@@ -48,16 +48,16 @@ use std::fmt;
 #[path = "artifact_code.rs"]
 mod code_admission;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-18";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-18";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 18;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF18";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART18";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN18";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-19";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-19";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 19;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF19";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART19";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN19";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v18";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v18";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v18";
+    "lkjscript.artifact-manifest-envelope.v19";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v19";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v19";
 pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v18";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
@@ -66,6 +66,45 @@ pub(crate) const MAXIMUM_ARTIFACT_REFERENCE_OWNERS: u64 = 1_000_000;
 pub(crate) const MAXIMUM_ARTIFACT_SEGMENTS: usize = 1_000_000;
 pub(crate) const MAXIMUM_ARTIFACT_BUNDLE_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 pub(crate) const TARGET_ARTIFACT_SEGMENT_BYTES: usize = 4 * 1024 * 1024;
+
+// The predecessor layout has no added fields. Retain its exact envelope/domain when admitting
+// historical bytes; all newly linked artifacts use the successor envelope before owner decoding.
+struct ArtifactWire {
+    version: u16,
+    manifest_magic: [u8; 8],
+    bundle_magic: [u8; 8],
+    end_magic: [u8; 8],
+    manifest_domain: &'static str,
+    digest_domain: &'static str,
+    checksum_domain: &'static str,
+}
+fn artifact_wire(version: u16) -> Result<ArtifactWire, Diagnostic> {
+    match version {
+        18 => Ok(ArtifactWire {
+            version,
+            manifest_magic: *b"LKJAMF18",
+            bundle_magic: *b"LKJART18",
+            end_magic: *b"LKJAEN18",
+            manifest_domain: "lkjscript.artifact-manifest-envelope.v18",
+            digest_domain: "lkjscript.artifact-bundle.v18",
+            checksum_domain: "lkjscript.artifact-bundle.complete.v18",
+        }),
+        ARTIFACT_CONTRACT_VERSION => Ok(ArtifactWire {
+            version,
+            manifest_magic: ARTIFACT_MANIFEST_MAGIC,
+            bundle_magic: ARTIFACT_BUNDLE_MAGIC,
+            end_magic: ARTIFACT_BUNDLE_END_MAGIC,
+            manifest_domain: ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
+            digest_domain: ARTIFACT_BUNDLE_DIGEST_DOMAIN,
+            checksum_domain: ARTIFACT_BUNDLE_CHECKSUM_DOMAIN,
+        }),
+        _ => Err(artifact_error(
+            DiagnosticClass::Source,
+            "artifact_bundle_contract",
+            "artifact encoding generation is unsupported",
+        )),
+    }
+}
 
 const BUNDLE_HEADER_BYTES: usize = 8 + 2 + 2 + 8 + 8 + 32;
 const SEGMENT_HEADER_BYTES: usize = 8 + 32;
@@ -241,8 +280,10 @@ const fn runtime_owner_kind(kind: OwnerKind) -> bool {
             | OwnerKind::Component
             | OwnerKind::Record
             | OwnerKind::Variant
+            | OwnerKind::Interface
             | OwnerKind::TypeParameter
             | OwnerKind::EffectParameter
+            | OwnerKind::RequirementParameter
             | OwnerKind::Field
             | OwnerKind::Case
             | OwnerKind::Operation
@@ -270,9 +311,10 @@ const fn reference_owner_kind(kind: OwnerKind) -> bool {
 impl ArtifactManifest {
     pub fn encode(&self) -> Result<(ArtifactManifestDigest, Vec<u8>), Diagnostic> {
         self.validate()?;
+        let wire = artifact_wire(self.contract_version)?;
         let bytes = crate::platform::packed::encode(
-            ARTIFACT_MANIFEST_MAGIC,
-            ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
+            wire.manifest_magic,
+            wire.manifest_domain,
             self,
             MAXIMUM_ARTIFACT_MANIFEST_BYTES,
         )?;
@@ -284,16 +326,28 @@ impl ArtifactManifest {
     }
 
     pub fn decode(bytes: &[u8], expected: ArtifactManifestDigest) -> Result<Self, Diagnostic> {
+        let wire = artifact_wire(if bytes.starts_with(b"LKJAMF18") {
+            18
+        } else {
+            ARTIFACT_CONTRACT_VERSION
+        })?;
         expected
             .object_key()
             .verify(bytes)
             .map_err(store_diagnostic)?;
         let manifest: Self = crate::platform::packed::decode(
             bytes,
-            ARTIFACT_MANIFEST_MAGIC,
-            ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
+            wire.manifest_magic,
+            wire.manifest_domain,
             MAXIMUM_ARTIFACT_MANIFEST_BYTES,
         )?;
+        if manifest.contract_version != wire.version {
+            return Err(artifact_error(
+                DiagnosticClass::Source,
+                "artifact_bundle_contract",
+                "manifest generation differs from its envelope",
+            ));
+        }
         manifest.validate()?;
         let (digest, canonical) = manifest.encode()?;
         if digest != expected || canonical != bytes {
@@ -307,11 +361,21 @@ impl ArtifactManifest {
     }
 
     fn validate(&self) -> Result<(), Diagnostic> {
-        if self.contract_version != ARTIFACT_CONTRACT_VERSION
-            || self.graph_contract_version
-                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-            || self.compiler_contract_version != COMPILER_UNIT_CONTRACT_VERSION
-            || self.bytecode_contract_version != BYTECODE_CONTRACT_VERSION
+        if !matches!(self.contract_version, 18 | ARTIFACT_CONTRACT_VERSION)
+            || (self.contract_version == 18
+                && (
+                    self.graph_contract_version,
+                    self.compiler_contract_version,
+                    self.bytecode_contract_version,
+                ) != (14, 10, 6))
+            || !matches!(
+                (
+                    self.graph_contract_version,
+                    self.compiler_contract_version,
+                    self.bytecode_contract_version
+                ),
+                (14, 10, 6) | (15, 11, 7)
+            )
             || self.compilation_manifest_contract_version != COMPILATION_MANIFEST_CONTRACT_VERSION
         {
             return Err(artifact_error(
@@ -603,8 +667,27 @@ pub(crate) fn canonicalize_dependency_artifact_interfaces(
             types.insert(digest, bytes);
         }
         let rebuilt = build_package_interface(&interface.owners, &types)?;
-        if package_interface_digest(package.package, rebuilt.root.content_root())?
-            != package.interface
+        let revision = crate::platform::package_transport::PackageRevision::decode(
+            artifact
+                .objects
+                .get(&ObjectKey::from_digest(
+                    ObjectDomain::PackageRevision,
+                    package.package_revision.bytes(),
+                ))
+                .ok_or_else(|| {
+                    artifact_error(
+                        DiagnosticClass::Corrupt,
+                        "artifact_package_revision_missing",
+                        "dependency revision bytes are missing",
+                    )
+                })?,
+            package.package_revision,
+        )?;
+        if crate::platform::package_interface::package_interface_digest_for_graph(
+            package.package,
+            rebuilt.root.content_root(),
+            revision.graph_contract_version,
+        )? != package.interface
         {
             return Err(artifact_error(
                 DiagnosticClass::Corrupt,
@@ -663,6 +746,7 @@ pub(crate) fn encode_artifact(
     manifest: ArtifactManifest,
     objects: &BTreeMap<ObjectKey, Vec<u8>>,
 ) -> Result<EncodedArtifact, Diagnostic> {
+    let wire = artifact_wire(manifest.contract_version)?;
     validate_declared_closure(&manifest, objects)?;
     let (manifest_digest, manifest_bytes) = manifest.encode()?;
     let mut builder = PackBuilder::default();
@@ -726,8 +810,8 @@ pub(crate) fn encode_artifact(
         )
     })?;
     let mut bytes = Vec::with_capacity(capacity);
-    bytes.extend_from_slice(&ARTIFACT_BUNDLE_MAGIC);
-    bytes.extend_from_slice(&ARTIFACT_CONTRACT_VERSION.to_be_bytes());
+    bytes.extend_from_slice(&wire.bundle_magic);
+    bytes.extend_from_slice(&wire.version.to_be_bytes());
     bytes.extend_from_slice(&0_u16.to_be_bytes());
     bytes.extend_from_slice(&manifest_length.to_be_bytes());
     bytes.extend_from_slice(&segment_count.to_be_bytes());
@@ -745,11 +829,10 @@ pub(crate) fn encode_artifact(
             "artifact bundle encoder produced an unexpected core length",
         ));
     }
-    let checksum = domain_digest(ARTIFACT_BUNDLE_CHECKSUM_DOMAIN, &bytes);
+    let checksum = domain_digest(wire.checksum_domain, &bytes);
     bytes.extend_from_slice(&checksum);
-    bytes.extend_from_slice(&ARTIFACT_BUNDLE_END_MAGIC);
-    let bundle_digest =
-        ArtifactBundleDigest::from_bytes(domain_digest(ARTIFACT_BUNDLE_DIGEST_DOMAIN, &bytes));
+    bytes.extend_from_slice(&wire.end_magic);
+    let bundle_digest = ArtifactBundleDigest::from_bytes(domain_digest(wire.digest_domain, &bytes));
     let loaded = load_artifact(&bytes)?;
     if loaded.manifest_digest != manifest_digest
         || loaded.bundle_digest != bundle_digest
@@ -780,7 +863,8 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
             "artifact bundle byte length is outside its hostile decoder bound",
         ));
     }
-    if bytes.get(..8) != Some(ARTIFACT_BUNDLE_MAGIC.as_slice()) {
+    let wire = artifact_wire(read_u16(bytes, 8, "artifact_bundle_contract")?)?;
+    if bytes.get(..8) != Some(wire.bundle_magic.as_slice()) {
         return Err(artifact_error(
             DiagnosticClass::Source,
             "artifact_bundle_contract",
@@ -789,7 +873,7 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
     }
     let version = read_u16(bytes, 8, "artifact_bundle_contract")?;
     let flags = read_u16(bytes, 10, "artifact_bundle_flags")?;
-    if version != ARTIFACT_CONTRACT_VERSION || flags != 0 {
+    if version != wire.version || flags != 0 {
         return Err(artifact_error(
             DiagnosticClass::Source,
             "artifact_bundle_contract",
@@ -835,6 +919,13 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
     }
     let manifest =
         ArtifactManifest::decode(&bytes[BUNDLE_HEADER_BYTES..manifest_end], manifest_digest)?;
+    if manifest.contract_version != version {
+        return Err(artifact_error(
+            DiagnosticClass::Source,
+            "artifact_bundle_contract",
+            "bundle and manifest encoding generations differ",
+        ));
+    }
     let mut position = manifest_end;
     let mut objects = BTreeMap::new();
     let mut previous = None;
@@ -907,7 +998,7 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
             "artifact bundle contains bytes outside its exact segment sequence",
         ));
     }
-    if bytes[footer_start + 32..] != ARTIFACT_BUNDLE_END_MAGIC {
+    if bytes[footer_start + 32..] != wire.end_magic {
         return Err(artifact_error(
             DiagnosticClass::Corrupt,
             "artifact_bundle_end_magic",
@@ -915,7 +1006,7 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
         ));
     }
     let expected_checksum = read_array::<32>(bytes, footer_start, "artifact_bundle_checksum")?;
-    if domain_digest(ARTIFACT_BUNDLE_CHECKSUM_DOMAIN, &bytes[..footer_start]) != expected_checksum {
+    if domain_digest(wire.checksum_domain, &bytes[..footer_start]) != expected_checksum {
         return Err(artifact_error(
             DiagnosticClass::Corrupt,
             "artifact_bundle_checksum",
@@ -924,8 +1015,7 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
     }
     validate_declared_closure(&manifest, &objects)?;
     validate_object_closure(&manifest, &objects, &mut work)?;
-    let bundle_digest =
-        ArtifactBundleDigest::from_bytes(domain_digest(ARTIFACT_BUNDLE_DIGEST_DOMAIN, bytes));
+    let bundle_digest = ArtifactBundleDigest::from_bytes(domain_digest(wire.digest_domain, bytes));
     work.objects = objects.len() as u64;
     work.object_bytes = objects.values().fold(0_u64, |total, value| {
         total.saturating_add(value.len() as u64)
@@ -1053,6 +1143,9 @@ fn validate_declared_closure(
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum RuntimeOwnerExpectation {
+    Interface {
+        operations: Vec<crate::platform::semantic_id::OperationId>,
+    },
     Component {
         requirements: Vec<crate::platform::semantic_id::RequirementId>,
         ports: Vec<crate::platform::semantic_id::PortId>,
@@ -1075,6 +1168,9 @@ pub(crate) enum RuntimeOwnerExpectation {
         constraints: crate::platform::kernel::TypeParameterConstraints,
     },
     EffectParameter {
+        declaration: DeclarationId,
+    },
+    RequirementParameter {
         declaration: DeclarationId,
     },
     Field {
@@ -1134,12 +1230,14 @@ pub(crate) enum RuntimePortImplementation {
 impl RuntimeOwnerExpectation {
     pub(crate) const fn kind(&self) -> OwnerKind {
         match self {
+            Self::Interface { .. } => OwnerKind::Interface,
             Self::Component { .. } => OwnerKind::Component,
             Self::Record { .. } => OwnerKind::Record,
             Self::Variant { .. } => OwnerKind::Variant,
             Self::ResourceFunction { .. } => OwnerKind::TaskFunction,
             Self::TypeParameter { .. } => OwnerKind::TypeParameter,
             Self::EffectParameter { .. } => OwnerKind::EffectParameter,
+            Self::RequirementParameter { .. } => OwnerKind::RequirementParameter,
             Self::Field { .. } => OwnerKind::Field,
             Self::Case { .. } => OwnerKind::Case,
             Self::Operation { .. } => OwnerKind::Operation,
@@ -1153,6 +1251,9 @@ impl RuntimeOwnerExpectation {
 
     fn matches(&self, record: &OwnerRecord) -> bool {
         match (self, record) {
+            (Self::Interface { operations }, OwnerRecord::Declaration(record)) => {
+                matches!(&record.payload, DeclarationPayload::Interface { operations: actual } if actual == operations)
+            }
             (
                 Self::Component {
                     requirements,
@@ -1194,14 +1295,14 @@ impl RuntimeOwnerExpectation {
                     (
                         DeclarationVisibility::Private,
                         DeclarationPayload::Function(function),
-                    ) if function.type_parameters.is_empty() && function.effect_parameters.is_empty()
+                    ) if function.type_parameters.is_empty() && function.effect_parameters.is_empty() && function.requirement_parameters.is_empty()
                         && function.parameters == *parameters
                         && function.result == *result
                         && matches!(
                             &function.effect,
                             FunctionEffect::Task { effect_parameters: _,
                                 requirements: actual,
-                            } if actual == requirements
+                            } if actual.iter().filter_map(|r| r.concrete()).collect::<Vec<_>>() == *requirements
                         )
                 )
             }
@@ -1212,6 +1313,10 @@ impl RuntimeOwnerExpectation {
                 },
                 OwnerRecord::TypeParameter(record),
             ) => record.declaration == *declaration && record.constraints == *constraints,
+            (
+                Self::RequirementParameter { declaration },
+                OwnerRecord::RequirementParameter(record),
+            ) => record.declaration == *declaration,
             (Self::EffectParameter { declaration }, OwnerRecord::EffectParameter(record)) => {
                 record.declaration == *declaration
             }
@@ -1334,6 +1439,16 @@ pub(crate) fn runtime_owner_expectations(
             current_package_count = 0;
         }
         let before = expected.len();
+        for reference in &unit.tables.requirements {
+            insert_runtime_expectation(
+                &mut expected,
+                (
+                    reference.package,
+                    OwnerKey::Requirement(reference.requirement),
+                ),
+                RuntimeOwnerExpectation::TaskRequirement,
+            )?;
+        }
         match &unit.payload {
             CompilationPayload::Record {
                 fields,
@@ -1428,6 +1543,25 @@ pub(crate) fn runtime_owner_expectations(
             }
             CompilationPayload::Interface { operations } => {
                 let declaration = declaration_owner(*owner, "interface")?;
+                if unit.contract_version >= 11 {
+                    insert_runtime_expectation(
+                        &mut expected,
+                        (*package, *owner),
+                        RuntimeOwnerExpectation::Interface {
+                            operations: operations
+                                .iter()
+                                .map(|operation| {
+                                    table_value(
+                                        &unit.tables.operations,
+                                        operation.operation,
+                                        "interface operation",
+                                    )
+                                    .map(|reference| reference.operation)
+                                })
+                                .collect::<Result<_, _>>()?,
+                        },
+                    )?;
+                }
                 for operation in operations {
                     let reference = table_value(
                         &unit.tables.operations,
@@ -1784,6 +1918,7 @@ fn validate_artifact_http_route_contracts(
             )?;
             if !signature.type_parameters.is_empty()
                 || !signature.effect_parameters.is_empty()
+                || !signature.requirement_parameters.is_empty()
                 || signature.parameters.len() != route.selector.capture_count().saturating_add(1)
                 || first_type != Some(http.request_type)
                 || result != http.response_type
@@ -1872,6 +2007,13 @@ fn insert_signature_expectations(
     signature: &CompiledSignature,
     unit: &CompilationUnit,
 ) -> Result<(), Diagnostic> {
+    for parameter in &signature.requirement_parameters {
+        insert_runtime_expectation(
+            expected,
+            (package, OwnerKey::RequirementParameter(*parameter)),
+            RuntimeOwnerExpectation::RequirementParameter { declaration },
+        )?;
+    }
     for parameter in &signature.effect_parameters {
         insert_runtime_expectation(
             expected,
@@ -2104,8 +2246,11 @@ fn trace_object_closure(
             &store,
             &mut store_work,
         )?;
-        if package_interface_digest(package.package, package.interface_owners.content_root())?
-            != package.interface
+        if crate::platform::package_interface::package_interface_digest_for_graph(
+            package.package,
+            package.interface_owners.content_root(),
+            revision.graph_contract_version,
+        )? != package.interface
         {
             return Err(artifact_error(
                 DiagnosticClass::Corrupt,
@@ -2122,7 +2267,9 @@ fn trace_object_closure(
             &mut store_work,
         )?;
         let compilation = CompilationManifest::decode(&compilation_bytes, package.compilation)?;
-        if package.repository_id != revision.revision.repository_id
+        if compilation.graph_contract_version > manifest.graph_contract_version
+            || revision.graph_contract_version > manifest.graph_contract_version
+            || package.repository_id != revision.revision.repository_id
             || package.package != revision.package
             || package.semantic_revision != revision.revision.revision_id()?
             || package.semantic_state != revision.revision.semantic_state
@@ -2158,6 +2305,9 @@ fn trace_object_closure(
                     )?;
                     let unit = CompilationUnit::decode(&unit_bytes, binding.object.object_key())?;
                     if unit.key != binding.key
+                        || unit.contract_version != compilation.compiler_contract_version
+                        || unit.bytecode_contract_version != compilation.bytecode_contract_version
+                        || unit.graph_contract_version != compilation.graph_contract_version
                         || unit.source.package != package.package
                         || unit.source.owner != owner
                         || unit.source.kind != binding.kind
@@ -2327,12 +2477,20 @@ fn validate_nominal_instruction_inventory(
             DeclarationReference,
             Vec<TypeObjectDigest>,
             Vec<crate::platform::kernel::EffectRow>,
+            Vec<crate::platform::kernel::RequirementOperand>,
             usize,
         ),
+        Perform(
+            crate::platform::kernel::RequirementOperand,
+            OperationReference,
+            usize,
+        ),
+        Transaction(crate::platform::kernel::RequirementOperand),
         FunctionValue(
             DeclarationReference,
             Vec<TypeObjectDigest>,
             Vec<crate::platform::kernel::EffectRow>,
+            Vec<crate::platform::kernel::RequirementOperand>,
         ),
     }
     let mut work = 0usize;
@@ -2418,28 +2576,36 @@ fn validate_nominal_instruction_inventory(
                 ));
             };
             let constructor = match &record.operation {
-                ExpressionOperation::Constant { declaration } => {
-                    Some(Constructor::Call(*declaration, Vec::new(), Vec::new(), 0))
-                }
+                ExpressionOperation::Constant { declaration } => Some(Constructor::Call(
+                    *declaration,
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                    0,
+                )),
                 ExpressionOperation::Call {
                     function,
                     type_arguments,
                     effect_arguments,
+                    requirement_arguments,
                     arguments,
                 } => Some(Constructor::Call(
                     *function,
                     type_arguments.clone(),
                     effect_arguments.clone(),
+                    requirement_arguments.clone(),
                     arguments.len(),
                 )),
                 ExpressionOperation::FunctionValue {
                     function,
                     type_arguments,
                     effect_arguments,
+                    requirement_arguments,
                 } => Some(Constructor::FunctionValue(
                     *function,
                     type_arguments.clone(),
                     effect_arguments.clone(),
+                    requirement_arguments.clone(),
                 )),
                 ExpressionOperation::Record {
                     nominal_type,
@@ -2457,6 +2623,18 @@ fn validate_nominal_instruction_inventory(
                         type_arguments.clone(),
                         fields.iter().map(|field| field.selector.clone()).collect(),
                     ))
+                }
+                ExpressionOperation::CapabilityCall {
+                    requirement,
+                    operation,
+                    arguments,
+                } => Some(Constructor::Perform(
+                    *requirement,
+                    *operation,
+                    arguments.len(),
+                )),
+                ExpressionOperation::Transaction { requirement, .. } => {
+                    Some(Constructor::Transaction(*requirement))
                 }
                 ExpressionOperation::Variant {
                     case,
@@ -2506,6 +2684,7 @@ fn validate_nominal_instruction_inventory(
                         function,
                         type_arguments,
                         effect_arguments,
+                        requirement_arguments,
                         arguments,
                     } => Some(Constructor::Call(
                         table_value(&unit.tables.declarations, *function, "call target")?,
@@ -2516,12 +2695,14 @@ fn validate_nominal_instruction_inventory(
                             })
                             .collect::<Result<_, _>>()?,
                         effect_arguments.clone(),
+                        requirement_arguments.clone(),
                         *arguments as usize,
                     )),
                     CompiledInstruction::FunctionValue {
                         function,
                         type_arguments,
                         effect_arguments,
+                        requirement_arguments,
                     } => Some(Constructor::FunctionValue(
                         table_value(&unit.tables.declarations, *function, "callable target")?,
                         type_arguments
@@ -2531,7 +2712,44 @@ fn validate_nominal_instruction_inventory(
                             })
                             .collect::<Result<_, _>>()?,
                         effect_arguments.clone(),
+                        requirement_arguments.clone(),
                     )),
+                    CompiledInstruction::Perform {
+                        requirement,
+                        operation,
+                        arguments,
+                    } => Some(Constructor::Perform(
+                        table_value(
+                            &unit.tables.requirements,
+                            *requirement,
+                            "capability requirement",
+                        )?
+                        .into(),
+                        table_value(&unit.tables.operations, *operation, "capability operation")?,
+                        *arguments as usize,
+                    )),
+                    CompiledInstruction::PerformParameter {
+                        parameter,
+                        operation,
+                        arguments,
+                    } => Some(Constructor::Perform(
+                        (*parameter).into(),
+                        table_value(&unit.tables.operations, *operation, "parameter operation")?,
+                        *arguments as usize,
+                    )),
+                    CompiledInstruction::BeginTransaction { requirement, .. } => {
+                        Some(Constructor::Transaction(
+                            table_value(
+                                &unit.tables.requirements,
+                                *requirement,
+                                "transaction requirement",
+                            )?
+                            .into(),
+                        ))
+                    }
+                    CompiledInstruction::BeginParameterTransaction { parameter, .. } => {
+                        Some(Constructor::Transaction((*parameter).into()))
+                    }
                     CompiledInstruction::Record {
                         nominal_type,
                         type_arguments,
@@ -3675,7 +3893,8 @@ fn reference_payload_matches(unit: &CompilationUnit, canonical: &DeclarationPayl
         DeclarationPayload::Function(function),
     ) = (compiled, canonical)
     {
-        return signature.type_parameters == function.type_parameters
+        return signature.requirement_parameters == function.requirement_parameters
+            && signature.type_parameters == function.type_parameters
             && signature.effect_parameters == function.effect_parameters
             && signature.effect == function.effect
             && signature
@@ -3779,6 +3998,7 @@ fn validate_unit_relocations(
     let mut operations = BTreeSet::new();
     let mut ports = BTreeSet::new();
     for unit in units.values() {
+        requirements.extend(unit.tables.requirements.iter().copied());
         match &unit.payload {
             CompilationPayload::Record {
                 fields: layouts,

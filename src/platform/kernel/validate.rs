@@ -407,6 +407,21 @@ impl FullValidator<'_> {
                 return;
             }
             self.capture(record.validate_local());
+            if record.header().contract_version
+                == super::contract::PREDECESSOR_GRAPH_CONTRACT_VERSION
+                && super::wire14::OwnerRecord14::try_from(record.clone()).is_err()
+            {
+                self.error(
+                    "kernel_owner_graph_generation",
+                    "predecessor owner contains unsupported successor meaning",
+                );
+            }
+            if record.header().contract_version > self.snapshot.root.graph_contract_version {
+                self.error(
+                    "kernel_owner_graph_generation",
+                    "owner uses a newer generation than its containing graph",
+                );
+            }
             if *key != record.owner() {
                 self.error(
                     "kernel_full_owner_key",
@@ -420,6 +435,15 @@ impl FullValidator<'_> {
         for (digest, object) in &self.snapshot.types {
             if !self.consume_work() {
                 return;
+            }
+            if self.snapshot.root.graph_contract_version
+                == super::contract::PREDECESSOR_GRAPH_CONTRACT_VERSION
+                && matches!(&object.form, TypeForm::TaskFunction { effect, .. } if effect.requirements.iter().any(|requirement| requirement.concrete().is_none()))
+            {
+                self.error(
+                    "kernel_type_graph_generation",
+                    "predecessor graph contains a requirement-parametric task type",
+                );
             }
             match encode_type_object(object) {
                 Ok((encoded_digest, _)) if encoded_digest == *digest => {}
@@ -435,6 +459,12 @@ impl FullValidator<'_> {
                 return;
             }
             self.capture(dependency.validate_local());
+            if dependency.graph_contract_version > self.snapshot.root.graph_contract_version {
+                self.error(
+                    "kernel_dependency_graph_generation",
+                    "dependency encoding is newer than its containing graph",
+                );
+            }
             if package != &dependency.package || package == &self.snapshot.root.package_id {
                 self.error(
                     "kernel_full_dependency_key",
@@ -447,6 +477,12 @@ impl FullValidator<'_> {
                 return;
             }
             self.capture(retirement.validate_local());
+            if retirement.graph_contract_version > self.snapshot.root.graph_contract_version {
+                self.error(
+                    "kernel_retirement_graph_generation",
+                    "retirement encoding is newer than its containing graph",
+                );
+            }
             if owner != &retirement.owner {
                 self.error(
                     "kernel_full_retirement_key",
@@ -517,6 +553,11 @@ impl FullValidator<'_> {
                     *key,
                     OwnerKey::Declaration(parameter.declaration),
                     "effect parameter",
+                ),
+                OwnerRecord::RequirementParameter(parameter) => self.require_parent_listed(
+                    *key,
+                    OwnerKey::Declaration(parameter.declaration),
+                    "requirement parameter",
                 ),
                 OwnerRecord::Field(field) => self.require_parent_listed(
                     *key,
@@ -784,7 +825,21 @@ impl FullValidator<'_> {
                 );
             }
         }
-        self.validate_http_route_requirement_closure(route, &effect.row().requirements);
+        let row = effect.row();
+        if row.requirements.iter().any(|r| r.concrete().is_none()) {
+            self.error(
+                "kernel_http_route_requirement_closure",
+                "entry requirements must be concrete",
+            );
+            return;
+        }
+        self.validate_http_route_requirement_closure(
+            route,
+            &row.requirements
+                .iter()
+                .filter_map(|r| r.concrete())
+                .collect::<Vec<_>>(),
+        );
     }
 
     fn http_route_function_contract(
@@ -804,7 +859,9 @@ impl FullValidator<'_> {
             {
                 Some(OwnerRecord::Declaration(record)) => match &record.payload {
                     DeclarationPayload::Function(signature) => Some((
-                        signature.type_parameters.len() + signature.effect_parameters.len(),
+                        signature.type_parameters.len()
+                            + signature.effect_parameters.len()
+                            + signature.requirement_parameters.len(),
                         signature.parameters.clone(),
                         signature.result,
                         signature.effect.clone(),
@@ -847,7 +904,9 @@ impl FullValidator<'_> {
         match owners.get(&OwnerKey::Declaration(function.declaration)) {
             Some(PackageInterfaceRecord::Declaration(record)) => match &record.payload {
                 PackageInterfaceDeclarationPayload::Function(signature) => Some((
-                    signature.type_parameters.len() + signature.effect_parameters.len(),
+                    signature.type_parameters.len()
+                        + signature.effect_parameters.len()
+                        + signature.requirement_parameters.len(),
                     signature.parameters.clone(),
                     signature.result,
                     signature.effect.clone(),
@@ -1092,6 +1151,21 @@ impl FullValidator<'_> {
                 }
             }
             DeclarationPayload::Function(function) => {
+                for parameter in &function.requirement_parameters {
+                    self.require_local_kind(
+                        OwnerKey::RequirementParameter(*parameter),
+                        &[OwnerKind::RequirementParameter],
+                        "function requirement parameter",
+                    );
+                    if !matches!(self.snapshot.owners.get(&OwnerKey::RequirementParameter(*parameter)),
+                        Some(OwnerRecord::RequirementParameter(record)) if record.declaration == declaration_id)
+                    {
+                        self.error(
+                            "kernel_requirement_parameter_owner",
+                            "requirement parameter belongs to another function",
+                        );
+                    }
+                }
                 for parameter in &function.effect_parameters {
                     self.require_local_kind(
                         OwnerKey::EffectParameter(*parameter),
@@ -1128,9 +1202,9 @@ impl FullValidator<'_> {
                 {
                     for requirement in requirements {
                         self.require_exact_kind(
-                            requirement.package,
-                            OwnerKey::Requirement(requirement.requirement),
-                            &[OwnerKind::Requirement],
+                            requirement.package(),
+                            requirement.owner(),
+                            &[OwnerKind::Requirement, OwnerKind::RequirementParameter],
                             "function requirement",
                         );
                     }
@@ -1266,6 +1340,31 @@ impl FullValidator<'_> {
         }
     }
 
+    fn validate_requirement_operand(
+        &mut self,
+        source: OwnerKey,
+        operand: super::RequirementOperand,
+    ) {
+        match operand {
+            super::RequirementOperand::Concrete(reference) => self.require_exact_kind(
+                reference.package,
+                OwnerKey::Requirement(reference.requirement),
+                &[OwnerKind::Requirement],
+                "concrete requirement",
+            ),
+            super::RequirementOperand::Parameter(reference) => {
+                if reference.package != self.snapshot.root.package_id
+                    || !matches!(self.snapshot.owners.get(&OwnerKey::RequirementParameter(reference.parameter)), Some(OwnerRecord::RequirementParameter(record)) if Some(record.declaration) == self.semantic_declaration(source))
+                {
+                    self.error(
+                        "kernel_requirement_parameter_scope",
+                        "requirement parameter is outside the exact owning function",
+                    );
+                }
+            }
+        }
+    }
+
     fn validate_effect_row(&mut self, source: OwnerKey, row: &super::EffectRow) {
         if let Err(error) = row.validate() {
             self.diagnostics.push(error);
@@ -1275,12 +1374,7 @@ impl FullValidator<'_> {
             if !self.consume_work() {
                 return;
             }
-            self.require_exact_kind(
-                requirement.package,
-                OwnerKey::Requirement(requirement.requirement),
-                &[OwnerKind::Requirement],
-                "effect row requirement",
-            );
+            self.validate_requirement_operand(source, *requirement);
         }
         for parameter in &row.parameters {
             if !self.consume_work() {
@@ -1564,7 +1658,10 @@ impl FullValidator<'_> {
                                     ),
                                 );
                             }
-                            if !function.type_parameters.is_empty() {
+                            if !function.type_parameters.is_empty()
+                                || !function.effect_parameters.is_empty()
+                                || !function.requirement_parameters.is_empty()
+                            {
                                 self.error(
                                     "kernel_affine_function_resource_generic",
                                     format!(
@@ -1596,7 +1693,7 @@ impl FullValidator<'_> {
                                     ),
                                 );
                             }
-                            if !requirements.contains(&requirement) {
+                            if !requirements.contains(&requirement.into()) {
                                 self.error(
                                     "kernel_affine_function_resource_effect",
                                     format!(
@@ -1660,6 +1757,16 @@ impl FullValidator<'_> {
         for _ in 0..=MAXIMUM_EXPRESSION_DEPTH {
             match current {
                 OwnerKey::Declaration(declaration) => return Some(declaration),
+                OwnerKey::RequirementParameter(parameter) => {
+                    return match self
+                        .snapshot
+                        .owners
+                        .get(&OwnerKey::RequirementParameter(parameter))
+                    {
+                        Some(OwnerRecord::RequirementParameter(record)) => Some(record.declaration),
+                        _ => None,
+                    };
+                }
                 OwnerKey::EffectParameter(parameter) => {
                     return match self
                         .snapshot
@@ -2015,6 +2122,39 @@ impl FullValidator<'_> {
                 OwnerRecord::Expression(expression) => {
                     self.validate_expression_references(expression.id, &expression.operation);
                 }
+                OwnerRecord::RequirementParameter(parameter) => {
+                    self.require_exact_kind(
+                        parameter.constraint.interface.package,
+                        OwnerKey::Declaration(parameter.constraint.interface.declaration),
+                        &[OwnerKind::Interface],
+                        "requirement interface",
+                    );
+                    for operation in &parameter.constraint.operations {
+                        self.require_exact_kind(
+                            operation.package,
+                            OwnerKey::Operation(operation.operation),
+                            &[OwnerKind::Operation],
+                            "requirement operation",
+                        );
+                        if operation.package != parameter.constraint.interface.package {
+                            self.error(
+                                "kernel_full_requirement_package",
+                                "requirement interface and operations must belong to one package",
+                            );
+                        }
+                        if self
+                            .exact_operation_parent(operation.package, operation.operation)
+                            .is_some_and(|parent| {
+                                parent != parameter.constraint.interface.declaration
+                            })
+                        {
+                            self.error(
+                                "kernel_full_requirement_operation_owner",
+                                "requirement operation does not belong to its interface",
+                            );
+                        }
+                    }
+                }
                 OwnerRecord::Requirement(requirement) => {
                     self.require_exact_kind(
                         requirement.interface.package,
@@ -2122,17 +2262,30 @@ impl FullValidator<'_> {
                 &[OwnerKind::Constant],
                 "constant reference",
             ),
-            ExpressionOperation::Call { function, .. }
-            | ExpressionOperation::FunctionValue { function, .. } => self.require_exact_kind(
-                function.package,
-                OwnerKey::Declaration(function.declaration),
-                &[
-                    OwnerKind::PureFunction,
-                    OwnerKind::TaskFunction,
-                    OwnerKind::External,
-                ],
-                "function reference",
-            ),
+            ExpressionOperation::Call {
+                function,
+                requirement_arguments,
+                ..
+            }
+            | ExpressionOperation::FunctionValue {
+                function,
+                requirement_arguments,
+                ..
+            } => {
+                for argument in requirement_arguments {
+                    self.validate_requirement_operand(OwnerKey::Expression(expression), *argument);
+                }
+                self.require_exact_kind(
+                    function.package,
+                    OwnerKey::Declaration(function.declaration),
+                    &[
+                        OwnerKind::PureFunction,
+                        OwnerKind::TaskFunction,
+                        OwnerKind::External,
+                    ],
+                    "function reference",
+                );
+            }
             ExpressionOperation::Record {
                 nominal_type: Some(declaration),
                 fields,
@@ -2201,10 +2354,11 @@ impl FullValidator<'_> {
                 operation,
                 ..
             } => {
+                self.validate_requirement_operand(OwnerKey::Expression(expression), *requirement);
                 self.require_exact_kind(
-                    requirement.package,
-                    OwnerKey::Requirement(requirement.requirement),
-                    &[OwnerKind::Requirement],
+                    requirement.package(),
+                    requirement.owner(),
+                    &[OwnerKind::Requirement, OwnerKind::RequirementParameter],
                     "capability requirement",
                 );
                 self.require_exact_kind(
@@ -2223,9 +2377,9 @@ impl FullValidator<'_> {
                 }
             }
             ExpressionOperation::Transaction { requirement, .. } => self.require_exact_kind(
-                requirement.package,
-                OwnerKey::Requirement(requirement.requirement),
-                &[OwnerKind::Requirement],
+                requirement.package(),
+                requirement.owner(),
+                &[OwnerKind::Requirement, OwnerKind::RequirementParameter],
                 "transaction requirement",
             ),
             _ => {}
@@ -2349,6 +2503,11 @@ impl FullValidator<'_> {
             return;
         };
         let listed = match (child, parent_record) {
+            (OwnerKey::RequirementParameter(id), OwnerRecord::Declaration(declaration)) => {
+                matches!(
+                    &declaration.payload, DeclarationPayload::Function(function) if function.requirement_parameters.contains(&id)
+                )
+            }
             (OwnerKey::EffectParameter(id), OwnerRecord::Declaration(declaration)) => matches!(
                 &declaration.payload, DeclarationPayload::Function(function) if function.effect_parameters.contains(&id)
             ),
@@ -2401,8 +2560,8 @@ impl FullValidator<'_> {
                             effect_parameters: _,
                             requirements,
                         } => requirements.iter().any(|reference| {
-                            reference.package == self.snapshot.root.package_id
-                                && reference.requirement == id
+                            reference.package() == self.snapshot.root.package_id
+                                && reference.owner() == OwnerKey::Requirement(id)
                         }),
                         FunctionEffect::Pure => false,
                     },
@@ -2561,34 +2720,44 @@ impl FullValidator<'_> {
 
     fn requirement_allows(
         &self,
-        requirement: crate::platform::kernel::RequirementReference,
-        operation: crate::platform::kernel::OperationReference,
+        requirement: super::RequirementOperand,
+        operation: super::OperationReference,
     ) -> bool {
-        let record = if requirement.package == self.snapshot.root.package_id {
-            match self
-                .snapshot
-                .owners
-                .get(&OwnerKey::Requirement(requirement.requirement))
-            {
-                Some(OwnerRecord::Requirement(record)) => Some(record),
+        let parts = if requirement.package() == self.snapshot.root.package_id {
+            match self.snapshot.owners.get(&requirement.owner()) {
+                Some(OwnerRecord::Requirement(record)) => {
+                    Some((record.interface, &record.operations))
+                }
+                Some(OwnerRecord::RequirementParameter(record)) => {
+                    Some((record.constraint.interface, &record.constraint.operations))
+                }
                 _ => None,
             }
         } else {
-            let dependency = self.snapshot.dependencies.get(&requirement.package);
-            dependency
+            self.snapshot
+                .dependencies
+                .get(&requirement.package())
                 .and_then(|dependency| {
                     self.snapshot
                         .dependency_interfaces
                         .get(&dependency.package_revision)
                 })
-                .and_then(|owners| owners.get(&OwnerKey::Requirement(requirement.requirement)))
+                .and_then(|owners| owners.get(&requirement.owner()))
                 .and_then(|record| match record {
-                    PackageInterfaceRecord::Requirement(record) => Some(record),
+                    PackageInterfaceRecord::Requirement(record) => {
+                        Some((record.interface, &record.operations))
+                    }
+                    PackageInterfaceRecord::RequirementParameter(record) => {
+                        Some((record.constraint.interface, &record.constraint.operations))
+                    }
                     _ => None,
                 })
         };
-        record.is_some_and(|record| {
-            record.interface.package == operation.package && record.operations.contains(&operation)
+        parts.is_some_and(|(interface, operations)| {
+            interface.package == operation.package
+                && operations.contains(&operation)
+                && self.exact_operation_parent(operation.package, operation.operation)
+                    == Some(interface.declaration)
         })
     }
 

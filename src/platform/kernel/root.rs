@@ -26,7 +26,7 @@ pub struct SemanticRoot {
 
 impl SemanticRoot {
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
-        if self.graph_contract_version != GRAPH_CONTRACT_VERSION {
+        if !super::contract::supported_graph_contract(self.graph_contract_version) {
             return Err(root_error(
                 "kernel_root_contract",
                 format!(
@@ -62,7 +62,7 @@ pub struct DependencyRecord {
 
 impl DependencyRecord {
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
-        if self.graph_contract_version != GRAPH_CONTRACT_VERSION {
+        if !super::contract::supported_graph_contract(self.graph_contract_version) {
             return Err(root_error(
                 "kernel_dependency_contract",
                 "dependency record uses a foreign graph contract",
@@ -92,7 +92,7 @@ pub struct RetirementRecord {
 
 impl RetirementRecord {
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
-        if self.graph_contract_version != GRAPH_CONTRACT_VERSION {
+        if !super::contract::supported_graph_contract(self.graph_contract_version) {
             return Err(root_error(
                 "kernel_retirement_contract",
                 "retirement record uses a foreign graph contract",

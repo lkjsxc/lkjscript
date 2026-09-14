@@ -198,6 +198,10 @@ const REBUILD_LIMITS: StoreReadLimits = StoreReadLimits {
 };
 
 impl ViewStore {
+    pub(super) fn persistent_base(&self) -> &PackDirectoryStore {
+        &self.base
+    }
+
     pub const fn new(base: PackDirectoryStore) -> Self {
         Self {
             base,

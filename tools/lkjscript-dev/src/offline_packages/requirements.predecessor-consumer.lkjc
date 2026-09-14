@@ -1,0 +1,8 @@
+reference.owner as=$encoder package=$old class=declaration name=encode-integer
+create.module as=$module name=old-transport-consumer
+create.component as=$component module=$module name=old-scalar visibility=public
+expression.call as=$encoded function=$encoder
+create.function as=$entry module=$module name=encode-integer visibility=public result=bytes effect=pure body=$encoded
+type.function as=@Entry result=bytes
+add.port as=$port component=$component name=scalar type=@Entry function=$entry
+create.target as=$target name=encode-integer component=$component port=$port runner=command

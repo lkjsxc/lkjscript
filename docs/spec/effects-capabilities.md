@@ -8,7 +8,7 @@ Pure meaning is independent of deployment, time, randomness, scheduling, network
 credentials, and process state. A pure function cannot perform a capability operation or call a
 task function, including one with an empty requirement row. It may construct and return task
 descriptors without executing them. A task function has an explicit row containing stable exact
-requirement references and function-owned effect parameters. Effect checking is transitive through
+requirement operands and function-owned effect parameters. Effect checking is transitive through
 direct and indirect calls after explicit substitution.
 
 A component declares the requirements needed by its ports. Preparation proves that every task
@@ -33,7 +33,7 @@ Failed planning or apply leaves accepted authority unchanged.
 
 An effect parameter is descriptive meaning. It grants no authority to its declaration, descriptor,
 holder or importing library. Pure factories may be effect-parametric and return bound
-`TaskFunction` values. Named task values and calls require exact ordered ordinary type and effect
+`TaskFunction` values. Named task values and calls require exact ordered ordinary type, effect and requirement
 arguments; omitted/excess/foreign arguments reject even if unused. Rows normalize as set union by
 stable identity; equal names or interfaces never merge atoms. Callable type equality compares exact
 rows and has no effect subtyping. Signature traversal substitutes task rows nested in pure callable
@@ -57,7 +57,7 @@ requires the references to resolve to the same canonical grant. Shared grants ca
 activation, merge row identities, reset counters or clone authority. Preparation closes HTTP, worker
 and structured-session task ports before live execution.
 
-Creation, binding and returning retain only an exact prepared target, closed ordered type/effect
+Creation, binding and returning retain only an exact prepared target, closed ordered type/effect/requirement
 arguments and a flat capture-safe prefix. Foreign preparation, forged kind/row/target, wrong arity,
 mismatched prefixes and captured live resources reject before target execution. Descriptor copies
 hold no adapter, credential, resource, transaction or frame. Both evaluators enforce activation
@@ -171,3 +171,41 @@ Graceful shutdown stops admission, drains within the configured bound, cancels r
 allows only explicitly non-cancellable publication sections to finish, closes resources, and
 returns a classified status. A process boundary is not a hostile-code sandbox or multi-tenant
 security boundary.
+
+## Operations and transactions through requirement parameters
+
+An ordinary imported library may perform operations through a caller's explicitly supplied
+requirement without owning or importing the caller's component. Its formal constraint names an
+exact interface and a minimum operation set. Selection performs no operation and supplies no
+deployment authority. Concrete activation coverage retains its previous narrow semantics;
+minimum constraints neither widen an older narrow activation nor synthesize grants.
+
+A DataStore formal admitting the existing transaction operation may own a lexical transaction.
+The actual supplied requirement identifies its transaction and canonical accounting. Direct calls,
+imported helpers and callbacks through that same resolved requirement share the transaction.
+Nested transactions remain rejected. Cancellation and failure stop later effects and join cleanup.
+A second store or a Configuration/HTTP operation is not included in the first store's atomicity.
+
+A false conditional expectation suppresses publication of the entire transaction. Later operations
+can still return their local results; normal lexical completion can mean committed or unchanged.
+Commit-time base conflicts retain their execution failure. A graph library may return an ordinary
+`UpdateAttempt<T>` record with `candidate: T` and `primary_condition_matched: Bool` after normal
+lexical completion. The boolean reports only its primary conditional operation, and neither field
+certifies durable publication. An effectful callback may already have caused a false expectation,
+so the primary flag can be true while the whole transaction publishes nothing. No automatic retry,
+exception conversion or changed expectation semantics follows from this API.
+
+Local affine operations are also valid through a constrained requirement parameter. An acquired
+resource carries the symbolic operand and exact interface during generic validation. R1 and R2
+remain different provenance even if one concrete application aliases them. Matching, borrowing,
+consuming and dropping require the same operand under existing local rules; runtime provenance
+resolves to the original concrete requirement, canonical grant and task scope. This does not admit
+generic resource-bearing function parameters/results, capture, aggregate escape or cross-function
+transfer. The private concrete consume-helper exception remains unchanged.
+
+Typed-cell libraries use the existing typed-data encoder and decoder, not JSON. Decode-or may use
+a supplied default on absence or incompatible encoding/layout, but does not swallow cancellation,
+resource exhaustion or execution failures. Closed intrinsically unencodable applications reject at
+the existing pre-effect admission boundary. Capture safety and typed-data eligibility are separate;
+only retained values need the existing capture constraint. Space/schema ownership and migration
+remain caller policy. An application result or cleanup/output failure never authorizes effect replay.

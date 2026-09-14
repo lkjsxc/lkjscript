@@ -141,6 +141,11 @@ pub struct WitnessTestDependencyRead {
 /// Narrow accepted-authority surface required before high-level edits become an exact canonical
 /// delta. Implementations must pin one immutable base for the lifetime of a normalization.
 pub trait CanonicalBaseRead {
+    /// Only an authenticated accepted retry may reconstruct its original encoding generation.
+    /// Ordinary edits always publish the current generation, even over a predecessor base.
+    fn accepted_retry_encoding(&self) -> Option<u16> {
+        None
+    }
     /// Interrupt in-memory analysis as well as physical reads at the owning operation's boundary.
     fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
         Ok(())
@@ -471,6 +476,9 @@ impl<'a, B: CanonicalBaseRead + ?Sized> BudgetedCanonicalBase<'a, B> {
 }
 
 impl<B: CanonicalBaseRead + ?Sized> CanonicalBaseRead for BudgetedCanonicalBase<'_, B> {
+    fn accepted_retry_encoding(&self) -> Option<u16> {
+        self.base.accepted_retry_encoding()
+    }
     fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
         self.base.validation_checkpoint()
     }

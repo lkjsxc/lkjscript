@@ -79,6 +79,7 @@ pub enum OwnershipRole {
     ModuleDeclaration,
     DeclarationTypeParameter,
     DeclarationEffectParameter,
+    DeclarationRequirementParameter,
     DeclarationField,
     DeclarationCase,
     DeclarationOperation,
@@ -108,6 +109,7 @@ impl OwnershipRole {
             self,
             Self::DeclarationTypeParameter
                 | Self::DeclarationEffectParameter
+                | Self::DeclarationRequirementParameter
                 | Self::DeclarationField
                 | Self::DeclarationCase
                 | Self::DeclarationOperation

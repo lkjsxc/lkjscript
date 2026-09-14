@@ -107,8 +107,9 @@ impl RevisionCore {
 
     fn validate(&self) -> Result<(), Diagnostic> {
         if self.contract_version != REVISION_CONTRACT_VERSION
-            || self.graph_contract_version
-                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+            || !crate::platform::kernel::contract::supported_graph_contract(
+                self.graph_contract_version,
+            )
         {
             return Err(revision_error(
                 DiagnosticClass::Source,
@@ -305,8 +306,9 @@ impl HeadRecord {
 
     fn validate(&self) -> Result<(), Diagnostic> {
         if self.contract_version != REVISION_CONTRACT_VERSION
-            || self.graph_contract_version
-                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+            || !crate::platform::kernel::contract::supported_graph_contract(
+                self.graph_contract_version,
+            )
         {
             return Err(revision_error(
                 DiagnosticClass::Source,
@@ -339,7 +341,8 @@ impl AcceptedBinding {
     ) -> Result<Self, Diagnostic> {
         head.validate()?;
         let (record_digest, _) = record.encode()?;
-        if head.repository_id != record.core.repository_id
+        if head.graph_contract_version != record.core.graph_contract_version
+            || head.repository_id != record.core.repository_id
             || head.revision != record.revision
             || head.record != record_digest
         {

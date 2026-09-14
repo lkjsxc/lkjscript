@@ -1257,7 +1257,12 @@ fn reconstruct_function_extraction(
             _ => {}
         }
     }
-    required.extend(captures.iter().filter_map(|capture| capture.requirement));
+    required.extend(
+        captures
+            .iter()
+            .filter_map(|capture| capture.requirement)
+            .map(crate::platform::kernel::RequirementOperand::Concrete),
+    );
     let requirements = match &function_record.effect {
         FunctionEffect::Pure if required.is_empty() => Vec::new(),
         FunctionEffect::Pure => {
@@ -1363,7 +1368,7 @@ fn reconstruct_function_extraction(
         requirements: requirements
             .iter()
             .copied()
-            .map(oracle_requirement_reference)
+            .map(|r| format!("{}/{}", r.package(), r.owner()))
             .collect(),
         affine_requirement: captures
             .last()
@@ -1826,9 +1831,16 @@ fn oracle_capture_requirement(
             ));
         };
         let mut candidates = Vec::new();
-        for requirement in requirements {
-            if oracle_requirement(snapshot, *requirement)?.interface == interface {
-                candidates.push(*requirement);
+        for operand in requirements {
+            let requirement = operand.concrete().ok_or_else(|| {
+                oracle_error(
+                    DiagnosticClass::Semantic,
+                    "contributor_extraction_resource_source",
+                    "generic resource transfer is unsupported",
+                )
+            })?;
+            if oracle_requirement(snapshot, requirement)?.interface == interface {
+                candidates.push(requirement);
             }
         }
         return match candidates.as_slice() {
@@ -1854,7 +1866,15 @@ fn oracle_capture_requirement(
     };
     match snapshot.owners.get(&OwnerKey::Expression(value)) {
         Some(OwnerRecord::Expression(record)) => match record.operation {
-            ExpressionOperation::CapabilityCall { requirement, .. } => Ok(requirement),
+            ExpressionOperation::CapabilityCall { requirement, .. } => {
+                requirement.concrete().ok_or_else(|| {
+                    oracle_error(
+                        DiagnosticClass::Semantic,
+                        "contributor_extraction_resource_source",
+                        "generic resource transfer is unsupported",
+                    )
+                })
+            }
             _ => Err(oracle_error(
                 DiagnosticClass::Semantic,
                 "contributor_extraction_resource_source",
@@ -2037,10 +2057,10 @@ fn reconstruct_function_definition(
         } => requirements.as_slice(),
     };
     for (ordinal, requirement) in requirements.iter().copied().enumerate() {
-        if requirement.package != package {
+        if requirement.package() != package {
             continue;
         }
-        let owner = OwnerKey::Requirement(requirement.requirement);
+        let owner = requirement.owner();
         let expected = OwnershipEntry::new(
             OwnershipParent::Owner(function_owner),
             OwnershipRole::DeclarationRequirement,
@@ -2219,7 +2239,7 @@ impl DefinitionOracleWalker<'_> {
                 .capability_calls
                 .push(FunctionDefinitionOracleCapability {
                     expression: owner.to_string(),
-                    requirement: format!("{}/{}", requirement.package, requirement.requirement),
+                    requirement: format!("{}/{}", requirement.package(), requirement.owner()),
                     operation: format!("{}/{}", operation.package, operation.operation),
                     arguments: arguments.len() as u64,
                     parameter_uses: oracle_operation_parameter_uses(self.snapshot, *operation)?,
@@ -2954,6 +2974,7 @@ mod tests {
             panic!("recursive selected expression")
         };
         expression.operation = ExpressionOperation::Call {
+            requirement_arguments: Vec::new(),
             effect_arguments: Vec::new(),
             function: crate::platform::kernel::DeclarationReference {
                 package,
@@ -3127,7 +3148,7 @@ mod tests {
         assert_eq!(
             requirements
                 .iter()
-                .copied()
+                .map(|reference| reference.concrete().expect("concrete extraction fixture"))
                 .map(super::oracle_requirement_reference)
                 .collect::<Vec<_>>(),
             oracle.requirements

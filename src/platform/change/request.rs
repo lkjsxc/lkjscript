@@ -21,8 +21,8 @@ pub use creation::{
     AuthoredLocalReference, AuthoredMapExpressionEntry, AuthoredMatchExpressionArm,
     AuthoredOperation, AuthoredOperationReference, AuthoredParameter, AuthoredPort,
     AuthoredPortImplementation, AuthoredPortReference, AuthoredRecordExpressionField,
-    AuthoredRequirement, AuthoredRequirementReference, AuthoredResourceLimit,
-    AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
+    AuthoredRequirement, AuthoredRequirementParameter, AuthoredRequirementReference,
+    AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
     AuthoredTypeParameterReference,
 };
 pub use precondition::{
@@ -169,6 +169,15 @@ pub enum AuthoredChange {
     AddOperation {
         interface: DeclarationSelector,
         operation: AuthoredOperation,
+    },
+    AddRequirementParameter {
+        declaration: DeclarationSelector,
+        parameter: AuthoredRequirementParameter,
+    },
+    SetRequirementParameter {
+        parameter: OwnerSelector,
+        interface: AuthoredDeclarationReference,
+        operations: Vec<AuthoredOperationReference>,
     },
     AddEffectParameter {
         declaration: DeclarationSelector,
@@ -344,6 +353,7 @@ pub(super) enum SymbolKind {
     Declaration,
     TypeParameter,
     EffectParameter,
+    RequirementParameter,
     Field,
     Case,
     Operation,
@@ -368,6 +378,7 @@ impl SymbolKind {
             Self::Declaration => 2,
             Self::TypeParameter => 3,
             Self::EffectParameter => 19,
+            Self::RequirementParameter => 20,
             Self::Field => 4,
             Self::Case => 5,
             Self::Operation => 6,
@@ -389,6 +400,7 @@ impl SymbolKind {
     const fn allocation_domain(self) -> u8 {
         match self {
             Self::EffectParameter => 16,
+            Self::RequirementParameter => 17,
             Self::Module => 1,
             Self::Declaration => 2,
             Self::TypeParameter => 3,
@@ -413,6 +425,7 @@ impl SymbolKind {
             Self::Declaration => IdentityKind::Declaration,
             Self::TypeParameter => IdentityKind::TypeParameter,
             Self::EffectParameter => IdentityKind::EffectParameter,
+            Self::RequirementParameter => IdentityKind::RequirementParameter,
             Self::Field => IdentityKind::Field,
             Self::Case => IdentityKind::Case,
             Self::Operation => IdentityKind::Operation,
@@ -434,6 +447,9 @@ impl SymbolKind {
         match self {
             Self::Module => OwnerKey::Module(ModuleId::allocate(seed, ordinal)),
             Self::Declaration => OwnerKey::Declaration(DeclarationId::allocate(seed, ordinal)),
+            Self::RequirementParameter => OwnerKey::RequirementParameter(
+                crate::platform::semantic_id::RequirementParameterId::allocate(seed, ordinal),
+            ),
             Self::EffectParameter => {
                 OwnerKey::EffectParameter(EffectParameterId::allocate(seed, ordinal))
             }
@@ -778,6 +794,8 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
             | AuthoredChange::AddCase { .. }
             | AuthoredChange::AddOperation { .. }
             | AuthoredChange::AddTypeParameter { .. }
+            | AuthoredChange::AddRequirementParameter { .. }
+            | AuthoredChange::SetRequirementParameter { .. }
             | AuthoredChange::AddEffectParameter { .. }
             | AuthoredChange::SetTypeParameterConstraint { .. }
             | AuthoredChange::AddRequirement { .. }
@@ -817,6 +835,8 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
             | AuthoredChange::AddCase { .. }
             | AuthoredChange::AddOperation { .. }
             | AuthoredChange::AddTypeParameter { .. }
+            | AuthoredChange::AddRequirementParameter { .. }
+            | AuthoredChange::SetRequirementParameter { .. }
             | AuthoredChange::AddEffectParameter { .. }
             | AuthoredChange::SetTypeParameterConstraint { .. }
             | AuthoredChange::AddParameter { .. }
@@ -1009,6 +1029,8 @@ fn collect_symbol_definitions(
             | AuthoredChange::AddCase { .. }
             | AuthoredChange::AddOperation { .. }
             | AuthoredChange::AddTypeParameter { .. }
+            | AuthoredChange::AddRequirementParameter { .. }
+            | AuthoredChange::SetRequirementParameter { .. }
             | AuthoredChange::AddEffectParameter { .. }
             | AuthoredChange::SetTypeParameterConstraint { .. }
             | AuthoredChange::AddParameter { .. }
@@ -1522,6 +1544,20 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         match self.symbol_owner(symbol, SymbolKind::Declaration)? {
             OwnerKey::Declaration(value) => Ok(value),
             _ => Err(symbol_domain_corrupt(symbol)),
+        }
+    }
+
+    fn requirement_parameter_symbol(
+        &self,
+        symbol: &str,
+    ) -> Result<crate::platform::semantic_id::RequirementParameterId, Diagnostic> {
+        match self.symbol_owner(symbol, SymbolKind::RequirementParameter)? {
+            OwnerKey::RequirementParameter(value) => Ok(value),
+            _ => Err(request_error(
+                DiagnosticClass::Corrupt,
+                "change_requirement_parameter_symbol",
+                "requirement parameter allocation has another identity kind",
+            )),
         }
     }
 
@@ -2042,7 +2078,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 edits.push(PrimitiveEdit::AddTypeObject { digest, object });
             }
         }
-        for (_, working) in self.owners {
+        for (_, mut working) in self.owners {
             if working.deleted {
                 let expected = working.before.ok_or_else(|| {
                     request_error(
@@ -2056,6 +2092,13 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                     expected,
                 });
                 continue;
+            }
+            if working.original.as_ref() != Some(&working.record) {
+                working.record.set_encoding_for_edit(
+                    self.base
+                        .accepted_retry_encoding()
+                        .unwrap_or(crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION),
+                );
             }
             let (after, _) = encode_owner(&working.record)?;
             match working.before {
@@ -2074,8 +2117,13 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             let WorkingDependency {
                 before,
                 original,
-                record,
+                mut record,
             } = working;
+            if let (Some(generation), Some(record)) =
+                (self.base.accepted_retry_encoding(), &mut record)
+            {
+                record.graph_contract_version = generation;
+            }
             match (before, record) {
                 (None, Some(record)) => edits.push(PrimitiveEdit::InsertDependency { record }),
                 (Some(before), Some(record)) => {
@@ -2097,7 +2145,10 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 (None, None) => {}
             }
         }
-        for (_, record) in self.retirements {
+        for (_, mut record) in self.retirements {
+            if let Some(generation) = self.base.accepted_retry_encoding() {
+                record.graph_contract_version = generation;
+            }
             edits.push(PrimitiveEdit::InsertRetirement { record });
         }
         Ok(AuthoredLowering {

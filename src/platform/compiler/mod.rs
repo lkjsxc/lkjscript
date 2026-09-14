@@ -17,6 +17,7 @@ mod link;
 mod lower;
 pub(crate) mod manifest;
 pub(crate) mod unit;
+mod wire10;
 
 pub(crate) use artifact::{
     ARTIFACT_BUNDLE_CHECKSUM_DOMAIN, ARTIFACT_BUNDLE_DIGEST_DOMAIN, ARTIFACT_BUNDLE_END_MAGIC,

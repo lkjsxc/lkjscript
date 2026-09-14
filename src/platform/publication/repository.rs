@@ -671,14 +671,11 @@ impl GraphRepository {
                 "accepted idempotency result parent disagrees with its history binding",
             ));
         }
-        let base_head = HeadRecord {
-            contract_version: REVISION_CONTRACT_VERSION,
-            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-            repository_id: binding.repository_id,
-            revision: parent.revision,
-            record: parent.record,
-        };
-        let base_publication = read_publication(&store, base_head)?;
+        let mut parent_work = StoreWork::default();
+        let base_head =
+            load_parent_binding(&store, binding.repository_id, *parent, &mut parent_work)?.head;
+        let mut base_publication = read_publication(&store, base_head)?;
+        base_publication.store_work.add(parent_work);
         let hidden_type_objects = match &accepted.semantic_diff.body {
             crate::platform::publication::SemanticDiffBody::Change { type_additions, .. } => {
                 type_additions.iter().copied().collect()
@@ -1260,7 +1257,7 @@ fn load_parent_binding(
     AcceptedBinding::verify(
         HeadRecord {
             contract_version: REVISION_CONTRACT_VERSION,
-            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+            graph_contract_version: revision.core.graph_contract_version,
             repository_id,
             revision: parent.revision,
             record: parent.record,

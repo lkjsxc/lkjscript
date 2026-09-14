@@ -22,16 +22,16 @@ not editable source or an alternate package repository.
 An exported pure factory can return a pure or task function with a runtime bound prefix over its private graph
 helper. Transport and linking include that helper's complete code and type closure; receiving the
 callable does not grant consumers direct authoring visibility of its target. Code may contain `bind`
-expressions, but transports and artifacts never contain evaluated environments or execution grants. Accepted Graph 14
-meaning rejects predecessor graph inputs. The unchanged TypeObject 10 codec, magic, digest domains,
+expressions, but transports and artifacts never contain evaluated environments or execution grants. Graph 15 retains the supported exact Graph 14 predecessor decoding described in
+[semantic-storage.md](semantic-storage.md). The unchanged TypeObject 10 codec, magic, digest domains,
 and bytes remain current for all pre-existing type forms. Positive nominal applications use the
 separate version-1 `LKJTAP01` envelope and its own digest domain, binding declaration and ordered
 arguments. Task callable types use their own version-1 `LKJTFN01` envelope and digest domain, binding
 the exact signature and canonical effect row; existing pure type bytes do not change. Unchanged
 monomorphic typed-data layouts retain their exact identities. This cutover does
-not rewrite operational data or add a predecessor graph reader.
+not rewrite operational data; the supported predecessor reader authenticates historical bytes.
 
-Function interfaces include exact ordered type/effect parameters, substituted callable signatures,
+Function interfaces include exact ordered type/effect/requirement parameters, substituted callable signatures,
 and effect rows. A transported abstract library need not own any concrete consumer requirement:
 effect arguments retain those consumer references through invocation. Strict loading independently
 cross-checks compiled parameter ownership/order, effect arguments, nested task types, target
@@ -40,8 +40,15 @@ It also reconstructs canonical code under the existing validation work bound and
 instructions, operands, locals and all return/transaction continuations before runtime tail
 derivation. A compiled control-flow change is corruption even when its references, stack merges
 and enclosing hashes are valid. Valid unchanged Artifact 18 bytes remain supported.
-Prepared application identity includes target, ordered type/effect arguments and preparation origin.
+Prepared application identity includes target, ordered type/effect/requirement arguments and preparation origin.
 Task ports use closed task-callable types; the predecessor task-as-pure entry representation rejects.
+
+Requirement formals publish their exact interface and minimum operation set. Explicit caller
+requirements close to whole exact atoms, including operations beyond that minimum; they do not
+become attenuated views. Constraint edits change the exact public interface and invalidate affected
+callers. Dependency replacement validates every consumer against the replacement constraint before
+atomic publication. An imported library may own operations and lexical transactions through these
+arguments without importing the caller component or gaining any deployment grant.
 
 Public package interfaces retain exact-interface capability-resource types and operation parameter
 use modes. Resource interface references must resolve inside the exact dependency closure and
@@ -225,30 +232,45 @@ future explicitly selected adapter; no TLS or certificate machinery is implied b
 model. The first-party data root is local trusted-host authority, not encrypted storage or a remote
 database service.
 
-Rank-one package interfaces include every type parameter's exact closed constraint set, including
-unused parameters. Graph 14 owner encoding, compiled-unit 10 signatures and package-interface-owner 10
-replace their predecessors explicitly. An imported `capture-safe` constraint must be discharged in
-the consumer's scope using its exact closure and nominal layouts. A returned callable can target a
-private generic graph helper retained in transported code; private helpers remain unavailable to
-ordinary public name lookup. Checksums and compiled metadata do not override canonical constraints.
-The immutable transport/container framing is unchanged. Bytecode 6 constructor instructions retain
-ordered application arguments, and Artifact 18 binds the new compiled/runtime meaning. Strict loading
-rederives parameter order, constraints, member layouts and constructor inventories from canonical
-owners, including private closure objects. Fully rehashed incompatible or incomplete inputs reject.
-Unchanged TypeObject 10 and monomorphic typed-data bytes, operational stores, queues and backups
-require no data migration. Applications have a separate typed-data layout discriminator that includes
-all arguments before the substituted members, so phantom changes cannot reuse a layout.
+Rank-one package interfaces include every ordinary, effect and requirement parameter, including
+unused parameters. Requirement parameters expose their stable order, exact interface and canonical
+minimum operation set. Imported applications discharge those constraints in the consumer's scope;
+transport preserves private graph bodies and exact closed callable descriptors. Private helpers
+remain unavailable to public name lookup. Checksums and compiled metadata cannot override the
+canonical constraints or confer deployment grants.
+
+The current graph/owner generation is 15, compiler-unit 11, bytecode 7 and package-interface-owner
+11. Supported predecessor Graph 14, compiler-unit 10, bytecode 6 and interface-owner 10 objects have
+strict independent wire layouts. TypeObject 10 and nominal application encodings remain unchanged;
+task-callable rows use the explicit successor envelope only when symbolic requirement operands
+need it. Canonical re-encoding follows the admitted object's generation, preserving unchanged
+predecessor objects and IDs. Current package/interface wrappers may contain compatible old canonical
+objects and necessarily acquire new wrapper identities. Artifact 19 and its manifest bind the
+supported graph/compiler/bytecode tuple. Exact Artifact 18 decoding admits only its predecessor
+Graph 14 / compiler 10 / bytecode 6 tuple. New bundles use the explicit version 19 outer envelope,
+so predecessor executables reject them before decoding extended owners. Mixed or unsupported
+tuples reject before execution.
+The transport/container framing remains unchanged, with explicit contained graph generations.
+A predecessor executable rejects new graph meaning rather than ignoring requirement arguments.
+
+Inspection and current validation do not migrate accepted roots, historical records or application
+data. Ordinary reviewed edits create successor owners/roots, and compatible historical retries
+return the original accepted identities. Derived caches may be rebuilt under current contracts.
+Unchanged TypeObject and monomorphic typed-data bytes, operational stores, queues and backups
+require no data migration. Applied typed-data layout identities include all type arguments before
+substituted members, so phantom changes cannot reuse a layout. Capture-safe remains distinct from
+typed-data eligibility, and closed intrinsically unencodable external entries reject before effects.
 The finite-instantiation rule follows the exact package closure, including private members,
 phantom arguments and function signatures. A package cannot hide structural parameter growth
 behind an unused case or a private wrapper. Compilation prepares one complete instance per
-canonical application and validates all references before exposing it. The nominal/session
-feature-proof versions are 2 and semantic validator identity is 4; predecessor proofs and
-compiled units cannot certify the revised acceptance rule. These proof identities do not change
+canonical application and validates all references before exposing it. Current feature proofs bind the maintained validator and feature contract; predecessor proofs
+cannot certify current execution admission. These proof identities do not change
 canonical TypeObject or typed-value encoding generations.
 For a source container with the current graph and witness schemas, historical validator metadata
 is checked for canonical encoding, certificate and exact source binding, then discarded as proof.
 Admission rebuilds every witness from the complete canonical source under the current validator
 before publishing readiness. This permits exporting an unchanged predecessor source package,
-restaging its exact dependency closure, and rebuilding it without changing logical identities.
+restaging its exact dependency closure, and rebuilding it while preserving accepted semantic identity;
+successor package wrappers may have new logical package identities.
 Repository witness reuse and compiled-artifact loading still require their current contracts;
 unknown producer proof metadata cannot exempt malformed or expanding source from validation.

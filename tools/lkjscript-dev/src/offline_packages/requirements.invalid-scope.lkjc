@@ -1,0 +1,12 @@
+reference.owner as=$module package=local class=module name=typed-cells
+reference.owner as=$update package=local class=declaration parent=$module name=attempt-update
+reference.owner as=$R package=local class=requirement-parameter parent=$update name=R
+effect.row as=@Empty
+expression.function-value as=$invalid function=$update
+type.argument parent=$invalid index=0 type=i64
+effect.argument parent=$invalid index=0 effect=@Empty
+requirement.argument parent=$invalid index=0 requirement=parameter:$R
+expression.unit as=$unit
+expression.bool as=$stop value=true
+expression.if as=$body condition=$stop when-true=$unit when-false=$invalid
+create.function as=$bad module=$module name=unreachable-foreign-scope visibility=private result=unit effect=pure body=$body

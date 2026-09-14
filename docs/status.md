@@ -104,11 +104,27 @@ created 2026-09-13T22:27:10Z, completed successfully at 2026-09-14T00:12:35Z on 
 Its five authenticated original artifacts are retained locally. Original package, six target and
 installed-pair readers pass; the original prepare authenticates 26 fresh full gates with zero reuse.
 The final-source 76-omission target test passes with intact baseline/recovery and byte-identical
-restoration. These are rehearsal evidence and reader observations; immutable/public delivery is
-still selected and open. Reporting descendants do not replace its frozen inputs. The
+restoration. The later immutable v0.1.35 release `388511109` was published at
+2026-09-14T15:34:40Z by `34847832173/1`, exact frozen `4306ef64`; its public job
+`104039969207` passed and the run completed at 16:13:06Z. Authenticated original publisher ZIPs,
+strict package, all six target, simulated pair and anonymous exact/latest installed-pair readers
+pass under retained original context. The exact route owns the fresh five-child suite; latest binds
+it within the same pair, with joined cleanup. This closes named-reference/finite-callable delivery;
+the older pending paragraphs above are historical observations. Reporting descendants do not
+replace its frozen inputs. The
 [requirement-parameter campaign](campaigns/202609140938.md) continues the unimplemented language
 capability while finishing this independent predecessor publication; its acceptance deferral has
 not begun.
+
+The requirement candidate now implements explicit ordered T/E/R applications, minimum-operation
+constraints, exact closed callable descriptors, symbolic operations/transactions and local affine
+provenance. Literal transported typed-cell and DurableQueue workloads pass focused public acceptance,
+including independent persistence observations, constraint replacement/repair, authentic predecessor
+read/edit/run and unencodable-output admission. These are designed witnesses. The candidate extends
+Graph 15, compiler 11/bytecode 7 and Artifact 19 while preserving strict Graph 14 / compiler 10 /
+bytecode 6 / Artifact 18 decoding and unchanged TypeObject 10 bytes. Final frozen fresh full and
+static-target acceptance and source integration remain pending; predecessor v0.1.35 is independently
+complete. The untagged 0.1.36 candidate has not started its acceptance-triggered release deferral.
 
 The typed meaning graph is the sole current editable program authority. A project root contains a strict
 `GraphRepository`: `HEAD`, immutable packs, an object catalog, optional exact package transports,

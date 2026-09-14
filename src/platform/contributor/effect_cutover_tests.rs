@@ -2,11 +2,21 @@
 use super::*;
 
 pub(crate) fn neutral_effect_fields(value: &mut serde_json::Value) {
+    // The successor discriminant makes concrete and symbolic operands distinct. Only the
+    // concrete arm denotes the same predecessor reference in this historical meaning oracle.
+    if value["kind"] == "concrete" && value["reference"].get("requirement").is_some() {
+        *value = value["reference"].clone();
+    }
     match value {
         serde_json::Value::Object(fields) => {
             fields.remove("contract_version");
             fields.remove("graph_contract_version");
-            for key in ["effect_parameters", "effect_arguments"] {
+            for key in [
+                "effect_parameters",
+                "effect_arguments",
+                "requirement_parameters",
+                "requirement_arguments",
+            ] {
                 if fields
                     .get(key)
                     .is_some_and(|value| value.as_array().is_some_and(Vec::is_empty))
@@ -162,10 +172,7 @@ fn frozen_effect_transition_preserves_every_owner_and_unchanged_type_byte() {
     )
     .unwrap();
     assert_eq!(fixture["predecessor_graph"], 13);
-    assert_eq!(
-        fixture["successor_graph"],
-        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-    );
+    assert_eq!(fixture["successor_graph"], 14);
     for project in fixture["projects"].as_array().unwrap() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(project["project"].as_str().unwrap());
         let before = std::fs::read(path.join("HEAD")).unwrap();

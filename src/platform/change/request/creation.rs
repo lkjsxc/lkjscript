@@ -114,6 +114,14 @@ pub struct AuthoredParameter {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AuthoredRequirementParameter {
+    pub symbol: String,
+    pub name: Name,
+    pub interface: AuthoredDeclarationReference,
+    pub operations: Vec<AuthoredOperationReference>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoredEffectParameter {
     pub symbol: String,
     pub name: Name,
@@ -272,6 +280,16 @@ pub enum AuthoredOperationReference {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredRequirementReference {
+    ParameterSelected {
+        reference: super::AuthoredReference,
+    },
+    ParameterExact {
+        package: crate::platform::kernel::PackageId,
+        parameter: crate::platform::semantic_id::RequirementParameterId,
+    },
+    ParameterSymbol {
+        symbol: String,
+    },
     Selected {
         reference: super::AuthoredReference,
     },
@@ -335,12 +353,14 @@ pub enum AuthoredExpressionOperation {
         items: Vec<AuthoredExpression>,
     },
     Call {
+        requirement_arguments: Vec<AuthoredRequirementReference>,
         effect_arguments: Vec<AuthoredEffectRow>,
         function: AuthoredDeclarationReference,
         type_arguments: Vec<AuthoredType>,
         arguments: Vec<AuthoredExpression>,
     },
     FunctionValue {
+        requirement_arguments: Vec<AuthoredRequirementReference>,
         effect_arguments: Vec<AuthoredEffectRow>,
         function: AuthoredDeclarationReference,
         type_arguments: Vec<AuthoredType>,
@@ -629,6 +649,7 @@ pub(super) fn lower_function<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead +
         name: name.clone(),
         visibility,
         payload: DeclarationPayload::Function(FunctionDeclaration {
+            requirement_parameters: Vec::new(),
             effect_parameters: Vec::new(),
             type_parameters: type_parameter_ids,
             parameters: parameter_ids,
@@ -876,7 +897,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         let mut row = crate::platform::kernel::EffectRow {
             requirements: requirements
                 .iter()
-                .map(|r| self.lower_requirement_reference(r))
+                .map(|r| self.lower_requirement_operand(r))
                 .collect::<Result<_, _>>()?,
             parameters: parameters
                 .iter()
@@ -986,21 +1007,31 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 items: self.lower_expressions(items)?,
             },
             AuthoredExpressionOperation::Call {
+                requirement_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
                 arguments,
             } => ExpressionOperation::Call {
+                requirement_arguments: requirement_arguments
+                    .iter()
+                    .map(|r| self.lower_requirement_operand(r))
+                    .collect::<Result<_, _>>()?,
                 effect_arguments: self.lower_effect_rows(effect_arguments)?,
                 function: self.lower_declaration_reference(function)?,
                 type_arguments: self.lower_types(type_arguments)?,
                 arguments: self.lower_expressions(arguments)?,
             },
             AuthoredExpressionOperation::FunctionValue {
+                requirement_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
             } => ExpressionOperation::FunctionValue {
+                requirement_arguments: requirement_arguments
+                    .iter()
+                    .map(|r| self.lower_requirement_operand(r))
+                    .collect::<Result<_, _>>()?,
                 effect_arguments: self.lower_effect_rows(effect_arguments)?,
                 function: self.lower_declaration_reference(function)?,
                 type_arguments: self.lower_types(type_arguments)?,
@@ -1103,7 +1134,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 operation,
                 arguments,
             } => ExpressionOperation::CapabilityCall {
-                requirement: self.lower_requirement_reference(requirement)?,
+                requirement: self.lower_requirement_operand(requirement)?,
                 operation: self.lower_operation_reference(operation)?,
                 arguments: self.lower_expressions(arguments)?,
             },
@@ -1112,7 +1143,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 binding,
                 body,
             } => ExpressionOperation::Transaction {
-                requirement: self.lower_requirement_reference(requirement)?,
+                requirement: self.lower_requirement_operand(requirement)?,
                 binding: self.insert_scoped_binding(binding, SymbolKind::TransactionBinding)?,
                 body: self.lower_expression(body)?,
             },
@@ -1371,11 +1402,18 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         }
     }
 
-    fn lower_requirement_reference(
+    fn lower_concrete_requirement_reference(
         &mut self,
         selector: &AuthoredRequirementReference,
     ) -> Result<RequirementReference, Diagnostic> {
         match selector {
+            AuthoredRequirementReference::ParameterSelected { .. }
+            | AuthoredRequirementReference::ParameterExact { .. }
+            | AuthoredRequirementReference::ParameterSymbol { .. } => Err(request_error(
+                DiagnosticClass::Semantic,
+                "change_requirement_concrete",
+                "resource-transfer signatures require a concrete requirement",
+            )),
             AuthoredRequirementReference::Selected { reference } => {
                 let selected =
                     self.selected(*reference, Some(NamespaceClass::Requirement), false)?;
@@ -1404,6 +1442,73 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 requirement: self.requirement_symbol(symbol)?,
             }),
         }
+    }
+
+    fn lower_requirement_reference(
+        &mut self,
+        selector: &AuthoredRequirementReference,
+    ) -> Result<RequirementReference, Diagnostic> {
+        self.lower_concrete_requirement_reference(selector)
+    }
+
+    fn lower_requirement_operand(
+        &mut self,
+        selector: &AuthoredRequirementReference,
+    ) -> Result<crate::platform::kernel::RequirementOperand, Diagnostic> {
+        use crate::platform::kernel::{RequirementOperand, RequirementParameterReference};
+        let reference = match selector {
+            AuthoredRequirementReference::ParameterSelected { reference } => {
+                let selected = self.selected(
+                    *reference,
+                    Some(NamespaceClass::RequirementParameter),
+                    false,
+                )?;
+                let OwnerKey::RequirementParameter(parameter) = selected.owner else {
+                    return Err(super::references::wrong_domain());
+                };
+                RequirementParameterReference {
+                    package: selected.package,
+                    parameter,
+                }
+            }
+            AuthoredRequirementReference::ParameterExact { package, parameter } => {
+                RequirementParameterReference {
+                    package: *package,
+                    parameter: *parameter,
+                }
+            }
+            AuthoredRequirementReference::ParameterSymbol { symbol } => {
+                RequirementParameterReference {
+                    package: self.base.package_id(),
+                    parameter: self.requirement_parameter_symbol(symbol)?,
+                }
+            }
+            _ => {
+                return self
+                    .lower_concrete_requirement_reference(selector)
+                    .map(RequirementOperand::Concrete);
+            }
+        };
+        Ok(RequirementOperand::Parameter(reference))
+    }
+
+    fn lower_requirement_constraint(
+        &mut self,
+        interface: &AuthoredDeclarationReference,
+        operations: &[AuthoredOperationReference],
+    ) -> Result<crate::platform::kernel::RequirementConstraint, Diagnostic> {
+        self.admit_effect_work(operations.len())?;
+        let interface = self.lower_declaration_reference(interface)?;
+        let mut operations = operations
+            .iter()
+            .map(|op| self.lower_operation_reference(op))
+            .collect::<Result<Vec<_>, _>>()?;
+        operations.sort();
+        operations.dedup();
+        Ok(crate::platform::kernel::RequirementConstraint {
+            interface,
+            operations,
+        })
     }
 
     fn insert_scoped_binding(

@@ -198,8 +198,8 @@
       "frozen_clone": ".artifacts/stable-release-202609140703/candidate-source/",
       "policy": "New corrected-workflow dispatch after refreshing remote, permissions/rules and matching terminal runs. Event head_sha equals frozen source. Reporting descendants do not replace this source. No tag/control/publication mutation."
     },
-    "remaining": "Normal integration of the accepted stable-source repair/report; frozen 4306ef64 v0.1.35 publication, attestations and anonymous exact/latest installed public pair plus original-reader admission.",
-    "resumption": "Use the frozen 4306ef64 clone after normal integration and refreshed unused tag/control/publisher checks. Original final rehearsal and 76 omissions are admitted; do not launch another rehearsal. Follow docs/release.md to publish v0.1.35 and complete public acceptance.",
+    "remaining": "None for the selected predecessor delivery; frozen v0.1.35 public acceptance and original-reader admission completed.",
+    "resumption": "Preserve frozen 4306ef64 and immutable v0.1.35; requirement-parameter engineering proceeds separately under 202609140938.md.",
     "final_source_rehearsal_admission": {
       "source": "4306ef64783462a8dda48f2a855a88482d1faec8",
       "run": {
@@ -229,6 +229,34 @@
         "restored_bytes_equal": true
       },
       "publication": "selected; tag and publisher not yet started at this observation"
+    },
+    "public_delivery": {
+      "source": "4306ef64783462a8dda48f2a855a88482d1faec8",
+      "integrated_by": "e49a5835cdca24e58da610e78bc1eb4fd488aa95",
+      "tag": "v0.1.35",
+      "tag_object": "c90758848312705af6bb2f896831fbed27d353e5",
+      "release_id": 388511109,
+      "published_at": "2026-09-14T15:34:40Z",
+      "run": "34847832173/1",
+      "conclusion": "success",
+      "completed_at": "2026-09-14T16:13:06Z",
+      "classification": "authenticated_hosted_behavior_and_original_reader_admission",
+      "source_full": {
+        "fresh": 26,
+        "reused": 0,
+        "sha256": "1a8fa89307ae74f0e0aaf8baa54ef25dc94f07069342924db966b9a2c368c1d8",
+        "private_reader": "original prepare binding authenticated; no new prepare"
+      },
+      "target_owners": 6,
+      "static_userlands": 2,
+      "public_job": 104039969207,
+      "public_artifact": 10356694322,
+      "public_receipt": "verification_05d477e78766a48c240e7a8dae948bca4f95434e7497a178a28c3254021cbb62",
+      "public_receipt_sha256": "5e4de03ce5511fbe16b257aabea2016cea2d4210eca9ef502fbe735985cd8033",
+      "pair": "anonymous exact/latest; independent small lifecycles; exact fresh five-owner suite, latest bound within the same pair; cleanup complete",
+      "local_evidence": ".artifacts/requirement-202609140938/predecessor/publication/retention-manifest.json",
+      "readers": "strict original package, six target, simulated pair and public pair passed in isolated archived context; no application effects replayed",
+      "failures_preserved": "Prior rehearsal failures and local context reconstruction failures retained; no immutable identity replaced"
     },
     "deployment": "Not selected; effects confined to owned disposable witnesses."
   },

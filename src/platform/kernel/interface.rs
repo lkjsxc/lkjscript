@@ -29,6 +29,7 @@ pub enum PackageInterfaceRecord {
     Parameter(ParameterRecord),
     Requirement(RequirementRecord),
     Port(PackageInterfacePort),
+    RequirementParameter(super::RequirementParameterRecord),
 }
 
 impl PackageInterfaceRecord {
@@ -39,6 +40,7 @@ impl PackageInterfaceRecord {
             }
             OwnerRecord::TypeParameter(record) => Self::TypeParameter(record.clone()),
             OwnerRecord::EffectParameter(record) => Self::EffectParameter(record.clone()),
+            OwnerRecord::RequirementParameter(record) => Self::RequirementParameter(record.clone()),
             OwnerRecord::Field(record) => Self::Field(record.clone()),
             OwnerRecord::Case(record) => Self::Case(record.clone()),
             OwnerRecord::Operation(record) => Self::Operation(record.clone()),
@@ -65,6 +67,7 @@ impl PackageInterfaceRecord {
             Self::Declaration(record) => record.header,
             Self::TypeParameter(record) => record.header,
             Self::EffectParameter(record) => record.header,
+            Self::RequirementParameter(record) => record.header,
             Self::Field(record) => record.header,
             Self::Case(record) => record.header,
             Self::Operation(record) => record.header,
@@ -82,13 +85,19 @@ impl PackageInterfaceRecord {
             Self::Operation(record) => vec![record.result],
             Self::Parameter(record) => vec![record.ty],
             Self::Port(record) => vec![record.function_type],
-            Self::TypeParameter(_) | Self::EffectParameter(_) | Self::Requirement(_) => Vec::new(),
+            Self::TypeParameter(_)
+            | Self::EffectParameter(_)
+            | Self::RequirementParameter(_)
+            | Self::Requirement(_) => Vec::new(),
         }
     }
 
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
         match self {
             Self::Declaration(record) => record.validate_local(),
+            Self::RequirementParameter(record) => {
+                OwnerRecord::RequirementParameter(record.clone()).validate_local()
+            }
             Self::EffectParameter(record) => {
                 OwnerRecord::EffectParameter(record.clone()).validate_local()
             }
@@ -150,6 +159,7 @@ impl PackageInterfaceDeclaration {
             }
             DeclarationPayload::Function(function) => {
                 PackageInterfaceDeclarationPayload::Function(PackageFunctionSignature {
+                    requirement_parameters: function.requirement_parameters.clone(),
                     effect_parameters: function.effect_parameters.clone(),
                     type_parameters: function.type_parameters.clone(),
                     parameters: function.parameters.clone(),
@@ -223,6 +233,10 @@ impl PackageInterfaceDeclaration {
                 OwnerKind::External
             }
             PackageInterfaceDeclarationPayload::Function(signature) => {
+                validate_ordered(
+                    "function requirement parameters",
+                    &signature.requirement_parameters,
+                )?;
                 validate_ordered("function effect parameters", &signature.effect_parameters)?;
                 signature.effect.row().validate()?;
                 validate_ordered("function type parameters", &signature.type_parameters)?;
@@ -292,6 +306,7 @@ pub struct PackageExternalSignature {
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct PackageFunctionSignature {
+    pub requirement_parameters: Vec<crate::platform::semantic_id::RequirementParameterId>,
     pub effect_parameters: Vec<EffectParameterId>,
     pub type_parameters: Vec<TypeParameterId>,
     pub parameters: Vec<ParameterId>,
@@ -322,7 +337,8 @@ impl PackageInterfacePort {
 }
 
 fn validate_header(header: OwnerHeader) -> Result<(), Diagnostic> {
-    if header.contract_version != GRAPH_CONTRACT_VERSION || !header.kind.accepts_owner(header.owner)
+    if !super::contract::supported_graph_contract(header.contract_version)
+        || !header.kind.accepts_owner(header.owner)
     {
         return Err(interface_error(
             DiagnosticClass::Corrupt,

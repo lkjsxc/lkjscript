@@ -4,7 +4,7 @@ use super::contract::GRAPH_CONTRACT_VERSION;
 use crate::platform::semantic_id::{
     AnnotationId, BindingId, CaseId, DeclarationId, DocumentationId, EffectParameterId,
     ExpressionId, FieldId, HttpRouteId, ModuleId, OperationId, ParameterId, PortId, RequirementId,
-    TargetId, TypeParameterId,
+    RequirementParameterId, TargetId, TypeParameterId,
 };
 use crate::platform::{
     diagnostic::Diagnostic, diagnostic::DiagnosticClass, semantic_id::encode_hex,
@@ -46,10 +46,11 @@ pub enum OwnerKind {
     Annotation,
     HttpRoute,
     EffectParameter,
+    RequirementParameter,
 }
 
 impl OwnerKind {
-    pub const ALL: [Self; 24] = [
+    pub const ALL: [Self; 25] = [
         Self::Module,
         Self::Record,
         Self::Variant,
@@ -74,6 +75,7 @@ impl OwnerKind {
         Self::Annotation,
         Self::HttpRoute,
         Self::EffectParameter,
+        Self::RequirementParameter,
     ];
 
     /// Coarse durable owner kinds that survive the scoped-identity cutover and may therefore be
@@ -107,6 +109,7 @@ impl OwnerKind {
             Self::Test => 10,
             Self::TypeParameter => 11,
             Self::EffectParameter => 24,
+            Self::RequirementParameter => 25,
             Self::Field => 12,
             Self::Case => 13,
             Self::Operation => 14,
@@ -136,6 +139,7 @@ impl OwnerKind {
             Self::Test => "test",
             Self::TypeParameter => "type_parameter",
             Self::EffectParameter => "effect_parameter",
+            Self::RequirementParameter => "requirement_parameter",
             Self::Field => "field",
             Self::Case => "case",
             Self::Operation => "operation",
@@ -179,6 +183,10 @@ impl OwnerKind {
                 | (Self::Test, OwnerKey::Declaration(_))
                 | (Self::TypeParameter, OwnerKey::TypeParameter(_))
                 | (Self::EffectParameter, OwnerKey::EffectParameter(_))
+                | (
+                    Self::RequirementParameter,
+                    OwnerKey::RequirementParameter(_)
+                )
                 | (Self::Field, OwnerKey::Field(_))
                 | (Self::Case, OwnerKey::Case(_))
                 | (Self::Operation, OwnerKey::Operation(_))
@@ -237,6 +245,7 @@ pub enum OwnerKey {
     Annotation(AnnotationId),
     HttpRoute(HttpRouteId),
     EffectParameter(EffectParameterId),
+    RequirementParameter(RequirementParameterId),
 }
 
 impl OwnerKey {
@@ -246,6 +255,7 @@ impl OwnerKey {
             Self::Declaration(_) => IdentityKind::Declaration,
             Self::TypeParameter(_) => IdentityKind::TypeParameter,
             Self::EffectParameter(_) => IdentityKind::EffectParameter,
+            Self::RequirementParameter(_) => IdentityKind::RequirementParameter,
             Self::Field(_) => IdentityKind::Field,
             Self::Case(_) => IdentityKind::Case,
             Self::Operation(_) => IdentityKind::Operation,
@@ -267,6 +277,7 @@ impl OwnerKey {
             Self::Declaration(id) => id.bytes(),
             Self::TypeParameter(id) => id.bytes(),
             Self::EffectParameter(id) => id.bytes(),
+            Self::RequirementParameter(id) => id.bytes(),
             Self::Field(id) => id.bytes(),
             Self::Case(id) => id.bytes(),
             Self::Operation(id) => id.bytes(),
@@ -290,6 +301,7 @@ impl fmt::Display for OwnerKey {
             Self::Declaration(value) => value.fmt(formatter),
             Self::TypeParameter(value) => value.fmt(formatter),
             Self::EffectParameter(value) => value.fmt(formatter),
+            Self::RequirementParameter(value) => value.fmt(formatter),
             Self::Field(value) => value.fmt(formatter),
             Self::Case(value) => value.fmt(formatter),
             Self::Operation(value) => value.fmt(formatter),
@@ -314,6 +326,8 @@ impl FromStr for OwnerKey {
             value.parse().map(Self::Module)
         } else if value.starts_with(DeclarationId::PREFIX) {
             value.parse().map(Self::Declaration)
+        } else if value.starts_with(RequirementParameterId::PREFIX) {
+            value.parse().map(Self::RequirementParameter)
         } else if value.starts_with(EffectParameterId::PREFIX) {
             value.parse().map(Self::EffectParameter)
         } else if value.starts_with(TypeParameterId::PREFIX) {
@@ -370,6 +384,7 @@ pub enum IdentityKind {
     Annotation,
     HttpRoute,
     EffectParameter,
+    RequirementParameter,
 }
 
 impl IdentityKind {
@@ -379,6 +394,7 @@ impl IdentityKind {
             Self::Declaration => 2,
             Self::TypeParameter => 3,
             Self::EffectParameter => 16,
+            Self::RequirementParameter => 17,
             Self::Field => 4,
             Self::Case => 5,
             Self::Operation => 6,
@@ -450,6 +466,7 @@ impl EncodedOwnerKey {
             2 => DeclarationId::from_bytes(identity).map(OwnerKey::Declaration),
             3 => TypeParameterId::from_bytes(identity).map(OwnerKey::TypeParameter),
             16 => EffectParameterId::from_bytes(identity).map(OwnerKey::EffectParameter),
+            17 => RequirementParameterId::from_bytes(identity).map(OwnerKey::RequirementParameter),
             4 => FieldId::from_bytes(identity).map(OwnerKey::Field),
             5 => CaseId::from_bytes(identity).map(OwnerKey::Case),
             6 => OperationId::from_bytes(identity).map(OwnerKey::Operation),

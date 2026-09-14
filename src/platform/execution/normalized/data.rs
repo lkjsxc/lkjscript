@@ -48,14 +48,16 @@ struct RecordCodec {
 
 #[derive(Clone, Debug)]
 struct DataCodecs {
-    key_part: VariantCodec,
-    expectation: VariantCodec,
-    schema_expectation: VariantCodec,
-    direction: VariantCodec,
-    schema: RecordCodec,
-    entry: RecordCodec,
-    scan_item: RecordCodec,
-    scan_page: RecordCodec,
+    // Admission prepares exactly the codecs needed by the allowed operations. A narrow
+    // requirement does not need schema-set/scan merely to get or conditionally put a cell.
+    key_part: Option<VariantCodec>,
+    expectation: Option<VariantCodec>,
+    schema_expectation: Option<VariantCodec>,
+    direction: Option<VariantCodec>,
+    schema: Option<RecordCodec>,
+    entry: Option<RecordCodec>,
+    scan_item: Option<RecordCodec>,
+    scan_page: Option<RecordCodec>,
 }
 
 #[derive(Clone, Debug)]
@@ -285,14 +287,14 @@ impl NormalizedDataAdapter {
             }
         }
         let codecs = DataCodecs {
-            key_part: require_codec(key_part, "data key part")?,
-            expectation: require_codec(expectation, "data expectation")?,
-            schema_expectation: require_codec(schema_expectation, "data schema expectation")?,
-            direction: require_codec(direction, "data scan direction")?,
-            schema: require_codec(schema, "data schema")?,
-            entry: require_codec(entry, "data entry")?,
-            scan_item: require_codec(scan_item, "data scan item")?,
-            scan_page: require_codec(scan_page, "data scan page")?,
+            key_part,
+            expectation,
+            schema_expectation,
+            direction,
+            schema,
+            entry,
+            scan_item,
+            scan_page,
         };
         let exact_operations = operations.keys().copied().collect();
         Ok(move |store| Self {
@@ -340,13 +342,14 @@ impl NormalizedDataAdapter {
                 let [NormalizedValue::StaticText(space)] = arguments else {
                     return Err(data_argument("schema-read expects one StaticText space"));
                 };
+                let codec = admitted_codec(&self.codecs.schema)?;
                 let schema = transaction
                     .schema_read(space)
                     .map_err(|error| map_data_error(error, false))?;
                 Ok(NormalizedValue::list(
                     schema
                         .into_iter()
-                        .map(|schema| self.codecs.schema.encode_schema(schema))
+                        .map(|schema| codec.encode_schema(schema))
                         .collect(),
                 )?)
             }
@@ -356,11 +359,10 @@ impl NormalizedDataAdapter {
                         "schema-set expects space, expectation, and schema",
                     ));
                 };
-                let expected = self
-                    .codecs
-                    .schema_expectation
-                    .decode_schema_expectation(expected, &self.codecs.schema)?;
-                let next = self.codecs.schema.decode_schema(next)?;
+                let schema = admitted_codec(&self.codecs.schema)?;
+                let expected = admitted_codec(&self.codecs.schema_expectation)?
+                    .decode_schema_expectation(expected, schema)?;
+                let next = schema.decode_schema(next)?;
                 transaction
                     .schema_set(space, &expected, next)
                     .map(NormalizedValue::Bool)
@@ -370,14 +372,16 @@ impl NormalizedDataAdapter {
                 let [NormalizedValue::StaticText(space), key] = arguments else {
                     return Err(data_argument("get expects StaticText space and data key"));
                 };
-                let key = self.codecs.key_part.decode_key(key, self.store.limits())?;
+                let key =
+                    admitted_codec(&self.codecs.key_part)?.decode_key(key, self.store.limits())?;
+                let codec = admitted_codec(&self.codecs.entry)?;
                 let entry = transaction
                     .get(space, &key)
                     .map_err(|error| map_data_error(error, false))?;
                 Ok(NormalizedValue::list(
                     entry
                         .into_iter()
-                        .map(|entry| self.codecs.entry.encode_entry(entry))
+                        .map(|entry| codec.encode_entry(entry))
                         .collect(),
                 )?)
             }
@@ -396,8 +400,12 @@ impl NormalizedDataAdapter {
                         "scan expects space, prefix, direction, three limits, and continuation",
                     ));
                 };
-                let prefix = self.codecs.key_part.decode_key_parts(prefix)?;
-                let direction = self.codecs.direction.decode_direction(direction)?;
+                let key_codec = admitted_codec(&self.codecs.key_part)?;
+                let page_codec = admitted_codec(&self.codecs.scan_page)?;
+                let item_codec = admitted_codec(&self.codecs.scan_item)?;
+                let prefix = key_codec.decode_key_parts(prefix)?;
+                let direction =
+                    admitted_codec(&self.codecs.direction)?.decode_direction(direction)?;
                 let maximum_items = bounded_usize(*maximum_items, "scan item limit")?;
                 let maximum_bytes = bounded_usize(*maximum_bytes, "scan byte limit")?;
                 let maximum_work = bounded_usize(*maximum_work, "scan work limit")?;
@@ -413,11 +421,7 @@ impl NormalizedDataAdapter {
                         continuation,
                     )
                     .map_err(|error| map_data_error(error, false))?;
-                self.codecs.scan_page.encode_scan_page(
-                    page,
-                    &self.codecs.scan_item,
-                    &self.codecs.key_part,
-                )
+                page_codec.encode_scan_page(page, item_codec, key_codec)
             }
             DataOperation::Put => {
                 let [
@@ -431,8 +435,10 @@ impl NormalizedDataAdapter {
                         "put expects space, key, bytes, and expectation",
                     ));
                 };
-                let key = self.codecs.key_part.decode_key(key, self.store.limits())?;
-                let expected = self.codecs.expectation.decode_expectation(expected)?;
+                let key =
+                    admitted_codec(&self.codecs.key_part)?.decode_key(key, self.store.limits())?;
+                let expected =
+                    admitted_codec(&self.codecs.expectation)?.decode_expectation(expected)?;
                 transaction
                     .put(space, &key, value.to_vec(), expected)
                     .map(NormalizedValue::Bool)
@@ -442,8 +448,10 @@ impl NormalizedDataAdapter {
                 let [NormalizedValue::StaticText(space), key, expected] = arguments else {
                     return Err(data_argument("delete expects space, key, and expectation"));
                 };
-                let key = self.codecs.key_part.decode_key(key, self.store.limits())?;
-                let expected = self.codecs.expectation.decode_expectation(expected)?;
+                let key =
+                    admitted_codec(&self.codecs.key_part)?.decode_key(key, self.store.limits())?;
+                let expected =
+                    admitted_codec(&self.codecs.expectation)?.decode_expectation(expected)?;
                 transaction
                     .delete(space, &key, expected)
                     .map(NormalizedValue::Bool)
@@ -1128,11 +1136,11 @@ fn remember_record(slot: &mut Option<RecordCodec>, codec: RecordCodec) -> Result
     Ok(())
 }
 
-fn require_codec<T>(codec: Option<T>, label: &str) -> Result<T, Diagnostic> {
-    codec.ok_or_else(|| {
-        data_diagnostic(
+fn admitted_codec<T>(codec: &Option<T>) -> Result<&T, ExecutionError> {
+    codec.as_ref().ok_or_else(|| {
+        data_runtime(
             "normalized_data_codec_missing",
-            format!("data requirement does not expose the operation needed to bind {label}"),
+            "admitted data operation lacks its prepared codec",
         )
     })
 }

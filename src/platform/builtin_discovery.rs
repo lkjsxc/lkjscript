@@ -388,7 +388,7 @@ fn append_owner_detail(
                                 ("index", index.to_string()),
                                 (
                                     "reference",
-                                    format!("{}/{}", requirement.package, requirement.requirement),
+                                    format!("{}/{}", requirement.package(), requirement.owner()),
                                 ),
                             ],
                         ));
@@ -407,6 +407,14 @@ fn append_owner_detail(
                     }
                 }
                 append_type_parameters(standard, &signature.type_parameters, records)?;
+                for (index, parameter) in signature.requirement_parameters.iter().enumerate() {
+                    append_child_owner(
+                        standard,
+                        OwnerKey::RequirementParameter(*parameter),
+                        index,
+                        records,
+                    )?;
+                }
                 for (index, parameter) in signature.effect_parameters.iter().enumerate() {
                     append_child_owner(
                         standard,
@@ -449,6 +457,7 @@ fn append_owner_detail(
         },
         PackageInterfaceRecord::TypeParameter(_)
         | PackageInterfaceRecord::EffectParameter(_)
+        | PackageInterfaceRecord::RequirementParameter(_)
         | PackageInterfaceRecord::Field(_)
         | PackageInterfaceRecord::Case(_)
         | PackageInterfaceRecord::Operation(_)
@@ -507,6 +516,42 @@ fn append_child_detail(
         common.push(("index".to_owned(), index.to_string()));
     }
     match record {
+        PackageInterfaceRecord::RequirementParameter(parameter) => {
+            common.push(("name".to_owned(), parameter.name.as_str().to_owned()));
+            common.push(("identity".to_owned(), parameter.header.owner.to_string()));
+            common.push(("declaration".to_owned(), parameter.declaration.to_string()));
+            records.push(DiscoveryRecord {
+                operation: "requirement-parameter".to_owned(),
+                fields: {
+                    common.push((
+                        "interface".to_owned(),
+                        format!(
+                            "{}/{}",
+                            parameter.constraint.interface.package,
+                            parameter.constraint.interface.declaration
+                        ),
+                    ));
+                    common.push((
+                        "minimum-operations".to_owned(),
+                        parameter.constraint.operations.len().to_string(),
+                    ));
+                    common
+                },
+            });
+            for (index, operation) in parameter.constraint.operations.iter().enumerate() {
+                records.push(DiscoveryRecord::new(
+                    "requirement-parameter.operation",
+                    [
+                        ("parent", parameter.header.owner.to_string()),
+                        ("index", index.to_string()),
+                        (
+                            "reference",
+                            format!("{}/{}", operation.package, operation.operation),
+                        ),
+                    ],
+                ));
+            }
+        }
         PackageInterfaceRecord::EffectParameter(parameter) => {
             common.push(("name".to_owned(), parameter.name.as_str().to_owned()));
             common.push(("identity".to_owned(), parameter.header.owner.to_string()));
@@ -786,7 +831,7 @@ fn append_type(
                     ("index", index.to_string()),
                     (
                         "reference",
-                        format!("{}/{}", requirement.package, requirement.requirement),
+                        format!("{}/{}", requirement.package(), requirement.owner()),
                     ),
                 ],
             ));
@@ -907,6 +952,7 @@ fn owner_name(record: &PackageInterfaceRecord) -> &str {
     match record {
         PackageInterfaceRecord::Declaration(record) => record.name.as_str(),
         PackageInterfaceRecord::TypeParameter(record) => record.name.as_str(),
+        PackageInterfaceRecord::RequirementParameter(record) => record.name.as_str(),
         PackageInterfaceRecord::EffectParameter(record) => record.name.as_str(),
         PackageInterfaceRecord::Field(record) => record.name.as_str(),
         PackageInterfaceRecord::Case(record) => record.name.as_str(),
@@ -921,6 +967,9 @@ fn owner_parent(record: &PackageInterfaceRecord) -> Option<OwnerKey> {
     match record {
         PackageInterfaceRecord::Declaration(_) => None,
         PackageInterfaceRecord::TypeParameter(record) => {
+            Some(OwnerKey::Declaration(record.declaration))
+        }
+        PackageInterfaceRecord::RequirementParameter(record) => {
             Some(OwnerKey::Declaration(record.declaration))
         }
         PackageInterfaceRecord::EffectParameter(record) => {

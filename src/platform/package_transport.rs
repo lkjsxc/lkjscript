@@ -11,7 +11,7 @@ use crate::platform::kernel::{
     semantic_state_digest_from_root,
 };
 use crate::platform::package_interface::{
-    PackageInterfaceValidation, package_interface_digest, validate_package_interface_metered,
+    PackageInterfaceValidation, validate_package_interface_metered,
 };
 use crate::platform::persistent_map::{MapAdmission, MapRoot, MapWork};
 use crate::platform::publication::RevisionCore;
@@ -142,8 +142,9 @@ impl PackageRevision {
 
     fn validate(&self) -> Result<(), Diagnostic> {
         if self.contract_version != PACKAGE_REVISION_CONTRACT_VERSION
-            || self.graph_contract_version
-                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+            || !crate::platform::kernel::contract::supported_graph_contract(
+                self.graph_contract_version,
+            )
         {
             return Err(package_error(
                 DiagnosticClass::Source,
@@ -151,7 +152,7 @@ impl PackageRevision {
                 "package revision uses a predecessor or foreign contract",
             ));
         }
-        if self.revision.graph_contract_version != self.graph_contract_version {
+        if self.revision.graph_contract_version > self.graph_contract_version {
             return Err(package_error(
                 DiagnosticClass::Corrupt,
                 "package_revision_core_contract",
@@ -221,8 +222,9 @@ impl PackageTransport {
 
     fn validate_local(&self) -> Result<(), Diagnostic> {
         if self.contract_version != PACKAGE_TRANSPORT_CONTRACT_VERSION
-            || self.graph_contract_version
-                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+            || !crate::platform::kernel::contract::supported_graph_contract(
+                self.graph_contract_version,
+            )
         {
             return Err(package_error(
                 DiagnosticClass::Source,
@@ -656,7 +658,10 @@ fn bind_transport<S: ImmutableObjectStore + ?Sized>(
             )
         })?;
     let root = decode_root(&root_bytes, transport.semantic_root)?;
-    if root.repository_id != revision.revision.repository_id || root.package_id != revision.package
+    if root.graph_contract_version != revision.revision.graph_contract_version
+        || root.graph_contract_version > transport.graph_contract_version
+        || root.repository_id != revision.revision.repository_id
+        || root.package_id != revision.package
     {
         return Err(package_error(
             DiagnosticClass::Corrupt,
@@ -671,8 +676,11 @@ fn bind_transport<S: ImmutableObjectStore + ?Sized>(
             "physical semantic root and logical package revision commit to different semantic states",
         ));
     }
-    if package_interface_digest(revision.package, transport.interface_owners.content_root())?
-        != revision.interface
+    if crate::platform::package_interface::package_interface_digest_for_graph(
+        revision.package,
+        transport.interface_owners.content_root(),
+        revision.graph_contract_version,
+    )? != revision.interface
     {
         return Err(package_error(
             DiagnosticClass::Corrupt,
@@ -780,67 +788,30 @@ fn validate_interface_dependencies(
                     for requirement in requirements {
                         closure.require_owner(
                             revision,
-                            requirement.package,
-                            OwnerKey::Requirement(requirement.requirement),
-                            &[OwnerKind::Requirement],
+                            requirement.package(),
+                            requirement.owner(),
+                            &[if requirement.concrete().is_some() {
+                                OwnerKind::Requirement
+                            } else {
+                                OwnerKind::RequirementParameter
+                            }],
                             "task function requirement",
                         )?;
                     }
                 }
-                PackageInterfaceRecord::Requirement(requirement) => {
-                    let interface_owner = closure.require_owner(
+                PackageInterfaceRecord::Requirement(requirement) => validate_requirement_contract(
+                    &closure,
+                    revision,
+                    requirement.interface,
+                    &requirement.operations,
+                )?,
+                PackageInterfaceRecord::RequirementParameter(parameter) => {
+                    validate_requirement_contract(
+                        &closure,
                         revision,
-                        requirement.interface.package,
-                        OwnerKey::Declaration(requirement.interface.declaration),
-                        &[OwnerKind::Interface],
-                        "requirement interface",
-                    )?;
-                    if !matches!(
-                        interface_owner.record,
-                        PackageInterfaceRecord::Declaration(ref declaration)
-                            if matches!(
-                                declaration.payload,
-                                PackageInterfaceDeclarationPayload::Interface { .. }
-                            )
-                    ) {
-                        return Err(package_error(
-                            DiagnosticClass::Semantic,
-                            "package_transport_interface_requirement_kind",
-                            "requirement interface does not name an interface declaration payload",
-                        ));
-                    }
-                    for operation in &requirement.operations {
-                        if operation.package != requirement.interface.package {
-                            return Err(package_error(
-                                DiagnosticClass::Semantic,
-                                "package_transport_interface_operation_package",
-                                "requirement interface and operation belong to different packages",
-                            ));
-                        }
-                        let operation_owner = closure.require_owner(
-                            revision,
-                            operation.package,
-                            OwnerKey::Operation(operation.operation),
-                            &[OwnerKind::Operation],
-                            "requirement operation",
-                        )?;
-                        let PackageInterfaceRecord::Operation(operation_record) =
-                            &operation_owner.record
-                        else {
-                            return Err(package_error(
-                                DiagnosticClass::Corrupt,
-                                "package_transport_interface_operation_variant",
-                                "validated operation kind disagrees with its interface record",
-                            ));
-                        };
-                        if operation_record.declaration != requirement.interface.declaration {
-                            return Err(package_error(
-                                DiagnosticClass::Semantic,
-                                "package_transport_interface_operation_owner",
-                                "requirement operation does not belong to its exact interface declaration",
-                            ));
-                        }
-                    }
+                        parameter.constraint.interface,
+                        &parameter.constraint.operations,
+                    )?
                 }
                 PackageInterfaceRecord::TypeParameter(_)
                 | PackageInterfaceRecord::EffectParameter(_)
@@ -852,6 +823,67 @@ fn validate_interface_dependencies(
             }
         }
     }
+    Ok(())
+}
+
+fn validate_requirement_contract(
+    closure: &PackageInterfaceClosure<'_>,
+    revision: &PackageRevision,
+    interface: crate::platform::kernel::DeclarationReference,
+    operations: &[crate::platform::kernel::OperationReference],
+) -> Result<(), Diagnostic> {
+    let interface_owner = closure.require_owner(
+        revision,
+        interface.package,
+        OwnerKey::Declaration(interface.declaration),
+        &[OwnerKind::Interface],
+        "requirement interface",
+    )?;
+    if !matches!(
+        interface_owner.record,
+        PackageInterfaceRecord::Declaration(ref declaration)
+            if matches!(
+                declaration.payload,
+                PackageInterfaceDeclarationPayload::Interface { .. }
+            )
+    ) {
+        return Err(package_error(
+            DiagnosticClass::Semantic,
+            "package_transport_interface_requirement_kind",
+            "requirement interface does not name an interface declaration payload",
+        ));
+    }
+    for operation in operations {
+        if operation.package != interface.package {
+            return Err(package_error(
+                DiagnosticClass::Semantic,
+                "package_transport_interface_operation_package",
+                "requirement interface and operation belong to different packages",
+            ));
+        }
+        let operation_owner = closure.require_owner(
+            revision,
+            operation.package,
+            OwnerKey::Operation(operation.operation),
+            &[OwnerKind::Operation],
+            "requirement operation",
+        )?;
+        let PackageInterfaceRecord::Operation(operation_record) = &operation_owner.record else {
+            return Err(package_error(
+                DiagnosticClass::Corrupt,
+                "package_transport_interface_operation_variant",
+                "validated operation kind disagrees with its interface record",
+            ));
+        };
+        if operation_record.declaration != interface.declaration {
+            return Err(package_error(
+                DiagnosticClass::Semantic,
+                "package_transport_interface_operation_owner",
+                "requirement operation does not belong to its exact interface declaration",
+            ));
+        }
+    }
+
     Ok(())
 }
 
@@ -1108,8 +1140,11 @@ mod tests {
         );
         let interface = build_package_interface(&BTreeMap::new(), &BTreeMap::new())
             .expect("empty package interface");
-        let interface_digest = package_interface_digest(package, interface.root.content_root())
-            .expect("logical interface digest");
+        let interface_digest = crate::platform::package_interface::package_interface_digest(
+            package,
+            interface.root.content_root(),
+        )
+        .expect("logical interface digest");
         let revision = PackageRevision {
             contract_version: PACKAGE_REVISION_CONTRACT_VERSION,
             graph_contract_version: GRAPH_CONTRACT_VERSION,
@@ -1252,12 +1287,12 @@ mod tests {
         assert_eq!(fixture.revision.encode().unwrap().0, logical_digest);
         assert_ne!(fixture.transport_digest, revalidated_digest);
         assert_eq!(
-            package_interface_digest(
+            crate::platform::package_interface::package_interface_digest(
                 fixture.revision.package,
                 fixture.transport.interface_owners.content_root(),
             )
             .unwrap(),
-            package_interface_digest(
+            crate::platform::package_interface::package_interface_digest(
                 fixture.revision.package,
                 revalidated.interface_owners.content_root(),
             )

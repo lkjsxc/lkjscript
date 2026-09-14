@@ -22,6 +22,7 @@ type Invocation = (
     DeclarationReference,
     Arc<[TypeObjectDigest]>,
     Arc<[EffectRow]>,
+    Arc<[RequirementOperand]>,
     Vec<Value>,
 );
 
@@ -90,6 +91,7 @@ impl Value {
         function: FunctionIndex,
         type_arguments: Arc<[TypeObjectDigest]>,
         effect_arguments: Arc<[EffectRow]>,
+        requirement_arguments: Arc<[RequirementOperand]>,
         signature: &ReferenceSignature,
     ) -> Result<Self, ExecutionError> {
         if function.1 != schema.value_origin || schema.functions.get(function.0 as usize).is_none()
@@ -99,6 +101,8 @@ impl Value {
             ));
         }
         if signature.type_parameters.len() != type_arguments.len()
+            || signature.requirement_parameters.len() != requirement_arguments.len()
+            || requirement_arguments.iter().any(|r| r.concrete().is_none())
             || signature.effect_parameters.len() != effect_arguments.len()
             || effect_arguments
                 .iter()
@@ -129,6 +133,7 @@ impl Value {
                 function,
                 type_arguments,
                 effect_arguments,
+                requirement_arguments,
                 bound_arguments: None,
             },
             preparation: schema.value_origin,
@@ -918,6 +923,7 @@ impl ReferenceState<'_> {
                         function,
                         type_arguments,
                         effect_arguments,
+                        requirement_arguments,
                         bound_arguments,
                     } = node
                     else {
@@ -927,7 +933,12 @@ impl ReferenceState<'_> {
                     };
                     let declaration = schema.functions.get(function.0 as usize).copied().filter(|_| function.1 == schema.value_origin).ok_or_else(|| reject("raw callback belongs to another preparation; select the current callable"))?;
                     let signature = self
-                        .applied_signature(declaration, type_arguments, effect_arguments)
+                        .applied_signature(
+                            declaration,
+                            type_arguments,
+                            effect_arguments,
+                            requirement_arguments,
+                        )
                         .map_err(|error| {
                             if error.code == "normalized_reference_type" {
                                 reject(format!("raw callback signature: {}", error.message))
@@ -1139,7 +1150,7 @@ impl ReferenceState<'_> {
         arguments: Vec<NormalizedValue>,
     ) -> Result<Vec<Value>, ExecutionError> {
         let arguments = super::super::value::RawArguments::new(arguments);
-        let signature = self.applied_signature(declaration, types, &[])?;
+        let signature = self.applied_signature(declaration, types, &[], &[])?;
         if signature.parameters.len() != arguments.len()
             || signature.type_parameters.len() != types.len()
         {
@@ -1233,13 +1244,19 @@ impl ReferenceState<'_> {
             function,
             type_arguments,
             effect_arguments,
+            requirement_arguments,
             bound_arguments,
         } = callee.raw()
         else {
             return Err(reference_type_error("bind callee is not a function"));
         };
         let declaration = self.function_reference(*function)?;
-        let signature = self.applied_signature(declaration, type_arguments, effect_arguments)?;
+        let signature = self.applied_signature(
+            declaration,
+            type_arguments,
+            effect_arguments,
+            requirement_arguments,
+        )?;
         if signature.type_parameters.len() != type_arguments.len()
             || signature
                 .parameters
@@ -1312,6 +1329,7 @@ impl ReferenceState<'_> {
                 function: *function,
                 type_arguments: Arc::clone(type_arguments),
                 effect_arguments: Arc::clone(effect_arguments),
+                requirement_arguments: Arc::clone(requirement_arguments),
                 bound_arguments: Some(Arc::new(prefix)),
             },
             preparation: self.schema.value_origin,
@@ -1333,6 +1351,7 @@ impl ReferenceState<'_> {
             function,
             type_arguments,
             effect_arguments,
+            requirement_arguments,
             bound_arguments,
         } = callee.raw()
         else {
@@ -1344,6 +1363,7 @@ impl ReferenceState<'_> {
                 declaration,
                 Arc::clone(type_arguments),
                 Arc::clone(effect_arguments),
+                Arc::clone(requirement_arguments),
                 arguments,
             ));
         };
@@ -1380,6 +1400,7 @@ impl ReferenceState<'_> {
             declaration,
             Arc::clone(type_arguments),
             Arc::clone(effect_arguments),
+            Arc::clone(requirement_arguments),
             complete,
         ))
     }

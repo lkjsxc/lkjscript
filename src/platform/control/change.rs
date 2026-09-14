@@ -64,6 +64,10 @@ pub(crate) const COMPACT_NAMESPACE_CLASSES: &[(&str, NamespaceClass)] = &[
     ("requirement", NamespaceClass::Requirement),
     ("port", NamespaceClass::Port),
     ("effect-parameter", NamespaceClass::EffectParameter),
+    (
+        "requirement-parameter",
+        NamespaceClass::RequirementParameter,
+    ),
     ("target", NamespaceClass::Target),
 ];
 
@@ -87,6 +91,11 @@ pub(crate) const COMPACT_REFERENCE_NAMESPACES: &[(&str, &str, &str)] = &[
         "parameter",
         "function|external|operation",
         "exported-function|external|operation",
+    ),
+    (
+        "requirement-parameter",
+        "pure-function-or-task-function",
+        "exported-function",
     ),
     ("requirement", "component", "exported-component"),
     ("port", "component", "exported-component"),
@@ -112,6 +121,8 @@ pub(crate) enum CompactChangeOperation {
     AddOperation,
     AddTypeParameter,
     AddEffectParameter,
+    AddRequirementParameter,
+    SetRequirementParameter,
     SetTypeParameterConstraint,
     SetFieldType,
     SetCasePayload,
@@ -133,7 +144,7 @@ pub(crate) enum CompactChangeOperation {
 }
 
 impl CompactChangeOperation {
-    pub(crate) const ALL: [Self; 35] = [
+    pub(crate) const ALL: [Self; 37] = [
         Self::ReferencePackage,
         Self::ReferenceOwner,
         Self::CreateModule,
@@ -151,6 +162,8 @@ impl CompactChangeOperation {
         Self::AddOperation,
         Self::AddTypeParameter,
         Self::AddEffectParameter,
+        Self::AddRequirementParameter,
+        Self::SetRequirementParameter,
         Self::SetTypeParameterConstraint,
         Self::SetFieldType,
         Self::SetCasePayload,
@@ -820,6 +833,55 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
                 name: "external-visibility",
                 required: true,
                 form: FieldForm::ExternalVisibility,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::AddRequirementParameter,
+        name: "add.requirement-parameter",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "declaration",
+                required: true,
+                form: FieldForm::DeclarationSelector,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "interface",
+                required: true,
+                form: FieldForm::DeclarationReference,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::SetRequirementParameter,
+        name: "set.requirement-parameter",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestFragment,
+            },
+            CompactChangeOperationField {
+                name: "parameter",
+                required: true,
+                form: FieldForm::OwnerSelector,
+            },
+            CompactChangeOperationField {
+                name: "interface",
+                required: true,
+                form: FieldForm::DeclarationReference,
             },
         ],
         direct: None,
@@ -1958,7 +2020,7 @@ pub(crate) const COMPACT_EXPRESSION_FORM_FIELDS: &[CompactFormField] = &[
         form: "capability-call",
         name: "requirement",
         required: true,
-        syntax: "$NAME|pkg_HEX/req_HEX",
+        syntax: "$NAME|pkg_HEX/req_HEX|parameter:$NAME|parameter:pkg_HEX/reqparam_HEX",
     },
     CompactFormField {
         form: "capability-call",
@@ -1976,7 +2038,7 @@ pub(crate) const COMPACT_EXPRESSION_FORM_FIELDS: &[CompactFormField] = &[
         form: "transaction",
         name: "requirement",
         required: true,
-        syntax: "$NAME|pkg_HEX/req_HEX",
+        syntax: "$NAME|pkg_HEX/req_HEX|parameter:$NAME|parameter:pkg_HEX/reqparam_HEX",
     },
     CompactFormField {
         form: "transaction",
@@ -2007,6 +2069,56 @@ pub(crate) struct CompactEdgeDescriptor {
 }
 
 pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
+    CompactEdgeDescriptor {
+        name: "requirement.argument",
+        parent: "call-or-function-value",
+        child: "requirement-operand",
+        fields: &[
+            CompactFormField {
+                form: "requirement.argument",
+                name: "parent",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "requirement.argument",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "requirement.argument",
+                name: "requirement",
+                required: true,
+                syntax: "$NAME|pkg_ID/req_ID|parameter:$NAME|parameter:pkg_ID/reqparam_ID",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "requirement-parameter.operation",
+        parent: "requirement-parameter-or-constraint-fragment",
+        child: "operation-reference",
+        fields: &[
+            CompactFormField {
+                form: "requirement-parameter.operation",
+                name: "parent",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "requirement-parameter.operation",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "requirement-parameter.operation",
+                name: "operation",
+                required: true,
+                syntax: "$NAME|pkg_ID/op_ID",
+            },
+        ],
+    },
     CompactEdgeDescriptor {
         name: "effect.argument",
         parent: "call-or-function-value",
@@ -2159,7 +2271,7 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
                 form: "effect.requirement",
                 name: "requirement",
                 required: true,
-                syntax: "$NAME|pkg_HEX/req_HEX",
+                syntax: "$NAME|pkg_HEX/req_HEX|parameter:$NAME|parameter:pkg_HEX/reqparam_HEX",
             },
         ],
     },
@@ -2519,6 +2631,12 @@ impl Decoder {
                         ));
                     }
                 }
+                "requirement.argument" => {
+                    self.insert_indexed_record_edge(record, &["parent", "index", "requirement"])?
+                }
+                "requirement-parameter.operation" => {
+                    self.insert_indexed_record_edge(record, &["parent", "index", "operation"])?
+                }
                 "effect.argument" => {
                     self.insert_indexed_record_edge(record, &["parent", "index", "effect"])?
                 }
@@ -2596,6 +2714,7 @@ impl Decoder {
                             descriptor.operation,
                             CompactChangeOperation::SetFunctionContract
                                 | CompactChangeOperation::SetRequirementContract
+                                | CompactChangeOperation::SetRequirementParameter
                         ) {
                             let label = fragment(&record, "as")?;
                             if self
@@ -2980,6 +3099,36 @@ impl Decoder {
                     external_visibility: parse_external_visibility(record, "external-visibility")?,
                 },
             }),
+            CompactChangeOperation::AddRequirementParameter => {
+                let label = symbol(record, "as")?;
+                let operations = self
+                    .ordered_record_edges("requirement-parameter.operation", &label)?
+                    .iter()
+                    .map(|edge| self.parse_operation_reference(&edge.record, "operation"))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(AuthoredChange::AddRequirementParameter {
+                    declaration: self.parse_declaration_selector(record, "declaration")?,
+                    parameter: crate::platform::change::AuthoredRequirementParameter {
+                        symbol: label,
+                        name: parse_name(record, "name")?,
+                        interface: self.parse_declaration_reference(record, "interface")?,
+                        operations,
+                    },
+                })
+            }
+            CompactChangeOperation::SetRequirementParameter => {
+                let label = fragment(record, "as")?;
+                let operations = self
+                    .ordered_record_edges("requirement-parameter.operation", &label)?
+                    .iter()
+                    .map(|edge| self.parse_operation_reference(&edge.record, "operation"))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(AuthoredChange::SetRequirementParameter {
+                    parameter: self.parse_owner_selector(record, "parameter")?,
+                    interface: self.parse_declaration_reference(record, "interface")?,
+                    operations,
+                })
+            }
             CompactChangeOperation::AddEffectParameter => Ok(AuthoredChange::AddEffectParameter {
                 declaration: self.parse_declaration_selector(record, "declaration")?,
                 parameter: AuthoredEffectParameter {
@@ -3263,6 +3412,16 @@ impl Decoder {
         })
     }
 
+    fn decode_requirement_arguments(
+        &mut self,
+        parent: &str,
+    ) -> Result<Vec<AuthoredRequirementReference>, Diagnostic> {
+        self.ordered_record_edges("requirement.argument", parent)?
+            .iter()
+            .map(|edge| self.parse_requirement_reference(&edge.record, "requirement"))
+            .collect()
+    }
+
     fn decode_effect_arguments(
         &mut self,
         parent: &str,
@@ -3519,6 +3678,7 @@ impl Decoder {
                 check_fields(&record, &["as", "function"])?;
                 AuthoredExpressionOperation::Call {
                     effect_arguments: self.decode_effect_arguments(symbol)?,
+                    requirement_arguments: self.decode_requirement_arguments(symbol)?,
                     function: self.parse_declaration_reference(&record, "function")?,
                     type_arguments: self
                         .ordered_edges(symbol, true)?
@@ -3532,6 +3692,7 @@ impl Decoder {
                 check_fields(&record, &["as", "function"])?;
                 AuthoredExpressionOperation::FunctionValue {
                     effect_arguments: self.decode_effect_arguments(symbol)?,
+                    requirement_arguments: self.decode_requirement_arguments(symbol)?,
                     function: self.parse_declaration_reference(&record, "function")?,
                     type_arguments: self
                         .ordered_edges(symbol, true)?
@@ -4680,7 +4841,12 @@ mod tests {
     #[test]
     fn legacy_named_reference_baseline_goldens() {
         let temporary = tempfile::tempdir().unwrap();
-        let logical = crate::platform::kernel::tests::witness_snapshot();
+        let mut logical = crate::platform::kernel::tests::witness_snapshot();
+        // This golden binds authentic predecessor request/base bytes, not a successor root.
+        logical.root.graph_contract_version = 14;
+        for owner in logical.owners.values_mut() {
+            owner.set_encoding_for_edit(14);
+        }
         let created = crate::platform::publication::GraphRepository::create(
             &temporary.path().join("meaning"),
             &logical,

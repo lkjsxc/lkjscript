@@ -682,11 +682,21 @@ fn authored_type(
                 requirements: effect
                     .requirements
                     .iter()
-                    .map(|r| AuthoredRequirementReference::Exact {
-                        package: r.package,
-                        requirement: r.requirement,
+                    .map(|r| {
+                        r.concrete()
+                            .map(|r| AuthoredRequirementReference::Exact {
+                                package: r.package,
+                                requirement: r.requirement,
+                            })
+                            .ok_or_else(|| {
+                                crate::platform::diagnostic::Diagnostic::new(
+                                    crate::platform::diagnostic::DiagnosticClass::Semantic,
+                                    "recipe_requirement_scope",
+                                    "recipe cannot import an unclosed requirement parameter",
+                                )
+                            })
                     })
-                    .collect(),
+                    .collect::<Result<_, _>>()?,
                 parameters: effect
                     .parameters
                     .iter()
@@ -763,6 +773,7 @@ impl RecipeExpressions {
         arguments: Vec<AuthoredExpression>,
     ) -> AuthoredExpression {
         self.expression(AuthoredExpressionOperation::Call {
+            requirement_arguments: Vec::new(),
             effect_arguments: Vec::new(),
             function,
             type_arguments,
@@ -789,6 +800,7 @@ impl RecipeExpressions {
         type_arguments: Vec<AuthoredType>,
     ) -> AuthoredExpression {
         self.expression(AuthoredExpressionOperation::FunctionValue {
+            requirement_arguments: Vec::new(),
             effect_arguments: Vec::new(),
             function,
             type_arguments,

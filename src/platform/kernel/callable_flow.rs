@@ -263,13 +263,22 @@ impl<R: ExpressionRead> Flow<'_, R> {
                     ExpressionOperation::Call {
                         function,
                         type_arguments,
+                        requirement_arguments,
                         ..
                     }
                     | ExpressionOperation::FunctionValue {
                         function,
                         type_arguments,
+                        requirement_arguments,
                         ..
                     } => {
+                        // Rank-one requirement arguments only select an exact atom or a caller
+                        // formal. Their permutations add finite application keys, never type
+                        // constructor edges. Still admit and charge every explicit argument.
+                        self.reserve::<super::RequirementOperand>(requirement_arguments.len())?;
+                        for _ in requirement_arguments {
+                            self.tick()?;
+                        }
                         self.application(
                             caller,
                             &parameters,

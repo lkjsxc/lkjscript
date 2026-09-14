@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-10";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 10;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-6";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 6;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN10";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v10";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v10";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-11";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 11;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-7";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 7;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN11";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v11";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v11";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -40,10 +40,26 @@ impl CompilationUnitKey {
         source: &CompilationSource,
         optimization: OptimizationPolicy,
     ) -> Result<Self, Diagnostic> {
+        Self::derive_generation(
+            source,
+            optimization,
+            COMPILER_UNIT_CONTRACT_VERSION,
+            BYTECODE_CONTRACT_VERSION,
+            crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+        )
+    }
+
+    pub(crate) fn derive_generation(
+        source: &CompilationSource,
+        optimization: OptimizationPolicy,
+        compiler_contract_version: u16,
+        bytecode_contract_version: u16,
+        graph_contract_version: u16,
+    ) -> Result<Self, Diagnostic> {
         let core = CompilationKeyCore {
-            compiler_contract_version: COMPILER_UNIT_CONTRACT_VERSION,
-            bytecode_contract_version: BYTECODE_CONTRACT_VERSION,
-            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+            compiler_contract_version,
+            bytecode_contract_version,
+            graph_contract_version,
             source: source.clone(),
             optimization,
         };
@@ -54,7 +70,11 @@ impl CompilationUnitKey {
                 format!("failed to encode compiler-unit key: {error}"),
             )
         })?;
-        let mut hasher = blake3::Hasher::new_derive_key(COMPILER_UNIT_KEY_DOMAIN);
+        let mut hasher = blake3::Hasher::new_derive_key(if compiler_contract_version == 10 {
+            "lkjscript.compiler-unit-key.v10"
+        } else {
+            COMPILER_UNIT_KEY_DOMAIN
+        });
         hasher.update(&(bytes.len() as u64).to_be_bytes());
         hasher.update(&bytes);
         Ok(Self(*hasher.finalize().as_bytes()))
@@ -187,6 +207,7 @@ pub struct CompiledHttpRoute {
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct CompiledSignature {
+    pub requirement_parameters: Vec<crate::platform::semantic_id::RequirementParameterId>,
     pub effect_parameters: Vec<crate::platform::semantic_id::EffectParameterId>,
     pub effect: crate::platform::kernel::FunctionEffect,
     pub type_parameters: Vec<TypeParameterId>,
@@ -270,12 +291,14 @@ pub enum CompiledInstruction {
     JumpIfFalse(u32),
     Jump(u32),
     Call {
+        requirement_arguments: Vec<crate::platform::kernel::RequirementOperand>,
         effect_arguments: Vec<crate::platform::kernel::EffectRow>,
         function: u32,
         type_arguments: Vec<u32>,
         arguments: u32,
     },
     FunctionValue {
+        requirement_arguments: Vec<crate::platform::kernel::RequirementOperand>,
         effect_arguments: Vec<crate::platform::kernel::EffectRow>,
         function: u32,
         type_arguments: Vec<u32>,
@@ -317,6 +340,19 @@ pub enum CompiledInstruction {
         requirement: u32,
         binding: u32,
     },
+    PerformParameter {
+        parameter: crate::platform::kernel::RequirementParameterReference,
+        operation: u32,
+        arguments: u32,
+    },
+    BeginParameterTransaction {
+        parameter: crate::platform::kernel::RequirementParameterReference,
+        binding: u32,
+    },
+    CommitParameterTransaction {
+        parameter: crate::platform::kernel::RequirementParameterReference,
+        binding: u32,
+    },
     Return,
     Bind {
         arguments: u32,
@@ -345,12 +381,21 @@ pub struct CompiledVariantJump {
 impl CompilationUnit {
     pub fn encode(&self) -> Result<(ObjectKey, Vec<u8>), Diagnostic> {
         self.validate()?;
-        let bytes = crate::platform::packed::encode(
-            COMPILER_UNIT_MAGIC,
-            COMPILER_UNIT_ENVELOPE_DOMAIN,
-            self,
-            MAXIMUM_COMPILER_UNIT_BYTES,
-        )?;
+        let bytes = if self.contract_version == 10 {
+            crate::platform::packed::encode(
+                *b"LKJCUN10",
+                "lkjscript.compiler-unit-envelope.v10",
+                &super::wire10::CompilationUnit10::try_from(self.clone())?,
+                MAXIMUM_COMPILER_UNIT_BYTES,
+            )?
+        } else {
+            crate::platform::packed::encode(
+                COMPILER_UNIT_MAGIC,
+                COMPILER_UNIT_ENVELOPE_DOMAIN,
+                self,
+                MAXIMUM_COMPILER_UNIT_BYTES,
+            )?
+        };
         Ok((
             ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &bytes),
             bytes,
@@ -367,12 +412,22 @@ impl CompilationUnit {
                 "compiler-unit bytes disagree with their exact object-domain digest",
             ));
         }
-        let unit: Self = crate::platform::packed::decode(
-            bytes,
-            COMPILER_UNIT_MAGIC,
-            COMPILER_UNIT_ENVELOPE_DOMAIN,
-            MAXIMUM_COMPILER_UNIT_BYTES,
-        )?;
+        let unit: Self = if bytes.starts_with(b"LKJCUN10") {
+            crate::platform::packed::decode::<super::wire10::CompilationUnit10>(
+                bytes,
+                *b"LKJCUN10",
+                "lkjscript.compiler-unit-envelope.v10",
+                MAXIMUM_COMPILER_UNIT_BYTES,
+            )?
+            .into()
+        } else {
+            crate::platform::packed::decode(
+                bytes,
+                COMPILER_UNIT_MAGIC,
+                COMPILER_UNIT_ENVELOPE_DOMAIN,
+                MAXIMUM_COMPILER_UNIT_BYTES,
+            )?
+        };
         unit.validate()?;
         let (actual, canonical) = unit.encode()?;
         if actual != expected || canonical != bytes {
@@ -386,11 +441,14 @@ impl CompilationUnit {
     }
 
     pub(crate) fn validate(&self) -> Result<(), Diagnostic> {
-        if self.contract_version != COMPILER_UNIT_CONTRACT_VERSION
-            || self.bytecode_contract_version != BYTECODE_CONTRACT_VERSION
-            || self.graph_contract_version
-                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-        {
+        if !matches!(
+            (
+                self.contract_version,
+                self.bytecode_contract_version,
+                self.graph_contract_version
+            ),
+            (10, 6, 14) | (11, 7, 15)
+        ) {
             return Err(unit_error(
                 DiagnosticClass::Source,
                 "compiler_unit_contract",
@@ -418,7 +476,13 @@ impl CompilationUnit {
                 "compiler-unit source test digest presence disagrees with its owner kind",
             ));
         }
-        let expected_key = CompilationUnitKey::derive(&self.source, self.optimization)?;
+        let expected_key = CompilationUnitKey::derive_generation(
+            &self.source,
+            self.optimization,
+            self.contract_version,
+            self.bytecode_contract_version,
+            self.graph_contract_version,
+        )?;
         if self.key != expected_key {
             return Err(unit_error(
                 DiagnosticClass::Corrupt,
@@ -796,6 +860,15 @@ fn validate_compiled_http_routes(
 impl CompiledSignature {
     fn validate(&self, tables: &CompilationTables, kind: OwnerKind) -> Result<(), Diagnostic> {
         require_item_count(
+            "compiled requirement parameters",
+            self.requirement_parameters.len(),
+            true,
+        )?;
+        require_unique(
+            "compiled requirement parameter",
+            &self.requirement_parameters,
+        )?;
+        require_item_count(
             "compiled effect parameters",
             self.effect_parameters.len(),
             true,
@@ -807,13 +880,19 @@ impl CompiledSignature {
             self.effect,
             crate::platform::kernel::FunctionEffect::Task { .. }
         ) != (kind == OwnerKind::TaskFunction)
-            || (kind == OwnerKind::External && !self.effect_parameters.is_empty())
+            || (kind == OwnerKind::External
+                && (!self.effect_parameters.is_empty() || !self.requirement_parameters.is_empty()))
             || self
                 .task_requirements
                 .iter()
                 .map(|i| tables.requirements.get(*i as usize).copied())
                 .collect::<Option<Vec<_>>>()
-                != Some(row.requirements)
+                != Some(
+                    row.requirements
+                        .iter()
+                        .filter_map(|r| r.concrete())
+                        .collect(),
+                )
         {
             return Err(unit_corrupt(
                 "compiler_effect_signature",
@@ -1045,11 +1124,13 @@ impl CompiledInstruction {
                 require_index("jump target", *target, code.instructions.len())
             }
             Self::Call {
+                requirement_arguments,
                 effect_arguments: _,
                 function,
                 type_arguments,
                 arguments,
             } => {
+                require_item_count("requirement arguments", requirement_arguments.len(), true)?;
                 require_runtime_count("call arguments", *arguments)?;
                 require_item_count("call type arguments", type_arguments.len(), true)?;
                 require_index("function relocation", *function, tables.declarations.len())?;
@@ -1059,10 +1140,12 @@ impl CompiledInstruction {
                 Ok(())
             }
             Self::FunctionValue {
+                requirement_arguments,
                 effect_arguments: _,
                 function,
                 type_arguments,
             } => {
+                require_item_count("requirement arguments", requirement_arguments.len(), true)?;
                 require_item_count("function type arguments", type_arguments.len(), true)?;
                 require_index("function relocation", *function, tables.declarations.len())?;
                 for ty in type_arguments {
@@ -1140,6 +1223,18 @@ impl CompiledInstruction {
                     }
                 }
                 Ok(())
+            }
+            Self::PerformParameter {
+                operation,
+                arguments,
+                ..
+            } => {
+                require_runtime_count("capability arguments", *arguments)?;
+                require_index("capability operation", *operation, tables.operations.len())
+            }
+            Self::BeginParameterTransaction { binding, .. }
+            | Self::CommitParameterTransaction { binding, .. } => {
+                require_index("transaction local", *binding, code.local_count as usize)
             }
             Self::Perform {
                 requirement,
@@ -1438,6 +1533,8 @@ fn stack_effect(instruction: &CompiledInstruction) -> Result<(usize, usize), Dia
         CompiledInstruction::StoreLocal(_) | CompiledInstruction::Drop => (1, 0),
         CompiledInstruction::JumpIfFalse(_) => (1, 0),
         CompiledInstruction::Jump(_)
+        | CompiledInstruction::BeginParameterTransaction { .. }
+        | CompiledInstruction::CommitParameterTransaction { .. }
         | CompiledInstruction::BeginTransaction { .. }
         | CompiledInstruction::CommitTransaction { .. } => (0, 0),
         CompiledInstruction::Call { arguments, .. } => (count(*arguments)?, 1),
@@ -1467,7 +1564,8 @@ fn stack_effect(instruction: &CompiledInstruction) -> Result<(usize, usize), Dia
             (consumed, 1)
         }
         CompiledInstruction::SwitchVariant(_) => (1, 0),
-        CompiledInstruction::Perform { arguments, .. } => (count(*arguments)?, 1),
+        CompiledInstruction::Perform { arguments, .. }
+        | CompiledInstruction::PerformParameter { arguments, .. } => (count(*arguments)?, 1),
         CompiledInstruction::Return => (1, 0),
     })
 }

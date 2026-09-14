@@ -20,8 +20,8 @@ pub struct TypeObject {
 impl TypeObject {
     pub fn new(form: TypeForm) -> Result<Self, Diagnostic> {
         let object = Self {
-            contract_version: if matches!(form, TypeForm::TaskFunction { .. }) {
-                super::contract::TASK_FUNCTION_CONTRACT_VERSION
+            contract_version: if let TypeForm::TaskFunction { effect, .. } = &form {
+                task_generation(effect)
             } else if matches!(form, TypeForm::Applied { .. }) {
                 super::contract::NOMINAL_APPLICATION_CONTRACT_VERSION
             } else {
@@ -34,8 +34,8 @@ impl TypeObject {
     }
 
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
-        let expected = if matches!(self.form, TypeForm::TaskFunction { .. }) {
-            super::contract::TASK_FUNCTION_CONTRACT_VERSION
+        let expected = if let TypeForm::TaskFunction { effect, .. } = &self.form {
+            task_generation(effect)
         } else if matches!(self.form, TypeForm::Applied { .. }) {
             super::contract::NOMINAL_APPLICATION_CONTRACT_VERSION
         } else {
@@ -307,4 +307,12 @@ fn require_count(label: &str, count: usize, allow_zero: bool) -> Result<(), Diag
 
 fn type_error(code: &str, message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Semantic, code, message)
+}
+
+fn task_generation(effect: &super::EffectRow) -> u16 {
+    if effect.requirements.iter().any(|r| r.concrete().is_none()) {
+        2
+    } else {
+        super::contract::TASK_FUNCTION_CONTRACT_VERSION
+    }
 }

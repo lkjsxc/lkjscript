@@ -107,8 +107,8 @@ pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-function-definition-projection-6";
-pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 6;
+    "lkjscript-function-definition-projection-7";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 7;
 pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
 pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
 pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -208,6 +208,7 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("definition.function", "visibility"),
     ("definition.function", "type-parameters"),
     ("definition.function", "effect-parameters"),
+    ("definition.function", "requirement-parameters"),
     ("definition.function", "effect-row-parameters"),
     ("definition.function", "parameters"),
     ("definition.function", "result"),
@@ -219,6 +220,15 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("definition.type-parameter", "index"),
     ("definition.type-parameter", "name"),
     ("definition.type-parameter", "constraint"),
+    ("definition.requirement-parameter", "id"),
+    ("definition.requirement-parameter", "parent"),
+    ("definition.requirement-parameter", "index"),
+    ("definition.requirement-parameter", "name"),
+    ("definition.requirement-parameter", "interface"),
+    ("definition.requirement-parameter", "minimum-operations"),
+    ("definition.requirement-parameter-operation", "parent"),
+    ("definition.requirement-parameter-operation", "index"),
+    ("definition.requirement-parameter-operation", "reference"),
     ("definition.effect-parameter", "id"),
     ("definition.effect-parameter", "parent"),
     ("definition.effect-parameter", "index"),
@@ -263,6 +273,7 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("definition.expression", "blob"),
     ("definition.expression", "type-arguments"),
     ("definition.expression", "effect-arguments"),
+    ("definition.expression", "requirement-arguments"),
     ("definition.expression", "arguments"),
     ("definition.expression", "bindings"),
     ("definition.expression", "items"),
@@ -7549,9 +7560,9 @@ mod tests {
             .expect("definition projection contract");
         assert_eq!(
             contract.identity,
-            "lkjscript-function-definition-projection-6"
+            "lkjscript-function-definition-projection-7"
         );
-        assert_eq!(contract.version, 6);
+        assert_eq!(contract.version, 7);
         assert_eq!(
             contract_descriptors()
                 .iter()

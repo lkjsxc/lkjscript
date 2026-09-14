@@ -1,0 +1,42 @@
+reference.owner as=$Queue package=$std class=declaration name=DurableQueue
+reference.owner as=$LeaseState package=$std class=declaration name=QueueLeaseState
+reference.owner as=$claim package=$std class=operation parent=$Queue name=claim
+reference.owner as=$lease-info package=$std class=operation parent=$Queue name=lease-info
+reference.owner as=$complete package=$std class=operation parent=$Queue name=complete
+reference.owner as=$live package=$std class=case parent=$LeaseState name=live
+reference.owner as=$absent-case package=$std class=case parent=$LeaseState name=absent
+add.requirement-parameter as=$queue-R declaration=$finish-one name=R interface=$Queue
+requirement-parameter.operation parent=$queue-R index=0 operation=$claim
+requirement-parameter.operation parent=$queue-R index=1 operation=$lease-info
+requirement-parameter.operation parent=$queue-R index=2 operation=$complete
+type.capability-resource as=@Lease interface=$Queue
+add.parameter as=$worker function=$finish-one name=worker type=text
+add.parameter as=$now function=$finish-one name=now type=i64
+add.parameter as=$duration function=$finish-one name=lease-duration type=i64
+add.parameter as=$result function=$finish-one name=result type=bytes
+expression.local as=$worker-value value=$worker
+expression.local as=$claim-now value=$now
+expression.local as=$duration-value value=$duration
+expression.capability-call as=$claimed requirement=parameter:$queue-R operation=$claim
+expression.argument parent=$claimed index=0 expression=$worker-value
+expression.argument parent=$claimed index=1 expression=$claim-now
+expression.argument parent=$claimed index=2 expression=$duration-value
+expression.local as=$borrowed-lease value=$lease
+expression.capability-call as=$observed-lease requirement=parameter:$queue-R operation=$lease-info
+expression.argument parent=$observed-lease index=0 expression=$borrowed-lease
+expression.local as=$consumed-lease value=$lease
+expression.local as=$complete-now value=$now
+expression.local as=$result-value value=$result
+expression.capability-call as=$completed requirement=parameter:$queue-R operation=$complete
+expression.argument parent=$completed index=0 expression=$consumed-lease
+expression.argument parent=$completed index=1 expression=$complete-now
+expression.argument parent=$completed index=2 expression=$result-value
+expression.sequence as=$finish-live
+expression.argument parent=$finish-live index=0 expression=$observed-lease
+expression.argument parent=$finish-live index=1 expression=$completed
+expression.bool as=$no-lease value=false
+expression.match as=$finish-body value=$claimed
+expression.match-arm parent=$finish-body index=0 case=$live as=$lease name=lease type=@Lease body=$finish-live
+expression.match-arm parent=$finish-body index=1 case=$absent-case body=$no-lease
+create.function as=$finish-one module=$cells name=finish-one visibility=public result=bool effect=task body=$finish-body
+effect.requirement parent=$finish-one index=0 requirement=parameter:$queue-R

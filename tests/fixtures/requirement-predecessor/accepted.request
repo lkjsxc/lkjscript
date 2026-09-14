@@ -1,0 +1,20 @@
+request base=rev_4210870dbd324fd02021046011e1efaf215d986323e45893be1a0f370c9a6d1c idempotency=predecessor-scalars-4306
+reference.package as=$std source=builtin
+reference.owner as=$encode package=$std class=declaration name=data-encode
+create.module as=$module name=scalar-compatibility
+create.component as=$component module=$module name=scalar-codecs visibility=public
+expression.i64 as=$integer value=13
+expression.call as=$encoded-integer function=$encode
+type.argument parent=$encoded-integer index=0 type=i64
+expression.argument parent=$encoded-integer index=0 expression=$integer
+create.function as=$integer-function module=$module name=encode-integer visibility=public result=bytes effect=pure body=$encoded-integer
+expression.text as=$text value="a!"
+expression.call as=$encoded-text function=$encode
+type.argument parent=$encoded-text index=0 type=text
+expression.argument parent=$encoded-text index=0 expression=$text
+create.function as=$text-function module=$module name=encode-text visibility=public result=bytes effect=pure body=$encoded-text
+type.function as=@Encoder result=bytes
+add.port as=$integer-port component=$component name=integer type=@Encoder function=$integer-function
+add.port as=$text-port component=$component name=text type=@Encoder function=$text-function
+create.target as=$integer-target name=encode-integer component=$component port=$integer-port runner=command
+create.target as=$text-target name=encode-text component=$component port=$text-port runner=command

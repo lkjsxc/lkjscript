@@ -29,6 +29,12 @@ pub(in crate::platform::change::request) fn collect_mutation_symbols(
             }
             Ok(())
         }
+        AuthoredChange::AddRequirementParameter { parameter, .. } => define_symbol(
+            definitions,
+            &parameter.symbol,
+            SymbolKind::RequirementParameter,
+        ),
+        AuthoredChange::SetRequirementParameter { .. } => Ok(()),
         AuthoredChange::AddEffectParameter { parameter, .. } => {
             define_symbol(definitions, &parameter.symbol, SymbolKind::EffectParameter)
         }
@@ -92,6 +98,47 @@ pub(in crate::platform::change::request) fn lower_mutation<
             interface,
             operation,
         } => lower_add_operation(lowerer, interface, operation),
+        AuthoredChange::AddRequirementParameter {
+            declaration,
+            parameter,
+        } => {
+            let declaration = lowerer.resolve_declaration(declaration)?;
+            let id = lowerer.requirement_parameter_symbol(&parameter.symbol)?;
+            let constraint = lowerer
+                .lower_requirement_constraint(&parameter.interface, &parameter.operations)?;
+            let owner = OwnerKey::Declaration(declaration);
+            let OwnerRecord::Declaration(record) = lowerer.candidate_mut(owner)? else {
+                return Err(mutation_kind("function", owner));
+            };
+            let DeclarationPayload::Function(function) = &mut record.payload else {
+                return Err(mutation_kind("function", owner));
+            };
+            function.requirement_parameters.push(id);
+            lowerer.insert_created(OwnerRecord::RequirementParameter(
+                crate::platform::kernel::RequirementParameterRecord {
+                    header: OwnerHeader::new(
+                        OwnerKey::RequirementParameter(id),
+                        OwnerKind::RequirementParameter,
+                    ),
+                    declaration,
+                    name: parameter.name.clone(),
+                    constraint,
+                },
+            ))
+        }
+        AuthoredChange::SetRequirementParameter {
+            parameter,
+            interface,
+            operations,
+        } => {
+            let owner = lowerer.resolve_owner(parameter)?;
+            let constraint = lowerer.lower_requirement_constraint(interface, operations)?;
+            let OwnerRecord::RequirementParameter(record) = lowerer.candidate_mut(owner)? else {
+                return Err(mutation_kind("requirement parameter", owner));
+            };
+            record.constraint = constraint;
+            Ok(())
+        }
         AuthoredChange::AddEffectParameter {
             declaration,
             parameter,

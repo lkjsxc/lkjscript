@@ -277,7 +277,13 @@ impl NormalizedReferenceSchema {
         substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
         depth: usize,
     ) -> Option<TypeObjectDigest> {
-        self.instantiated_with_effects(digest, substitutions, &BTreeMap::new(), depth)
+        self.instantiated_with_effects(
+            digest,
+            substitutions,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            depth,
+        )
     }
 
     pub(super) fn instantiated_with_effects(
@@ -285,13 +291,20 @@ impl NormalizedReferenceSchema {
         digest: TypeObjectDigest,
         substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
         effects: &super::reference_effects::Bindings,
+        requirements: &super::reference_effects::RequirementBindings,
         depth: usize,
     ) -> Option<TypeObjectDigest> {
         if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
             return None;
         }
         let descend = |ty| {
-            self.instantiated_with_effects(ty, substitutions, effects, depth.saturating_add(1))
+            self.instantiated_with_effects(
+                ty,
+                substitutions,
+                effects,
+                requirements,
+                depth.saturating_add(1),
+            )
         };
         let form = match &self.types.get(&digest)?.form {
             TypeForm::TypeParameter { parameter } => {
@@ -356,7 +369,8 @@ impl NormalizedReferenceSchema {
                     .map(descend)
                     .collect::<Option<_>>()?,
                 result: descend(*result)?,
-                effect: super::reference_effects::close(effect, effects, |_| Ok(())).ok()?,
+                effect: super::reference_effects::close(effect, effects, requirements, |_| Ok(()))
+                    .ok()?,
             },
             _ => return Some(digest),
         };

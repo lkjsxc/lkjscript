@@ -1092,10 +1092,12 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
                 *instruction = match instruction {
                     NormalizedInstruction::TailCall {
                         effect_arguments,
+                        requirement_arguments,
                         function,
                         type_arguments,
                         arguments,
                     } => NormalizedInstruction::Call {
+                        requirement_arguments: Arc::clone(requirement_arguments),
                         effect_arguments: Arc::clone(effect_arguments),
                         function: *function,
                         type_arguments: type_arguments.clone(),

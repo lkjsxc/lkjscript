@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 )]
 #[serde(deny_unknown_fields)]
 pub struct EffectRow {
-    pub requirements: Vec<RequirementReference>,
+    pub requirements: Vec<super::RequirementOperand>,
     pub parameters: Vec<EffectParameterReference>,
 }
 
@@ -53,7 +53,27 @@ impl EffectRow {
     }
 
     pub fn is_closed(&self) -> bool {
-        self.parameters.is_empty()
+        self.parameters.is_empty() && self.requirements.iter().all(|r| r.concrete().is_some())
+    }
+
+    pub fn substitute_requirements(
+        &self,
+        bindings: &super::RequirementSubstitution,
+        mut admit: impl FnMut(usize) -> Result<(), Diagnostic>,
+    ) -> Result<Self, Diagnostic> {
+        self.validate()?;
+        admit(self.requirements.len())?;
+        let requirements = self
+            .requirements
+            .iter()
+            .map(|r| r.substitute(bindings))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut row = Self {
+            requirements,
+            parameters: self.parameters.clone(),
+        };
+        row.normalize()?;
+        Ok(row)
     }
 
     /// Bounded exact identity paths for diagnostics. Names and deployment data are absent.
@@ -65,7 +85,7 @@ impl EffectRow {
         let atoms = self
             .requirements
             .iter()
-            .map(|r| format!("requirement {}/{}", r.package, r.requirement))
+            .map(|r| format!("requirement {}/{}", r.package(), r.owner()))
             .chain(
                 self.parameters
                     .iter()
@@ -147,7 +167,10 @@ impl EffectRow {
             }
             let mut covered = false;
             for allowance in &available.requirements {
-                if covers(*required, *allowance)? {
+                if let (Some(required), Some(allowance)) =
+                    (required.concrete(), allowance.concrete())
+                    && covers(required, allowance)?
+                {
                     covered = true;
                     break;
                 }
@@ -177,9 +200,12 @@ mod tests {
         EffectRow {
             requirements: (0..3)
                 .filter(|i| mask & (1 << i) != 0)
-                .map(|i| RequirementReference {
-                    package,
-                    requirement: RequirementId::from_bytes([i + 1; 16]).unwrap(),
+                .map(|i| {
+                    RequirementReference {
+                        package,
+                        requirement: RequirementId::from_bytes([i + 1; 16]).unwrap(),
+                    }
+                    .into()
                 })
                 .collect(),
             parameters: (0..2)
@@ -252,9 +278,12 @@ mod tests {
         let scope = row(24).parameters;
         let mut closed = row(1);
         closed.requirements = (1..=super::super::contract::MAXIMUM_CHILDREN)
-            .map(|n| RequirementReference {
-                package: closed.requirements[0].package,
-                requirement: RequirementId::migrate(b"finite-effect-universe", n as u64),
+            .map(|n| {
+                RequirementReference {
+                    package: closed.requirements[0].package(),
+                    requirement: RequirementId::migrate(b"finite-effect-universe", n as u64),
+                }
+                .into()
             })
             .collect();
         closed.normalize().unwrap();

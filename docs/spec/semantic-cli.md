@@ -324,7 +324,7 @@ only a declaration exposed by that same selected interface.
 | --- | --- | --- | --- |
 | `module` | Package root | Existing module | Rejected; interfaces expose no modules |
 | `declaration` | Local module; foreign interface root | Existing declaration | Unique exported name, or exact exported declaration ID |
-| `type-parameter`, `effect-parameter` | Declaring declaration | Existing named parameter | Only parameters exposed by the selected interface |
+| `type-parameter`, `effect-parameter`, `requirement-parameter` | Declaring declaration | Existing named parameter | Only parameters exposed by the selected interface |
 | `field` | Record declaration | Exact field | Exposed exact field |
 | `case` | Variant declaration | Exact case | Exposed exact case |
 | `operation` | Interface declaration | Exact operation | Exposed exact operation |
@@ -692,3 +692,33 @@ complete definitions.
 `set.case-payload case=OWNER_SELECTOR [payload=TYPE]` edit exact nominal members. Omitting payload
 makes a case payloadless. These operations, parameter constraints, and dependent constructor/signature
 changes share normal plan/apply validation and atomic accepted publication.
+
+## Explicit requirement-parameter authoring
+
+`add.requirement-parameter as=$R declaration=FUNCTION name=R interface=INTERFACE` adds an
+ordered function-owned parameter with an empty minimum operation set. Its stable ID is distinct
+from concrete requirements, type parameters and effect parameters.
+`requirement-parameter.operation parent=$R index=INDEX operation=OPERATION` supplies contiguous
+ordered fragments that normalize to a canonical set. Interface and operation references are exact;
+empty constraints remain interface-constrained.
+
+`set.requirement-parameter as=%constraint parameter=PARAMETER interface=INTERFACE` replaces the
+complete constraint through normal review. Operation children use %constraint as their parent.
+Changing a constraint affects the owning signature, callers and exported exact package interfaces;
+replacing a dependency rechecks consumers. Rejected edits leave accepted HEAD unchanged.
+
+Direct calls and named function-value expressions supply contiguous
+`requirement.argument parent=$call index=INDEX requirement=OPERAND` children. Concrete operands
+retain existing exact or named-reference forms. Symbolic operands have an explicit  `parameter:`
+prefix:  `parameter:$R` for an allocated or discovered parameter, or
+`parameter:pkg_ID/reqparam_ID` for its exact identity. The prefix selects a typed reference kind;
+failed concrete lookups never trigger reinterpretation. The same operands are accepted by
+`effect.requirement`,  `expression.capability-call` and  `expression.transaction`.
+
+Named discovery uses class  `requirement-parameter` with the exact owning function as parent.
+Definition inspection includes formal order, interface and operation constraints, rows and ordered
+applications. Relation queries expose parameter uses and requirement arguments. No implicit
+requirement selection or ambient deployment binding follows from name resolution. Complete candidate
+validation checks unused and unreachable applications as well as reachable bodies. Old request
+commitments remain unchanged when the new forms are absent; successor commitment/decoder tags
+explicitly identify new meaning.

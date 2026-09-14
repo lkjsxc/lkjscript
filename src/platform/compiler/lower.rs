@@ -1,4 +1,4 @@
-//! Exact point-read lowering from normalized Graph 14 records into one compiler unit.
+//! Exact point-read lowering from admitted canonical records into one compiler unit.
 
 use super::unit::{
     BYTECODE_CONTRACT_VERSION, COMPILER_UNIT_CONTRACT_VERSION, CompilationPayload,
@@ -29,6 +29,12 @@ use crate::platform::semantic_id::{
 use crate::platform::session::{CanonicalSessionRead, validate_session_function_type};
 use crate::platform::storage::object::ObjectKey;
 use std::collections::{BTreeMap, BTreeSet};
+
+struct SignatureGenerics<'a> {
+    types: &'a [crate::platform::semantic_id::TypeParameterId],
+    effects: &'a [crate::platform::semantic_id::EffectParameterId],
+    requirements: &'a [crate::platform::semantic_id::RequirementParameterId],
+}
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CompilationWork {
@@ -561,8 +567,11 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
             DeclarationPayload::External(external) => {
                 let signature = self.compile_signature(
                     declaration,
-                    &external.type_parameters,
-                    &[],
+                    SignatureGenerics {
+                        types: &external.type_parameters,
+                        effects: &[],
+                        requirements: &[],
+                    },
                     &external.parameters,
                     external.result,
                     &FunctionEffect::Pure,
@@ -575,8 +584,11 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
             DeclarationPayload::Function(function) => {
                 let signature = self.compile_signature(
                     declaration,
-                    &function.type_parameters,
-                    &function.effect_parameters,
+                    SignatureGenerics {
+                        types: &function.type_parameters,
+                        effects: &function.effect_parameters,
+                        requirements: &function.requirement_parameters,
+                    },
                     &function.parameters,
                     function.result,
                     &function.effect,
@@ -645,12 +657,16 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
     fn compile_signature(
         &mut self,
         declaration: DeclarationId,
-        type_parameters: &[crate::platform::semantic_id::TypeParameterId],
-        effect_parameters: &[crate::platform::semantic_id::EffectParameterId],
+        generics: SignatureGenerics<'_>,
         parameters: &[ParameterId],
         result: TypeObjectDigest,
         effect: &FunctionEffect,
     ) -> Result<CompiledSignature, Diagnostic> {
+        let SignatureGenerics {
+            types: type_parameters,
+            effects: effect_parameters,
+            requirements: requirement_parameters,
+        } = generics;
         let type_parameter_constraints =
             self.compile_type_parameter_constraints(declaration, type_parameters)?;
         let mut compiled_parameters = Vec::with_capacity(parameters.len());
@@ -678,10 +694,12 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                 requirements,
             } => requirements
                 .iter()
-                .map(|reference| self.tables.requirement(*reference))
+                .filter_map(|reference| reference.concrete())
+                .map(|reference| self.tables.requirement(reference))
                 .collect::<Result<Vec<_>, _>>()?,
         };
         Ok(CompiledSignature {
+            requirement_parameters: requirement_parameters.to_vec(),
             effect_parameters: effect_parameters.to_vec(),
             effect: effect.clone(),
             type_parameters: type_parameters.to_vec(),
@@ -1316,6 +1334,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
             ExpressionOperation::Constant { declaration } => {
                 let function = self.unit.tables.declaration(declaration)?;
                 self.push(CompiledInstruction::Call {
+                    requirement_arguments: Vec::new(),
                     effect_arguments: Vec::new(),
                     function,
                     type_arguments: Vec::new(),
@@ -1367,11 +1386,15 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 }
             }
             ExpressionOperation::Call {
+                requirement_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
                 arguments,
             } => {
+                for reference in requirement_arguments.iter().filter_map(|r| r.concrete()) {
+                    self.unit.tables.requirement(reference)?;
+                }
                 let parameter_uses = self.unit.function_parameter_uses(function)?;
                 if parameter_uses.len() != arguments.len() {
                     return Err(compiler_corrupt(
@@ -1389,6 +1412,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     self.expression_with_use(argument, depth, use_mode)?;
                 }
                 self.push(CompiledInstruction::Call {
+                    requirement_arguments,
                     effect_arguments,
                     function,
                     type_arguments,
@@ -1396,16 +1420,21 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 })?;
             }
             ExpressionOperation::FunctionValue {
+                requirement_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
             } => {
+                for reference in requirement_arguments.iter().filter_map(|r| r.concrete()) {
+                    self.unit.tables.requirement(reference)?;
+                }
                 let function = self.unit.tables.declaration(function)?;
                 let type_arguments = type_arguments
                     .into_iter()
                     .map(|ty| self.unit.tables.ty(ty))
                     .collect::<Result<Vec<_>, _>>()?;
                 self.push(CompiledInstruction::FunctionValue {
+                    requirement_arguments,
                     effect_arguments,
                     function,
                     type_arguments,
@@ -1582,17 +1611,28 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                         "capability arguments disagree with the exact operation parameters",
                     ));
                 }
-                let requirement = self.unit.tables.requirement(requirement)?;
                 let operation = self.unit.tables.operation(operation)?;
                 let argument_count = u32_count("capability arguments", arguments.len())?;
                 for (argument, use_mode) in arguments.into_iter().zip(parameter_uses) {
                     self.expression_with_use(argument, depth, use_mode)?;
                 }
-                self.push(CompiledInstruction::Perform {
-                    requirement,
-                    operation,
-                    arguments: argument_count,
-                })?;
+                let instruction = match requirement {
+                    crate::platform::kernel::RequirementOperand::Concrete(reference) => {
+                        CompiledInstruction::Perform {
+                            requirement: self.unit.tables.requirement(reference)?,
+                            operation,
+                            arguments: argument_count,
+                        }
+                    }
+                    crate::platform::kernel::RequirementOperand::Parameter(parameter) => {
+                        CompiledInstruction::PerformParameter {
+                            parameter,
+                            operation,
+                            arguments: argument_count,
+                        }
+                    }
+                };
+                self.push(instruction)?;
             }
             ExpressionOperation::Transaction {
                 requirement,
@@ -1600,18 +1640,39 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 body,
             } => {
                 self.binding(binding, BindingKind::Transaction)?;
-                let requirement = self.unit.tables.requirement(requirement)?;
                 let reference = LocalValueReference::TransactionBinding(binding);
                 let local = self.bind(reference)?;
-                self.push(CompiledInstruction::BeginTransaction {
-                    requirement,
-                    binding: local,
-                })?;
+                let instruction = match requirement {
+                    crate::platform::kernel::RequirementOperand::Concrete(reference) => {
+                        CompiledInstruction::BeginTransaction {
+                            requirement: self.unit.tables.requirement(reference)?,
+                            binding: local,
+                        }
+                    }
+                    crate::platform::kernel::RequirementOperand::Parameter(parameter) => {
+                        CompiledInstruction::BeginParameterTransaction {
+                            parameter,
+                            binding: local,
+                        }
+                    }
+                };
+                self.push(instruction)?;
                 self.expression(body, depth)?;
-                self.push(CompiledInstruction::CommitTransaction {
-                    requirement,
-                    binding: local,
-                })?;
+                let instruction = match requirement {
+                    crate::platform::kernel::RequirementOperand::Concrete(reference) => {
+                        CompiledInstruction::CommitTransaction {
+                            requirement: self.unit.tables.requirement(reference)?,
+                            binding: local,
+                        }
+                    }
+                    crate::platform::kernel::RequirementOperand::Parameter(parameter) => {
+                        CompiledInstruction::CommitParameterTransaction {
+                            parameter,
+                            binding: local,
+                        }
+                    }
+                };
+                self.push(instruction)?;
                 self.locals.remove(&reference);
             }
         }

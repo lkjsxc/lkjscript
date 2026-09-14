@@ -3,7 +3,7 @@
 use super::id::PackageId;
 use crate::platform::semantic_id::{
     CaseId, DeclarationId, EffectParameterId, FieldId, ModuleId, OperationId, PortId,
-    RequirementId, TargetId,
+    RequirementId, RequirementParameterId, TargetId,
 };
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
@@ -72,6 +72,12 @@ exact_reference!(
     parameter,
     EffectParameterId,
     "lkjscript.EffectParameterReferenceV1"
+);
+exact_reference!(
+    RequirementParameterReference,
+    parameter,
+    RequirementParameterId,
+    "lkjscript.RequirementParameterReferenceV1"
 );
 exact_reference!(
     PortReference,

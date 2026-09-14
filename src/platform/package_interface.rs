@@ -32,10 +32,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-10";
-pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 10;
-pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF10";
+pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 11;
+pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF11";
 pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str =
-    "lkjscript.package-interface-owner-envelope.v10";
+    "lkjscript.package-interface-owner-envelope.v11";
 const PACKAGE_INTERFACE_IDENTITY_MAGIC: [u8; 8] = *b"LKJPIFI1";
 const PACKAGE_INTERFACE_IDENTITY_DOMAIN: &str = "lkjscript.package-interface-identity.v1";
 pub const MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES: usize = 1024 * 1024;
@@ -75,6 +75,12 @@ pub struct PackageInterfaceOwner {
     pub record: PackageInterfaceRecord,
 }
 
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+struct PackageInterfaceOwner14 {
+    contract_version: u16,
+    record: crate::platform::kernel::wire14::PackageInterfaceRecord14,
+}
+
 impl PackageInterfaceOwner {
     pub fn project(
         canonical: &OwnerRecord,
@@ -103,7 +109,11 @@ impl PackageInterfaceOwner {
             return Ok(None);
         };
         let value = Self {
-            contract_version: PACKAGE_INTERFACE_CONTRACT_VERSION,
+            contract_version: if canonical.header().contract_version == 14 {
+                10
+            } else {
+                PACKAGE_INTERFACE_CONTRACT_VERSION
+            },
             record,
         };
         value.validate_local()?;
@@ -124,6 +134,19 @@ impl PackageInterfaceOwner {
 
     pub fn encode(&self) -> Result<(PackageInterfaceOwnerDigest, Vec<u8>), Diagnostic> {
         self.validate_local()?;
+        if self.contract_version == 10 {
+            let wire = PackageInterfaceOwner14 {
+                contract_version: 10,
+                record: self.record.clone().try_into()?,
+            };
+            let bytes = crate::platform::packed::encode(
+                *b"LKJPIF10",
+                "lkjscript.package-interface-owner-envelope.v10",
+                &wire,
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
+        }
         let bytes = crate::platform::packed::encode(
             PACKAGE_INTERFACE_MAGIC,
             PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
@@ -145,12 +168,30 @@ impl PackageInterfaceOwner {
                 "package-interface owner bytes disagree with their exact digest",
             ));
         }
-        let value: Self = crate::platform::packed::decode(
-            bytes,
-            PACKAGE_INTERFACE_MAGIC,
-            PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
-            MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
-        )?;
+        let value: Self = if bytes.starts_with(b"LKJPIF10") {
+            let wire: PackageInterfaceOwner14 = crate::platform::packed::decode(
+                bytes,
+                *b"LKJPIF10",
+                "lkjscript.package-interface-owner-envelope.v10",
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            if wire.contract_version != 10 {
+                return Err(interface_corrupt(
+                    "predecessor interface envelope has a foreign generation",
+                ));
+            }
+            Self {
+                contract_version: wire.contract_version,
+                record: wire.record.into(),
+            }
+        } else {
+            crate::platform::packed::decode(
+                bytes,
+                PACKAGE_INTERFACE_MAGIC,
+                PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?
+        };
         value.validate_local()?;
         if value.owner() != expected_owner {
             return Err(interface_error(
@@ -171,7 +212,9 @@ impl PackageInterfaceOwner {
     }
 
     fn validate_local(&self) -> Result<(), Diagnostic> {
-        if self.contract_version != PACKAGE_INTERFACE_CONTRACT_VERSION {
+        if self.contract_version != PACKAGE_INTERFACE_CONTRACT_VERSION
+            && self.contract_version != 10
+        {
             return Err(interface_error(
                 DiagnosticClass::Source,
                 "package_interface_contract",
@@ -194,9 +237,28 @@ pub fn package_interface_digest(
     package: PackageId,
     owners: MapContentRoot,
 ) -> Result<PackageInterfaceDigest, Diagnostic> {
+    package_interface_digest_for_graph(
+        package,
+        owners,
+        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+    )
+}
+
+pub fn package_interface_digest_for_graph(
+    package: PackageId,
+    owners: MapContentRoot,
+    graph_contract_version: u16,
+) -> Result<PackageInterfaceDigest, Diagnostic> {
+    if !crate::platform::kernel::contract::supported_graph_contract(graph_contract_version) {
+        return Err(interface_error(
+            DiagnosticClass::Source,
+            "package_interface_graph_contract",
+            "unsupported interface graph generation",
+        ));
+    }
     let identity = PackageInterfaceIdentity {
         contract_version: 1,
-        graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+        graph_contract_version,
         package,
         owners,
     };
@@ -215,6 +277,7 @@ pub struct PackageInterfaceSelection {
     declarations: BTreeSet<DeclarationId>,
     type_parameters: BTreeSet<TypeParameterId>,
     effect_parameters: BTreeSet<crate::platform::semantic_id::EffectParameterId>,
+    requirement_parameters: BTreeSet<crate::platform::semantic_id::RequirementParameterId>,
     fields: BTreeSet<FieldId>,
     cases: BTreeSet<CaseId>,
     operations: BTreeSet<OperationId>,
@@ -230,6 +293,7 @@ impl PackageInterfaceSelection {
             declarations: BTreeSet::new(),
             type_parameters: BTreeSet::new(),
             effect_parameters: BTreeSet::new(),
+            requirement_parameters: BTreeSet::new(),
             fields: BTreeSet::new(),
             cases: BTreeSet::new(),
             operations: BTreeSet::new(),
@@ -244,6 +308,7 @@ impl PackageInterfaceSelection {
             OwnerKey::Declaration(id) => self.declarations.contains(&id),
             OwnerKey::TypeParameter(id) => self.type_parameters.contains(&id),
             OwnerKey::EffectParameter(id) => self.effect_parameters.contains(&id),
+            OwnerKey::RequirementParameter(id) => self.requirement_parameters.contains(&id),
             OwnerKey::Field(id) => self.fields.contains(&id),
             OwnerKey::Case(id) => self.cases.contains(&id),
             OwnerKey::Operation(id) => self.operations.contains(&id),
@@ -306,12 +371,14 @@ impl PackageInterfaceSelection {
             }
             DeclarationPayload::Function(FunctionDeclaration {
                 effect_parameters,
+                requirement_parameters,
                 type_parameters,
                 parameters,
                 effect,
                 ..
             }) => {
                 self.effect_parameters.extend(effect_parameters);
+                self.requirement_parameters.extend(requirement_parameters);
                 self.type_parameters.extend(type_parameters);
                 self.parameters.extend(parameters);
                 if let FunctionEffect::Task {
@@ -322,6 +389,7 @@ impl PackageInterfaceSelection {
                     self.requirements.extend(
                         requirements
                             .iter()
+                            .filter_map(|requirement| requirement.concrete())
                             .filter(|requirement| requirement.package == self.package)
                             .map(|requirement| requirement.requirement),
                     );
@@ -358,6 +426,7 @@ impl PackageInterfaceSelection {
                 effect
                     .requirements
                     .iter()
+                    .filter_map(|reference| reference.concrete())
                     .filter(|reference| reference.package == self.package)
                     .map(|reference| reference.requirement),
             );
@@ -374,6 +443,12 @@ impl PackageInterfaceSelection {
                     .iter()
                     .copied()
                     .map(OwnerKey::TypeParameter),
+            )
+            .chain(
+                self.requirement_parameters
+                    .iter()
+                    .copied()
+                    .map(OwnerKey::RequirementParameter),
             )
             .chain(self.fields.iter().copied().map(OwnerKey::Field))
             .chain(self.cases.iter().copied().map(OwnerKey::Case))
@@ -634,6 +709,8 @@ pub(crate) fn interface_owner_validation_visits(owner: &PackageInterfaceOwner) -
             PackageInterfaceDeclarationPayload::Function(function) => {
                 function.parameters.len()
                     + function.type_parameters.len()
+                    + function.requirement_parameters.len()
+                    + function.effect_parameters.len()
                     + match &function.effect {
                         FunctionEffect::Pure => 0,
                         FunctionEffect::Task {
@@ -653,6 +730,9 @@ pub(crate) fn interface_owner_validation_visits(owner: &PackageInterfaceOwner) -
         },
         PackageInterfaceRecord::Operation(operation) => operation.parameters.len(),
         PackageInterfaceRecord::Requirement(requirement) => 1 + requirement.operations.len(),
+        PackageInterfaceRecord::RequirementParameter(parameter) => {
+            1 + parameter.constraint.operations.len()
+        }
         _ => 0,
     };
     1 + children as u64
@@ -764,6 +844,15 @@ fn validate_owner_closure(
                 )?;
             }
             PackageInterfaceDeclarationPayload::Function(signature) => {
+                for parameter in &signature.requirement_parameters {
+                    require_child(
+                        owners,
+                        &mut expected,
+                        OwnerKey::RequirementParameter(*parameter),
+                        OwnerKind::RequirementParameter,
+                        Some(*declaration_id),
+                    )?;
+                }
                 for parameter in &signature.effect_parameters {
                     require_child(
                         owners,
@@ -781,18 +870,46 @@ fn validate_owner_closure(
                     &signature.parameters,
                 )?;
                 if let FunctionEffect::Task {
-                    effect_parameters: _,
+                    effect_parameters,
                     requirements,
                 } = &signature.effect
                 {
+                    for parameter in effect_parameters {
+                        if parameter.package != package
+                            || !signature.effect_parameters.contains(&parameter.parameter)
+                        {
+                            return Err(interface_error(
+                                DiagnosticClass::Semantic,
+                                "package_interface_effect_scope",
+                                "function row uses a foreign effect parameter",
+                            ));
+                        }
+                    }
                     for requirement in requirements {
-                        if requirement.package == package {
+                        if let crate::platform::kernel::RequirementOperand::Parameter(parameter) =
+                            requirement
+                            && (parameter.package != package
+                                || !signature
+                                    .requirement_parameters
+                                    .contains(&parameter.parameter))
+                        {
+                            return Err(interface_error(
+                                DiagnosticClass::Semantic,
+                                "package_interface_requirement_scope",
+                                "function row uses a foreign requirement parameter",
+                            ));
+                        }
+                        if requirement.package() == package {
                             require_child(
                                 owners,
                                 &mut expected,
-                                OwnerKey::Requirement(requirement.requirement),
-                                OwnerKind::Requirement,
-                                None,
+                                requirement.owner(),
+                                if requirement.concrete().is_some() {
+                                    OwnerKind::Requirement
+                                } else {
+                                    OwnerKind::RequirementParameter
+                                },
+                                requirement.concrete().is_none().then_some(*declaration_id),
                             )?;
                         }
                     }
@@ -830,12 +947,16 @@ fn validate_owner_closure(
     for object in types.values() {
         if let TypeForm::TaskFunction { effect, .. } = &object.form {
             for requirement in &effect.requirements {
-                if requirement.package == package {
+                if requirement.package() == package {
                     require_child(
                         owners,
                         &mut expected,
-                        OwnerKey::Requirement(requirement.requirement),
-                        OwnerKind::Requirement,
+                        requirement.owner(),
+                        if requirement.concrete().is_some() {
+                            OwnerKind::Requirement
+                        } else {
+                            OwnerKind::RequirementParameter
+                        },
                         None,
                     )?;
                 }
@@ -932,6 +1053,7 @@ fn require_child(
         let actual = match &value.record {
             PackageInterfaceRecord::TypeParameter(record) => record.declaration,
             PackageInterfaceRecord::EffectParameter(record) => record.declaration,
+            PackageInterfaceRecord::RequirementParameter(record) => record.declaration,
             PackageInterfaceRecord::Field(record) => record.declaration,
             PackageInterfaceRecord::Case(record) => record.declaration,
             PackageInterfaceRecord::Operation(record) => record.declaration,
@@ -1030,11 +1152,23 @@ fn validate_interface_type_reference(
                 }
             }
             for requirement in &effect.requirements {
-                if requirement.package == package
+                if let crate::platform::kernel::RequirementOperand::Parameter(reference) =
+                    requirement
+                {
+                    if reference.package != package
+                        || !matches!(owners.get(&requirement.owner()).map(|v| &v.record), Some(PackageInterfaceRecord::RequirementParameter(record)) if Some(record.declaration) == semantic_declaration(source, owners))
+                    {
+                        return Err(interface_error(
+                            DiagnosticClass::Semantic,
+                            "package_interface_requirement_scope",
+                            "requirement parameter is outside its exact public function",
+                        ));
+                    }
+                    continue;
+                }
+                if requirement.package() == package
                     && !matches!(
-                        owners
-                            .get(&OwnerKey::Requirement(requirement.requirement))
-                            .map(|v| &v.record),
+                        owners.get(&requirement.owner()).map(|v| &v.record),
                         Some(PackageInterfaceRecord::Requirement(_))
                     )
                 {
@@ -1153,6 +1287,15 @@ fn semantic_declaration(
 ) -> Option<DeclarationId> {
     match owner {
         OwnerKey::Declaration(declaration) => Some(declaration),
+        OwnerKey::RequirementParameter(parameter) => {
+            match &owners
+                .get(&OwnerKey::RequirementParameter(parameter))?
+                .record
+            {
+                PackageInterfaceRecord::RequirementParameter(record) => Some(record.declaration),
+                _ => None,
+            }
+        }
         OwnerKey::EffectParameter(parameter) => {
             match &owners.get(&OwnerKey::EffectParameter(parameter))?.record {
                 PackageInterfaceRecord::EffectParameter(record) => Some(record.declaration),

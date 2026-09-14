@@ -128,7 +128,8 @@ impl Value {
                 "function constructor requires capture-safe type arguments",
             ));
         }
-        if !target.effect_parameters.is_empty()
+        if !target.requirement_parameters.is_empty()
+            || !target.effect_parameters.is_empty()
             || !target.effect.row().is_closed()
             || (matches!(target.effect, crate::platform::kernel::FunctionEffect::Pure)
                 && !target.graph_function
@@ -150,6 +151,7 @@ impl Value {
                 function,
                 type_arguments,
                 effect_arguments: Arc::clone(&target.effect_arguments),
+                requirement_arguments: Arc::clone(&target.requirement_arguments),
                 bound_arguments: None,
             },
             origin: program.value_origin,
@@ -171,6 +173,7 @@ impl Value {
             function,
             type_arguments,
             effect_arguments: _,
+            requirement_arguments: _,
             bound_arguments,
         } = &self.raw
         else {
@@ -522,6 +525,7 @@ impl Admission<'_> {
             function,
             type_arguments,
             effect_arguments: _,
+            requirement_arguments: _,
             bound_arguments,
         } = callee.raw()
         else {
@@ -533,7 +537,8 @@ impl Admission<'_> {
             .get(function.0 as usize)
             .filter(|_| function.1 == self.program.value_origin)
             .ok_or_else(|| admission_error("bind target belongs to another prepared program"))?;
-        if !target.effect_parameters.is_empty()
+        if !target.requirement_parameters.is_empty()
+            || !target.effect_parameters.is_empty()
             || target
                 .parameters
                 .iter()
@@ -584,6 +589,7 @@ impl Admission<'_> {
             function,
             type_arguments,
             effect_arguments: _,
+            requirement_arguments: _,
             bound_arguments,
         } = callee.raw()
         else {
@@ -644,6 +650,7 @@ impl Admission<'_> {
             function,
             type_arguments,
             effect_arguments,
+            requirement_arguments,
             bound_arguments,
         } = callee.raw()
         else {
@@ -664,6 +671,7 @@ impl Admission<'_> {
                 function: *function,
                 type_arguments: Arc::clone(type_arguments),
                 effect_arguments: Arc::clone(effect_arguments),
+                requirement_arguments: Arc::clone(requirement_arguments),
                 bound_arguments: Some(Arc::new(prefix)),
             },
             origin: self.program.value_origin,
@@ -1030,6 +1038,7 @@ impl Admission<'_> {
                         function,
                         type_arguments,
                         effect_arguments,
+                        requirement_arguments,
                         bound_arguments,
                     },
                     expected_callable @ (TypeForm::Function { parameters, result }
@@ -1059,7 +1068,10 @@ impl Admission<'_> {
                         _ => false,
                     };
                     if !effect_matches
+                        || !callable.requirement_parameters.is_empty()
                         || !callable.effect_parameters.is_empty()
+                        || requirement_arguments.as_ref() != callable.requirement_arguments.as_ref()
+                        || requirement_arguments.iter().any(|r| r.concrete().is_none())
                         || effect_arguments.as_ref() != callable.effect_arguments.as_ref()
                         || callable
                             .parameters

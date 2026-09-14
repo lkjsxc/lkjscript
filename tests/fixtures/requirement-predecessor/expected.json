@@ -1,0 +1,8 @@
+{
+  "encode-integer": {
+    "$bytes": "TEtKRFZBTDEAATKj491WICpKrZ/wbOYyICpm1jnBhHdOkGDOJyZdAEL0AAAAAAAAAA1u6NAlCGzab7J+i8O5/GRTE8yVv+p8upon5l5v6TSgCA=="
+  },
+  "encode-text": {
+    "$bytes": "TEtKRFZBTDEAAW/IopkNU5aDCBT4ArhseSUStYdfbEaNfJ6jkTb+u2VzAAAAAmEhokAqY9bDG8tfScUV/6HloU5mn99zxEfpnbfpyA1Z5Yo="
+  }
+}

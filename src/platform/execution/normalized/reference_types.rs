@@ -15,6 +15,7 @@ type Application = (
     DeclarationReference,
     Vec<TypeObjectDigest>,
     Vec<crate::platform::kernel::EffectRow>,
+    Vec<crate::platform::kernel::RequirementReference>,
 );
 type Calls = VecDeque<Application>;
 const MAXIMUM_METADATA_BYTES: usize = 256 * 1024 * 1024;
@@ -26,6 +27,7 @@ struct Closure<'a> {
     allocated: usize,
     control: &'a crate::platform::execution::ExecutionControl,
     effects: super::reference_effects::Bindings,
+    requirements: super::reference_effects::RequirementBindings,
 }
 
 fn allocate<T>(allocated: &mut usize, count: usize) -> Result<(), ExecutionError> {
@@ -126,13 +128,18 @@ impl Closure<'_> {
                 result,
                 effect,
             } => {
-                let effect = super::reference_effects::close(&effect, &self.effects, |n| {
-                    allocate::<(crate::platform::kernel::RequirementReference, usize)>(
-                        &mut self.allocated,
-                        n,
-                    )?;
-                    self.control.check()
-                })?;
+                let effect = super::reference_effects::close(
+                    &effect,
+                    &self.effects,
+                    &self.requirements,
+                    |n| {
+                        allocate::<(crate::platform::kernel::RequirementReference, usize)>(
+                            &mut self.allocated,
+                            n,
+                        )?;
+                        self.control.check()
+                    },
+                )?;
                 TypeForm::TaskFunction {
                     parameters: parameters
                         .into_iter()
@@ -245,10 +252,12 @@ impl Closure<'_> {
                     function,
                     type_arguments,
                     effect_arguments,
+                    requirement_arguments,
                     ..
                 }
                 | ExpressionOperation::FunctionValue {
                     effect_arguments,
+                    requirement_arguments,
                     function,
                     type_arguments,
                 } => {
@@ -269,14 +278,30 @@ impl Closure<'_> {
                     let mut effects = Vec::with_capacity(effect_arguments.len());
                     for row in effect_arguments {
                         self.tick()?;
-                        effects.push(super::reference_effects::close(&row, &self.effects, |n| {
-                            allocate::<(crate::platform::kernel::RequirementReference, usize)>(
-                                &mut self.allocated,
-                                n,
-                            )
-                        })?);
+                        effects.push(super::reference_effects::close(
+                            &row,
+                            &self.effects,
+                            &self.requirements,
+                            |n| {
+                                allocate::<(crate::platform::kernel::RequirementReference, usize)>(
+                                    &mut self.allocated,
+                                    n,
+                                )
+                            },
+                        )?);
                     }
-                    calls.push_back((function, concrete, effects));
+                    allocate::<crate::platform::kernel::RequirementReference>(
+                        &mut self.allocated,
+                        requirement_arguments.len(),
+                    )?;
+                    let requirements = requirement_arguments
+                        .iter()
+                        .map(|operand| {
+                            self.control.check()?;
+                            super::reference_effects::resolve(*operand, &self.requirements)
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    calls.push_back((function, concrete, effects, requirements));
                 }
                 _ => {}
             }
@@ -349,6 +374,7 @@ pub(super) fn complete(
         allocated: 0,
         control,
         effects: BTreeMap::new(),
+        requirements: BTreeMap::new(),
     };
     let mut calls = VecDeque::new();
     let empty = Bindings::new();
@@ -362,7 +388,8 @@ pub(super) fn complete(
                 let generic = match &declaration.payload {
                     DeclarationPayload::Function(function) => Some(
                         !function.type_parameters.is_empty()
-                            || !function.effect_parameters.is_empty(),
+                            || !function.effect_parameters.is_empty()
+                            || !function.requirement_parameters.is_empty(),
                     ),
                     DeclarationPayload::External(function) => {
                         Some(!function.type_parameters.is_empty())
@@ -382,6 +409,7 @@ pub(super) fn complete(
                             },
                             Vec::new(),
                             Vec::new(),
+                            Vec::new(),
                         ));
                     }
                     continue;
@@ -396,7 +424,7 @@ pub(super) fn complete(
         }
     }
     let mut completed = BTreeSet::new();
-    while let Some((function, arguments, effects)) = calls.pop_front() {
+    while let Some((function, arguments, effects, requirements)) = calls.pop_front() {
         closure.tick()?;
         index_node::<(DeclarationReference, Vec<TypeObjectDigest>)>(&mut closure.allocated)?;
         allocate::<TypeObjectDigest>(&mut closure.allocated, arguments.len())?;
@@ -407,7 +435,16 @@ pub(super) fn complete(
                 row.requirements.len(),
             )?;
         }
-        if !completed.insert((function, arguments.clone(), effects.clone())) {
+        allocate::<crate::platform::kernel::RequirementReference>(
+            &mut closure.allocated,
+            requirements.len(),
+        )?;
+        if !completed.insert((
+            function,
+            arguments.clone(),
+            effects.clone(),
+            requirements.clone(),
+        )) {
             continue;
         }
         let OwnerRecord::Declaration(declaration) = closure
@@ -419,24 +456,30 @@ pub(super) fn complete(
         else {
             return Err(failure());
         };
-        let (parameters, types, effect_parameters, result, body) = match declaration.payload {
-            DeclarationPayload::Function(function) => (
-                function.parameters,
-                function.type_parameters,
-                function.effect_parameters,
-                function.result,
-                Some(function.body),
-            ),
-            DeclarationPayload::External(function) => (
-                function.parameters,
-                function.type_parameters,
-                Vec::new(),
-                function.result,
-                None,
-            ),
-            _ => return Err(failure()),
-        };
-        if types.len() != arguments.len() || effect_parameters.len() != effects.len() {
+        let (parameters, types, effect_parameters, requirement_parameters, result, body) =
+            match declaration.payload {
+                DeclarationPayload::Function(function) => (
+                    function.parameters,
+                    function.type_parameters,
+                    function.effect_parameters,
+                    function.requirement_parameters,
+                    function.result,
+                    Some(function.body),
+                ),
+                DeclarationPayload::External(function) => (
+                    function.parameters,
+                    function.type_parameters,
+                    Vec::new(),
+                    Vec::new(),
+                    function.result,
+                    None,
+                ),
+                _ => return Err(failure()),
+            };
+        if types.len() != arguments.len()
+            || effect_parameters.len() != effects.len()
+            || requirement_parameters.len() != requirements.len()
+        {
             return Err(failure());
         }
         for _ in &types {
@@ -461,6 +504,23 @@ pub(super) fn complete(
                 )
             })
             .collect();
+        allocate::<(
+            crate::platform::kernel::RequirementParameterReference,
+            crate::platform::kernel::RequirementReference,
+        )>(&mut closure.allocated, requirements.len())?;
+        closure.requirements = requirement_parameters
+            .into_iter()
+            .zip(requirements)
+            .map(|(parameter, reference)| {
+                (
+                    crate::platform::kernel::RequirementParameterReference {
+                        package: function.package,
+                        parameter,
+                    },
+                    reference,
+                )
+            })
+            .collect();
         closure.identity(result, &bindings, 0)?;
         for parameter in parameters {
             let OwnerRecord::Parameter(parameter) = closure
@@ -476,6 +536,7 @@ pub(super) fn complete(
         }
     }
     closure.effects.clear();
+    closure.requirements.clear();
     closure.nominals(
         &mut schema.records,
         &mut schema.variants,

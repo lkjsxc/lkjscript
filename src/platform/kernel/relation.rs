@@ -58,6 +58,8 @@ pub enum RelationKind {
     PackageDependency,
     VariantExhaustiveness,
     EffectParameterUse,
+    RequirementParameterUse,
+    RequirementArgument,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -74,7 +76,7 @@ pub enum PropagationClass {
 }
 
 impl RelationKind {
-    pub const ALL: [Self; 31] = [
+    pub const ALL: [Self; 33] = [
         Self::DeclarationModule,
         Self::MemberDeclaration,
         Self::ParameterOperation,
@@ -106,6 +108,8 @@ impl RelationKind {
         Self::PackageDependency,
         Self::VariantExhaustiveness,
         Self::EffectParameterUse,
+        Self::RequirementParameterUse,
+        Self::RequirementArgument,
     ];
 
     pub const fn tag(self) -> u8 {
@@ -117,6 +121,8 @@ impl RelationKind {
             Self::ExpressionRoot => 5,
             Self::TypeParameterUse => 6,
             Self::EffectParameterUse => 31,
+            Self::RequirementParameterUse => 32,
+            Self::RequirementArgument => 33,
             Self::NamedTypeUse => 7,
             Self::LocalValueReference => 8,
             Self::ConstantReference => 9,
@@ -157,6 +163,8 @@ impl RelationKind {
             Self::ExpressionRoot => "expression_root",
             Self::TypeParameterUse => "type_parameter_use",
             Self::EffectParameterUse => "effect_parameter_use",
+            Self::RequirementParameterUse => "requirement_parameter_use",
+            Self::RequirementArgument => "requirement_argument",
             Self::NamedTypeUse => "named_type_use",
             Self::LocalValueReference => "local_value_reference",
             Self::ConstantReference => "constant_reference",
@@ -204,9 +212,10 @@ impl RelationKind {
             | Self::ParameterOperation
             | Self::ExpressionParent
             | Self::ExpressionRoot => PropagationClass::Ownership,
-            Self::EffectParameterUse | Self::TypeParameterUse | Self::NamedTypeUse => {
-                PropagationClass::Type
-            }
+            Self::RequirementParameterUse
+            | Self::EffectParameterUse
+            | Self::TypeParameterUse
+            | Self::NamedTypeUse => PropagationClass::Type,
             Self::LocalValueReference
             | Self::ConstantReference
             | Self::NominalFieldConstruction
@@ -215,7 +224,8 @@ impl RelationKind {
             | Self::VariantMatch
             | Self::VariantExhaustiveness => PropagationClass::Value,
             Self::FunctionCall | Self::FunctionValue => PropagationClass::Behavior,
-            Self::FunctionRequirement
+            Self::RequirementArgument
+            | Self::FunctionRequirement
             | Self::ParameterRequirement
             | Self::CapabilityInterface
             | Self::CapabilityOperation
@@ -425,8 +435,8 @@ where
                                 edges,
                                 source,
                                 RelationKind::FunctionRequirement,
-                                requirement.package,
-                                OwnerKey::Requirement(requirement.requirement),
+                                requirement.package(),
+                                requirement.owner(),
                             )?;
                         }
                     }
@@ -476,6 +486,31 @@ where
                     RelationKind::ExpressionRoot,
                     package,
                     source.owner,
+                )?;
+            }
+        }
+        OwnerRecord::RequirementParameter(parameter) => {
+            owner_edge(
+                edges,
+                source,
+                RelationKind::MemberDeclaration,
+                package,
+                OwnerKey::Declaration(parameter.declaration),
+            )?;
+            exact_edge(
+                edges,
+                source,
+                RelationKind::CapabilityInterface,
+                parameter.constraint.interface.package,
+                OwnerKey::Declaration(parameter.constraint.interface.declaration),
+            )?;
+            for operation in &parameter.constraint.operations {
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::CapabilityOperation,
+                    operation.package,
+                    OwnerKey::Operation(operation.operation),
                 )?;
             }
         }
@@ -670,12 +705,25 @@ where
     ) -> Result<Option<crate::platform::semantic_id::DeclarationId>, Diagnostic>,
 {
     if let ExpressionOperation::Call {
-        effect_arguments, ..
+        effect_arguments,
+        requirement_arguments,
+        ..
     }
     | ExpressionOperation::FunctionValue {
-        effect_arguments, ..
+        effect_arguments,
+        requirement_arguments,
+        ..
     } = operation
     {
+        for argument in requirement_arguments {
+            exact_edge(
+                edges,
+                source,
+                RelationKind::RequirementArgument,
+                argument.package(),
+                argument.owner(),
+            )?;
+        }
         for row in effect_arguments {
             extract_effect_relations(source, row, edges)?;
         }
@@ -790,8 +838,8 @@ where
                 edges,
                 source,
                 RelationKind::ComponentRequirement,
-                requirement.package,
-                OwnerKey::Requirement(requirement.requirement),
+                requirement.package(),
+                requirement.owner(),
             )?;
             exact_edge(
                 edges,
@@ -805,8 +853,8 @@ where
             edges,
             source,
             RelationKind::ComponentRequirement,
-            requirement.package,
-            OwnerKey::Requirement(requirement.requirement),
+            requirement.package(),
+            requirement.owner(),
         )?,
         ExpressionOperation::Unit {}
         | ExpressionOperation::Bool { .. }
@@ -921,9 +969,13 @@ fn extract_effect_relations(
         exact_edge(
             edges,
             source,
-            RelationKind::FunctionRequirement,
-            requirement.package,
-            OwnerKey::Requirement(requirement.requirement),
+            if requirement.concrete().is_some() {
+                RelationKind::FunctionRequirement
+            } else {
+                RelationKind::RequirementParameterUse
+            },
+            requirement.package(),
+            requirement.owner(),
         )?;
     }
     Ok(())

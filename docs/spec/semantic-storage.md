@@ -192,3 +192,38 @@ The local operator, executable, OS, and filesystem durability implementation are
 contract does not provide encrypted storage, signatures/provenance, hostile-code sandboxing,
 multi-tenant isolation, distributed consensus, leases, garbage collection, live packing, memory
 mapping, or cross-filesystem atomic visibility.
+
+## Requirement extension and supported predecessor bytes
+
+The current semantic model supports Graph 15 and strictly admits authentic Graph 14 content from
+the preceding executable. `LKJOWN14` owners decode through the exact predecessor wire layout;
+`LKJOWN15` carries requirement parameters, typed operands and explicit applications. The old layout
+cannot encode these extensions. Canonical re-encoding uses each admitted object's generation.
+Unchanged objects retain their stored bytes and IDs. Actual reviewed edits produce successor owner
+objects and a Graph 15 root; read, inspection and current revalidation do not migrate accepted HEAD,
+historical records or application data.
+
+TypeObject 10 and `LKJTFN01` version 1 retain their exact encodings. A task-function row containing a
+requirement parameter uses `LKJTFN02` version 2; closing the row uses the canonical form appropriate
+to its resulting content. Concrete-only rows retain the preceding whole-requirement encoding.
+The base type and typed-data encodings do not acquire new fields.
+
+Package interface owner 10 retains its exact predecessor layout; owner 11 represents the extension.
+Package revision and transport envelope 1 retain explicit graph-generation fields. Graph 15 wrappers
+may contain admitted Graph 14 meaning; a Graph 14 root cannot contain Graph 15 owner meaning.
+Compiler unit 10 / bytecode 6 / Graph 14 remain strictly decodable through their exact old layouts;
+compiler unit 11 / bytecode 7 / Graph 15 carry requirement applications and symbolic operation targets.
+Compiler-unit keys and canonical bytes use the admitted compiler generation. Compilation manifest 3
+retains its layout and explicitly binds these supported graph/compiler/bytecode combinations.
+Artifact 19 extends the containing envelope; strict Artifact 18 decoding preserves its original
+Graph 14 / compiler 10 / bytecode 6 closure. A containing older generation cannot admit newer meaning. The predecessor executable
+rejects the unsupported generation before execution, rather than ignoring application operands.
+
+Historical witnesses and acceptance records authenticate their original bytes and identities;
+they do not authorize execution or incremental proof under a changed validator. The current
+checker validates the complete supported closure and may rebuild derived validation/cache data.
+It remains possible to inspect and repair authentic historically accepted invalid meaning through
+a completely valid reviewed candidate. Accepted retries return their original receipt and record
+identities. There is one editable accepted authority and no predecessor execution engine. Retirement
+of this predecessor decoder requires an explicit future support/migration decision; installation
+and runtime selection perform no graph or application-data migration.

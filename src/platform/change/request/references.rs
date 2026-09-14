@@ -419,7 +419,7 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
                         | OwnerKind::External
                 )
             ),
-            NamespaceClass::EffectParameter => matches!(
+            NamespaceClass::EffectParameter | NamespaceClass::RequirementParameter => matches!(
                 parent_kind,
                 Some(OwnerKind::PureFunction | OwnerKind::TaskFunction)
             ),
@@ -549,6 +549,11 @@ fn interface_namespace(record: &crate::platform::kernel::PackageInterfaceRecord)
         R::TypeParameter(record) => (
             Some(OwnerKey::Declaration(record.declaration)),
             NamespaceClass::TypeParameter,
+            &record.name,
+        ),
+        R::RequirementParameter(record) => (
+            Some(OwnerKey::Declaration(record.declaration)),
+            NamespaceClass::RequirementParameter,
             &record.name,
         ),
         R::EffectParameter(record) => (

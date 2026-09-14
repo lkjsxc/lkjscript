@@ -182,8 +182,21 @@ pub(crate) fn prepare_repository_with_control(
     let current = repository.current()?;
     let closure = repository
         .view_current_with_control(control)?
-        .export_package_container()?;
-    let oracle = super::package_transport::oracle::reconstruct(&closure.container)?;
+        .export_package_container()
+        .map_err(|mut error| {
+            error
+                .notes
+                .push("while exporting current accepted package closure".into());
+            error
+        })?;
+    let oracle = super::package_transport::oracle::reconstruct(&closure.container).map_err(
+        |mut error| {
+            error
+                .notes
+                .push("while independently reconstructing the accepted package closure".into());
+            error
+        },
+    )?;
     let mut schema =
         super::execution::normalized::NormalizedReferenceSchema::reconstruct_with_control(
             oracle.snapshots.values(),
@@ -268,7 +281,13 @@ pub(crate) fn prepare_repository_with_control(
             })
             .collect::<Result<Vec<_>, _>>()?;
         let linked =
-            super::compiler::compile_immutable(package, &closure.container.objects, &dependencies)?;
+            super::compiler::compile_immutable(package, &closure.container.objects, &dependencies)
+                .map_err(|mut error| {
+                    error
+                        .notes
+                        .push(format!("while compiling exact dependency {revision}"));
+                    error
+                })?;
         let compiled_units = package
             .snapshot
             .owners
@@ -421,7 +440,12 @@ pub(crate) fn prepare_repository_with_control(
         };
     let linked = match recovered_link {
         Some(linked) => linked,
-        None => link_artifact(&repository, compilation, &dependencies)?,
+        None => link_artifact(&repository, compilation, &dependencies).map_err(|mut error| {
+            error
+                .notes
+                .push("while linking the current root compilation".into());
+            error
+        })?,
     };
     let artifact_bytes = linked.artifact.bytes;
     let artifact = load_artifact(&artifact_bytes)?;

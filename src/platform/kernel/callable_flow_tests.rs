@@ -250,12 +250,14 @@ impl Read {
                     .collect();
                 let operation = if named {
                     ExpressionOperation::FunctionValue {
+                        requirement_arguments: Vec::new(),
                         function: target(application.target),
                         type_arguments,
                         effect_arguments: vec![],
                     }
                 } else {
                     ExpressionOperation::Call {
+                        requirement_arguments: Vec::new(),
                         function: target(application.target),
                         type_arguments,
                         effect_arguments: vec![],
@@ -283,6 +285,7 @@ impl Read {
                     name: Name::new(format!("f{f}")).unwrap(),
                     visibility: DeclarationVisibility::Private,
                     payload: DeclarationPayload::Function(FunctionDeclaration {
+                        requirement_parameters: Vec::new(),
                         effect_parameters: vec![],
                         type_parameters: (0..*arity).map(|p| parameter(f, p)).collect(),
                         parameters: vec![],

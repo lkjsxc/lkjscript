@@ -515,3 +515,45 @@ encoding does not extend existing Option/Result codec support.
 The maintained standard graph owns `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and
 `pair-map`. Mapping invokes the first callback and then the second, once each; a trap in the first
 prevents the second. These declarations have ordinary graph bodies and no host-specific policy.
+
+## Explicit requirement parameters
+
+A pure or task graph function may own an ordered rank-one list of requirement parameters, separate
+from its ordinary type and effect-row parameters. Each has a stable identity, one owning function,
+a mutable local name, an exact interface reference and a canonical finite minimum operation set.
+The empty set is legal and still constrains the interface. Operation identities must belong to
+that exact interface. Closed external intrinsics cannot declare these parameters.
+
+A requirement operand has a typed concrete-requirement or requirement-parameter discriminant.
+Parameter operands resolve only in their exact owning function; identical names in different
+functions are unrelated. Every direct call and named function-value expression supplies one ordered
+requirement argument per formal. No argument is inferred, defaulted or selected by a mutable name.
+Arity, kind, scope, exact interface, minimum operations and visibility are checked independently
+of ordinary and effect arguments, including unused formals and unreachable expressions.
+
+A concrete argument must supply the formal's exact interface and every minimum operation.
+A forwarded parameter must declare a constraint that entails the callee's constraint. Validation
+checks the generic body, so a favorable concrete application cannot authorize an operation outside
+that body's declared minimum. Requirement operands may occur in task rows, nested task-callable
+types, capability calls and lexical transactions. Unknown effect-row parameters remain unions
+that cannot identify a particular operation.
+
+Substitution is simultaneous across exact scopes and traverses nested callable and nominal types,
+rows and applications. Substituting concrete requirement q for R yields the whole exact atom q.
+Minimum constraints do not attenuate q: an explicitly supplied callback whose row contains q may
+use an additional operation permitted by q, although the generic body cannot name it through R.
+Rows still use normalized set union, exact equality and the existing concrete coverage relation.
+Different requirement identities never merge merely because their interfaces, names or grants agree.
+
+Named callable descriptors retain their closed ordered requirement arguments along with exact
+provenance and ordinary/effect applications. Binding preserves this data. Pure factories may
+construct, bind and return task descriptors without running operations. No descriptor retains a
+grant, adapter, credential, live resource, transaction, creator frame or mutable substitution scope.
+Prepared application identities include the requirement vector even when ordinary parameter and
+result types coincide. Invocation and direct/tail calls check current allowances and concrete grants.
+
+Requirement applications range over a finite exact reference universe. Recursion may simultaneously
+permute requirement, ordinary and effect arguments under the existing finite parameter-flow rule.
+This does not admit expanding ordinary-type cycles. Preparation work/storage exhaustion and
+cancellation remain separate from semantic invalidity; formal operation constraints introduce no
+quota or counter reset.

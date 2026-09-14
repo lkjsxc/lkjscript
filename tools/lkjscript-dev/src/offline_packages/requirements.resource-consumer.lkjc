@@ -1,0 +1,67 @@
+reference.owner as=$q-Queue package=$std class=declaration name=DurableQueue
+reference.owner as=$q-initialize package=$std class=operation parent=$q-Queue name=initialize
+reference.owner as=$q-enqueue package=$std class=operation parent=$q-Queue name=enqueue
+reference.owner as=$q-claim package=$std class=operation parent=$q-Queue name=claim
+reference.owner as=$q-lease-info package=$std class=operation parent=$q-Queue name=lease-info
+reference.owner as=$q-complete package=$std class=operation parent=$q-Queue name=complete
+reference.owner as=$q-bytes-from-text package=$std class=declaration name=bytes-from-text
+reference.owner as=$q-text-from-static package=$std class=declaration name=text-from-static
+reference.owner as=$q-finish-one package=$library class=declaration name=finish-one
+create.component as=$q-queue-component module=$module name=queue visibility=public
+add.requirement as=$q-jobs component=$q-queue-component name=jobs interface=$q-Queue
+requirement.operation parent=$q-jobs index=0 operation=$q-initialize
+requirement.operation parent=$q-jobs index=1 operation=$q-enqueue
+requirement.operation parent=$q-jobs index=2 operation=$q-claim
+requirement.operation parent=$q-jobs index=3 operation=$q-lease-info
+requirement.operation parent=$q-jobs index=4 operation=$q-complete
+requirement.limit parent=$q-jobs index=0 name=maximum_calls maximum=10 unit=calls
+expression.capability-call as=$q-queue-initialized requirement=$q-jobs operation=$q-initialize
+expression.static-text as=$q-job-static value=job
+expression.call as=$q-job-id function=$q-text-from-static
+expression.argument parent=$q-job-id index=0 expression=$q-job-static
+expression.static-text as=$q-request-static value=request
+expression.call as=$q-request-id function=$q-text-from-static
+expression.argument parent=$q-request-id index=0 expression=$q-request-static
+expression.static-text as=$q-payload-static value=payload
+expression.call as=$q-payload-text function=$q-text-from-static
+expression.argument parent=$q-payload-text index=0 expression=$q-payload-static
+expression.call as=$q-payload function=$q-bytes-from-text
+expression.argument parent=$q-payload index=0 expression=$q-payload-text
+expression.i64 as=$q-available-at value=0
+expression.i64 as=$q-created-at value=0
+expression.capability-call as=$q-enqueued requirement=$q-jobs operation=$q-enqueue
+expression.argument parent=$q-enqueued index=0 expression=$q-job-id
+expression.argument parent=$q-enqueued index=1 expression=$q-request-id
+expression.argument parent=$q-enqueued index=2 expression=$q-payload
+expression.argument parent=$q-enqueued index=3 expression=$q-available-at
+expression.argument parent=$q-enqueued index=4 expression=$q-created-at
+expression.sequence as=$q-seed-body
+expression.argument parent=$q-seed-body index=0 expression=$q-queue-initialized
+expression.argument parent=$q-seed-body index=1 expression=$q-enqueued
+create.function as=$q-queue-seed module=$module name=queue-seed visibility=private result=bool effect=task body=$q-seed-body
+effect.requirement parent=$q-queue-seed index=0 requirement=$q-jobs
+expression.static-text as=$q-worker-static value=worker
+expression.call as=$q-worker function=$q-text-from-static
+expression.argument parent=$q-worker index=0 expression=$q-worker-static
+expression.i64 as=$q-queue-now value=0
+expression.i64 as=$q-lease-duration value=10
+expression.static-text as=$q-result-static value=done
+expression.call as=$q-result-text function=$q-text-from-static
+expression.argument parent=$q-result-text index=0 expression=$q-result-static
+expression.call as=$q-queue-result function=$q-bytes-from-text
+expression.argument parent=$q-queue-result index=0 expression=$q-result-text
+expression.call as=$q-finish-body function=$q-finish-one
+requirement.argument parent=$q-finish-body index=0 requirement=$q-jobs
+expression.argument parent=$q-finish-body index=0 expression=$q-worker
+expression.argument parent=$q-finish-body index=1 expression=$q-queue-now
+expression.argument parent=$q-finish-body index=2 expression=$q-lease-duration
+expression.argument parent=$q-finish-body index=3 expression=$q-queue-result
+create.function as=$q-queue-finish module=$module name=queue-finish visibility=private result=bool effect=task body=$q-finish-body
+effect.requirement parent=$q-queue-finish index=0 requirement=$q-jobs
+effect.row as=@Jobs
+effect.requirement parent=@Jobs index=0 requirement=$q-jobs
+type.task-function as=@QueueCommand result=bool effect=@Jobs
+add.port as=$q-queue-seed-port component=$q-queue-component name=queue-seed type=@QueueCommand function=$q-queue-seed
+create.target as=$q-queue-seed-target name=queue-seed component=$q-queue-component port=$q-queue-seed-port runner=command
+add.port as=$q-queue-finish-port component=$q-queue-component name=queue-finish type=@QueueCommand function=$q-queue-finish
+create.target as=$q-queue-finish-target name=queue-finish component=$q-queue-component port=$q-queue-finish-port runner=command

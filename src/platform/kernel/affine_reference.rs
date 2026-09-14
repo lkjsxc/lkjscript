@@ -7,8 +7,8 @@ use super::{
     BindingKind, DeclarationPayload, DeclarationReference, DeclarationVisibility,
     ExpressionOperation, FunctionEffect, KernelSnapshot, LocalValueReference, OperationRecord,
     OperationReference, OwnerKey, OwnerRecord, PackageId, PackageInterfaceDeclarationPayload,
-    PackageInterfaceRecord, ParameterRecord, ParameterUse, RequirementRecord, RequirementReference,
-    TypeForm, TypeObjectDigest,
+    PackageInterfaceRecord, ParameterRecord, ParameterUse, RequirementOperand,
+    RequirementReference, TypeForm, TypeObjectDigest,
 };
 use crate::platform::publication::GraphRepository;
 use crate::platform::semantic_id::{DeclarationId, ExpressionId, OperationId, ParameterId};
@@ -24,7 +24,7 @@ enum Shape {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct Right {
     shape: Shape,
-    requirement: RequirementReference,
+    requirement: RequirementOperand,
     interface: DeclarationReference,
 }
 
@@ -410,15 +410,18 @@ impl Reference<'_> {
 
     fn capability(
         &self,
-        requirement: RequirementReference,
+        requirement: RequirementOperand,
         operation: OperationReference,
         arguments: &[ExpressionId],
         live: &mut Live,
     ) -> Result<Value, ()> {
         let requirement_record = self.requirement(requirement).ok_or(())?;
         let operation_record = self.operation(operation).ok_or(())?;
-        if requirement_record.interface.package != operation.package
-            || requirement_record.interface.declaration != operation_record.declaration
+        if !requirement_record.1.contains(&operation) {
+            return Err(());
+        }
+        if requirement_record.0.package != operation.package
+            || requirement_record.0.declaration != operation_record.declaration
             || operation_record.parameters.len() != arguments.len()
         {
             return Err(());
@@ -437,7 +440,7 @@ impl Reference<'_> {
                     let right = self.take(*argument, live, mode)?;
                     if right.requirement != requirement
                         || right.interface != interface
-                        || interface != requirement_record.interface
+                        || interface != requirement_record.0
                     {
                         return Err(());
                     }
@@ -449,7 +452,7 @@ impl Reference<'_> {
         else {
             return Ok(Value::Plain);
         };
-        if interface != requirement_record.interface {
+        if interface != requirement_record.0 {
             return Err(());
         }
         Ok(Value::Affine(Right {
@@ -561,7 +564,7 @@ impl Reference<'_> {
                         parameter_count: function.parameters.len(),
                         right: Right {
                             shape: Shape::Direct,
-                            requirement,
+                            requirement: requirement.into(),
                             interface,
                         },
                     });
@@ -583,6 +586,7 @@ impl Reference<'_> {
         if declaration.visibility != DeclarationVisibility::Private
             || !function.type_parameters.is_empty()
             || !function.effect_parameters.is_empty()
+            || !function.requirement_parameters.is_empty()
             || self.contains_resource(function.result, &mut BTreeSet::new())
         {
             return Err(());
@@ -594,11 +598,11 @@ impl Reference<'_> {
         else {
             return Err(());
         };
-        if resource.right.requirement.package != self.snapshot.root.package_id
+        if resource.right.requirement.package() != self.snapshot.root.package_id
             || !requirements.contains(&resource.right.requirement)
             || self
                 .requirement(resource.right.requirement)
-                .is_none_or(|requirement| requirement.interface != resource.right.interface)
+                .is_none_or(|requirement| requirement.0 != resource.right.interface)
         {
             return Err(());
         }
@@ -871,22 +875,27 @@ impl Reference<'_> {
         }
     }
 
-    fn requirement(&self, reference: RequirementReference) -> Option<RequirementRecord> {
-        if reference.package == self.snapshot.root.package_id {
-            return match self
-                .snapshot
-                .owners
-                .get(&OwnerKey::Requirement(reference.requirement))?
-            {
-                OwnerRecord::Requirement(record) => Some(record.clone()),
+    fn requirement(
+        &self,
+        reference: RequirementOperand,
+    ) -> Option<(DeclarationReference, Vec<OperationReference>)> {
+        if reference.package() == self.snapshot.root.package_id {
+            return match self.snapshot.owners.get(&reference.owner())? {
+                OwnerRecord::Requirement(record) => {
+                    Some((record.interface, record.operations.clone()))
+                }
+                OwnerRecord::RequirementParameter(record) => Some((
+                    record.constraint.interface,
+                    record.constraint.operations.clone(),
+                )),
                 _ => None,
             };
         }
-        match self.foreign_owner(
-            reference.package,
-            OwnerKey::Requirement(reference.requirement),
-        )? {
-            PackageInterfaceRecord::Requirement(record) => Some(record.clone()),
+        match self.foreign_owner(reference.package(), reference.owner())? {
+            PackageInterfaceRecord::Requirement(record) => {
+                Some((record.interface, record.operations.clone()))
+            }
+            // A formal never gains local scope by importing its owning function.
             _ => None,
         }
     }
@@ -1052,7 +1061,7 @@ fn capability_call(
     names: &[&str],
 ) -> Option<(
     ExpressionId,
-    RequirementReference,
+    RequirementOperand,
     OperationReference,
     Vec<ExpressionId>,
 )> {
@@ -1153,7 +1162,7 @@ fn mutate_foreign_requirement(snapshot: &mut KernelSnapshot) {
     let interface = Reference { snapshot }
         .requirement(requirement)
         .expect("terminal requirement")
-        .interface;
+        .0;
     let replacement = snapshot.owners.iter().find_map(|(owner, record)| {
         let (OwnerKey::Requirement(candidate), OwnerRecord::Requirement(record)) = (owner, record)
         else {
@@ -1163,7 +1172,8 @@ fn mutate_foreign_requirement(snapshot: &mut KernelSnapshot) {
             package: snapshot.root.package_id,
             requirement: *candidate,
         };
-        (reference != requirement && record.interface == interface).then_some(reference)
+        (RequirementOperand::Concrete(reference) != requirement && record.interface == interface)
+            .then_some(reference)
     });
     let replacement = replacement.expect("second exact durable-queue requirement");
     let Some(OwnerRecord::Expression(record)) =
@@ -1174,7 +1184,7 @@ fn mutate_foreign_requirement(snapshot: &mut KernelSnapshot) {
     let ExpressionOperation::CapabilityCall { requirement, .. } = &mut record.operation else {
         panic!("maintained terminal operation");
     };
-    *requirement = replacement;
+    *requirement = replacement.into();
 }
 
 fn mutate_branch_join(snapshot: &mut KernelSnapshot) {
@@ -1349,6 +1359,46 @@ fn mutate_wrong_function_binding(snapshot: &mut KernelSnapshot) {
     record.resource_requirement = Some(replacement);
 }
 
+fn mutate_requirement_generic_resource_helper(snapshot: &mut KernelSnapshot) {
+    let (helper, _, actual) = maintained_resource_helper(snapshot);
+    let OwnerRecord::Requirement(requirement) =
+        &snapshot.owners[&OwnerKey::Requirement(actual.requirement)]
+    else {
+        panic!("requirement");
+    };
+    let interface = requirement.interface;
+    let formal = crate::platform::semantic_id::RequirementParameterId::migrate(
+        b"forbidden-generic-resource-transfer",
+        0,
+    );
+    snapshot.owners.insert(
+        OwnerKey::RequirementParameter(formal),
+        OwnerRecord::RequirementParameter(super::RequirementParameterRecord {
+            header: super::OwnerHeader::new(
+                OwnerKey::RequirementParameter(formal),
+                super::OwnerKind::RequirementParameter,
+            ),
+            declaration: helper,
+            name: super::Name::new("R").unwrap(),
+            constraint: super::RequirementConstraint {
+                interface,
+                operations: vec![],
+            },
+        }),
+    );
+    let OwnerRecord::Declaration(owner) = snapshot
+        .owners
+        .get_mut(&OwnerKey::Declaration(helper))
+        .unwrap()
+    else {
+        panic!("helper");
+    };
+    let DeclarationPayload::Function(function) = &mut owner.payload else {
+        panic!("function");
+    };
+    function.requirement_parameters.push(formal);
+}
+
 fn mutate_public_resource_helper(snapshot: &mut KernelSnapshot) {
     let (helper, _, _) = maintained_resource_helper(snapshot);
     let Some(OwnerRecord::Declaration(record)) =
@@ -1377,6 +1427,7 @@ fn mutate_resource_self_recursion(snapshot: &mut KernelSnapshot) {
     let call_record = super::ExpressionRecord::new(
         call,
         ExpressionOperation::Call {
+            requirement_arguments: Vec::new(),
             effect_arguments: Vec::new(),
             function: DeclarationReference {
                 package: snapshot.root.package_id,
@@ -1447,6 +1498,7 @@ fn mutate_resource_function_value(snapshot: &mut KernelSnapshot) {
         panic!("maintained resource handoff expression");
     };
     record.operation = ExpressionOperation::FunctionValue {
+        requirement_arguments: Vec::new(),
         effect_arguments: Vec::new(),
         function: DeclarationReference {
             package: snapshot.root.package_id,
@@ -1510,7 +1562,7 @@ fn independent_reference_agrees_on_maintained_graphs_and_finite_negative_corpus(
         assert!(Reference { snapshot }.accepts(), "reference accepts {name}");
     }
 
-    let journal_mutations: [SnapshotMutation; 13] = [
+    let journal_mutations: [SnapshotMutation; 14] = [
         ("fabricated resource", mutate_fabricated_resource),
         ("post-consume escape", mutate_post_consume_escape),
         ("duplicate consume", mutate_duplicate_consume),
@@ -1521,6 +1573,10 @@ fn independent_reference_agrees_on_maintained_graphs_and_finite_negative_corpus(
         ("missing function binding", mutate_missing_function_binding),
         ("wrong function binding", mutate_wrong_function_binding),
         ("public resource helper", mutate_public_resource_helper),
+        (
+            "generic resource transfer",
+            mutate_requirement_generic_resource_helper,
+        ),
         ("resource self recursion", mutate_resource_self_recursion),
         ("resource function value", mutate_resource_function_value),
         ("duplicate handoff", mutate_duplicate_handoff),
@@ -1553,5 +1609,20 @@ fn independent_reference_agrees_on_maintained_graphs_and_finite_negative_corpus(
             .accepts(),
             "reference rejects {name}"
         );
+    }
+}
+
+#[test]
+fn requirement_resources_keep_symbolic_provenance_when_concrete_arguments_alias() {
+    for cross_operand in [false, true] {
+        let snapshot = crate::platform::execution::normalized::tests::iteration_resource_tests::requirement_snapshot(cross_operand);
+        assert_eq!(
+            Reference {
+                snapshot: &snapshot
+            }
+            .accepts(),
+            !cross_operand
+        );
+        assert_eq!(production_accepts(&snapshot), !cross_operand);
     }
 }

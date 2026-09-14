@@ -31,7 +31,7 @@ mod nominal_flow_tests;
 struct ExecutionContext {
     declaration: Option<DeclarationId>,
     pure: bool,
-    requirements: BTreeSet<RequirementReference>,
+    requirements: BTreeSet<super::RequirementOperand>,
     effect_parameters: BTreeSet<super::EffectParameterReference>,
 }
 
@@ -40,7 +40,7 @@ struct FunctionSignature {
     target: Option<DeclarationReference>,
     parameters: Vec<TypeObjectDigest>,
     result: TypeObjectDigest,
-    requirements: BTreeSet<RequirementReference>,
+    requirements: BTreeSet<super::RequirementOperand>,
     task: bool,
     effect_parameters: BTreeSet<super::EffectParameterReference>,
 }
@@ -327,7 +327,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                                 requirements,
                             } => {
                                 for requirement in &requirements {
-                                    if let Err(diagnostic) = self.requirement_record(*requirement) {
+                                    if let Err(diagnostic) =
+                                        self.requirement_constraint(*requirement)
+                                    {
                                         self.push_diagnostic(diagnostic);
                                         if self.exhausted() {
                                             return;
@@ -435,7 +437,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             "port expression",
                         ),
                         PortImplementation::Function(function) => {
-                            match self.function_signature(function, &[], &[], &context) {
+                            match self.function_signature(function, &[], &[], &[], &context) {
                                 Ok(signature) => {
                                     if let Err(diagnostic) =
                                         self.validate_call_effect(&signature, &context)
@@ -745,24 +747,36 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 })
             }
             ExpressionOperation::Call {
+                requirement_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
                 arguments,
             } => {
-                let signature =
-                    self.function_signature(function, &type_arguments, &effect_arguments, context)?;
+                let signature = self.function_signature(
+                    function,
+                    &type_arguments,
+                    &effect_arguments,
+                    &requirement_arguments,
+                    context,
+                )?;
                 self.validate_call_effect(&signature, context)?;
                 self.validate_arguments(&arguments, &signature.parameters, context, next)?;
                 Ok(signature.result)
             }
             ExpressionOperation::FunctionValue {
+                requirement_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
             } => {
-                let signature =
-                    self.function_signature(function, &type_arguments, &effect_arguments, context)?;
+                let signature = self.function_signature(
+                    function,
+                    &type_arguments,
+                    &effect_arguments,
+                    &requirement_arguments,
+                    context,
+                )?;
                 self.function_type(&signature)
             }
             ExpressionOperation::Bind { callee, arguments } => {
@@ -879,7 +893,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         "capability requirement is unavailable in this task context",
                     ));
                 }
-                let requirement_record = self.requirement_record(requirement)?;
+                let requirement_record = self.requirement_constraint(requirement)?;
                 if requirement_record.interface.package != operation.package
                     || !requirement_record.operations.contains(&operation)
                 {
@@ -918,7 +932,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         "transaction requirement is unavailable in this task context",
                     ));
                 }
-                self.requirement_record(requirement)?;
+                self.requirement_constraint(requirement)?;
                 self.transaction_binding_type(binding)?;
                 self.infer(body, context, next)
             }
@@ -1597,81 +1611,30 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         reference: DeclarationReference,
         type_arguments: &[TypeObjectDigest],
         effect_arguments: &[super::EffectRow],
+        requirement_arguments: &[super::RequirementOperand],
         context: &ExecutionContext,
     ) -> Result<FunctionSignature, Diagnostic> {
         let foreign = reference.package != self.read.package_id();
-        let (type_parameters, effect_parameters, parameters, result, requirements, task, symbolic) =
-            if foreign {
-                let record = self.dependency_owner(
-                    reference.package,
-                    OwnerKey::Declaration(reference.declaration),
-                    "function",
-                )?;
-                match record {
-                    PackageInterfaceRecord::Declaration(record) => match record.payload {
-                        PackageInterfaceDeclarationPayload::External(function) => (
-                            function.type_parameters,
-                            Vec::new(),
-                            function.parameters,
-                            function.result,
-                            BTreeSet::new(),
-                            false,
-                            Vec::new(),
-                        ),
-                        PackageInterfaceDeclarationPayload::Function(function) => {
-                            let symbolic = function.effect.row().parameters;
-                            let (requirements, task) = match function.effect {
-                                FunctionEffect::Pure => (BTreeSet::new(), false),
-                                FunctionEffect::Task {
-                                    effect_parameters: _,
-                                    requirements,
-                                } => {
-                                    for requirement in &requirements {
-                                        self.requirement_record(*requirement)?;
-                                    }
-                                    (requirements.into_iter().collect(), true)
-                                }
-                            };
-                            (
-                                function.type_parameters,
-                                function.effect_parameters,
-                                function.parameters,
-                                function.result,
-                                requirements,
-                                task,
-                                symbolic,
-                            )
-                        }
-                        _ => {
-                            return Err(type_error(
-                                "kernel_type_function_kind",
-                                "function reference names another declaration kind",
-                            ));
-                        }
-                    },
-                    _ => {
-                        return Err(type_error(
-                            "kernel_type_function_kind",
-                            "function reference names another owner kind",
-                        ));
-                    }
-                }
-            } else {
-                let record = match self
-                    .read
-                    .owner(OwnerKey::Declaration(reference.declaration))?
-                {
-                    Some(OwnerRecord::Declaration(record)) => record,
-                    _ => {
-                        return Err(type_error(
-                            "kernel_type_function_missing",
-                            "function declaration is missing",
-                        ));
-                    }
-                };
-                match record.payload {
-                    DeclarationPayload::External(function) => (
+        let (
+            type_parameters,
+            requirement_parameters,
+            effect_parameters,
+            parameters,
+            result,
+            requirements,
+            task,
+            symbolic,
+        ) = if foreign {
+            let record = self.dependency_owner(
+                reference.package,
+                OwnerKey::Declaration(reference.declaration),
+                "function",
+            )?;
+            match record {
+                PackageInterfaceRecord::Declaration(record) => match record.payload {
+                    PackageInterfaceDeclarationPayload::External(function) => (
                         function.type_parameters,
+                        Vec::new(),
                         Vec::new(),
                         function.parameters,
                         function.result,
@@ -1679,7 +1642,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         false,
                         Vec::new(),
                     ),
-                    DeclarationPayload::Function(function) => {
+                    PackageInterfaceDeclarationPayload::Function(function) => {
                         let symbolic = function.effect.row().parameters;
                         let (requirements, task) = match function.effect {
                             FunctionEffect::Pure => (BTreeSet::new(), false),
@@ -1688,13 +1651,14 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                                 requirements,
                             } => {
                                 for requirement in &requirements {
-                                    self.requirement_record(*requirement)?;
+                                    self.requirement_constraint(*requirement)?;
                                 }
                                 (requirements.into_iter().collect(), true)
                             }
                         };
                         (
                             function.type_parameters,
+                            function.requirement_parameters,
                             function.effect_parameters,
                             function.parameters,
                             function.result,
@@ -1709,8 +1673,103 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             "function reference names another declaration kind",
                         ));
                     }
+                },
+                _ => {
+                    return Err(type_error(
+                        "kernel_type_function_kind",
+                        "function reference names another owner kind",
+                    ));
+                }
+            }
+        } else {
+            let record = match self
+                .read
+                .owner(OwnerKey::Declaration(reference.declaration))?
+            {
+                Some(OwnerRecord::Declaration(record)) => record,
+                _ => {
+                    return Err(type_error(
+                        "kernel_type_function_missing",
+                        "function declaration is missing",
+                    ));
                 }
             };
+            match record.payload {
+                DeclarationPayload::External(function) => (
+                    function.type_parameters,
+                    Vec::new(),
+                    Vec::new(),
+                    function.parameters,
+                    function.result,
+                    BTreeSet::new(),
+                    false,
+                    Vec::new(),
+                ),
+                DeclarationPayload::Function(function) => {
+                    let symbolic = function.effect.row().parameters;
+                    let (requirements, task) = match function.effect {
+                        FunctionEffect::Pure => (BTreeSet::new(), false),
+                        FunctionEffect::Task {
+                            effect_parameters: _,
+                            requirements,
+                        } => {
+                            for requirement in &requirements {
+                                self.requirement_constraint(*requirement)?;
+                            }
+                            (requirements.into_iter().collect(), true)
+                        }
+                    };
+                    (
+                        function.type_parameters,
+                        function.requirement_parameters,
+                        function.effect_parameters,
+                        function.parameters,
+                        function.result,
+                        requirements,
+                        task,
+                        symbolic,
+                    )
+                }
+                _ => {
+                    return Err(type_error(
+                        "kernel_type_function_kind",
+                        "function reference names another declaration kind",
+                    ));
+                }
+            }
+        };
+        if requirement_parameters.len() != requirement_arguments.len() {
+            return Err(type_error(
+                "kernel_requirement_argument_count",
+                "function requires exactly one explicit argument per requirement parameter",
+            ));
+        }
+        let mut requirements_substitution = super::RequirementSubstitution::new();
+        for (parameter, argument) in requirement_parameters.iter().zip(requirement_arguments) {
+            self.consume_work()?;
+            let formal = super::RequirementParameterReference {
+                package: reference.package,
+                parameter: *parameter,
+            };
+            let record = self.requirement_parameter_record(formal)?;
+            if record.declaration != reference.declaration {
+                return Err(type_error(
+                    "kernel_requirement_parameter_scope",
+                    "formal requirement parameter has a different function owner",
+                ));
+            }
+            self.validate_requirement_scope(*argument, context)?;
+            if !self
+                .requirement_constraint(*argument)?
+                .entails(&record.constraint)?
+            {
+                return Err(type_error(
+                    "kernel_requirement_argument_constraint",
+                    "requirement argument does not entail the exact interface and minimum operations",
+                ));
+            }
+            requirements_substitution.insert(formal, *argument);
+        }
         if effect_parameters.len() != effect_arguments.len() {
             return Err(type_error(
                 "kernel_effect_argument_count",
@@ -1743,6 +1802,12 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             requirements: requirements.into_iter().collect(),
             parameters: symbolic,
         }
+        .substitute_requirements(&requirements_substitution, |n| {
+            for _ in 0..n {
+                self.consume_work()?;
+            }
+            Ok(())
+        })?
         .substitute(&effects, |n| {
             for _ in 0..n {
                 self.consume_work()?;
@@ -1793,10 +1858,11 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             .collect::<BTreeMap<_, _>>();
         let mut parameter_types = self.parameter_types(reference.package, &parameters)?;
         for parameter in &mut parameter_types {
-            *parameter = self.substitute_effects(*parameter, &effects, 0)?;
+            *parameter =
+                self.substitute_effects(*parameter, &effects, &requirements_substitution, 0)?;
             *parameter = self.substitute(*parameter, &substitutions, 0)?;
         }
-        let result = self.substitute_effects(result, &effects, 0)?;
+        let result = self.substitute_effects(result, &effects, &requirements_substitution, 0)?;
         let result = self.substitute(result, &substitutions, 0)?;
         Ok(FunctionSignature {
             target: Some(reference),
@@ -2059,7 +2125,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         row.validate()?;
         for requirement in &row.requirements {
             self.consume_work()?;
-            self.requirement_record(*requirement)?;
+            self.validate_requirement_scope(*requirement, context)?;
         }
         for parameter in &row.parameters {
             self.consume_work()?;
@@ -2241,6 +2307,18 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         if matches!(owner, OwnerRecord::Expression(_) | OwnerRecord::Binding(_)) {
             return Ok(());
         }
+        if let OwnerRecord::RequirementParameter(parameter) = owner {
+            let OwnerKey::RequirementParameter(id) = parameter.header.owner else {
+                return Err(type_error(
+                    "kernel_requirement_parameter_scope",
+                    "requirement parameter has a foreign identity kind",
+                ));
+            };
+            self.validate_requirement_parameter_contract(super::RequirementParameterReference {
+                package: self.read.package_id(),
+                parameter: id,
+            })?;
+        }
         let declaration = match owner {
             OwnerRecord::Declaration(record) => match record.header.owner {
                 OwnerKey::Declaration(id) => Some(id),
@@ -2257,6 +2335,17 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         let context = pure_context(declaration);
         let mut roots = owner.type_roots();
         if let OwnerRecord::Declaration(record) = owner {
+            if let DeclarationPayload::Function(function) = &record.payload {
+                for parameter in &function.requirement_parameters {
+                    self.validate_requirement_parameter_contract(
+                        super::RequirementParameterReference {
+                            package: self.read.package_id(),
+                            parameter: *parameter,
+                        },
+                    )?;
+                }
+                self.validate_effect_scope(&function.effect.row(), &context)?;
+            }
             let parameters = match &record.payload {
                 DeclarationPayload::Function(function) => &function.parameters[..],
                 DeclarationPayload::External(function) => &function.parameters[..],
@@ -2541,9 +2630,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         &mut self,
         digest: TypeObjectDigest,
         bindings: &BTreeMap<super::EffectParameterReference, super::EffectRow>,
+        requirements: &super::RequirementSubstitution,
         depth: usize,
     ) -> Result<TypeObjectDigest, Diagnostic> {
-        if bindings.is_empty() {
+        if bindings.is_empty() && requirements.is_empty() {
             return Ok(digest);
         }
         self.consume_work()?;
@@ -2555,15 +2645,22 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         }
         let mut object = self.type_object(digest)?;
         if let TypeForm::TaskFunction { effect, .. } = &mut object.form {
-            *effect = effect.substitute(bindings, |n| {
-                for _ in 0..n {
-                    self.consume_work()?;
-                }
-                Ok(())
-            })?;
+            *effect = effect
+                .substitute_requirements(requirements, |n| {
+                    for _ in 0..n {
+                        self.consume_work()?;
+                    }
+                    Ok(())
+                })?
+                .substitute(bindings, |n| {
+                    for _ in 0..n {
+                        self.consume_work()?;
+                    }
+                    Ok(())
+                })?;
         }
         let mut replace = |ty: &mut TypeObjectDigest| -> Result<(), Diagnostic> {
-            *ty = self.substitute_effects(*ty, bindings, depth + 1)?;
+            *ty = self.substitute_effects(*ty, bindings, requirements, depth + 1)?;
             Ok(())
         };
         match &mut object.form {
@@ -2656,22 +2753,140 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
     fn component_requirements(
         &self,
         declaration: DeclarationId,
-    ) -> Result<BTreeSet<RequirementReference>, Diagnostic> {
+    ) -> Result<BTreeSet<super::RequirementOperand>, Diagnostic> {
         let package = self.read.package_id();
         Ok(match self.read.owner(OwnerKey::Declaration(declaration))? {
             Some(OwnerRecord::Declaration(record)) => match &record.payload {
                 DeclarationPayload::Component { requirements, .. } => requirements
                     .iter()
                     .copied()
-                    .map(|requirement| RequirementReference {
-                        package,
-                        requirement,
+                    .map(|requirement| {
+                        RequirementReference {
+                            package,
+                            requirement,
+                        }
+                        .into()
                     })
                     .collect(),
                 _ => BTreeSet::new(),
             },
             _ => BTreeSet::new(),
         })
+    }
+
+    fn requirement_parameter_record(
+        &self,
+        reference: super::RequirementParameterReference,
+    ) -> Result<super::RequirementParameterRecord, Diagnostic> {
+        if reference.package != self.read.package_id() {
+            return match self.dependency_owner(
+                reference.package,
+                OwnerKey::RequirementParameter(reference.parameter),
+                "requirement parameter",
+            )? {
+                PackageInterfaceRecord::RequirementParameter(record) => Ok(record),
+                _ => Err(type_error(
+                    "kernel_requirement_parameter_scope",
+                    "requirement parameter has a foreign owner kind",
+                )),
+            };
+        }
+        match self
+            .read
+            .owner(OwnerKey::RequirementParameter(reference.parameter))?
+        {
+            Some(OwnerRecord::RequirementParameter(record)) => Ok(record),
+            _ => Err(type_error(
+                "kernel_requirement_parameter_scope",
+                "exact requirement parameter is missing",
+            )),
+        }
+    }
+
+    fn validate_requirement_parameter_contract(
+        &mut self,
+        reference: super::RequirementParameterReference,
+    ) -> Result<(), Diagnostic> {
+        self.consume_work()?;
+        let parameter = self.requirement_parameter_record(reference)?;
+        parameter.constraint.validate()?;
+        let listed = if reference.package == self.read.package_id() {
+            matches!(self.read.owner(OwnerKey::Declaration(parameter.declaration))?,
+                Some(OwnerRecord::Declaration(record)) if matches!(&record.payload, DeclarationPayload::Function(function) if function.requirement_parameters.contains(&reference.parameter)))
+        } else {
+            matches!(self.dependency_owner(reference.package, OwnerKey::Declaration(parameter.declaration), "requirement parameter function")?,
+                PackageInterfaceRecord::Declaration(record) if matches!(&record.payload, PackageInterfaceDeclarationPayload::Function(function) if function.requirement_parameters.contains(&reference.parameter)))
+        };
+        if !listed {
+            return Err(type_error(
+                "kernel_requirement_parameter_scope",
+                "requirement parameter is not listed by its exact function",
+            ));
+        }
+        let interface = parameter.constraint.interface;
+        let is_interface = if interface.package == self.read.package_id() {
+            matches!(self.read.owner(OwnerKey::Declaration(interface.declaration))?, Some(OwnerRecord::Declaration(record)) if matches!(record.payload, DeclarationPayload::Interface { .. }))
+        } else {
+            matches!(self.dependency_owner(interface.package, OwnerKey::Declaration(interface.declaration), "requirement interface")?, PackageInterfaceRecord::Declaration(record) if matches!(record.payload, PackageInterfaceDeclarationPayload::Interface { .. }))
+        };
+        if !is_interface {
+            return Err(type_error(
+                "kernel_requirement_constraint_interface",
+                "requirement constraint must name an exact interface",
+            ));
+        }
+        for operation in &parameter.constraint.operations {
+            self.consume_work()?;
+            if operation.package != interface.package
+                || self
+                    .operation_record(operation.package, operation.operation)?
+                    .declaration
+                    != interface.declaration
+            {
+                return Err(type_error(
+                    "kernel_requirement_constraint_operation",
+                    "minimum operation belongs to another exact interface",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn requirement_constraint(
+        &self,
+        operand: super::RequirementOperand,
+    ) -> Result<super::RequirementConstraint, Diagnostic> {
+        match operand {
+            super::RequirementOperand::Concrete(reference) => {
+                let record = self.requirement_record(reference)?;
+                Ok(super::RequirementConstraint {
+                    interface: record.interface,
+                    operations: record.operations,
+                })
+            }
+            super::RequirementOperand::Parameter(reference) => {
+                Ok(self.requirement_parameter_record(reference)?.constraint)
+            }
+        }
+    }
+
+    fn validate_requirement_scope(
+        &self,
+        operand: super::RequirementOperand,
+        context: &ExecutionContext,
+    ) -> Result<(), Diagnostic> {
+        if let super::RequirementOperand::Parameter(reference) = operand {
+            let record = self.requirement_parameter_record(reference)?;
+            if reference.package != self.read.package_id()
+                || Some(record.declaration) != context.declaration
+            {
+                return Err(type_error(
+                    "kernel_requirement_parameter_scope",
+                    "requirement parameter is outside the exact caller function scope",
+                ));
+            }
+        }
+        self.requirement_constraint(operand)?.validate()
     }
 
     fn requirement_record(

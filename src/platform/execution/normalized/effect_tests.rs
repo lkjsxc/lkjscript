@@ -258,6 +258,7 @@ pub(crate) fn library_composition() -> KernelSnapshot {
                 .unwrap(),
                 visibility: DeclarationVisibility::Public,
                 payload: DeclarationPayload::Function(FunctionDeclaration {
+                    requirement_parameters: Vec::new(),
                     type_parameters: vec![parameter],
                     effect_parameters: vec![EffectParameterId::migrate(SEED, ordinal)],
                     parameters: vec![value, callee],
@@ -302,6 +303,7 @@ pub(crate) fn library_composition() -> KernelSnapshot {
             name: Name::new("consumer-task").unwrap(),
             visibility: DeclarationVisibility::Public,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                requirement_parameters: Vec::new(),
                 type_parameters: Vec::new(),
                 effect_parameters: Vec::new(),
                 parameters: params.to_vec(),
@@ -323,6 +325,7 @@ pub(crate) fn library_composition() -> KernelSnapshot {
         &mut snapshot,
         &mut serial,
         ExpressionOperation::FunctionValue {
+            requirement_arguments: Vec::new(),
             function: reference(callback),
             type_arguments: Vec::new(),
             effect_arguments: Vec::new(),
@@ -332,6 +335,7 @@ pub(crate) fn library_composition() -> KernelSnapshot {
         &mut snapshot,
         &mut serial,
         ExpressionOperation::Call {
+            requirement_arguments: Vec::new(),
             function: reference(factory),
             type_arguments: vec![unit],
             effect_arguments: vec![row.clone()],
@@ -351,6 +355,7 @@ pub(crate) fn library_composition() -> KernelSnapshot {
         &mut snapshot,
         &mut serial,
         ExpressionOperation::Call {
+            requirement_arguments: Vec::new(),
             function: reference(wrapper),
             type_arguments: vec![unit],
             effect_arguments: vec![row],
@@ -752,6 +757,7 @@ fn recursive_effect_permutation_and_union_close_by_finite_set_identity() {
             &mut snapshot,
             &mut ordinal,
             ExpressionOperation::Call {
+                requirement_arguments: Vec::new(),
                 function: DeclarationReference {
                     package,
                     declaration: recursive,
@@ -792,6 +798,7 @@ fn recursive_effect_permutation_and_union_close_by_finite_set_identity() {
             name: Name::new("combine-effects").unwrap(),
             visibility: DeclarationVisibility::Public,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                requirement_parameters: Vec::new(),
                 type_parameters: vec![],
                 effect_parameters: parameters.clone(),
                 parameters: vec![stop],
@@ -813,6 +820,7 @@ fn recursive_effect_permutation_and_union_close_by_finite_set_identity() {
         &mut snapshot,
         &mut ordinal,
         ExpressionOperation::Call {
+            requirement_arguments: Vec::new(),
             function: DeclarationReference {
                 package,
                 declaration: recursive,
@@ -830,6 +838,7 @@ fn recursive_effect_permutation_and_union_close_by_finite_set_identity() {
             name: Name::new("row-entry").unwrap(),
             visibility: DeclarationVisibility::Public,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                requirement_parameters: Vec::new(),
                 type_parameters: vec![],
                 effect_parameters: vec![],
                 parameters: vec![],
@@ -1015,6 +1024,7 @@ fn task_input_fixture_dispatch(
     } else {
         let prefix = put_expression(&mut snapshot, &mut serial, ExpressionOperation::Unit {});
         ExpressionOperation::Call {
+            requirement_arguments: Vec::new(),
             function: callback,
             type_arguments: vec![],
             effect_arguments: vec![],
@@ -1030,6 +1040,7 @@ fn task_input_fixture_dispatch(
             name: Name::new("accept-task").unwrap(),
             visibility: DeclarationVisibility::Public,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                requirement_parameters: Vec::new(),
                 type_parameters: vec![],
                 effect_parameters: vec![],
                 parameters: vec![parameter],
@@ -1076,6 +1087,7 @@ fn task_input_fixture_dispatch(
                 name: Name::new(name).unwrap(),
                 visibility: DeclarationVisibility::Public,
                 payload: DeclarationPayload::Function(FunctionDeclaration {
+                    requirement_parameters: Vec::new(),
                     type_parameters: vec![],
                     effect_parameters: vec![],
                     parameters,
@@ -1119,6 +1131,7 @@ fn task_descriptor_raw_boundaries_reject_kind_row_origin_arity_and_retained_reso
                 types: Vec<TypeObjectDigest>,
                 effects: Vec<EffectRow>,
                 prefix: Option<Vec<NormalizedValue>>| NormalizedValue::Function {
+        requirement_arguments: std::sync::Arc::from([]),
         function,
         type_arguments: types.into(),
         effect_arguments: effects.into(),
@@ -1344,6 +1357,7 @@ fn empty_and_inactive_task_containers_are_transient_but_not_serializable() {
             name: Name::new("discard-task-containers").unwrap(),
             visibility: DeclarationVisibility::Private,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                requirement_parameters: Vec::new(),
                 type_parameters: vec![],
                 effect_parameters: vec![],
                 parameters,
@@ -1418,7 +1432,7 @@ fn shared_grant_allowance(direct: bool) {
     let (mut snapshot, accept, _) = task_input_fixture_dispatch(direct);
     let wide = match &snapshot.owners[&OwnerKey::Declaration(accept.declaration)] {
         OwnerRecord::Declaration(owner) => match &owner.payload {
-            DeclarationPayload::Function(f) => f.effect.row().requirements[0],
+            DeclarationPayload::Function(f) => f.effect.row().requirements[0].concrete().unwrap(),
             _ => unreachable!(),
         },
         _ => unreachable!(),
@@ -1492,7 +1506,7 @@ fn shared_grant_allowance(direct: bool) {
     let FunctionEffect::Task { requirements, .. } = &mut f.effect else {
         unreachable!()
     };
-    requirements.push(narrow);
+    requirements.push(narrow.into());
     requirements.sort();
     snapshot.root.owners = MapRoot::from_parts(
         snapshot.root.owners.page(),
@@ -1524,6 +1538,7 @@ fn shared_grant_allowance(direct: bool) {
         &program.requirements[narrow_index]
     ));
     let descriptor = NormalizedValue::Function {
+        requirement_arguments: std::sync::Arc::from([]),
         function: program
             .function(declaration_named(&snapshot, "consumer-task"))
             .unwrap(),
@@ -1545,7 +1560,7 @@ fn shared_grant_allowance(direct: bool) {
         unreachable!()
     };
     f.effect = FunctionEffect::Task {
-        requirements: vec![narrow],
+        requirements: vec![narrow.into()],
         effect_parameters: vec![],
     };
     assert!(
@@ -1577,7 +1592,7 @@ fn shared_grant_allowance(direct: bool) {
     let function = program.function(accept).unwrap();
     let target = &mut Arc::make_mut(&mut program.functions)[function.0 as usize];
     target.effect = FunctionEffect::Task {
-        requirements: vec![narrow],
+        requirements: vec![narrow.into()],
         effect_parameters: vec![],
     };
     target.task_requirements =
@@ -1721,6 +1736,7 @@ fn an_empty_task_row_requires_task_context_in_both_evaluators() {
     snapshot.types.remove(&old_type);
     let mut program = prepare_snapshot(&snapshot);
     let value = NormalizedValue::Function {
+        requirement_arguments: std::sync::Arc::from([]),
         function: program
             .function(declaration_named(&snapshot, "empty-task-prefix"))
             .unwrap(),

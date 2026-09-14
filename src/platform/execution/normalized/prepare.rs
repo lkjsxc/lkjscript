@@ -102,18 +102,21 @@ pub enum NormalizedInstruction {
     JumpIfFalse(u32),
     Jump(u32),
     Call {
+        requirement_arguments: Arc<[crate::platform::kernel::RequirementOperand]>,
         effect_arguments: Arc<[crate::platform::kernel::EffectRow]>,
         function: FunctionIndex,
         type_arguments: Arc<[TypeObjectDigest]>,
         arguments: u32,
     },
     TailCall {
+        requirement_arguments: Arc<[crate::platform::kernel::RequirementOperand]>,
         effect_arguments: Arc<[crate::platform::kernel::EffectRow]>,
         function: FunctionIndex,
         type_arguments: Arc<[TypeObjectDigest]>,
         arguments: u32,
     },
     FunctionValue {
+        requirement_arguments: Arc<[crate::platform::kernel::RequirementOperand]>,
         effect_arguments: Arc<[crate::platform::kernel::EffectRow]>,
         function: FunctionIndex,
         type_arguments: Arc<[TypeObjectDigest]>,
@@ -165,6 +168,19 @@ pub enum NormalizedInstruction {
         requirement: RequirementIndex,
         binding: u32,
     },
+    PerformParameter {
+        parameter: crate::platform::kernel::RequirementParameterReference,
+        operation: OperationIndex,
+        arguments: u32,
+    },
+    BeginParameterTransaction {
+        parameter: crate::platform::kernel::RequirementParameterReference,
+        binding: u32,
+    },
+    CommitParameterTransaction {
+        parameter: crate::platform::kernel::RequirementParameterReference,
+        binding: u32,
+    },
     Return,
 }
 
@@ -193,6 +209,8 @@ pub enum NormalizedFunctionBody {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedFunction {
+    pub requirement_parameters: Arc<[crate::platform::semantic_id::RequirementParameterId]>,
+    pub requirement_arguments: Arc<[crate::platform::kernel::RequirementOperand]>,
     pub effect_parameters: Arc<[crate::platform::semantic_id::EffectParameterId]>,
     pub effect: FunctionEffect,
     pub effect_arguments: Arc<[crate::platform::kernel::EffectRow]>,
@@ -635,6 +653,7 @@ impl RuntimeIndexes {
         let mut component_refs = BTreeSet::new();
         let mut port_refs = BTreeSet::new();
         for ((package, owner), unit) in units {
+            requirement_refs.extend(unit.tables.requirements.iter().copied());
             let OwnerKey::Declaration(declaration) = owner else {
                 continue;
             };
@@ -1215,8 +1234,9 @@ fn prepare_functions(
                         requirements,
                     } => requirements
                         .iter()
+                        .filter_map(|requirement| requirement.concrete())
                         .map(|requirement| {
-                            required_index(&indexes.requirements, *requirement, "task requirement")
+                            required_index(&indexes.requirements, requirement, "task requirement")
                         })
                         .collect::<Result<Vec<_>, _>>()?,
                 };
@@ -1226,7 +1246,8 @@ fn prepare_functions(
                         "function payload changed",
                     ));
                 };
-                if function.effect_parameters != signature.effect_parameters
+                if function.requirement_parameters != signature.requirement_parameters
+                    || function.effect_parameters != signature.effect_parameters
                     || function.effect != signature.effect
                     || function.type_parameters != type_parameters
                     || function.parameters
@@ -1253,15 +1274,18 @@ fn prepare_functions(
                 ));
             }
         };
-        let (effect_parameters, effect) = match &unit.payload {
+        let (requirement_parameters, effect_parameters, effect) = match &unit.payload {
             CompilationPayload::Function { signature, .. }
             | CompilationPayload::External { signature, .. } => (
+                signature.requirement_parameters.clone(),
                 signature.effect_parameters.clone(),
                 signature.effect.clone(),
             ),
-            _ => (Vec::new(), FunctionEffect::Pure),
+            _ => (Vec::new(), Vec::new(), FunctionEffect::Pure),
         };
         functions[index.0 as usize] = Some(NormalizedFunction {
+            requirement_parameters: requirement_parameters.into(),
+            requirement_arguments: Arc::from([]),
             effect_parameters: effect_parameters.into(),
             effect,
             effect_arguments: Arc::from([]),
@@ -1360,12 +1384,14 @@ pub(super) fn derive_tail_dispatch(
             }
             *instruction = match instruction {
                 NormalizedInstruction::Call {
+                    requirement_arguments,
                     effect_arguments,
                     function,
                     type_arguments,
                     arguments,
                 } if graph.get(function.0 as usize).copied() == Some(true) => {
                     NormalizedInstruction::TailCall {
+                        requirement_arguments: Arc::clone(requirement_arguments),
                         effect_arguments: Arc::clone(effect_arguments),
                         function: *function,
                         type_arguments: type_arguments.clone(),
@@ -1530,8 +1556,8 @@ fn validate_normalized_resource_signature(
         || !matches!(
             &function.effect,
             FunctionEffect::Task { effect_parameters: _, requirements: canonical }
-                if canonical == &requirement_references
-                    && canonical.contains(&requirement.reference)
+                if canonical.iter().filter_map(|r| r.concrete()).collect::<Vec<_>>() == requirement_references
+                    && canonical.contains(&requirement.reference.into())
         )
     {
         return Err(runtime_corrupt(
@@ -2109,6 +2135,7 @@ fn prepare_targets(
             if prepared_port.function_type != expected_type
                 || !prepared_function.type_parameters.is_empty()
                 || !prepared_function.effect_parameters.is_empty()
+                || !prepared_function.requirement_parameters.is_empty()
                 || prepared_function.parameters.len() != captures.len().saturating_add(1)
                 || prepared_function
                     .parameters
@@ -2393,6 +2420,7 @@ fn translate_code(
             CompiledInstruction::JumpIfFalse(target) => NormalizedInstruction::JumpIfFalse(*target),
             CompiledInstruction::Jump(target) => NormalizedInstruction::Jump(*target),
             CompiledInstruction::Call {
+                requirement_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
@@ -2404,6 +2432,7 @@ fn translate_code(
                     "normalized call target",
                 )?;
                 NormalizedInstruction::Call {
+                    requirement_arguments: requirement_arguments.clone().into(),
                     effect_arguments: effect_arguments.clone().into(),
                     function: required_index(&indexes.functions, declaration, "function")?,
                     type_arguments: type_arguments
@@ -2417,6 +2446,7 @@ fn translate_code(
                 }
             }
             CompiledInstruction::FunctionValue {
+                requirement_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
@@ -2427,6 +2457,7 @@ fn translate_code(
                     "normalized function value",
                 )?;
                 NormalizedInstruction::FunctionValue {
+                    requirement_arguments: requirement_arguments.clone().into(),
                     effect_arguments: effect_arguments.clone().into(),
                     function: required_index(&indexes.functions, declaration, "function")?,
                     type_arguments: type_arguments
@@ -2585,6 +2616,31 @@ fn translate_code(
                 )?;
                 NormalizedInstruction::CommitTransaction {
                     requirement: required_index(&indexes.requirements, requirement, "requirement")?,
+                    binding: *binding,
+                }
+            }
+            CompiledInstruction::PerformParameter {
+                parameter,
+                operation,
+                arguments,
+            } => NormalizedInstruction::PerformParameter {
+                parameter: *parameter,
+                operation: required_index(
+                    &indexes.operations,
+                    index_copy(&unit.tables.operations, *operation, "parameter operation")?,
+                    "operation",
+                )?,
+                arguments: *arguments,
+            },
+            CompiledInstruction::BeginParameterTransaction { parameter, binding } => {
+                NormalizedInstruction::BeginParameterTransaction {
+                    parameter: *parameter,
+                    binding: *binding,
+                }
+            }
+            CompiledInstruction::CommitParameterTransaction { parameter, binding } => {
+                NormalizedInstruction::CommitParameterTransaction {
+                    parameter: *parameter,
                     binding: *binding,
                 }
             }

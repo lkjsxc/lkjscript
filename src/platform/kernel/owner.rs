@@ -44,23 +44,49 @@ pub enum OwnerRecord {
     Documentation(DocumentationRecord),
     Annotation(AnnotationRecord),
     HttpRoute(HttpRouteRecord),
+    RequirementParameter(RequirementParameterRecord),
 }
 
 impl OwnerRecord {
+    pub(crate) fn set_encoding_for_edit(&mut self, generation: u16) {
+        match self {
+            Self::Module(record) => record.header.contract_version = generation,
+            Self::Declaration(record) => record.header.contract_version = generation,
+            Self::TypeParameter(record) => record.header.contract_version = generation,
+            Self::EffectParameter(record) => record.header.contract_version = generation,
+            Self::Field(record) => record.header.contract_version = generation,
+            Self::Case(record) => record.header.contract_version = generation,
+            Self::Operation(record) => record.header.contract_version = generation,
+            Self::Parameter(record) => record.header.contract_version = generation,
+            Self::Binding(record) => record.header.contract_version = generation,
+            Self::Expression(record) => record.contract_version = generation,
+            Self::Requirement(record) => record.header.contract_version = generation,
+            Self::Port(record) => record.header.contract_version = generation,
+            Self::Target(record) => record.header.contract_version = generation,
+            Self::Documentation(record) => record.header.contract_version = generation,
+            Self::Annotation(record) => record.header.contract_version = generation,
+            Self::HttpRoute(record) => record.header.contract_version = generation,
+            Self::RequirementParameter(record) => record.header.contract_version = generation,
+        }
+    }
+
     pub fn header(&self) -> OwnerHeader {
         match self {
             Self::Module(record) => record.header,
             Self::Declaration(record) => record.header,
             Self::TypeParameter(record) => record.header,
             Self::EffectParameter(record) => record.header,
+            Self::RequirementParameter(record) => record.header,
             Self::Field(record) => record.header,
             Self::Case(record) => record.header,
             Self::Operation(record) => record.header,
             Self::Parameter(record) => record.header,
             Self::Binding(record) => record.header,
-            Self::Expression(record) => {
-                OwnerHeader::new(OwnerKey::Expression(record.id), OwnerKind::Expression)
-            }
+            Self::Expression(record) => OwnerHeader {
+                contract_version: record.contract_version,
+                owner: OwnerKey::Expression(record.id),
+                kind: OwnerKind::Expression,
+            },
             Self::Requirement(record) => record.header,
             Self::Port(record) => record.header,
             Self::Target(record) => record.header,
@@ -84,6 +110,7 @@ impl OwnerRecord {
             Self::Declaration(value) => Some(&value.name),
             Self::TypeParameter(value) => Some(&value.name),
             Self::EffectParameter(value) => Some(&value.name),
+            Self::RequirementParameter(value) => Some(&value.name),
             Self::Field(value) => Some(&value.name),
             Self::Case(value) => Some(&value.name),
             Self::Operation(value) => Some(&value.name),
@@ -103,6 +130,7 @@ impl OwnerRecord {
             Self::Declaration(value) => Some(&mut value.name),
             Self::TypeParameter(value) => Some(&mut value.name),
             Self::EffectParameter(value) => Some(&mut value.name),
+            Self::RequirementParameter(value) => Some(&mut value.name),
             Self::Field(value) => Some(&mut value.name),
             Self::Case(value) => Some(&mut value.name),
             Self::Operation(value) => Some(&mut value.name),
@@ -123,6 +151,11 @@ impl OwnerRecord {
                 validate_names([&record.name])
             }
             Self::Declaration(record) => record.validate_local(),
+            Self::RequirementParameter(record) => {
+                validate_header_domain(record.header, OwnerKind::RequirementParameter)?;
+                validate_names([&record.name])?;
+                record.constraint.validate()
+            }
             Self::EffectParameter(record) => {
                 validate_header_domain(record.header, OwnerKind::EffectParameter)?;
                 validate_names([&record.name])
@@ -174,6 +207,7 @@ impl OwnerRecord {
             Self::Module(_)
             | Self::TypeParameter(_)
             | Self::EffectParameter(_)
+            | Self::RequirementParameter(_)
             | Self::Requirement(_)
             | Self::Target(_)
             | Self::HttpRoute(_)
@@ -201,6 +235,7 @@ impl OwnerRecord {
             | Self::Declaration(_)
             | Self::TypeParameter(_)
             | Self::EffectParameter(_)
+            | Self::RequirementParameter(_)
             | Self::Field(_)
             | Self::Case(_)
             | Self::Operation(_)
@@ -405,6 +440,7 @@ impl ExternalDeclaration {
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct FunctionDeclaration {
+    pub requirement_parameters: Vec<crate::platform::semantic_id::RequirementParameterId>,
     pub effect_parameters: Vec<EffectParameterId>,
     pub type_parameters: Vec<TypeParameterId>,
     pub parameters: Vec<ParameterId>,
@@ -415,6 +451,11 @@ pub struct FunctionDeclaration {
 
 impl FunctionDeclaration {
     fn validate_local(&self) -> Result<(), Diagnostic> {
+        validate_ordered_unique(
+            "function requirement parameters",
+            &self.requirement_parameters,
+            true,
+        )?;
         validate_ordered_unique("function type parameters", &self.type_parameters, true)?;
         validate_ordered_unique("function parameters", &self.parameters, true)?;
         validate_ordered_unique("function effect parameters", &self.effect_parameters, true)?;
@@ -428,7 +469,7 @@ impl FunctionDeclaration {
 pub enum FunctionEffect {
     Pure,
     Task {
-        requirements: Vec<RequirementReference>,
+        requirements: Vec<super::RequirementOperand>,
         effect_parameters: Vec<super::EffectParameterReference>,
     },
 }
@@ -454,6 +495,15 @@ pub struct EffectParameterRecord {
     pub header: OwnerHeader,
     pub declaration: DeclarationId,
     pub name: Name,
+}
+
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RequirementParameterRecord {
+    pub header: OwnerHeader,
+    pub declaration: DeclarationId,
+    pub name: Name,
+    pub constraint: super::RequirementConstraint,
 }
 
 #[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
@@ -1717,7 +1767,7 @@ pub enum AnnotationValue {
 }
 
 fn validate_header_domain(header: OwnerHeader, kind: OwnerKind) -> Result<(), Diagnostic> {
-    if header.contract_version != GRAPH_CONTRACT_VERSION || header.kind != kind {
+    if !super::contract::supported_graph_contract(header.contract_version) || header.kind != kind {
         return Err(owner_error(
             "kernel_owner_header",
             "owner header contract or kind does not match its record",
@@ -1737,6 +1787,10 @@ fn validate_header_domain(header: OwnerHeader, kind: OwnerKind) -> Result<(), Di
             | (OwnerKey::Declaration(_), OwnerKind::Test)
             | (OwnerKey::TypeParameter(_), OwnerKind::TypeParameter)
             | (OwnerKey::EffectParameter(_), OwnerKind::EffectParameter)
+            | (
+                OwnerKey::RequirementParameter(_),
+                OwnerKind::RequirementParameter
+            )
             | (OwnerKey::Field(_), OwnerKind::Field)
             | (OwnerKey::Case(_), OwnerKind::Case)
             | (OwnerKey::Operation(_), OwnerKind::Operation)

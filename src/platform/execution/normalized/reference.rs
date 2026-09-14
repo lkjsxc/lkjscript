@@ -23,6 +23,7 @@ use crate::platform::kernel::{
     PortImplementation, RequirementReference, SemanticStateDigest, TextValue, TypeForm,
     TypeObjectDigest,
 };
+use crate::platform::kernel::{RequirementOperand, RequirementParameterReference};
 use crate::platform::semantic_id::{
     BindingId, ExpressionId, ParameterId, RepositoryId, RevisionId, TypeParameterId,
 };
@@ -260,6 +261,7 @@ impl NormalizedValueSchema for BoundReferenceSchema {
 }
 
 pub struct ReferenceSignature {
+    requirement_parameters: Vec<crate::platform::semantic_id::RequirementParameterId>,
     effect_parameters: Vec<crate::platform::semantic_id::EffectParameterId>,
     effect: FunctionEffect,
     type_parameters: Vec<TypeParameterId>,
@@ -330,7 +332,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         self.execute(capabilities, control, |state| {
             state.select_root_function(declaration)?;
             let arguments = state.admit_call_arguments(declaration, &[], arguments.into_vec())?;
-            state.call_declaration(declaration, &[], &[], arguments)
+            state.call_declaration(declaration, &[], &[], &[], arguments)
         })
     }
 
@@ -345,7 +347,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         let arguments = super::value::RawArguments::new(arguments);
         self.execute(None, control, |state| {
             let arguments = state.admit_call_arguments(declaration, types, arguments.into_vec())?;
-            state.call_declaration(declaration, types, &[], arguments)
+            state.call_declaration(declaration, types, &[], &[], arguments)
         })
     }
 
@@ -460,18 +462,24 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 PortImplementation::Function(function) => {
                     let arguments =
                         state.admit_call_arguments(function, &[], arguments.into_vec())?;
-                    state.call_declaration(function, &[], &[], arguments)
+                    state.call_declaration(function, &[], &[], &[], arguments)
                 }
                 PortImplementation::Expression(expression) => {
                     let arguments =
                         state.admit_port_arguments(port.function_type, arguments.into_vec())?;
                     let callee = state.evaluate(expression, &mut BTreeMap::new())?;
-                    let (declaration, type_arguments, effect_arguments, arguments) =
-                        state.callable_arguments(callee, arguments)?;
+                    let (
+                        declaration,
+                        type_arguments,
+                        effect_arguments,
+                        requirement_arguments,
+                        arguments,
+                    ) = state.callable_arguments(callee, arguments)?;
                     state.call_declaration(
                         declaration,
                         &type_arguments,
                         &effect_arguments,
+                        &requirement_arguments,
                         arguments,
                     )
                 }
@@ -549,6 +557,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
             calls_by_requirement: BTreeMap::new(),
             type_scopes: Vec::new(),
             effect_scopes: Vec::new(),
+            requirement_scopes: Vec::new(),
             allowances: Vec::new(),
             root_allowance: None,
             observation: NormalizedReferenceObservation {
@@ -665,6 +674,7 @@ struct ReferenceState<'a> {
     calls_by_requirement: BTreeMap<RequirementReference, u64>,
     type_scopes: Vec<BTreeMap<TypeParameterId, TypeObjectDigest>>,
     effect_scopes: Vec<super::reference_effects::Bindings>,
+    requirement_scopes: Vec<super::reference_effects::RequirementBindings>,
     allowances: Vec<Option<EffectRow>>,
     root_allowance: Option<EffectRow>,
     observation: NormalizedReferenceObservation,
@@ -682,6 +692,7 @@ struct AdmittedGraphCall {
     function: FunctionDeclaration,
     types: BTreeMap<TypeParameterId, TypeObjectDigest>,
     effects: super::reference_effects::Bindings,
+    requirements: super::reference_effects::RequirementBindings,
     allowance: Option<EffectRow>,
     arguments: Vec<CheckedValue>,
 }
@@ -710,8 +721,9 @@ impl ReferenceState<'_> {
         &mut self,
         row: &EffectRow,
         scope: &super::reference_effects::Bindings,
+        requirements: &super::reference_effects::RequirementBindings,
     ) -> Result<EffectRow, ExecutionError> {
-        super::reference_effects::close(row, scope, |count| {
+        super::reference_effects::close(row, scope, requirements, |count| {
             self.control.check()?;
             self.charge_items(
                 count,
@@ -727,15 +739,115 @@ impl ReferenceState<'_> {
         self.charge_items(arguments.len(), std::mem::size_of::<EffectRow>())?;
         let had_scope = !self.effect_scopes.is_empty();
         let scope = self.effect_scopes.pop().unwrap_or_default();
+        let requirement_scope = self.requirement_scopes.pop().unwrap_or_default();
         let result = arguments
             .iter()
-            .map(|row| self.close_row(row, &scope))
+            .map(|row| self.close_row(row, &scope, &requirement_scope))
             .collect();
         // Keep the exact caller scope even when closing an argument fails.
         if had_scope {
             self.effect_scopes.push(scope);
+            self.requirement_scopes.push(requirement_scope);
         }
         result
+    }
+
+    fn resolve_requirement(
+        &self,
+        operand: RequirementOperand,
+    ) -> Result<RequirementReference, ExecutionError> {
+        self.control.check()?;
+        let empty = BTreeMap::new();
+        super::reference_effects::resolve(operand, self.requirement_scopes.last().unwrap_or(&empty))
+    }
+
+    fn resolve_requirement_arguments(
+        &mut self,
+        operands: &[RequirementOperand],
+    ) -> Result<Vec<RequirementOperand>, ExecutionError> {
+        self.charge_items(operands.len(), std::mem::size_of::<RequirementOperand>())?;
+        operands
+            .iter()
+            .map(|operand| {
+                self.resolve_requirement(*operand)
+                    .map(RequirementOperand::Concrete)
+            })
+            .collect()
+    }
+
+    fn requirement_bindings(
+        &mut self,
+        declaration: DeclarationReference,
+        parameters: &[crate::platform::semantic_id::RequirementParameterId],
+        arguments: &[RequirementOperand],
+    ) -> Result<super::reference_effects::RequirementBindings, ExecutionError> {
+        if parameters.len() != arguments.len() {
+            return Err(reference_type_error(
+                "requirement argument arity differs from its exact target",
+            ));
+        }
+        self.charge_items(
+            arguments.len(),
+            std::mem::size_of::<(RequirementParameterReference, RequirementReference)>()
+                + 3 * std::mem::size_of::<usize>(),
+        )?;
+        let mut bindings = BTreeMap::new();
+        for (parameter, argument) in parameters.iter().zip(arguments) {
+            self.control.check()?;
+            let Some(OwnerRecord::RequirementParameter(formal)) = self.owner_in_package(
+                declaration.package,
+                OwnerKey::RequirementParameter(*parameter),
+            )?
+            else {
+                return Err(reference_type_error(
+                    "requirement formal has no canonical owner",
+                ));
+            };
+            let RequirementOperand::Concrete(reference) = argument else {
+                return Err(reference_type_error(
+                    "requirement argument must be closed before entering its callee",
+                ));
+            };
+            let Some(OwnerRecord::Requirement(actual)) = self.owner_in_package(
+                reference.package,
+                OwnerKey::Requirement(reference.requirement),
+            )?
+            else {
+                return Err(reference_type_error(
+                    "requirement argument has no exact component owner",
+                ));
+            };
+            if formal.declaration != declaration.declaration
+                || formal.constraint.interface != actual.interface
+            {
+                return Err(reference_type_error(
+                    "requirement argument has a foreign scope or exact interface",
+                ));
+            }
+            for operation in &formal.constraint.operations {
+                self.control.check()?;
+                if !actual.operations.contains(operation) {
+                    return Err(reference_type_error(
+                        "requirement argument does not supply the formal minimum operations",
+                    ));
+                }
+            }
+            if bindings
+                .insert(
+                    RequirementParameterReference {
+                        package: declaration.package,
+                        parameter: *parameter,
+                    },
+                    *reference,
+                )
+                .is_some()
+            {
+                return Err(reference_type_error(
+                    "requirement parameters repeat an exact identity",
+                ));
+            }
+        }
+        Ok(bindings)
     }
 
     fn effect_bindings(
@@ -763,7 +875,7 @@ impl ReferenceState<'_> {
                     "effect parameter belongs to another exact function",
                 ));
             }
-            let closed = self.close_row(row, &BTreeMap::new())?;
+            let closed = self.close_row(row, &BTreeMap::new(), &BTreeMap::new())?;
             if result
                 .insert(
                     EffectParameterReference {
@@ -802,17 +914,23 @@ impl ReferenceState<'_> {
             .ok_or_else(|| reference_type_error("activation allowance disappeared"))?
             .requirements
             .clone();
-        for requirement in &required.requirements {
+        for operand in &required.requirements {
+            let requirement = operand
+                .concrete()
+                .ok_or_else(|| reference_type_error("unclosed activation requirement"))?;
             let capabilities = self
                 .capabilities
                 .ok_or_else(reference_capabilities_unbound)?;
-            let grant = capabilities.canonical_requirement_exact(self.program, *requirement)?;
+            let grant = capabilities.canonical_requirement_exact(self.program, requirement)?;
             let mut found = false;
-            for candidate in &available {
+            for operand in &available {
+                let candidate = operand
+                    .concrete()
+                    .ok_or_else(|| reference_type_error("unclosed available requirement"))?;
                 self.control.check()?;
                 if (candidate == requirement
-                    || self.reference_requirement_covers(*requirement, *candidate)?)
-                    && capabilities.canonical_requirement_exact(self.program, *candidate)? == grant
+                    || self.reference_requirement_covers(requirement, candidate)?)
+                    && capabilities.canonical_requirement_exact(self.program, candidate)? == grant
                 {
                     found = true;
                     break;
@@ -874,7 +992,7 @@ impl ReferenceState<'_> {
             .last()
             .unwrap_or(&self.root_allowance)
             .as_ref()
-            .is_none_or(|row| !row.requirements.contains(&requirement))
+            .is_none_or(|row| !row.requirements.contains(&requirement.into()))
         {
             return Err(reference_type_error(
                 "operation is outside the current canonical activation allowance",
@@ -889,7 +1007,8 @@ impl ReferenceState<'_> {
     ) -> Result<(), ExecutionError> {
         let function = self.declaration(reference)?;
         if let DeclarationPayload::Function(function) = function.payload {
-            if !function.effect_parameters.is_empty() {
+            if !function.effect_parameters.is_empty() || !function.requirement_parameters.is_empty()
+            {
                 return Err(reference_type_error(
                     "entry effect arguments are not closed",
                 ));
@@ -906,6 +1025,7 @@ impl ReferenceState<'_> {
         reference: DeclarationReference,
         types: &[TypeObjectDigest],
         effects: &[EffectRow],
+        requirements: &[RequirementOperand],
     ) -> Result<ReferenceSignature, ExecutionError> {
         let mut signature = self.function_signature(reference)?;
         if signature.type_parameters.len() != types.len() {
@@ -913,9 +1033,11 @@ impl ReferenceState<'_> {
                 "callable type argument arity differs from its exact target",
             ));
         }
+        let requirement_scope =
+            self.requirement_bindings(reference, &signature.requirement_parameters, requirements)?;
         let scope = self.effect_bindings(reference, &signature.effect_parameters, effects)?;
         let declared = self.declared_row(&signature.effect)?;
-        let row = self.close_row(&declared, &scope)?;
+        let row = self.close_row(&declared, &scope, &requirement_scope)?;
         if !signature.pure {
             signature.effect = FunctionEffect::Task {
                 requirements: row.requirements,
@@ -925,7 +1047,7 @@ impl ReferenceState<'_> {
         // Zero-effect-arity signatures retain their canonical ordinary-type templates.
         // Raw argument/prefix admission substitutes those templates structurally, including
         // valid pure applications whose aggregate digest was not a prepared graph root.
-        if scope.is_empty() {
+        if scope.is_empty() && requirement_scope.is_empty() {
             return Ok(signature);
         }
         self.charge_items(
@@ -946,7 +1068,7 @@ impl ReferenceState<'_> {
         {
             *ty = self
                 .schema
-                .instantiated_with_effects(*ty, &bindings, &scope, 0)
+                .instantiated_with_effects(*ty, &bindings, &scope, &requirement_scope, 0)
                 .filter(|ty| self.schema.types.contains_key(ty))
                 .ok_or_else(|| {
                     reference_type_error(
@@ -998,11 +1120,16 @@ impl ReferenceState<'_> {
         let substitutions = self.type_scopes.last().unwrap_or(&empty);
         let empty_effects = BTreeMap::new();
         let effects = self.effect_scopes.last().unwrap_or(&empty_effects);
+        let empty_requirements = BTreeMap::new();
+        let requirements = self
+            .requirement_scopes
+            .last()
+            .unwrap_or(&empty_requirements);
         type_arguments
             .iter()
             .map(|ty| {
                 self.schema
-                    .instantiated_with_effects(*ty, substitutions, effects, 0)
+                    .instantiated_with_effects(*ty, substitutions, effects, requirements, 0)
                     .filter(|ty| self.schema.types.contains_key(ty))
                     .ok_or_else(|| {
                         reference_type_error("call type argument escaped its exact function scope")
@@ -1016,11 +1143,13 @@ impl ReferenceState<'_> {
         reference: DeclarationReference,
         type_arguments: &[TypeObjectDigest],
         effect_arguments: &[EffectRow],
+        requirement_arguments: &[RequirementOperand],
         arguments: Vec<CheckedValue>,
     ) -> Result<CheckedValue, ExecutionError> {
         self.control.check()?;
         let type_arguments = self.resolve_type_arguments(type_arguments)?;
         let effect_arguments = self.resolve_effect_arguments(effect_arguments)?;
+        let requirement_arguments = self.resolve_requirement_arguments(requirement_arguments)?;
         if self.call_depth >= self.policy.maximum_call_depth {
             return Err(reference_resource(
                 "normalized_reference_call_depth",
@@ -1032,8 +1161,13 @@ impl ReferenceState<'_> {
             self.observation.maximum_call_depth.max(self.call_depth);
         let previous_package = self.active_package;
         self.active_package = reference.package;
-        let mut step =
-            self.call_activation(reference, &type_arguments, &effect_arguments, arguments);
+        let mut step = self.call_activation(
+            reference,
+            &type_arguments,
+            &effect_arguments,
+            &requirement_arguments,
+            arguments,
+        );
         let result = loop {
             match step {
                 Ok(ReferenceStep::Value(value)) => break Ok(value),
@@ -1055,6 +1189,7 @@ impl ReferenceState<'_> {
         reference: DeclarationReference,
         type_arguments: &[TypeObjectDigest],
         effect_arguments: &[EffectRow],
+        requirement_arguments: &[RequirementOperand],
         arguments: Vec<CheckedValue>,
     ) -> Result<ReferenceStep, ExecutionError> {
         self.control.check()?;
@@ -1067,6 +1202,7 @@ impl ReferenceState<'_> {
                         function,
                         type_arguments,
                         effect_arguments,
+                        requirement_arguments,
                         arguments,
                     )?;
                     self.enter_graph_call(target, false)
@@ -1077,6 +1213,7 @@ impl ReferenceState<'_> {
                     self.validate_call_resources(&parameters, &arguments)?;
                     if type_arguments.len() != external.type_parameters.len()
                         || !effect_arguments.is_empty()
+                        || !requirement_arguments.is_empty()
                     {
                         Err(reference_type_error(
                             "external type-argument count disagrees with its exact signature",
@@ -1087,6 +1224,7 @@ impl ReferenceState<'_> {
                         ))
                     } else {
                         let signature = ReferenceSignature {
+                            requirement_parameters: Vec::new(),
                             effect_parameters: Vec::new(),
                             effect: FunctionEffect::Pure,
                             type_parameter_constraints: self
@@ -1171,12 +1309,14 @@ impl ReferenceState<'_> {
         function: FunctionDeclaration,
         types: &[TypeObjectDigest],
         effects: &[EffectRow],
+        requirements: &[RequirementOperand],
         arguments: Vec<CheckedValue>,
     ) -> Result<AdmittedGraphCall, ExecutionError> {
         self.control.check()?;
         if arguments.len() != function.parameters.len()
             || types.len() != function.type_parameters.len()
             || effects.len() != function.effect_parameters.len()
+            || requirements.len() != function.requirement_parameters.len()
         {
             return Err(reference_type_error(
                 "call application disagrees with its exact canonical signature",
@@ -1192,10 +1332,12 @@ impl ReferenceState<'_> {
                 "canonical callable type arguments fail capture-safe constraints",
             ));
         }
+        let requirement_scope =
+            self.requirement_bindings(declaration, &function.requirement_parameters, requirements)?;
         let effect_scope =
             self.effect_bindings(declaration, &function.effect_parameters, effects)?;
         let declared = self.declared_row(&function.effect)?;
-        let row = self.close_row(&declared, &effect_scope)?;
+        let row = self.close_row(&declared, &effect_scope, &requirement_scope)?;
         let allowance = if matches!(function.effect, FunctionEffect::Pure) {
             None
         } else {
@@ -1221,6 +1363,7 @@ impl ReferenceState<'_> {
             function,
             types,
             effects: effect_scope,
+            requirements: requirement_scope,
             allowance,
             arguments,
         })
@@ -1243,6 +1386,7 @@ impl ReferenceState<'_> {
         self.active_package = target.declaration.package;
         self.type_scopes.push(target.types);
         self.effect_scopes.push(target.effects);
+        self.requirement_scopes.push(target.requirements);
         self.allowances.push(target.allowance);
         self.observation.maximum_live_effect_bindings = self
             .observation
@@ -1261,6 +1405,7 @@ impl ReferenceState<'_> {
         self.local_counts.pop();
         self.type_scopes.pop();
         self.effect_scopes.pop();
+        self.requirement_scopes.pop();
         self.allowances.pop();
         result
     }
@@ -1423,6 +1568,7 @@ impl ReferenceState<'_> {
                     expression = arm.body;
                 }
                 ExpressionOperation::Call {
+                    requirement_arguments,
                     effect_arguments,
                     function,
                     type_arguments,
@@ -1430,17 +1576,29 @@ impl ReferenceState<'_> {
                 } => {
                     let uses = self.function_parameter_uses(function)?;
                     let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
-                    return self.tail_step(function, &type_arguments, &effect_arguments, arguments);
+                    return self.tail_step(
+                        function,
+                        &type_arguments,
+                        &effect_arguments,
+                        &requirement_arguments,
+                        arguments,
+                    );
                 }
                 ExpressionOperation::Invoke { callee, arguments } => {
                     let callee = self.evaluate(callee, locals)?;
                     let arguments = self.evaluate_many(&arguments, locals)?;
-                    let (declaration, type_arguments, effect_arguments, arguments) =
-                        self.callable_arguments(callee, arguments)?;
+                    let (
+                        declaration,
+                        type_arguments,
+                        effect_arguments,
+                        requirement_arguments,
+                        arguments,
+                    ) = self.callable_arguments(callee, arguments)?;
                     return self.tail_step(
                         declaration,
                         &type_arguments,
                         &effect_arguments,
+                        &requirement_arguments,
                         arguments,
                     );
                 }
@@ -1460,20 +1618,34 @@ impl ReferenceState<'_> {
         declaration: DeclarationReference,
         types: &[TypeObjectDigest],
         effect_arguments: &[EffectRow],
+        requirement_arguments: &[RequirementOperand],
         arguments: Vec<CheckedValue>,
     ) -> Result<ReferenceStep, ExecutionError> {
         let callable = self.declaration(declaration)?;
         if let DeclarationPayload::Function(function) = callable.payload {
             let types = self.resolve_type_arguments(types)?;
             let effects = self.resolve_effect_arguments(effect_arguments)?;
-            let target =
-                self.admit_graph_call(declaration, function, &types, &effects, arguments)?;
+            let requirements = self.resolve_requirement_arguments(requirement_arguments)?;
+            let target = self.admit_graph_call(
+                declaration,
+                function,
+                &types,
+                &effects,
+                &requirements,
+                arguments,
+            )?;
             self.charge_allocation(std::mem::size_of::<AdmittedGraphCall>() as u64)?;
             self.control.check()?;
             Ok(ReferenceStep::Tail(Box::new(target)))
         } else {
-            self.call_declaration(declaration, types, effect_arguments, arguments)
-                .map(ReferenceStep::Value)
+            self.call_declaration(
+                declaration,
+                types,
+                effect_arguments,
+                requirement_arguments,
+                arguments,
+            )
+            .map(ReferenceStep::Value)
         }
     }
 
@@ -1581,7 +1753,7 @@ impl ReferenceState<'_> {
                 value.duplicate(ParameterUse::Unrestricted)
             }
             ExpressionOperation::Constant { declaration } => {
-                self.call_declaration(declaration, &[], &[], Vec::new())
+                self.call_declaration(declaration, &[], &[], &[], Vec::new())
             }
             ExpressionOperation::If {
                 condition,
@@ -1631,6 +1803,7 @@ impl ReferenceState<'_> {
                 })
             }
             ExpressionOperation::Call {
+                requirement_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
@@ -1638,9 +1811,16 @@ impl ReferenceState<'_> {
             } => {
                 let uses = self.function_parameter_uses(function)?;
                 let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
-                self.call_declaration(function, &type_arguments, &effect_arguments, arguments)
+                self.call_declaration(
+                    function,
+                    &type_arguments,
+                    &effect_arguments,
+                    &requirement_arguments,
+                    arguments,
+                )
             }
             ExpressionOperation::FunctionValue {
+                requirement_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
@@ -1658,6 +1838,14 @@ impl ReferenceState<'_> {
                 }
                 let type_arguments = self.resolve_type_arguments(&type_arguments)?.into();
                 let effect_arguments = self.resolve_effect_arguments(&effect_arguments)?.into();
+                let requirement_arguments =
+                    self.resolve_requirement_arguments(&requirement_arguments)?;
+                self.requirement_bindings(
+                    function,
+                    &signature.requirement_parameters,
+                    &requirement_arguments,
+                )?;
+                let requirement_arguments = requirement_arguments.into();
                 self.schema
                     .functions
                     .binary_search(&function)
@@ -1676,6 +1864,7 @@ impl ReferenceState<'_> {
                             function,
                             type_arguments,
                             effect_arguments,
+                            requirement_arguments,
                             &signature,
                         )
                     })
@@ -1687,9 +1876,20 @@ impl ReferenceState<'_> {
             ExpressionOperation::Invoke { callee, arguments } => {
                 let callee = self.evaluate(callee, locals)?;
                 let arguments = self.evaluate_many(&arguments, locals)?;
-                let (declaration, type_arguments, effect_arguments, arguments) =
-                    self.callable_arguments(callee, arguments)?;
-                self.call_declaration(declaration, &type_arguments, &effect_arguments, arguments)
+                let (
+                    declaration,
+                    type_arguments,
+                    effect_arguments,
+                    requirement_arguments,
+                    arguments,
+                ) = self.callable_arguments(callee, arguments)?;
+                self.call_declaration(
+                    declaration,
+                    &type_arguments,
+                    &effect_arguments,
+                    &requirement_arguments,
+                    arguments,
+                )
             }
             ExpressionOperation::Record {
                 nominal_type,
@@ -1836,13 +2036,18 @@ impl ReferenceState<'_> {
             } => {
                 let uses = self.operation_parameter_uses(operation)?;
                 let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
-                self.capability_call(requirement, operation, arguments)
+                self.capability_call(self.resolve_requirement(requirement)?, operation, arguments)
             }
             ExpressionOperation::Transaction {
                 requirement,
                 binding,
                 body,
-            } => self.transaction(requirement, binding, body, locals),
+            } => self.transaction(
+                self.resolve_requirement(requirement)?,
+                binding,
+                body,
+                locals,
+            ),
         }
     }
 
@@ -1980,38 +2185,48 @@ impl ReferenceState<'_> {
         &mut self,
         reference: DeclarationReference,
     ) -> Result<ReferenceSignature, ExecutionError> {
-        let (type_parameters, effect_parameters, effect, parameters, result, pure) =
-            match self.declaration(reference)?.payload {
-                DeclarationPayload::Function(function) => (
-                    function.type_parameters,
-                    function.effect_parameters,
-                    function.effect.clone(),
-                    function.parameters,
-                    function.result,
-                    matches!(function.effect, FunctionEffect::Pure),
-                ),
-                DeclarationPayload::External(external) => (
-                    external.type_parameters,
-                    Vec::new(),
-                    FunctionEffect::Pure,
-                    external.parameters,
-                    external.result,
-                    true,
-                ),
-                DeclarationPayload::Constant { .. } => {
-                    return Err(reference_type_error(
-                        "a constant is not a named callable descriptor",
-                    ));
-                }
-                _ => {
-                    return Err(reference_type_error(
-                        "exact callable has a non-callable canonical owner",
-                    ));
-                }
-            };
+        let (
+            type_parameters,
+            effect_parameters,
+            requirement_parameters,
+            effect,
+            parameters,
+            result,
+            pure,
+        ) = match self.declaration(reference)?.payload {
+            DeclarationPayload::Function(function) => (
+                function.type_parameters,
+                function.effect_parameters,
+                function.requirement_parameters,
+                function.effect.clone(),
+                function.parameters,
+                function.result,
+                matches!(function.effect, FunctionEffect::Pure),
+            ),
+            DeclarationPayload::External(external) => (
+                external.type_parameters,
+                Vec::new(),
+                Vec::new(),
+                FunctionEffect::Pure,
+                external.parameters,
+                external.result,
+                true,
+            ),
+            DeclarationPayload::Constant { .. } => {
+                return Err(reference_type_error(
+                    "a constant is not a named callable descriptor",
+                ));
+            }
+            _ => {
+                return Err(reference_type_error(
+                    "exact callable has a non-callable canonical owner",
+                ));
+            }
+        };
         let type_parameter_constraints =
             self.type_parameter_constraints(reference, &type_parameters)?;
         Ok(ReferenceSignature {
+            requirement_parameters,
             effect_parameters,
             effect,
             type_parameters,

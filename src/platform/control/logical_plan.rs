@@ -1175,8 +1175,8 @@ where
             "logical-plan.extraction-requirement",
             &[
                 ("index", index.to_string()),
-                ("package", requirement.package.to_string()),
-                ("requirement", requirement.requirement.to_string()),
+                ("package", requirement.package().to_string()),
+                ("requirement", requirement.owner().to_string()),
             ],
         )?;
     }
@@ -3568,6 +3568,7 @@ fn parse_identity_kind(value: &str) -> Result<IdentityKind, Diagnostic> {
         IdentityKind::Documentation,
         IdentityKind::Annotation,
         IdentityKind::EffectParameter,
+        IdentityKind::RequirementParameter,
     ];
     kinds
         .into_iter()
@@ -4131,7 +4132,7 @@ fn validate_extraction_evidence(
         match (capture.use_mode, capture.resource_requirement) {
             (ParameterUse::Unrestricted, None) => {}
             (ParameterUse::Consume, Some(requirement))
-                if affine.is_none() && requirement_set.contains(&requirement) =>
+                if affine.is_none() && requirement_set.contains(&requirement.into()) =>
             {
                 affine = Some(index);
             }
@@ -4230,6 +4231,7 @@ pub(crate) const fn identity_kind_name(kind: IdentityKind) -> &'static str {
         IdentityKind::Declaration => "declaration",
         IdentityKind::TypeParameter => "type_parameter",
         IdentityKind::EffectParameter => "effect_parameter",
+        IdentityKind::RequirementParameter => "requirement_parameter",
         IdentityKind::Field => "field",
         IdentityKind::Case => "case",
         IdentityKind::Operation => "operation",
@@ -4251,6 +4253,7 @@ const fn identity_kind_order(kind: IdentityKind) -> u8 {
         IdentityKind::Declaration => 2,
         IdentityKind::TypeParameter => 3,
         IdentityKind::EffectParameter => 16,
+        IdentityKind::RequirementParameter => 17,
         IdentityKind::Field => 4,
         IdentityKind::Case => 5,
         IdentityKind::Operation => 6,

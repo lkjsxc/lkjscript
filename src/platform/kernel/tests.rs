@@ -101,10 +101,13 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             parameters: Vec::new(),
             result: unit_type,
             effect: EffectRow {
-                requirements: vec![RequirementReference {
-                    package,
-                    requirement,
-                }],
+                requirements: vec![
+                    RequirementReference {
+                        package,
+                        requirement,
+                    }
+                    .into(),
+                ],
                 parameters: Vec::new(),
             },
         })
@@ -337,6 +340,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             name: name("callee"),
             visibility: DeclarationVisibility::Package,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                requirement_parameters: Vec::new(),
                 effect_parameters: Vec::new(),
                 type_parameters: Vec::new(),
                 parameters: vec![parameter],
@@ -352,6 +356,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
         &mut owners,
         2,
         ExpressionOperation::Call {
+            requirement_arguments: Vec::new(),
             effect_arguments: Vec::new(),
             function: DeclarationReference {
                 package,
@@ -439,7 +444,8 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             requirement: RequirementReference {
                 package,
                 requirement,
-            },
+            }
+            .into(),
             operation: OperationReference { package, operation },
             arguments: Vec::new(),
         },
@@ -466,16 +472,20 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             name: name("caller"),
             visibility: DeclarationVisibility::Public,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                requirement_parameters: Vec::new(),
                 effect_parameters: Vec::new(),
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
                 result: unit_type,
                 effect: FunctionEffect::Task {
                     effect_parameters: Vec::new(),
-                    requirements: vec![RequirementReference {
-                        package,
-                        requirement,
-                    }],
+                    requirements: vec![
+                        RequirementReference {
+                            package,
+                            requirement,
+                        }
+                        .into(),
+                    ],
                 },
                 body: caller_root,
             }),
@@ -519,6 +529,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             name: name("with_binding"),
             visibility: DeclarationVisibility::Private,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                requirement_parameters: Vec::new(),
                 effect_parameters: Vec::new(),
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
@@ -533,6 +544,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
         &mut owners,
         17,
         ExpressionOperation::Call {
+            requirement_arguments: Vec::new(),
             effect_arguments: Vec::new(),
             function: DeclarationReference {
                 package,
@@ -1746,7 +1758,7 @@ fn canonical_kernel_codec_manifest_is_frozen() {
     hasher.update(&root);
     assert_eq!(
         crate::platform::semantic_id::encode_hex(hasher.finalize().as_bytes()),
-        "2e718cb9174246297b3cf4cb4e5ddd7dd3292d87c302a5e6c54230e8af5a9164"
+        "fd5c2bc0e948842dd1e456c8293849b3ca168aab4f18baaa32fbe0976e6cff5b"
     );
 }
 
@@ -2370,6 +2382,7 @@ fn generic_task_functions_require_explicit_applications_at_ports() {
             ExpressionRecord::new(
                 value,
                 ExpressionOperation::FunctionValue {
+                    requirement_arguments: Vec::new(),
                     function: DeclarationReference {
                         package: snapshot.root.package_id,
                         declaration: ids.caller,
@@ -2434,6 +2447,7 @@ fn authority_free_task_port_descriptors_can_bind_through_annotated_locals() {
             ExpressionRecord::new(
                 callee,
                 ExpressionOperation::FunctionValue {
+                    requirement_arguments: Vec::new(),
                     effect_arguments: Vec::new(),
                     function: DeclarationReference {
                         package: snapshot.root.package_id,

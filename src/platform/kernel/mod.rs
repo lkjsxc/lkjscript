@@ -26,11 +26,13 @@ mod namespace;
 mod owner;
 mod reference;
 mod relation;
+mod requirement;
 mod root;
 mod scoped;
 mod state;
 mod type_object;
 mod validate;
+pub(crate) mod wire14;
 
 pub(crate) use affine::validate_affine_roots_with_limits;
 pub use codec::{
@@ -65,6 +67,7 @@ pub use relation::{
     PropagationClass, RelationEdge, RelationEndpoint, RelationKind, extract_owner_relations,
     extract_owner_relations_with_limit, extract_relations,
 };
+pub use requirement::*;
 pub use root::*;
 pub(crate) use scoped::*;
 pub use state::{semantic_state_digest, semantic_state_digest_from_root};

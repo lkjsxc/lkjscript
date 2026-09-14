@@ -842,3 +842,32 @@ Changed asset, installation, recovery and nested receipt readers require live om
 consistently rehashed fault fixtures from the first complete matching acceptance; an ignored test
 without that execution remains unrun. Preserve predecessor readers for historical receipts. No
 installation proof licenses graph/artifact/data migration, effect replay or implicit runtime fallback.
+
+## Requirement-parametric library obligations
+
+The offline-package aggregate's current receipt generation is 12. It includes the literal
+`requirement-parameters` workload in its existing owner, covering producer-owned typed-cell
+operations/transactions, T/E/R applications and pure factories, distinct caller requirements,
+transported execution, honest local conditional results, independent typed-byte/store observations,
+reviewed constraint/body edits with before/after definition inspection, rejected insufficient
+dependency replacement and public repair. Its existing DurableQueue helper also executes after
+transport, with raw ready/completed/absent observations through the independent service observer.
+Closed unencodable update results reject before secret acquisition or store creation, and an
+unrelated callback requirement cannot hide in an empty supplied effect row.
+Focused execution uses `offline-packages --case requirement-parameters`; its child receipt is not
+full or target acceptance. The existing full and target readers require this material through the
+aggregate, and omit/forge probes exercise those readers without repeating application effects.
+
+Canonical and normalized tests retain independent affine/reference checks for formal resource
+provenance, matching/borrowing/consumption, alias rejection and cumulative concrete grant accounting.
+A 1/2/16 application ladder checks distinct closed requirement vectors with identical ordinary
+signatures; a finite recursion simultaneously forwards T/E and swaps R arguments. Work and metadata
+bounds, cancellation and preparation exhaustion are separate from semantic acceptance. Fixture
+construction/admission time is not isolated preparation latency and establishes no speedup.
+
+Compatibility evidence binds authentic supported predecessor inputs and executables. Unchanged
+old objects/types/data bytes and identities are checked separately from successor roots, wrappers,
+interfaces and artifacts. Historical acceptance and retries preserve original identities, while
+current validation remains necessary for current execution. No source migration is performed by
+inspection or revalidation. Frozen predecessor publication receipts keep their original verifier
+and obligations; they do not certify these language or reader changes.

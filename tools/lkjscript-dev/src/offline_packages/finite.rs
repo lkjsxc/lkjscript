@@ -735,7 +735,9 @@ pub(super) fn read_focused(path: &Path, candidate: &Path, verifier: &Path) -> Re
     require(
         matches!(
             receipt.schema.as_str(),
-            "lkjscript-offline-finite-callable-1" | "lkjscript-offline-validator-upgrade-1"
+            "lkjscript-offline-finite-callable-1"
+                | "lkjscript-offline-validator-upgrade-1"
+                | "lkjscript-offline-requirement-parameters-1"
         ) && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -760,6 +762,8 @@ pub(super) fn read_focused(path: &Path, candidate: &Path, verifier: &Path) -> Re
     )?;
     let pinned = if receipt.schema == "lkjscript-offline-validator-upgrade-1" {
         predecessor::validate(&receipt, root)?
+    } else if receipt.schema == "lkjscript-offline-requirement-parameters-1" {
+        super::requirements::validate(&receipt, root)?
     } else {
         validate(&receipt, root)?
     };

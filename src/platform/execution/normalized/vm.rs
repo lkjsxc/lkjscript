@@ -574,7 +574,7 @@ impl Machine<'_> {
                     let index = program
                         .requirements
                         .iter()
-                        .position(|r| r.reference == *reference)
+                        .position(|r| Some(r.reference) == reference.concrete())
                         .ok_or_else(|| {
                             type_error("port row requirement is missing from preparation")
                         })?;
@@ -756,25 +756,27 @@ impl Machine<'_> {
                 }
                 NormalizedInstruction::Jump(target) => self.jump(target)?,
                 NormalizedInstruction::Call {
+                    requirement_arguments,
                     effect_arguments,
                     function,
                     type_arguments,
                     arguments,
                 } => {
                     let arguments = self.pop_many(arguments as usize)?;
-                    if !effect_arguments.is_empty() {
+                    if !effect_arguments.is_empty() || !requirement_arguments.is_empty() {
                         return Err(type_error("effect application requires prepared closure"));
                     }
                     let type_arguments = self.resolve_type_arguments(&type_arguments)?;
                     self.call(function, type_arguments, arguments)?;
                 }
                 NormalizedInstruction::TailCall {
+                    requirement_arguments,
                     effect_arguments,
                     function,
                     type_arguments,
                     arguments,
                 } => {
-                    if !effect_arguments.is_empty() {
+                    if !effect_arguments.is_empty() || !requirement_arguments.is_empty() {
                         return Err(type_error("effect application requires prepared closure"));
                     }
                     let arguments = self.pop_many(arguments as usize)?;
@@ -782,11 +784,12 @@ impl Machine<'_> {
                     self.dispatch_call(function, type_arguments, arguments, true)?;
                 }
                 NormalizedInstruction::FunctionValue {
+                    requirement_arguments,
                     effect_arguments,
                     function,
                     type_arguments,
                 } => {
-                    if !effect_arguments.is_empty() {
+                    if !effect_arguments.is_empty() || !requirement_arguments.is_empty() {
                         return Err(type_error("effect application requires prepared closure"));
                     }
                     let type_arguments = self.resolve_type_arguments(&type_arguments)?;
@@ -1027,6 +1030,13 @@ impl Machine<'_> {
                         }
                     }
                     self.jump(jump.target)?;
+                }
+                NormalizedInstruction::PerformParameter { .. }
+                | NormalizedInstruction::BeginParameterTransaction { .. }
+                | NormalizedInstruction::CommitParameterTransaction { .. } => {
+                    return Err(type_error(
+                        "requirement operation requires prepared closure",
+                    ));
                 }
                 NormalizedInstruction::Perform {
                     requirement,

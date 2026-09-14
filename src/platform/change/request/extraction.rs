@@ -107,7 +107,10 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
             "extract.function selector does not name a local function declaration",
         ));
     };
-    if !function.type_parameters.is_empty() || !function.effect_parameters.is_empty() {
+    if !function.type_parameters.is_empty()
+        || !function.effect_parameters.is_empty()
+        || !function.requirement_parameters.is_empty()
+    {
         return Err(extract_error(
             "change_extract_generic_target",
             "extract.function does not admit generic target functions",
@@ -249,12 +252,17 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         .position(|capture| capture.resource_requirement.is_some());
     if let Some(index) = resource_capture {
         let capture = captures.remove(index);
-        requirements.insert(capture.resource_requirement.ok_or_else(|| {
-            extract_corrupt(
-                "change_extract_affine_requirement",
-                "resource capture lost its inferred requirement",
-            )
-        })?);
+        requirements.insert(
+            capture
+                .resource_requirement
+                .ok_or_else(|| {
+                    extract_corrupt(
+                        "change_extract_affine_requirement",
+                        "resource capture lost its inferred requirement",
+                    )
+                })?
+                .into(),
+        );
         captures.push(capture);
     }
     let effect = inferred_effect(&function.effect, &requirements)?;
@@ -355,6 +363,7 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     lowerer.insert_created(OwnerRecord::Expression(ExpressionRecord::new(
         call,
         ExpressionOperation::Call {
+            requirement_arguments: Vec::new(),
             effect_arguments: Vec::new(),
             function: DeclarationReference {
                 package: lowerer.base.package_id(),
@@ -377,6 +386,7 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         name: helper_name.clone(),
         visibility: crate::platform::kernel::DeclarationVisibility::Private,
         payload: DeclarationPayload::Function(FunctionDeclaration {
+            requirement_parameters: Vec::new(),
             effect_parameters: Vec::new(),
             type_parameters: Vec::new(),
             parameters: capture_evidence
@@ -1043,9 +1053,15 @@ fn capture_resource_requirement<B: CanonicalBaseRead + ?Sized>(
             ));
         };
         let mut candidates = Vec::new();
-        for requirement in requirements {
-            if read_requirement_interface(reader, *requirement)? == interface {
-                candidates.push(*requirement);
+        for operand in requirements {
+            let requirement = operand.concrete().ok_or_else(|| {
+                extract_error(
+                    "change_extract_generic_resource",
+                    "generic resource transfer is unsupported",
+                )
+            })?;
+            if read_requirement_interface(reader, requirement)? == interface {
+                candidates.push(requirement);
             }
         }
         return match candidates.as_slice() {
@@ -1070,7 +1086,12 @@ fn capture_resource_requirement<B: CanonicalBaseRead + ?Sized>(
         Some(OwnerRecord::Expression(ExpressionRecord {
             operation: ExpressionOperation::CapabilityCall { requirement, .. },
             ..
-        })) => Ok(requirement),
+        })) => requirement.concrete().ok_or_else(|| {
+            extract_error(
+                "change_extract_generic_resource",
+                "generic resource transfer is unsupported",
+            )
+        }),
         _ => Err(extract_error(
             "change_extract_resource_provenance",
             "captured capability binding is not acquired by one exact capability call",
@@ -1166,7 +1187,7 @@ fn infer_requirements<B: CanonicalBaseRead + ?Sized>(
     function: &FunctionDeclaration,
     inventory: &BodyInventory,
     captures: &[CaptureAnalysis],
-) -> Result<BTreeSet<RequirementReference>, Diagnostic> {
+) -> Result<BTreeSet<crate::platform::kernel::RequirementOperand>, Diagnostic> {
     let mut requirements = BTreeSet::new();
     for owner in &inventory.selected_owners {
         let OwnerKey::Expression(expression) = owner else {
@@ -1198,7 +1219,8 @@ fn infer_requirements<B: CanonicalBaseRead + ?Sized>(
     requirements.extend(
         captures
             .iter()
-            .filter_map(|capture| capture.resource_requirement),
+            .filter_map(|capture| capture.resource_requirement)
+            .map(crate::platform::kernel::RequirementOperand::Concrete),
     );
     let available = match &function.effect {
         FunctionEffect::Pure => BTreeSet::new(),
@@ -1260,7 +1282,7 @@ fn referenced_function_effect<B: CanonicalBaseRead + ?Sized>(
 
 fn inferred_effect(
     caller: &FunctionEffect,
-    required: &BTreeSet<RequirementReference>,
+    required: &BTreeSet<crate::platform::kernel::RequirementOperand>,
 ) -> Result<FunctionEffect, Diagnostic> {
     if required.is_empty() {
         return Ok(FunctionEffect::Pure);

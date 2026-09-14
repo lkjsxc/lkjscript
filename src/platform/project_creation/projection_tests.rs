@@ -595,6 +595,9 @@ fn sort_json_array(value: Option<&mut Value>) {
 }
 
 fn normalize_strings(value: &mut Value, identities: &BTreeMap<String, String>) {
+    if value["kind"] == "concrete" && value["reference"].get("requirement").is_some() {
+        *value = value["reference"].clone();
+    }
     match value {
         Value::String(text) => {
             if let Some(normalized) = identities.get(text) {
@@ -613,7 +616,12 @@ fn normalize_strings(value: &mut Value, identities: &BTreeMap<String, String>) {
             values.remove("graph_contract_version");
             // Effect arity zero preserves predecessor meaning; task kind and every nonempty
             // row/application remain represented in this generation-neutral observation.
-            for key in ["effect_parameters", "effect_arguments"] {
+            for key in [
+                "effect_parameters",
+                "effect_arguments",
+                "requirement_parameters",
+                "requirement_arguments",
+            ] {
                 if values
                     .get(key)
                     .is_some_and(|value| value.as_array().is_some_and(Vec::is_empty))

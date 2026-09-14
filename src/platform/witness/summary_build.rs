@@ -328,10 +328,10 @@ fn selected_aggregation_children<R: SummaryRead>(
         return Ok(children);
     };
     for requirement in requirements {
-        if requirement.package != view.package_id() {
+        if requirement.package() != view.package_id() {
             continue;
         }
-        let child = OwnerKey::Requirement(requirement.requirement);
+        let child = requirement.owner();
         let expected = OwnershipEntry::new(
             OwnershipParent::Owner(owner),
             OwnershipRole::DeclarationRequirement,
@@ -464,6 +464,7 @@ fn aggregation_mode(role: OwnershipRole) -> AggregationMode {
     match role {
         OwnershipRole::DeclarationTypeParameter
         | OwnershipRole::DeclarationEffectParameter
+        | OwnershipRole::DeclarationRequirementParameter
         | OwnershipRole::DeclarationField
         | OwnershipRole::DeclarationCase
         | OwnershipRole::DeclarationOperation
@@ -817,6 +818,12 @@ pub(crate) fn aggregation_children(
                 }));
             }
             DeclarationPayload::Function(function) => {
+                children.extend(function.requirement_parameters.iter().map(|parameter| {
+                    (
+                        OwnershipRole::DeclarationRequirementParameter,
+                        OwnerKey::RequirementParameter(*parameter),
+                    )
+                }));
                 children.extend(function.effect_parameters.iter().map(|parameter| {
                     (
                         OwnershipRole::DeclarationEffectParameter,
@@ -945,6 +952,7 @@ pub(crate) fn aggregation_children(
         OwnerRecord::Module(_)
         | OwnerRecord::TypeParameter(_)
         | OwnerRecord::EffectParameter(_)
+        | OwnerRecord::RequirementParameter(_)
         | OwnerRecord::Field(_)
         | OwnerRecord::Case(_)
         | OwnerRecord::Parameter(_)
@@ -1040,6 +1048,9 @@ fn local_summary(
                 }
                 DeclarationPayload::Function(function) => {
                     interface.piece(7, &function.effect_parameters)?;
+                    if !function.requirement_parameters.is_empty() {
+                        interface.piece(9, &function.requirement_parameters)?;
+                    }
                     interface.raw_piece(2, &[5]);
                     interface.piece(4, &function.type_parameters)?;
                     interface.piece(5, &function.parameters)?;
@@ -1083,6 +1094,11 @@ fn local_summary(
                     test = Some(material.finish(TEST_DIGEST_DOMAIN));
                 }
             }
+        }
+        OwnerRecord::RequirementParameter(record) => {
+            presentation.piece(1, &record.name)?;
+            interface.piece(1, &record.constraint)?;
+            capability.piece(1, &record.constraint)?;
         }
         OwnerRecord::EffectParameter(record) => {
             presentation.piece(1, &record.name)?;

@@ -2676,6 +2676,7 @@ fn validate_parent_identity_class(
         }
         NamespaceClass::TypeParameter
         | NamespaceClass::EffectParameter
+        | NamespaceClass::RequirementParameter
         | NamespaceClass::Field
         | NamespaceClass::Case
         | NamespaceClass::Operation

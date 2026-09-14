@@ -313,6 +313,7 @@ fn flat_oracle_preserves_nested_nominal_and_transient_callable_elements() {
             )))]),
         }),
         NormalizedValue::Function {
+            requirement_arguments: std::sync::Arc::from([]),
             effect_arguments: Arc::from([]),
             function: FunctionIndex(3, origin),
             type_arguments: Arc::from([]),

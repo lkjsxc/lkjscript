@@ -239,6 +239,12 @@ semantic_id!(AnnotationId, "annotation_", "annotation", 16u8);
 semantic_id!(TypeParameterId, "typeparam_", "type_parameter", 17u8);
 semantic_id!(HttpRouteId, "route_", "http_route", 18u8);
 semantic_id!(EffectParameterId, "effectparam_", "effect_parameter", 19u8);
+semantic_id!(
+    RequirementParameterId,
+    "reqparam_",
+    "requirement_parameter",
+    20u8
+);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct RevisionId([u8; 32]);

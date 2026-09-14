@@ -7,7 +7,7 @@ use super::{
     DeclarationVisibility, ExpressionOperation, FunctionDeclaration, FunctionEffect,
     LocalValueReference, OperationRecord, OwnerKey, OwnerRecord, PackageId,
     PackageInterfaceDeclarationPayload, PackageInterfaceRecord, ParameterRecord, ParameterUse,
-    RequirementRecord, RequirementReference, TypeForm, TypeObjectDigest,
+    RequirementReference, TypeForm, TypeObjectDigest,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::{BindingId, DeclarationId, ExpressionId, ParameterId};
@@ -21,7 +21,7 @@ enum ResourceShape {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct Provenance {
-    requirement: RequirementReference,
+    requirement: super::RequirementOperand,
     interface: DeclarationReference,
 }
 
@@ -167,7 +167,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                     value: ResourceValue {
                         shape: ResourceShape::Direct,
                         provenance: Provenance {
-                            requirement: parameter.requirement,
+                            requirement: parameter.requirement.into(),
                             interface: parameter.interface,
                         },
                     },
@@ -733,7 +733,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
             *resource_argument,
             state,
             ParameterUse::Consume,
-            Some(parameter.requirement),
+            Some(parameter.requirement.into()),
         )?;
         if resource.provenance.interface != parameter.interface {
             return Err(affine_error(
@@ -818,7 +818,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
     fn evaluate_capability_call(
         &mut self,
         expression: ExpressionId,
-        requirement: RequirementReference,
+        requirement: super::RequirementOperand,
         operation: super::OperationReference,
         arguments: &[ExpressionId],
         state: &mut FlowState,
@@ -914,7 +914,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
         expression: ExpressionId,
         state: &mut FlowState,
         use_mode: ParameterUse,
-        requirement: Option<RequirementReference>,
+        requirement: Option<super::RequirementOperand>,
     ) -> Result<ResourceValue, Diagnostic> {
         let record = self.expression(expression)?;
         let ExpressionOperation::Local { value } = record.operation else {
@@ -1381,18 +1381,24 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
 
     fn requirement(
         &mut self,
-        requirement: RequirementReference,
-    ) -> Result<RequirementRecord, Diagnostic> {
-        match self.exact_owner(
-            requirement.package,
-            OwnerKey::Requirement(requirement.requirement),
-        )? {
+        requirement: super::RequirementOperand,
+    ) -> Result<super::RequirementConstraint, Diagnostic> {
+        match self.exact_owner(requirement.package(), requirement.owner())? {
             Some(ExactRecord::Local(OwnerRecord::Requirement(record)))
-            | Some(ExactRecord::Foreign(PackageInterfaceRecord::Requirement(record))) => Ok(record),
+            | Some(ExactRecord::Foreign(PackageInterfaceRecord::Requirement(record))) => {
+                Ok(super::RequirementConstraint {
+                    interface: record.interface,
+                    operations: record.operations,
+                })
+            }
+            Some(ExactRecord::Local(OwnerRecord::RequirementParameter(record)))
+            | Some(ExactRecord::Foreign(PackageInterfaceRecord::RequirementParameter(record))) => {
+                Ok(record.constraint)
+            }
             _ => Err(Diagnostic::new(
                 DiagnosticClass::Corrupt,
                 "kernel_affine_requirement_missing",
-                "affine validation cannot read an exact requirement",
+                "affine validation cannot read an exact requirement operand",
             )),
         }
     }
@@ -1569,7 +1575,10 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 "resource-bearing task function must be private",
             ));
         }
-        if !function.type_parameters.is_empty() || !function.effect_parameters.is_empty() {
+        if !function.type_parameters.is_empty()
+            || !function.effect_parameters.is_empty()
+            || !function.requirement_parameters.is_empty()
+        {
             return Err(owner_affine_error(
                 "kernel_affine_function_resource_generic",
                 owner,
@@ -1601,14 +1610,14 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 "resource parameter must bind a same-package requirement",
             ));
         }
-        if !requirements.contains(&resource.requirement) {
+        if !requirements.contains(&resource.requirement.into()) {
             return Err(owner_affine_error(
                 "kernel_affine_function_resource_effect",
                 OwnerKey::Parameter(resource.parameter),
                 "resource parameter binding is absent from its function effect",
             ));
         }
-        let requirement = self.requirement(resource.requirement)?;
+        let requirement = self.requirement(resource.requirement.into())?;
         if requirement.interface != resource.interface {
             return Err(owner_affine_error(
                 "kernel_affine_function_resource_interface",

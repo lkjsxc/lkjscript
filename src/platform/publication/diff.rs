@@ -170,8 +170,9 @@ impl SemanticDiff {
 
     fn validate(&self) -> Result<(), Diagnostic> {
         if self.contract_version != SEMANTIC_DIFF_CONTRACT_VERSION
-            || self.graph_contract_version
-                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+            || !crate::platform::kernel::contract::supported_graph_contract(
+                self.graph_contract_version,
+            )
         {
             return Err(diff_error(
                 DiagnosticClass::Source,

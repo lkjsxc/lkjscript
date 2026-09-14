@@ -7,7 +7,7 @@ mod recursive_tests;
 mod iteration_tests;
 
 #[path = "iteration_resource_tests.rs"]
-mod iteration_resource_tests;
+pub(crate) mod iteration_resource_tests;
 
 #[path = "iteration_transaction_tests.rs"]
 pub(crate) mod iteration_transaction_tests;
@@ -17,6 +17,9 @@ mod iteration_compatibility_tests;
 
 #[path = "effect_tests.rs"]
 pub(crate) mod effect_tests;
+
+#[path = "requirement_tests.rs"]
+pub(crate) mod requirement_tests;
 
 use super::capability::{
     NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilities,
@@ -48,7 +51,7 @@ fn graph14_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
     );
     assert_eq!(
         crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-        14
+        15
     );
     assert_eq!(
         crate::platform::kernel::contract::TYPE_OBJECT_CONTRACT_VERSION,
@@ -537,6 +540,7 @@ fn nominal_phantom_identity_origin_properties_codecs_and_alias_fault_are_indepen
                 name: Name::new(format!("consume-{index}")).unwrap(),
                 visibility: DeclarationVisibility::Private,
                 payload: DeclarationPayload::Function(FunctionDeclaration {
+                    requirement_parameters: Vec::new(),
                     effect_parameters: Vec::new(),
                     type_parameters: vec![],
                     parameters: vec![input],
@@ -1047,6 +1051,7 @@ fn linked_pure_program() -> (
                 body: AuthoredExpression {
                     symbol: Some("$call".to_owned()),
                     operation: AuthoredExpressionOperation::Call {
+                        requirement_arguments: Vec::new(),
                         effect_arguments: Vec::new(),
                         function: AuthoredDeclarationReference::Exact {
                             package: source_reference.package,
@@ -1267,6 +1272,7 @@ fn normalized_worker_snapshot(
                     name: Name::new("worker_iteration").unwrap(),
                     visibility: DeclarationVisibility::Package,
                     payload: DeclarationPayload::Function(FunctionDeclaration {
+                        requirement_parameters: Vec::new(),
                         effect_parameters: Vec::new(),
                         type_parameters: Vec::new(),
                         parameters: Vec::new(),
@@ -1297,6 +1303,7 @@ fn normalized_worker_snapshot(
                 ExpressionRecord::new(
                     value,
                     ExpressionOperation::FunctionValue {
+                        requirement_arguments: Vec::new(),
                         function: reference,
                         type_arguments: Vec::new(),
                         effect_arguments: Vec::new(),
@@ -2171,6 +2178,7 @@ fn normalized_http_pattern_snapshot() -> crate::platform::kernel::KernelSnapshot
         (
             concatenated,
             ExpressionOperation::Call {
+                requirement_arguments: Vec::new(),
                 effect_arguments: Vec::new(),
                 function: DeclarationReference {
                     package,
@@ -2183,6 +2191,7 @@ fn normalized_http_pattern_snapshot() -> crate::platform::kernel::KernelSnapshot
         (
             captured_body,
             ExpressionOperation::Call {
+                requirement_arguments: Vec::new(),
                 effect_arguments: Vec::new(),
                 function: DeclarationReference {
                     package,
@@ -2737,7 +2746,9 @@ fn transaction_call_snapshot(
     operation_record.external_visibility = external_visibility;
     let OwnerRecord::Requirement(requirement_record) = snapshot
         .owners
-        .get_mut(&OwnerKey::Requirement(requirement.requirement))
+        .get_mut(&OwnerKey::Requirement(
+            requirement.concrete().unwrap().requirement,
+        ))
         .expect("coverage requirement owner")
     else {
         panic!("coverage requirement owner kind")
@@ -2822,7 +2833,7 @@ fn strict_graph9_artifact_prepares_only_dense_runtime_bindings() {
 
     assert_eq!(program.work.packages, 1);
     assert_eq!(program.work.compiler_units, 11);
-    assert_eq!(program.work.runtime_owners, 11);
+    assert_eq!(program.work.runtime_owners, 12);
     assert_eq!(program.work.type_objects, 4);
     assert_eq!(program.work.functions, 5);
     assert_eq!(program.work.record_layouts, 1);
@@ -4428,10 +4439,13 @@ fn call_policy_separates_exact_task_requirement_from_component_grant_alias() {
     };
     task_function.effect = FunctionEffect::Task {
         effect_parameters: Vec::new(),
-        requirements: vec![crate::platform::kernel::RequirementReference {
-            package,
-            requirement: alias_id,
-        }],
+        requirements: vec![
+            crate::platform::kernel::RequirementReference {
+                package,
+                requirement: alias_id,
+            }
+            .into(),
+        ],
     };
     let capability = snapshot
         .owners
@@ -4448,7 +4462,11 @@ fn call_policy_separates_exact_task_requirement_from_component_grant_alias() {
     let ExpressionOperation::CapabilityCall { requirement, .. } = &mut capability.operation else {
         panic!("capability call expected");
     };
-    requirement.requirement = alias_id;
+    *requirement = crate::platform::kernel::RequirementReference {
+        package,
+        requirement: alias_id,
+    }
+    .into();
     crate::platform::kernel::tests::update_fixture_task_port_row(&mut snapshot, task.declaration);
     crate::platform::kernel::validate_full(&snapshot).expect("valid requirement alias fixture");
 
@@ -4633,6 +4651,7 @@ fn pure_tail_transfer_rechecks_operand_base_exact_callee_and_caller_authority() 
         (
             vec![
                 NormalizedInstruction::TailCall {
+                    requirement_arguments: Arc::from([]),
                     effect_arguments: Arc::from([]),
                     function: super::value::FunctionIndex(u32::MAX, program.value_origin),
                     type_arguments: Arc::from([]),
@@ -4646,6 +4665,7 @@ fn pure_tail_transfer_rechecks_operand_base_exact_callee_and_caller_authority() 
         (
             vec![
                 NormalizedInstruction::TailCall {
+                    requirement_arguments: Arc::from([]),
                     effect_arguments: Arc::from([]),
                     function: callee_index,
                     type_arguments: Arc::from([TypeObjectDigest::from_bytes([0xff; 32])]),
@@ -4745,6 +4765,7 @@ fn pure_tail_preparation_executes_the_current_maintained_standard_artifact() {
                 list.clone(),
                 NormalizedValue::I64(0),
                 NormalizedValue::Function {
+                    requirement_arguments: std::sync::Arc::from([]),
                     effect_arguments: Arc::from([]),
                     function: index,
                     type_arguments: Arc::from([]),
@@ -4852,6 +4873,7 @@ fn pure_tail_fault_cannot_discard_an_owned_transaction() {
         .expect("transaction instruction");
     let mut instructions = code.instructions[..=begin].to_vec();
     instructions.push(NormalizedInstruction::TailCall {
+        requirement_arguments: Arc::from([]),
         effect_arguments: Arc::from([]),
         function: super::value::FunctionIndex(
             u32::try_from(callee).expect("callee index"),

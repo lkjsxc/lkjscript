@@ -83,13 +83,13 @@ pub fn prepare_initial_publication<S: ImmutableObjectStore + ?Sized>(
     let root = full.binding.semantic.digest;
     let transaction = NormalizedTransaction {
         contract_version: TRANSACTION_CONTRACT_VERSION,
-        graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+        graph_contract_version: full.snapshot.root.graph_contract_version,
         repository_id,
         body: TransactionBody::Bootstrap { result_root: root },
     };
     let semantic_diff = SemanticDiff {
         contract_version: SEMANTIC_DIFF_CONTRACT_VERSION,
-        graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+        graph_contract_version: full.snapshot.root.graph_contract_version,
         repository_id,
         body: SemanticDiffBody::Bootstrap {
             result_root: root,
@@ -156,6 +156,30 @@ pub fn prepare_change_publication<
     store: &S,
     options: PublicationOptions,
 ) -> Result<PreparedPublication, Vec<Diagnostic>> {
+    prepare_change_publication_with_facts(
+        base,
+        base_snapshot,
+        base_witness,
+        analysis,
+        store,
+        options,
+        None,
+    )
+}
+
+pub(crate) fn prepare_change_publication_with_facts<
+    B: CanonicalBaseRead + ?Sized,
+    W: WitnessBaseRead + ?Sized,
+    S: ImmutableObjectStore + ?Sized,
+>(
+    base: AcceptedBinding,
+    base_snapshot: &B,
+    base_witness: &W,
+    analysis: &PreparedChangeAnalysis,
+    store: &S,
+    options: PublicationOptions,
+    current_facts: Option<&crate::platform::witness::CanonicalWitnessFacts>,
+) -> Result<PreparedPublication, Vec<Diagnostic>> {
     validate_base(
         base,
         base_snapshot,
@@ -204,7 +228,31 @@ pub fn prepare_change_publication<
         },
         read_admission,
     );
-    let authority = stage_prepared_authority(
+    // Revalidation pages are read-only derived context until this accepted transition. Stage
+    // them against physical storage, so reuse cannot leave the new witness pointing at memory
+    // that disappears with its creator view. ObjectStage charges before every retained growth.
+    let mut support_work = StoreWork::default();
+    if let Some(facts) = current_facts {
+        for (digest, bytes) in &facts.summary_objects {
+            stage_object(
+                &mut stage,
+                ObjectDomain::OwnerSummary,
+                digest.bytes(),
+                bytes,
+                &mut support_work,
+            )?;
+        }
+        for (digest, bytes) in facts.pages.objects() {
+            stage_object(
+                &mut stage,
+                ObjectDomain::MapPage,
+                digest.bytes(),
+                bytes,
+                &mut support_work,
+            )?;
+        }
+    }
+    let mut authority = stage_prepared_authority(
         canonical_base.semantic_root(),
         base_witness,
         analysis,
@@ -212,6 +260,7 @@ pub fn prepare_change_publication<
         &mut stage,
         map_admission,
     )?;
+    authority.store_work.add(support_work);
     if authority.semantic.state == base.semantic_state {
         return Err(vec![publication_error(
             DiagnosticClass::Semantic,
@@ -395,7 +444,7 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
         .collect();
     let core = RevisionCore {
         contract_version: REVISION_CONTRACT_VERSION,
-        graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+        graph_contract_version: authority.semantic.root.graph_contract_version,
         repository_id,
         parents,
         semantic_state: authority.semantic.state,
@@ -453,7 +502,7 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
     let bases = core.parents.clone();
     let receipt = PublicationReceipt {
         contract_version: RECEIPT_CONTRACT_VERSION,
-        graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+        graph_contract_version: authority.semantic.root.graph_contract_version,
         repository_id,
         status,
         bases,
@@ -500,7 +549,7 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
     )?;
     let head = HeadRecord {
         contract_version: REVISION_CONTRACT_VERSION,
-        graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+        graph_contract_version: authority.semantic.root.graph_contract_version,
         repository_id,
         revision: revision.revision,
         record: revision_digest,
@@ -727,7 +776,7 @@ fn transaction_for_change(
 ) -> NormalizedTransaction {
     NormalizedTransaction {
         contract_version: TRANSACTION_CONTRACT_VERSION,
-        graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+        graph_contract_version: authority.semantic.root.graph_contract_version,
         repository_id: authority.semantic.root.repository_id,
         body: TransactionBody::Change {
             base: base.head.revision,
@@ -907,7 +956,7 @@ fn diff_for_change(
     }
     Ok(SemanticDiff {
         contract_version: SEMANTIC_DIFF_CONTRACT_VERSION,
-        graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+        graph_contract_version: authority.semantic.root.graph_contract_version,
         repository_id: authority.semantic.root.repository_id,
         body: SemanticDiffBody::Change {
             base: base.head.revision,

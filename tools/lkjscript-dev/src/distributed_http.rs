@@ -2584,7 +2584,7 @@ fn project_function_definition(
         )?;
         require_exact(
             required_field(projection, "contract")?,
-            "lkjscript-function-definition-projection-6",
+            "lkjscript-function-definition-projection-7",
             "definition contract",
         )?;
         require_exact(

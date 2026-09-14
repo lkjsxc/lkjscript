@@ -74,25 +74,30 @@ unused at reconciliation. Do not defer this selected delivery to requirement par
 semantic campaign; later reporting/main progress must not retarget its frozen proof source.
 Repair candidate `4306ef64` passed exact-source rehearsal `34786835189/1`. Its original
 full-prepare binding, package, six target and installed-pair evidence are authenticated and retained;
-the final-source 76-omission reader test passes. Continue its independent v0.1.35 publisher and
-anonymous installed public acceptance without another rehearsal or retargeting frozen inputs.
+the final-source 76-omission reader test passes. Publisher `34847832173/1` subsequently completed
+successfully on that frozen source at 2026-09-14T16:13:06Z. Immutable v0.1.35 release `388511109`
+and both anonymous installed routes passed; original package, six-target, simulated-pair and public
+pair readers accept the retained evidence. Named-reference/finite-callable delivery is closed.
+Earlier unused-tag and pending-publication statements above retain their historical observation time.
 The [requirement-parameter mandate](campaigns/202609140938.md) now selects the missing ordinary
 library mechanism and honest typed-cell `UpdateAttempt<T>` workload. No pre-existing implementation
 was found. Its engineering acceptance and one-campaign successor release deferral have not begun.
 
-Remaining observed burden is ordered flat expression/type assembly and request-wide creator
-symbols. If exact capability policy must still be repeated across packages/components, the next
-semantic candidate is explicit operation-bearing requirement parameters with exact interface and
-operation constraints, followed by a coherent resource-transfer contract. If expression assembly
-dominates instead, consider a structural request-block adapter over the same typed intent. These
-are contingent directions, not authorized work. The finite campaign's actual predecessor probes
+The requirement candidate implements the selected operation/transaction abstraction and its public
+maintenance path; final fresh full/static-target proof and integration remain pending. Its literal
+requests make ordered flat expression/type assembly and request-wide creator symbols observable.
+After acceptance, the next architectural reassessment must select one concrete combined substantive
+composition/authoring milestone or publish this capability alone. Deferral may cover at most that
+one campaign and cannot be renewed. A structural request-block adapter is a contingent candidate
+against this actual workload, not an authorized parser redesign. The finite campaign's predecessor probes
 established that a swap was admitted and ran, while an untaken expanding call was published and
 failed only at reference preparation exhaustion. The new canonical rule addresses that boundary.
-Its designed task witness still places concrete Configuration/DataStore operations and explicit
-transaction ownership in the consumer; reusable operation-constrained requirements remain the
-strongest next semantic candidate after this selected delivery completes.
-Large historical-repository revalidation cost is not yet characterized and may revise that priority
-if measured. This outlook is revisable and authorizes no subsequent feature work.
+Its earlier designed task witness placed concrete Configuration/DataStore operations and transaction
+ownership in the consumer. The requirement candidate's ordinary producer now owns those operations;
+its `UpdateAttempt<T>` still cannot certify publication after an arbitrary effectful callback.
+An observable transaction outcome or general affine transfer needs a later concrete blocked library
+and separate authority. Large historical-repository revalidation cost remains unmeasured. This
+outlook is revisable and authorizes no subsequent feature work.
 Immutable v0.1.8 remains the unchanged historical recovery point; its workflow defect was recovered additively.
 
 Each future item requires demonstrated usefulness and composition through a representative public

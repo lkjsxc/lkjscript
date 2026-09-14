@@ -1,0 +1,14 @@
+reference.owner as=$update package=$library class=declaration name=attempt-update
+reference.owner as=$module package=local class=module name=cell-consumer
+reference.owner as=$component package=local class=declaration parent=$module name=cells
+reference.owner as=$config package=local class=requirement parent=$component name=suffix-config
+effect.row as=@Empty
+expression.function-value as=$invalid function=$update
+type.argument parent=$invalid index=0 type=i64
+effect.argument parent=$invalid index=0 effect=@Empty
+requirement.argument parent=$invalid index=0 requirement=$config
+expression.unit as=$unit
+expression.sequence as=$body
+expression.argument parent=$body index=0 expression=$invalid
+expression.argument parent=$body index=1 expression=$unit
+create.function as=$bad module=$module name=unused-foreign-interface visibility=private result=unit effect=pure body=$body

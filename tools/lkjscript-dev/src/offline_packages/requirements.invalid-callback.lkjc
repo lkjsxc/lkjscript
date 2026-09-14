@@ -1,0 +1,30 @@
+reference.owner as=$update package=$library class=declaration name=attempt-update
+reference.owner as=$module package=local class=module name=cell-consumer
+reference.owner as=$component package=local class=declaration parent=$module name=cells
+reference.owner as=$texts package=local class=requirement parent=$component name=settings-store
+reference.owner as=$suffix package=local class=declaration parent=$module name=append-configured-suffix
+reference.package as=$std source=builtin
+reference.owner as=$KeyPart package=$std class=declaration name=DataKeyPart
+reference.owner as=$from-static package=$std class=declaration name=text-from-static
+type.named as=@KeyPart declaration=$KeyPart
+effect.row as=@Empty
+expression.static-text as=$space value=typed-cell
+expression.static-text as=$default-static value=a
+expression.call as=$default function=$from-static
+expression.argument parent=$default index=0 expression=$default-static
+expression.function-value as=$callback function=$suffix
+expression.list as=$key item=@KeyPart
+expression.call as=$invalid function=$update
+type.argument parent=$invalid index=0 type=text
+effect.argument parent=$invalid index=0 effect=@Empty
+requirement.argument parent=$invalid index=0 requirement=$texts
+expression.argument parent=$invalid index=0 expression=$space
+expression.argument parent=$invalid index=1 expression=$default
+expression.argument parent=$invalid index=2 expression=$callback
+expression.argument parent=$invalid index=3 expression=$key
+expression.unit as=$unit
+expression.sequence as=$body
+expression.argument parent=$body index=0 expression=$invalid
+expression.argument parent=$body index=1 expression=$unit
+create.function as=$bad module=$module name=unrelated-callback-without-row visibility=private result=unit effect=task body=$body
+effect.requirement parent=$bad index=0 requirement=$texts

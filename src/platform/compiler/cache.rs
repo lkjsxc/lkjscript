@@ -605,6 +605,17 @@ fn bind_manifest_to_current(
     manifest: &CompilationManifest,
     view: &RepositoryView,
 ) -> Result<(), Diagnostic> {
+    if manifest.compiler_contract_version != COMPILER_UNIT_CONTRACT_VERSION
+        || manifest.bytecode_contract_version != BYTECODE_CONTRACT_VERSION
+        || manifest.graph_contract_version
+            != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+    {
+        return Err(cache_error(
+            DiagnosticClass::Source,
+            "compilation_cache_contract_outdated",
+            "derived compilation was produced under a supported predecessor contract; rebuild it under the current compiler",
+        ));
+    }
     let package_revision = view.build_package_revision()?;
     if manifest.repository_id != view.current().head.repository_id
         || manifest.package_id != view.package()

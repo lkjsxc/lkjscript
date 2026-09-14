@@ -430,6 +430,7 @@ pub(crate) fn complete_expression_snapshot() -> crate::platform::kernel::KernelS
         &mut snapshot,
         8,
         ExpressionOperation::FunctionValue {
+            requirement_arguments: Vec::new(),
             effect_arguments: Vec::new(),
             function: crate::platform::kernel::DeclarationReference {
                 package,
@@ -442,6 +443,7 @@ pub(crate) fn complete_expression_snapshot() -> crate::platform::kernel::KernelS
         &mut snapshot,
         9,
         ExpressionOperation::FunctionValue {
+            requirement_arguments: Vec::new(),
             effect_arguments: Vec::new(),
             function: crate::platform::kernel::DeclarationReference {
                 package,
@@ -537,7 +539,8 @@ pub(crate) fn complete_expression_snapshot() -> crate::platform::kernel::KernelS
             requirement: RequirementReference {
                 package,
                 requirement,
-            },
+            }
+            .into(),
             binding: transaction_binding,
             body: transaction_body,
         },
@@ -651,7 +654,7 @@ fn task_unit_uses_exact_dense_nominal_and_capability_operands() {
     else {
         panic!("caller task effect")
     };
-    assert_eq!(requirements, &[declared_requirement]);
+    assert_eq!(requirements, &[declared_requirement.into()]);
 
     let mut saw_record = false;
     let mut saw_field = false;
@@ -1622,7 +1625,7 @@ fn graph9_artifact_links_deterministically_and_reopens_without_graph4_modules() 
     assert_eq!(first.artifact.bytes, second.artifact.bytes);
     assert_eq!(first.artifact.bundle_digest, second.artifact.bundle_digest);
     assert_eq!(first.work.compiler_units, 11);
-    assert_eq!(first.work.runtime_owners, 11);
+    assert_eq!(first.work.runtime_owners, 12);
     assert_eq!(first.work.packages, 1);
     assert!(
         !first
@@ -1645,7 +1648,7 @@ fn graph9_artifact_links_deterministically_and_reopens_without_graph4_modules() 
             .expect("root package")
             .runtime_owners
             .len(),
-        11
+        12
     );
 
     drop(created);

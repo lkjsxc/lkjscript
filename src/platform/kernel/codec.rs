@@ -1,4 +1,4 @@
-//! Strict Graph 14 owner codecs, unchanged base TypeObject 10 and disjoint nominal applications.
+//! Strict current/predecessor owner codecs and unchanged base TypeObject 10.
 
 use super::contract::{
     DEPENDENCY_ENVELOPE_DOMAIN, DEPENDENCY_MAGIC, MAXIMUM_DEPENDENCY_BYTES,
@@ -28,6 +28,86 @@ pub const RETIREMENT_BINDING_BYTES: usize = 32;
 mod nominal_encoding_tests {
     use super::*;
     use crate::platform::kernel::{DeclarationReference, TypeForm};
+
+    #[test]
+    fn requirement_task_envelopes_preserve_predecessor_and_reject_malformed_extensions() {
+        use crate::platform::kernel::{
+            EffectRow, RequirementOperand, RequirementParameterReference, RequirementReference,
+        };
+        let package = "pkg_10000000000000000000000000000001".parse().unwrap();
+        let result = encode_type_object(&TypeObject::new(TypeForm::Unit).unwrap())
+            .unwrap()
+            .0;
+        let concrete = RequirementOperand::Concrete(RequirementReference {
+            package,
+            requirement: crate::platform::semantic_id::RequirementId::migrate(
+                b"requirement-wire",
+                0,
+            ),
+        });
+        let parameter = RequirementOperand::Parameter(RequirementParameterReference {
+            package,
+            parameter: crate::platform::semantic_id::RequirementParameterId::migrate(
+                b"requirement-wire",
+                0,
+            ),
+        });
+        for (operand, magic) in [(concrete, b"LKJTFN01"), (parameter, b"LKJTFN02")] {
+            let object = TypeObject::new(TypeForm::TaskFunction {
+                parameters: vec![],
+                result,
+                effect: EffectRow {
+                    requirements: vec![operand],
+                    parameters: vec![],
+                },
+            })
+            .unwrap();
+            let (digest, bytes) = encode_type_object(&object).unwrap();
+            assert_eq!(&bytes[..8], magic);
+            assert_eq!(
+                encode_type_object(&decode_type_object(&bytes, digest).unwrap()).unwrap(),
+                (digest, bytes.clone())
+            );
+            if operand == concrete {
+                let old: TaskFunctionObject<super::super::wire14::EffectRow14> = packed::decode(
+                    &bytes,
+                    super::super::contract::TASK_FUNCTION_MAGIC,
+                    super::super::contract::TASK_FUNCTION_ENVELOPE_DOMAIN,
+                    MAXIMUM_TYPE_OBJECT_BYTES,
+                )
+                .unwrap();
+                assert_eq!(old.contract_version, 1);
+                assert_eq!(old.effect.requirements.len(), 1);
+            } else {
+                let task = TaskFunctionObject {
+                    contract_version: 99,
+                    tag: 1,
+                    parameters: vec![],
+                    result,
+                    effect: EffectRow {
+                        requirements: vec![operand],
+                        parameters: vec![],
+                    },
+                };
+                let unsupported = packed::encode(
+                    super::super::contract::REQUIREMENT_TASK_FUNCTION_MAGIC,
+                    super::super::contract::REQUIREMENT_TASK_FUNCTION_ENVELOPE_DOMAIN,
+                    &task,
+                    MAXIMUM_TYPE_OBJECT_BYTES,
+                )
+                .unwrap();
+                let error = decode_type_object(&unsupported, TypeObjectDigest::of(&unsupported))
+                    .unwrap_err();
+                assert_eq!(error.code, "kernel_type_contract");
+                let mut malformed = bytes.clone();
+                malformed.push(0);
+                assert!(decode_type_object(&malformed, TypeObjectDigest::of(&malformed)).is_err());
+                let mut old = object.clone();
+                old.contract_version = 1;
+                assert!(encode_type_object(&old).is_err());
+            }
+        }
+    }
 
     #[test]
     fn positive_application_has_one_encoding_and_ordered_nominal_identity() {
@@ -184,6 +264,16 @@ pub fn decode_retirement_binding(bytes: &[u8]) -> Result<RetirementBinding, Diag
 
 pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>), Diagnostic> {
     record.validate_local()?;
+    if record.header().contract_version == super::contract::PREDECESSOR_GRAPH_CONTRACT_VERSION {
+        let wire = super::wire14::OwnerRecord14::try_from(record.clone())?;
+        let bytes = packed::encode(
+            super::contract::PREDECESSOR_OWNER_MAGIC,
+            super::contract::PREDECESSOR_OWNER_ENVELOPE_DOMAIN,
+            &wire,
+            MAXIMUM_OWNER_OBJECT_BYTES,
+        )?;
+        return Ok((OwnerObjectDigest::of(&bytes), bytes));
+    }
     let bytes = packed::encode(
         OWNER_MAGIC,
         OWNER_ENVELOPE_DOMAIN,
@@ -204,12 +294,29 @@ pub fn decode_owner(
         OwnerObjectDigest::of(bytes).bytes(),
         "owner",
     )?;
-    let record: OwnerRecord = packed::decode(
-        bytes,
-        OWNER_MAGIC,
-        OWNER_ENVELOPE_DOMAIN,
-        MAXIMUM_OWNER_OBJECT_BYTES,
-    )?;
+    let record: OwnerRecord = if bytes.starts_with(&super::contract::PREDECESSOR_OWNER_MAGIC) {
+        let wire: super::wire14::OwnerRecord14 = packed::decode(
+            bytes,
+            super::contract::PREDECESSOR_OWNER_MAGIC,
+            super::contract::PREDECESSOR_OWNER_ENVELOPE_DOMAIN,
+            MAXIMUM_OWNER_OBJECT_BYTES,
+        )?;
+        let record: OwnerRecord = wire.into();
+        if record.header().contract_version != super::contract::PREDECESSOR_GRAPH_CONTRACT_VERSION {
+            return Err(codec_error(
+                "kernel_owner_encoding_generation",
+                "predecessor envelope has a foreign owner generation",
+            ));
+        }
+        record
+    } else {
+        packed::decode(
+            bytes,
+            OWNER_MAGIC,
+            OWNER_ENVELOPE_DOMAIN,
+            MAXIMUM_OWNER_OBJECT_BYTES,
+        )?
+    };
     record.validate_local()?;
     if record.owner() != expected_owner || record.kind() != expected_kind {
         return Err(codec_error(
@@ -236,18 +343,33 @@ pub fn encode_type_object(object: &TypeObject) -> Result<(TypeObjectDigest, Vec<
         effect,
     } = &object.form
     {
-        let bytes = packed::encode(
-            super::contract::TASK_FUNCTION_MAGIC,
-            super::contract::TASK_FUNCTION_ENVELOPE_DOMAIN,
-            &TaskFunctionObject {
-                contract_version: object.contract_version,
-                tag: 1,
-                parameters: parameters.clone(),
-                result: *result,
-                effect: effect.clone(),
-            },
-            MAXIMUM_TYPE_OBJECT_BYTES,
-        )?;
+        let bytes = if object.contract_version == 1 {
+            packed::encode(
+                super::contract::TASK_FUNCTION_MAGIC,
+                super::contract::TASK_FUNCTION_ENVELOPE_DOMAIN,
+                &TaskFunctionObject {
+                    contract_version: object.contract_version,
+                    tag: 1,
+                    parameters: parameters.clone(),
+                    result: *result,
+                    effect: super::wire14::EffectRow14::try_from(effect.clone())?,
+                },
+                MAXIMUM_TYPE_OBJECT_BYTES,
+            )?
+        } else {
+            packed::encode(
+                super::contract::REQUIREMENT_TASK_FUNCTION_MAGIC,
+                super::contract::REQUIREMENT_TASK_FUNCTION_ENVELOPE_DOMAIN,
+                &TaskFunctionObject {
+                    contract_version: object.contract_version,
+                    tag: 1,
+                    parameters: parameters.clone(),
+                    result: *result,
+                    effect: effect.clone(),
+                },
+                MAXIMUM_TYPE_OBJECT_BYTES,
+            )?
+        };
         return Ok((TypeObjectDigest::of(&bytes), bytes));
     }
     if let super::type_object::TypeForm::Applied {
@@ -286,12 +408,12 @@ struct NominalApplicationObject {
 }
 
 #[derive(bincode::Encode, bincode::Decode)]
-struct TaskFunctionObject {
+struct TaskFunctionObject<Row> {
     contract_version: u16,
     tag: u8,
     parameters: Vec<TypeObjectDigest>,
     result: TypeObjectDigest,
-    effect: super::EffectRow,
+    effect: Row,
 }
 
 pub fn decode_type_object(
@@ -303,13 +425,32 @@ pub fn decode_type_object(
         TypeObjectDigest::of(bytes).bytes(),
         "type",
     )?;
-    if bytes.starts_with(&super::contract::TASK_FUNCTION_MAGIC) {
-        let task: TaskFunctionObject = packed::decode(
-            bytes,
-            super::contract::TASK_FUNCTION_MAGIC,
-            super::contract::TASK_FUNCTION_ENVELOPE_DOMAIN,
-            MAXIMUM_TYPE_OBJECT_BYTES,
-        )?;
+    if bytes.starts_with(&super::contract::TASK_FUNCTION_MAGIC)
+        || bytes.starts_with(&super::contract::REQUIREMENT_TASK_FUNCTION_MAGIC)
+    {
+        let task: TaskFunctionObject<super::EffectRow> =
+            if bytes.starts_with(&super::contract::TASK_FUNCTION_MAGIC) {
+                let old: TaskFunctionObject<super::wire14::EffectRow14> = packed::decode(
+                    bytes,
+                    super::contract::TASK_FUNCTION_MAGIC,
+                    super::contract::TASK_FUNCTION_ENVELOPE_DOMAIN,
+                    MAXIMUM_TYPE_OBJECT_BYTES,
+                )?;
+                TaskFunctionObject {
+                    contract_version: old.contract_version,
+                    tag: old.tag,
+                    parameters: old.parameters,
+                    result: old.result,
+                    effect: old.effect.into(),
+                }
+            } else {
+                packed::decode(
+                    bytes,
+                    super::contract::REQUIREMENT_TASK_FUNCTION_MAGIC,
+                    super::contract::REQUIREMENT_TASK_FUNCTION_ENVELOPE_DOMAIN,
+                    MAXIMUM_TYPE_OBJECT_BYTES,
+                )?
+            };
         if task.tag != 1 {
             return Err(codec_error(
                 "kernel_task_function_tag",

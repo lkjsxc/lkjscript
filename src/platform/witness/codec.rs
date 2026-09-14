@@ -192,7 +192,7 @@ fn validate_manifest_content(manifest: &ValidationWitnessManifest) -> Result<(),
             "validation witness uses a foreign witness contract",
         ));
     }
-    if manifest.graph_contract_version != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+    if !crate::platform::kernel::contract::supported_graph_contract(manifest.graph_contract_version)
     {
         return Err(codec_error(
             "witness_validator_contract",

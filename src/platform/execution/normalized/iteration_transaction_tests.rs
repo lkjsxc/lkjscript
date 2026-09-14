@@ -19,7 +19,7 @@ pub(crate) fn fixture(
     let unit = f.result;
     let requirement = f.effect.row().requirements[0];
     let OwnerRecord::Requirement(req) =
-        &snapshot.owners[&OwnerKey::Requirement(requirement.requirement)]
+        &snapshot.owners[&OwnerKey::Requirement(requirement.concrete().unwrap().requirement)]
     else {
         panic!("requirement")
     };
@@ -59,6 +59,7 @@ pub(crate) fn fixture(
     let again = expression(
         &mut snapshot,
         ExpressionOperation::Call {
+            requirement_arguments: Vec::new(),
             function: DeclarationReference {
                 package: caller.package,
                 declaration: relay,
@@ -118,6 +119,7 @@ pub(crate) fn fixture(
     let call = expression(
         &mut snapshot,
         ExpressionOperation::Call {
+            requirement_arguments: Vec::new(),
             function: DeclarationReference {
                 package: caller.package,
                 declaration: relay,

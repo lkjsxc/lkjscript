@@ -211,7 +211,13 @@ fn stage_semantic_delta<S: ImmutableObjectStore + ?Sized>(
     merge_store_work(store_work, page_store_work);
 
     let root = SemanticRoot {
-        graph_contract_version: root.graph_contract_version,
+        graph_contract_version: if delta.is_empty() {
+            root.graph_contract_version
+        } else {
+            delta
+                .accepted_retry_encoding
+                .unwrap_or(crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
+        },
         repository_id: root.repository_id,
         package_id: root.package_id,
         package_name: root.package_name.clone(),

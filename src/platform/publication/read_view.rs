@@ -1,9 +1,7 @@
 //! Revision-pinned, bounded reads over accepted Graph 10 authority and its committed witness.
 
 use super::validation::{RevalidatedBase, ViewStore};
-use super::{
-    CurrentPublication, PreparedPublication, PublicationOptions, prepare_change_publication,
-};
+use super::{CurrentPublication, PreparedPublication, PublicationOptions};
 use crate::platform::change::{
     AuthoredAllocation, AuthoredChangeSet, AuthoredLoweringWork, BoundOwnerSummary,
     BudgetedCanonicalBase, BudgetedWitnessBase, CanonicalBaseRead, CanonicalDelta, CanonicalRead,
@@ -1147,13 +1145,14 @@ impl RepositoryView {
         };
         analysis.canonical_read_work.add(budget_reads.canonical);
         analysis.witness_read_work.add(prior_work.witness);
-        let publication = prepare_change_publication(
+        let publication = super::prepare::prepare_change_publication_with_facts(
             self.current.accepted,
             self,
             self,
             &analysis,
-            &self.store,
+            self.store.persistent_base(),
             options,
+            self.revalidated.as_ref().map(|base| &base.facts),
         )?;
         super::repository::validate_prepared_dependency_sources(&self.store, &publication)
             .map_err(|diagnostic| vec![diagnostic])?;
@@ -1843,7 +1842,12 @@ impl RepositoryView {
             interface_owners,
             interface_types,
             read_work,
-        } = self.build_package_revision()?;
+        } = self.build_package_revision().map_err(|mut error| {
+            error
+                .notes
+                .push("while projecting the exact public package interface".into());
+            error
+        })?;
         let transport = PackageTransport {
             contract_version: PACKAGE_TRANSPORT_CONTRACT_VERSION,
             graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
@@ -1903,7 +1907,13 @@ impl RepositoryView {
             ),
             None,
             &mut closure_work,
-        )?;
+        )
+        .map_err(|mut error| {
+            error
+                .notes
+                .push("while resolving historical package transport selections".into());
+            error
+        })?;
         if validated.root_revision != revision || validated.root_transport != transport {
             return Err(read_error(
                 DiagnosticClass::Corrupt,
@@ -1918,8 +1928,19 @@ impl RepositoryView {
                 transport: transport_digest,
             },
             &validated.selections,
-        )?;
-        let container = admitted.container.encode()?;
+        )
+        .map_err(|mut error| {
+            error
+                .notes
+                .push("while collecting authenticated package source objects".into());
+            error
+        })?;
+        let container = admitted.container.encode().map_err(|mut error| {
+            error
+                .notes
+                .push("while encoding the collected package container".into());
+            error
+        })?;
         Ok(ExportedPackageTransport {
             revision,
             revision_digest,
@@ -3278,6 +3299,10 @@ fn admit_decoded_records(
 }
 
 impl CanonicalBaseRead for RepositoryView {
+    fn accepted_retry_encoding(&self) -> Option<u16> {
+        self.idempotent_result
+            .map(|result| result.graph_contract_version)
+    }
     fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
         self.control
             .check()

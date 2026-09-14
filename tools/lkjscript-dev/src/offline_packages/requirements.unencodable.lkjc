@@ -1,0 +1,27 @@
+type.function as=@UnencodableCell result=i64
+type.argument parent=@UnencodableCell index=0 type=i64
+type.application as=@UnencodableAttempt declaration=$Attempt
+type.argument parent=@UnencodableAttempt index=0 type=@UnencodableCell
+add.parameter as=$unsupported-identity-input function=$unsupported-identity name=value type=i64
+expression.local as=$unsupported-identity-body value=$unsupported-identity-input
+create.function as=$unsupported-identity module=$module name=unsupported-identity visibility=private result=i64 effect=pure body=$unsupported-identity-body
+add.parameter as=$unsupported-transform-input function=$unsupported-transform name=value type=@UnencodableCell
+expression.local as=$unsupported-transform-body value=$unsupported-transform-input
+create.function as=$unsupported-transform module=$module name=unsupported-transform visibility=private result=@UnencodableCell effect=task body=$unsupported-transform-body
+expression.static-text as=$unsupported-space value=typed-cell
+expression.function-value as=$unsupported-default function=$unsupported-identity
+expression.function-value as=$unsupported-callback function=$unsupported-transform
+expression.list as=$unsupported-key item=@KeyPart
+expression.call as=$unsupported-attempt function=$attempt-update
+type.argument parent=$unsupported-attempt index=0 type=@UnencodableCell
+effect.argument parent=$unsupported-attempt index=0 effect=@Empty
+requirement.argument parent=$unsupported-attempt index=0 requirement=$numbers
+expression.argument parent=$unsupported-attempt index=0 expression=$unsupported-space
+expression.argument parent=$unsupported-attempt index=1 expression=$unsupported-default
+expression.argument parent=$unsupported-attempt index=2 expression=$unsupported-callback
+expression.argument parent=$unsupported-attempt index=3 expression=$unsupported-key
+create.function as=$unsupported-entry module=$module name=unencodable-cell visibility=private result=@UnencodableAttempt effect=task body=$unsupported-attempt
+effect.requirement parent=$unsupported-entry index=0 requirement=$numbers
+type.task-function as=@UnencodablePort result=@UnencodableAttempt effect=@Numbers
+add.port as=$unsupported-port component=$component name=unencodable-cell type=@UnencodablePort function=$unsupported-entry
+create.target as=$unsupported-target name=unencodable-cell component=$component port=$unsupported-port runner=command

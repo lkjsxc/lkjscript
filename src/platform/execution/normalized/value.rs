@@ -107,6 +107,7 @@ pub enum NormalizedValue {
         function: FunctionIndex,
         type_arguments: Arc<[TypeObjectDigest]>,
         effect_arguments: Arc<[crate::platform::kernel::EffectRow]>,
+        requirement_arguments: Arc<[crate::platform::kernel::RequirementOperand]>,
         bound_arguments: Option<Arc<Vec<NormalizedValue>>>,
     },
     Resource(NormalizedResourceHandle),

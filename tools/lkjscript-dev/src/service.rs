@@ -49,7 +49,7 @@ const WORKER_HELPER_FUNCTION: &str = "decl_7f443401f4946c55fa239c5430e8ad93";
 const WORKER_QUEUE_REQUIREMENT: &str = "req_0cebded5cb056cda5484e39aa40594ad";
 const SERVICE_ARTIFACT_RELATIVE: &str = "generated/lkjournal.lkja";
 const SERVICE_ARTIFACT_SHA256: &str =
-    "1941459005944b1b9c27657544e39d31fa3c4c30bc63b7bf8ddee1e6e2554db1";
+    "2bed39723688ceafaf7bb7fd7e88e39910ab964ae26fd3bd77acd4ca052c9502";
 const HTTP_REQUEST_TYPE: &str =
     "type_object_b84486b5e78230fd2b9c4bdcedc6f4ee1fb08838bc3b178aab0d3fb5967a6a44";
 const HTTP_RESPONSE_TYPE: &str =
@@ -708,6 +708,7 @@ struct ObservedQueueJob {
     worker_id: Option<String>,
     lease_until: Option<i64>,
     last_error_class: Option<String>,
+    result: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -3196,7 +3197,7 @@ fn decode_queue_job(bytes: &[u8]) -> Result<ObservedQueueJob, ServiceFailure> {
     let attempt_id = cursor.optional_text(512)?;
     let worker_id = cursor.optional_text(512)?;
     let lease_until = cursor.optional_i64()?;
-    let _result = cursor.optional_blob(1_048_576)?;
+    let result = cursor.optional_blob(1_048_576)?;
     let last_error_class = cursor.optional_text(128)?;
     cursor.finish()?;
     let owns_transition_authority =
@@ -3214,7 +3215,19 @@ fn decode_queue_job(bytes: &[u8]) -> Result<ObservedQueueJob, ServiceFailure> {
         worker_id,
         lease_until,
         last_error_class,
+        result,
     })
+}
+
+// Read-only reuse of the independent queue wire observer by the offline library workload.
+// The product queue adapter and its job decoder do not supply this answer.
+pub(crate) fn observe_queue_record(bytes: &[u8]) -> Result<Value, DevError> {
+    let job = decode_queue_job(bytes).map_err(|e| DevError::corrupt(e.message))?;
+    Ok(serde_json::json!({
+        "job": job.job_id, "state": job.state.name(), "attempts": job.attempt_count,
+        "attempt": job.attempt_id, "worker": job.worker_id, "lease_until": job.lease_until,
+        "error": job.last_error_class, "result": job.result
+    }))
 }
 
 fn queue_schema_digest(identity: &str) -> Vec<u8> {

@@ -8,7 +8,6 @@ use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::*;
 use crate::platform::package_interface::{
     PackageInterfaceOwner, PackageInterfaceSelection, build_package_interface,
-    package_interface_digest,
 };
 use crate::platform::persistent_map::{MapRoot, MapWork, PersistentMap};
 use crate::platform::storage::object::{
@@ -302,6 +301,8 @@ impl PackageContainer {
                 && object.starts_with(b"LKJOWN")
                 && object.get(..8)
                     != Some(crate::platform::kernel::contract::OWNER_MAGIC.as_slice())
+                && object.get(..8)
+                    != Some(crate::platform::kernel::contract::PREDECESSOR_OWNER_MAGIC.as_slice())
             {
                 return Err(package_error(
                     DiagnosticClass::Source,
@@ -778,8 +779,11 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
         let revision = revisions
             .remove(&binding.package_revision)
             .ok_or_else(|| corrupt("package_source_revision", "source revision disappeared"))?;
-        if package_interface_digest(revision.package, rebuilt.root.content_root())?
-            != revision.interface
+        if crate::platform::package_interface::package_interface_digest_for_graph(
+            revision.package,
+            rebuilt.root.content_root(),
+            revision.graph_contract_version,
+        )? != revision.interface
             || interfaces
                 .get(&binding.package_revision)
                 .is_none_or(|interface| interface.owners != interface_owners)

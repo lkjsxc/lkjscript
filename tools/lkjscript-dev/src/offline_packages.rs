@@ -22,6 +22,9 @@ mod recursive_data_program;
 mod recursive_measurements;
 mod recursive_program;
 mod recursive_schemas;
+mod requirements;
+mod requirements_predecessor;
+mod requirements_queue;
 
 use crate::{error::DevError, evidence, process};
 use lkjscript::platform::contributor::{
@@ -118,9 +121,12 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
             "--case" if selected_case.is_none() => {
                 let selected = crate::next_utf8(&mut arguments, "case")?
                     .ok_or_else(|| DevError::usage("missing --case name"))?;
-                if !matches!(selected.as_str(), "finite-callable" | "validator-upgrade") {
+                if !matches!(
+                    selected.as_str(),
+                    "finite-callable" | "validator-upgrade" | "requirement-parameters"
+                ) {
                     return Err(DevError::usage(
-                        "offline-packages --case accepts finite-callable or validator-upgrade",
+                        "offline-packages --case accepts finite-callable, validator-upgrade, or requirement-parameters",
                     ));
                 }
                 selected_case = Some(selected);
@@ -165,7 +171,8 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
             schema: match selected_case.as_deref() {
                 Some("finite-callable") => "lkjscript-offline-finite-callable-1",
                 Some("validator-upgrade") => "lkjscript-offline-validator-upgrade-1",
-                _ => "lkjscript-offline-packages-acceptance-11",
+                Some("requirement-parameters") => "lkjscript-offline-requirement-parameters-1",
+                _ => "lkjscript-offline-packages-acceptance-12",
             }
             .to_owned(),
             status: "failed".to_owned(),
@@ -194,6 +201,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
     let outcome = (match selected_case.as_deref() {
         Some("finite-callable") => finite::focused(&mut context),
         Some("validator-upgrade") => finite::upgrade(&mut context),
+        Some("requirement-parameters") => requirements::focused(&mut context),
         _ => workflow(&mut context),
     })
     .and_then(|()| {
@@ -1535,6 +1543,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     effects::workflow(context, &mut standard)?;
     named::workflow(context, &standard)?;
     finite::workflow(context, &standard)?;
+    requirements::workflow(context, &standard)?;
     Ok(())
 }
 
@@ -1841,7 +1850,7 @@ pub(crate) fn read_transferred_receipt(
         "offline receipt encoding or path is noncanonical",
     )?;
     require(
-        receipt.schema == "lkjscript-offline-packages-acceptance-11"
+        receipt.schema == "lkjscript-offline-packages-acceptance-12"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -2021,6 +2030,7 @@ pub(crate) fn read_transferred_receipt(
     let mut missing_source_diagnostic = false;
     let named_commands = named::validate(&receipt, &root)?;
     let finite_installed_commands = finite::validate(&receipt, &root)?;
+    requirements::validate(&receipt, &root)?;
     let named_cwd = Path::new(&receipt.isolated_root)
         .join("named-unrelated")
         .display()

@@ -39,7 +39,7 @@ and pair receipt `verification_f6ff1a63fc67f11d29993c115c460f2b892e1c55d015e4f8d
 passed the retained original reader after archived path/mode/environment reconstruction. The exact
 route ran the five aggregate children freshly; latest was bound within that same pair. Cleanup is
 complete. This is authenticated hosted evidence rereading, not fresh local acquisition or execution.
-INS-7 is closed; v0.1.34 is the last verified public release.
+INS-7 is closed; v0.1.34 remains an immutable verified predecessor.
 
 The newer typed named-reference source increment uses offline receipt 10. It is absent from the
 frozen installer release. Accepted source `5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847` passed 26
@@ -82,6 +82,18 @@ The exact-source 76-omission target test also passes with restored original byte
 rehearsal, with publication/public jobs appropriately skipped. Selected immutable/public delivery
 continues through the existing protocol. Preserve the frozen branch and original readers; later
 reporting descendants do not change the release candidate.
+
+The selected v0.1.35 publication is now complete. Annotated object
+`c90758848312705af6bb2f896831fbed27d353e5` selects frozen `4306ef64`, integrated by normal push
+through `e49a5835`. Publisher `34847832173/1` completed successfully at 2026-09-14T16:13:06Z;
+immutable release `388511109` was published at 15:34:40Z. All mandatory source/target/package and
+installed gates passed. Original authenticated publisher artifacts are retained, and their matching
+package, six-target, simulated-pair and anonymous-public-pair readers pass. Public pair
+`verification_05d477e78766a48c240e7a8dae948bca4f95434e7497a178a28c3254021cbb62`
+binds independently admitted exact/latest routes and one fresh five-owner suite within the pair.
+Cleanup is complete. Archived-context rereading did not replay applications. The preceding pending
+observations are superseded by this delivery, without rewriting their failed history or frozen inputs.
+Requirement-parameter development remains a separate untagged 0.1.36 candidate.
 
 Immutable `v0.1.31`, release `386791231`, remains a retained recursive-data predecessor from
 `7ea9c99a31ecd0e5317129d2bd81ab4f8f51e02e`, with its original readers and assets unchanged.

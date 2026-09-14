@@ -234,10 +234,12 @@ fn task_control_oracle_detects_disabled_production_transfers() {
             function,
             type_arguments,
             effect_arguments,
+            requirement_arguments,
             arguments,
         } = instruction
         {
             *instruction = NormalizedInstruction::Call {
+                requirement_arguments: requirement_arguments.clone(),
                 function: *function,
                 type_arguments: type_arguments.clone(),
                 effect_arguments: effect_arguments.clone(),

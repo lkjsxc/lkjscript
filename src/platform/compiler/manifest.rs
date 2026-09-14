@@ -187,10 +187,14 @@ impl CompilationManifest {
 
     pub(crate) fn validate(&self) -> Result<(), Diagnostic> {
         if self.contract_version != COMPILATION_MANIFEST_CONTRACT_VERSION
-            || self.graph_contract_version
-                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-            || self.compiler_contract_version != COMPILER_UNIT_CONTRACT_VERSION
-            || self.bytecode_contract_version != BYTECODE_CONTRACT_VERSION
+            || !matches!(
+                (
+                    self.graph_contract_version,
+                    self.compiler_contract_version,
+                    self.bytecode_contract_version
+                ),
+                (14, 10, 6) | (15, 11, 7)
+            )
         {
             return Err(manifest_error(
                 DiagnosticClass::Source,

@@ -461,3 +461,117 @@ fn strict_rehashed_artifact_cannot_delete_a_pending_transaction_commit() {
     let error = load_artifact(&bytes).unwrap_err();
     assert_eq!(error.code, "artifact_compiled_control_meaning", "{error:?}");
 }
+
+#[test]
+fn strict_requirement_artifact_rejects_rehashed_argument_formal_operand_and_row() {
+    let snapshot = crate::platform::execution::normalized::tests::iteration_resource_tests::requirement_snapshot(false);
+    let temporary = tempfile::tempdir().unwrap();
+    let created =
+        GraphRepository::create(&temporary.path().join("requirements"), &snapshot, None).unwrap();
+    let compiled = build_clean(
+        &created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .unwrap();
+    let linked = link_artifact(&created.repository, compiled.manifest_digest, &[]).unwrap();
+    let loaded = load_artifact(&linked.artifact.bytes).unwrap();
+    let units = loaded
+        .objects
+        .iter()
+        .filter(|(key, _)| key.domain == ObjectDomain::CompilerUnit)
+        .map(|(key, bytes)| (*key, CompilationUnit::decode(bytes, *key).unwrap()))
+        .collect::<Vec<_>>();
+    for fault in ["argument", "formal", "operand", "row"] {
+        let (old,original) = units.iter().find(|(_,unit)|matches!(&unit.payload,CompilationPayload::Function{signature,code}
+            if if fault=="argument" { code.instructions.iter().any(|instruction|matches!(instruction,CompiledInstruction::Call{requirement_arguments,..} if !requirement_arguments.is_empty())) }
+            else if fault=="operand" { code.instructions.iter().any(|instruction|matches!(instruction,CompiledInstruction::PerformParameter{..})) }
+            else { !signature.requirement_parameters.is_empty() })).unwrap();
+        let mut unit = original.clone();
+        let CompilationPayload::Function { signature, code } = &mut unit.payload else {
+            panic!("function");
+        };
+        match fault {
+            "argument" => {
+                let arguments = code
+                    .instructions
+                    .iter_mut()
+                    .find_map(|instruction| match instruction {
+                        CompiledInstruction::Call {
+                            requirement_arguments,
+                            ..
+                        } if !requirement_arguments.is_empty() => Some(requirement_arguments),
+                        _ => None,
+                    })
+                    .unwrap();
+                arguments.clear();
+            }
+            "formal" => {
+                signature.requirement_parameters[0] =
+                    crate::platform::semantic_id::RequirementParameterId::migrate(
+                        b"foreign-artifact-formal",
+                        0,
+                    )
+            }
+            "operand" => {
+                let operand = code
+                    .instructions
+                    .iter_mut()
+                    .find_map(|instruction| match instruction {
+                        CompiledInstruction::PerformParameter { parameter, .. } => Some(parameter),
+                        _ => None,
+                    })
+                    .unwrap();
+                operand.parameter = crate::platform::semantic_id::RequirementParameterId::migrate(
+                    b"foreign-artifact-operand",
+                    0,
+                );
+            }
+            "row" => {
+                signature.effect = FunctionEffect::Task {
+                    requirements: vec![],
+                    effect_parameters: vec![],
+                }
+            }
+            _ => unreachable!(),
+        }
+        let bytes = replace_unit(&loaded, *old, &unit, vec![]);
+        let error = load_artifact(&bytes).unwrap_err();
+        assert!(
+            !error.code.contains("checksum") && !error.code.contains("closure_digest"),
+            "{fault}: {error:?}"
+        );
+        assert!(
+            error.code.starts_with("artifact_") || error.code.starts_with("kernel_"),
+            "{fault}: {error:?}"
+        );
+        eprintln!("requirement-artifact-negative {fault}: {}", error.code);
+    }
+}
+
+#[test]
+fn strict_requirement_artifact_rejects_reordered_existing_formals() {
+    let snapshot =
+        crate::platform::execution::normalized::tests::requirement_tests::applications(2, false);
+    let temporary = tempfile::tempdir().unwrap();
+    let created =
+        GraphRepository::create(&temporary.path().join("order"), &snapshot, None).unwrap();
+    let compiled = build_clean(
+        &created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .unwrap();
+    let linked = link_artifact(&created.repository, compiled.manifest_digest, &[]).unwrap();
+    let loaded = load_artifact(&linked.artifact.bytes).unwrap();
+    let (old, mut unit) = loaded.objects.iter().filter(|(key,_)|key.domain == ObjectDomain::CompilerUnit)
+        .map(|(key, bytes)|(*key, CompilationUnit::decode(bytes,*key).unwrap()))
+        .find(|(_,unit)|matches!(&unit.payload, CompilationPayload::Function{signature,..} if signature.requirement_parameters.len()>1)).unwrap();
+    let CompilationPayload::Function { signature, .. } = &mut unit.payload else {
+        panic!("function")
+    };
+    signature.requirement_parameters.swap(0, 1);
+    let error = load_artifact(&replace_unit(&loaded, old, &unit, vec![])).unwrap_err();
+    assert_eq!(
+        error.code, "artifact_reference_declaration_payload",
+        "{error:?}"
+    );
+}

@@ -555,6 +555,44 @@ impl Decoder {
         record: &CompactRecord,
         field: &str,
     ) -> Result<AuthoredRequirementReference, Diagnostic> {
+        if let Some(value) = required(record, field)?.strip_prefix("parameter:") {
+            let mut exact = record.clone();
+            let target = exact
+                .fields
+                .iter_mut()
+                .find(|f| f.name == field)
+                .ok_or_else(|| {
+                    record_error(
+                        record,
+                        "change_requirement_operand",
+                        "requirement operand field is absent",
+                    )
+                })?;
+            target.value = value.to_owned();
+            if let Some(reference) = self.references.owner(
+                &exact,
+                field,
+                Some(NamespaceClass::RequirementParameter),
+                false,
+            )? {
+                return Ok(AuthoredRequirementReference::ParameterSelected { reference });
+            }
+            if value.starts_with('$') {
+                validate_local_label(&exact, field, value, '$')?;
+                return Ok(AuthoredRequirementReference::ParameterSymbol {
+                    symbol: value.to_owned(),
+                });
+            }
+            let (package, parameter) = value.split_once('/').ok_or_else(|| field_error(record, field, "change_requirement_operand", "parameter operand requires an exact package/reqparam_ID, named reference or request symbol"))?;
+            return Ok(AuthoredRequirementReference::ParameterExact {
+                package: package.parse().map_err(|error: Diagnostic| {
+                    field_error(record, field, error.code, error.message)
+                })?,
+                parameter: parameter.parse().map_err(|error: Diagnostic| {
+                    field_error(record, field, error.code, error.message)
+                })?,
+            });
+        }
         match self
             .references
             .owner(record, field, Some(NamespaceClass::Requirement), false)?

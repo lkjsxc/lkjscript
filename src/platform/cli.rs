@@ -39,9 +39,8 @@ use super::kernel::{
     ExactOwnerKey, ExpressionChildRole, ExpressionOperation, FieldSelector, FunctionEffect,
     HttpRouteSelector, LocalValueReference, Name, OperationReference, OwnerKey as KernelOwnerKey,
     OwnerKind as KernelOwnerKind, OwnerRecord, PackageId, PackageTransportDigest, ParameterParent,
-    ParameterUse, PortImplementation, RelationEndpoint, RelationKind, RequirementReference,
-    ResourceUnit, TextValue, TypeObjectDigest, analyze_http_route_set, encode_owner,
-    http_route_set_digest,
+    ParameterUse, PortImplementation, RelationEndpoint, RelationKind, ResourceUnit, TextValue,
+    TypeObjectDigest, analyze_http_route_set, encode_owner, http_route_set_digest,
 };
 use super::normalized_lifecycle::{PreparedApplication, prepare_repository};
 use super::normalized_query::{execute_normalized_query, parse_query_arguments};
@@ -4339,14 +4338,18 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
         role: impl Into<String>,
         source: KernelOwnerKey,
         ordinal: usize,
-        target: RequirementReference,
+        target: impl Into<super::kernel::RequirementOperand>,
     ) -> Result<(), Diagnostic> {
+        let target = target.into();
         self.add_reference(
             role,
             source,
             ordinal,
-            "requirement",
-            format!("{}/{}", target.package, target.requirement),
+            match target {
+                super::kernel::RequirementOperand::Concrete(_) => "requirement",
+                super::kernel::RequirementOperand::Parameter(_) => "requirement_parameter",
+            },
+            format!("{}/{}", target.package(), target.owner()),
         )
     }
 
@@ -4709,6 +4712,7 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                 fields.push(("items", items.len().to_string()));
             }
             ExpressionOperation::Call {
+                requirement_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
@@ -4727,8 +4731,16 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                     self.add_type_reference("call_type_argument", owner, index, argument)?;
                 }
                 self.add_effect_arguments(owner, effect_arguments)?;
+                fields.push((
+                    "requirement-arguments",
+                    requirement_arguments.len().to_string(),
+                ));
+                for (index, argument) in requirement_arguments.iter().copied().enumerate() {
+                    self.add_requirement_reference("requirement_argument", owner, index, argument)?;
+                }
             }
             ExpressionOperation::FunctionValue {
+                requirement_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
@@ -4750,6 +4762,13 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                     )?;
                 }
                 self.add_effect_arguments(owner, effect_arguments)?;
+                fields.push((
+                    "requirement-arguments",
+                    requirement_arguments.len().to_string(),
+                ));
+                for (index, argument) in requirement_arguments.iter().copied().enumerate() {
+                    self.add_requirement_reference("requirement_argument", owner, index, argument)?;
+                }
             }
             ExpressionOperation::Invoke { arguments, .. } => {
                 fields.push(("form", "invoke".to_owned()));
@@ -4873,7 +4892,7 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                 fields.push(("form", "capability_call".to_owned()));
                 fields.push((
                     "requirement",
-                    format!("{}/{}", requirement.package, requirement.requirement),
+                    format!("{}/{}", requirement.package(), requirement.owner()),
                 ));
                 fields.push((
                     "operation",
@@ -4891,7 +4910,7 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                 fields.push(("form", "transaction".to_owned()));
                 fields.push((
                     "requirement",
-                    format!("{}/{}", requirement.package, requirement.requirement),
+                    format!("{}/{}", requirement.package(), requirement.owner()),
                 ));
                 fields.push(("binding", binding.to_string()));
                 self.add_requirement_reference("transaction_requirement", owner, 0, *requirement)?;
@@ -5421,6 +5440,7 @@ fn definition_identity_kind_name(owner: KernelOwnerKey) -> &'static str {
         KernelOwnerKey::Module(_) => "module",
         KernelOwnerKey::Declaration(_) => "declaration",
         KernelOwnerKey::TypeParameter(_) => "type_parameter",
+        KernelOwnerKey::RequirementParameter(_) => "requirement_parameter",
         KernelOwnerKey::EffectParameter(_) => "effect_parameter",
         KernelOwnerKey::Field(_) => "field",
         KernelOwnerKey::Case(_) => "case",
@@ -5524,6 +5544,10 @@ fn materialize_function_definition(
                 "effect-row-parameters",
                 function.effect.row().parameters.len().to_string(),
             ),
+            (
+                "requirement-parameters",
+                function.requirement_parameters.len().to_string(),
+            ),
             ("parameters", function.parameters.len().to_string()),
             ("result", function.result.to_string()),
             ("effect", effect_name.to_owned()),
@@ -5588,6 +5612,86 @@ fn materialize_function_definition(
         )?;
     }
 
+    for (index, parameter) in function.requirement_parameters.iter().copied().enumerate() {
+        let owner = KernelOwnerKey::RequirementParameter(parameter);
+        materializer.add_local_reference(
+            "function_requirement_parameter",
+            function_owner,
+            index,
+            owner,
+        )?;
+        let record = materializer.load_structural_owner(
+            owner,
+            OwnershipEntry::new(
+                OwnershipParent::Owner(function_owner),
+                OwnershipRole::DeclarationRequirementParameter,
+            ),
+            None,
+        )?;
+        let OwnerRecord::RequirementParameter(record) = record else {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_owner_binding",
+                format!("function requirement parameter '{owner}' has the wrong owner record"),
+            ));
+        };
+        if record.declaration != function_id {
+            return Err(owner_inspection_error(
+                DiagnosticClass::Corrupt,
+                "definition_ownership_mismatch",
+                format!("function requirement parameter '{owner}' names another declaration"),
+            ));
+        }
+        materializer.push_fields(
+            DefinitionSection::Contract,
+            "definition.requirement-parameter",
+            &[
+                ("id", owner.to_string()),
+                ("parent", function_owner.to_string()),
+                ("index", index.to_string()),
+                ("name", record.name.as_str().to_owned()),
+                (
+                    "interface",
+                    format!(
+                        "{}/{}",
+                        record.constraint.interface.package,
+                        record.constraint.interface.declaration
+                    ),
+                ),
+                (
+                    "minimum-operations",
+                    record.constraint.operations.len().to_string(),
+                ),
+            ],
+        )?;
+        materializer.add_declaration_reference(
+            "requirement_parameter_interface",
+            owner,
+            0,
+            record.constraint.interface,
+        )?;
+        for (operation_index, operation) in record.constraint.operations.iter().copied().enumerate()
+        {
+            materializer.add_operation_reference(
+                "requirement_parameter_operation",
+                owner,
+                operation_index,
+                operation,
+            )?;
+            materializer.push_fields(
+                DefinitionSection::Contract,
+                "definition.requirement-parameter-operation",
+                &[
+                    ("parent", owner.to_string()),
+                    ("index", operation_index.to_string()),
+                    (
+                        "reference",
+                        format!("{}/{}", operation.package, operation.operation),
+                    ),
+                ],
+            )?;
+        }
+    }
     for (index, parameter) in function.effect_parameters.iter().copied().enumerate() {
         let owner = KernelOwnerKey::EffectParameter(parameter);
         materializer.add_local_reference(
@@ -5711,10 +5815,10 @@ fn materialize_function_definition(
             index,
             requirement,
         )?;
-        if requirement.package != view.package() {
+        if requirement.package() != view.package() {
             continue;
         }
-        let owner = KernelOwnerKey::Requirement(requirement.requirement);
+        let owner = requirement.owner();
         let Some(record) = materializer.load_local_requirement_if_owned(owner, function_owner)?
         else {
             continue;

@@ -114,6 +114,7 @@ pub(super) fn encode_budget(budget: ChangeBudget) -> Result<Vec<u8>, Diagnostic>
 struct Writer {
     bytes: Vec<u8>,
     maximum: usize,
+    requirement_extension: bool,
 }
 
 impl Writer {
@@ -121,10 +122,14 @@ impl Writer {
         Self {
             bytes: Vec::new(),
             maximum,
+            requirement_extension: false,
         }
     }
 
-    fn finish(self) -> Vec<u8> {
+    fn finish(mut self) -> Vec<u8> {
+        if self.requirement_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR15");
+        }
         self.bytes
     }
 
@@ -634,6 +639,33 @@ impl Writer {
                 self.tag(15)?;
                 self.declaration_selector(interface, definitions)?;
                 self.operation(operation, definitions)
+            }
+            AuthoredChange::AddRequirementParameter {
+                declaration,
+                parameter,
+            } => {
+                self.requirement_extension = true;
+                self.tag(42)?;
+                self.declaration_selector(declaration, definitions)?;
+                self.symbol(&parameter.symbol, definitions)?;
+                self.name(&parameter.name)?;
+                self.declaration_reference(&parameter.interface, definitions)?;
+                self.list(&parameter.operations, |writer, op| {
+                    writer.operation_reference(op, definitions)
+                })
+            }
+            AuthoredChange::SetRequirementParameter {
+                parameter,
+                interface,
+                operations,
+            } => {
+                self.requirement_extension = true;
+                self.tag(43)?;
+                self.owner_selector(parameter, definitions)?;
+                self.declaration_reference(interface, definitions)?;
+                self.list(operations, |writer, op| {
+                    writer.operation_reference(op, definitions)
+                })
             }
             AuthoredChange::AddEffectParameter {
                 declaration,
@@ -1318,6 +1350,22 @@ impl Writer {
         definitions: &BTreeMap<String, SymbolDefinition>,
     ) -> Result<(), Diagnostic> {
         match value {
+            AuthoredRequirementReference::ParameterSelected { reference } => {
+                self.requirement_extension = true;
+                self.tag(3)?;
+                self.selected_reference(*reference)
+            }
+            AuthoredRequirementReference::ParameterExact { package, parameter } => {
+                self.requirement_extension = true;
+                self.tag(4)?;
+                self.raw(&package.bytes())?;
+                self.raw(&parameter.bytes())
+            }
+            AuthoredRequirementReference::ParameterSymbol { symbol } => {
+                self.requirement_extension = true;
+                self.tag(5)?;
+                self.symbol(symbol, definitions)
+            }
             AuthoredRequirementReference::Selected { reference } => {
                 self.selected_reference(*reference)
             }
@@ -1469,12 +1517,21 @@ impl Writer {
                 })
             }
             AuthoredExpressionOperation::Call {
+                requirement_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
                 arguments,
             } => {
-                self.tag(11)?;
+                if requirement_arguments.is_empty() {
+                    self.tag(11)?;
+                } else {
+                    self.requirement_extension = true;
+                    self.tag(24)?;
+                    self.list(requirement_arguments, |writer, argument| {
+                        writer.requirement_reference(argument, definitions)
+                    })?;
+                }
                 self.list(effect_arguments, |writer, row| {
                     writer.effect_row(row, definitions)
                 })?;
@@ -1487,11 +1544,20 @@ impl Writer {
                 })
             }
             AuthoredExpressionOperation::FunctionValue {
+                requirement_arguments,
                 effect_arguments,
                 function,
                 type_arguments,
             } => {
-                self.tag(12)?;
+                if requirement_arguments.is_empty() {
+                    self.tag(12)?;
+                } else {
+                    self.requirement_extension = true;
+                    self.tag(25)?;
+                    self.list(requirement_arguments, |writer, argument| {
+                        writer.requirement_reference(argument, definitions)
+                    })?;
+                }
                 self.list(effect_arguments, |writer, row| {
                     writer.effect_row(row, definitions)
                 })?;

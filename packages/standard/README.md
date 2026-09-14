@@ -22,10 +22,10 @@ Current identity:
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
 - semantic revision: `rev_f2d0249a9e2b937a110a6a2a31705cb1bcbc8840193c24e3caf68fa73f0f3591`;
-- package revision: `package_revision_405b01a5c2183af37f0403758a8e7d1fe2a8913158fddb5914f8450a7a62da53`;
-- package transport: `package_transport_e1d2ccc42f9fe8055c5b9ea853683f7243f15c2a03f432d7146f11d6c5b7726b`;
-- artifact manifest: `artifact_manifest_9c4f7216ae569098bb0c9b70960629cbd5c5a387f717afc578af426688db3b21`;
-- artifact bundle: `artifact_bundle_7181b443e4eab81ed216543c306d572053adb5227b0d31870a2a2f58ec995809`;
+- package revision: `package_revision_5a828264c94644f96399d97ae2496b83c48255a3a669b98c7f6a12c86179c9fa`;
+- package transport: `package_transport_35ff911fbf888e8569a7b06e0bae0fbe3a70b88486cd99338523bbdb2671b1dc`;
+- artifact manifest: `artifact_manifest_c66b139cf7b2a7f50b27e952e17fa0ee06944fa68f313404c88b3869ff591644`;
+- artifact bundle: `artifact_bundle_81d606a50a8f5fe08424f87ab36e3e9c1ff7718a2db0c7f234036ff8957469fa`;
 - 888 live semantic owners, 142 compiler units, and 33 graph tests.
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose

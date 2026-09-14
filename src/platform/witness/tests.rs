@@ -36,7 +36,7 @@ fn witness_contract_domains_are_closed_and_unique() {
     assert_ne!(contract::validator_contract_digest().bytes(), [0_u8; 32]);
     assert_eq!(
         contract::validator_contract_digest().to_string(),
-        "validator_contract_0f3694a3d6a97db3e1a735041761b25ef0e768394ec3885ae955d5e512edcdf7"
+        "validator_contract_bc6efe52386ec5151171ee2d90c7744ac2baf1d2acaffe47557ef56afaaddcb7"
     );
 }
 

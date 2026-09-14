@@ -331,8 +331,11 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
             .iter()
             .map(|(owner, record)| {
                 let value = PackageInterfaceOwner {
-                    contract_version:
-                        crate::platform::package_interface::PACKAGE_INTERFACE_CONTRACT_VERSION,
+                    contract_version: if record.header().contract_version == 14 {
+                        10
+                    } else {
+                        crate::platform::package_interface::PACKAGE_INTERFACE_CONTRACT_VERSION
+                    },
                     record: record.clone(),
                 };
                 let (digest, _) = value.encode()?;
@@ -345,8 +348,11 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
         let content =
             crate::platform::persistent_map::MapContentRoot::from_sorted(interface_entries)
                 .map_err(|error| failure(error.message))?;
-        if crate::platform::package_interface::package_interface_digest(revision.package, content)?
-            != revision.interface
+        if crate::platform::package_interface::package_interface_digest_for_graph(
+            revision.package,
+            content,
+            revision.graph_contract_version,
+        )? != revision.interface
         {
             return Err(failure(
                 "independently reconstructed interface commitment disagrees with logical revision",
@@ -512,6 +518,14 @@ fn public_inventory(
                 }
             }
             DeclarationPayload::Function(function) => {
+                reader.charge(function.requirement_parameters.len())?;
+                selected.extend(
+                    function
+                        .requirement_parameters
+                        .iter()
+                        .copied()
+                        .map(OwnerKey::RequirementParameter),
+                );
                 reader.charge(function.effect_parameters.len())?;
                 selected.extend(
                     function
@@ -538,11 +552,12 @@ fn public_inventory(
                     selected.extend(
                         requirements
                             .iter()
-                            .filter(|requirement| requirement.package == snapshot.root.package_id)
-                            .map(|requirement| OwnerKey::Requirement(requirement.requirement)),
+                            .filter(|requirement| requirement.package() == snapshot.root.package_id)
+                            .map(|requirement| requirement.owner()),
                     );
                 }
                 PackageInterfaceDeclarationPayload::Function(PackageFunctionSignature {
+                    requirement_parameters: function.requirement_parameters.clone(),
                     effect_parameters: function.effect_parameters.clone(),
                     type_parameters: function.type_parameters.clone(),
                     parameters: function.parameters.clone(),
@@ -604,6 +619,9 @@ fn public_inventory(
             .get(&owner)
             .ok_or_else(|| failure("public declaration names absent member"))?;
         let projected = match record {
+            OwnerRecord::RequirementParameter(value) => {
+                PackageInterfaceRecord::RequirementParameter(value.clone())
+            }
             OwnerRecord::EffectParameter(value) => {
                 PackageInterfaceRecord::EffectParameter(value.clone())
             }
@@ -654,16 +672,24 @@ fn public_inventory(
         if let TypeForm::TaskFunction { effect, .. } = &object.form {
             reader.charge(effect.requirements.len())?;
             for reference in &effect.requirements {
-                if reference.package != snapshot.root.package_id {
+                if reference.package() != snapshot.root.package_id {
                     continue;
                 }
-                let owner = OwnerKey::Requirement(reference.requirement);
-                let Some(OwnerRecord::Requirement(record)) = snapshot.owners.get(&owner) else {
-                    return Err(failure(
-                        "public callable requirement is absent from canonical inventory",
-                    ));
+                let owner = reference.owner();
+                let record = match snapshot.owners.get(&owner) {
+                    Some(OwnerRecord::Requirement(record)) => {
+                        PackageInterfaceRecord::Requirement(record.clone())
+                    }
+                    Some(OwnerRecord::RequirementParameter(record)) => {
+                        PackageInterfaceRecord::RequirementParameter(record.clone())
+                    }
+                    _ => {
+                        return Err(failure(
+                            "public callable requirement is absent from canonical inventory",
+                        ));
+                    }
                 };
-                result.insert(owner, PackageInterfaceRecord::Requirement(record.clone()));
+                result.insert(owner, record);
             }
         }
     }

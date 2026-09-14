@@ -1,0 +1,21 @@
+// Authentic exact 4306ef64 public fixture bytes; see the fixture provenance.
+const FILES: &[(&str, &[u8])] = &[
+    ("project/HEAD", include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/requirement-predecessor/project/HEAD"))),
+    ("project/LOCK", include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/requirement-predecessor/project/LOCK"))),
+    ("project/PACKAGE-TRANSPORTS/CURRENT", include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/requirement-predecessor/project/PACKAGE-TRANSPORTS/CURRENT"))),
+    ("project/catalog/current.lkjc", include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/requirement-predecessor/project/catalog/current.lkjc"))),
+    ("project/catalog/segments/segment_5c750063718be365f8230717586aea36d9c5190c6e044eeeec0ea176d1edca17.lkjs", include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/requirement-predecessor/project/catalog/segments/segment_5c750063718be365f8230717586aea36d9c5190c6e044eeeec0ea176d1edca17.lkjs"))),
+    ("project/catalog/segments/segment_93a3a64e061d168058f9af120930a23bd49be1e3b349953e3c8d3ff1537b91c2.lkjs", include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/requirement-predecessor/project/catalog/segments/segment_93a3a64e061d168058f9af120930a23bd49be1e3b349953e3c8d3ff1537b91c2.lkjs"))),
+    ("project/derived/compiler/CURRENT", include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/requirement-predecessor/project/derived/compiler/CURRENT"))),
+    ("project/derived/compiler/LOCK", include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/requirement-predecessor/project/derived/compiler/LOCK"))),
+    ("project/packs/pack_08357a52666166f1143bd24e3446a8d058f56fa4d81f139cfbef879a9506efa2.lkjp", include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/requirement-predecessor/project/packs/pack_08357a52666166f1143bd24e3446a8d058f56fa4d81f139cfbef879a9506efa2.lkjp"))),
+    ("project/packs/pack_13f76a405e5963e16b4ab480534424c0f87d4b0eac0cca43215223eb5277484e.lkjp", include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/requirement-predecessor/project/packs/pack_13f76a405e5963e16b4ab480534424c0f87d4b0eac0cca43215223eb5277484e.lkjp"))),
+    ("project/packs/pack_2bdd5b17f88d642fce0f1fbff114858f8be8f3b87ef37414b56ec9ba6851e0a1.lkjp", include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/requirement-predecessor/project/packs/pack_2bdd5b17f88d642fce0f1fbff114858f8be8f3b87ef37414b56ec9ba6851e0a1.lkjp"))),
+    ("project/packs/pack_4fd93e1e063d37bbac2a98486454896b839d0f79e594364a1c07adfd8b9fe698.lkjp", include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/requirement-predecessor/project/packs/pack_4fd93e1e063d37bbac2a98486454896b839d0f79e594364a1c07adfd8b9fe698.lkjp"))),
+    ("project/packs/pack_524cf71926013914651708c4d284b756fac1382781edf74a2f16fe447a53e312.lkjp", include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/requirement-predecessor/project/packs/pack_524cf71926013914651708c4d284b756fac1382781edf74a2f16fe447a53e312.lkjp"))),
+    ("project/packs/pack_8545fb25d26c8af8951067e0a0a4fce5e999c5e2270c4ed4292f44245f735fc5.lkjp", include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/requirement-predecessor/project/packs/pack_8545fb25d26c8af8951067e0a0a4fce5e999c5e2270c4ed4292f44245f735fc5.lkjp"))),
+    ("predecessor.lkja", include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/requirement-predecessor/predecessor.lkja"))),
+    ("predecessor.lkjp", include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/requirement-predecessor/predecessor.lkjp"))),
+    ("accepted.request", include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/requirement-predecessor/accepted.request"))),
+    ("expected.json", include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/requirement-predecessor/expected.json"))),
+];
