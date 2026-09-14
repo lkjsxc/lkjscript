@@ -66,38 +66,34 @@ Reconciliation confirms that remote main `6b0c19be` already contains that source
 `34777722470/1` at `9cf26ecd` succeeded on 2026-09-13 at 21:09:55 UTC, but predates the retry
 correction. Corrected rehearsal `34779065098/1` failed at 21:10:08 UTC during workflow identity
 preflight; all semantic/target/package proof was skipped. It is no longer pending. The
-[stable-candidate campaign](campaigns/202609140703-collision-1.md) repairs exact dispatch-source
-selection and admits frozen integrated ancestors for rehearsal while preserving stricter publication
-authority. Its new candidate still requires fresh full/target/package/installed proof, original-reader
-admission, normal integration of the repair and immutable installed/public delivery. v0.1.35 remains
-unused at reconciliation. Do not defer this selected delivery to requirement parameters or another
-semantic campaign; later reporting/main progress must not retarget its frozen proof source.
-Repair candidate `4306ef64` passed exact-source rehearsal `34786835189/1`. Its original
-full-prepare binding, package, six target and installed-pair evidence are authenticated and retained;
-the final-source 76-omission reader test passes. Publisher `34847832173/1` subsequently completed
-successfully on that frozen source at 2026-09-14T16:13:06Z. Immutable v0.1.35 release `388511109`
-and both anonymous installed routes passed; original package, six-target, simulated-pair and public
-pair readers accept the retained evidence. Named-reference/finite-callable delivery is closed.
-Earlier unused-tag and pending-publication statements above retain their historical observation time.
-The [requirement-parameter mandate](campaigns/202609140938.md) now selects the missing ordinary
-library mechanism and honest typed-cell `UpdateAttempt<T>` workload. No pre-existing implementation
-was found. Its engineering acceptance and one-campaign successor release deferral have not begun.
+[stable-candidate campaign](campaigns/202609140703-collision-1.md) repaired dispatch-source selection
+and completed that combined publication at frozen `4306ef64`. Rehearsal `34786835189/1` and its
+original readers passed, including the final-source 76-omission test. Publisher `34847832173/1`
+completed on 2026-09-14T16:13:06Z. Immutable v0.1.35 release `388511109`, anonymous exact/latest
+installed acceptance and original package/six-target/pair readers passed. That independent delivery
+is closed; its frozen inputs and failed history stay intact.
 
-The requirement candidate implements the selected operation/transaction abstraction and its public
-maintenance path; final fresh full/static-target proof and integration remain pending. Its literal
-requests make ordered flat expression/type assembly and request-wide creator symbols observable.
-After acceptance, the next architectural reassessment must select one concrete combined substantive
-composition/authoring milestone or publish this capability alone. Deferral may cover at most that
-one campaign and cannot be renewed. A structural request-block adapter is a contingent candidate
-against this actual workload, not an authorized parser redesign. The finite campaign's predecessor probes
-established that a swap was admitted and ran, while an untaken expanding call was published and
-failed only at reference preparation exhaustion. The new canonical rule addresses that boundary.
-Its earlier designed task witness placed concrete Configuration/DataStore operations and transaction
-ownership in the consumer. The requirement candidate's ordinary producer now owns those operations;
-its `UpdateAttempt<T>` still cannot certify publication after an arbitrary effectful callback.
-An observable transaction outcome or general affine transfer needs a later concrete blocked library
-and separate authority. Large historical-repository revalidation cost remains unmeasured. This
-outlook is revisable and authorizes no subsequent feature work.
+The [requirement-parameter campaign](campaigns/202609140938.md) implements the selected ordinary
+library mechanism and honest typed-cell `UpdateAttempt<T>` workload. No earlier implementation was
+found or replaced. Final source `104654edf866d8f5531555b0aa0731fd496d72a8` passed 26 fresh full
+gates, both pinned userlands, six target owners and 89 omission faults, and is normally integrated.
+Source version 0.1.36 remains untagged. Its one-campaign
+release deferral begins at this acceptance; the trigger is acceptance of the next selected substantive
+composition/authoring campaign, with at most that one campaign of deferral. At the first architectural
+reassessment, select that concrete combined milestone or publish this capability alone. No next
+campaign has been selected, and this deferral cannot be renewed.
+
+The literal producer uses 145 nonempty lines, 41 expression definitions and 20 expression argument
+edges; the consumer uses 273, 88 and 63 respectively. This establishes flat assembly friction, not
+authoring time, model tokens or billing. A structural request-block adapter is a contingent candidate
+against those actual requests, not an authorized parser redesign. The producer owns operations and
+its lexical transaction across caller-owned requirements; minimum sets preserve the whole supplied
+requirement. Its ordinary `UpdateAttempt<T>` cannot certify publication after arbitrary effectful
+callbacks. An observable transaction outcome or general affine transfer needs a later concrete
+blocked library and separate authority. The witness is designed composition, not existing adoption;
+standard/`lkjournal` changes maintain compatibility. Large historical-repository revalidation cost
+remains unmeasured. This outlook is revisable and authorizes no subsequent feature work.
+
 Immutable v0.1.8 remains the unchanged historical recovery point; its workflow defect was recovered additively.
 
 Each future item requires demonstrated usefulness and composition through a representative public

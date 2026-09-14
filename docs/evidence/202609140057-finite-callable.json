@@ -1,7 +1,8 @@
 {
   "schema": "lkjscript-finite-callable-evidence-1",
   "campaign": "202609140057",
-  "status": "language implementation integrated through main 6b0c19be; stable-source repair 4306ef64 passed focused proof and is frozen on its pushed branch; final rehearsal 34786835189/1 running; repair integration and selected immutable/public delivery remain open",
+  "prior_status_before_publication": "language implementation integrated through main 6b0c19be; stable-source repair 4306ef64 passed focused proof and is frozen on its pushed branch; final rehearsal 34786835189/1 running; repair integration and selected immutable/public delivery remain open",
+  "status": "Named-reference/finite-callable engineering is integrated; stable-source repair 4306ef64 was integrated through e49a5835. Immutable v0.1.35 release 388511109 and publisher 34847832173/1 completed anonymous exact/latest installed acceptance, with matching original-reader admission. The independent requirement-parameter successor is accepted and integrated at 104654ed.",
   "source": {
     "starting": "15c0bfdf82697e1a8dd4df6085e867d4b109bbf7",
     "named_reference_ancestor": "5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847",
@@ -199,7 +200,7 @@
       "policy": "New corrected-workflow dispatch after refreshing remote, permissions/rules and matching terminal runs. Event head_sha equals frozen source. Reporting descendants do not replace this source. No tag/control/publication mutation."
     },
     "remaining": "None for the selected predecessor delivery; frozen v0.1.35 public acceptance and original-reader admission completed.",
-    "resumption": "Preserve frozen 4306ef64 and immutable v0.1.35; requirement-parameter engineering proceeds separately under 202609140938.md.",
+    "resumption": "Preserve frozen 4306ef64, immutable v0.1.35 and their original evidence. Requirement parameters are accepted at 104654ed under 202609140938.md; its bounded successor release trigger is the next architectural resumption action.",
     "final_source_rehearsal_admission": {
       "source": "4306ef64783462a8dda48f2a855a88482d1faec8",
       "run": {
@@ -261,5 +262,6 @@
     "deployment": "Not selected; effects confined to owned disposable witnesses."
   },
   "preserved": "Unrelated August 31 stash, immutable releases, frozen release checkouts and reader inputs, operational state and unrelated services remain untouched. Failed attempts, authentic predecessor repositories, copied binaries and raw receipts are deliberately retained under existing .artifacts owners.",
-  "next_architect": "Operation-bearing requirement parameters and reusable transaction ownership remain the strongest next semantic candidate: finite alternation transports, while the consumer still supplies concrete operation requirements and transaction callbacks. Flat expression assembly remains visible authoring cost. No subsequent campaign is authorized here."
+  "prior_next_architect_at_finite_acceptance": "Operation-bearing requirement parameters and reusable transaction ownership remain the strongest next semantic candidate: finite alternation transports, while the consumer still supplies concrete operation requirements and transaction callbacks. Flat expression assembly remains visible authoring cost. No subsequent campaign is authorized here.",
+  "next_architect": "Requirement-parameter source 104654ed passed fresh full/static-target/89-omission acceptance and normal main integration. The ordinary requirement-parametric producer now owns the typed-cell operations and lexical transaction. The prior consumer-owned finite witness remains historical evidence; the new transported witness has independent I64/Text/store and DurableQueue observations. Flat literal expression assembly remains measurable request friction, with no token/time/billing claim. At the first architectural reassessment after acceptance, select one concrete combined composition/authoring milestone or publish the accepted capability alone; no following campaign is authorized here."
 }

@@ -106,6 +106,15 @@ callback; an offline generic library invokes it under the consumer's exact allow
 grants. Graph 14 adds a distinct task-callable envelope while preserving unchanged pure/type/data
 bytes. The [effect campaign](docs/campaigns/202609111843.md) tracks its independent public workload,
 maintained cutover and completed v0.1.32 publication.
+
+Source version 0.1.36 adds explicit requirement parameters: an ordinary transported library can
+perform constrained operations and own a transaction through caller-supplied exact requirements.
+Minimum operation sets preserve the supplied whole requirement and confer no deployment grant.
+The typed-cell witness returns an `UpdateAttempt<T>` describing its candidate and primary condition;
+a normal return is not a transaction publication certificate. This source capability has a bounded
+release deferral; see its [campaign and proof](docs/campaigns/202609140938.md) and
+[language contract](docs/spec/language.md#explicit-requirement-parameters).
+
 The [capture-safe evidence](docs/evidence/202609091625-capture-safe-generics.json) records the current
 generic factory, graph-owned function-constant, exact offline closure, negative constraints, and
 maintained-consumer cutover. The [public milestone evidence](docs/evidence/202609092050-capture-safe-public-milestone.json)
@@ -129,8 +138,9 @@ x86-64 environment, or broader Linux portability.
 ## Download and install
 
 The supported runtime is Linux x86-64, statically linked for `x86_64-unknown-linux-musl`.
-The installation milestone uses immutable version slots and an explicit default selection. It is
-selected for publication as v0.1.34; see [release state](docs/release.md) for actual delivery status.
+Public v0.1.35 includes immutable version slots and an explicit default selection. Anonymous
+exact/latest downloads and installed application acceptance are complete; see
+[release state](docs/release.md) for the frozen source and delivery evidence.
 The latest bootstrap is acquired completely before execution with this single compound invocation:
 
 ```sh
@@ -151,9 +161,9 @@ lkjscript runtime list
 For download/inspect/run, use the exact immutable URL and review the complete script first:
 
 ```sh
-curl -q --fail --location --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 180 --max-filesize 16384 --output install-v0.1.34.sh https://github.com/lkjsxc/lkjscript/releases/download/v0.1.34/install.sh
-cat install-v0.1.34.sh
-sh install-v0.1.34.sh --prefix "$HOME/.local"
+curl -q --fail --location --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 180 --max-filesize 16384 --output install-v0.1.35.sh https://github.com/lkjsxc/lkjscript/releases/download/v0.1.35/install.sh
+cat install-v0.1.35.sh
+sh install-v0.1.35.sh --prefix "$HOME/.local"
 ```
 
 Trust the initial script as executable code from the selected GitHub HTTPS source. Its embedded
@@ -166,10 +176,10 @@ metadata and attestations are separate from anonymous download.
 The public native offline boundary takes a local archive and its expected lowercase SHA-256:
 
 ```sh
-manager="$HOME/.local/lib/lkjscript/versions/v0.1.34/x86_64-unknown-linux-musl/lkjscript"
+manager="$HOME/.local/lib/lkjscript/versions/v0.1.35/x86_64-unknown-linux-musl/lkjscript"
 "$manager" runtime install --archive "$PWD/lkjscript-x86_64-unknown-linux-musl.tar.gz" --sha256 "$archive_sha256" --prefix "$HOME/.local"
 "$manager" runtime list --prefix "$HOME/.local"
-"$manager" runtime select v0.1.34 --prefix "$HOME/.local"
+"$manager" runtime select v0.1.35 --prefix "$HOME/.local"
 ```
 
 Set `archive_sha256` to the exact archive checksum from the chosen trusted release. Local dry-run
@@ -186,7 +196,7 @@ recover through the retained newer manager:
 ```sh
 "$manager" runtime select v0.1.32 --prefix "$HOME/.local"
 "$HOME/.local/bin/lkjscript" --version
-"$manager" runtime select v0.1.34 --prefix "$HOME/.local"
+"$manager" runtime select v0.1.35 --prefix "$HOME/.local"
 "$manager" run --deployment /absolute/application/command.deployment.json
 ```
 

@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-09-13 UTC. This file describes implemented checkout reality. Executable-derived
+Status date: 2026-09-14 UTC. This file describes implemented checkout reality. Executable-derived
 public guides live under [generated](generated), including the
 [operation guide](generated/operations.md); this file does not duplicate them.
 
@@ -12,8 +12,7 @@ has passed pure starters and fresh transported task-library consumers after thei
 were removed, including persistent once-only counters and dependency replacement/recovery.
 Source `0b5e982727a080761d14afd98e45199497acf87d` passed 26 fresh full gates, exact static-musl
 admission in both pinned userlands and all six target owners, 73 receipt faults, and deterministic
-package verification. It is normally integrated on main. The selected combined v0.1.33 release
-remains selected. Dry run `34693887632/1` failed at the 1,200-second outer offline-package deadline
+package verification. It is normally integrated on main. That work selected the combined v0.1.33 release described below. Dry run `34693887632/1` failed at the 1,200-second outer offline-package deadline
 after reaching command 470 of 492; no semantic failure was established. Corrected isolated source
 `c34114fc1b51f96f42c2b637fb9ad522b55b41f9` preserves the two-asset workflow, gives that owner
 1,800 seconds, and initializes a missing derived catalog before its read-only projection test. Its
@@ -56,8 +55,8 @@ foreground consumer now uses a literal prelude instead of host member-ID maps. S
 final copied named/foreground workflows, public CLI, maintained semantic/artifact equality and
 generated guides, and was pushed normally to main. Exact verifier/candidate bindings are recorded in its
 [evidence owner](evidence/202609131008-typed-named-references.json). v0.1.34 does not contain these
-bindings. Their additional release is selected together with the finite-callable campaign below,
-consuming the one-campaign deferral in the [roadmap trigger](roadmap.md).
+bindings. Their additional release was combined with the finite-callable campaign below,
+closing the one-campaign deferral in the [roadmap trigger](roadmap.md).
 
 The [finite callable campaign](campaigns/202609140057-collision-1.md) implements explicit
 parameter-flow admission for direct calls and named function values. Permutation, duplication and
@@ -85,46 +84,38 @@ independently establish that the old main-before-candidate predicate rejects thi
 checkout also used the mutable dispatch ref. These are delivery defects, not failing language
 tests. Earlier pending observations are retained in the campaign and evidence records.
 
-The [stable-candidate campaign](campaigns/202609140703-collision-1.md) continues the combined
-named-reference/finite-callable/validator-repair release, with exact event-source checkout and
-comparable-ancestry dry-run admission. Publication retains its stricter integrated-source,
-annotated-tag and scoped-control requirements. The changed workflow/release owner require a new
-candidate, new dispatch, fresh full/static-target/package/installed proof and original-reader
-admission. Integration of that repair and immutable anonymous exact/latest installed public
-acceptance remain open. v0.1.35 is still unused at reconciliation; v0.1.33 and v0.1.34 remain closed
-predecessors. These changes do not alter language, graph, artifact or application-data formats.
-The designed witness still requires consumer-owned concrete operations and transactions; reusable
-operation-bearing requirement parameters and large historical-repository revalidation cost remain
-unresolved and unmeasured, respectively.
+The [stable-candidate campaign](campaigns/202609140703-collision-1.md) completed the independent
+named-reference/finite-callable publication. Frozen source `4306ef64783462a8dda48f2a855a88482d1faec8`
+passed rehearsal `34786835189/1`, original full/package/six-target/installed-pair admission and the
+final-source 76-omission test. Normal integration through `e49a5835` preserved its ancestry.
+Publisher `34847832173/1` completed at 2026-09-14T16:13:06Z; immutable v0.1.35 release
+`388511109` was published at 15:34:40Z. Its anonymous exact/latest installed acceptance and the
+matching original package, six-target and pair readers pass with joined cleanup. The original ZIPs
+and contexts are retained. Earlier failed rehearsals remain recorded above and in their campaign;
+reporting descendants do not replace frozen release inputs.
 
-The admission repair is now frozen at `4306ef64783462a8dda48f2a855a88482d1faec8` on pushed
-branch `codex/stable-release-202609140703`. All 47 focused release-owner tests (including 12
-actual-Git/workflow-shell cases) and strict clippy pass. New read-only rehearsal `34786835189/1`,
-created 2026-09-13T22:27:10Z, completed successfully at 2026-09-14T00:12:35Z on that exact SHA.
-Its five authenticated original artifacts are retained locally. Original package, six target and
-installed-pair readers pass; the original prepare authenticates 26 fresh full gates with zero reuse.
-The final-source 76-omission target test passes with intact baseline/recovery and byte-identical
-restoration. The later immutable v0.1.35 release `388511109` was published at
-2026-09-14T15:34:40Z by `34847832173/1`, exact frozen `4306ef64`; its public job
-`104039969207` passed and the run completed at 16:13:06Z. Authenticated original publisher ZIPs,
-strict package, all six target, simulated pair and anonymous exact/latest installed-pair readers
-pass under retained original context. The exact route owns the fresh five-child suite; latest binds
-it within the same pair, with joined cleanup. This closes named-reference/finite-callable delivery;
-the older pending paragraphs above are historical observations. Reporting descendants do not
-replace its frozen inputs. The
-[requirement-parameter campaign](campaigns/202609140938.md) continues the unimplemented language
-capability while finishing this independent predecessor publication; its acceptance deferral has
-not begun.
+The [requirement-parameter campaign](campaigns/202609140938.md) implements explicit ordered T/E/R
+applications, exact interface/minimum-operation constraints, closed callable descriptors, producer-owned
+operations/transactions and local affine provenance. No pre-existing implementation was found.
+The literal transported typed-cell and DurableQueue workloads cover direct and bound invocation,
+independent typed bytes and store state, constraint/body replacement, insufficient-consumer rejection,
+repair and recovery. Whole-requirement substitution permits a supplied callback to use extra allowed
+operations. `UpdateAttempt<T>` reports the candidate and the primary conditional result, not a durable
+publication certificate: the positive primary flag/no-publication case is independently observed.
+These are designed witnesses. Maintained standard/`lkjournal` compatibility and lifecycle checks pass;
+the latter's data and deployment settings are preserved.
 
-The requirement candidate now implements explicit ordered T/E/R applications, minimum-operation
-constraints, exact closed callable descriptors, symbolic operations/transactions and local affine
-provenance. Literal transported typed-cell and DurableQueue workloads pass focused public acceptance,
-including independent persistence observations, constraint replacement/repair, authentic predecessor
-read/edit/run and unencodable-output admission. These are designed witnesses. The candidate extends
-Graph 15, compiler 11/bytecode 7 and Artifact 19 while preserving strict Graph 14 / compiler 10 /
-bytecode 6 / Artifact 18 decoding and unchanged TypeObject 10 bytes. Final frozen fresh full and
-static-target acceptance and source integration remain pending; predecessor v0.1.35 is independently
-complete. The untagged 0.1.36 candidate has not started its acceptance-triggered release deferral.
+Final source `104654edf866d8f5531555b0aa0731fd496d72a8` has passed all 26 fresh full gates (zero reused),
+fresh static-musl admission in both pinned userlands and all six target owners, and all 89 original-reader
+omission faults with restored-byte recovery. It was integrated normally into main on 2026-09-14.
+Graph 15, compiler 11/bytecode 7 and Artifact 19 explicitly extend the containers. Strict authentic
+Graph 14 / compiler 10 / bytecode 6 / Artifact 18 inputs remain usable without read-time source
+migration; unchanged TypeObject 10 and old canonical bytes/identities are preserved. Public edits
+publish successor meaning, and the predecessor rejects new feature artifacts before execution.
+Earlier failed full attempts are retained as failures. Source version 0.1.36 remains untagged;
+the one-substantive-campaign release deferral has begun at this acceptance. At the first
+architectural reassessment select its concrete combined milestone or publish it alone.
+v0.1.35 delivery is independently complete.
 
 The typed meaning graph is the sole current editable program authority. A project root contains a strict
 `GraphRepository`: `HEAD`, immutable packs, an object catalog, optional exact package transports,
@@ -143,21 +134,21 @@ remain canonical and unchanged.
 | Consumer | Exact current identity |
 |---|---|
 | standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_f2d0249a9e2b937a110a6a2a31705cb1bcbc8840193c24e3caf68fa73f0f3591`; state `semantic_state_fc21c9bd9445929ccc57cc2e48fa2ac657a57fc0ee450a0316a611bb88386066` |
-| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_3b95593b73b56d791c5b7b12a4fd4d96adc02102e7c87104a09550a1eee69c62`; state `semantic_state_e623257fa3ef83d8cc25c3e2a79b5d0ec5de3c9f38a1a55058292efd4be3f952` |
-| built-in standard dependency | package revision `package_revision_405b01a5c2183af37f0403758a8e7d1fe2a8913158fddb5914f8450a7a62da53`; transport `package_transport_e1d2ccc42f9fe8055c5b9ea853683f7243f15c2a03f432d7146f11d6c5b7726b`; artifact manifest `artifact_manifest_9c4f7216ae569098bb0c9b70960629cbd5c5a387f717afc578af426688db3b21` |
+| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_0d732aace827ebbab0652d73165e2dd1335458affbb4f18f07971793b41a51d5`; state `semantic_state_7e96cf2cca36898a5f431fe98b5282cba49aec616480875f7994859ba7731e01` |
+| built-in standard dependency | package revision `package_revision_5a828264c94644f96399d97ae2496b83c48255a3a669b98c7f6a12c86179c9fa`; transport `package_transport_35ff911fbf888e8569a7b06e0bae0fbe3a70b88486cd99338523bbdb2671b1dc`; artifact manifest `artifact_manifest_c66b139cf7b2a7f50b27e952e17fa0ee06944fa68f313404c88b3869ff591644` |
 
 The standard package owns 888 live semantic owners, 142 compiler units, and 33 graph tests. Its
-current artifact has 537,736 bytes. `lkjournal` owns 2,040 live semantic owners and one exact standard
-dependency; its two-package artifact has 232 compiler units and 1,296,806 bytes. Its complete dependency closure runs 40 graph tests. Both
+current artifact has 541,227 bytes. `lkjournal` owns 2,040 live semantic owners and one exact standard
+dependency; its two-package artifact has 232 compiler units and 1,300,765 bytes. Its complete dependency closure runs 40 graph tests. Both
 consumers currently pass production/reference equality.
 
 Maintained derived assets are:
 
 | Path | Role | SHA-256 |
 |---|---|---|
-| `packages/standard/generated/standard.lkjp` | code-complete standard source container, 389,537 bytes | `7949278731fa2a9b860f79391df781c5c9550a7d08933d080f098e47a705a79b` |
-| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 537,736 bytes | `bd0bba1b6c363fa8d39f10dbed2288a4ba82ea603dcd58cdd44d94d7b49eedd4` |
-| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 1,296,806 bytes | `1941459005944b1b9c27657544e39d31fa3c4c30bc63b7bf8ddee1e6e2554db1` |
+| `packages/standard/generated/standard.lkjp` | code-complete standard source container, 389,537 bytes | `643bec7953a6ef583f8deefde86f5c91169a11558d50f40866e828bbff843a54` |
+| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 541,227 bytes | `db574cbcd8f8085fc581668cc68fcf957992058d4c411557f40b4aacaaea3c63` |
+| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 1,300,765 bytes | `2bed39723688ceafaf7bb7fd7e88e39910ab964ae26fd3bd77acd4ca052c9502` |
 
 The built-in transport and artifact are compiled into the executable and strictly cross-checked.
 Product verification regenerates maintained owners and compares exact bytes. Service verification
@@ -339,28 +330,23 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-The supported immutable public release is `0.1.32`, from frozen effect-library source `67baaf0b`.
-Current main additionally contains accepted task iteration at `3f25c3a7`; that increment is
-deliberately unpublished. The product retains the exact-requirement-bound affine
+The supported immutable public release is `0.1.35`, from frozen source `4306ef64`.
+It includes task iteration, foreground commands, installation, named references and finite callable
+admission. Requirement-parameter source `0.1.36` has the separate bounded release trigger above.
+The product retains the exact-requirement-bound affine
 handoff, identity-preserving extraction, incremental catalog, graph-owned structured sessions, and
 adds signature-indexed inbound HTTP path captures, code-complete offline package composition,
 constant control space for eligible pure and task graph tail execution, and preparation-bound checked execution
 values in both evaluators. The latter removes descendant scans from ordinary local/call eligibility;
 raw admission, exact capability ownership and independent reference execution remain mandatory.
-Graph 14, TypeObject 10 plus nominal application envelope 1 and task-function envelope 1,
-validation witness 9, owner summary 9, validator 14, package 3, package interface 10,
-compiler-unit 10, bytecode 6, Artifact 18, resident runtime 3, function-definition projection 6,
-service receipt 10, distributed-HTTP receipt 4,
-outbound-HTTP receipt 2, stateful-HTTP receipt 6, compact change 18, authored change 15,
-logical change plan 5, query 7,
-project creation 5, registry 17, CLI 31, deployment 4, HTTP adapter 3, and structured-session 1 are
-current. Object catalog 2, semantic-scale receipt 3, object-store 1, pack 1, stream 1, and
-HTTP-client adapter 1 retain their independent owners.
-The recursive-data validator contract advances its nominal and session feature identities to 2,
-and the semantic-summary validator identity to 4. Graph, TypeObject and typed-data bytes retain
-their existing domains for unchanged meaning. Current offline-package acceptance is receipt 7,
-which requires iteration observations; pure-tail receipt 6 remains separate. The frozen effect
-release retains its original offline receipt 6 reader and does not rewrite preceding identities.
+Current changed boundaries are Graph 15, package interface 11, compiler unit 11, bytecode 7,
+Artifact 19, validator 15 and definition projection 7. TypeObject 10 remains unchanged; symbolic
+requirement rows use task-function envelope 2 while concrete predecessor rows retain envelope 1.
+The authentic predecessor closure is admitted under its exact stored generation, with one current
+semantic checker. Object catalog 2, object-store 1 and pack 1 retain their independent owners.
+The generated capability guides and normative specifications own the complete current contracts.
+Offline-package receipt 12 requires the requirement-library observations; full and target readers
+require that material. Frozen releases retain their matching original receipt readers and identities.
 
 The contributor pair owner independently admits and runs a small command lifecycle on both routes,
 then binds one freshly executed five-owner aggregate within that same invocation. Pair receipt 1

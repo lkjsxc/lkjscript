@@ -45,7 +45,7 @@ The newer typed named-reference source increment uses offline receipt 10. It is 
 frozen installer release. Accepted source `5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847` passed 26
 fresh full gates and is integrated on main; later reporting commits do not replace that proof.
 The [finite callable campaign](campaigns/202609140057-collision-1.md) consumes its one-campaign
-deferral and selects a combined release, with candidate version v0.1.35. Current offline receipt 11
+deferral and selects a combined release, with candidate version v0.1.35. Its frozen offline receipt 11
 adds the transported pure/task alternator, finite reset, strict hostile-artifact rejection and
 authentic historical/current validation repair through both copied and pinned absolute runtimes.
 The existing six target and five installed/public aggregate owners retain their boundaries.
@@ -63,14 +63,11 @@ exit 1 without tracing the exact failing command. Independently, the source and 
 that its old dry-run predicate rejects a frozen candidate when main has advanced beyond it.
 Earlier queued/running observations remain in their campaign records; neither run is a publisher.
 
-The [stable-candidate campaign](campaigns/202609140703-collision-1.md) repairs that admission policy
-and mutable-ref checkout while continuing the selected combined delivery. Its changed workflow and
-release owner require a new candidate and a new dispatch; rerunning `34779065098/1` retains the old
-inputs. v0.1.35 remains unused at reconciliation, and the scoped control still selects the completed
-v0.1.34 tag object. Fresh final-source full/target/package/installed proof, original-reader admission,
-ordinary integration of the admission repair, and immutable anonymous exact/latest installed public
-acceptance remain required. No new tag or publication is claimed; see the
-[campaign evidence](evidence/202609140057-finite-callable.json).
+The [stable-candidate campaign](campaigns/202609140703-collision-1.md) repaired that admission policy
+and mutable-ref checkout while preserving the selected combined delivery. Its new exact-source
+rehearsal and later publisher completed the required source/target/package/installed proof,
+original-reader admission and normal integration. The older failed attempt and its unchanged
+inputs remain historical evidence; see the [campaign evidence](evidence/202609140057-finite-callable.json).
 
 The repaired workflow/tooling source is frozen at `4306ef64783462a8dda48f2a855a88482d1faec8`,
 with 47 focused release tests and strict clippy passed. Its pushed source branch is
@@ -79,8 +76,8 @@ with 47 focused release tests and strict clippy passed. Its pushed source branch
 2026-09-14T00:12:35Z. All five authenticated artifacts are retained; original package, target and
 installed-pair readers pass, with the original prepare binding 26 fresh full gates and zero reuse.
 The exact-source 76-omission target test also passes with restored original bytes. This is admitted
-rehearsal, with publication/public jobs appropriately skipped. Selected immutable/public delivery
-continues through the existing protocol. Preserve the frozen branch and original readers; later
+rehearsal, with publication/public jobs appropriately skipped. Its subsequent immutable/public delivery
+is recorded below. Preserve the frozen branch and original readers; later
 reporting descendants do not change the release candidate.
 
 The selected v0.1.35 publication is now complete. Annotated object
@@ -93,7 +90,13 @@ package, six-target, simulated-pair and anonymous-public-pair readers pass. Publ
 binds independently admitted exact/latest routes and one fresh five-owner suite within the pair.
 Cleanup is complete. Archived-context rereading did not replay applications. The preceding pending
 observations are superseded by this delivery, without rewriting their failed history or frozen inputs.
-Requirement-parameter development remains a separate untagged 0.1.36 candidate.
+Requirement-parameter source `104654edf866d8f5531555b0aa0731fd496d72a8` has
+passed fresh full/static-target/89-omission acceptance and normal main integration. Version 0.1.36
+remains untagged. Its additional release is deferred
+at most through acceptance of the next selected substantive composition/authoring campaign. At the
+first architectural reassessment after acceptance, select that concrete combined milestone or
+publish this capability alone; do not renew the deferral. The [roadmap](roadmap.md) owns the trigger.
+No next campaign is selected by this record.
 
 Immutable `v0.1.31`, release `386791231`, remains a retained recursive-data predecessor from
 `7ea9c99a31ecd0e5317129d2bd81ab4f8f51e02e`, with its original readers and assets unchanged.
