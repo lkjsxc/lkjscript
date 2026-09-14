@@ -1015,6 +1015,8 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "add.field",
             "add.case",
             "add.operation",
+            "add.requirement-parameter",
+            "set.requirement-parameter",
             "add.effect-parameter",
             "add.type-parameter",
             "set.type-parameter-constraint",
@@ -1041,7 +1043,13 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .iter()
         .filter(|record| record.operation == "change.operation-field")
         .collect::<Vec<_>>();
-    assert_eq!(operation_fields.len(), 139);
+    assert_eq!(operation_fields.len(), 146);
+    assert!(change_section.iter().any(|record| {
+        record.operation == "change.edge-field"
+            && compact_field(record, "edge") == Some("requirement-parameter.operation")
+            && compact_field(record, "name") == Some("parent")
+            && compact_field(record, "syntax") == Some("$NAME|%NAME")
+    }));
     assert_eq!(
         operation_fields
             .iter()
@@ -1160,7 +1168,12 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         record.operation == "query.relation-kind"
             && compact_field(record, "name") == Some("parameter_requirement")
     }));
-    for relation in ["http_route_target", "http_route_port"] {
+    for relation in [
+        "http_route_target",
+        "http_route_port",
+        "requirement_parameter_use",
+        "requirement_argument",
+    ] {
         assert!(query.iter().any(|record| {
             record.operation == "query.relation-kind"
                 && compact_field(record, "name") == Some(relation)
@@ -1171,21 +1184,21 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .iter()
             .filter(|record| record.operation == "query.owner-kind")
             .count(),
-        24
+        25
     );
     assert_eq!(
         query
             .iter()
             .filter(|record| record.operation == "query.namespace-class")
             .count(),
-        11
+        12
     );
     assert_eq!(
         query
             .iter()
             .filter(|record| record.operation == "query.relation-kind")
             .count(),
-        31
+        33
     );
     assert_eq!(
         query

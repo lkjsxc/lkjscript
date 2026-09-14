@@ -2103,7 +2103,7 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
                 form: "requirement-parameter.operation",
                 name: "parent",
                 required: true,
-                syntax: "$NAME",
+                syntax: "$NAME|%NAME",
             },
             CompactFormField {
                 form: "requirement-parameter.operation",
