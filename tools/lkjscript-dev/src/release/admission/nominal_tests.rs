@@ -238,8 +238,8 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
     );
     assert_eq!(
         results.len(),
-        76,
-        "complete nominal and recursive target fault inventory"
+        89,
+        "complete nominal, recursive, and requirement target fault inventory"
     );
     scratch.close().expect("owned log cleanup");
     archive::write_new(&root.join("nominal-receipt-faults.json"), &evidence::encode_json(&serde_json::json!({

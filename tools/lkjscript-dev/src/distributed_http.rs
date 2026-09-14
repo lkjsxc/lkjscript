@@ -2589,7 +2589,7 @@ fn project_function_definition(
         )?;
         require_exact(
             required_field(projection, "version")?,
-            "6",
+            "7",
             "definition version",
         )?;
         let digest = required_field(projection, "digest")?.to_owned();

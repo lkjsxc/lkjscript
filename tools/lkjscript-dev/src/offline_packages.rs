@@ -1990,10 +1990,10 @@ pub(crate) fn read_transferred_receipt(
     }
     verify_file_inventory(&receipt, &root)?;
     require(
-        receipt.inventories.len() == 31
-            && receipt.transport_digests.len() == 31
-            && receipt.producer_inventories.len() == 31,
-        "complete producer, replacement, HTTP and foreground source inventories missing",
+        receipt.inventories.len() == 33
+            && receipt.transport_digests.len() == 33
+            && receipt.producer_inventories.len() == 33,
+        "complete producer, replacement, HTTP, foreground and requirement source inventories missing",
     )?;
     for (index, inventory) in receipt.inventories.iter().enumerate() {
         verify_producer_inventory(&receipt.producer_inventories[index], inventory)?;
