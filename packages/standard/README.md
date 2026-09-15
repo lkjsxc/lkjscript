@@ -17,16 +17,24 @@ absent/live `QueueLeaseState`; `lease-info` borrows its live resource; heartbeat
 consume. `QueueLeaseInfo` exposes job ID, attempt number, lease deadline, and payload without raw
 attempt or worker transition authority.
 
+`TransactionOutcome<T>` is the ordinary nominal variant `Committed(T) | Aborted(TransactionAbortReason)`;
+the ordinary abort reason is `ConditionFailed | Conflict`. Both types are constructible data.
+The lexical `transaction-outcome` expression binds these exact declarations and cases and returns
+the store's completed decision. It adds no capture or serialization permission to `T`. Ordinary
+requirement-parametric libraries can expose completion without moving their transaction to callers;
+the transported typed-cell witness is maintained by the
+[requirement-library observation](../../tools/lkjscript-dev/src/offline_packages/requirements.md).
+
 Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_f2d0249a9e2b937a110a6a2a31705cb1bcbc8840193c24e3caf68fa73f0f3591`;
-- package revision: `package_revision_5a828264c94644f96399d97ae2496b83c48255a3a669b98c7f6a12c86179c9fa`;
-- package transport: `package_transport_35ff911fbf888e8569a7b06e0bae0fbe3a70b88486cd99338523bbdb2671b1dc`;
-- artifact manifest: `artifact_manifest_c66b139cf7b2a7f50b27e952e17fa0ee06944fa68f313404c88b3869ff591644`;
-- artifact bundle: `artifact_bundle_81d606a50a8f5fe08424f87ab36e3e9c1ff7718a2db0c7f234036ff8957469fa`;
-- 888 live semantic owners, 142 compiler units, and 33 graph tests.
+- semantic revision: `rev_961fb9773948313d606f11bd69785a055d0609477555f370a4dfdbc08d0a0044`;
+- package revision: `package_revision_53634416f408feddc2207ca97dc064e855d94ae6ca670f8bf39810a9eea58410`;
+- package transport: `package_transport_a7ab2c4b6ff765b3aeae27f15f0b51445f58d61608a41ccd01b4d24b3b66cf20`;
+- artifact manifest: `artifact_manifest_c95278bfaf2fb19617a3f5cd9ae9d17adbb0e8eb107e096409a3f07003a2b3a9`;
+- artifact bundle: `artifact_bundle_211413a3907045a45fa68acddfd45d8ad7d31a08a8bbdd7ea28a5525bdc2b3f8`;
+- 895 live semantic owners, 144 compiler units, and 33 graph tests.
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose
 ordinary parametric records with pure functions. Mapping invokes the first callback then the second,

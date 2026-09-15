@@ -5,7 +5,7 @@ reference.owner as=$put package=$std class=operation parent=$DataStore name=put
 reference.owner as=$transaction package=$std class=operation parent=$DataStore name=transaction
 reference.owner as=$schema-read package=$std class=operation parent=$DataStore name=schema-read
 reference.owner as=$module package=local class=module name=typed-cells
-reference.owner as=$update package=local class=declaration parent=$module name=attempt-update
+reference.owner as=$update package=local class=declaration parent=$module name=try-update
 reference.owner as=$R package=local class=requirement-parameter parent=$update name=R
 set.requirement-parameter as=%stronger parameter=$R interface=$DataStore
 requirement-parameter.operation parent=%stronger index=0 operation=$get

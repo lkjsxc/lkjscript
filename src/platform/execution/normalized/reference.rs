@@ -1,7 +1,8 @@
 //! Implementation-disjoint evaluator over canonical Graph 14 owner and expression records.
 
 use super::capability::{
-    NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
+    NormalizedCapabilities, NormalizedCapabilityTransaction, NormalizedTransactionCompletion,
+    validate_outcome,
 };
 use super::prepare::NormalizedProgram;
 use super::reference_schema::NormalizedReferenceSchema;
@@ -20,8 +21,8 @@ use crate::platform::kernel::{
     EffectParameterReference, EffectRow, ExpressionOperation, FieldReference, FieldSelector,
     FunctionDeclaration, FunctionEffect, ImplementationName, KernelSnapshot, LocalValueReference,
     Name, OperationReference, OwnerKey, OwnerRecord, PackageId, ParameterRecord, ParameterUse,
-    PortImplementation, RequirementReference, SemanticStateDigest, TextValue, TypeForm,
-    TypeObjectDigest,
+    PortImplementation, RequirementReference, SemanticStateDigest, TextValue,
+    TransactionOutcomeContract, TypeForm, TypeObjectDigest,
 };
 use crate::platform::kernel::{RequirementOperand, RequirementParameterReference};
 use crate::platform::semantic_id::{
@@ -2047,6 +2048,20 @@ impl ReferenceState<'_> {
                 binding,
                 body,
                 locals,
+                None,
+            ),
+            ExpressionOperation::TransactionOutcome {
+                requirement,
+                binding,
+                body,
+                outcome,
+                type_argument,
+            } => self.transaction(
+                self.resolve_requirement(requirement)?,
+                binding,
+                body,
+                locals,
+                Some((outcome, type_argument)),
             ),
         }
     }
@@ -2668,7 +2683,11 @@ impl ReferenceState<'_> {
         binding: BindingId,
         body: ExpressionId,
         locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
+        outcome: Option<(TransactionOutcomeContract, TypeObjectDigest)>,
     ) -> Result<CheckedValue, ExecutionError> {
+        let outcome = outcome
+            .map(|(contract, ty)| self.outcome_layouts(contract, ty))
+            .transpose()?;
         self.admit_operation_allowance(requirement)?;
         self.binding(binding, BindingKind::Transaction)?;
         let capabilities = self
@@ -2737,14 +2756,116 @@ impl ReferenceState<'_> {
         }
         match result {
             Ok(value) => {
-                transaction.transaction.commit(self.control)?;
-                Ok(value)
+                if let Some((layout, reason_layout, [committed, aborted, condition, conflict])) =
+                    outcome
+                {
+                    // Complete every fallible layout/ownership/capacity operation before commit.
+                    // Retain the checked payload directly in a private, already built success.
+                    let prepared = (|| {
+                        self.charge_allocation(
+                            (3 * std::mem::size_of::<NormalizedValue>()) as u64,
+                        )?;
+                        let committed = self.variant_value(layout, committed, Some(value))?;
+                        let condition = self.variant_value(reason_layout, condition, None)?;
+                        let condition = self.variant_value(layout, aborted, Some(condition))?;
+                        let conflict = self.variant_value(reason_layout, conflict, None)?;
+                        let conflict = self.variant_value(layout, aborted, Some(conflict))?;
+                        Ok::<_, ExecutionError>((committed, condition, conflict))
+                    })();
+                    let (committed, condition, conflict) = match prepared {
+                        Ok(choices) => choices,
+                        Err(error) => {
+                            let _ = transaction.transaction.rollback();
+                            return Err(error);
+                        }
+                    };
+                    let completion = match transaction.transaction.commit(self.control) {
+                        Ok(completion) => completion,
+                        Err(error) => {
+                            let _ = transaction.transaction.rollback();
+                            return Err(error);
+                        }
+                    };
+                    Ok(match completion {
+                        NormalizedTransactionCompletion::Committed => committed,
+                        NormalizedTransactionCompletion::ConditionFailed => condition,
+                        NormalizedTransactionCompletion::Conflict => conflict,
+                    })
+                } else {
+                    transaction.transaction.commit(self.control)?.legacy()?;
+                    Ok(value)
+                }
             }
             Err(error) => {
                 let _ = transaction.transaction.rollback();
                 Err(error)
             }
         }
+    }
+
+    fn outcome_layouts(
+        &self,
+        contract: TransactionOutcomeContract,
+        type_argument: TypeObjectDigest,
+    ) -> Result<(VariantLayoutIndex, VariantLayoutIndex, [u32; 4]), ExecutionError> {
+        contract.validate_identity().map_err(|_| {
+            reference_type_error("transaction completion uses foreign nominal identities")
+        })?;
+        let arguments = self.resolve_type_arguments(&[type_argument])?;
+        let result_type = super::value_schema::nominal_identity(contract.outcome, &arguments)
+            .map_err(|_| reference_type_error("transaction result has an invalid application"))?;
+        let reason_type = super::value_schema::nominal_identity(contract.abort_reason, &[])
+            .map_err(|_| reference_type_error("transaction abort has an invalid identity"))?;
+        if !self.schema.ordinary_types.contains(&result_type) {
+            return Err(reference_type_error(
+                "transaction result contains inadmissible authority",
+            ));
+        }
+        let result_index = self
+            .schema
+            .variant_index(result_type)
+            .and_then(|index| u32::try_from(index).ok())
+            .ok_or_else(|| reference_type_error("transaction result has no canonical layout"))?;
+        let reason_index = self
+            .schema
+            .variant_index(reason_type)
+            .and_then(|index| u32::try_from(index).ok())
+            .ok_or_else(|| reference_type_error("transaction abort has no canonical layout"))?;
+        let result = &self.schema.variants[result_index as usize];
+        let reason = &self.schema.variants[reason_index as usize];
+        if result.declaration != contract.outcome
+            || reason.declaration != contract.abort_reason
+            || result.cases.len() != 2
+            || reason.cases.len() != 2
+            || result.arguments.as_ref() != arguments.as_slice()
+            || !reason.arguments.is_empty()
+        {
+            return Err(reference_type_error(
+                "transaction completion has foreign canonical declarations",
+            ));
+        }
+        let select = |cases: &[super::prepare::NormalizedVariantCase], reference, payload| {
+            cases
+                .iter()
+                .enumerate()
+                .find(|(_, case)| case.reference == reference && case.payload == payload)
+                .and_then(|(index, _)| u32::try_from(index).ok())
+                .ok_or_else(|| {
+                    reference_type_error(
+                        "transaction completion has a foreign canonical case or payload",
+                    )
+                })
+        };
+        Ok((
+            VariantLayoutIndex(result_index, self.schema.value_origin),
+            VariantLayoutIndex(reason_index, self.schema.value_origin),
+            [
+                select(&result.cases, contract.committed, Some(arguments[0]))?,
+                select(&result.cases, contract.aborted, Some(reason_type))?,
+                select(&reason.cases, contract.condition_failed, None)?,
+                select(&reason.cases, contract.conflict, None)?,
+            ],
+        ))
     }
 
     fn text(&mut self, value: TextValue) -> Result<Arc<str>, ExecutionError> {

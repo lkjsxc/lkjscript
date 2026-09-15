@@ -41,6 +41,16 @@ impl ExpressionRecord {
                 ),
             ));
         }
+        if matches!(
+            self.operation,
+            ExpressionOperation::TransactionOutcome { .. }
+        ) && self.contract_version < 16
+        {
+            return Err(expression_error(
+                "kernel_expression_generation",
+                "transaction-outcome requires Graph Contract 16",
+            ));
+        }
         validate_operation(&self.operation)
     }
 
@@ -54,6 +64,7 @@ impl ExpressionRecord {
             | ExpressionOperation::FunctionValue { type_arguments, .. }
             | ExpressionOperation::Record { type_arguments, .. }
             | ExpressionOperation::Variant { type_arguments, .. } => type_arguments.clone(),
+            ExpressionOperation::TransactionOutcome { type_argument, .. } => vec![*type_argument],
             ExpressionOperation::List { item_type, .. } => vec![*item_type],
             ExpressionOperation::Map {
                 key_type,
@@ -157,6 +168,68 @@ pub enum ExpressionOperation {
         callee: ExpressionId,
         arguments: Vec<ExpressionId>,
     },
+    TransactionOutcome {
+        requirement: super::RequirementOperand,
+        binding: BindingId,
+        body: ExpressionId,
+        outcome: TransactionOutcomeContract,
+        type_argument: TypeObjectDigest,
+    },
+}
+
+/// Exact ordinary nominal owners bound by a lexical completion expression.
+/// These identities are independent of names and of the installed standard revision.
+#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TransactionOutcomeContract {
+    pub outcome: DeclarationReference,
+    pub abort_reason: DeclarationReference,
+    pub committed: CaseReference,
+    pub aborted: CaseReference,
+    pub condition_failed: CaseReference,
+    pub conflict: CaseReference,
+}
+
+impl TransactionOutcomeContract {
+    pub fn standard() -> Result<Self, Diagnostic> {
+        let package = "pkg_10000000000000000000000000000001".parse()?;
+        Ok(Self {
+            outcome: DeclarationReference {
+                package,
+                declaration: "decl_793c300ee2cc4254bb6869577ff6a156".parse()?,
+            },
+            abort_reason: DeclarationReference {
+                package,
+                declaration: "decl_717a93982fa4cfc42d0397150df09872".parse()?,
+            },
+            committed: CaseReference {
+                package,
+                case: "case_c6ba2c49dff0913b6c6935a811287824".parse()?,
+            },
+            aborted: CaseReference {
+                package,
+                case: "case_fc20a66fa0d7c7f01fa0dbec97c0325f".parse()?,
+            },
+            condition_failed: CaseReference {
+                package,
+                case: "case_8bdab52b6d86b1ccc0d9160a5cca7ba8".parse()?,
+            },
+            conflict: CaseReference {
+                package,
+                case: "case_97d121e1a242f4b0ca8dc6dad0380dd6".parse()?,
+            },
+        })
+    }
+
+    pub fn validate_identity(self) -> Result<(), Diagnostic> {
+        if self != Self::standard()? {
+            return Err(expression_error(
+                "kernel_transaction_outcome_identity",
+                "transaction completion requires the exact standard nominal declaration and case identities",
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
@@ -379,6 +452,7 @@ fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic>
         | ExpressionOperation::If { .. }
         | ExpressionOperation::Field { .. }
         | ExpressionOperation::Transaction { .. } => {}
+        ExpressionOperation::TransactionOutcome { outcome, .. } => outcome.validate_identity()?,
     }
     Ok(())
 }
@@ -517,7 +591,8 @@ fn expression_children(operation: &ExpressionOperation) -> Vec<ExpressionChild> 
             arguments,
             ExpressionChildRole::CapabilityArgument,
         ),
-        ExpressionOperation::Transaction { body, .. } => {
+        ExpressionOperation::Transaction { body, .. }
+        | ExpressionOperation::TransactionOutcome { body, .. } => {
             push_child(
                 &mut children,
                 *body,

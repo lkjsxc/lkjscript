@@ -184,7 +184,7 @@ impl Closure<'_> {
                 return Err(failure());
             };
             let children = record.children();
-            let nominal = match &record.operation {
+            let nominal: Option<(_, &[TypeObjectDigest])> = match &record.operation {
                 ExpressionOperation::Record {
                     nominal_type: Some(declaration),
                     type_arguments,
@@ -208,6 +208,11 @@ impl Closure<'_> {
                         type_arguments,
                     ))
                 }
+                ExpressionOperation::TransactionOutcome {
+                    outcome,
+                    type_argument,
+                    ..
+                } => Some((outcome.outcome, std::slice::from_ref(type_argument))),
                 _ => None,
             };
             if let Some((declaration, arguments)) = nominal {

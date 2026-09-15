@@ -76,25 +76,34 @@ is closed; its frozen inputs and failed history stay intact.
 The [requirement-parameter campaign](campaigns/202609140938.md) and accepted
 [structural-authoring campaign](campaigns/202609150900.md) have consumed the single delivery deferral.
 The [delivery continuation](campaigns/202609151412.md) has started their combined publication from
-the unchanged frozen source. Close its publisher and anonymous installed-product gates before
-selecting another capability; the [current summary](status.md#combined-release-delivery) owns the
-remaining disposition. This deferral cannot be renewed.
+the unchanged frozen source. The [transaction-completion mandate](campaigns/202609151502.md)
+supersedes only the prohibition on independent mutable capability development while the frozen
+publisher owns delivery. Its original-reader and anonymous installed-product gates remain due;
+the [current summary](status.md#combined-release-delivery) owns their disposition. The consumed
+deferral cannot be renewed or moved to the new source.
 
-The literal producer uses 145 nonempty lines, 41 expression definitions and 20 expression argument
-edges; the consumer uses 273, 88 and 63 respectively. This establishes flat assembly friction, not
-authoring time, model tokens or billing. The implemented structural request-block adapter reduces
-those literal inputs to 107 and 182 nonempty lines respectively, with two and eleven exported roots
-and no per-occurrence labels or indexed expression edges in their bodies. Explicit declaration,
-reference, type, effect, constraint and dependency preludes remain. The producer owns operations and
-its lexical transaction across caller-owned requirements; minimum sets preserve the whole supplied
-requirement. Its ordinary `UpdateAttempt<T>` cannot certify publication after arbitrary effectful
-callbacks: a true primary condition with no transaction publication is already observed. Evaluate a
-concrete committed-update API against this outcome after combined delivery; consider structural
-declarations or editable projections only after observing the remaining prelude/edit burden.
-General affine transfer needs a caller policy requiring ownership across a library boundary.
-These are hypotheses requiring separate authority. The witness is designed composition, not existing adoption;
-standard/`lkjournal` changes maintain compatibility. Large historical-repository revalidation cost
-remains unmeasured. This outlook is revisable and authorizes no subsequent feature work.
+The selected transaction-completion increment may proceed independently of that recovery lane.
+After its engineering acceptance and integration, its separate publication is deferred for at most
+one further substantive campaign. At the next architectural reassessment select a concrete companion
+or publish the accepted increment alone. Acceptance, material blockage or abandonment of that
+companion triggers publication without another deferral. Any due additive recovery takes precedence
+in the publication lane. This does not select automatic retry: independent callback effects still
+require an application policy for replay and idempotency.
+
+The [structural campaign](campaigns/202609150900.md) retains the original literal size observations;
+they establish assembly friction, not authoring time, model tokens or billing. Explicit declaration,
+reference, type, effect, constraint and dependency preludes remain. The selected completion API lets
+the library own finalization across a caller-supplied requirement; fresh acceptance must establish
+the result through transport, callback failures and independent store observations.
+
+After completion, the difficult composition boundary is transaction ownership: a helper owning a
+transaction still cannot join an already active transaction on the same canonical requirement.
+Conflict describes that store's non-publication, while independent callback effects can survive.
+Retries therefore need workload-specific idempotency and effect analysis. Evaluate useful ordinary
+libraries or numerical computation from fresh workloads, and reconsider authoring preludes or affine
+transfer only where a concrete caller needs them. The typed-cell witness is designed composition,
+not adoption; standard/`lkjournal` changes maintain compatibility. Historical-repository revalidation
+cost remains unmeasured. This outlook is revisable and authorizes no subsequent feature work.
 
 Immutable v0.1.8 remains the unchanged historical recovery point; its workflow defect was recovered additively.
 

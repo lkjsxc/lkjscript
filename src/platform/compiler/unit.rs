@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-11";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 11;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-7";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 7;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN11";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v11";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v11";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-12";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 12;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-8";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 8;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN12";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v12";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v12";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -72,6 +72,8 @@ impl CompilationUnitKey {
         })?;
         let mut hasher = blake3::Hasher::new_derive_key(if compiler_contract_version == 10 {
             "lkjscript.compiler-unit-key.v10"
+        } else if compiler_contract_version == 11 {
+            "lkjscript.compiler-unit-key.v11"
         } else {
             COMPILER_UNIT_KEY_DOMAIN
         });
@@ -363,6 +365,33 @@ pub enum CompiledInstruction {
     Capture {
         index: u32,
     },
+    BeginTransactionOutcome {
+        requirement: CompiledTransactionRequirement,
+        binding: u32,
+        outcome: CompiledTransactionOutcome,
+    },
+    CommitTransactionOutcome {
+        requirement: CompiledTransactionRequirement,
+        binding: u32,
+        outcome: CompiledTransactionOutcome,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
+pub enum CompiledTransactionRequirement {
+    Concrete(u32),
+    Parameter(crate::platform::kernel::RequirementParameterReference),
+}
+
+#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
+pub struct CompiledTransactionOutcome {
+    pub outcome: u32,
+    pub abort_reason: u32,
+    pub committed: u32,
+    pub aborted: u32,
+    pub condition_failed: u32,
+    pub conflict: u32,
+    pub type_argument: u32,
 }
 
 #[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
@@ -386,6 +415,13 @@ impl CompilationUnit {
                 *b"LKJCUN10",
                 "lkjscript.compiler-unit-envelope.v10",
                 &super::wire10::CompilationUnit10::try_from(self.clone())?,
+                MAXIMUM_COMPILER_UNIT_BYTES,
+            )?
+        } else if self.contract_version == 11 {
+            crate::platform::packed::encode(
+                *b"LKJCUN11",
+                "lkjscript.compiler-unit-envelope.v11",
+                self,
                 MAXIMUM_COMPILER_UNIT_BYTES,
             )?
         } else {
@@ -420,6 +456,13 @@ impl CompilationUnit {
                 MAXIMUM_COMPILER_UNIT_BYTES,
             )?
             .into()
+        } else if bytes.starts_with(b"LKJCUN11") {
+            crate::platform::packed::decode(
+                bytes,
+                *b"LKJCUN11",
+                "lkjscript.compiler-unit-envelope.v11",
+                MAXIMUM_COMPILER_UNIT_BYTES,
+            )?
         } else {
             crate::platform::packed::decode(
                 bytes,
@@ -447,12 +490,19 @@ impl CompilationUnit {
                 self.bytecode_contract_version,
                 self.graph_contract_version
             ),
-            (10, 6, 14) | (11, 7, 15)
+            (10, 6, 14) | (11, 7, 15) | (12, 8, 16)
         ) {
             return Err(unit_error(
                 DiagnosticClass::Source,
                 "compiler_unit_contract",
                 "compiler unit uses a predecessor or foreign contract",
+            ));
+        }
+        if self.contract_version < 12 && self.payload.uses_transaction_outcome() {
+            return Err(unit_error(
+                DiagnosticClass::Source,
+                "compiler_unit_transaction_outcome_generation",
+                "transaction outcomes require compiler-unit 12 and bytecode 8",
             ));
         }
         if self.source.package.bytes() == [0; 16] {
@@ -548,6 +598,26 @@ impl CompilationTables {
 }
 
 impl CompilationPayload {
+    fn uses_transaction_outcome(&self) -> bool {
+        let contains = |code: &CompiledCode| {
+            code.instructions.iter().any(|instruction| {
+                matches!(
+                    instruction,
+                    CompiledInstruction::BeginTransactionOutcome { .. }
+                        | CompiledInstruction::CommitTransactionOutcome { .. }
+                )
+            })
+        };
+        match self {
+            Self::Function { code, .. } | Self::Constant { code, .. } => contains(code),
+            Self::Test { actual, expected, .. } => contains(actual) || contains(expected),
+            Self::Component { ports, .. } => ports.iter().any(|port| {
+                matches!(&port.implementation, CompiledPortImplementation::Expression(code) if contains(code))
+            }),
+            _ => false,
+        }
+    }
+
     fn validate(
         &self,
         source: &CompilationSource,
@@ -1236,6 +1306,49 @@ impl CompiledInstruction {
             | Self::CommitParameterTransaction { binding, .. } => {
                 require_index("transaction local", *binding, code.local_count as usize)
             }
+            Self::BeginTransactionOutcome {
+                requirement,
+                binding,
+                outcome,
+            }
+            | Self::CommitTransactionOutcome {
+                requirement,
+                binding,
+                outcome,
+            } => {
+                if let CompiledTransactionRequirement::Concrete(requirement) = requirement {
+                    require_index(
+                        "transaction requirement",
+                        *requirement,
+                        tables.requirements.len(),
+                    )?;
+                }
+                require_index("transaction local", *binding, code.local_count as usize)?;
+                require_index(
+                    "transaction outcome declaration",
+                    outcome.outcome,
+                    tables.declarations.len(),
+                )?;
+                require_index(
+                    "transaction abort declaration",
+                    outcome.abort_reason,
+                    tables.declarations.len(),
+                )?;
+                require_index(
+                    "transaction body type",
+                    outcome.type_argument,
+                    tables.types.len(),
+                )?;
+                for case in [
+                    outcome.committed,
+                    outcome.aborted,
+                    outcome.condition_failed,
+                    outcome.conflict,
+                ] {
+                    require_index("transaction outcome case", case, tables.cases.len())?;
+                }
+                Ok(())
+            }
             Self::Perform {
                 requirement,
                 operation,
@@ -1536,7 +1649,9 @@ fn stack_effect(instruction: &CompiledInstruction) -> Result<(usize, usize), Dia
         | CompiledInstruction::BeginParameterTransaction { .. }
         | CompiledInstruction::CommitParameterTransaction { .. }
         | CompiledInstruction::BeginTransaction { .. }
+        | CompiledInstruction::BeginTransactionOutcome { .. }
         | CompiledInstruction::CommitTransaction { .. } => (0, 0),
+        CompiledInstruction::CommitTransactionOutcome { .. } => (1, 1),
         CompiledInstruction::Call { arguments, .. } => (count(*arguments)?, 1),
         CompiledInstruction::BeginBind { .. } | CompiledInstruction::Capture { .. } => (1, 1),
         CompiledInstruction::Invoke { arguments } | CompiledInstruction::Bind { arguments } => {

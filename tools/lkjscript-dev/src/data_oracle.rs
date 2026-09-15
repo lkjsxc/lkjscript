@@ -955,16 +955,22 @@ fn benchmark_data(
     {
         return Err(DevError::corrupt("benchmark delete expectation failed"));
     }
-    if let DataCommitOutcome::Committed {
-        durable_bytes,
-        fsync_publications,
-        ..
-    } = change.commit().map_err(data_error)?
-    {
-        metrics.durable_bytes = metrics.durable_bytes.saturating_add(durable_bytes as u64);
-        metrics.fsync_publications = metrics
-            .fsync_publications
-            .saturating_add(fsync_publications as u64);
+    match change.commit().map_err(data_error)? {
+        DataCommitOutcome::Committed {
+            durable_bytes,
+            fsync_publications,
+            ..
+        } => {
+            metrics.durable_bytes = metrics.durable_bytes.saturating_add(durable_bytes as u64);
+            metrics.fsync_publications = metrics
+                .fsync_publications
+                .saturating_add(fsync_publications as u64);
+        }
+        _ => {
+            return Err(DevError::corrupt(
+                "benchmark update/delete did not commit one revision",
+            ));
+        }
     }
     metrics.operations = metrics.operations.saturating_add(4);
     remove_exact_directory(root)?;

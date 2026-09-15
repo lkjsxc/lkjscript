@@ -32,11 +32,11 @@ const STANDARD_TRANSPORT_CONTAINER: &[u8] =
 const STANDARD_ARTIFACT: &[u8] = include_bytes!("../../packages/standard/generated/standard.lkja");
 const STANDARD_PACKAGE: &str = "pkg_10000000000000000000000000000001";
 const STANDARD_SEMANTIC_REVISION: &str =
-    "rev_f2d0249a9e2b937a110a6a2a31705cb1bcbc8840193c24e3caf68fa73f0f3591";
+    "rev_961fb9773948313d606f11bd69785a055d0609477555f370a4dfdbc08d0a0044";
 const STANDARD_PACKAGE_REVISION: &str =
-    "package_revision_5a828264c94644f96399d97ae2496b83c48255a3a669b98c7f6a12c86179c9fa";
+    "package_revision_53634416f408feddc2207ca97dc064e855d94ae6ca670f8bf39810a9eea58410";
 const STANDARD_PACKAGE_TRANSPORT: &str =
-    "package_transport_35ff911fbf888e8569a7b06e0bae0fbe3a70b88486cd99338523bbdb2671b1dc";
+    "package_transport_a7ab2c4b6ff765b3aeae27f15f0b51445f58d61608a41ccd01b4d24b3b66cf20";
 const COMMAND_TEXT_FROM_STATIC: &str = "text-from-static";
 const COMMAND_TEXT_FROM_STATIC_IMPLEMENTATION: &str = "core.text.from-static";
 const HTTP_BYTES_FROM_TEXT: &str = "bytes-from-text";

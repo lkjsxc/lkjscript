@@ -37,7 +37,9 @@ impl Decoder {
             let mut children = Vec::new();
             let direct: &[&str] = match record.operation.as_str() {
                 "expression.if" => &["condition", "when-true", "when-false"],
-                "expression.let" | "expression.transaction" => &["body"],
+                "expression.let" | "expression.transaction" | "expression.transaction-outcome" => {
+                    &["body"]
+                }
                 "expression.bind" => &["callee"],
                 "expression.invoke" => &["function"],
                 "expression.field" | "expression.match" => &["value"],

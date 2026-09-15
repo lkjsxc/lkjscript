@@ -487,7 +487,8 @@ fn visit_expression(
         ExpressionOperation::CapabilityCall { arguments, .. } => {
             visit_many(snapshot, arguments, &label, "argument", identities)
         }
-        ExpressionOperation::Transaction { binding, body, .. } => {
+        ExpressionOperation::Transaction { binding, body, .. }
+        | ExpressionOperation::TransactionOutcome { binding, body, .. } => {
             visit_binding(snapshot, *binding, format!("{label}/binding"), identities);
             visit_expression(snapshot, *body, format!("{label}/body"), identities);
         }

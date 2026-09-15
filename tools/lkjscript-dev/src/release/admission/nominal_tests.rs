@@ -246,6 +246,8 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
                 "/observations/requirement_retry",
                 "/observations/requirement_packages",
                 "/observations/requirement_predecessor",
+                "/observations/requirement_transaction_predecessor",
+                "/observations/requirement_conflict",
                 "/observations/requirement_queue",
                 "/observations/requirement_unencodable",
                 "/observations/requirement_structural",
@@ -353,9 +355,21 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
         .expect("edited update inspection");
     let before_name = format!("command-{update_before:04}.stdout");
     let after_name = format!("command-{update_after:04}.stdout");
+    let requirement_commands: Vec<usize> = serde_json::from_str(
+        child["observations"]["requirement_commands"]
+            .as_str()
+            .expect("completed outcome invocation inventory"),
+    )
+    .expect("completed outcome indices");
+    let condition_name = format!("command-{:04}.stdout", requirement_commands[9]);
+    let predecessor_artifact = "requirement-transaction-predecessor--predecessor.lkja";
     for name in [
         "requirement-consumer-structural.lkjplan",
         "requirement-supplier-structural.lkjplan",
+        "requirement-consumer-structural.lkjc",
+        "requirement-store-observations.json",
+        predecessor_artifact,
+        &condition_name,
         &before_name,
         &after_name,
     ] {
@@ -565,6 +579,81 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
         Some("inspection changed function identity, accepted revision"),
     );
 
+    let name = "requirement-consumer-structural.lkjc";
+    let input = fs::read_to_string(child_root.join(name)).expect("original outcome literal");
+    let completed_literal =
+        include_str!("../../offline_packages/requirements.outcomes.consumer.structural.lkjc");
+    assert_eq!(input.matches(completed_literal).count(), 1);
+    fs::write(
+        child_root.join(name),
+        input.replacen(completed_literal, "", 1),
+    )
+    .expect("withhold owned completed outcome literal");
+    let mut fault = child.clone();
+    rebind_offline_file(&mut fault, &child_root, name);
+    structural_fault(
+        fault,
+        "transaction-outcome/omit-literal-consumer",
+        Some("independent literal library request changed"),
+    );
+
+    let output = fs::read_to_string(child_root.join(&condition_name))
+        .expect("original condition-failed completion");
+    fs::write(
+        child_root.join(&condition_name),
+        replace_record_field(
+            &output,
+            "execution",
+            "value",
+            r#"{"case":"Committed","value":19}"#,
+        ),
+    )
+    .expect("forge accepted candidate for a suppressed transaction");
+    let mut fault = child.clone();
+    rebind_offline_file(&mut fault, &child_root, &condition_name);
+    structural_fault(
+        fault,
+        "transaction-outcome/condition-failed-forged-as-committed",
+        Some("requirement result, operation count, or cleanup differs"),
+    );
+
+    let name = "requirement-store-observations.json";
+    let mut states: Value = serde_json::from_slice(
+        &fs::read(child_root.join(name)).expect("original physical store observations"),
+    )
+    .expect("store observations JSON");
+    for row in states.as_array_mut().expect("store rows") {
+        row[0]
+            .as_object_mut()
+            .expect("number store")
+            .remove("revision");
+    }
+    fs::write(
+        child_root.join(name),
+        evidence::encode_json(&states).expect("omitted physical revisions"),
+    )
+    .expect("withhold owned number-store HEAD identity");
+    let mut fault = child.clone();
+    rebind_offline_file(&mut fault, &child_root, name);
+    structural_fault(
+        fault,
+        "transaction-outcome/omit-physical-head-identities",
+        Some("independent store revision, complete cells, or entry bytes omitted"),
+    );
+
+    fs::remove_file(child_root.join(predecessor_artifact))
+        .expect("withhold owned authentic predecessor artifact");
+    let mut fault = child.clone();
+    fault["files"]
+        .as_array_mut()
+        .expect("offline retained files")
+        .retain(|file| file["path"] != predecessor_artifact);
+    structural_fault(
+        fault,
+        "transaction-outcome/omit-authentic-predecessor-artifact",
+        None,
+    );
+
     assert_eq!(
         invoke().0,
         ProcessStatus::Passed,
@@ -576,7 +665,7 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
     );
     assert_eq!(
         results.len(),
-        108,
+        114,
         "complete nominal, recursive, and requirement target fault inventory"
     );
     scratch.close().expect("owned log cleanup");

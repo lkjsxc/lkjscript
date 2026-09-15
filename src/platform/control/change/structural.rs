@@ -412,13 +412,32 @@ pub(super) fn layout(
                 node.record.fields.push(block.field(args[1], "operation")?);
                 node.children.extend_from_slice(&args[2..]);
             }
-            "transaction" => {
-                arity(&block, id, args, 3)?;
+            "transaction" | "transaction-outcome" => {
+                let outcome = form == "transaction-outcome";
+                arity(&block, id, args, if outcome { 5 } else { 3 })?;
                 node.record
                     .fields
                     .push(block.field(args[0], "requirement")?);
-                let binder = clause(&block, args[1], "binding")?;
-                arity(&block, args[1], binder, 1)?;
+                let binder_index = if outcome { 3 } else { 1 };
+                if outcome {
+                    let types = clause(&block, args[1], "types")?;
+                    arity(&block, args[1], types, 1)?;
+                    node.record.fields.push(block.field(types[0], "type")?);
+                    let references = clause(&block, args[2], "outcome")?;
+                    arity(&block, args[2], references, 6)?;
+                    for (value, field) in references.iter().zip([
+                        "outcome",
+                        "abort-reason",
+                        "committed",
+                        "aborted",
+                        "condition-failed",
+                        "conflict",
+                    ]) {
+                        node.record.fields.push(block.field(*value, field)?);
+                    }
+                }
+                let binder = clause(&block, args[binder_index], "binding")?;
+                arity(&block, args[binder_index], binder, 1)?;
                 let binder_name = name(&block, binder[0])?;
                 let binder_symbol = symbols.allocate(&block.syntax[binder[0]].location)?;
                 node.record.fields.push(block.field(binder[0], "name")?);
@@ -427,10 +446,10 @@ pub(super) fn layout(
                     value: binder_symbol.clone(),
                     location: block.syntax[binder[0]].location.clone(),
                 });
-                node.children.push(args[2]);
+                node.children.push(args[binder_index + 1]);
                 work.push(Work::Leave(binder_name.as_str().to_owned()));
                 work.push(Work::Expression {
-                    id: args[2],
+                    id: args[binder_index + 1],
                     depth: depth + 1,
                 });
                 work.push(Work::Enter {
@@ -774,6 +793,17 @@ fn lower_node(
                 declared_type: None,
             },
             body: Box::new(child()?),
+        },
+        "expression.transaction-outcome" => AuthoredExpressionOperation::TransactionOutcome {
+            requirement: decoder.parse_requirement_reference(record, "requirement")?,
+            binding: AuthoredBindingDefinition {
+                symbol: symbol(record, "binding")?,
+                name: parse_name(record, "name")?,
+                declared_type: None,
+            },
+            body: Box::new(child()?),
+            type_argument: Box::new(decoder.decode_type_field(required_field(record, "type")?)?),
+            outcome: decoder.decode_transaction_outcome(record)?,
         },
         _ => {
             return Err(inventory_error(

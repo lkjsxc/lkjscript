@@ -1,5 +1,5 @@
 reference.owner as=$module package=local class=module name=typed-cells
-reference.owner as=$update package=local class=declaration parent=$module name=attempt-update
+reference.owner as=$update package=local class=declaration parent=$module name=try-update
 effect.row as=@Empty
 expression.function-value as=$invalid function=$update
 type.argument parent=$invalid index=0 type=i64

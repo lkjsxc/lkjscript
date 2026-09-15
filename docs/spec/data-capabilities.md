@@ -17,10 +17,13 @@ meaning.
 
 The physical format is `lkjscript-data-store-1`. One root has a random physical identity, immutable
 canonical revision objects, retained parent history, private staging, one cross-process writer lock,
-and one atomic durable `HEAD`. A transaction reads one immutable base snapshot. Commit locks,
-rechecks that exact base, synchronizes one complete immutable revision, and changes visibility once.
-A changed base is a retryable conflict with no visibility. Failure before head visibility reopens
-the old state; interruption after visibility is a distinct possible-visibility reconciliation
+and one atomic durable `HEAD`. A transaction reads one immutable base snapshot. A transaction with
+a failed conditional expectation suppresses publication before checking for mutations or a changed
+base. Successful completion without mutations retains the original snapshot, creates no revision,
+and does not recheck the latest `HEAD`. A mutating commit locks, rechecks that exact base, synchronizes
+one complete immutable revision, and changes visibility once. A changed base is a definite conflict
+with no visibility. Failure before head visibility reopens the old state; interruption after
+visibility is a distinct possible-visibility reconciliation
 case. Readers pin their revision. This format performs no compaction, garbage collection,
 in-place repair, accepted-file rewriting, replication, or remote coordination.
 
@@ -35,6 +38,30 @@ non-regular files. All accepted revision objects reachable from `HEAD` are autho
 verify. `catalog/CURRENT` is a bounded sorted acceleration only: read-only verification reconstructs
 objects without it, and a later write rebuilds it after missing, stale, or corrupt catalog bytes.
 Catalog damage cannot hide or redefine canonical authority.
+
+### Lexical completion
+
+Both lexical transaction forms use this one physical completion decision. `transaction` retains
+its body value on successful completion or a failed condition; a changed-base conflict remains its
+retryable execution failure. `transaction-outcome` evaluates its body once, keeps the value private
+until finalization, and returns the exact ordinary nominal `TransactionOutcome<T>`: `Committed(T)`
+for successful completion, including no mutation, or `Aborted(TransactionAbortReason)` with
+`ConditionFailed` or `Conflict`. An abort carries no body value. A returned false, none, or
+application-constructed variant is ordinary body data and does not itself change the transaction's
+expectation state. Failed conditions take precedence over both no mutation and a competing writer.
+
+Body failure, cancellation, resource exhaustion and infrastructure failure produce no normal
+completion value. In particular, `data_head_visibility_unknown` and
+`data_head_durability_unknown` remain possible-visibility execution failures, never an abort.
+Output or cleanup can fail after publication, so receiving no result does not prove rollback or
+safe retry. Completion offers the store's existing durability guarantee and no exactly-once guarantee.
+The outcome declarations are ordinary constructible nominal data, not receipts or authority.
+Their payload retains the existing type, capture, affine and typed-data eligibility rules.
+
+Reentry rejects at runtime when the same canonical requirement already owns an active transaction,
+including aliases and callback-mediated entry. A separately granted store may own an independent
+transaction; its completion and other external effects can survive the outer store's abort.
+There is no implicit retry, transaction joining, savepoint or cross-store rollback.
 
 ## Logical interface
 

@@ -177,7 +177,7 @@ pub(super) fn validate_body_changes(
     supplier_plan: &[CompactRecord],
 ) -> Result<(), DevError> {
     let mut former_bodies = Vec::new();
-    for (index, signature, old_count, new_count) in [(0, 7, 5, 8), (1, 8, 41, 43)] {
+    for (index, signature, old_count, new_count) in [(0, 7, 5, 8), (1, 8, 39, 41)] {
         let old = body_owners(before[index])?;
         let new = body_owners(after[index])?;
         require(
@@ -257,14 +257,16 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<(), DevError> {
             "consumer",
             "requirement-consumer",
             format!(
-                "{}{}{}",
+                "{}{}{}{}",
                 include_str!("requirements.consumer.lkjc"),
+                include_str!("requirements.outcomes.consumer.flat.lkjc"),
                 include_str!("requirements.resource-consumer.lkjc"),
                 include_str!("requirements.unencodable.lkjc")
             ),
             format!(
-                "{}{}{}",
+                "{}{}{}{}",
                 include_str!("requirements.consumer.structural.lkjc"),
+                include_str!("requirements.outcomes.consumer.structural.lkjc"),
                 include_str!("requirements.resource-consumer.structural.lkjc"),
                 include_str!("requirements.unencodable.lkjc")
             ),
@@ -402,14 +404,14 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<(), DevError> {
             "task_function",
             "producer",
             "$update",
-            "attempt-update",
+            "try-update",
         ),
         (
             "update_after",
             "task_function",
             "supplier",
             "$update",
-            "attempt-update",
+            "try-update",
         ),
     ] {
         let index = value[key]

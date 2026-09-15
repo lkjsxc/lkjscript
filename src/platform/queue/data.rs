@@ -424,6 +424,11 @@ impl DataQueue {
                 DataCommitOutcome::Committed { .. } | DataCommitOutcome::Unchanged { .. } => {
                     return Ok(output);
                 }
+                DataCommitOutcome::ConditionFailed { .. } => {
+                    return Err(queue_internal(
+                        "durable queue transaction suppressed publication after a failed expectation",
+                    ));
+                }
                 DataCommitOutcome::Conflict { .. } => continue,
             }
         }
@@ -933,6 +938,53 @@ mod tests {
                 .expect("job")
                 .result,
             Some(b"done".to_vec())
+        );
+    }
+
+    #[test]
+    fn failed_condition_is_neither_success_nor_a_queue_retry() {
+        let (temporary, queue) = queue();
+        let control = ExecutionControl::uncancelled();
+        let base = queue.store.current_revision().expect("base revision");
+        let record = text_key(&queue.store, "rejected").expect("record key");
+        let mut attempts = 0;
+        let error = queue
+            .transact(&control, true, |transaction| {
+                attempts += 1;
+                assert!(
+                    transaction
+                        .put("proof", &record, vec![1], DataExpectation::Missing)
+                        .expect("first write")
+                );
+                assert!(
+                    !transaction
+                        .put("proof", &record, vec![2], DataExpectation::Missing)
+                        .expect("failed condition")
+                );
+                Ok(true)
+            })
+            .expect_err("suppressed queue commit must fail");
+        assert_eq!(attempts, 1);
+        assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
+        assert!(!error.retryable);
+        drop(queue);
+        let reopened = DataStore::open(
+            &temporary.path().join("data"),
+            "queue-test",
+            Default::default(),
+        )
+        .expect("reopen suppressed queue transaction");
+        assert_eq!(
+            reopened.current_revision().expect("reopened revision"),
+            base
+        );
+        assert!(
+            reopened
+                .begin()
+                .expect("reopened read")
+                .get("proof", &record)
+                .expect("suppressed record")
+                .is_none()
         );
     }
 

@@ -1,15 +1,18 @@
 //! Bounded dense-index virtual machine for normalized Graph 14 compiler units.
 
 use super::capability::{
-    NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
+    NormalizedCapabilities, NormalizedCapabilityTransaction, NormalizedTransactionCompletion,
+    validate_outcome,
 };
 use super::prepare::{
     NormalizedCode, NormalizedEntryPoint, NormalizedFieldSelector, NormalizedFunctionBody,
-    NormalizedInstruction, NormalizedProgram, NormalizedTarget,
+    NormalizedInstruction, NormalizedProgram, NormalizedTarget, NormalizedTransactionOutcome,
+    NormalizedTransactionRequirement,
 };
 use super::resource::NormalizedResourceScope;
 use super::value::{
     FunctionIndex, NormalizedMapKey, NormalizedRecord, NormalizedValue, RequirementIndex,
+    VariantLayoutIndex,
 };
 use crate::platform::diagnostic::DiagnosticClass;
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
@@ -505,8 +508,10 @@ struct Frame {
 
 struct ActiveTransaction {
     owner_frame: u64,
+    requirement: RequirementIndex,
     binding: u32,
     generation: u64,
+    outcome: Option<NormalizedTransactionOutcome>,
     transaction: Box<dyn NormalizedCapabilityTransaction>,
 }
 
@@ -1131,8 +1136,10 @@ impl Machine<'_> {
                         canonical,
                         ActiveTransaction {
                             owner_frame,
+                            requirement,
                             binding,
                             generation,
+                            outcome: None,
                             transaction,
                         },
                     );
@@ -1163,7 +1170,9 @@ impl Machine<'_> {
                         .and_then(Option::as_ref)
                         .map(CheckedValue::raw);
                     if transaction.owner_frame != frame.id
+                        || transaction.requirement != requirement
                         || transaction.binding != binding
+                        || transaction.outcome.is_some()
                         || !matches!(token, Some(NormalizedValue::Unit))
                     {
                         let _ = transaction.transaction.rollback();
@@ -1172,8 +1181,34 @@ impl Machine<'_> {
                             "transaction commit disagrees with its exact runtime binding",
                         ));
                     }
-                    transaction.transaction.commit(self.control)?;
+                    transaction.transaction.commit(self.control)?.legacy()?;
                     self.set_local(binding, None)?;
+                }
+                NormalizedInstruction::BeginTransactionOutcome {
+                    requirement,
+                    binding,
+                    outcome,
+                } => {
+                    let NormalizedTransactionRequirement::Concrete(requirement) = requirement
+                    else {
+                        return Err(type_error(
+                            "transaction outcome requires a prepared requirement",
+                        ));
+                    };
+                    self.begin_outcome_transaction(requirement, binding, outcome)?;
+                }
+                NormalizedInstruction::CommitTransactionOutcome {
+                    requirement,
+                    binding,
+                    outcome,
+                } => {
+                    let NormalizedTransactionRequirement::Concrete(requirement) = requirement
+                    else {
+                        return Err(type_error(
+                            "transaction outcome requires a prepared requirement",
+                        ));
+                    };
+                    self.commit_outcome_transaction(requirement, binding, outcome)?;
                 }
                 NormalizedInstruction::Return => {
                     let result = self.pop()?;
@@ -1240,6 +1275,252 @@ impl Machine<'_> {
             })
             .collect::<Result<Vec<_>, _>>()
             .map(Into::into)
+    }
+
+    fn outcome_layouts(
+        &self,
+        outcome: NormalizedTransactionOutcome,
+    ) -> Result<(VariantLayoutIndex, VariantLayoutIndex, [u32; 4]), ExecutionError> {
+        outcome
+            .contract
+            .validate_identity()
+            .map_err(|_| type_error("transaction outcome has foreign nominal identities"))?;
+        let arguments = self.resolve_type_arguments(&[outcome.type_argument])?;
+        let ty = super::value_schema::nominal_identity(outcome.contract.outcome, &arguments)
+            .map_err(|_| type_error("transaction outcome has an invalid nominal application"))?;
+        let reason_ty = super::value_schema::nominal_identity(outcome.contract.abort_reason, &[])
+            .map_err(|_| {
+            type_error("transaction abort reason has an invalid nominal identity")
+        })?;
+        if !self.program.ordinary_types.contains(&ty) {
+            return Err(type_error(
+                "transaction outcome application is not ordinary data",
+            ));
+        }
+        let layout =
+            *self.program.variant_instances.get(&ty).ok_or_else(|| {
+                type_error("transaction outcome application has no prepared layout")
+            })?;
+        let reason_layout = *self
+            .program
+            .variant_instances
+            .get(&reason_ty)
+            .ok_or_else(|| type_error("transaction abort reason has no prepared layout"))?;
+        let result = self
+            .program
+            .variants
+            .get(layout.0 as usize)
+            .filter(|value| {
+                layout.1 == self.program.value_origin
+                    && value.declaration == outcome.contract.outcome
+            })
+            .ok_or_else(|| type_error("transaction outcome layout has a foreign declaration"))?;
+        let reason = self
+            .program
+            .variants
+            .get(reason_layout.0 as usize)
+            .filter(|value| {
+                reason_layout.1 == self.program.value_origin
+                    && value.declaration == outcome.contract.abort_reason
+            })
+            .ok_or_else(|| type_error("transaction abort layout has a foreign declaration"))?;
+        let case = |cases: &[super::prepare::NormalizedVariantCase], reference, payload| {
+            cases
+                .iter()
+                .position(|case| case.reference == reference && case.payload == payload)
+                .and_then(|index| u32::try_from(index).ok())
+                .ok_or_else(|| {
+                    type_error("transaction outcome case has a foreign identity or payload type")
+                })
+        };
+        if result.cases.len() != 2
+            || reason.cases.len() != 2
+            || result.arguments.as_ref() != arguments.as_ref()
+            || !reason.arguments.is_empty()
+        {
+            return Err(type_error(
+                "transaction outcome layout has foreign cases or type arguments",
+            ));
+        }
+        Ok((
+            layout,
+            reason_layout,
+            [
+                case(
+                    &result.cases,
+                    outcome.contract.committed,
+                    Some(arguments[0]),
+                )?,
+                case(&result.cases, outcome.contract.aborted, Some(reason_ty))?,
+                case(&reason.cases, outcome.contract.condition_failed, None)?,
+                case(&reason.cases, outcome.contract.conflict, None)?,
+            ],
+        ))
+    }
+
+    fn begin_outcome_transaction(
+        &mut self,
+        requirement: RequirementIndex,
+        binding: u32,
+        outcome: NormalizedTransactionOutcome,
+    ) -> Result<(), ExecutionError> {
+        self.outcome_layouts(outcome)?;
+        self.admit_operation_allowance(requirement)?;
+        let capabilities = self.capabilities.ok_or_else(capabilities_unbound)?;
+        let canonical = capabilities.canonical_requirement(requirement)?;
+        if self.transactions.contains_key(&canonical) {
+            return Err(runtime_error(
+                "normalized_transaction_nested",
+                "one exact requirement cannot begin a nested transaction",
+            ));
+        }
+        let frame = self.current_frame()?;
+        if frame
+            .locals
+            .get(binding as usize)
+            .is_none_or(Option::is_some)
+        {
+            return Err(runtime_error(
+                "normalized_transaction_binding",
+                "transaction binding escaped its verified empty local slot",
+            ));
+        }
+        let owner_frame = frame.id;
+        let generation = self.next_transaction;
+        let next_generation = generation.checked_add(1).ok_or_else(|| {
+            resource_error(
+                "normalized_transaction_generation",
+                "transaction generation counter overflowed",
+            )
+        })?;
+        self.charge_capability_call(requirement)?;
+        let transaction = capabilities.begin_transaction(
+            self.program,
+            requirement,
+            self.resources,
+            self.control,
+        )?;
+        self.next_transaction = next_generation;
+        self.set_local(
+            binding,
+            Some(CheckedValue::scalar(self.program, NormalizedValue::Unit)?),
+        )?;
+        self.transactions.insert(
+            canonical,
+            ActiveTransaction {
+                owner_frame,
+                requirement,
+                binding,
+                generation,
+                outcome: Some(outcome),
+                transaction,
+            },
+        );
+        self.observation.maximum_live_transactions = self
+            .observation
+            .maximum_live_transactions
+            .max(self.transactions.len());
+        Ok(())
+    }
+
+    fn commit_outcome_transaction(
+        &mut self,
+        requirement: RequirementIndex,
+        binding: u32,
+        outcome: NormalizedTransactionOutcome,
+    ) -> Result<(), ExecutionError> {
+        let canonical = self
+            .capabilities
+            .ok_or_else(capabilities_unbound)?
+            .canonical_requirement(requirement)?;
+        let transaction = self.transactions.get(&canonical).ok_or_else(|| {
+            runtime_error(
+                "normalized_transaction_missing",
+                "transaction commit has no active exact requirement scope",
+            )
+        })?;
+        let frame = self.current_frame()?;
+        let token = frame
+            .locals
+            .get(binding as usize)
+            .and_then(Option::as_ref)
+            .map(CheckedValue::raw);
+        if transaction.owner_frame != frame.id
+            || transaction.requirement != requirement
+            || transaction.binding != binding
+            || transaction.outcome != Some(outcome)
+            || !matches!(token, Some(NormalizedValue::Unit))
+        {
+            return Err(runtime_error(
+                "normalized_transaction_binding",
+                "transaction completion disagrees with its exact runtime continuation",
+            ));
+        }
+        let (layout, reason_layout, [committed, aborted, condition, conflict]) =
+            self.outcome_layouts(outcome)?;
+        // Construct all three bounded choices while the transaction is still rollback-owned.
+        // The checked body moves once into the private success choice. No payload walk or copy
+        // and no allocation, quota charge or value admission occurs after physical completion.
+        self.charge_allocation((3 * std::mem::size_of::<NormalizedValue>()) as u64)?;
+        let body = self.pop()?;
+        let committed = CheckedValue::variant(
+            self.program,
+            layout,
+            committed,
+            Some(body),
+            &mut self.observation.value_work,
+        )?;
+        let condition = CheckedValue::variant(
+            self.program,
+            reason_layout,
+            condition,
+            None,
+            &mut self.observation.value_work,
+        )?;
+        let condition = CheckedValue::variant(
+            self.program,
+            layout,
+            aborted,
+            Some(condition),
+            &mut self.observation.value_work,
+        )?;
+        let conflict = CheckedValue::variant(
+            self.program,
+            reason_layout,
+            conflict,
+            None,
+            &mut self.observation.value_work,
+        )?;
+        let conflict = CheckedValue::variant(
+            self.program,
+            layout,
+            aborted,
+            Some(conflict),
+            &mut self.observation.value_work,
+        )?;
+        let mut transaction = self.transactions.remove(&canonical).ok_or_else(|| {
+            runtime_error(
+                "normalized_transaction_missing",
+                "transaction disappeared before completion",
+            )
+        })?;
+        // Resolve the local slot before entering the bounded physical critical section.
+        self.set_local(binding, None)?;
+        let completion = match transaction.transaction.commit(self.control) {
+            Ok(completion) => completion,
+            Err(error) => {
+                let _ = transaction.transaction.rollback();
+                return Err(error);
+            }
+        };
+        let value = match completion {
+            NormalizedTransactionCompletion::Committed => committed,
+            NormalizedTransactionCompletion::ConditionFailed => condition,
+            NormalizedTransactionCompletion::Conflict => conflict,
+        };
+        // Reuse the operand slot whose capacity and proof storage the body already admitted.
+        self.stack.push(value);
+        Ok(())
     }
 
     fn prepare_invocation(

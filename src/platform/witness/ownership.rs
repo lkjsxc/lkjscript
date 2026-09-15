@@ -238,7 +238,8 @@ pub(crate) fn ownership_contributions(
                         }
                     }
                 }
-                ExpressionOperation::Transaction { binding, .. } => insert_binding_parent(
+                ExpressionOperation::Transaction { binding, .. }
+                | ExpressionOperation::TransactionOutcome { binding, .. } => insert_binding_parent(
                     &mut ownership,
                     *binding,
                     record.id,

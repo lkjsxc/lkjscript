@@ -251,10 +251,13 @@ impl NormalizedCapabilityTransaction for Transaction {
         }
         Ok(NormalizedValue::Bool(self.calls <= 8192))
     }
-    fn commit(&mut self, control: &ExecutionControl) -> Result<(), ExecutionError> {
+    fn commit(
+        &mut self,
+        control: &ExecutionControl,
+    ) -> Result<NormalizedTransactionCompletion, ExecutionError> {
         control.check()?;
         self.trace.lock().unwrap().push("commit".into());
-        Ok(())
+        Ok(NormalizedTransactionCompletion::Committed)
     }
     fn rollback(&mut self) -> Result<(), ExecutionError> {
         self.trace.lock().unwrap().push("rollback".into());

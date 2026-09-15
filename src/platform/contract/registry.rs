@@ -151,11 +151,15 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
         "transaction",
         "(transaction REQUIREMENT (binding NAME) BODY)",
     ),
+    (
+        "transaction-outcome",
+        "(transaction-outcome REQUIREMENT (types TYPE) (outcome OUTCOME REASON COMMITTED ABORTED CONDITION-FAILED CONFLICT) (binding NAME) BODY)",
+    ),
 ];
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-function-definition-projection-7";
-pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 7;
+    "lkjscript-function-definition-projection-8";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 8;
 pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
 pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
 pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -339,6 +343,13 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("definition.expression", "requirement"),
     ("definition.expression", "operation"),
     ("definition.expression", "binding"),
+    ("definition.expression", "type-argument"),
+    ("definition.expression", "outcome"),
+    ("definition.expression", "abort-reason"),
+    ("definition.expression", "committed"),
+    ("definition.expression", "aborted"),
+    ("definition.expression", "condition-failed"),
+    ("definition.expression", "conflict"),
     ("definition.binding", "id"),
     ("definition.binding", "parent"),
     ("definition.binding", "slot"),
@@ -4159,6 +4170,42 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Select none or capture-safe; omission is permitted only when adding a parameter.",
         ),
         diagnostic(
+            "kernel_expression_generation",
+            DiagnosticClass::Semantic,
+            "A transaction-outcome expression claims a graph generation that cannot represent it.",
+            "Use a runtime that admits Graph 16 and preserve authentic predecessor bytes.",
+        ),
+        diagnostic(
+            "kernel_transaction_outcome_identity",
+            DiagnosticClass::Semantic,
+            "A lexical outcome names foreign outcome declarations or cases.",
+            "Bind the exact ordinary standard outcome and abort-reason owners through named references.",
+        ),
+        diagnostic(
+            "kernel_type_transaction_requirement",
+            DiagnosticClass::Semantic,
+            "The task allowance or constrained requirement does not admit the exact DataStore transaction operation.",
+            "Declare the required operation and task effect, then supply the exact deployment grant.",
+        ),
+        diagnostic(
+            "kernel_type_transaction_outcome_payload",
+            DiagnosticClass::Semantic,
+            "The transaction body type disagrees with the explicit outcome type argument.",
+            "Supply the body's exact ordinary type, including its in-scope generic substitution.",
+        ),
+        diagnostic(
+            "kernel_type_transaction_outcome_shape",
+            DiagnosticClass::Semantic,
+            "The selected exact outcome owners have an incompatible nominal declaration shape.",
+            "Use a compatible exact supplier revision with the ordinary Committed and Aborted payload contracts.",
+        ),
+        diagnostic(
+            "compiler_unit_transaction_outcome_generation",
+            DiagnosticClass::Source,
+            "A compiled outcome continuation claims an older compiler or bytecode generation.",
+            "Rebuild with compiler unit 12 and bytecode 8 through the current product; preserve predecessor artifacts.",
+        ),
+        diagnostic(
             "compiler_type_parameter_constraints",
             DiagnosticClass::Corrupt,
             "A loaded compiled signature lacks its exact ordered parameter constraint inventory.",
@@ -6433,6 +6480,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 "match",
                 "capability_call",
                 "transaction",
+                "transaction_outcome",
             ] {
                 records.push(compact_record(
                     "inspection.definition-expression",
@@ -7321,6 +7369,11 @@ fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String
             "the distinct transaction binding exists only in BODY and has no authored type annotation; existing transaction and affine validation apply",
         ),
         (
+            "transaction-outcome",
+            "(transaction-outcome REQUIREMENT (types TYPE) (outcome OUTCOME REASON COMMITTED ABORTED CONDITION-FAILED CONFLICT) (binding NAME) BODY)",
+            "exact ordinary standard nominal references and one explicit body type argument; return completed Committed(TYPE) or Aborted(reason) after this transaction finalizes; no retry or new retention permission",
+        ),
+        (
             "root-ownership",
             "$ROOT",
             "consume exactly once in an outer change or genuine flat parent; unused or shared roots reject; nested expressions and binders are private; flat edges cannot extend a block root or reach private children; a block cannot splice a flat expression into its interior",
@@ -7914,9 +7967,9 @@ mod tests {
             .expect("definition projection contract");
         assert_eq!(
             contract.identity,
-            "lkjscript-function-definition-projection-7"
+            "lkjscript-function-definition-projection-8"
         );
-        assert_eq!(contract.version, 7);
+        assert_eq!(contract.version, 8);
         assert_eq!(
             contract_descriptors()
                 .iter()

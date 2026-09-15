@@ -9,8 +9,6 @@ reference.owner as=$edit-first package=$std class=declaration name=list-get
 reference.owner as=$edit-equal package=$std class=declaration name=i64-equal
 reference.owner as=$edit-decode package=$std class=declaration name=data-decode-or
 reference.owner as=$edit-encode package=$std class=declaration name=data-encode
-reference.owner as=$edit-candidate-field package=local class=field parent=$Attempt name=candidate
-reference.owner as=$edit-matched-field package=local class=field parent=$Attempt name=primary_condition_matched
 reference.owner as=$edit-update-T package=local class=type-parameter parent=$update name=T
 reference.owner as=$edit-space package=local class=parameter parent=$update name=space
 reference.owner as=$edit-default package=local class=parameter parent=$update name=default
@@ -76,15 +74,10 @@ expression.argument parent=$edit-write index=1 expression=$edit-key-write
 expression.argument parent=$edit-write index=2 expression=$edit-encoded
 expression.argument parent=$edit-write index=3 expression=$edit-condition
 expression.local as=$edit-candidate-result value=$edit-candidate
-expression.local as=$edit-matched-result value=$edit-matched
-expression.record as=$edit-attempt type=$Attempt
-type.argument parent=$edit-attempt index=0 type=@UpdateT
-expression.record-field parent=$edit-attempt index=0 field=$edit-candidate-field value=$edit-candidate-result
-expression.record-field parent=$edit-attempt index=1 field=$edit-matched-field value=$edit-matched-result
-expression.let as=$edit-algorithm body=$edit-attempt
+expression.let as=$edit-algorithm body=$edit-candidate-result
 expression.binding parent=$edit-algorithm index=0 as=$edit-entries name=entries type=@EditEntries value=$edit-read
 expression.binding parent=$edit-algorithm index=1 as=$edit-absent name=absent type=bool value=$edit-is-absent
 expression.binding parent=$edit-algorithm index=2 as=$edit-candidate name=candidate type=@UpdateT value=$edit-twice
 expression.binding parent=$edit-algorithm index=3 as=$edit-matched name=primary-condition-matched type=bool value=$edit-write
-expression.transaction as=$edited-update-body requirement=parameter:$R binding=$edit-transaction name=cell-attempt body=$edit-algorithm
+expression.transaction-outcome as=$edited-update-body requirement=parameter:$R binding=$edit-transaction name=cell-update type=@UpdateT outcome=$Outcome abort-reason=$Reason committed=$Committed aborted=$Aborted condition-failed=$ConditionFailed conflict=$Conflict body=$edit-algorithm
 replace.body function=$update body=$edited-update-body

@@ -177,7 +177,10 @@ impl NormalizedCapabilityTransaction for Transaction {
             _ => Err(script_error()),
         }
     }
-    fn commit(&mut self, control: &ExecutionControl) -> Result<(), ExecutionError> {
+    fn commit(
+        &mut self,
+        control: &ExecutionControl,
+    ) -> Result<NormalizedTransactionCompletion, ExecutionError> {
         control.check()?;
         let mut state = self.script.state.lock().map_err(|_| script_error())?;
         if self.closed || state.active != 1 {
@@ -194,7 +197,7 @@ impl NormalizedCapabilityTransaction for Transaction {
         state.events.push("commit".into());
         state.active = 0;
         self.closed = true;
-        Ok(())
+        Ok(NormalizedTransactionCompletion::Committed)
     }
     fn rollback(&mut self) -> Result<(), ExecutionError> {
         if !self.closed {

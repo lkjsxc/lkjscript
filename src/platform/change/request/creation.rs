@@ -410,6 +410,23 @@ pub enum AuthoredExpressionOperation {
         binding: AuthoredBindingDefinition,
         body: Box<AuthoredExpression>,
     },
+    TransactionOutcome {
+        requirement: AuthoredRequirementReference,
+        binding: AuthoredBindingDefinition,
+        body: Box<AuthoredExpression>,
+        type_argument: Box<AuthoredType>,
+        outcome: Box<AuthoredTransactionOutcomeContract>,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AuthoredTransactionOutcomeContract {
+    pub outcome: AuthoredDeclarationReference,
+    pub abort_reason: AuthoredDeclarationReference,
+    pub committed: AuthoredCaseReference,
+    pub aborted: AuthoredCaseReference,
+    pub condition_failed: AuthoredCaseReference,
+    pub conflict: AuthoredCaseReference,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -586,7 +603,8 @@ pub(super) fn collect_expression_symbols(
                 }
                 stack.push(Visit::Expression(value, next));
             }
-            AuthoredExpressionOperation::Transaction { binding, body, .. } => {
+            AuthoredExpressionOperation::Transaction { binding, body, .. }
+            | AuthoredExpressionOperation::TransactionOutcome { binding, body, .. } => {
                 stack.push(Visit::Expression(body, next));
                 stack.push(Visit::Binding(
                     &binding.symbol,
@@ -1164,6 +1182,26 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 requirement: self.lower_requirement_operand(requirement)?,
                 binding: self.insert_scoped_binding(binding, SymbolKind::TransactionBinding)?,
                 body: self.lower_expression(body)?,
+            },
+            AuthoredExpressionOperation::TransactionOutcome {
+                requirement,
+                binding,
+                body,
+                type_argument,
+                outcome,
+            } => ExpressionOperation::TransactionOutcome {
+                requirement: self.lower_requirement_operand(requirement)?,
+                binding: self.insert_scoped_binding(binding, SymbolKind::TransactionBinding)?,
+                body: self.lower_expression(body)?,
+                type_argument: self.lower_type(type_argument)?,
+                outcome: crate::platform::kernel::TransactionOutcomeContract {
+                    outcome: self.lower_declaration_reference(&outcome.outcome)?,
+                    abort_reason: self.lower_declaration_reference(&outcome.abort_reason)?,
+                    committed: self.lower_case_reference(&outcome.committed)?,
+                    aborted: self.lower_case_reference(&outcome.aborted)?,
+                    condition_failed: self.lower_case_reference(&outcome.condition_failed)?,
+                    conflict: self.lower_case_reference(&outcome.conflict)?,
+                },
             },
         };
         self.insert_created(OwnerRecord::Expression(ExpressionRecord::new(

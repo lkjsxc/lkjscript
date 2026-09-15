@@ -687,7 +687,10 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 state,
                 depth + 1,
             ),
-            ExpressionOperation::Transaction { body, .. } => self.evaluate(body, state, depth + 1),
+            ExpressionOperation::Transaction { body, .. }
+            | ExpressionOperation::TransactionOutcome { body, .. } => {
+                self.evaluate(body, state, depth + 1)
+            }
         }
     }
 

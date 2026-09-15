@@ -1,0 +1,242 @@
+reference.owner as=$DataEntry package=$std class=declaration name=DataEntry
+reference.owner as=$entry-value package=$std class=field parent=$DataEntry name=value
+reference.owner as=$first package=$std class=declaration name=list-get
+reference.owner as=$decode package=$std class=declaration name=data-decode-or
+type.named as=@Entry declaration=$DataEntry
+type.application as=@BooleanOutcome declaration=$Outcome
+type.argument parent=@BooleanOutcome index=0 type=bool
+type.application as=@UnitOutcome declaration=$Outcome
+type.argument parent=@UnitOutcome index=0 type=unit
+type.named as=@AbortReason declaration=$Reason
+type.task-function as=@BooleanOutcomePort result=@BooleanOutcome effect=@Numbers
+type.task-function as=@UnitOutcomePort result=@UnitOutcome effect=@Numbers
+type.task-function as=@ReadOnlyPort result=@NumberOutcome effect=@Numbers
+effect.row as=@BothStores
+effect.requirement parent=@BothStores index=0 requirement=$numbers
+effect.requirement parent=@BothStores index=1 requirement=$texts
+type.task-function as=@BothStoresPort result=@NumberOutcome effect=@BothStores
+type.argument parent=@BothStoresPort index=0 type=text
+type.task-function as=@MatchPort result=text effect=@Numbers
+type.argument parent=@MatchPort index=0 type=text
+
+add.parameter as=$multi-input function=$multi-transform name=value type=i64
+expression.block as=$multi-transform-body
+  (sequence
+    (capability-call $numbers $put
+      (static-text "typed-cell")
+      (list @KeyPart (variant $text-key (text "success-aux")))
+      (call $encode (types i64) (i64 7))
+      (variant $Missing))
+    (call $add (local $multi-input) (i64 3)))
+expression.end
+create.function as=$multi-transform module=$module name=write-auxiliary visibility=private result=i64 effect=task body=$multi-transform-body
+effect.requirement parent=$multi-transform index=0 requirement=$numbers
+add.parameter as=$multi-key function=$multi-main name=key type=text
+expression.block as=$multi-main-body
+  (call $try-update (types i64) (effects @Numbers) (requirements $numbers)
+    (static-text "typed-cell") (i64 10) (function-value $multi-transform)
+    (list @KeyPart (variant $text-key (local $multi-key))))
+expression.end
+create.function as=$multi-main module=$module name=multi-key-update visibility=private result=@NumberOutcome effect=task body=$multi-main-body
+effect.requirement parent=$multi-main index=0 requirement=$numbers
+add.port as=$multi-port component=$component name=multi-key-update type=@NumberPort function=$multi-main
+create.target as=$multi-target name=multi-key-update component=$component port=$multi-port runner=command
+
+add.parameter as=$staged-input function=$staged-transform name=value type=i64
+expression.block as=$staged-transform-body
+  (sequence
+    (capability-call $numbers $put
+      (static-text "typed-cell")
+      (list @KeyPart (variant $text-key (text "early-aux")))
+      (call $encode (types i64) (i64 71)) (variant $Missing))
+    (capability-call $numbers $put
+      (static-text "typed-cell")
+      (list @KeyPart (variant $text-key (text "aux")))
+      (call $encode (types i64) (i64 999)) (variant $Missing))
+    (capability-call $numbers $put
+      (static-text "typed-cell")
+      (list @KeyPart (variant $text-key (text "late-aux")))
+      (call $encode (types i64) (i64 72)) (variant $Missing))
+    (call $add (local $staged-input) (i64 3)))
+expression.end
+create.function as=$staged-transform module=$module name=staged-false-callback visibility=private result=i64 effect=task body=$staged-transform-body
+effect.requirement parent=$staged-transform index=0 requirement=$numbers
+add.parameter as=$staged-key function=$staged-main name=key type=text
+expression.block as=$staged-main-body
+  (call $try-update (types i64) (effects @Numbers) (requirements $numbers)
+    (static-text "typed-cell") (i64 10) (function-value $staged-transform)
+    (list @KeyPart (variant $text-key (local $staged-key))))
+expression.end
+create.function as=$staged-main module=$module name=staged-false-attempt visibility=private result=@NumberOutcome effect=task body=$staged-main-body
+effect.requirement parent=$staged-main index=0 requirement=$numbers
+add.port as=$staged-port component=$component name=staged-false-attempt type=@NumberPort function=$staged-main
+create.target as=$staged-target name=staged-false-attempt component=$component port=$staged-port runner=command
+
+expression.block as=$no-write-body
+  (transaction-outcome $numbers (types bool)
+    (outcome $Outcome $Reason $Committed $Aborted $ConditionFailed $Conflict)
+    (binding false-body) (bool false))
+expression.end
+create.function as=$no-write module=$module name=no-write-false visibility=private result=@BooleanOutcome effect=task body=$no-write-body
+effect.requirement parent=$no-write index=0 requirement=$numbers
+add.port as=$no-write-port component=$component name=no-write-false type=@BooleanOutcomePort function=$no-write
+create.target as=$no-write-target name=no-write-false component=$component port=$no-write-port runner=command
+
+expression.block as=$condition-only-body
+  (transaction-outcome $numbers (types bool)
+    (outcome $Outcome $Reason $Committed $Aborted $ConditionFailed $Conflict)
+    (binding condition-only)
+    (capability-call $numbers $put
+      (static-text "typed-cell")
+      (list @KeyPart (variant $text-key (text "aux")))
+      (call $encode (types i64) (i64 999)) (variant $Missing)))
+expression.end
+create.function as=$condition-only module=$module name=condition-only visibility=private result=@BooleanOutcome effect=task body=$condition-only-body
+effect.requirement parent=$condition-only index=0 requirement=$numbers
+add.port as=$condition-only-port component=$component name=condition-only type=@BooleanOutcomePort function=$condition-only
+create.target as=$condition-only-target name=condition-only component=$component port=$condition-only-port runner=command
+
+add.parameter as=$match-key function=$match-main name=key type=text
+expression.block as=$match-body
+  (match
+    (call $try-update (types i64) (effects @Numbers) (requirements $numbers)
+      (static-text "typed-cell") (i64 10) (function-value $false-transform)
+      (list @KeyPart (variant $text-key (local $match-key))))
+    (arm $Committed (payload completed i64) (text "committed"))
+    (arm $Aborted (payload reason @AbortReason)
+      (match (local reason)
+        (arm $ConditionFailed (text "condition-failed"))
+        (arm $Conflict (text "conflict")))))
+expression.end
+create.function as=$match-main module=$module name=match-completion visibility=private result=text effect=task body=$match-body
+effect.requirement parent=$match-main index=0 requirement=$numbers
+add.port as=$match-port component=$component name=match-completion type=@MatchPort function=$match-main
+create.target as=$match-target name=match-completion component=$component port=$match-port runner=command
+
+add.parameter as=$independent-input function=$independent-transform name=value type=i64
+expression.block as=$independent-transform-body
+  (sequence
+    (transaction $texts (binding independent-store)
+      (capability-call $texts $put
+        (static-text "typed-cell")
+        (list @KeyPart (variant $text-key (text "independent")))
+        (call $encode (types text) (text "survived")) (variant $Missing)))
+    (capability-call $numbers $put
+      (static-text "typed-cell")
+      (list @KeyPart (variant $text-key (text "aux")))
+      (call $encode (types i64) (i64 999)) (variant $Missing))
+    (call $add (local $independent-input) (i64 3)))
+expression.end
+create.function as=$independent-transform module=$module name=independent-store-then-false visibility=private result=i64 effect=task body=$independent-transform-body
+effect.requirement parent=$independent-transform index=0 requirement=$numbers
+effect.requirement parent=$independent-transform index=1 requirement=$texts
+add.parameter as=$independent-key function=$independent-main name=key type=text
+expression.block as=$independent-main-body
+  (call $try-update (types i64) (effects @BothStores) (requirements $numbers)
+    (static-text "typed-cell") (i64 10) (function-value $independent-transform)
+    (list @KeyPart (variant $text-key (local $independent-key))))
+expression.end
+create.function as=$independent-main module=$module name=other-store-survives visibility=private result=@NumberOutcome effect=task body=$independent-main-body
+effect.requirement parent=$independent-main index=0 requirement=$numbers
+effect.requirement parent=$independent-main index=1 requirement=$texts
+add.port as=$independent-port component=$component name=other-store-survives type=@BothStoresPort function=$independent-main
+create.target as=$independent-target name=other-store-survives component=$component port=$independent-port runner=command
+
+create.record as=$ApplicationPayload module=$module name=ApplicationPayload visibility=public
+add.field as=$amount-field record=$ApplicationPayload name=amount type=i64
+add.field as=$note-field record=$ApplicationPayload name=note type=text
+type.named as=@ApplicationPayload declaration=$ApplicationPayload
+type.application as=@ApplicationOutcome declaration=$Outcome
+type.argument parent=@ApplicationOutcome index=0 type=@ApplicationPayload
+type.task-function as=@ApplicationPort result=@ApplicationOutcome effect=@Numbers
+expression.block as=$application-body
+  (let
+    (binding completed (type @ApplicationOutcome)
+      (transaction-outcome $numbers (types @ApplicationPayload)
+        (outcome $Outcome $Reason $Committed $Aborted $ConditionFailed $Conflict)
+        (binding application-value)
+        (record $ApplicationPayload
+          (field $amount-field (i64 42))
+          (field $note-field (text "snapshot")))))
+    (in
+      (call $decode (types @ApplicationOutcome)
+        (call $encode (types @ApplicationOutcome) (local completed))
+        (variant $Aborted (types @ApplicationPayload) (variant $Conflict)))))
+expression.end
+create.function as=$application-main module=$module name=application-payload visibility=private result=@ApplicationOutcome effect=task body=$application-body
+effect.requirement parent=$application-main index=0 requirement=$numbers
+add.port as=$application-port component=$component name=application-payload type=@ApplicationPort function=$application-main
+create.target as=$application-target name=application-payload component=$component port=$application-port runner=command
+
+expression.block as=$empty-body
+  (transaction-outcome $numbers (types unit)
+    (outcome $Outcome $Reason $Committed $Aborted $ConditionFailed $Conflict)
+    (binding empty) (unit))
+expression.end
+create.function as=$empty-main module=$module name=empty-outcome visibility=private result=@UnitOutcome effect=task body=$empty-body
+effect.requirement parent=$empty-main index=0 requirement=$numbers
+add.port as=$empty-port component=$component name=empty-outcome type=@UnitOutcomePort function=$empty-main
+create.target as=$empty-target name=empty-outcome component=$component port=$empty-port runner=command
+
+expression.block as=$read-only-body
+  (transaction-outcome $numbers (types i64)
+    (outcome $Outcome $Reason $Committed $Aborted $ConditionFailed $Conflict)
+    (binding read-only)
+    (call $decode (types i64)
+      (field
+        (call $first (types @Entry)
+          (capability-call $numbers $get
+            (static-text "typed-cell")
+            (list @KeyPart (variant $text-key (text "direct"))))
+          (i64 0))
+        $entry-value)
+      (i64 -1)))
+expression.end
+create.function as=$read-only-main module=$module name=read-only-outcome visibility=private result=@NumberOutcome effect=task body=$read-only-body
+effect.requirement parent=$read-only-main index=0 requirement=$numbers
+add.port as=$read-only-port component=$component name=read-only-outcome type=@ReadOnlyPort function=$read-only-main
+create.target as=$read-only-target name=read-only-outcome component=$component port=$read-only-port runner=command
+
+reference.owner as=$HttpClient package=$std class=declaration name=HttpClient
+reference.owner as=$http-get package=$std class=operation parent=$HttpClient name=get
+create.component as=$race-component module=$module name=concurrent-cells visibility=public
+add.requirement as=$race-store component=$race-component name=race-store interface=$DataStore
+requirement.operation parent=$race-store index=0 operation=$get
+requirement.operation parent=$race-store index=1 operation=$put
+requirement.operation parent=$race-store index=2 operation=$transaction
+requirement.operation parent=$race-store index=3 operation=$schema-read
+requirement.limit parent=$race-store index=0 name=maximum_calls maximum=20 unit=calls
+add.requirement as=$barrier component=$race-component name=barrier interface=$HttpClient
+requirement.operation parent=$barrier index=0 operation=$http-get
+requirement.limit parent=$barrier index=0 name=maximum_calls maximum=1 unit=calls
+type.structural-record as=@BarrierHeader
+type.field parent=@BarrierHeader index=0 name=name type=text
+type.field parent=@BarrierHeader index=1 name=value type=bytes
+effect.row as=@BarrierEffects
+effect.requirement parent=@BarrierEffects index=0 requirement=$barrier
+effect.row as=@RaceEffects
+effect.requirement parent=@RaceEffects index=0 requirement=$race-store
+effect.requirement parent=@RaceEffects index=1 requirement=$barrier
+type.task-function as=@RacePort result=@NumberOutcome effect=@RaceEffects
+type.argument parent=@RacePort index=0 type=text
+type.argument parent=@RacePort index=1 type=i64
+add.parameter as=$race-input function=$race-transform name=value type=i64
+expression.block as=$race-transform-body
+  (sequence
+    (capability-call $barrier $http-get (list @BarrierHeader))
+    (call $add (local $race-input) (i64 3)))
+expression.end
+create.function as=$race-transform module=$module name=barrier-then-increment visibility=private result=i64 effect=task body=$race-transform-body
+effect.requirement parent=$race-transform index=0 requirement=$barrier
+add.parameter as=$race-key function=$race-main name=key type=text
+add.parameter as=$race-default function=$race-main name=default type=i64
+expression.block as=$race-main-body
+  (call $try-update (types i64) (effects @BarrierEffects) (requirements $race-store)
+    (static-text "typed-cell") (local $race-default) (function-value $race-transform)
+    (list @KeyPart (variant $text-key (local $race-key))))
+expression.end
+create.function as=$race-main module=$module name=concurrent-update visibility=private result=@NumberOutcome effect=task body=$race-main-body
+effect.requirement parent=$race-main index=0 requirement=$race-store
+effect.requirement parent=$race-main index=1 requirement=$barrier
+add.port as=$race-port component=$race-component name=concurrent-update type=@RacePort function=$race-main
+create.target as=$race-target name=concurrent-update component=$race-component port=$race-port runner=command

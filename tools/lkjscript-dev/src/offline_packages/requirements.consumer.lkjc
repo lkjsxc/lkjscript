@@ -1,4 +1,10 @@
 reference.package as=$std source=builtin
+reference.owner as=$Outcome package=$std class=declaration name=TransactionOutcome
+reference.owner as=$Reason package=$std class=declaration name=TransactionAbortReason
+reference.owner as=$Committed package=$std class=case parent=$Outcome name=Committed
+reference.owner as=$Aborted package=$std class=case parent=$Outcome name=Aborted
+reference.owner as=$ConditionFailed package=$std class=case parent=$Reason name=ConditionFailed
+reference.owner as=$Conflict package=$std class=case parent=$Reason name=Conflict
 reference.owner as=$DataStore package=$std class=declaration name=DataStore
 reference.owner as=$Configuration package=$std class=declaration name=Configuration
 reference.owner as=$DataKeyPart package=$std class=declaration name=DataKeyPart
@@ -14,9 +20,8 @@ reference.owner as=$add package=$std class=declaration name=add
 reference.owner as=$concat package=$std class=declaration name=text-concat
 reference.owner as=$divide package=$std class=declaration name=divide
 reference.owner as=$encode package=$std class=declaration name=data-encode
-reference.owner as=$attempt-update package=$library class=declaration name=attempt-update
+reference.owner as=$try-update package=$library class=declaration name=try-update
 reference.owner as=$make-updater package=$library class=declaration name=make-cell-updater
-reference.owner as=$Attempt package=$library class=declaration name=UpdateAttempt
 create.module as=$module name=cell-consumer
 create.component as=$component module=$module name=cells visibility=public
 add.requirement as=$numbers component=$component name=counters interface=$DataStore
@@ -35,10 +40,10 @@ requirement.operation parent=$config index=0 operation=$config-text
 requirement.limit parent=$config index=0 name=maximum_calls maximum=100 unit=calls
 type.named as=@KeyPart declaration=$DataKeyPart
 type.list as=@Key item=@KeyPart
-type.application as=@NumberAttempt declaration=$Attempt
-type.argument parent=@NumberAttempt index=0 type=i64
-type.application as=@TextAttempt declaration=$Attempt
-type.argument parent=@TextAttempt index=0 type=text
+type.application as=@NumberOutcome declaration=$Outcome
+type.argument parent=@NumberOutcome index=0 type=i64
+type.application as=@TextOutcome declaration=$Outcome
+type.argument parent=@TextOutcome index=0 type=text
 effect.row as=@Empty
 effect.row as=@Numbers
 effect.requirement parent=@Numbers index=0 requirement=$numbers
@@ -72,7 +77,7 @@ expression.local as=$direct-key-value value=$direct-key
 expression.variant as=$direct-key-part case=$text-key payload=$direct-key-value
 expression.list as=$direct-key-list item=@KeyPart
 expression.argument parent=$direct-key-list index=0 expression=$direct-key-part
-expression.call as=$direct-body function=$attempt-update
+expression.call as=$direct-body function=$try-update
 type.argument parent=$direct-body index=0 type=i64
 effect.argument parent=$direct-body index=0 effect=@Empty
 requirement.argument parent=$direct-body index=0 requirement=$numbers
@@ -80,9 +85,9 @@ expression.argument parent=$direct-body index=0 expression=$direct-space
 expression.argument parent=$direct-body index=1 expression=$direct-default
 expression.argument parent=$direct-body index=2 expression=$direct-transform
 expression.argument parent=$direct-body index=3 expression=$direct-key-list
-create.function as=$direct module=$module name=number-direct visibility=private result=@NumberAttempt effect=task body=$direct-body
+create.function as=$direct module=$module name=number-direct visibility=private result=@NumberOutcome effect=task body=$direct-body
 effect.requirement parent=$direct index=0 requirement=$numbers
-type.task-function as=@NumberPort result=@NumberAttempt effect=@Numbers
+type.task-function as=@NumberPort result=@NumberOutcome effect=@Numbers
 type.argument parent=@NumberPort index=0 type=text
 add.port as=$direct-port component=$component name=number-direct type=@NumberPort function=$direct
 create.target as=$direct-target name=number-direct component=$component port=$direct-port runner=command
@@ -104,7 +109,7 @@ expression.argument parent=$bound-key-list index=0 expression=$bound-key-part
 expression.bind as=$bound-thunk callee=$factory-call
 expression.argument parent=$bound-thunk index=0 expression=$bound-key-list
 expression.invoke as=$bound-body function=$bound-thunk
-create.function as=$bound module=$module name=number-bound visibility=private result=@NumberAttempt effect=task body=$bound-body
+create.function as=$bound module=$module name=number-bound visibility=private result=@NumberOutcome effect=task body=$bound-body
 effect.requirement parent=$bound index=0 requirement=$numbers
 add.port as=$bound-port component=$component name=number-bound type=@NumberPort function=$bound
 create.target as=$bound-target name=number-bound component=$component port=$bound-port runner=command
@@ -116,7 +121,7 @@ expression.local as=$text-key-value value=$text-key-input
 expression.variant as=$text-key-part case=$text-key payload=$text-key-value
 expression.list as=$text-key-list item=@KeyPart
 expression.argument parent=$text-key-list index=0 expression=$text-key-part
-expression.call as=$text-body function=$attempt-update
+expression.call as=$text-body function=$try-update
 type.argument parent=$text-body index=0 type=text
 effect.argument parent=$text-body index=0 effect=@Configuration
 requirement.argument parent=$text-body index=0 requirement=$texts
@@ -124,10 +129,10 @@ expression.argument parent=$text-body index=0 expression=$text-space
 expression.argument parent=$text-body index=1 expression=$text-default
 expression.argument parent=$text-body index=2 expression=$text-transform
 expression.argument parent=$text-body index=3 expression=$text-key-list
-create.function as=$text-direct module=$module name=text-direct visibility=private result=@TextAttempt effect=task body=$text-body
+create.function as=$text-direct module=$module name=text-direct visibility=private result=@TextOutcome effect=task body=$text-body
 effect.requirement parent=$text-direct index=0 requirement=$texts
 effect.requirement parent=$text-direct index=1 requirement=$config
-type.task-function as=@TextPort result=@TextAttempt effect=@Texts
+type.task-function as=@TextPort result=@TextOutcome effect=@Texts
 type.argument parent=@TextPort index=0 type=text
 add.port as=$text-direct-port component=$component name=text-direct type=@TextPort function=$text-direct
 create.target as=$text-direct-target name=text-direct component=$component port=$text-direct-port runner=command
@@ -149,7 +154,7 @@ expression.argument parent=$text-bound-key-list index=0 expression=$text-bound-k
 expression.bind as=$text-bound-thunk callee=$text-factory-call
 expression.argument parent=$text-bound-thunk index=0 expression=$text-bound-key-list
 expression.invoke as=$text-bound-body function=$text-bound-thunk
-create.function as=$text-bound module=$module name=text-bound visibility=private result=@TextAttempt effect=task body=$text-bound-body
+create.function as=$text-bound module=$module name=text-bound visibility=private result=@TextOutcome effect=task body=$text-bound-body
 effect.requirement parent=$text-bound index=0 requirement=$texts
 effect.requirement parent=$text-bound index=1 requirement=$config
 add.port as=$text-bound-port component=$component name=text-bound type=@TextPort function=$text-bound
@@ -192,7 +197,7 @@ expression.local as=$false-main-key-value value=$false-main-key
 expression.variant as=$false-main-key-part case=$text-key payload=$false-main-key-value
 expression.list as=$false-main-key-list item=@KeyPart
 expression.argument parent=$false-main-key-list index=0 expression=$false-main-key-part
-expression.call as=$false-main-body function=$attempt-update
+expression.call as=$false-main-body function=$try-update
 type.argument parent=$false-main-body index=0 type=i64
 effect.argument parent=$false-main-body index=0 effect=@Numbers
 requirement.argument parent=$false-main-body index=0 requirement=$numbers
@@ -200,7 +205,7 @@ expression.argument parent=$false-main-body index=0 expression=$false-main-space
 expression.argument parent=$false-main-body index=1 expression=$false-main-default
 expression.argument parent=$false-main-body index=2 expression=$false-main-transform
 expression.argument parent=$false-main-body index=3 expression=$false-main-key-list
-create.function as=$false-main module=$module name=false-attempt visibility=private result=@NumberAttempt effect=task body=$false-main-body
+create.function as=$false-main module=$module name=false-attempt visibility=private result=@NumberOutcome effect=task body=$false-main-body
 effect.requirement parent=$false-main index=0 requirement=$numbers
 add.port as=$false-port component=$component name=false-attempt type=@NumberPort function=$false-main
 create.target as=$false-target name=false-attempt component=$component port=$false-port runner=command
@@ -238,7 +243,7 @@ expression.local as=$trap-main-key-value value=$trap-main-key
 expression.variant as=$trap-main-key-part case=$text-key payload=$trap-main-key-value
 expression.list as=$trap-main-key-list item=@KeyPart
 expression.argument parent=$trap-main-key-list index=0 expression=$trap-main-key-part
-expression.call as=$trap-main-body function=$attempt-update
+expression.call as=$trap-main-body function=$try-update
 type.argument parent=$trap-main-body index=0 type=i64
 effect.argument parent=$trap-main-body index=0 effect=@Numbers
 requirement.argument parent=$trap-main-body index=0 requirement=$numbers
@@ -246,7 +251,7 @@ expression.argument parent=$trap-main-body index=0 expression=$trap-main-space
 expression.argument parent=$trap-main-body index=1 expression=$trap-main-default
 expression.argument parent=$trap-main-body index=2 expression=$trap-main-transform
 expression.argument parent=$trap-main-body index=3 expression=$trap-main-key-list
-create.function as=$trap-main module=$module name=trapped-attempt visibility=private result=@NumberAttempt effect=task body=$trap-main-body
+create.function as=$trap-main module=$module name=trapped-attempt visibility=private result=@NumberOutcome effect=task body=$trap-main-body
 effect.requirement parent=$trap-main index=0 requirement=$numbers
 add.port as=$trap-port component=$component name=trapped-attempt type=@NumberPort function=$trap-main
 create.target as=$trap-target name=trapped-attempt component=$component port=$trap-port runner=command

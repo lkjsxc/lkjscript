@@ -30,6 +30,73 @@ mod nominal_encoding_tests {
     use crate::platform::kernel::{DeclarationReference, TypeForm};
 
     #[test]
+    fn transaction_outcome_encoding_preserves_ordinary_predecessors_and_rejects_false_generation() {
+        use crate::platform::kernel::{
+            ExpressionOperation, ExpressionRecord, TransactionOutcomeContract,
+        };
+        use crate::platform::semantic_id::{BindingId, ExpressionId, RequirementId};
+        let id = ExpressionId::migrate(b"transaction-outcome-generation", 0);
+        for generation in [14, 15, 16] {
+            let mut expression = ExpressionRecord::new(id, ExpressionOperation::Unit {}).unwrap();
+            expression.contract_version = generation;
+            let owner = OwnerRecord::Expression(expression);
+            let (digest, bytes) = encode_owner(&owner).unwrap();
+            assert_eq!(&bytes[..8], format!("LKJOWN{generation}").as_bytes());
+            assert_eq!(
+                decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
+                owner
+            );
+        }
+        let contract = TransactionOutcomeContract::standard().unwrap();
+        let body_type = encode_type_object(&TypeObject::new(TypeForm::I64).unwrap())
+            .unwrap()
+            .0;
+        let mut expression = ExpressionRecord::new(
+            id,
+            ExpressionOperation::TransactionOutcome {
+                requirement: super::super::RequirementReference {
+                    package: contract.outcome.package,
+                    requirement: RequirementId::migrate(b"transaction-outcome-generation", 0),
+                }
+                .into(),
+                binding: BindingId::migrate(b"transaction-outcome-generation", 0),
+                body: ExpressionId::migrate(b"transaction-outcome-generation", 1),
+                type_argument: body_type,
+                outcome: contract,
+            },
+        )
+        .unwrap();
+        let owner = OwnerRecord::Expression(expression.clone());
+        let (digest, bytes) = encode_owner(&owner).unwrap();
+        assert_eq!(&bytes[..8], b"LKJOWN16");
+        assert_eq!(
+            decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
+            owner
+        );
+        expression.contract_version = 15;
+        let forged_owner = OwnerRecord::Expression(expression);
+        assert_eq!(
+            encode_owner(&forged_owner).unwrap_err().code,
+            "kernel_expression_generation"
+        );
+        let forged = packed::encode(
+            super::super::contract::REQUIREMENT_OWNER_MAGIC,
+            super::super::contract::REQUIREMENT_OWNER_ENVELOPE_DOMAIN,
+            &forged_owner,
+            MAXIMUM_OWNER_OBJECT_BYTES,
+        )
+        .unwrap();
+        let error = decode_owner(
+            &forged,
+            forged_owner.owner(),
+            forged_owner.kind(),
+            OwnerObjectDigest::of(&forged),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "kernel_expression_generation");
+    }
+
+    #[test]
     fn requirement_task_envelopes_preserve_predecessor_and_reject_malformed_extensions() {
         use crate::platform::kernel::{
             EffectRow, RequirementOperand, RequirementParameterReference, RequirementReference,
@@ -274,12 +341,17 @@ pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>)
         )?;
         return Ok((OwnerObjectDigest::of(&bytes), bytes));
     }
-    let bytes = packed::encode(
-        OWNER_MAGIC,
-        OWNER_ENVELOPE_DOMAIN,
-        record,
-        MAXIMUM_OWNER_OBJECT_BYTES,
-    )?;
+    let (magic, domain) = if record.header().contract_version
+        == super::contract::REQUIREMENT_GRAPH_CONTRACT_VERSION
+    {
+        (
+            super::contract::REQUIREMENT_OWNER_MAGIC,
+            super::contract::REQUIREMENT_OWNER_ENVELOPE_DOMAIN,
+        )
+    } else {
+        (OWNER_MAGIC, OWNER_ENVELOPE_DOMAIN)
+    };
+    let bytes = packed::encode(magic, domain, record, MAXIMUM_OWNER_OBJECT_BYTES)?;
     Ok((OwnerObjectDigest::of(&bytes), bytes))
 }
 
@@ -306,6 +378,20 @@ pub fn decode_owner(
             return Err(codec_error(
                 "kernel_owner_encoding_generation",
                 "predecessor envelope has a foreign owner generation",
+            ));
+        }
+        record
+    } else if bytes.starts_with(&super::contract::REQUIREMENT_OWNER_MAGIC) {
+        let record: OwnerRecord = packed::decode(
+            bytes,
+            super::contract::REQUIREMENT_OWNER_MAGIC,
+            super::contract::REQUIREMENT_OWNER_ENVELOPE_DOMAIN,
+            MAXIMUM_OWNER_OBJECT_BYTES,
+        )?;
+        if record.header().contract_version != super::contract::REQUIREMENT_GRAPH_CONTRACT_VERSION {
+            return Err(codec_error(
+                "kernel_owner_encoding_generation",
+                "requirement envelope has a foreign owner generation",
             ));
         }
         record

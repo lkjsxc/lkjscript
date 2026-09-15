@@ -345,15 +345,16 @@ holes/reordering, and durable captured environments are outside this language sl
 The complete graph expression kinds are unit/bool/i64/text/static-text literals, variable,
 conditional, lexical let, sequencing, direct call with explicit type/effect/requirement arguments, function
 reference with explicit type/effect/requirement arguments, prefix binding, invocation, record construction and projection, variant
-construction and match, list, map, capability operation, and lexical capability transaction.
+construction and match, list, map, capability operation, lexical capability transaction, and
+lexical transaction completion outcome.
 
 Compact change records expose unit, bool, i64, text, and static-text literals; lexical variables and
 constants; conditionals and sequencing; direct calls; lexical `let`; nominal or structural record
 construction and field projection; variants and exhaustive matches; typed lists and maps; exact requirement
-capability calls; lexical transactions; named `function-value` expressions with ordered explicit
+capability calls; lexical `transaction` and `transaction-outcome`; named `function-value` expressions with ordered explicit
 type/effect/requirement arguments; and `bind` and `invoke` with ordered expression arguments.
 `add.type-parameter`, `add.effect-parameter` and `add.requirement-parameter` add ordered stable
-parameters through the current declaration surface. All 22 public expression forms also have
+parameters through the current declaration surface. All 23 public expression forms also have
 structural syntax inside `expression.block as=$ROOT` / `expression.end`. Declarations, signatures,
 types, rows, requirements and dependency selection keep their explicit record forms. The generated
 [change grammar](../generated/change-grammar.md) is the exhaustive public inventory;
@@ -377,6 +378,13 @@ Each syntactic local read is a separate expression occurrence. Only a let bindin
 evaluated-once value reuse. Structural notation preserves left-to-right arguments, sequence items,
 record fields and map entries, callee-before-arguments order and selected-branch evaluation. It
 neither changes transaction completion nor infers generic applications, grants or retries.
+
+`transaction-outcome` explicitly instantiates the ordinary standard result family with one type
+argument, like nominal variant construction. Inference independently checks that the body has
+that type and returns `TransactionOutcome<T>`. Its exact declaration/case references are explicit
+named references in both notations and remain in the typed reference inventory. The
+[completion contract](effects-capabilities.md#completed-lexical-transaction-outcomes) defines
+finalization, the private body value, condition/conflict branches and independent-effect scope.
 
 Equivalent flat and structural normalized authored trees retain canonical intent bytes, request
 commitments and same-base prepared candidates. Semantic binding Names, optional type annotations

@@ -620,7 +620,8 @@ fn walk_expression<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
                 )?;
             }
         }
-        ExpressionOperation::Transaction { binding, body, .. } => {
+        ExpressionOperation::Transaction { binding, body, .. }
+        | ExpressionOperation::TransactionOutcome { binding, body, .. } => {
             walk_binding(
                 lowerer,
                 binding,
@@ -1201,7 +1202,8 @@ fn infer_requirements<B: CanonicalBaseRead + ?Sized>(
         })?;
         match operation {
             ExpressionOperation::CapabilityCall { requirement, .. }
-            | ExpressionOperation::Transaction { requirement, .. } => {
+            | ExpressionOperation::Transaction { requirement, .. }
+            | ExpressionOperation::TransactionOutcome { requirement, .. } => {
                 requirements.insert(*requirement);
             }
             ExpressionOperation::Call { function, .. } => {
@@ -1431,7 +1433,8 @@ fn replace_expression_reference(
         }
         ExpressionOperation::Let { body, .. }
         | ExpressionOperation::Field { value: body, .. }
-        | ExpressionOperation::Transaction { body, .. } => replace(body),
+        | ExpressionOperation::Transaction { body, .. }
+        | ExpressionOperation::TransactionOutcome { body, .. } => replace(body),
         ExpressionOperation::Sequence { items }
         | ExpressionOperation::List { items, .. }
         | ExpressionOperation::Call {
@@ -1659,7 +1662,8 @@ fn collect_local_calls<B: CanonicalBaseRead + ?Sized>(
                 collect_local_calls(reader, arm.body, seen, calls, work, maximum_work, next)?;
             }
         }
-        ExpressionOperation::Transaction { binding, body, .. } => {
+        ExpressionOperation::Transaction { binding, body, .. }
+        | ExpressionOperation::TransactionOutcome { binding, body, .. } => {
             collect_binding_local_calls(reader, binding, seen, calls, work, maximum_work, next)?;
             collect_local_calls(reader, body, seen, calls, work, maximum_work, next)?;
         }

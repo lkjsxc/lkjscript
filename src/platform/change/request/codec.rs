@@ -115,6 +115,7 @@ struct Writer {
     bytes: Vec<u8>,
     maximum: usize,
     requirement_extension: bool,
+    outcome_extension: bool,
 }
 
 impl Writer {
@@ -123,11 +124,14 @@ impl Writer {
             bytes: Vec::new(),
             maximum,
             requirement_extension: false,
+            outcome_extension: false,
         }
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.requirement_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+        if self.outcome_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR16");
+        } else if self.requirement_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR15");
         }
         self.bytes
@@ -1679,6 +1683,27 @@ impl Writer {
                 self.requirement_reference(requirement, definitions)?;
                 self.symbol(&binding.symbol, definitions)?;
                 self.name(&binding.name)?;
+                self.expression(body, definitions, next)
+            }
+            AuthoredExpressionOperation::TransactionOutcome {
+                requirement,
+                binding,
+                body,
+                type_argument,
+                outcome,
+            } => {
+                self.outcome_extension = true;
+                self.tag(26)?;
+                self.requirement_reference(requirement, definitions)?;
+                self.symbol(&binding.symbol, definitions)?;
+                self.name(&binding.name)?;
+                self.authored_type(type_argument, definitions, 1)?;
+                self.declaration_reference(&outcome.outcome, definitions)?;
+                self.declaration_reference(&outcome.abort_reason, definitions)?;
+                self.case_reference(&outcome.committed, definitions)?;
+                self.case_reference(&outcome.aborted, definitions)?;
+                self.case_reference(&outcome.condition_failed, definitions)?;
+                self.case_reference(&outcome.conflict, definitions)?;
                 self.expression(body, definitions, next)
             }
         }

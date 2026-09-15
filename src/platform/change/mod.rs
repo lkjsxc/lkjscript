@@ -70,11 +70,11 @@ pub use request::{
     AuthoredRecordExpressionField, AuthoredReference, AuthoredReferenceBindings,
     AuthoredReferenceOrigin, AuthoredReferencePackage, AuthoredRequirement,
     AuthoredRequirementParameter, AuthoredRequirementReference, AuthoredResourceLimit,
-    AuthoredSelectedPrecondition, AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
-    AuthoredTypeParameterReference, DeclarationSelector, MAXIMUM_AUTHORED_CHANGE_BYTES,
-    MAXIMUM_AUTHORED_CHANGES, ModuleSelector, OwnerSelector, ParameterParentSelector,
-    ResolvedOwnerReference, ResolvedReferenceBindings, ResolvedReferencePackage,
-    lower_authored_changes,
+    AuthoredSelectedPrecondition, AuthoredStructuralTypeField, AuthoredTransactionOutcomeContract,
+    AuthoredType, AuthoredTypeParameter, AuthoredTypeParameterReference, DeclarationSelector,
+    MAXIMUM_AUTHORED_CHANGE_BYTES, MAXIMUM_AUTHORED_CHANGES, ModuleSelector, OwnerSelector,
+    ParameterParentSelector, ResolvedOwnerReference, ResolvedReferenceBindings,
+    ResolvedReferencePackage, lower_authored_changes,
 };
 pub(crate) use request::{
     authored_source_owners, canonical_authored_budget_bytes, canonical_authored_intent_bytes,

@@ -2,7 +2,7 @@
 
 use super::capability::{
     NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter,
-    NormalizedCapabilityTransaction, NormalizedTransactionPolicy,
+    NormalizedCapabilityTransaction, NormalizedTransactionCompletion, NormalizedTransactionPolicy,
 };
 use super::prepare::{NormalizedOperation, NormalizedProgram, NormalizedRequirement};
 use super::resource::NormalizedResourceScope;
@@ -568,7 +568,10 @@ impl NormalizedCapabilityTransaction for NormalizedDataTransaction {
         self.adapter.call_with(transaction, operation, &arguments)
     }
 
-    fn commit(&mut self, control: &ExecutionControl) -> Result<(), ExecutionError> {
+    fn commit(
+        &mut self,
+        control: &ExecutionControl,
+    ) -> Result<NormalizedTransactionCompletion, ExecutionError> {
         control.check()?;
         let transaction = self.transaction.take().ok_or_else(|| {
             data_runtime(
@@ -580,16 +583,13 @@ impl NormalizedCapabilityTransaction for NormalizedDataTransaction {
             .commit()
             .map_err(|error| map_data_error(error, true))?
         {
-            DataCommitOutcome::Committed { .. } | DataCommitOutcome::Unchanged { .. } => Ok(()),
-            DataCommitOutcome::Conflict { .. } => {
-                let mut error = ExecutionError::new(
-                    ExecutionFailureClass::Capability,
-                    "normalized_data_transaction_conflict",
-                    "data transaction exact base changed before commit",
-                );
-                error.retryable = true;
-                Err(error)
+            DataCommitOutcome::Committed { .. } | DataCommitOutcome::Unchanged { .. } => {
+                Ok(NormalizedTransactionCompletion::Committed)
             }
+            DataCommitOutcome::ConditionFailed { .. } => {
+                Ok(NormalizedTransactionCompletion::ConditionFailed)
+            }
+            DataCommitOutcome::Conflict { .. } => Ok(NormalizedTransactionCompletion::Conflict),
         }
     }
 
@@ -1206,4 +1206,39 @@ fn data_runtime(code: &'static str, message: impl Into<String>) -> ExecutionErro
 
 fn data_diagnostic(code: &'static str, message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Capability, code, message)
+}
+
+#[cfg(test)]
+mod completion_tests {
+    use super::*;
+
+    #[test]
+    fn transaction_completion_preserves_physical_visibility_classification() {
+        for (code, expected) in [
+            (
+                "data_revision_stage_create",
+                ExecutionFailureClass::Infrastructure,
+            ),
+            (
+                "data_head_visibility_unknown",
+                ExecutionFailureClass::PossibleVisibility,
+            ),
+            (
+                "data_head_durability_unknown",
+                ExecutionFailureClass::PossibleVisibility,
+            ),
+        ] {
+            let error = map_data_error(
+                Diagnostic::new(
+                    DiagnosticClass::Infrastructure,
+                    code,
+                    "physical store fault",
+                ),
+                true,
+            );
+            assert_eq!(error.class, expected);
+            assert_eq!(error.code, code);
+            assert!(!error.retryable);
+        }
+    }
 }

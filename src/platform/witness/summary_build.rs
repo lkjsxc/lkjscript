@@ -939,7 +939,8 @@ pub(crate) fn aggregation_children(
                         }
                     }
                 }
-                ExpressionOperation::Transaction { binding, .. } => children.push((
+                ExpressionOperation::Transaction { binding, .. }
+                | ExpressionOperation::TransactionOutcome { binding, .. } => children.push((
                     OwnershipRole::ExpressionBinding {
                         role: BindingContainerRole::Transaction,
                         ordinal: 0,

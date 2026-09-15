@@ -2933,6 +2933,12 @@ fn inject_queue_oracle_fixtures(data_root: &Path) -> Result<(), ServiceFailure> 
         {
             DataCommitOutcome::Committed { .. } => return Ok(()),
             DataCommitOutcome::Conflict { .. } => continue,
+            DataCommitOutcome::ConditionFailed { .. } => {
+                return Err(ServiceFailure::failed(
+                    "queue_oracle_condition_failed",
+                    "queue oracle fixture transaction suppressed publication after a failed expectation",
+                ));
+            }
             DataCommitOutcome::Unchanged { .. } => {
                 return Err(ServiceFailure::failed(
                     "queue_oracle_unchanged",

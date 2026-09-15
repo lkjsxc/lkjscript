@@ -856,6 +856,42 @@ where
             requirement.package(),
             requirement.owner(),
         )?,
+        ExpressionOperation::TransactionOutcome {
+            requirement,
+            outcome,
+            ..
+        } => {
+            exact_edge(
+                edges,
+                source,
+                RelationKind::ComponentRequirement,
+                requirement.package(),
+                requirement.owner(),
+            )?;
+            for declaration in [outcome.outcome, outcome.abort_reason] {
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::NamedTypeUse,
+                    declaration.package,
+                    OwnerKey::Declaration(declaration.declaration),
+                )?;
+            }
+            for case in [
+                outcome.committed,
+                outcome.aborted,
+                outcome.condition_failed,
+                outcome.conflict,
+            ] {
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::VariantConstruction,
+                    case.package,
+                    OwnerKey::Case(case.case),
+                )?;
+            }
+        }
         ExpressionOperation::Unit {}
         | ExpressionOperation::Bool { .. }
         | ExpressionOperation::I64 { .. }

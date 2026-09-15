@@ -26,7 +26,9 @@ not capabilities, and there is no ambient requirement search or unchecked IO eff
 
 Validation rejects pure-to-task calls, pure capability use, absent effect requirements, duplicate
 requirements, cross-component or foreign references, unadmitted operations, interface mismatch,
-escaping transaction bindings, nested transactions, and effect escalation before publication.
+escaping transaction bindings and effect escalation before publication. Runtime reentry rejects
+a second active transaction for the same canonical requirement, including aliases and callbacks;
+separately granted stores may own independent nested transactions.
 Failed planning or apply leaves accepted authority unchanged.
 
 ## Explicit effect applications and authority-free descriptors
@@ -64,7 +66,7 @@ hold no adapter, credential, resource, transaction or frame. Both evaluators enf
 allowances independently; component-wide grant search cannot replace this check.
 
 Indirect and imported calls use the same canonical grant counters, resource provenance and active
-lexical transaction as direct calls. Nested transactions remain forbidden. A later trap,
+lexical transaction as direct calls. Same-canonical transaction reentry remains forbidden. A later trap,
 cancellation or exhaustion stops subsequent callbacks and emits no successful partial traversal;
 earlier effects remain visible unless the applicable transaction rolls back its staged work. An
 ordinary returned `Result` remains a value until graph control flow branches on it. No evaluator
@@ -183,7 +185,9 @@ minimum constraints neither widen an older narrow activation nor synthesize gran
 A DataStore formal admitting the existing transaction operation may own a lexical transaction.
 The actual supplied requirement identifies its transaction and canonical accounting. Direct calls,
 imported helpers and callbacks through that same resolved requirement share the transaction.
-Nested transactions remain rejected. Cancellation and failure stop later effects and join cleanup.
+Same-canonical transaction reentry remains rejected, including symbolic aliases. Independently
+granted stores retain their independent transaction boundaries. Cancellation and failure stop later
+effects and join cleanup.
 A second store or a Configuration/HTTP operation is not included in the first store's atomicity.
 
 A false conditional expectation suppresses publication of the entire transaction. Later operations
@@ -194,6 +198,44 @@ lexical completion. The boolean reports only its primary conditional operation, 
 certifies durable publication. An effectful callback may already have caused a false expectation,
 so the primary flag can be true while the whole transaction publishes nothing. No automatic retry,
 exception conversion or changed expectation semantics follows from this API.
+
+## Completed lexical transaction outcomes
+
+`transaction-outcome` owns the same DataStore transaction mechanism as `transaction`. Its body
+has type `T` and its result is the ordinary standard nominal application `TransactionOutcome<T>`:
+`Committed(T) | Aborted(TransactionAbortReason)`, where the ordinary abort reason is
+`ConditionFailed | Conflict`. These values are constructible data, not receipts or execution
+authority. Only evaluation of the expression guarantees the relationship to its own finalization.
+
+Accepted meaning explicitly binds the exact outcome/reason declarations and all four cases.
+The identities are stable standard owners, checked separately from their complete parametric
+shape in the exact accepted dependency closure. Neither spelling, a shape-compatible foreign
+nominal nor the currently installed standard revision selects meaning. `T` is an explicit type
+argument, independently checked against the inferred body through ordinary substitution. Existing
+capture, affine and serialization rules apply;
+the expression adds no blanket capture-safe or durable constraint on `T`.
+
+The body executes once in authored order with no implicit retry. Its value stays private until
+finalization. Body failure or cancellation propagates the execution failure and cleans staged
+work. Any failed conditional expectation wins over no-change and base conflict and returns
+`Aborted(ConditionFailed)`, exposing no body value. Later body operations may still execute.
+A normal transaction with no mutations returns `Committed(body)` without revalidating latest
+HEAD or creating a revision. A mutating transaction whose base changed returns `Aborted(Conflict)`
+with definite non-publication by this transaction. Durable store completion returns
+`Committed(body)`. Infrastructure errors, including possible visibility, remain execution errors.
+The legacy expression retains its body result on condition suppression/no-change and its retryable
+execution error on conflict.
+
+Outcome layout and bounded wrapper capacity are admitted before physical publication; the
+already checked body value is reused without a fallible whole-payload copy or recursive admission
+after commit. Cancellation stays before the bounded publication critical section. Output or
+cleanup can still fail after publication, so receiving no result never proves rollback. A body
+`false`, absence or application-constructed variant is ordinary payload and does not abort.
+
+The exact requirement or constrained in-scope requirement parameter must admit the DataStore
+transaction operation. Same-canonical reentry rejects; another store or external effect has
+independent visibility and can survive the outer abort. Conflict therefore authorizes no automatic
+replay of callbacks. Transaction bindings remain lexical runtime bookkeeping and cannot escape.
 
 Local affine operations are also valid through a constrained requirement parameter. An acquired
 resource carries the symbolic operand and exact interface during generic validation. R1 and R2
