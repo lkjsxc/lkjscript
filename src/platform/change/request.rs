@@ -22,8 +22,8 @@ pub use creation::{
     AuthoredOperation, AuthoredOperationReference, AuthoredParameter, AuthoredPort,
     AuthoredPortImplementation, AuthoredPortReference, AuthoredRecordExpressionField,
     AuthoredRequirement, AuthoredRequirementParameter, AuthoredRequirementReference,
-    AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
-    AuthoredTypeParameterReference,
+    AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredTransactionOutcomeContract,
+    AuthoredType, AuthoredTypeParameter, AuthoredTypeParameterReference,
 };
 pub use precondition::{
     AuthoredExistingOwner, AuthoredOwnerParent, AuthoredPrecondition, AuthoredSelectedPrecondition,

@@ -8,7 +8,7 @@ use crate::platform::compiler::LoadedArtifact;
 use crate::platform::compiler::manifest::{CompilationBinding, CompilationManifest};
 use crate::platform::compiler::unit::{
     CompilationPayload, CompilationUnit, CompiledCode, CompiledFieldSelector, CompiledInstruction,
-    CompiledParameter, CompiledPortImplementation, CompiledText,
+    CompiledParameter, CompiledPortImplementation, CompiledText, CompiledTransactionRequirement,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH;
@@ -181,7 +181,29 @@ pub enum NormalizedInstruction {
         parameter: crate::platform::kernel::RequirementParameterReference,
         binding: u32,
     },
+    BeginTransactionOutcome {
+        requirement: NormalizedTransactionRequirement,
+        binding: u32,
+        outcome: NormalizedTransactionOutcome,
+    },
+    CommitTransactionOutcome {
+        requirement: NormalizedTransactionRequirement,
+        binding: u32,
+        outcome: NormalizedTransactionOutcome,
+    },
     Return,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NormalizedTransactionRequirement {
+    Concrete(RequirementIndex),
+    Parameter(crate::platform::kernel::RequirementParameterReference),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NormalizedTransactionOutcome {
+    pub contract: crate::platform::kernel::TransactionOutcomeContract,
+    pub type_argument: TypeObjectDigest,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -2642,6 +2664,91 @@ fn translate_code(
                 NormalizedInstruction::CommitParameterTransaction {
                     parameter: *parameter,
                     binding: *binding,
+                }
+            }
+            CompiledInstruction::BeginTransactionOutcome {
+                requirement,
+                binding,
+                outcome,
+            }
+            | CompiledInstruction::CommitTransactionOutcome {
+                requirement,
+                binding,
+                outcome,
+            } => {
+                let requirement = match requirement {
+                    CompiledTransactionRequirement::Concrete(requirement) => {
+                        let reference = index_copy(
+                            &unit.tables.requirements,
+                            *requirement,
+                            "transaction requirement",
+                        )?;
+                        NormalizedTransactionRequirement::Concrete(required_index(
+                            &indexes.requirements,
+                            reference,
+                            "requirement",
+                        )?)
+                    }
+                    CompiledTransactionRequirement::Parameter(parameter) => {
+                        NormalizedTransactionRequirement::Parameter(*parameter)
+                    }
+                };
+                let contract = crate::platform::kernel::TransactionOutcomeContract {
+                    outcome: index_copy(
+                        &unit.tables.declarations,
+                        outcome.outcome,
+                        "transaction outcome",
+                    )?,
+                    abort_reason: index_copy(
+                        &unit.tables.declarations,
+                        outcome.abort_reason,
+                        "transaction abort reason",
+                    )?,
+                    committed: index_copy(
+                        &unit.tables.cases,
+                        outcome.committed,
+                        "transaction committed case",
+                    )?,
+                    aborted: index_copy(
+                        &unit.tables.cases,
+                        outcome.aborted,
+                        "transaction aborted case",
+                    )?,
+                    condition_failed: index_copy(
+                        &unit.tables.cases,
+                        outcome.condition_failed,
+                        "transaction condition case",
+                    )?,
+                    conflict: index_copy(
+                        &unit.tables.cases,
+                        outcome.conflict,
+                        "transaction conflict case",
+                    )?,
+                };
+                contract.validate_identity()?;
+                let outcome = NormalizedTransactionOutcome {
+                    contract,
+                    type_argument: index_copy(
+                        &unit.tables.types,
+                        outcome.type_argument,
+                        "transaction body type",
+                    )?,
+                };
+                if matches!(
+                    instruction,
+                    CompiledInstruction::BeginTransactionOutcome { .. }
+                ) {
+                    NormalizedInstruction::BeginTransactionOutcome {
+                        requirement,
+                        binding: *binding,
+                        outcome,
+                    }
+                } else {
+                    NormalizedInstruction::CommitTransactionOutcome {
+                        requirement,
+                        binding: *binding,
+                        outcome,
+                    }
                 }
             }
             CompiledInstruction::Return => NormalizedInstruction::Return,

@@ -6,7 +6,8 @@ use super::unit::{
     CompiledCode, CompiledFieldLayout, CompiledFieldSelector, CompiledHttpRoute,
     CompiledInstruction, CompiledOperationLayout, CompiledParameter, CompiledPort,
     CompiledPortImplementation, CompiledRequirement, CompiledSignature, CompiledText,
-    CompiledVariantJump, MAXIMUM_COMPILER_UNIT_ITEMS, OptimizationPolicy,
+    CompiledTransactionOutcome, CompiledTransactionRequirement, CompiledVariantJump,
+    MAXIMUM_COMPILER_UNIT_ITEMS, OptimizationPolicy,
 };
 use crate::platform::builtin_standard::BuiltinStandard;
 use crate::platform::change::{
@@ -1673,6 +1674,48 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     }
                 };
                 self.push(instruction)?;
+                self.locals.remove(&reference);
+            }
+            ExpressionOperation::TransactionOutcome {
+                requirement,
+                binding,
+                body,
+                outcome,
+                type_argument,
+            } => {
+                self.binding(binding, BindingKind::Transaction)?;
+                let reference = LocalValueReference::TransactionBinding(binding);
+                let local = self.bind(reference)?;
+                let requirement = match requirement {
+                    crate::platform::kernel::RequirementOperand::Concrete(reference) => {
+                        CompiledTransactionRequirement::Concrete(
+                            self.unit.tables.requirement(reference)?,
+                        )
+                    }
+                    crate::platform::kernel::RequirementOperand::Parameter(parameter) => {
+                        CompiledTransactionRequirement::Parameter(parameter)
+                    }
+                };
+                let outcome = CompiledTransactionOutcome {
+                    outcome: self.unit.tables.declaration(outcome.outcome)?,
+                    abort_reason: self.unit.tables.declaration(outcome.abort_reason)?,
+                    committed: self.unit.tables.case(outcome.committed)?,
+                    aborted: self.unit.tables.case(outcome.aborted)?,
+                    condition_failed: self.unit.tables.case(outcome.condition_failed)?,
+                    conflict: self.unit.tables.case(outcome.conflict)?,
+                    type_argument: self.unit.tables.ty(type_argument)?,
+                };
+                self.push(CompiledInstruction::BeginTransactionOutcome {
+                    requirement,
+                    binding: local,
+                    outcome,
+                })?;
+                self.expression(body, depth)?;
+                self.push(CompiledInstruction::CommitTransactionOutcome {
+                    requirement,
+                    binding: local,
+                    outcome,
+                })?;
                 self.locals.remove(&reference);
             }
         }

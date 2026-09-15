@@ -463,6 +463,80 @@ fn strict_rehashed_artifact_cannot_delete_a_pending_transaction_commit() {
 }
 
 #[test]
+fn strict_transaction_outcome_artifact_rejects_missing_and_mismatched_completion() {
+    let snapshot =
+        crate::platform::execution::normalized::tests::transaction_outcome_tests::snapshot();
+    let temporary = tempfile::tempdir().unwrap();
+    let created =
+        GraphRepository::create(&temporary.path().join("outcome"), &snapshot, None).unwrap();
+    let compiled = build_clean(
+        &created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .unwrap();
+    let linked = link_artifact(&created.repository, compiled.manifest_digest, &[]).unwrap();
+    let loaded = load_artifact(&linked.artifact.bytes).unwrap();
+    let entry = declaration_named(&snapshot, "observe-completion");
+    let (old, original) = loaded
+        .objects
+        .iter()
+        .filter(|(key, _)| key.domain == ObjectDomain::CompilerUnit)
+        .map(|(key, bytes)| (*key, CompilationUnit::decode(bytes, *key).unwrap()))
+        .find(|(_, unit)| unit.source.owner == OwnerKey::Declaration(entry))
+        .unwrap();
+    for fault in ["missing", "legacy", "case"] {
+        let mut unit = original.clone();
+        let CompilationPayload::Function { code, .. } = &mut unit.payload else {
+            unreachable!()
+        };
+        let index = code
+            .instructions
+            .iter()
+            .position(|instruction| {
+                matches!(
+                    instruction,
+                    CompiledInstruction::CommitTransactionOutcome { .. }
+                )
+            })
+            .unwrap();
+        match fault {
+            "missing" => {
+                code.instructions.remove(index);
+            }
+            "legacy" => {
+                let CompiledInstruction::CommitTransactionOutcome {
+                    requirement: super::unit::CompiledTransactionRequirement::Concrete(requirement),
+                    binding,
+                    ..
+                } = code.instructions[index]
+                else {
+                    unreachable!()
+                };
+                code.instructions[index] = CompiledInstruction::CommitTransaction {
+                    requirement,
+                    binding,
+                };
+            }
+            _ => {
+                let CompiledInstruction::CommitTransactionOutcome {
+                    ref mut outcome, ..
+                } = code.instructions[index]
+                else {
+                    unreachable!()
+                };
+                outcome.committed = outcome.aborted;
+            }
+        }
+        let bytes = replace_unit(&loaded, old, &unit, vec![]);
+        let error = load_artifact(&bytes).unwrap_err();
+        assert_eq!(
+            error.code, "artifact_compiled_control_meaning",
+            "{fault}: {error:?}"
+        );
+    }
+}
+
+#[test]
 fn strict_requirement_artifact_rejects_rehashed_argument_formal_operand_and_row() {
     let snapshot = crate::platform::execution::normalized::tests::iteration_resource_tests::requirement_snapshot(false);
     let temporary = tempfile::tempdir().unwrap();

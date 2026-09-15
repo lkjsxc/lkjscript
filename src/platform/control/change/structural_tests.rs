@@ -311,6 +311,12 @@ const PAIRS: &[Pair] = &[
         block: "(transaction $store (binding transaction-body) (unit))",
     },
     Pair {
+        name: "transaction-outcome",
+        result: "@UnitOutcome",
+        flat: "expression.unit as=$inside\nexpression.transaction-outcome as=$body requirement=$store binding=$transaction-binding name=transaction-body type=unit outcome=$Outcome abort-reason=$Reason committed=$Committed aborted=$Aborted condition-failed=$ConditionFailed conflict=$Conflict body=$inside\n",
+        block: "(transaction-outcome $store (types unit) (outcome $Outcome $Reason $Committed $Aborted $ConditionFailed $Conflict) (binding transaction-body) (unit))",
+    },
+    Pair {
         name: "explicit-applications",
         result: "i64",
         flat: "expression.i64 as=$argument value=83\nexpression.call as=$body function=$generic\ntype.argument parent=$body index=0 type=i64\neffect.argument parent=$body index=0 effect=@Empty\nrequirement.argument parent=$body index=0 requirement=$store\nexpression.argument parent=$body index=0 expression=$argument\n",
@@ -331,6 +337,14 @@ reference.owner as=$DataEntry package=$std class=declaration name=DataEntry
 reference.owner as=$DataKeyPart package=$std class=declaration name=DataKeyPart
 reference.owner as=$get package=$std class=operation parent=$DataStore name=get
 reference.owner as=$transaction package=$std class=operation parent=$DataStore name=transaction
+reference.owner as=$Outcome package=$std class=declaration name=TransactionOutcome
+reference.owner as=$Reason package=$std class=declaration name=TransactionAbortReason
+reference.owner as=$Committed package=$std class=case parent=$Outcome name=Committed
+reference.owner as=$Aborted package=$std class=case parent=$Outcome name=Aborted
+reference.owner as=$ConditionFailed package=$std class=case parent=$Reason name=ConditionFailed
+reference.owner as=$Conflict package=$std class=case parent=$Reason name=Conflict
+type.application as=@UnitOutcome declaration=$Outcome
+type.argument parent=@UnitOutcome index=0 type=unit
 create.module as=$module name=structural-forms
 expression.local as=$identity-body value=$identity-parameter
 create.function as=$identity module=$module name=identity visibility=private result=i64 effect=pure body=$identity-body
@@ -385,7 +399,7 @@ add.parameter as=$generic-parameter function=$generic name=value type=@GenericT
 ";
 
 #[test]
-fn structural_all_twenty_two_expression_forms_preserve_canonical_intent_and_candidate_objects() {
+fn structural_all_expression_forms_preserve_canonical_intent_and_candidate_objects() {
     let temporary = tempfile::tempdir().unwrap();
     let logical = crate::platform::kernel::tests::witness_snapshot();
     let created =
@@ -429,6 +443,76 @@ fn standalone(body: &str) -> String {
         "request base={}\nexpression.block as=$body\n{body}\nexpression.end\n{SHADOW_DECLARATIONS}",
         RevisionId::from_digest([7; 32])
     )
+}
+
+#[test]
+fn transaction_outcome_rejects_wrong_nominal_authority_body_type_and_missing_operation_before_acceptance()
+ {
+    let temporary = tempfile::tempdir().unwrap();
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created =
+        GraphRepository::create(&temporary.path().join("meaning"), &logical, None).unwrap();
+    let standard = crate::platform::builtin_standard::BuiltinStandard::load().unwrap();
+    created
+        .repository
+        .stage_package_transport(standard.package_transport, &standard.transport().container)
+        .unwrap();
+    let pair = PAIRS
+        .iter()
+        .find(|pair| pair.name == "transaction-outcome")
+        .unwrap();
+    let source = format!(
+        "request base={} intent=outcome-authority\n{}{FORM_DECLARATIONS}create.function as=$subject module=$module name=subject visibility=private result=@UnitOutcome effect=task body=$body\neffect.requirement parent=$subject index=0 requirement=$store\nadd.dependency package={} semantic-revision={} package-revision={}\n",
+        created.current.head.revision,
+        pair.flat,
+        standard.package,
+        standard.semantic_revision,
+        standard.package_revision,
+    );
+    for (request, code) in [
+        (
+            source.replace(
+                "name=transaction-body type=unit",
+                "name=transaction-body type=text",
+            ),
+            "kernel_type_transaction_outcome_payload",
+        ),
+        (
+            source.replace("committed=$Committed", "committed=$Aborted"),
+            "kernel_transaction_outcome_identity",
+        ),
+        (
+            source.replace("outcome=$Outcome", "outcome=$Choice"),
+            "kernel_transaction_outcome_identity",
+        ),
+        (
+            source.replace(
+                "requirement.operation parent=$store index=1 operation=$transaction\n",
+                "",
+            ),
+            "kernel_type_transaction_requirement",
+        ),
+    ] {
+        let decoded = decode("outcome-invalid.lkjc", &request);
+        let errors = created
+            .repository
+            .prepare_authored_change(&decoded.semantic, decoded.options)
+            .unwrap_err();
+        assert!(
+            errors.iter().any(|error| error.code == code),
+            "{code}: {errors:#?}"
+        );
+        assert_eq!(
+            created
+                .repository
+                .view_current()
+                .unwrap()
+                .current()
+                .head
+                .revision,
+            created.current.head.revision
+        );
+    }
 }
 
 #[test]
@@ -758,6 +842,9 @@ fn structural_framing_and_forms_reject_malformed_input_at_original_locations() {
         "(map i64 i64 (entry (i64 1)))",
         "(match (unit) (arm))",
         "(transaction $store (binding tx) (unit) (unit))",
+        "(transaction-outcome $store (types) (outcome $Outcome $Reason $Committed $Aborted $ConditionFailed $Conflict) (binding tx) (unit))",
+        "(transaction-outcome $store (types unit) (outcome $Outcome $Reason $Committed $Aborted $ConditionFailed) (binding tx) (unit))",
+        "(transaction-outcome $store (types unit) (outcome $Outcome $Reason $Committed $Aborted $ConditionFailed $Conflict) (binding tx))",
         "(capability-call $store)",
         "(call $identity (types) (types))",
         "(call $identity (effects) (types))",

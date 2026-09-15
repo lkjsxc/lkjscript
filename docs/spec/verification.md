@@ -10,7 +10,8 @@ factory, parametric/recursive payloads, complete paginated definitions and inter
 consumer configuration/data rows, reviewed contract/dependency changes, and exact source/artifact
 binding. The transferred reader independently requires complete results at lengths 0, 1, 31, 32,
 33, 4,097 and 8,192, ordered repeated-key writes, restart persistence, transaction commit/rollback,
-forbidden nested transactions, nontransactional partial visibility and preserved older-bundle behavior.
+same-canonical transaction reentry rejection, nontransactional partial visibility and preserved
+older-bundle behavior.
 The stateful HTTP owner supplies the shared disposable listener/data lifecycle.
 
 The source-bound effect observations use separate neutral grants for production and canonical
@@ -852,15 +853,41 @@ installation proof licenses graph/artifact/data migration, effect replay or impl
 
 ## Requirement-parametric library obligations
 
-The offline-package aggregate's current receipt generation is 12. It includes the literal
+The offline-package aggregate's current receipt generation is 13. It includes the literal
 `requirement-parameters` workload in its existing owner, covering producer-owned typed-cell
 operations/transactions, T/E/R applications and pure factories, distinct caller requirements,
-transported execution, honest local conditional results, independent typed-byte/store observations,
+transported execution, completed lexical transaction results, independent typed-byte/store observations,
 reviewed constraint/body edits with before/after definition inspection, rejected insufficient
 dependency replacement and public repair. Its existing DurableQueue helper also executes after
 transport, with raw ready/completed/absent observations through the independent service observer.
 Closed unencodable update results reject before secret acquisition or store creation, and an
 unrelated callback requirement cannot hide in an empty supplied effect row.
+
+The ordinary `try-update` returns `TransactionOutcome<T>` directly from the new lexical form.
+I64/Text direct and bound task calls cover successful multi-key publication, an auxiliary false
+expectation before a locally true primary write, and successful stages before and after a false
+condition. All abort cases require unchanged outer HEAD and absent staged values after reopen.
+Empty, false-valued and read-only bodies complete successfully without new revisions; a
+false-condition-only body reports ConditionFailed. Callers exhaustively match both outcome and
+abort-reason variants. An unrelated application record inside the outcome passes ordinary
+typed-data encode/decode. A separately granted store may publish before the outer store aborts.
+
+Two concurrent public imported updates read one initial base and await an owned loopback HTTP
+barrier. The host releases replies only after both requests arrive; it performs no cell updates.
+Exactly one execution returns Committed and the other Aborted(Conflict), with two total callback
+requests, one new physical revision and only the winning typed bytes after close/reopen. The
+controlled VM/reference and physical-store owners separately cover legacy conflict errors,
+same-canonical reentry, read-only snapshots across another commit, cancellation, bounded wrapper
+admission and storage failures before and after visibility. Agreement between evaluators alone
+does not establish physical publication classification.
+
+Authentic v0.1.36 Graph 15 source, offline packages and artifact 19 bytes retain the predecessor
+`UpdateAttempt`/`transaction` result and suppressed-publication behavior. Original, rebuilt and
+imported artifacts execute on fresh disposable stores, and a reviewed source edit preserves old
+pack bytes and identities. The reader requires the authenticated original material, literal
+inputs, exact execution/artifact bindings and independent observations. Existing target receipt
+faults omit new completion material and forge a completed result after rebinding checksums; the
+matching owner must reject each fault without rerunning application effects.
 Focused execution uses `offline-packages --case requirement-parameters`; its child receipt is not
 full or target acceptance. The existing full and target readers require this material through the
 aggregate, and omit/forge probes exercise those readers without repeating application effects.
@@ -883,7 +910,7 @@ and obligations; they do not certify these language or reader changes.
 
 Structural expression acceptance uses the existing authored-intent, public CLI, offline-package
 and installed/public lifecycle owners. Independently handwritten flat and block pairs cover all
-22 expression forms, nominal and structural records, explicit T/E/R applications and later-declared
+23 expression forms, nominal and structural records, explicit T/E/R applications and later-declared
 public aliases. Equivalent normalized trees must have identical canonical authored bytes, request
 commitments, allocated identities and same-base prepared candidates, including semantic binder
 Names and absent/present annotations. Formatting, comments, alpha-renamed request labels and empty
@@ -905,8 +932,9 @@ DurableQueue bodies alongside their flat references. Through the copied candidat
 checkout it requires discovery, plan/apply, check/build, exact offline export/stage/bind, removal of
 authoring roots, and direct/bound I64 and Text execution. Existing independent typed bytes,
 per-store snapshots and the disjoint queue observer own expected outcomes. They retain the
-true-primary-condition/no-publication and staged-write/trap cases: `UpdateAttempt<T>` reports
-candidate data and the primary condition, not a transaction commit certificate. Parity proof is
+true-primary-condition/no-publication and staged-write/trap cases: the new library reports the
+whole transaction's completed decision, while the authentic predecessor keeps its documented
+candidate and primary-condition result. Parity proof is
 effect-free; live effects are not replayed as a differential parser oracle.
 
 An observed structural body replacement must use ordinary definition/owner discovery and preserve

@@ -193,14 +193,15 @@ contract does not provide encrypted storage, signatures/provenance, hostile-code
 multi-tenant isolation, distributed consensus, leases, garbage collection, live packing, memory
 mapping, or cross-filesystem atomic visibility.
 
-## Requirement extension and supported predecessor bytes
+## Transaction outcomes and supported predecessor bytes
 
-The current semantic model supports Graph 15 and strictly admits authentic Graph 14 content from
-the preceding executable. `LKJOWN14` owners decode through the exact predecessor wire layout;
-`LKJOWN15` carries requirement parameters, typed operands and explicit applications. The old layout
-cannot encode these extensions. Canonical re-encoding uses each admitted object's generation.
+The current semantic model is Graph 16 and strictly admits authentic Graph 14 and Graph 15 content.
+`LKJOWN14` owners decode through the exact predecessor wire layout; `LKJOWN15` carries requirement
+parameters, typed operands and explicit applications. `LKJOWN16` adds the exact lexical transaction
+outcome expression. Older generations cannot encode newer extensions. Canonical re-encoding uses
+each admitted object's generation.
 Unchanged objects retain their stored bytes and IDs. Actual reviewed edits produce successor owner
-objects and a Graph 15 root; read, inspection and current revalidation do not migrate accepted HEAD,
+objects and a Graph 16 root; read, inspection and current revalidation do not migrate accepted HEAD,
 historical records or application data.
 
 TypeObject 10 and `LKJTFN01` version 1 retain their exact encodings. A task-function row containing a
@@ -209,14 +210,16 @@ to its resulting content. Concrete-only rows retain the preceding whole-requirem
 The base type and typed-data encodings do not acquire new fields.
 
 Package interface owner 10 retains its exact predecessor layout; owner 11 represents the extension.
-Package revision and transport envelope 1 retain explicit graph-generation fields. Graph 15 wrappers
-may contain admitted Graph 14 meaning; a Graph 14 root cannot contain Graph 15 owner meaning.
+Package revision and transport envelope 1 retain explicit graph-generation fields. Current wrappers
+may contain admitted older meaning; an older root cannot contain newer owner meaning.
 Compiler unit 10 / bytecode 6 / Graph 14 remain strictly decodable through their exact old layouts;
 compiler unit 11 / bytecode 7 / Graph 15 carry requirement applications and symbolic operation targets.
+Compiler unit 12 / bytecode 8 / Graph 16 add exact paired outcome continuations and result authority.
 Compiler-unit keys and canonical bytes use the admitted compiler generation. Compilation manifest 3
 retains its layout and explicitly binds these supported graph/compiler/bytecode combinations.
-Artifact 19 extends the containing envelope; strict Artifact 18 decoding preserves its original
-Graph 14 / compiler 10 / bytecode 6 closure. A containing older generation cannot admit newer meaning. The predecessor executable
+Artifact 20 extends the containing envelope; strict Artifact 18 and 19 decoding preserves their
+original supported tuples, including Graph 15 / compiler 11 / bytecode 7 in Artifact 19.
+A containing older generation cannot admit newer meaning. The predecessor executable
 rejects the unsupported generation before execution, rather than ignoring application operands.
 
 Historical witnesses and acceptance records authenticate their original bytes and identities;

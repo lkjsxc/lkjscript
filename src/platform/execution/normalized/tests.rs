@@ -21,12 +21,15 @@ pub(crate) mod effect_tests;
 #[path = "requirement_tests.rs"]
 pub(crate) mod requirement_tests;
 
+#[path = "transaction_outcome_tests.rs"]
+pub(crate) mod transaction_outcome_tests;
+
 use super::capability::{
     NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilities,
     NormalizedCapabilityAdapter, NormalizedCapabilityGrant, NormalizedCapabilityGrantDescriptor,
     NormalizedCapabilityTransaction, NormalizedGrantAuthorityRevision,
     NormalizedGrantDescriptorDigest, NormalizedGrantLimit, NormalizedSharingDomain,
-    NormalizedTransactionPolicy,
+    NormalizedTransactionCompletion, NormalizedTransactionPolicy,
 };
 use super::codec::{decode_typed, encode_typed};
 use super::deployment::{
@@ -51,7 +54,7 @@ fn graph14_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
     );
     assert_eq!(
         crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-        15
+        16
     );
     assert_eq!(
         crate::platform::kernel::contract::TYPE_OBJECT_CONTRACT_VERSION,
@@ -2415,8 +2418,12 @@ impl NormalizedCapabilityTransaction for UnitTransaction {
         Ok(NormalizedValue::Unit)
     }
 
-    fn commit(&mut self, control: &ExecutionControl) -> Result<(), ExecutionError> {
-        control.check()
+    fn commit(
+        &mut self,
+        control: &ExecutionControl,
+    ) -> Result<NormalizedTransactionCompletion, ExecutionError> {
+        control.check()?;
+        Ok(NormalizedTransactionCompletion::Committed)
     }
 
     fn rollback(&mut self) -> Result<(), ExecutionError> {
@@ -2541,10 +2548,13 @@ impl NormalizedCapabilityTransaction for TrackingTransaction {
         }
     }
 
-    fn commit(&mut self, control: &ExecutionControl) -> Result<(), ExecutionError> {
+    fn commit(
+        &mut self,
+        control: &ExecutionControl,
+    ) -> Result<NormalizedTransactionCompletion, ExecutionError> {
         control.check()?;
         self.stats.commits.fetch_add(1, Ordering::Relaxed);
-        Ok(())
+        Ok(NormalizedTransactionCompletion::Committed)
     }
 
     fn rollback(&mut self) -> Result<(), ExecutionError> {

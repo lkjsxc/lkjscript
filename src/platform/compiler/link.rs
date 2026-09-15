@@ -618,7 +618,8 @@ fn reference_expression_bindings(
         ExpressionOperation::Match { arms, .. } => {
             bindings.extend(arms.iter().filter_map(|arm| arm.payload_binding));
         }
-        ExpressionOperation::Transaction { binding, .. } => bindings.push(*binding),
+        ExpressionOperation::Transaction { binding, .. }
+        | ExpressionOperation::TransactionOutcome { binding, .. } => bindings.push(*binding),
         _ => {}
     }
     bindings

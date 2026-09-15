@@ -163,6 +163,32 @@ pub trait NormalizedCapabilityAdapter: Send + Sync {
     }
 }
 
+/// Definite completion of this exact transaction. Infrastructure failures remain errors.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NormalizedTransactionCompletion {
+    Committed,
+    ConditionFailed,
+    Conflict,
+}
+
+impl NormalizedTransactionCompletion {
+    /// Historical lexical transactions return their body on suppressed publication.
+    pub(crate) fn legacy(self) -> Result<(), ExecutionError> {
+        match self {
+            Self::Committed | Self::ConditionFailed => Ok(()),
+            Self::Conflict => {
+                let mut error = ExecutionError::new(
+                    ExecutionFailureClass::Capability,
+                    "normalized_data_transaction_conflict",
+                    "data transaction exact base changed before commit",
+                );
+                error.retryable = true;
+                Err(error)
+            }
+        }
+    }
+}
+
 pub trait NormalizedCapabilityTransaction: Send {
     fn call(
         &mut self,
@@ -172,7 +198,10 @@ pub trait NormalizedCapabilityTransaction: Send {
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError>;
 
-    fn commit(&mut self, control: &ExecutionControl) -> Result<(), ExecutionError>;
+    fn commit(
+        &mut self,
+        control: &ExecutionControl,
+    ) -> Result<NormalizedTransactionCompletion, ExecutionError>;
 
     fn rollback(&mut self) -> Result<(), ExecutionError>;
 }

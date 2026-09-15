@@ -1,91 +1,98 @@
 # Requirement-parametric ordinary-library witness
 
-These literal requests are a designed composition workload, not evidence of existing application
-adoption. `requirements.producer.structural.lkjc` owns the typed-cell algorithm. The observer supplies only
-observed bases, exact package selections, executable arguments and isolated operational resources;
-it neither builds the semantic body nor performs the cell updates. Resource composition also has
-a public `DurableQueue` helper in `requirements.resource-library.structural.lkjc`. Its transported execution
-changes an independently observed raw queue record from ready to completed with one attempt and
-the exact result bytes, then reports no available lease without changing that record. The existing
-service wire observer supplies these expected transitions. Separate deterministic resource scripts
-exercise local matching, borrowing, consumption, cancellation and exact accounting in both execution
-owners; those adapters are disjoint from live effects.
+These literal requests define a designed composition workload, not application adoption.
+`requirements.producer.{lkjc,structural.lkjc}` owns a generic typed-cell algorithm. The observer
+supplies observed bases, exact package selections, executable arguments and disposable operational
+resources. It does not generate the library body or perform its cell updates.
 
 The public library API is:
 
 ```text
-attempt-update<T; E; R>(space: StaticText, default: T,
+try-update<T; E; R>(space: StaticText, default: T,
     transform: TaskFn(T)->T ! E, key: List<DataKeyPart>)
-    -> UpdateAttempt<T> ! ({R} union E)
+    -> TransactionOutcome<T> ! ({R} union E)
 
 make-cell-updater<T: capture-safe; E; R>(space, default, transform)
-    -> TaskFn(List<DataKeyPart>)->UpdateAttempt<T> ! ({R} union E)
+    -> TaskFn(List<DataKeyPart>)->TransactionOutcome<T> ! ({R} union E)
 ```
 
-The second function is pure. It binds the immutable prefix; a consumer may bind the remaining key
-and invoke the resulting zero-argument task. The core imposes no capture constraint. The callback
-uses the existing exact task-callable kind, including an empty effect row for a calculation with no
-capability use. An empty-row task is still a task and cannot be invoked from pure execution.
+The second function is pure. It binds the immutable prefix; the consumer also binds the key and
+invokes the resulting zero-argument task. The core imposes no capture constraint. An empty-row task
+callback remains a task and cannot be invoked from pure execution. Selection and factory creation
+grant no execution authority.
 
-R constrains the exact standard DataStore interface and at least `get`, `put`, `transaction`.
-The initial consumer's counter requirement also permits `schema-read`. A callback explicitly using
-that whole requirement may call `schema-read`; the formal minimum does not attenuate its argument.
-The text callback instead uses a separate Configuration requirement supplied through E and its own
-deployment grant. Selection and factory construction grant no authority.
+R constrains the exact standard `DataStore` interface and at least `get`, `put`, `transaction`.
+The counter requirement also permits `schema-read`; a callback explicitly using that whole
+requirement may perform that operation. The formal minimum does not attenuate its argument.
+The Text callback uses a separately supplied Configuration requirement through E and its own grant.
 
-`UpdateAttempt<T>` is an ordinary nominal record. Its `candidate` is the transformed value and
-`primary_condition_matched` is the boolean from the primary conditional write, returned after normal
-lexical completion. They are not a persistence certificate. The false-auxiliary-condition callback
-first receives false from `Missing` on an existing key, then returns normally. The primary write
-reports true while the entire transaction publishes nothing. The trapping callback stages an
-auxiliary write and then divides by zero; its auxiliary write rolls back, and the later primary
-write is never reached. Earlier completed invocations remain visible.
+The core computes, encodes and conditionally writes inside `transaction-outcome`, then returns its
+completed result directly. The expression binds the exact ordinary standard `TransactionOutcome`
+and `TransactionAbortReason` declarations and all four cases through public named references.
+Successful completion yields `Committed(T)`; a failed condition or commit-time conflict yields
+`Aborted(ConditionFailed|Conflict)` without a candidate payload. These are constructible nominal
+values. They are not execution authority or unforgeable receipts. The guarantee belongs to
+evaluation of the lexical expression.
 
-Absent values and incompatible typed-data encoding/layout use the supplied default. This is the
-typed-data codec, not JSON; cancellation, quota exhaustion and execution failures are not defaults.
-The closed `UpdateAttempt<Fn(I64)->I64>` external result rejects before an unavailable secret or
-either uncreated store is opened. Closed unencodable applications retain pre-effect rejection.
-Capture safety is not serialization.
-The caller owns keys, spaces, schemas and migrations. The helper neither retries nor coordinates
-another store or Configuration/HTTP effects into distributed rollback.
+The initial direct and bound I64 paths advance 10 to 13 to 16; the Text paths advance `a` to `a!`
+to `a!!`. The decisive false callback fails `Missing` against an existing auxiliary record and
+returns normally; the primary write can still report true, while the library returns
+`Aborted(ConditionFailed)` and the store's data and HEAD stay unchanged. Another callback stages
+successful writes both before and after its failed condition; all those writes remain absent.
+A trapping callback stages a write then divides by zero, produces no normal outcome and never
+reaches the primary write. A multi-key successful update publishes both independently expected
+values and returns `Committed(13)`.
 
-The observer compares I64/Text bytes using independent frozen TypeObject 10 scalar identities and
-the typed-value envelope contract, then reads the ordered store directly without committing an
-observer transaction. It saves observations after each invocation, preserves failures, and creates
-fresh owned state for a new invocation after an observer correction. The repaired producer changes
-both minimum constraints and the pure factory body. Its independently handwritten
-`requirements.update-body.{flat,structural}.lkjc` edit replaces the substantial generic update
-body so it applies the supplied transformation twice before encoding and conditionally writing.
-This is an intentional supplier behavior change: the repaired I64 invocation advances 16 to 22,
-and the repaired Text invocation advances `a!!` to `a!!!!` with two Configuration reads. The
-original artifacts retain single transformation and all original false-condition/trap outcomes.
-The edit adds no transaction retry. An insufficient dependency replacement leaves consumer
-authority unchanged, and a sufficient public requirement edit/rebind succeeds. Original
-and repaired artifacts run after the producer and consumer authoring paths are removed; the moved
-owned consumer copy supports public recovery checks.
+The additional literal consumer pair, `requirements.outcomes.consumer.{flat,structural}.lkjc`,
+matches both ordinary outcome variants and both abort-reason variants. It also checks successful
+no-write false and unit bodies, a read-only snapshot, a false-condition-only transaction and an
+unrelated application-defined nominal payload through ordinary typed-data encode/decode. No-write completion creates no new revision and
+does not promise latest-HEAD revalidation. A callback completes a transaction through a separately
+granted store before failing the outer store's condition; the inner store's `survived` Text value
+remains visible. The helper adds no retry, savepoint or distributed rollback.
 
-The original flat producer, consumer, queue and supplier-edit literals remain unchanged as an
-independent authoring oracle. The public workflow plans both complete literal notations against
-the same base, declaration/reference prelude and request controls. Strict canonical review files
-must be byte-identical, including request commitments, typed inventories, allocated identities,
-candidate owners and retirements. It then applies the structural request with the flat plan token.
-Only the resulting structural workload performs the live cell and queue effects.
+Absent values and incompatible typed-data encoding/layout use the supplied default. Cancellation,
+quota exhaustion and execution failures are not defaults. The closed
+`TransactionOutcome<Fn(I64)->I64>` external result rejects before an unavailable secret or either
+uncreated store is opened. Capture safety and transient nominal wrapping grant no serialization
+eligibility. The caller continues to own keys, spaces, schema and migration policy.
 
-Structural blocks keep explicit type/effect/requirement applications, binder Names and annotations.
-The producer uses sequential let bindings within its transaction, and the queue helper confines
-the affine lease to its match arm before borrowing and consuming it. The stronger supplier edit
-discovers both functions and all referenced parameters by their existing owners, then replaces the
-factory and update bodies. Public definition inspection verifies all seven factory and eight update
-signature identities persist. The factory's five old expression owners retire; the update's 41 old
-expression/binding owners retire. The new bodies have eight and 43 distinct expression/binding
-owners respectively. The
-`requirement_structural` observation binds these commands and the retained literal requests/reviews;
-the existing receipt reader independently admits those files.
+The observer derives only the independent frozen TypeObject 10 I64/Text scalar envelopes and
+compares complete stored bytes after opening fresh snapshots. It retains every state observation,
+including unchanged HEAD on abort/no-write and a distinct HEAD for the independently completed
+store. It never commits an observer transaction. Two public imported updates use a distinct
+component with a DataStore grant and an HTTP callback grant limited to one call each. An owned
+loopback barrier waits for both GET requests before sending either response, placing both bodies
+on the same initial snapshot. Exactly one returns `Committed(13|23)` and the other
+`Aborted(Conflict)`. Independent HEAD/history/reopen observations require one winning key and
+one new revision; the host only schedules replies and observes state. Runtime cancellation, reentry and
+prepublication wrapper-capacity cases use the existing independent controlled adapters and the
+physical data owner's HEAD/reopen/fault tests; no live callback is replayed differentially.
 
-The flat producer has 145 nonempty lines, 41 expression definitions and 20 indexed expression
-argument edges; its structural counterpart has 107 lines and two exported block roots. The flat
-consumer has 273 lines, 88 expression definitions and 63 argument edges; its structural counterpart
-has 182 lines and 11 exported roots. Substantial bodies no longer require per-occurrence labels or
-indexed expression edges. Declarations, references, types, effect rows, constraints and dependency
-selections still have explicit preludes. These counts describe input assembly; they do not measure
-authoring time, model tokens, billing or parser speed.
+The supplier edit raises both minimum operation constraints and replaces the pure factory and
+substantial generic update bodies through reviewed public input. Its handwritten flat and
+structural update replacements transform twice before encoding. The repaired I64 path advances
+16 to 22; the repaired Text path advances `a!!` to `a!!!!` with two Configuration reads. An
+insufficient dependency replacement rejects without changing consumer authority; an explicit
+requirement edit and replacement succeeds. Original and repaired artifacts run after producer
+and consumer authoring paths are unavailable. A moved owned consumer copy supports public recovery.
+
+The public workflow plans both complete literal notations against the same base and exact
+declaration/reference prelude. Their strict canonical reviews must agree byte-for-byte, including
+typed reference inventories, commitments, allocated identities and retirements. Structural apply
+consumes the flat plan token. Public inspection verifies retained function, parameter and T/E/R
+identities while the old body owners retire. Both notations are retained as literal proof inputs;
+the reader requires them, the exact artifacts, completed results and independent data observations.
+
+The former `attempt-update -> UpdateAttempt<T>` API is preserved as authentic v0.1.36 source,
+package and artifact material under `tests/fixtures/transaction-outcome-predecessor`. It keeps its
+honest candidate-plus-primary-boolean meaning. Original, rebuilt and imported old artifacts run
+against separate fresh stores and must preserve that result and publication behavior. The new
+library result is an explicit API change in this designed workload. The earlier authentic scalar
+predecessor fixture also remains unchanged.
+
+Resource composition continues to use the public `DurableQueue` helper in
+`requirements.resource-library.structural.lkjc`. Transported execution changes the independently
+observed raw queue record from ready to completed with one attempt and exact result bytes, then
+reports no available lease without changing the record. Existing controlled resource scripts
+exercise matching, borrowing, consumption, cancellation and exact accounting in both evaluators.

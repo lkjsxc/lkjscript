@@ -959,7 +959,135 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 self.transaction_binding_type(binding)?;
                 self.infer(body, context, next)
             }
+            ExpressionOperation::TransactionOutcome {
+                requirement,
+                binding,
+                body,
+                outcome,
+                type_argument,
+            } => {
+                outcome.validate_identity()?;
+                if context.pure || !context.requirements.contains(&requirement) {
+                    return Err(type_error(
+                        "kernel_type_transaction_requirement",
+                        "transaction-outcome requires its exact task allowance",
+                    ));
+                }
+                let constraint = self.requirement_constraint(requirement)?;
+                let interface = DeclarationReference {
+                    package: outcome.outcome.package,
+                    declaration: "decl_640e96fa57dee1c09557eb4bc7b53398".parse()?,
+                };
+                let operation = super::OperationReference {
+                    package: outcome.outcome.package,
+                    operation: "op_1c083402875f8f088541c27751f61d22".parse()?,
+                };
+                if constraint.interface != interface || !constraint.operations.contains(&operation)
+                {
+                    return Err(type_error(
+                        "kernel_type_transaction_requirement",
+                        "transaction-outcome requires the exact DataStore transaction operation",
+                    ));
+                }
+                self.transaction_binding_type(binding)?;
+                let actual = self.infer(body, context, next)?;
+                require_same(
+                    type_argument,
+                    actual,
+                    "kernel_type_transaction_outcome_payload",
+                    "transaction-outcome body",
+                )?;
+                self.transaction_outcome_type(outcome, type_argument, context)
+            }
         }
+    }
+
+    fn transaction_outcome_type(
+        &mut self,
+        contract: super::TransactionOutcomeContract,
+        body: TypeObjectDigest,
+        context: &ExecutionContext,
+    ) -> Result<TypeObjectDigest, Diagnostic> {
+        let invalid = || {
+            type_error(
+                "kernel_type_transaction_outcome_shape",
+                "exact transaction outcome owners have an incompatible nominal contract",
+            )
+        };
+        let parameters = self.nominal_parameters(contract.outcome)?;
+        if parameters.len() != 1 || !self.nominal_parameters(contract.abort_reason)?.is_empty() {
+            return Err(invalid());
+        }
+        let parameter = if contract.outcome.package == self.read.package_id() {
+            match self.read.owner(OwnerKey::TypeParameter(parameters[0]))? {
+                Some(OwnerRecord::TypeParameter(record)) => record,
+                _ => return Err(invalid()),
+            }
+        } else {
+            match self.dependency_owner(
+                contract.outcome.package,
+                OwnerKey::TypeParameter(parameters[0]),
+                "transaction outcome parameter",
+            )? {
+                PackageInterfaceRecord::TypeParameter(record) => record,
+                _ => return Err(invalid()),
+            }
+        };
+        if parameter.declaration != contract.outcome.declaration
+            || parameter.constraints != super::TypeParameterConstraints::None
+        {
+            return Err(invalid());
+        }
+        let outcome_cases: BTreeSet<_> =
+            self.variant_cases(contract.outcome)?.into_iter().collect();
+        let reason_cases: BTreeSet<_> = self
+            .variant_cases(contract.abort_reason)?
+            .into_iter()
+            .collect();
+        if outcome_cases != BTreeSet::from([contract.committed.case, contract.aborted.case])
+            || reason_cases
+                != BTreeSet::from([contract.condition_failed.case, contract.conflict.case])
+        {
+            return Err(invalid());
+        }
+        let committed = self.case_record(contract.committed.package, contract.committed.case)?;
+        let aborted = self.case_record(contract.aborted.package, contract.aborted.case)?;
+        let condition = self.case_record(
+            contract.condition_failed.package,
+            contract.condition_failed.case,
+        )?;
+        let conflict = self.case_record(contract.conflict.package, contract.conflict.case)?;
+        if committed.declaration != contract.outcome.declaration
+            || aborted.declaration != contract.outcome.declaration
+            || condition.declaration != contract.abort_reason.declaration
+            || conflict.declaration != contract.abort_reason.declaration
+            || condition.payload.is_some()
+            || conflict.payload.is_some()
+        {
+            return Err(invalid());
+        }
+        let payload = committed.payload.ok_or_else(invalid)?;
+        if self.type_object(payload)?.form
+            != (TypeForm::TypeParameter {
+                parameter: parameters[0],
+            })
+        {
+            return Err(invalid());
+        }
+        let reason = self.nominal_type(contract.abort_reason, &[])?;
+        if aborted.payload != Some(reason) {
+            return Err(invalid());
+        }
+        let bindings = self.nominal_bindings(contract.outcome, &[body])?;
+        require_same(
+            body,
+            self.substitute(payload, &bindings, 0)?,
+            "kernel_type_transaction_outcome_payload",
+            "transaction outcome substitution",
+        )?;
+        let result = self.nominal_type(contract.outcome, &[body])?;
+        self.validate_nominal_type(result, context, 0)?;
+        Ok(result)
     }
 
     fn local_type(

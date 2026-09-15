@@ -1738,26 +1738,40 @@ fn owner_codec_rejects_wrong_key_and_predecessor_magic() {
 
 #[test]
 fn canonical_kernel_codec_manifest_is_frozen() {
-    let (snapshot, _) = prototype_snapshot();
-    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.kernel.codec-manifest.test.v1");
-    hasher.update(contract::GRAPH_CONTRACT_IDENTITY.as_bytes());
-    for (owner, record) in &snapshot.owners {
-        hasher.update(&EncodedOwnerKey::new(*owner).bytes());
-        let (_, bytes) = encode_owner(record).expect("owner must encode");
-        hasher.update(&(bytes.len() as u64).to_be_bytes());
-        hasher.update(&bytes);
+    fn manifest(snapshot: &KernelSnapshot, identity: &str) -> String {
+        let mut hasher = blake3::Hasher::new_derive_key("lkjscript.kernel.codec-manifest.test.v1");
+        hasher.update(identity.as_bytes());
+        for (owner, record) in &snapshot.owners {
+            hasher.update(&EncodedOwnerKey::new(*owner).bytes());
+            let (_, bytes) = encode_owner(record).expect("owner must encode");
+            hasher.update(&(bytes.len() as u64).to_be_bytes());
+            hasher.update(&bytes);
+        }
+        for (digest, object) in &snapshot.types {
+            hasher.update(&digest.bytes());
+            let (_, bytes) = encode_type_object(object).expect("type must encode");
+            hasher.update(&(bytes.len() as u64).to_be_bytes());
+            hasher.update(&bytes);
+        }
+        let (_, root) = encode_root(&snapshot.root).expect("root must encode");
+        hasher.update(&(root.len() as u64).to_be_bytes());
+        hasher.update(&root);
+        crate::platform::semantic_id::encode_hex(hasher.finalize().as_bytes())
     }
-    for (digest, object) in &snapshot.types {
-        hasher.update(&digest.bytes());
-        let (_, bytes) = encode_type_object(object).expect("type must encode");
-        hasher.update(&(bytes.len() as u64).to_be_bytes());
-        hasher.update(&bytes);
-    }
-    let (_, root) = encode_root(&snapshot.root).expect("root must encode");
-    hasher.update(&(root.len() as u64).to_be_bytes());
-    hasher.update(&root);
+
+    let (mut snapshot, _) = prototype_snapshot();
     assert_eq!(
-        crate::platform::semantic_id::encode_hex(hasher.finalize().as_bytes()),
+        manifest(&snapshot, contract::GRAPH_CONTRACT_IDENTITY),
+        "c8aacde3d692096bc7e701b445b36861fbcca57d3530f8e0c17e02083b3127f8"
+    );
+    // Preserve the authentic Graph 15 golden while admitting the additive Graph 16 envelope.
+    // Type objects and every predecessor owner retain their old canonical bytes.
+    snapshot.root.graph_contract_version = 15;
+    for owner in snapshot.owners.values_mut() {
+        owner.set_encoding_for_edit(15);
+    }
+    assert_eq!(
+        manifest(&snapshot, "lkjscript-meaning-graph-15"),
         "fd5c2bc0e948842dd1e456c8293849b3ca168aab4f18baaa32fbe0976e6cff5b"
     );
 }

@@ -1,4 +1,10 @@
 reference.package as=$std source=builtin
+reference.owner as=$Outcome package=$std class=declaration name=TransactionOutcome
+reference.owner as=$Reason package=$std class=declaration name=TransactionAbortReason
+reference.owner as=$Committed package=$std class=case parent=$Outcome name=Committed
+reference.owner as=$Aborted package=$std class=case parent=$Outcome name=Aborted
+reference.owner as=$ConditionFailed package=$std class=case parent=$Reason name=ConditionFailed
+reference.owner as=$Conflict package=$std class=case parent=$Reason name=Conflict
 reference.owner as=$DataStore package=$std class=declaration name=DataStore
 reference.owner as=$DataEntry package=$std class=declaration name=DataEntry
 reference.owner as=$DataExpectation package=$std class=declaration name=DataExpectation
@@ -16,11 +22,6 @@ reference.owner as=$equal package=$std class=declaration name=i64-equal
 reference.owner as=$decode package=$std class=declaration name=data-decode-or
 reference.owner as=$encode package=$std class=declaration name=data-encode
 create.module as=$cells name=typed-cells
-create.record as=$Attempt module=$cells name=UpdateAttempt visibility=public
-add.type-parameter as=$Value declaration=$Attempt name=Value
-type.parameter as=@Value parameter=$Value
-add.field as=$candidate-field record=$Attempt name=candidate type=@Value
-add.field as=$matched-field record=$Attempt name=primary_condition_matched type=bool
 type.named as=@Entry declaration=$DataEntry
 type.list as=@Entries item=@Entry
 type.named as=@KeyPart declaration=$DataKeyPart
@@ -32,8 +33,8 @@ requirement-parameter.operation parent=$R index=0 operation=$get
 requirement-parameter.operation parent=$R index=1 operation=$put
 requirement-parameter.operation parent=$R index=2 operation=$transaction
 type.parameter as=@T parameter=$T
-type.application as=@Attempt declaration=$Attempt
-type.argument parent=@Attempt index=0 type=@T
+type.application as=@Outcome declaration=$Outcome
+type.argument parent=@Outcome index=0 type=@T
 effect.row as=@E
 effect.parameter parent=@E index=0 parameter=$E
 type.task-function as=@Transform result=@T effect=@E
@@ -95,19 +96,14 @@ expression.argument parent=$primary-write index=0 expression=$space-write
 expression.argument parent=$primary-write index=1 expression=$key-write
 expression.argument parent=$primary-write index=2 expression=$encoded
 expression.argument parent=$primary-write index=3 expression=$condition
-expression.local as=$matched-value value=$matched
-expression.record as=$attempt type=$Attempt
-type.argument parent=$attempt index=0 type=@T
 expression.local as=$candidate-result value=$candidate
-expression.record-field parent=$attempt index=0 field=$candidate-field value=$candidate-result
-expression.record-field parent=$attempt index=1 field=$matched-field value=$matched-value
-expression.let as=$algorithm body=$attempt
+expression.let as=$algorithm body=$candidate-result
 expression.binding parent=$algorithm index=0 as=$entries name=entries type=@Entries value=$entries-read
 expression.binding parent=$algorithm index=1 as=$absent name=absent type=bool value=$is-absent
 expression.binding parent=$algorithm index=2 as=$candidate name=candidate type=@T value=$transformed
 expression.binding parent=$algorithm index=3 as=$matched name=primary-condition-matched type=bool value=$primary-write
-expression.transaction as=$update-body requirement=parameter:$R binding=$tx name=cell-attempt body=$algorithm
-create.function as=$update module=$cells name=attempt-update visibility=public result=@Attempt effect=task body=$update-body
+expression.transaction-outcome as=$update-body requirement=parameter:$R binding=$tx name=cell-update type=@T outcome=$Outcome abort-reason=$Reason committed=$Committed aborted=$Aborted condition-failed=$ConditionFailed conflict=$Conflict body=$algorithm
+create.function as=$update module=$cells name=try-update visibility=public result=@Outcome effect=task body=$update-body
 effect.requirement parent=$update index=0 requirement=parameter:$R
 effect.parameter parent=$update index=0 parameter=$E
 add.type-parameter as=$factory-T declaration=$factory name=T constraint=capture-safe
@@ -117,8 +113,8 @@ requirement-parameter.operation parent=$factory-R index=0 operation=$get
 requirement-parameter.operation parent=$factory-R index=1 operation=$put
 requirement-parameter.operation parent=$factory-R index=2 operation=$transaction
 type.parameter as=@FactoryT parameter=$factory-T
-type.application as=@FactoryAttempt declaration=$Attempt
-type.argument parent=@FactoryAttempt index=0 type=@FactoryT
+type.application as=@FactoryOutcome declaration=$Outcome
+type.argument parent=@FactoryOutcome index=0 type=@FactoryT
 effect.row as=@FactoryE
 effect.parameter parent=@FactoryE index=0 parameter=$factory-E
 effect.row as=@FactoryRow
@@ -126,7 +122,7 @@ effect.parameter parent=@FactoryRow index=0 parameter=$factory-E
 effect.requirement parent=@FactoryRow index=0 requirement=parameter:$factory-R
 type.task-function as=@FactoryTransform result=@FactoryT effect=@FactoryE
 type.argument parent=@FactoryTransform index=0 type=@FactoryT
-type.task-function as=@Updater result=@FactoryAttempt effect=@FactoryRow
+type.task-function as=@Updater result=@FactoryOutcome effect=@FactoryRow
 type.argument parent=@Updater index=0 type=@Key
 add.parameter as=$factory-space function=$factory name=space type=static-text
 add.parameter as=$factory-default function=$factory name=default type=@FactoryT

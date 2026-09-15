@@ -1,0 +1,11 @@
+reference.owner as=$cells package=$old class=declaration name=cells
+reference.owner as=$direct package=$old class=port parent=$cells name=number-direct
+reference.owner as=$bound package=$old class=port parent=$cells name=number-bound
+reference.owner as=$text package=$old class=port parent=$cells name=text-direct
+reference.owner as=$seed package=$old class=port parent=$cells name=seed-auxiliary
+reference.owner as=$false package=$old class=port parent=$cells name=false-attempt
+create.target as=$direct-target name=number-direct component=$cells port=$direct runner=command
+create.target as=$bound-target name=number-bound component=$cells port=$bound runner=command
+create.target as=$text-target name=text-direct component=$cells port=$text runner=command
+create.target as=$seed-target name=seed-auxiliary component=$cells port=$seed runner=command
+create.target as=$false-target name=false-attempt component=$cells port=$false runner=command

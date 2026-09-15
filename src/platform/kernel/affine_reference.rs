@@ -404,7 +404,8 @@ impl Reference<'_> {
                 operation,
                 arguments,
             } => self.capability(*requirement, *operation, arguments, live),
-            ExpressionOperation::Transaction { body, .. } => self.eval(*body, live),
+            ExpressionOperation::Transaction { body, .. }
+            | ExpressionOperation::TransactionOutcome { body, .. } => self.eval(*body, live),
         }
     }
 

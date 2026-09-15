@@ -1,9 +1,25 @@
 //! Literal public requirement-parametric library with independent ordered-store observations.
 use super::*;
+#[path = "requirements_conflict.rs"]
+mod conflict;
 #[path = "requirements_structural.rs"]
 mod structural;
+#[path = "requirements_transaction_predecessor.rs"]
+mod transaction_predecessor;
 use lkjscript::platform::data::{DataKey, DataKeyPart, DataLimits, DataStore};
 use serde_json::{Value, json};
+
+const CELL_KEYS: [&str; 9] = [
+    "direct",
+    "bound",
+    "aux",
+    "trap-aux",
+    "multi",
+    "success-aux",
+    "early-aux",
+    "late-aux",
+    "independent",
+];
 
 pub(super) fn focused(context: &mut Context) -> Result<(), DevError> {
     let builtin = context.cli(None, &["package", "builtin", "inspect"], true)?;
@@ -87,9 +103,8 @@ fn reject_request(
     Ok(())
 }
 
-fn deployment(bundle: &Path, target: &str, artifact: &str) -> Result<PathBuf, DevError> {
-    let descriptor = bundle.join(format!("{artifact}-{target}.deployment.json"));
-    let value = json!({
+fn deployment_value(target: &str, artifact: &str) -> Value {
+    json!({
         "artifact":artifact,"target":target,"listen":null,"http":null,"session":null,"worker":null,
         "streams":lkjscript::platform::stream::StreamLimits::default(),
         "configuration":{"suffix":{"kind":"text","value":"!"}},"secrets":[],
@@ -98,8 +113,15 @@ fn deployment(bundle: &Path, target: &str, artifact: &str) -> Result<PathBuf, De
             {"requirement":"settings-store","sharing_domain":"requirement-texts","authority_revision":"a2".repeat(32),"adapter":{"kind":"data","root":"texts","namespace":"text-cells","limits":DataLimits::default()}},
             {"requirement":"suffix-config","sharing_domain":"requirement-configuration","authority_revision":"a3".repeat(32),"adapter":{"kind":"configuration"}}
         ]
-    });
-    fs::write(&descriptor, evidence::encode_json(&value)?)?;
+    })
+}
+
+fn deployment(bundle: &Path, target: &str, artifact: &str) -> Result<PathBuf, DevError> {
+    let descriptor = bundle.join(format!("{artifact}-{target}.deployment.json"));
+    fs::write(
+        &descriptor,
+        evidence::encode_json(&deployment_value(target, artifact))?,
+    )?;
     Ok(descriptor)
 }
 
@@ -196,7 +218,7 @@ fn observe(bundle: &Path) -> Result<Value, DevError> {
             .begin()
             .map_err(|e| DevError::corrupt(e.to_string()))?;
         let mut cells = BTreeMap::new();
-        for key in ["direct", "bound", "aux", "trap-aux"] {
+        for key in CELL_KEYS {
             let key_value = DataKey::new(vec![DataKeyPart::Text(key.to_owned())], store.limits())
                 .map_err(|e| DevError::corrupt(e.to_string()))?;
             let entry = transaction
@@ -219,7 +241,9 @@ fn expect_cell(
     key: &str,
     value: Option<Value>,
 ) -> Result<(), DevError> {
-    let observed = &observation[store]["cells"][key];
+    let observed = observation[store]["cells"]
+        .get(key)
+        .ok_or_else(|| DevError::corrupt("independent cell observation omitted"))?;
     if let Some(value) = value {
         require(
             observed["bytes"] == json!(typed_bytes(&value)?),
@@ -231,6 +255,101 @@ fn expect_cell(
             &format!("unexpected publication at store {store} key {key}"),
         )
     }
+}
+
+fn revision_identity(value: &Value) -> bool {
+    value
+        .as_str()
+        .and_then(|text| text.strip_prefix("data_revision_"))
+        .is_some_and(|digest| {
+            digest.len() == 64
+                && digest
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        })
+}
+
+fn byte_array(value: &Value, length: Option<usize>) -> bool {
+    value.as_array().is_some_and(|bytes| {
+        length.is_none_or(|length| bytes.len() == length)
+            && bytes
+                .iter()
+                .all(|byte| byte.as_u64().is_some_and(|byte| byte <= 255))
+    })
+}
+
+fn retained_cell(value: &Value) -> bool {
+    value.is_null()
+        || (value.as_object().is_some_and(|fields| fields.len() == 2)
+            && byte_array(&value["bytes"], None)
+            && byte_array(&value["revision"], Some(32)))
+}
+
+fn store_observations(rows: &[Value]) -> Result<(), DevError> {
+    for row in rows {
+        require(
+            row.as_array().is_some_and(|stores| stores.len() == 2),
+            "independent store pair omitted",
+        )?;
+        for (index, (store, namespace)) in [("numbers", "number-cells"), ("texts", "text-cells")]
+            .into_iter()
+            .enumerate()
+        {
+            let value = &row[index];
+            require(
+                value["store"] == store
+                    && value["namespace"] == namespace
+                    && revision_identity(&value["revision"])
+                    && value["cells"].as_object().is_some_and(|cells| {
+                        cells.len() == CELL_KEYS.len()
+                            && CELL_KEYS
+                                .iter()
+                                .all(|key| cells.get(*key).is_some_and(retained_cell))
+                    }),
+                "independent store revision, complete cells, or entry bytes omitted",
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn completed_states(rows: &[Value]) -> Result<(), DevError> {
+    require(
+        rows.len() == 23,
+        "completed transaction state evidence omitted",
+    )?;
+    expect_cell(&rows[14], 0, "multi", Some(json!(13)))?;
+    expect_cell(&rows[14], 0, "success-aux", Some(json!(7)))?;
+    require(
+        rows[13][1] == rows[14][1],
+        "multi-key update changed another store",
+    )?;
+    for row in &rows[15..=18] {
+        require(
+            row == &rows[14],
+            "failed or no-write completion changed data or HEAD",
+        )?;
+    }
+    expect_cell(&rows[18], 0, "early-aux", None)?;
+    expect_cell(&rows[18], 0, "late-aux", None)?;
+    expect_cell(&rows[18], 0, "direct", Some(json!(22)))?;
+    require(
+        rows[18][0] == rows[19][0],
+        "outer condition failure published its store",
+    )?;
+    expect_cell(&rows[18], 1, "independent", None)?;
+    expect_cell(&rows[19], 1, "independent", Some(json!("survived")))?;
+    require(
+        rows[18][1]["revision"] != rows[19][1]["revision"],
+        "independent inner store completion did not advance its own HEAD",
+    )?;
+    for row in &rows[20..=22] {
+        require(
+            row == &rows[19],
+            "empty, nominal or read-only completion changed data or HEAD",
+        )?;
+    }
+    Ok(())
 }
 
 pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), DevError> {
@@ -350,14 +469,16 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
             selection(&producer),
         ),
         &format!(
-            "{}{}{}",
+            "{}{}{}{}",
             include_str!("requirements.consumer.lkjc"),
+            include_str!("requirements.outcomes.consumer.flat.lkjc"),
             include_str!("requirements.resource-consumer.lkjc"),
             include_str!("requirements.unencodable.lkjc")
         ),
         &format!(
-            "{}{}{}",
+            "{}{}{}{}",
             include_str!("requirements.consumer.structural.lkjc"),
+            include_str!("requirements.outcomes.consumer.structural.lkjc"),
             include_str!("requirements.resource-consumer.structural.lkjc"),
             include_str!("requirements.unencodable.lkjc")
         ),
@@ -601,6 +722,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
     expect_cell(&observations[11], 1, "aux", None)?;
     expect_cell(&observations[12], 0, "direct", Some(json!(22)))?;
     expect_cell(&observations[13], 1, "bound", Some(json!("a!!!!")))?;
+    completed_states(&observations)?;
     // Reopening the owned recovery copy is a normal public recovery check, after execution no
     // longer has either authoring path. It must preserve the final accepted revision.
     context.cli(Some(&recovery), &["check"], true)?;
@@ -617,85 +739,151 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
         .observations
         .insert("requirement_sources_removed".into(), "true".into());
     super::requirements_predecessor::workflow(context)?;
+    transaction_predecessor::workflow(context)?;
+    conflict::workflow(context, &bundle)?;
     super::requirements_queue::workflow(context, &bundle)?;
     Ok(())
 }
 
-fn cases() -> [(&'static str, &'static str, &'static str, Option<Value>); 13] {
+fn cases() -> [(&'static str, &'static str, &'static str, Option<Value>); 22] {
     [
         (
             "consumer.lkja",
             "number-direct",
             "[\"direct\"]",
-            Some(json!({"candidate":13,"primary_condition_matched":true})),
+            Some(json!({"case":"Committed","value":13})),
         ),
         (
             "consumer.lkja",
             "number-direct",
             "[\"direct\"]",
-            Some(json!({"candidate":16,"primary_condition_matched":true})),
+            Some(json!({"case":"Committed","value":16})),
         ),
         (
             "consumer.lkja",
             "number-bound",
             "[\"bound\"]",
-            Some(json!({"candidate":13,"primary_condition_matched":true})),
+            Some(json!({"case":"Committed","value":13})),
         ),
         (
             "consumer.lkja",
             "number-bound",
             "[\"bound\"]",
-            Some(json!({"candidate":16,"primary_condition_matched":true})),
+            Some(json!({"case":"Committed","value":16})),
         ),
         (
             "consumer.lkja",
             "text-direct",
             "[\"direct\"]",
-            Some(json!({"candidate":"a!","primary_condition_matched":true})),
+            Some(json!({"case":"Committed","value":"a!"})),
         ),
         (
             "consumer.lkja",
             "text-direct",
             "[\"direct\"]",
-            Some(json!({"candidate":"a!!","primary_condition_matched":true})),
+            Some(json!({"case":"Committed","value":"a!!"})),
         ),
         (
             "consumer.lkja",
             "text-bound",
             "[\"bound\"]",
-            Some(json!({"candidate":"a!","primary_condition_matched":true})),
+            Some(json!({"case":"Committed","value":"a!"})),
         ),
         (
             "consumer.lkja",
             "text-bound",
             "[\"bound\"]",
-            Some(json!({"candidate":"a!!","primary_condition_matched":true})),
+            Some(json!({"case":"Committed","value":"a!!"})),
         ),
         ("consumer.lkja", "seed-auxiliary", "[]", Some(json!(true))),
         (
             "consumer.lkja",
             "false-attempt",
             "[\"direct\"]",
-            Some(json!({"candidate":19,"primary_condition_matched":true})),
+            Some(json!({"case":"Aborted","value":{"case":"ConditionFailed"}})),
         ),
         ("consumer.lkja", "trapped-attempt", "[\"direct\"]", None),
         (
             "repaired.lkja",
             "number-direct",
             "[\"direct\"]",
-            Some(json!({"candidate":22,"primary_condition_matched":true})),
+            Some(json!({"case":"Committed","value":22})),
         ),
         (
             "repaired.lkja",
             "text-bound",
             "[\"bound\"]",
-            Some(json!({"candidate":"a!!!!","primary_condition_matched":true})),
+            Some(json!({"case":"Committed","value":"a!!!!"})),
+        ),
+        (
+            "consumer.lkja",
+            "multi-key-update",
+            "[\"multi\"]",
+            Some(json!({"case":"Committed","value":13})),
+        ),
+        (
+            "consumer.lkja",
+            "staged-false-attempt",
+            "[\"direct\"]",
+            Some(json!({"case":"Aborted","value":{"case":"ConditionFailed"}})),
+        ),
+        (
+            "consumer.lkja",
+            "no-write-false",
+            "[]",
+            Some(json!({"case":"Committed","value":false})),
+        ),
+        (
+            "consumer.lkja",
+            "condition-only",
+            "[]",
+            Some(json!({"case":"Aborted","value":{"case":"ConditionFailed"}})),
+        ),
+        (
+            "consumer.lkja",
+            "match-completion",
+            "[\"direct\"]",
+            Some(json!("condition-failed")),
+        ),
+        (
+            "consumer.lkja",
+            "other-store-survives",
+            "[\"direct\"]",
+            Some(json!({"case":"Aborted","value":{"case":"ConditionFailed"}})),
+        ),
+        (
+            "consumer.lkja",
+            "application-payload",
+            "[]",
+            Some(json!({"case":"Committed","value":{"amount":42,"note":"snapshot"}})),
+        ),
+        (
+            "consumer.lkja",
+            "empty-outcome",
+            "[]",
+            Some(json!({"case":"Committed","value":null})),
+        ),
+        (
+            "consumer.lkja",
+            "read-only-outcome",
+            "[]",
+            Some(json!({"case":"Committed","value":22})),
         ),
     ]
 }
 
 pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, DevError> {
     structural::validate(receipt, root)?;
+    let mut expected_preflight = deployment_value("unencodable-cell", "consumer.lkja");
+    expected_preflight["secrets"] =
+        json!([{"name":"unread","variable":"LKJSCRIPT_REQUIREMENT_UNAVAILABLE_SECRET"}]);
+    require(
+        serde_json::from_slice::<Value>(&process::read_bounded(
+            &root.join("requirement-unencodable.deployment.json"),
+            MAXIMUM_OUTPUT_BYTES,
+        )?)? == expected_preflight,
+        "unencodable outcome preflight descriptor changed exact target or grants",
+    )?;
     let preflight: Value = serde_json::from_str(
         receipt
             .observations
@@ -874,8 +1062,9 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
     let rows = observations
         .as_array()
         .ok_or_else(|| DevError::corrupt("requirement store observations missing"))?;
+    store_observations(rows)?;
     require(
-        rows.len() == 14
+        rows.len() == cases().len() + 1
             && rows
                 .iter()
                 .all(|row| row.as_array().is_some_and(|stores| stores.len() == 2)),
@@ -891,7 +1080,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
         )?;
     }
     for store in [0, 1] {
-        for key in ["direct", "bound", "aux", "trap-aux"] {
+        for key in CELL_KEYS {
             expect_cell(&rows[0], store, key, None)?;
         }
     }
@@ -919,7 +1108,26 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
     )?;
     expect_cell(&rows[11], 0, "trap-aux", None)?;
     expect_cell(&rows[11], 0, "direct", Some(json!(16)))?;
+    completed_states(rows)?;
+    let mut artifact_identities = BTreeMap::new();
+    for (artifact, material) in [
+        ("consumer.lkja", "requirement-consumer.lkja"),
+        ("repaired.lkja", "requirement-repaired.lkja"),
+    ] {
+        let loaded = lkjscript::platform::contributor::strict_artifact_identity_probe(
+            &process::read_bounded(&root.join(material), MAXIMUM_CONTAINER_BYTES)?,
+        )
+        .map_err(|error| DevError::corrupt(error.to_string()))?;
+        artifact_identities.insert(artifact, loaded);
+    }
     for (index, (artifact, target, arguments, expected)) in commands.iter().zip(cases()) {
+        require(
+            serde_json::from_slice::<Value>(&process::read_bounded(
+                &root.join(format!("requirement-{artifact}-{target}.deployment.json")),
+                MAXIMUM_OUTPUT_BYTES,
+            )?)? == deployment_value(target, artifact),
+            "requirement descriptor changed exact target or grants",
+        )?;
         let command = receipt
             .commands
             .get(*index)
@@ -953,17 +1161,24 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
             let work: Value =
                 serde_json::from_str(&field(&output, "execution", "production-observation")?)?;
             let cleanup: Value = serde_json::from_str(&field(&output, "execution", "cleanup")?)?;
-            let expected_calls = if target == "false-attempt" {
-                5
-            } else if target == "seed-auxiliary" {
-                2
-            } else if target.starts_with("text-") {
-                if artifact == "repaired.lkja" { 5 } else { 4 }
-            } else {
-                3
+            let expected_calls = match target {
+                "false-attempt" | "match-completion" => 5,
+                "seed-auxiliary" | "condition-only" | "read-only-outcome" => 2,
+                "multi-key-update" => 4,
+                "staged-false-attempt" | "other-store-survives" => 6,
+                "no-write-false" | "application-payload" | "empty-outcome" => 1,
+                name if name.starts_with("text-") => {
+                    if artifact == "repaired.lkja" {
+                        5
+                    } else {
+                        4
+                    }
+                }
+                _ => 3,
             };
             require(
                 value == expected
+                    && field(&output, "execution", "artifact")? == artifact_identities[artifact]
                     && work["capability_calls"] == expected_calls
                     && cleanup["remaining_tasks"] == 0
                     && cleanup["cleanup_failures"] == json!([]),
@@ -999,6 +1214,8 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
     let mut commands = commands;
     commands.push(preflight_index);
     commands.extend(super::requirements_predecessor::validate(receipt, root)?);
+    commands.extend(transaction_predecessor::validate(receipt, root)?);
+    commands.extend(conflict::validate(receipt, root)?);
     commands.extend(super::requirements_queue::validate(receipt, root)?);
     Ok(commands)
 }

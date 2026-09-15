@@ -4946,6 +4946,54 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                     KernelOwnerKey::Binding(*binding),
                 )?;
             }
+            ExpressionOperation::TransactionOutcome {
+                requirement,
+                binding,
+                outcome,
+                type_argument,
+                ..
+            } => {
+                fields.push(("form", "transaction_outcome".to_owned()));
+                fields.push((
+                    "requirement",
+                    format!("{}/{}", requirement.package(), requirement.owner()),
+                ));
+                fields.push(("binding", binding.to_string()));
+                fields.push(("type-argument", type_argument.to_string()));
+                self.add_type_reference("outcome_type_argument", owner, 0, *type_argument)?;
+                self.add_requirement_reference("transaction_requirement", owner, 0, *requirement)?;
+                self.add_local_reference(
+                    "transaction_binding",
+                    owner,
+                    0,
+                    KernelOwnerKey::Binding(*binding),
+                )?;
+                for (role, declaration) in [
+                    ("outcome", outcome.outcome),
+                    ("abort-reason", outcome.abort_reason),
+                ] {
+                    fields.push((
+                        role,
+                        format!("{}/{}", declaration.package, declaration.declaration),
+                    ));
+                    self.add_declaration_reference(role, owner, 0, declaration)?;
+                }
+                for (role, case) in [
+                    ("committed", outcome.committed),
+                    ("aborted", outcome.aborted),
+                    ("condition-failed", outcome.condition_failed),
+                    ("conflict", outcome.conflict),
+                ] {
+                    fields.push((role, format!("{}/{}", case.package, case.case)));
+                    self.add_reference(
+                        role,
+                        owner,
+                        0,
+                        "case",
+                        format!("{}/{}", case.package, case.case),
+                    )?;
+                }
+            }
         }
         self.push_fields(DefinitionSection::Body, "definition.expression", &fields)?;
         if let Some(fragments) = literal_fragments {
@@ -5203,7 +5251,8 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                     )?;
                 }
             }
-            ExpressionOperation::Transaction { binding, body, .. } => {
+            ExpressionOperation::Transaction { binding, body, .. }
+            | ExpressionOperation::TransactionOutcome { binding, body, .. } => {
                 self.visit_binding(
                     binding,
                     DefinitionPosition {

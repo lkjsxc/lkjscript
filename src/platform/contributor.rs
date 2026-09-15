@@ -32,6 +32,11 @@ pub fn strict_artifact_admission_probe(bytes: &[u8]) -> Result<(), Diagnostic> {
     super::compiler::load_artifact(bytes).map(|_| ())
 }
 
+/// Read the canonical bundle identity only after complete independent artifact admission.
+pub fn strict_artifact_identity_probe(bytes: &[u8]) -> Result<String, Diagnostic> {
+    super::compiler::load_artifact(bytes).map(|bundle| bundle.bundle_digest.to_string())
+}
+
 /// Bind output evidence to an independently transported exact source closure. This is a
 /// read-only verifier boundary; an older self-consistent standalone bundle remains executable.
 pub fn strict_artifact_source_probe(
@@ -1240,7 +1245,8 @@ fn reconstruct_function_extraction(
         };
         match &record.operation {
             ExpressionOperation::CapabilityCall { requirement, .. }
-            | ExpressionOperation::Transaction { requirement, .. } => {
+            | ExpressionOperation::Transaction { requirement, .. }
+            | ExpressionOperation::TransactionOutcome { requirement, .. } => {
                 required.insert(*requirement);
             }
             ExpressionOperation::Call {
@@ -2317,7 +2323,8 @@ impl DefinitionOracleWalker<'_> {
                     )?;
                 }
             }
-            ExpressionOperation::Transaction { binding, body, .. } => {
+            ExpressionOperation::Transaction { binding, body, .. }
+            | ExpressionOperation::TransactionOutcome { binding, body, .. } => {
                 self.visit_binding(
                     *binding,
                     owner,
@@ -2695,6 +2702,7 @@ fn oracle_expression_form(operation: &ExpressionOperation) -> &'static str {
         ExpressionOperation::Match { .. } => "match",
         ExpressionOperation::CapabilityCall { .. } => "capability_call",
         ExpressionOperation::Transaction { .. } => "transaction",
+        ExpressionOperation::TransactionOutcome { .. } => "transaction_outcome",
     }
 }
 
@@ -2806,7 +2814,7 @@ mod tests {
         let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
         let before = std::fs::read(project.join("HEAD")).expect("standard HEAD before oracle");
         let inventory = semantic_inventory(&project).expect("standard semantic inventory");
-        assert_eq!(inventory.owners, 888);
+        assert_eq!(inventory.owners, 895);
         assert_eq!(inventory.modules, 13);
         assert!(inventory.functions > 0);
         assert!(inventory.relations > 0);

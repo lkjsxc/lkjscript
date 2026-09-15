@@ -1,0 +1,394 @@
+reference.owner as=$DataEntry package=$std class=declaration name=DataEntry
+reference.owner as=$entry-value package=$std class=field parent=$DataEntry name=value
+reference.owner as=$first package=$std class=declaration name=list-get
+reference.owner as=$decode package=$std class=declaration name=data-decode-or
+type.named as=@Entry declaration=$DataEntry
+type.application as=@BooleanOutcome declaration=$Outcome
+type.argument parent=@BooleanOutcome index=0 type=bool
+type.application as=@UnitOutcome declaration=$Outcome
+type.argument parent=@UnitOutcome index=0 type=unit
+type.named as=@AbortReason declaration=$Reason
+type.task-function as=@BooleanOutcomePort result=@BooleanOutcome effect=@Numbers
+type.task-function as=@UnitOutcomePort result=@UnitOutcome effect=@Numbers
+type.task-function as=@ReadOnlyPort result=@NumberOutcome effect=@Numbers
+effect.row as=@BothStores
+effect.requirement parent=@BothStores index=0 requirement=$numbers
+effect.requirement parent=@BothStores index=1 requirement=$texts
+type.task-function as=@BothStoresPort result=@NumberOutcome effect=@BothStores
+type.argument parent=@BothStoresPort index=0 type=text
+type.task-function as=@MatchPort result=text effect=@Numbers
+type.argument parent=@MatchPort index=0 type=text
+
+add.parameter as=$multi-input function=$multi-transform name=value type=i64
+expression.static-text as=$multi-space value=typed-cell
+expression.text as=$multi-aux-name value=success-aux
+expression.variant as=$multi-aux-part case=$text-key payload=$multi-aux-name
+expression.list as=$multi-aux-key item=@KeyPart
+expression.argument parent=$multi-aux-key index=0 expression=$multi-aux-part
+expression.i64 as=$multi-seven value=7
+expression.call as=$multi-encoded function=$encode
+type.argument parent=$multi-encoded index=0 type=i64
+expression.argument parent=$multi-encoded index=0 expression=$multi-seven
+expression.variant as=$multi-missing case=$Missing
+expression.capability-call as=$multi-put requirement=$numbers operation=$put
+expression.argument parent=$multi-put index=0 expression=$multi-space
+expression.argument parent=$multi-put index=1 expression=$multi-aux-key
+expression.argument parent=$multi-put index=2 expression=$multi-encoded
+expression.argument parent=$multi-put index=3 expression=$multi-missing
+expression.local as=$multi-value value=$multi-input
+expression.i64 as=$multi-three value=3
+expression.call as=$multi-sum function=$add
+expression.argument parent=$multi-sum index=0 expression=$multi-value
+expression.argument parent=$multi-sum index=1 expression=$multi-three
+expression.sequence as=$multi-transform-body
+expression.argument parent=$multi-transform-body index=0 expression=$multi-put
+expression.argument parent=$multi-transform-body index=1 expression=$multi-sum
+create.function as=$multi-transform module=$module name=write-auxiliary visibility=private result=i64 effect=task body=$multi-transform-body
+effect.requirement parent=$multi-transform index=0 requirement=$numbers
+add.parameter as=$multi-key function=$multi-main name=key type=text
+expression.static-text as=$multi-main-space value=typed-cell
+expression.i64 as=$multi-default value=10
+expression.function-value as=$multi-callback function=$multi-transform
+expression.local as=$multi-main-key-name value=$multi-key
+expression.variant as=$multi-main-part case=$text-key payload=$multi-main-key-name
+expression.list as=$multi-main-key item=@KeyPart
+expression.argument parent=$multi-main-key index=0 expression=$multi-main-part
+expression.call as=$multi-main-body function=$try-update
+type.argument parent=$multi-main-body index=0 type=i64
+effect.argument parent=$multi-main-body index=0 effect=@Numbers
+requirement.argument parent=$multi-main-body index=0 requirement=$numbers
+expression.argument parent=$multi-main-body index=0 expression=$multi-main-space
+expression.argument parent=$multi-main-body index=1 expression=$multi-default
+expression.argument parent=$multi-main-body index=2 expression=$multi-callback
+expression.argument parent=$multi-main-body index=3 expression=$multi-main-key
+create.function as=$multi-main module=$module name=multi-key-update visibility=private result=@NumberOutcome effect=task body=$multi-main-body
+effect.requirement parent=$multi-main index=0 requirement=$numbers
+add.port as=$multi-port component=$component name=multi-key-update type=@NumberPort function=$multi-main
+create.target as=$multi-target name=multi-key-update component=$component port=$multi-port runner=command
+
+add.parameter as=$staged-input function=$staged-transform name=value type=i64
+expression.static-text as=$early-space value=typed-cell
+expression.text as=$early-name value=early-aux
+expression.variant as=$early-part case=$text-key payload=$early-name
+expression.list as=$early-key item=@KeyPart
+expression.argument parent=$early-key index=0 expression=$early-part
+expression.i64 as=$early-number value=71
+expression.call as=$early-encoded function=$encode
+type.argument parent=$early-encoded index=0 type=i64
+expression.argument parent=$early-encoded index=0 expression=$early-number
+expression.variant as=$early-missing case=$Missing
+expression.capability-call as=$early-put requirement=$numbers operation=$put
+expression.argument parent=$early-put index=0 expression=$early-space
+expression.argument parent=$early-put index=1 expression=$early-key
+expression.argument parent=$early-put index=2 expression=$early-encoded
+expression.argument parent=$early-put index=3 expression=$early-missing
+expression.static-text as=$staged-false-space value=typed-cell
+expression.text as=$staged-false-name value=aux
+expression.variant as=$staged-false-part case=$text-key payload=$staged-false-name
+expression.list as=$staged-false-key item=@KeyPart
+expression.argument parent=$staged-false-key index=0 expression=$staged-false-part
+expression.i64 as=$staged-false-number value=999
+expression.call as=$staged-false-encoded function=$encode
+type.argument parent=$staged-false-encoded index=0 type=i64
+expression.argument parent=$staged-false-encoded index=0 expression=$staged-false-number
+expression.variant as=$staged-false-missing case=$Missing
+expression.capability-call as=$staged-false-put requirement=$numbers operation=$put
+expression.argument parent=$staged-false-put index=0 expression=$staged-false-space
+expression.argument parent=$staged-false-put index=1 expression=$staged-false-key
+expression.argument parent=$staged-false-put index=2 expression=$staged-false-encoded
+expression.argument parent=$staged-false-put index=3 expression=$staged-false-missing
+expression.static-text as=$late-space value=typed-cell
+expression.text as=$late-name value=late-aux
+expression.variant as=$late-part case=$text-key payload=$late-name
+expression.list as=$late-key item=@KeyPart
+expression.argument parent=$late-key index=0 expression=$late-part
+expression.i64 as=$late-number value=72
+expression.call as=$late-encoded function=$encode
+type.argument parent=$late-encoded index=0 type=i64
+expression.argument parent=$late-encoded index=0 expression=$late-number
+expression.variant as=$late-missing case=$Missing
+expression.capability-call as=$late-put requirement=$numbers operation=$put
+expression.argument parent=$late-put index=0 expression=$late-space
+expression.argument parent=$late-put index=1 expression=$late-key
+expression.argument parent=$late-put index=2 expression=$late-encoded
+expression.argument parent=$late-put index=3 expression=$late-missing
+expression.local as=$staged-value value=$staged-input
+expression.i64 as=$staged-three value=3
+expression.call as=$staged-sum function=$add
+expression.argument parent=$staged-sum index=0 expression=$staged-value
+expression.argument parent=$staged-sum index=1 expression=$staged-three
+expression.sequence as=$staged-transform-body
+expression.argument parent=$staged-transform-body index=0 expression=$early-put
+expression.argument parent=$staged-transform-body index=1 expression=$staged-false-put
+expression.argument parent=$staged-transform-body index=2 expression=$late-put
+expression.argument parent=$staged-transform-body index=3 expression=$staged-sum
+create.function as=$staged-transform module=$module name=staged-false-callback visibility=private result=i64 effect=task body=$staged-transform-body
+effect.requirement parent=$staged-transform index=0 requirement=$numbers
+add.parameter as=$staged-key function=$staged-main name=key type=text
+expression.static-text as=$staged-main-space value=typed-cell
+expression.i64 as=$staged-default value=10
+expression.function-value as=$staged-callback function=$staged-transform
+expression.local as=$staged-main-key-name value=$staged-key
+expression.variant as=$staged-main-part case=$text-key payload=$staged-main-key-name
+expression.list as=$staged-main-key item=@KeyPart
+expression.argument parent=$staged-main-key index=0 expression=$staged-main-part
+expression.call as=$staged-main-body function=$try-update
+type.argument parent=$staged-main-body index=0 type=i64
+effect.argument parent=$staged-main-body index=0 effect=@Numbers
+requirement.argument parent=$staged-main-body index=0 requirement=$numbers
+expression.argument parent=$staged-main-body index=0 expression=$staged-main-space
+expression.argument parent=$staged-main-body index=1 expression=$staged-default
+expression.argument parent=$staged-main-body index=2 expression=$staged-callback
+expression.argument parent=$staged-main-body index=3 expression=$staged-main-key
+create.function as=$staged-main module=$module name=staged-false-attempt visibility=private result=@NumberOutcome effect=task body=$staged-main-body
+effect.requirement parent=$staged-main index=0 requirement=$numbers
+add.port as=$staged-port component=$component name=staged-false-attempt type=@NumberPort function=$staged-main
+create.target as=$staged-target name=staged-false-attempt component=$component port=$staged-port runner=command
+
+expression.bool as=$no-write-false value=false
+expression.transaction-outcome as=$no-write-body requirement=$numbers binding=$no-write-binding name=false-body type=bool outcome=$Outcome abort-reason=$Reason committed=$Committed aborted=$Aborted condition-failed=$ConditionFailed conflict=$Conflict body=$no-write-false
+create.function as=$no-write module=$module name=no-write-false visibility=private result=@BooleanOutcome effect=task body=$no-write-body
+effect.requirement parent=$no-write index=0 requirement=$numbers
+add.port as=$no-write-port component=$component name=no-write-false type=@BooleanOutcomePort function=$no-write
+create.target as=$no-write-target name=no-write-false component=$component port=$no-write-port runner=command
+
+expression.static-text as=$condition-only-space value=typed-cell
+expression.text as=$condition-only-name value=aux
+expression.variant as=$condition-only-part case=$text-key payload=$condition-only-name
+expression.list as=$condition-only-key item=@KeyPart
+expression.argument parent=$condition-only-key index=0 expression=$condition-only-part
+expression.i64 as=$condition-only-number value=999
+expression.call as=$condition-only-encoded function=$encode
+type.argument parent=$condition-only-encoded index=0 type=i64
+expression.argument parent=$condition-only-encoded index=0 expression=$condition-only-number
+expression.variant as=$condition-only-missing case=$Missing
+expression.capability-call as=$condition-only-put requirement=$numbers operation=$put
+expression.argument parent=$condition-only-put index=0 expression=$condition-only-space
+expression.argument parent=$condition-only-put index=1 expression=$condition-only-key
+expression.argument parent=$condition-only-put index=2 expression=$condition-only-encoded
+expression.argument parent=$condition-only-put index=3 expression=$condition-only-missing
+expression.transaction-outcome as=$condition-only-body requirement=$numbers binding=$condition-only-binding name=condition-only type=bool outcome=$Outcome abort-reason=$Reason committed=$Committed aborted=$Aborted condition-failed=$ConditionFailed conflict=$Conflict body=$condition-only-put
+create.function as=$condition-only module=$module name=condition-only visibility=private result=@BooleanOutcome effect=task body=$condition-only-body
+effect.requirement parent=$condition-only index=0 requirement=$numbers
+add.port as=$condition-only-port component=$component name=condition-only type=@BooleanOutcomePort function=$condition-only
+create.target as=$condition-only-target name=condition-only component=$component port=$condition-only-port runner=command
+
+add.parameter as=$match-key function=$match-main name=key type=text
+expression.static-text as=$match-space value=typed-cell
+expression.i64 as=$match-default value=10
+expression.function-value as=$match-callback function=$false-transform
+expression.local as=$match-key-name value=$match-key
+expression.variant as=$match-part case=$text-key payload=$match-key-name
+expression.list as=$match-data-key item=@KeyPart
+expression.argument parent=$match-data-key index=0 expression=$match-part
+expression.call as=$match-update function=$try-update
+type.argument parent=$match-update index=0 type=i64
+effect.argument parent=$match-update index=0 effect=@Numbers
+requirement.argument parent=$match-update index=0 requirement=$numbers
+expression.argument parent=$match-update index=0 expression=$match-space
+expression.argument parent=$match-update index=1 expression=$match-default
+expression.argument parent=$match-update index=2 expression=$match-callback
+expression.argument parent=$match-update index=3 expression=$match-data-key
+expression.text as=$match-committed value=committed
+expression.local as=$match-reason value=$matched-reason
+expression.text as=$match-condition value=condition-failed
+expression.text as=$match-conflict value=conflict
+expression.match as=$reason-match value=$match-reason
+expression.match-arm parent=$reason-match index=0 case=$ConditionFailed body=$match-condition
+expression.match-arm parent=$reason-match index=1 case=$Conflict body=$match-conflict
+expression.match as=$match-body value=$match-update
+expression.match-arm parent=$match-body index=0 case=$Committed as=$matched-completed name=completed type=i64 body=$match-committed
+expression.match-arm parent=$match-body index=1 case=$Aborted as=$matched-reason name=reason type=@AbortReason body=$reason-match
+create.function as=$match-main module=$module name=match-completion visibility=private result=text effect=task body=$match-body
+effect.requirement parent=$match-main index=0 requirement=$numbers
+add.port as=$match-port component=$component name=match-completion type=@MatchPort function=$match-main
+create.target as=$match-target name=match-completion component=$component port=$match-port runner=command
+
+add.parameter as=$independent-input function=$independent-transform name=value type=i64
+expression.static-text as=$independent-text-space value=typed-cell
+expression.text as=$independent-text-name value=independent
+expression.variant as=$independent-text-part case=$text-key payload=$independent-text-name
+expression.list as=$independent-text-key item=@KeyPart
+expression.argument parent=$independent-text-key index=0 expression=$independent-text-part
+expression.text as=$independent-value value=survived
+expression.call as=$independent-encoded function=$encode
+type.argument parent=$independent-encoded index=0 type=text
+expression.argument parent=$independent-encoded index=0 expression=$independent-value
+expression.variant as=$independent-text-missing case=$Missing
+expression.capability-call as=$independent-text-put requirement=$texts operation=$put
+expression.argument parent=$independent-text-put index=0 expression=$independent-text-space
+expression.argument parent=$independent-text-put index=1 expression=$independent-text-key
+expression.argument parent=$independent-text-put index=2 expression=$independent-encoded
+expression.argument parent=$independent-text-put index=3 expression=$independent-text-missing
+expression.transaction as=$independent-text-transaction requirement=$texts binding=$independent-transaction name=independent-store body=$independent-text-put
+expression.static-text as=$independent-false-space value=typed-cell
+expression.text as=$independent-false-name value=aux
+expression.variant as=$independent-false-part case=$text-key payload=$independent-false-name
+expression.list as=$independent-false-key item=@KeyPart
+expression.argument parent=$independent-false-key index=0 expression=$independent-false-part
+expression.i64 as=$independent-false-number value=999
+expression.call as=$independent-false-encoded function=$encode
+type.argument parent=$independent-false-encoded index=0 type=i64
+expression.argument parent=$independent-false-encoded index=0 expression=$independent-false-number
+expression.variant as=$independent-false-missing case=$Missing
+expression.capability-call as=$independent-false-put requirement=$numbers operation=$put
+expression.argument parent=$independent-false-put index=0 expression=$independent-false-space
+expression.argument parent=$independent-false-put index=1 expression=$independent-false-key
+expression.argument parent=$independent-false-put index=2 expression=$independent-false-encoded
+expression.argument parent=$independent-false-put index=3 expression=$independent-false-missing
+expression.local as=$independent-input-value value=$independent-input
+expression.i64 as=$independent-three value=3
+expression.call as=$independent-sum function=$add
+expression.argument parent=$independent-sum index=0 expression=$independent-input-value
+expression.argument parent=$independent-sum index=1 expression=$independent-three
+expression.sequence as=$independent-transform-body
+expression.argument parent=$independent-transform-body index=0 expression=$independent-text-transaction
+expression.argument parent=$independent-transform-body index=1 expression=$independent-false-put
+expression.argument parent=$independent-transform-body index=2 expression=$independent-sum
+create.function as=$independent-transform module=$module name=independent-store-then-false visibility=private result=i64 effect=task body=$independent-transform-body
+effect.requirement parent=$independent-transform index=0 requirement=$numbers
+effect.requirement parent=$independent-transform index=1 requirement=$texts
+add.parameter as=$independent-key function=$independent-main name=key type=text
+expression.static-text as=$independent-main-space value=typed-cell
+expression.i64 as=$independent-default value=10
+expression.function-value as=$independent-callback function=$independent-transform
+expression.local as=$independent-main-key-name value=$independent-key
+expression.variant as=$independent-main-part case=$text-key payload=$independent-main-key-name
+expression.list as=$independent-main-key item=@KeyPart
+expression.argument parent=$independent-main-key index=0 expression=$independent-main-part
+expression.call as=$independent-main-body function=$try-update
+type.argument parent=$independent-main-body index=0 type=i64
+effect.argument parent=$independent-main-body index=0 effect=@BothStores
+requirement.argument parent=$independent-main-body index=0 requirement=$numbers
+expression.argument parent=$independent-main-body index=0 expression=$independent-main-space
+expression.argument parent=$independent-main-body index=1 expression=$independent-default
+expression.argument parent=$independent-main-body index=2 expression=$independent-callback
+expression.argument parent=$independent-main-body index=3 expression=$independent-main-key
+create.function as=$independent-main module=$module name=other-store-survives visibility=private result=@NumberOutcome effect=task body=$independent-main-body
+effect.requirement parent=$independent-main index=0 requirement=$numbers
+effect.requirement parent=$independent-main index=1 requirement=$texts
+add.port as=$independent-port component=$component name=other-store-survives type=@BothStoresPort function=$independent-main
+create.target as=$independent-target name=other-store-survives component=$component port=$independent-port runner=command
+
+create.record as=$ApplicationPayload module=$module name=ApplicationPayload visibility=public
+add.field as=$amount-field record=$ApplicationPayload name=amount type=i64
+add.field as=$note-field record=$ApplicationPayload name=note type=text
+type.named as=@ApplicationPayload declaration=$ApplicationPayload
+type.application as=@ApplicationOutcome declaration=$Outcome
+type.argument parent=@ApplicationOutcome index=0 type=@ApplicationPayload
+type.task-function as=@ApplicationPort result=@ApplicationOutcome effect=@Numbers
+expression.i64 as=$application-amount value=42
+expression.text as=$application-note value=snapshot
+expression.record as=$application-record type=$ApplicationPayload
+expression.record-field parent=$application-record index=0 field=$amount-field value=$application-amount
+expression.record-field parent=$application-record index=1 field=$note-field value=$application-note
+expression.transaction-outcome as=$application-completed requirement=$numbers binding=$application-binding name=application-value type=@ApplicationPayload outcome=$Outcome abort-reason=$Reason committed=$Committed aborted=$Aborted condition-failed=$ConditionFailed conflict=$Conflict body=$application-record
+expression.local as=$application-local value=$completed-binding
+expression.call as=$application-encoded function=$encode
+type.argument parent=$application-encoded index=0 type=@ApplicationOutcome
+expression.argument parent=$application-encoded index=0 expression=$application-local
+expression.variant as=$application-fallback-reason case=$Conflict
+expression.variant as=$application-fallback case=$Aborted payload=$application-fallback-reason
+type.argument parent=$application-fallback index=0 type=@ApplicationPayload
+expression.call as=$application-decoded function=$decode
+type.argument parent=$application-decoded index=0 type=@ApplicationOutcome
+expression.argument parent=$application-decoded index=0 expression=$application-encoded
+expression.argument parent=$application-decoded index=1 expression=$application-fallback
+expression.let as=$application-body body=$application-decoded
+expression.binding parent=$application-body index=0 as=$completed-binding name=completed type=@ApplicationOutcome value=$application-completed
+create.function as=$application-main module=$module name=application-payload visibility=private result=@ApplicationOutcome effect=task body=$application-body
+effect.requirement parent=$application-main index=0 requirement=$numbers
+add.port as=$application-port component=$component name=application-payload type=@ApplicationPort function=$application-main
+create.target as=$application-target name=application-payload component=$component port=$application-port runner=command
+
+expression.unit as=$empty-unit
+expression.transaction-outcome as=$empty-body requirement=$numbers binding=$empty-binding name=empty type=unit outcome=$Outcome abort-reason=$Reason committed=$Committed aborted=$Aborted condition-failed=$ConditionFailed conflict=$Conflict body=$empty-unit
+create.function as=$empty-main module=$module name=empty-outcome visibility=private result=@UnitOutcome effect=task body=$empty-body
+effect.requirement parent=$empty-main index=0 requirement=$numbers
+add.port as=$empty-port component=$component name=empty-outcome type=@UnitOutcomePort function=$empty-main
+create.target as=$empty-target name=empty-outcome component=$component port=$empty-port runner=command
+
+expression.static-text as=$read-only-space value=typed-cell
+expression.text as=$read-only-name value=direct
+expression.variant as=$read-only-part case=$text-key payload=$read-only-name
+expression.list as=$read-only-key item=@KeyPart
+expression.argument parent=$read-only-key index=0 expression=$read-only-part
+expression.capability-call as=$read-only-get requirement=$numbers operation=$get
+expression.argument parent=$read-only-get index=0 expression=$read-only-space
+expression.argument parent=$read-only-get index=1 expression=$read-only-key
+expression.i64 as=$read-only-index value=0
+expression.call as=$read-only-first function=$first
+type.argument parent=$read-only-first index=0 type=@Entry
+expression.argument parent=$read-only-first index=0 expression=$read-only-get
+expression.argument parent=$read-only-first index=1 expression=$read-only-index
+expression.field as=$read-only-bytes value=$read-only-first field=$entry-value
+expression.i64 as=$read-only-default value=-1
+expression.call as=$read-only-value function=$decode
+type.argument parent=$read-only-value index=0 type=i64
+expression.argument parent=$read-only-value index=0 expression=$read-only-bytes
+expression.argument parent=$read-only-value index=1 expression=$read-only-default
+expression.transaction-outcome as=$read-only-body requirement=$numbers binding=$read-only-binding name=read-only type=i64 outcome=$Outcome abort-reason=$Reason committed=$Committed aborted=$Aborted condition-failed=$ConditionFailed conflict=$Conflict body=$read-only-value
+create.function as=$read-only-main module=$module name=read-only-outcome visibility=private result=@NumberOutcome effect=task body=$read-only-body
+effect.requirement parent=$read-only-main index=0 requirement=$numbers
+add.port as=$read-only-port component=$component name=read-only-outcome type=@ReadOnlyPort function=$read-only-main
+create.target as=$read-only-target name=read-only-outcome component=$component port=$read-only-port runner=command
+
+reference.owner as=$HttpClient package=$std class=declaration name=HttpClient
+reference.owner as=$http-get package=$std class=operation parent=$HttpClient name=get
+create.component as=$race-component module=$module name=concurrent-cells visibility=public
+add.requirement as=$race-store component=$race-component name=race-store interface=$DataStore
+requirement.operation parent=$race-store index=0 operation=$get
+requirement.operation parent=$race-store index=1 operation=$put
+requirement.operation parent=$race-store index=2 operation=$transaction
+requirement.operation parent=$race-store index=3 operation=$schema-read
+requirement.limit parent=$race-store index=0 name=maximum_calls maximum=20 unit=calls
+add.requirement as=$barrier component=$race-component name=barrier interface=$HttpClient
+requirement.operation parent=$barrier index=0 operation=$http-get
+requirement.limit parent=$barrier index=0 name=maximum_calls maximum=1 unit=calls
+type.structural-record as=@BarrierHeader
+type.field parent=@BarrierHeader index=0 name=name type=text
+type.field parent=@BarrierHeader index=1 name=value type=bytes
+effect.row as=@BarrierEffects
+effect.requirement parent=@BarrierEffects index=0 requirement=$barrier
+effect.row as=@RaceEffects
+effect.requirement parent=@RaceEffects index=0 requirement=$race-store
+effect.requirement parent=@RaceEffects index=1 requirement=$barrier
+type.task-function as=@RacePort result=@NumberOutcome effect=@RaceEffects
+type.argument parent=@RacePort index=0 type=text
+type.argument parent=@RacePort index=1 type=i64
+add.parameter as=$race-input function=$race-transform name=value type=i64
+expression.list as=$race-headers item=@BarrierHeader
+expression.capability-call as=$race-http requirement=$barrier operation=$http-get
+expression.argument parent=$race-http index=0 expression=$race-headers
+expression.local as=$race-value value=$race-input
+expression.i64 as=$race-three value=3
+expression.call as=$race-sum function=$add
+expression.argument parent=$race-sum index=0 expression=$race-value
+expression.argument parent=$race-sum index=1 expression=$race-three
+expression.sequence as=$race-transform-body
+expression.argument parent=$race-transform-body index=0 expression=$race-http
+expression.argument parent=$race-transform-body index=1 expression=$race-sum
+create.function as=$race-transform module=$module name=barrier-then-increment visibility=private result=i64 effect=task body=$race-transform-body
+effect.requirement parent=$race-transform index=0 requirement=$barrier
+add.parameter as=$race-key function=$race-main name=key type=text
+add.parameter as=$race-default function=$race-main name=default type=i64
+expression.static-text as=$race-space value=typed-cell
+expression.local as=$race-default-value value=$race-default
+expression.function-value as=$race-callback function=$race-transform
+expression.local as=$race-key-name value=$race-key
+expression.variant as=$race-key-part case=$text-key payload=$race-key-name
+expression.list as=$race-data-key item=@KeyPart
+expression.argument parent=$race-data-key index=0 expression=$race-key-part
+expression.call as=$race-main-body function=$try-update
+type.argument parent=$race-main-body index=0 type=i64
+effect.argument parent=$race-main-body index=0 effect=@BarrierEffects
+requirement.argument parent=$race-main-body index=0 requirement=$race-store
+expression.argument parent=$race-main-body index=0 expression=$race-space
+expression.argument parent=$race-main-body index=1 expression=$race-default-value
+expression.argument parent=$race-main-body index=2 expression=$race-callback
+expression.argument parent=$race-main-body index=3 expression=$race-data-key
+create.function as=$race-main module=$module name=concurrent-update visibility=private result=@NumberOutcome effect=task body=$race-main-body
+effect.requirement parent=$race-main index=0 requirement=$race-store
+effect.requirement parent=$race-main index=1 requirement=$barrier
+add.port as=$race-port component=$race-component name=concurrent-update type=@RacePort function=$race-main
+create.target as=$race-target name=concurrent-update component=$race-component port=$race-port runner=command

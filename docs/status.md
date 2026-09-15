@@ -14,13 +14,32 @@ strict package, six-target and installed-pair readers passed under the archived 
 preparation binds the retained full receipt's 26 fresh gates and zero reuse. This is authenticated
 evidence rereading, with simulated acquisition; no local application replay was performed.
 
-Annotated v0.1.36 object `a8cacb9c574005079a7532e4f9e7d140c51ccc40` was pushed at 05:34 UTC
-with useful release notes and the exact existing selector binding. Publisher `34933268953/1`
-selects that source. At 05:40 UTC its identity preflight had passed and its host-verifier build
-was running; the fresh source/target/package and later gates remained pending. Immutable publication and anonymous
-exact/latest acceptance remain incomplete. v0.1.35 remains the accepted public product. Resume the
-owning run, retain and admit its original publisher/public evidence, then advance public claims.
-The consumed delivery deferral cannot be renewed; later reporting commits preserve frozen inputs.
+Immutable v0.1.36 release `388927116` was published at 07:00:57Z from annotated object
+`a8cacb9c574005079a7532e4f9e7d140c51ccc40`. Publisher `34933268953/1` reports success, and its
+original verifier/preparation, strict package, six-target and prepublication-pair readers pass.
+Public original-reader admission fails: eight exact/latest authoring requests and logical plans
+are missing from the authenticated public handoff. No matching retained originals were found.
+The immutable assets and failed admission remain preserved; v0.1.35 remains the last fully closed
+public milestone.
+
+The [delivery continuation](campaigns/202609151412.md) owns additive v0.1.37 recovery from frozen
+`eea968b9`, correcting public evidence retention without transaction-outcome meaning. Initial repair
+`3b32f2fc` is normally integrated by `7590a121`. Corrected source `8baafff7` regenerates its eight
+version-dependent guides through the matching product and is integrated by `3372cb3e`.
+Rehearsal `34953636796/1` owns fresh acceptance of that exact recovery source; the earlier
+`34952573731/1` was cancelled before full/target/package execution. The consumed delivery deferral
+remains due until public original-reader admission closes.
+
+## Transaction completion increment
+
+The [selected mandate](campaigns/202609151502.md) adds ordinary typed lexical completion through
+`transaction-outcome`. Physical condition/no-change/conflict and publication-fault tests pass;
+public authoring, exact nominal authority, compiler and both evaluators pass focused validation.
+The imported library witness and its reader pass 123 public commands, 22 current outcomes and
+15 authentic predecessor executions, including a two-public-writer conflict and independent data observations.
+Fresh full acceptance is pending after diagnosed commitment/golden corrections; static-target
+acceptance and normal feature integration remain unrun. Mutable product version is 0.1.38;
+neither v0.1.36 nor its v0.1.37 recovery includes this capability.
 
 ## Current authority and maintained consumers
 
@@ -176,22 +195,23 @@ remain canonical and unchanged.
 
 | Consumer | Exact current identity |
 |---|---|
-| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_f2d0249a9e2b937a110a6a2a31705cb1bcbc8840193c24e3caf68fa73f0f3591`; state `semantic_state_fc21c9bd9445929ccc57cc2e48fa2ac657a57fc0ee450a0316a611bb88386066` |
-| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_0d732aace827ebbab0652d73165e2dd1335458affbb4f18f07971793b41a51d5`; state `semantic_state_7e96cf2cca36898a5f431fe98b5282cba49aec616480875f7994859ba7731e01` |
-| built-in standard dependency | package revision `package_revision_5a828264c94644f96399d97ae2496b83c48255a3a669b98c7f6a12c86179c9fa`; transport `package_transport_35ff911fbf888e8569a7b06e0bae0fbe3a70b88486cd99338523bbdb2671b1dc`; artifact manifest `artifact_manifest_c66b139cf7b2a7f50b27e952e17fa0ee06944fa68f313404c88b3869ff591644` |
+| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_961fb9773948313d606f11bd69785a055d0609477555f370a4dfdbc08d0a0044`; state `semantic_state_55fce8fc5ae09aee13ed39eda25481fbd7066971f3fc239b009e191a2f22917e` |
+| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_8d08786d726857b359788570f174cd4a30fec5f7e6843a5ed35b3f03e2583c29`; state `semantic_state_64fac59540dd4be2e20fd701a5f66fe334db1a43c82b9914d96def1576e4f862` |
+| built-in standard dependency | package revision `package_revision_53634416f408feddc2207ca97dc064e855d94ae6ca670f8bf39810a9eea58410`; transport `package_transport_a7ab2c4b6ff765b3aeae27f15f0b51445f58d61608a41ccd01b4d24b3b66cf20`; artifact manifest `artifact_manifest_c95278bfaf2fb19617a3f5cd9ae9d17adbb0e8eb107e096409a3f07003a2b3a9` |
 
-The standard package owns 888 live semantic owners, 142 compiler units, and 33 graph tests. Its
-current artifact has 541,227 bytes. `lkjournal` owns 2,040 live semantic owners and one exact standard
-dependency; its two-package artifact has 232 compiler units and 1,300,765 bytes. Its complete dependency closure runs 40 graph tests. Both
-consumers currently pass production/reference equality.
+The standard package owns 895 live semantic owners, 144 compiler units, and 33 graph tests. Its
+current artifact has 546,503 bytes. `lkjournal` owns 2,040 live semantic owners and one exact standard
+dependency; its two-package artifact has 234 compiler units and 1,306,041 bytes. Its complete
+dependency closure has 40 graph tests. Current successor production/reference acceptance is pending
+the fresh full profile.
 
 Maintained derived assets are:
 
 | Path | Role | SHA-256 |
 |---|---|---|
-| `packages/standard/generated/standard.lkjp` | code-complete standard source container, 389,537 bytes | `643bec7953a6ef583f8deefde86f5c91169a11558d50f40866e828bbff843a54` |
-| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 541,227 bytes | `db574cbcd8f8085fc581668cc68fcf957992058d4c411557f40b4aacaaea3c63` |
-| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 1,300,765 bytes | `2bed39723688ceafaf7bb7fd7e88e39910ab964ae26fd3bd77acd4ca052c9502` |
+| `packages/standard/generated/standard.lkjp` | code-complete standard source container, 392,816 bytes | `1d4a4a821b88c9de6fb40533db31f7eff25fe666070482c66ae8b3a4ff702662` |
+| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 546,503 bytes | `7a34683a8c3ec1c91152af5ae389d8defa0c754ab7e7a374159c69d3b3a5398a` |
+| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 1,306,041 bytes | `b9e365448e208594e5a3548308330fd2c67679aecb882f365d8cc08b72085d56` |
 
 The built-in transport and artifact are compiled into the executable and strictly cross-checked.
 Product verification regenerates maintained owners and compares exact bytes. Service verification

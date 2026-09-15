@@ -20,9 +20,9 @@ use crate::platform::change::{
     AuthoredMatchExpressionArm, AuthoredOperationReference, AuthoredOwnerParent, AuthoredParameter,
     AuthoredPort, AuthoredPortImplementation, AuthoredPortReference, AuthoredPrecondition,
     AuthoredRecordExpressionField, AuthoredRequirement, AuthoredRequirementReference,
-    AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
-    AuthoredTypeParameterReference, DeclarationSelector, ModuleSelector, OwnerSelector,
-    ParameterParentSelector,
+    AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredTransactionOutcomeContract,
+    AuthoredType, AuthoredTypeParameter, AuthoredTypeParameterReference, DeclarationSelector,
+    ModuleSelector, OwnerSelector, ParameterParentSelector,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass, SourceLocation};
 use crate::platform::kernel::{
@@ -39,10 +39,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-20";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 20;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-15";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 15;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-21";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 21;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-16";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 16;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -1541,6 +1541,7 @@ pub const COMPACT_EXPRESSION_FORMS: &[&str] = &[
     "match",
     "capability-call",
     "transaction",
+    "transaction-outcome",
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -2064,6 +2065,78 @@ pub(crate) const COMPACT_EXPRESSION_FORM_FIELDS: &[CompactFormField] = &[
         name: "body",
         required: true,
         syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "transaction-outcome",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "transaction-outcome",
+        name: "requirement",
+        required: true,
+        syntax: "$NAME|pkg_HEX/req_HEX|parameter:$NAME|parameter:pkg_HEX/reqparam_HEX",
+    },
+    CompactFormField {
+        form: "transaction-outcome",
+        name: "binding",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "transaction-outcome",
+        name: "name",
+        required: true,
+        syntax: "name",
+    },
+    CompactFormField {
+        form: "transaction-outcome",
+        name: "body",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "transaction-outcome",
+        name: "type",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "transaction-outcome",
+        name: "outcome",
+        required: true,
+        syntax: "$NAME|pkg_HEX/decl_HEX",
+    },
+    CompactFormField {
+        form: "transaction-outcome",
+        name: "abort-reason",
+        required: true,
+        syntax: "$NAME|pkg_HEX/decl_HEX",
+    },
+    CompactFormField {
+        form: "transaction-outcome",
+        name: "committed",
+        required: true,
+        syntax: "$NAME|pkg_HEX/case_HEX",
+    },
+    CompactFormField {
+        form: "transaction-outcome",
+        name: "aborted",
+        required: true,
+        syntax: "$NAME|pkg_HEX/case_HEX",
+    },
+    CompactFormField {
+        form: "transaction-outcome",
+        name: "condition-failed",
+        required: true,
+        syntax: "$NAME|pkg_HEX/case_HEX",
+    },
+    CompactFormField {
+        form: "transaction-outcome",
+        name: "conflict",
+        required: true,
+        syntax: "$NAME|pkg_HEX/case_HEX",
     },
 ];
 
@@ -4029,6 +4102,39 @@ impl Decoder {
                     body: Box::new(self.decode_expression(&body)?),
                 }
             }
+            "expression.transaction-outcome" => {
+                check_fields(
+                    &record,
+                    &[
+                        "as",
+                        "requirement",
+                        "binding",
+                        "name",
+                        "body",
+                        "type",
+                        "outcome",
+                        "abort-reason",
+                        "committed",
+                        "aborted",
+                        "condition-failed",
+                        "conflict",
+                    ],
+                )?;
+                let body = required(&record, "body")?.to_owned();
+                let type_argument = Box::new(self.decode_type(required(&record, "type")?)?);
+                let outcome = self.decode_transaction_outcome(&record)?;
+                AuthoredExpressionOperation::TransactionOutcome {
+                    requirement: self.parse_requirement_reference(&record, "requirement")?,
+                    binding: AuthoredBindingDefinition {
+                        symbol: symbol_field(&record, "binding")?,
+                        name: parse_name(&record, "name")?,
+                        declared_type: None,
+                    },
+                    body: Box::new(self.decode_expression(&body)?),
+                    type_argument,
+                    outcome,
+                }
+            }
             operation => {
                 return Err(record_error(
                     &record,
@@ -4051,6 +4157,20 @@ impl Decoder {
             .into_iter()
             .map(|edge| self.decode_expression(&edge.value))
             .collect()
+    }
+
+    fn decode_transaction_outcome(
+        &mut self,
+        record: &CompactRecord,
+    ) -> Result<Box<AuthoredTransactionOutcomeContract>, Diagnostic> {
+        Ok(Box::new(AuthoredTransactionOutcomeContract {
+            outcome: self.parse_declaration_reference(record, "outcome")?,
+            abort_reason: self.parse_declaration_reference(record, "abort-reason")?,
+            committed: self.parse_case_reference(record, "committed")?,
+            aborted: self.parse_case_reference(record, "aborted")?,
+            condition_failed: self.parse_case_reference(record, "condition-failed")?,
+            conflict: self.parse_case_reference(record, "conflict")?,
+        }))
     }
 
     fn ordered_edges(
@@ -4196,7 +4316,14 @@ fn change_request_commitment(
     let intent = crate::platform::change::canonical_authored_intent_bytes(request)?;
     let budget = crate::platform::change::canonical_authored_budget_bytes(request.budget)?;
     let mut hasher = blake3::Hasher::new_derive_key(CHANGE_REQUEST_COMMITMENT_DOMAIN);
-    hash_digest_field(&mut hasher, AUTHORED_CHANGE_CODEC_IDENTITY.as_bytes())?;
+    // Codec 15 committed both compatible intent generations under this exact identity.
+    // Adding an expression must not change reviewed request identities for unchanged bytes.
+    let codec_identity = if intent.starts_with(b"LKJACR14") || intent.starts_with(b"LKJACR15") {
+        "lkjscript-authored-change-codec-15"
+    } else {
+        AUTHORED_CHANGE_CODEC_IDENTITY
+    };
+    hash_digest_field(&mut hasher, codec_identity.as_bytes())?;
     hash_digest_field(&mut hasher, &intent)?;
     hash_digest_field(&mut hasher, &budget)?;
     hash_optional_digest_field(&mut hasher, options.idempotency_key.as_deref())?;

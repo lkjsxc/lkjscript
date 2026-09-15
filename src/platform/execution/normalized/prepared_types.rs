@@ -4,7 +4,8 @@
 
 use super::prepare::{
     NormalizedCode, NormalizedEntryPoint, NormalizedFunctionBody, NormalizedInstruction,
-    NormalizedProgram, NormalizedRecordLayout, NormalizedVariantLayout,
+    NormalizedProgram, NormalizedRecordLayout, NormalizedTransactionRequirement,
+    NormalizedVariantLayout,
 };
 use super::value::FunctionIndex;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -728,7 +729,7 @@ fn calls(
 ) -> Result<(), Diagnostic> {
     for instruction in code.instructions.iter() {
         step(work)?;
-        let nominal = match instruction {
+        let nominal: Option<(_, _, &[TypeObjectDigest])> = match instruction {
             NormalizedInstruction::Record {
                 layout: Some(layout),
                 type_arguments,
@@ -753,6 +754,12 @@ fn calls(
                     type_arguments,
                 ))
             }
+            NormalizedInstruction::BeginTransactionOutcome { outcome, .. }
+            | NormalizedInstruction::CommitTransactionOutcome { outcome, .. } => Some((
+                outcome.contract.outcome,
+                1,
+                std::slice::from_ref(&outcome.type_argument),
+            )),
             _ => None,
         };
         if let Some((declaration, arity, arguments)) = nominal {
@@ -1066,6 +1073,38 @@ fn close_effect_applications(
                             requirement,
                             binding: *binding,
                         };
+                    }
+                    NormalizedInstruction::BeginTransactionOutcome {
+                        requirement,
+                        outcome,
+                        ..
+                    }
+                    | NormalizedInstruction::CommitTransactionOutcome {
+                        requirement,
+                        outcome,
+                        ..
+                    } => {
+                        outcome.type_argument = substitute_effect_type(
+                            self.types,
+                            outcome.type_argument,
+                            bindings,
+                            requirements,
+                            0,
+                            self.work,
+                        )?;
+                        if let NormalizedTransactionRequirement::Parameter(parameter) = requirement
+                        {
+                            let reference = RequirementOperand::Parameter(*parameter)
+                                .substitute(requirements)?
+                                .concrete()
+                                .ok_or_else(missing)?;
+                            *requirement = NormalizedTransactionRequirement::Concrete(
+                                self.requirements
+                                    .get(&reference)
+                                    .copied()
+                                    .ok_or_else(missing)?,
+                            );
+                        }
                     }
                     _ => {}
                 }

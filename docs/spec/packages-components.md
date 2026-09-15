@@ -22,7 +22,7 @@ not editable source or an alternate package repository.
 An exported pure factory can return a pure or task function with a runtime bound prefix over its private graph
 helper. Transport and linking include that helper's complete code and type closure; receiving the
 callable does not grant consumers direct authoring visibility of its target. Code may contain `bind`
-expressions, but transports and artifacts never contain evaluated environments or execution grants. Graph 15 retains the supported exact Graph 14 predecessor decoding described in
+expressions, but transports and artifacts never contain evaluated environments or execution grants. Graph 16 retains the supported exact Graph 14 and 15 predecessor decoding described in
 [semantic-storage.md](semantic-storage.md). The unchanged TypeObject 10 codec, magic, digest domains,
 and bytes remain current for all pre-existing type forms. Positive nominal applications use the
 separate version-1 `LKJTAP01` envelope and its own digest domain, binding declaration and ordered
@@ -39,7 +39,7 @@ signatures and port kinds against canonical owners, even in structurally valid r
 It also reconstructs canonical code under the existing validation work bound and compares ordered
 instructions, operands, locals and all return/transaction continuations before runtime tail
 derivation. A compiled control-flow change is corruption even when its references, stack merges
-and enclosing hashes are valid. Valid unchanged Artifact 18 bytes remain supported.
+and enclosing hashes are valid. Valid unchanged Artifact 18 and 19 bytes remain supported.
 Prepared application identity includes target, ordered type/effect/requirement arguments and preparation origin.
 Task ports use closed task-callable types; the predecessor task-as-pure entry representation rejects.
 
@@ -239,15 +239,17 @@ transport preserves private graph bodies and exact closed callable descriptors. 
 remain unavailable to public name lookup. Checksums and compiled metadata cannot override the
 canonical constraints or confer deployment grants.
 
-The current graph/owner generation is 15, compiler-unit 11, bytecode 7 and package-interface-owner
-11. Supported predecessor Graph 14, compiler-unit 10, bytecode 6 and interface-owner 10 objects have
-strict independent wire layouts. TypeObject 10 and nominal application encodings remain unchanged;
+The current graph/owner generation is 16, compiler-unit 12, bytecode 8 and package-interface-owner
+11. Supported predecessors retain Graph 14 / compiler-unit 10 / bytecode 6 and Graph 15 /
+compiler-unit 11 / bytecode 7, with interface-owner 10 and 11 as previously admitted.
+TypeObject 10 and nominal application encodings remain unchanged;
 task-callable rows use the explicit successor envelope only when symbolic requirement operands
 need it. Canonical re-encoding follows the admitted object's generation, preserving unchanged
 predecessor objects and IDs. Current package/interface wrappers may contain compatible old canonical
-objects and necessarily acquire new wrapper identities. Artifact 19 and its manifest bind the
+objects and necessarily acquire new wrapper identities. Artifact 20 and its manifest bind the
 supported graph/compiler/bytecode tuple. Exact Artifact 18 decoding admits only its predecessor
-Graph 14 / compiler 10 / bytecode 6 tuple. New bundles use the explicit version 19 outer envelope,
+Graph 14 / compiler 10 / bytecode 6 tuple; Artifact 19 additionally admits its original Graph 15 /
+compiler 11 / bytecode 7 tuple. New bundles use the explicit version 20 outer envelope,
 so predecessor executables reject them before decoding extended owners. Mixed or unsupported
 tuples reject before execution.
 The transport/container framing remains unchanged, with explicit contained graph generations.

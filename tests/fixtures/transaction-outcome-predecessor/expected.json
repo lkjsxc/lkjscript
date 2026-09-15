@@ -1,0 +1,47 @@
+[
+  {
+    "target": "number-direct",
+    "arguments": [
+      "direct"
+    ],
+    "value": {
+      "candidate": 13,
+      "primary_condition_matched": true
+    }
+  },
+  {
+    "target": "number-bound",
+    "arguments": [
+      "bound"
+    ],
+    "value": {
+      "candidate": 13,
+      "primary_condition_matched": true
+    }
+  },
+  {
+    "target": "text-direct",
+    "arguments": [
+      "direct"
+    ],
+    "value": {
+      "candidate": "a!",
+      "primary_condition_matched": true
+    }
+  },
+  {
+    "target": "seed-auxiliary",
+    "arguments": [],
+    "value": true
+  },
+  {
+    "target": "false-attempt",
+    "arguments": [
+      "direct"
+    ],
+    "value": {
+      "candidate": 16,
+      "primary_condition_matched": true
+    }
+  }
+]

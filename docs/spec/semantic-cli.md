@@ -335,7 +335,7 @@ rules without quoted identifiers. Typed selectors, type references and effect ro
 existing spellings and exact resolution. There are no bare literals, arithmetic precedence,
 implicit applications or function-name lookup.
 
-`capabilities --section change` advertises all 22 structural forms as `change.expression-syntax`
+`capabilities --section change` advertises all structural forms as `change.expression-syntax`
 records and their framing, scope, ownership and application rules. The generated
 [change grammar](../generated/change-grammar.md) retains the same executable-owned inventory.
 Direct calls and function values accept zero or one each of `(types TYPE...)`, `(effects ROW...)`
@@ -345,6 +345,14 @@ out-of-order clauses reject. Nominal record and variant construction accept only
 `(types TYPE...)` clause. Concrete requirements and `parameter:$R` remain distinct. Existing
 owners decide arity, constraints, visibility, empty-sequence validity, field uniqueness,
 exhaustiveness and affine eligibility.
+
+Both notations expose `transaction-outcome` with one explicit body type and exact ordinary
+outcome/reason declaration and case references. The generated grammar owns their complete field
+and clause inventory. Named references resolve those identities through the same typed inventory
+as other nominal expressions; matching shape or spelling is insufficient. Complete inference
+checks the body/result substitution before publication. The
+[completion contract](effects-capabilities.md#completed-lexical-transaction-outcomes) owns the
+result branches, legacy projection, exact requirement allowance and independent visibility rules.
 
 `(local NAME)` selects the nearest binding in the current block's lexical environment. It never
 falls back to a public label or an exact identity. `(local $parameter)` uses ordinary typed public
@@ -384,10 +392,13 @@ Body replacement preserves the function declaration and unchanged value/type/eff
 parameter owners. Replaced expression and binding owners follow the existing retirement rules.
 A malformed or invalid block rejects its entire request without advancing `HEAD`; stale or changed
 plans, cancellation, idempotent retries and historical-current repair retain their existing rules.
-The structural input addition changes compact-change revision 19 to 20 and leaves authored codec
-15, Graph 15, TypeObject 10, compiler 11/bytecode 7 and Artifact 19 unchanged. Old flat inputs remain
-supported; older executables reject new block syntax before any write. Review tokens remain bound
-to their executable's capabilities and verifier.
+Current compact-change revision 21 adds transaction outcomes to both notations. Only requests
+using the new expression select authored intent generation 16; compatible intent 14/15 retains
+its codec-15 commitment domain and original allocation identities. New meaning uses Graph 16,
+compiler 12/bytecode 8 and Artifact 20. TypeObject 10 remains unchanged, and supported Graph 14/15
+and Artifact 18/19 inputs retain their original meaning. Older executables reject unsupported
+syntax or artifact generations before any write. Review tokens remain bound to their executable's
+capabilities and verifier, so a changed review context requires a new plan.
 
 Complete input remains bounded at 4 MiB. Outer flat-record bounds remain in force. Structural
 token admission is 2,560,000 across all blocks, derived from the existing 10,000-record by 256-field
@@ -576,8 +587,10 @@ new requirement names one exact built-in interface, an ordered admitted operatio
 named resource limits. Pure functions cannot call tasks or capabilities or open transactions;
 task capability calls must be admitted by both the function effect and component requirement.
 Foreign domains, duplicate requirements, interface/operation mismatch, escaping transaction
-bindings, nested transactions, shared owned fragments, unused fragments, and fragment cycles reject
-before publication.
+bindings, shared owned fragments, unused fragments, and fragment cycles reject before publication.
+Both evaluators reject reentry into an active transaction on the same canonical requirement,
+including aliases and callback-mediated entry. Separately granted stores may own independent
+nested transactions; one store's abort cannot undo another store's completed publication.
 
 The strict record decoder rejects unknown or duplicate records/fields, invalid UTF-8 or escaping,
 foreign identity domains, noncanonical order, overflow, missing edges, trailing input, and exhausted

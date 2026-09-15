@@ -660,6 +660,8 @@ impl TryFrom<CompiledInstruction> for CompiledInstruction10 {
             CompiledInstruction::PerformParameter { .. } => return Err(extension()),
             CompiledInstruction::BeginParameterTransaction { .. } => return Err(extension()),
             CompiledInstruction::CommitParameterTransaction { .. } => return Err(extension()),
+            CompiledInstruction::BeginTransactionOutcome { .. }
+            | CompiledInstruction::CommitTransactionOutcome { .. } => return Err(extension()),
         })
     }
 }

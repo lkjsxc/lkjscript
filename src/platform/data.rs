@@ -351,6 +351,9 @@ pub struct DataBackupReceipt {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DataCommitOutcome {
+    ConditionFailed {
+        revision: String,
+    },
     Unchanged {
         revision: String,
     },
@@ -821,11 +824,6 @@ impl DataTransaction {
     }
 
     pub fn commit(mut self) -> Result<DataCommitOutcome, Diagnostic> {
-        if self.expectation_failed {
-            return Ok(DataCommitOutcome::Unchanged {
-                revision: format_revision(self.base),
-            });
-        }
         self.commit_inner(&mut |_| Ok(()))
     }
 
@@ -833,6 +831,11 @@ impl DataTransaction {
     where
         F: FnMut(CommitCheckpoint) -> Result<(), Diagnostic>,
     {
+        if self.expectation_failed {
+            return Ok(DataCommitOutcome::ConditionFailed {
+                revision: format_revision(self.base),
+            });
+        }
         if !self.changed {
             return Ok(DataCommitOutcome::Unchanged {
                 revision: format_revision(self.base),
@@ -2640,8 +2643,8 @@ mod tests {
                 .expect("stale put")
         );
         assert!(matches!(
-            stale.commit().expect("unchanged"),
-            DataCommitOutcome::Unchanged { .. }
+            stale.commit().expect("condition failed"),
+            DataCommitOutcome::ConditionFailed { .. }
         ));
     }
 
@@ -2651,6 +2654,7 @@ mod tests {
         let root = temporary.path().join("data");
         DataStore::initialize(&root).expect("initialize");
         let store = opened(&root, "test");
+        let base = store.current_revision().expect("base revision");
         let mut left = store.begin().expect("left");
         let mut right = store.begin().expect("right");
         let left_key = key(vec![DataKeyPart::Text("left".to_owned())]);
@@ -2660,17 +2664,261 @@ mod tests {
         right
             .put("records", &right_key, vec![2], DataExpectation::Missing)
             .expect("right put");
-        left.commit().expect("left commit");
         assert!(matches!(
-            right.commit().expect("right conflict"),
-            DataCommitOutcome::Conflict { .. }
+            left.commit().expect("left commit"),
+            DataCommitOutcome::Committed { .. }
         ));
-        let read = store.begin().expect("read");
-        assert!(read.get("records", &left_key).expect("left get").is_some());
+        let winner = store.current_revision().expect("winner revision");
+        let winner_head = fs::read(root.join(HEAD_FILE)).expect("winner head bytes");
+        assert_eq!(
+            right.commit().expect("right conflict"),
+            DataCommitOutcome::Conflict {
+                expected: base,
+                actual: winner.clone(),
+            }
+        );
+        assert_eq!(
+            fs::read(root.join(HEAD_FILE)).expect("post-conflict head bytes"),
+            winner_head
+        );
+        drop(store);
+        let reopened = opened(&root, "test");
+        assert_eq!(
+            reopened.current_revision().expect("reopened revision"),
+            winner
+        );
+        let read = reopened.begin().expect("read");
+        assert_eq!(
+            read.get("records", &left_key)
+                .expect("left get")
+                .expect("winner present")
+                .value,
+            vec![1]
+        );
         assert!(
             read.get("records", &right_key)
                 .expect("right get")
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn failed_condition_suppresses_earlier_and_later_writes_before_conflict() {
+        let temporary = tempfile::TempDir::new().expect("temporary root");
+        let root = temporary.path().join("data");
+        DataStore::initialize(&root).expect("initialize");
+        let store = opened(&root, "test");
+        let auxiliary = key(vec![DataKeyPart::Text("auxiliary".to_owned())]);
+        let earlier = key(vec![DataKeyPart::Text("earlier".to_owned())]);
+        let primary = key(vec![DataKeyPart::Text("primary".to_owned())]);
+        let mut seed = store.begin().expect("seed");
+        assert!(
+            seed.put(
+                "records",
+                &auxiliary,
+                b"seed".to_vec(),
+                DataExpectation::Missing
+            )
+            .expect("seed put")
+        );
+        seed.commit().expect("seed commit");
+        let base = store.current_revision().expect("original base");
+
+        let mut rejected = store.begin().expect("rejected transaction");
+        assert!(
+            rejected
+                .put("records", &earlier, vec![1], DataExpectation::Missing)
+                .expect("earlier write")
+        );
+        assert!(
+            !rejected
+                .put("records", &auxiliary, vec![2], DataExpectation::Missing)
+                .expect("failed callback condition")
+        );
+        assert!(
+            rejected
+                .put("records", &primary, vec![3], DataExpectation::Missing)
+                .expect("primary write still returns true")
+        );
+        let mut winner = store.begin().expect("competing writer");
+        let observed = winner
+            .get("records", &auxiliary)
+            .expect("winner read")
+            .expect("seed entry");
+        assert!(
+            winner
+                .put(
+                    "records",
+                    &auxiliary,
+                    b"winner".to_vec(),
+                    DataExpectation::Exact(observed.revision),
+                )
+                .expect("winner put")
+        );
+        winner.commit().expect("winner commit");
+        let winner_revision = store.current_revision().expect("winner revision");
+        assert_ne!(winner_revision, base);
+        let winner_head = fs::read(root.join(HEAD_FILE)).expect("winner head bytes");
+        assert_eq!(
+            rejected
+                .commit()
+                .expect("condition failure precedes conflict"),
+            DataCommitOutcome::ConditionFailed { revision: base }
+        );
+        assert_eq!(
+            fs::read(root.join(HEAD_FILE)).expect("suppressed head bytes"),
+            winner_head
+        );
+        drop(store);
+        let reopened = opened(&root, "test");
+        assert_eq!(
+            reopened.current_revision().expect("reopened revision"),
+            winner_revision
+        );
+        let read = reopened.begin().expect("reopened read");
+        assert_eq!(
+            read.get("records", &auxiliary)
+                .expect("auxiliary read")
+                .expect("winner entry")
+                .value,
+            b"winner"
+        );
+        for absent in [&earlier, &primary] {
+            assert!(
+                read.get("records", absent)
+                    .expect("suppressed read")
+                    .is_none()
+            );
+        }
+    }
+
+    #[test]
+    fn empty_completion_is_distinct_from_condition_failure_without_mutations() {
+        let temporary = tempfile::TempDir::new().expect("temporary root");
+        let root = temporary.path().join("data");
+        DataStore::initialize(&root).expect("initialize");
+        let store = opened(&root, "test");
+        let base = store.current_revision().expect("base revision");
+        let head = fs::read(root.join(HEAD_FILE)).expect("initial head bytes");
+        assert_eq!(
+            store
+                .begin()
+                .expect("empty transaction")
+                .commit()
+                .expect("empty completion"),
+            DataCommitOutcome::Unchanged {
+                revision: base.clone()
+            }
+        );
+        let record = key(vec![DataKeyPart::Text("absent".to_owned())]);
+        let mut rejected = store.begin().expect("condition-only transaction");
+        assert!(
+            !rejected
+                .delete(
+                    "records",
+                    &record,
+                    DataExpectation::Exact(DataEntryRevision::from_bytes([0xa5; 32])),
+                )
+                .expect("false expectation")
+        );
+        assert_eq!(
+            rejected
+                .commit_inner(&mut |_| panic!("false condition reached publication"))
+                .expect("condition-only completion"),
+            DataCommitOutcome::ConditionFailed {
+                revision: base.clone()
+            }
+        );
+        drop(rejected);
+        assert_eq!(
+            fs::read(root.join(HEAD_FILE)).expect("unchanged head bytes"),
+            head
+        );
+        drop(store);
+        let reopened = opened(&root, "test");
+        assert_eq!(
+            reopened.current_revision().expect("reopened revision"),
+            base
+        );
+        assert!(
+            reopened
+                .begin()
+                .expect("reopened read")
+                .get("records", &record)
+                .expect("absent read")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn read_only_snapshot_completes_without_latest_head_revalidation() {
+        let temporary = tempfile::TempDir::new().expect("temporary root");
+        let root = temporary.path().join("data");
+        DataStore::initialize(&root).expect("initialize");
+        let store = opened(&root, "test");
+        let record = key(vec![DataKeyPart::Text("record".to_owned())]);
+        let mut seed = store.begin().expect("seed");
+        seed.put(
+            "records",
+            &record,
+            b"old".to_vec(),
+            DataExpectation::Missing,
+        )
+        .expect("seed put");
+        seed.commit().expect("seed commit");
+        let base = store.current_revision().expect("base revision");
+        let read_only = store.begin().expect("read-only transaction");
+        let old = read_only
+            .get("records", &record)
+            .expect("snapshot get")
+            .expect("old entry");
+
+        let mut writer = store.begin().expect("concurrent writer");
+        assert!(
+            writer
+                .put(
+                    "records",
+                    &record,
+                    b"new".to_vec(),
+                    DataExpectation::Exact(old.revision)
+                )
+                .expect("concurrent put")
+        );
+        writer.commit().expect("concurrent commit");
+        let current = store.current_revision().expect("concurrent revision");
+        assert_ne!(current, base);
+        let head = fs::read(root.join(HEAD_FILE)).expect("concurrent head bytes");
+        assert_eq!(
+            read_only
+                .get("records", &record)
+                .expect("pinned read")
+                .expect("pinned entry")
+                .value,
+            b"old"
+        );
+        assert_eq!(
+            read_only.commit().expect("read-only completion"),
+            DataCommitOutcome::Unchanged { revision: base }
+        );
+        assert_eq!(
+            fs::read(root.join(HEAD_FILE)).expect("post-read head bytes"),
+            head
+        );
+        drop(store);
+        let reopened = opened(&root, "test");
+        assert_eq!(
+            reopened.current_revision().expect("reopened revision"),
+            current
+        );
+        assert_eq!(
+            reopened
+                .begin()
+                .expect("reopened read")
+                .get("records", &record)
+                .expect("current get")
+                .expect("current entry")
+                .value,
+            b"new"
         );
     }
 
@@ -2842,7 +3090,7 @@ mod tests {
             }
             let outcome = transaction.commit().expect("model commit");
             if failed_expectation {
-                assert!(matches!(outcome, DataCommitOutcome::Unchanged { .. }));
+                assert!(matches!(outcome, DataCommitOutcome::ConditionFailed { .. }));
             } else {
                 model = candidate;
             }
@@ -3003,7 +3251,7 @@ mod tests {
         );
         assert!(matches!(
             divergent.commit().expect("divergent commit"),
-            DataCommitOutcome::Unchanged { .. }
+            DataCommitOutcome::ConditionFailed { .. }
         ));
         assert!(
             store
@@ -3149,6 +3397,9 @@ mod tests {
             match transaction.commit().expect("child commit") {
                 DataCommitOutcome::Committed { .. } => return,
                 DataCommitOutcome::Conflict { .. } => {}
+                DataCommitOutcome::ConditionFailed { .. } => {
+                    panic!("child write unexpectedly failed its condition");
+                }
                 DataCommitOutcome::Unchanged { .. } => {
                     panic!("child write unexpectedly remained unchanged");
                 }
@@ -3341,7 +3592,9 @@ mod tests {
                     Ok(())
                 }
             });
-            assert!(result.is_err());
+            let error = result.expect_err("interruption emits no normal completion");
+            assert_eq!(error.class, DiagnosticClass::Infrastructure);
+            assert_eq!(error.code, "data_test_interruption");
             let reopened = opened(&root, "test");
             let new = reopened.current_revision().expect("reopened head");
             let visible = reopened
@@ -3359,6 +3612,102 @@ mod tests {
             } else {
                 assert_eq!(new, old);
                 assert!(!visible);
+            }
+        }
+    }
+
+    #[test]
+    fn physical_io_failure_preserves_before_and_after_visibility_classification() {
+        for checkpoint in [
+            CommitCheckpoint::BeforeRevisionStage,
+            CommitCheckpoint::HeadStageSynced,
+            CommitCheckpoint::HeadPublished,
+        ] {
+            let temporary = tempfile::TempDir::new().expect("temporary root");
+            let root = temporary.path().join("data");
+            let displaced = temporary.path().join("displaced");
+            DataStore::initialize(&root).expect("initialize");
+            let store = opened(&root, "test");
+            let old = store.current_revision().expect("old revision");
+            let old_head = fs::read(root.join(HEAD_FILE)).expect("old head bytes");
+            let record = key(vec![DataKeyPart::Text("record".to_owned())]);
+            let mut transaction = store.begin().expect("transaction");
+            assert!(
+                transaction
+                    .put(
+                        "records",
+                        &record,
+                        b"new".to_vec(),
+                        DataExpectation::Missing
+                    )
+                    .expect("staged write")
+            );
+            let error = transaction
+                .commit_inner(&mut |point| {
+                    if point == checkpoint {
+                        match point {
+                            CommitCheckpoint::BeforeRevisionStage => {
+                                fs::rename(root.join(STAGING_DIRECTORY), &displaced)
+                                    .expect("withhold owned staging directory");
+                            }
+                            CommitCheckpoint::HeadStageSynced => {
+                                let head_stage = fs::read_dir(root.join(STAGING_DIRECTORY))
+                                    .expect("read owned staging directory")
+                                    .map(|entry| entry.expect("staged entry").path())
+                                    .find(|path| {
+                                        path.file_name()
+                                            .and_then(|name| name.to_str())
+                                            .is_some_and(|name| name.starts_with(".head-stage-"))
+                                    })
+                                    .expect("staged head exists");
+                                fs::rename(head_stage, &displaced).expect("withhold staged head");
+                            }
+                            CommitCheckpoint::HeadPublished => {
+                                fs::rename(&root, &displaced)
+                                    .expect("move owned root before directory sync");
+                            }
+                            _ => unreachable!("only selected publication checkpoint is faulted"),
+                        }
+                    }
+                    Ok(())
+                })
+                .expect_err("physical failure must not return a normal completion");
+            assert_eq!(error.class, DiagnosticClass::Infrastructure);
+            let expected_code = match checkpoint {
+                CommitCheckpoint::BeforeRevisionStage => "data_revision_stage_create",
+                CommitCheckpoint::HeadStageSynced => "data_head_visibility_unknown",
+                CommitCheckpoint::HeadPublished => "data_head_durability_unknown",
+                _ => unreachable!("only selected publication checkpoints are tested"),
+            };
+            assert_eq!(error.code, expected_code);
+            drop(transaction);
+            drop(store);
+            let reopened_root = if checkpoint == CommitCheckpoint::HeadPublished {
+                &displaced
+            } else {
+                if checkpoint == CommitCheckpoint::BeforeRevisionStage {
+                    fs::rename(&displaced, root.join(STAGING_DIRECTORY))
+                        .expect("restore owned staging directory");
+                }
+                &root
+            };
+            let reopened = opened(reopened_root, "test");
+            let current = reopened.current_revision().expect("reopened revision");
+            let observed = reopened
+                .begin()
+                .expect("reopened read")
+                .get("records", &record)
+                .expect("reopened value");
+            if checkpoint == CommitCheckpoint::HeadPublished {
+                assert_ne!(current, old);
+                assert_eq!(observed.expect("published value").value, b"new");
+            } else {
+                assert_eq!(current, old);
+                assert_eq!(
+                    fs::read(reopened_root.join(HEAD_FILE)).expect("reopened head bytes"),
+                    old_head
+                );
+                assert!(observed.is_none());
             }
         }
     }

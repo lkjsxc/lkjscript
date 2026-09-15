@@ -9,8 +9,6 @@ reference.owner as=$edit-first package=$std class=declaration name=list-get
 reference.owner as=$edit-equal package=$std class=declaration name=i64-equal
 reference.owner as=$edit-decode package=$std class=declaration name=data-decode-or
 reference.owner as=$edit-encode package=$std class=declaration name=data-encode
-reference.owner as=$edit-candidate-field package=local class=field parent=$Attempt name=candidate
-reference.owner as=$edit-matched-field package=local class=field parent=$Attempt name=primary_condition_matched
 reference.owner as=$edit-update-T package=local class=type-parameter parent=$update name=T
 reference.owner as=$edit-space package=local class=parameter parent=$update name=space
 reference.owner as=$edit-default package=local class=parameter parent=$update name=default
@@ -20,7 +18,9 @@ type.named as=@EditEntry declaration=$edit-DataEntry
 type.list as=@EditEntries item=@EditEntry
 type.parameter as=@UpdateT parameter=$edit-update-T
 expression.block as=$edited-update-body
-  (transaction parameter:$R (binding cell-attempt)
+  (transaction-outcome parameter:$R (types @UpdateT)
+    (outcome $Outcome $Reason $Committed $Aborted $ConditionFailed $Conflict)
+    (binding cell-update)
     (let
       (binding entries (type @EditEntries)
         (capability-call parameter:$R $get (local $edit-space) (local $edit-key)))
@@ -43,9 +43,6 @@ expression.block as=$edited-update-body
             (variant $edit-Missing)
             (variant $edit-Exact
               (field (call $edit-first (types @EditEntry) (local entries) (i64 0)) $edit-entry-revision)))))
-      (in
-        (record $Attempt (types @UpdateT)
-          (field $edit-candidate-field (local candidate))
-          (field $edit-matched-field (local primary-condition-matched))))))
+      (in (local candidate))))
 expression.end
 replace.body function=$update body=$edited-update-body

@@ -1924,7 +1924,8 @@ impl FullValidator<'_> {
                     }
                 }
             }
-            ExpressionOperation::Transaction { binding, body, .. } => {
+            ExpressionOperation::Transaction { binding, body, .. }
+            | ExpressionOperation::TransactionOutcome { binding, body, .. } => {
                 self.binding_containers
                     .entry(*binding)
                     .or_default()
@@ -2382,6 +2383,39 @@ impl FullValidator<'_> {
                 &[OwnerKind::Requirement, OwnerKind::RequirementParameter],
                 "transaction requirement",
             ),
+            ExpressionOperation::TransactionOutcome {
+                requirement,
+                outcome,
+                ..
+            } => {
+                self.require_exact_kind(
+                    requirement.package(),
+                    requirement.owner(),
+                    &[OwnerKind::Requirement, OwnerKind::RequirementParameter],
+                    "transaction requirement",
+                );
+                for declaration in [outcome.outcome, outcome.abort_reason] {
+                    self.require_exact_kind(
+                        declaration.package,
+                        OwnerKey::Declaration(declaration.declaration),
+                        &[OwnerKind::Variant],
+                        "transaction outcome declaration",
+                    );
+                }
+                for case in [
+                    outcome.committed,
+                    outcome.aborted,
+                    outcome.condition_failed,
+                    outcome.conflict,
+                ] {
+                    self.require_exact_kind(
+                        case.package,
+                        OwnerKey::Case(case.case),
+                        &[OwnerKind::Case],
+                        "transaction outcome case",
+                    );
+                }
+            }
             _ => {}
         }
     }

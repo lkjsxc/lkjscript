@@ -48,16 +48,16 @@ use std::fmt;
 #[path = "artifact_code.rs"]
 mod code_admission;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-19";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-19";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 19;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF19";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART19";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN19";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-20";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-20";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 20;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF20";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART20";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN20";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v19";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v19";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v19";
+    "lkjscript.artifact-manifest-envelope.v20";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v20";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v20";
 pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v18";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
@@ -88,6 +88,15 @@ fn artifact_wire(version: u16) -> Result<ArtifactWire, Diagnostic> {
             manifest_domain: "lkjscript.artifact-manifest-envelope.v18",
             digest_domain: "lkjscript.artifact-bundle.v18",
             checksum_domain: "lkjscript.artifact-bundle.complete.v18",
+        }),
+        19 => Ok(ArtifactWire {
+            version,
+            manifest_magic: *b"LKJAMF19",
+            bundle_magic: *b"LKJART19",
+            end_magic: *b"LKJAEN19",
+            manifest_domain: "lkjscript.artifact-manifest-envelope.v19",
+            digest_domain: "lkjscript.artifact-bundle.v19",
+            checksum_domain: "lkjscript.artifact-bundle.complete.v19",
         }),
         ARTIFACT_CONTRACT_VERSION => Ok(ArtifactWire {
             version,
@@ -328,6 +337,8 @@ impl ArtifactManifest {
     pub fn decode(bytes: &[u8], expected: ArtifactManifestDigest) -> Result<Self, Diagnostic> {
         let wire = artifact_wire(if bytes.starts_with(b"LKJAMF18") {
             18
+        } else if bytes.starts_with(b"LKJAMF19") {
+            19
         } else {
             ARTIFACT_CONTRACT_VERSION
         })?;
@@ -361,20 +372,29 @@ impl ArtifactManifest {
     }
 
     fn validate(&self) -> Result<(), Diagnostic> {
-        if !matches!(self.contract_version, 18 | ARTIFACT_CONTRACT_VERSION)
+        if !matches!(self.contract_version, 18 | 19 | ARTIFACT_CONTRACT_VERSION)
             || (self.contract_version == 18
                 && (
                     self.graph_contract_version,
                     self.compiler_contract_version,
                     self.bytecode_contract_version,
                 ) != (14, 10, 6))
+            || (self.contract_version == 19
+                && !matches!(
+                    (
+                        self.graph_contract_version,
+                        self.compiler_contract_version,
+                        self.bytecode_contract_version
+                    ),
+                    (14, 10, 6) | (15, 11, 7)
+                ))
             || !matches!(
                 (
                     self.graph_contract_version,
                     self.compiler_contract_version,
                     self.bytecode_contract_version
                 ),
-                (14, 10, 6) | (15, 11, 7)
+                (14, 10, 6) | (15, 11, 7) | (16, 12, 8)
             )
             || self.compilation_manifest_contract_version != COMPILATION_MANIFEST_CONTRACT_VERSION
         {
@@ -2486,6 +2506,12 @@ fn validate_nominal_instruction_inventory(
             usize,
         ),
         Transaction(crate::platform::kernel::RequirementOperand),
+        TransactionOutcome(
+            crate::platform::kernel::RequirementOperand,
+            [DeclarationReference; 2],
+            [CaseReference; 4],
+            TypeObjectDigest,
+        ),
         FunctionValue(
             DeclarationReference,
             Vec<TypeObjectDigest>,
@@ -2636,6 +2662,22 @@ fn validate_nominal_instruction_inventory(
                 ExpressionOperation::Transaction { requirement, .. } => {
                     Some(Constructor::Transaction(*requirement))
                 }
+                ExpressionOperation::TransactionOutcome {
+                    requirement,
+                    outcome,
+                    type_argument,
+                    ..
+                } => Some(Constructor::TransactionOutcome(
+                    *requirement,
+                    [outcome.outcome, outcome.abort_reason],
+                    [
+                        outcome.committed,
+                        outcome.aborted,
+                        outcome.condition_failed,
+                        outcome.conflict,
+                    ],
+                    *type_argument,
+                )),
                 ExpressionOperation::Variant {
                     case,
                     type_arguments,
@@ -2749,6 +2791,67 @@ fn validate_nominal_instruction_inventory(
                     }
                     CompiledInstruction::BeginParameterTransaction { parameter, .. } => {
                         Some(Constructor::Transaction((*parameter).into()))
+                    }
+                    CompiledInstruction::BeginTransactionOutcome {
+                        requirement,
+                        outcome,
+                        ..
+                    } => {
+                        let requirement = match requirement {
+                            super::unit::CompiledTransactionRequirement::Concrete(index) => {
+                                table_value(
+                                    &unit.tables.requirements,
+                                    *index,
+                                    "transaction requirement",
+                                )?
+                                .into()
+                            }
+                            super::unit::CompiledTransactionRequirement::Parameter(parameter) => {
+                                (*parameter).into()
+                            }
+                        };
+                        Some(Constructor::TransactionOutcome(
+                            requirement,
+                            [
+                                table_value(
+                                    &unit.tables.declarations,
+                                    outcome.outcome,
+                                    "transaction outcome",
+                                )?,
+                                table_value(
+                                    &unit.tables.declarations,
+                                    outcome.abort_reason,
+                                    "transaction abort reason",
+                                )?,
+                            ],
+                            [
+                                table_value(
+                                    &unit.tables.cases,
+                                    outcome.committed,
+                                    "transaction committed case",
+                                )?,
+                                table_value(
+                                    &unit.tables.cases,
+                                    outcome.aborted,
+                                    "transaction aborted case",
+                                )?,
+                                table_value(
+                                    &unit.tables.cases,
+                                    outcome.condition_failed,
+                                    "transaction condition case",
+                                )?,
+                                table_value(
+                                    &unit.tables.cases,
+                                    outcome.conflict,
+                                    "transaction conflict case",
+                                )?,
+                            ],
+                            table_value(
+                                &unit.tables.types,
+                                outcome.type_argument,
+                                "transaction body type",
+                            )?,
+                        ))
                     }
                     CompiledInstruction::Record {
                         nominal_type,
@@ -3969,7 +4072,8 @@ fn reference_expression_bindings(operation: &ExpressionOperation) -> Vec<Binding
                 .filter_map(|arm| arm.payload_binding)
                 .collect::<Vec<_>>(),
         ),
-        ExpressionOperation::Transaction { binding, .. } => bindings.push(*binding),
+        ExpressionOperation::Transaction { binding, .. }
+        | ExpressionOperation::TransactionOutcome { binding, .. } => bindings.push(*binding),
         _ => {}
     }
     bindings
