@@ -14,8 +14,8 @@ pub(crate) use change::{
     COMPACT_EXPRESSION_FORMS, COMPACT_FUNCTION_EFFECTS, COMPACT_NAMESPACE_CLASSES,
     COMPACT_REFERENCE_NAMESPACES, COMPACT_TYPE_FORM_FIELDS, COMPACT_TYPE_FORMS,
     ChangeRequestCommitment, CompactChangeFieldForm, CompactChangeOperation,
-    NormalizedChangeRequest, compact_change_operation_descriptor, decode_compact_change,
-    normalize_change_request,
+    MAXIMUM_STRUCTURAL_SYNTAX_NODES, MAXIMUM_STRUCTURAL_TOKENS, NormalizedChangeRequest,
+    compact_change_operation_descriptor, decode_compact_change, normalize_change_request,
 };
 pub use compact::{
     CompactField, CompactRecord, CompactResponseLimits, CompactResponseWriter,

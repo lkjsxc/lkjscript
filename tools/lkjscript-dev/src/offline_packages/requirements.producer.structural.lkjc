@@ -1,0 +1,107 @@
+reference.package as=$std source=builtin
+reference.owner as=$DataStore package=$std class=declaration name=DataStore
+reference.owner as=$DataEntry package=$std class=declaration name=DataEntry
+reference.owner as=$DataExpectation package=$std class=declaration name=DataExpectation
+reference.owner as=$DataKeyPart package=$std class=declaration name=DataKeyPart
+reference.owner as=$get package=$std class=operation parent=$DataStore name=get
+reference.owner as=$put package=$std class=operation parent=$DataStore name=put
+reference.owner as=$transaction package=$std class=operation parent=$DataStore name=transaction
+reference.owner as=$entry-value package=$std class=field parent=$DataEntry name=value
+reference.owner as=$entry-revision package=$std class=field parent=$DataEntry name=revision
+reference.owner as=$Missing package=$std class=case parent=$DataExpectation name=Missing
+reference.owner as=$Exact package=$std class=case parent=$DataExpectation name=Exact
+reference.owner as=$length package=$std class=declaration name=list-length
+reference.owner as=$first package=$std class=declaration name=list-get
+reference.owner as=$equal package=$std class=declaration name=i64-equal
+reference.owner as=$decode package=$std class=declaration name=data-decode-or
+reference.owner as=$encode package=$std class=declaration name=data-encode
+create.module as=$cells name=typed-cells
+create.record as=$Attempt module=$cells name=UpdateAttempt visibility=public
+add.type-parameter as=$Value declaration=$Attempt name=Value
+type.parameter as=@Value parameter=$Value
+add.field as=$candidate-field record=$Attempt name=candidate type=@Value
+add.field as=$matched-field record=$Attempt name=primary_condition_matched type=bool
+type.named as=@Entry declaration=$DataEntry
+type.list as=@Entries item=@Entry
+type.named as=@KeyPart declaration=$DataKeyPart
+type.list as=@Key item=@KeyPart
+add.type-parameter as=$T declaration=$update name=T
+add.effect-parameter as=$E declaration=$update name=E
+add.requirement-parameter as=$R declaration=$update name=R interface=$DataStore
+requirement-parameter.operation parent=$R index=0 operation=$get
+requirement-parameter.operation parent=$R index=1 operation=$put
+requirement-parameter.operation parent=$R index=2 operation=$transaction
+type.parameter as=@T parameter=$T
+type.application as=@Attempt declaration=$Attempt
+type.argument parent=@Attempt index=0 type=@T
+effect.row as=@E
+effect.parameter parent=@E index=0 parameter=$E
+type.task-function as=@Transform result=@T effect=@E
+type.argument parent=@Transform index=0 type=@T
+add.parameter as=$space function=$update name=space type=static-text
+add.parameter as=$default function=$update name=default type=@T
+add.parameter as=$transform function=$update name=transform type=@Transform
+add.parameter as=$key function=$update name=key type=@Key
+expression.block as=$update-body
+  (transaction parameter:$R (binding cell-attempt)
+    (let
+      (binding entries (type @Entries)
+        (capability-call parameter:$R $get (local $space) (local $key)))
+      (binding absent (type bool)
+        (call $equal (call $length (types @Entry) (local entries)) (i64 0)))
+      (binding candidate (type @T)
+        (invoke (local $transform)
+          (if (local absent)
+            (local $default)
+            (call $decode (types @T)
+              (field (call $first (types @Entry) (local entries) (i64 0)) $entry-value)
+              (local $default)))))
+      (binding primary-condition-matched (type bool)
+        (capability-call parameter:$R $put
+          (local $space)
+          (local $key)
+          (call $encode (types @T) (local candidate))
+          (if (local absent)
+            (variant $Missing)
+            (variant $Exact
+              (field (call $first (types @Entry) (local entries) (i64 0)) $entry-revision)))))
+      (in
+        (record $Attempt (types @T)
+          (field $candidate-field (local candidate))
+          (field $matched-field (local primary-condition-matched))))))
+expression.end
+create.function as=$update module=$cells name=attempt-update visibility=public result=@Attempt effect=task body=$update-body
+effect.requirement parent=$update index=0 requirement=parameter:$R
+effect.parameter parent=$update index=0 parameter=$E
+add.type-parameter as=$factory-T declaration=$factory name=T constraint=capture-safe
+add.effect-parameter as=$factory-E declaration=$factory name=E
+add.requirement-parameter as=$factory-R declaration=$factory name=R interface=$DataStore
+requirement-parameter.operation parent=$factory-R index=0 operation=$get
+requirement-parameter.operation parent=$factory-R index=1 operation=$put
+requirement-parameter.operation parent=$factory-R index=2 operation=$transaction
+type.parameter as=@FactoryT parameter=$factory-T
+type.application as=@FactoryAttempt declaration=$Attempt
+type.argument parent=@FactoryAttempt index=0 type=@FactoryT
+effect.row as=@FactoryE
+effect.parameter parent=@FactoryE index=0 parameter=$factory-E
+effect.row as=@FactoryRow
+effect.parameter parent=@FactoryRow index=0 parameter=$factory-E
+effect.requirement parent=@FactoryRow index=0 requirement=parameter:$factory-R
+type.task-function as=@FactoryTransform result=@FactoryT effect=@FactoryE
+type.argument parent=@FactoryTransform index=0 type=@FactoryT
+type.task-function as=@Updater result=@FactoryAttempt effect=@FactoryRow
+type.argument parent=@Updater index=0 type=@Key
+add.parameter as=$factory-space function=$factory name=space type=static-text
+add.parameter as=$factory-default function=$factory name=default type=@FactoryT
+add.parameter as=$factory-transform function=$factory name=transform type=@FactoryTransform
+expression.block as=$factory-body
+  (bind
+    (function-value $update
+      (types @FactoryT)
+      (effects @FactoryE)
+      (requirements parameter:$factory-R))
+    (local $factory-space)
+    (local $factory-default)
+    (local $factory-transform))
+expression.end
+create.function as=$factory module=$cells name=make-cell-updater visibility=public result=@Updater effect=pure body=$factory-body

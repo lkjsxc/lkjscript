@@ -932,27 +932,132 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     }));
 
     let expression_section = compact_success(&["capabilities", "--section", "expression"]);
-    for expected in [
-        "call",
+    let expected_expression_forms = [
+        "unit",
+        "bool",
+        "i64",
+        "text",
+        "static-text",
+        "local",
         "constant",
+        "if",
+        "sequence",
+        "call",
         "function-value",
         "invoke",
+        "bind",
         "let",
         "record",
         "variant",
         "field",
         "list",
+        "map",
         "match",
         "capability-call",
         "transaction",
-    ] {
-        assert!(expression_section.iter().any(|record| {
-            record.operation == "expression.form" && compact_field(record, "name") == Some(expected)
-        }));
-    }
+    ];
+    assert_eq!(
+        expression_section
+            .iter()
+            .filter(|record| record.operation == "expression.form")
+            .filter_map(|record| compact_field(record, "name"))
+            .collect::<Vec<_>>(),
+        expected_expression_forms
+    );
 
     let change_section = compact_success(&["capabilities", "--section", "change"]);
     let change_contract = compact_record(&change_section, "change");
+    assert_eq!(
+        compact_field(change_contract, "expression-notations"),
+        Some("flat|block")
+    );
+    assert_eq!(
+        compact_record_values(compact_record(&change_section, "change.expression-block")),
+        vec![
+            ("header", "expression.block as=$ROOT"),
+            ("header-fields", "as"),
+            ("body", "exactly-one-parenthesized-expression"),
+            ("end", "expression.end"),
+            ("root", "ordinary-request-local-expression"),
+            ("authority", "reviewed-authored-intent"),
+        ]
+    );
+    assert_eq!(
+        change_section
+            .iter()
+            .filter(|record| record.operation == "change.expression-syntax")
+            .filter_map(|record| compact_field(record, "name"))
+            .collect::<Vec<_>>(),
+        expected_expression_forms
+    );
+    for (name, syntax) in [
+        (
+            "local",
+            "(local NAME)|(local $PARAMETER)|(local (exact LOCAL_SELECTOR))",
+        ),
+        ("call", "(call FUNCTION APPLICATIONS EXPR...)"),
+        (
+            "let",
+            "(let (binding NAME [(type TYPE)] INITIALIZER)... (in BODY))",
+        ),
+        (
+            "map",
+            "(map KEY_TYPE VALUE_TYPE (entry KEY_EXPR VALUE_EXPR)...)",
+        ),
+        (
+            "transaction",
+            "(transaction REQUIREMENT (binding NAME) BODY)",
+        ),
+    ] {
+        assert!(change_section.iter().any(|record| {
+            record.operation == "change.expression-syntax"
+                && compact_field(record, "name") == Some(name)
+                && compact_field(record, "syntax") == Some(syntax)
+        }));
+    }
+    for (name, value, unit) in [
+        ("maximum-input-bytes", "4194304", "bytes"),
+        ("maximum-structural-tokens", "2560000", "tokens"),
+        ("maximum-structural-syntax-nodes", "1000000", "nodes"),
+        ("default-authored-identities", "100000", "identities"),
+        ("maximum-expanded-type-nodes", "1000000", "nodes"),
+        ("maximum-combined-expression-depth", "1024", "depth"),
+        ("maximum-type-depth", "256", "depth"),
+    ] {
+        assert!(change_section.iter().any(|record| {
+            record.operation == "change.expression-limit"
+                && compact_field(record, "name") == Some(name)
+                && compact_field(record, "value") == Some(value)
+                && compact_field(record, "unit") == Some(unit)
+                && compact_field(record, "scope") == Some("whole-request")
+        }));
+    }
+    assert_eq!(
+        change_section
+            .iter()
+            .filter(|record| record.operation == "change.expression-rule")
+            .filter_map(|record| compact_field(record, "name"))
+            .collect::<Vec<_>>(),
+        vec![
+            "metavariables",
+            "framing",
+            "tokens",
+            "names",
+            "applications",
+            "type-application",
+            "requirement-argument",
+            "local",
+            "let-scope",
+            "payload-scope",
+            "transaction-scope",
+            "root-ownership",
+            "delayed-references",
+            "occurrences-and-order",
+            "normalization",
+            "capacity",
+            "compatibility",
+        ]
+    );
     assert_eq!(
         compact_field(change_contract, "plan-hex-characters"),
         Some("128")
@@ -1385,6 +1490,15 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         ("change_extract_capture_limit", "resource"),
         ("change_extract_ownership", "corrupt"),
         ("change_plan_file_extraction_counts", "source"),
+        ("change_block_parenthesis", "source"),
+        ("change_block_local_unbound", "source"),
+        ("change_block_application", "source"),
+        ("change_block_private", "source"),
+        ("change_block_capacity", "resource"),
+        ("change_input_type_capacity", "resource"),
+        ("change_authored_type_depth", "resource"),
+        ("change_authored_expression_depth", "resource"),
+        ("change_block_inventory", "infrastructure"),
     ] {
         assert!(diagnostics_section.iter().any(|record| {
             record.operation == "diagnostic"

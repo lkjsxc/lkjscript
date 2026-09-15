@@ -112,10 +112,26 @@ Graph 15, compiler 11/bytecode 7 and Artifact 19 explicitly extend the container
 Graph 14 / compiler 10 / bytecode 6 / Artifact 18 inputs remain usable without read-time source
 migration; unchanged TypeObject 10 and old canonical bytes/identities are preserved. Public edits
 publish successor meaning, and the predecessor rejects new feature artifacts before execution.
-Earlier failed full attempts are retained as failures. Source version 0.1.36 remains untagged;
-the one-substantive-campaign release deferral has begun at this acceptance. At the first
-architectural reassessment select its concrete combined milestone or publish it alone.
-v0.1.35 delivery is independently complete.
+Earlier failed full attempts are retained as failures. v0.1.35 delivery is independently complete.
+
+The [structural-authoring campaign](campaigns/202609150900.md) consumes the requirement milestone's
+single campaign deferral and selects combined v0.1.36 delivery. Its change-only block adapter covers
+all 22 public expression forms, sequential/nested lexical shadowing, explicit T/E/R applications,
+delayed typed references and reviewed body replacement. Private occurrences lower to the existing
+authored tree with independent flat/block canonical and same-base candidate parity. Flat inputs
+remain supported; request proposals and descriptive definition projections do not become semantic
+authority. Compact-change 20 identifies syntax; authored codec 15, Graph 15, TypeObject 10,
+compiler 11/bytecode 7 and Artifact 19 remain unchanged.
+
+Focused proof covers all forms, private/scope rejection, public creation/edit/review/retry, pure
+map/record composition, located failures and combined flat/block depth. An initial depth-1,024
+stack overflow and subsequent impact-budget exhaustion were repaired without reducing the semantic
+limit: public changes join a 64 MiB worker and the default ownership-step allowance is now 2,000,000
+(formerly 1,000,000; explicit old budgets retain their commitments). Literal structural cell/queue
+requests passed transported execution and substantial supplier edits against independent flat
+references. Full, target, integration, publication and anonymous acceptance for this source are
+pending; the campaign records exact proof and delivery revisions separately. The combined release
+deferral cannot be renewed.
 
 The typed meaning graph is the sole current editable program authority. A project root contains a strict
 `GraphRepository`: `HEAD`, immutable packs, an object catalog, optional exact package transports,

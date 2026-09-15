@@ -1,0 +1,29 @@
+reference.owner as=$Queue package=$std class=declaration name=DurableQueue
+reference.owner as=$LeaseState package=$std class=declaration name=QueueLeaseState
+reference.owner as=$claim package=$std class=operation parent=$Queue name=claim
+reference.owner as=$lease-info package=$std class=operation parent=$Queue name=lease-info
+reference.owner as=$complete package=$std class=operation parent=$Queue name=complete
+reference.owner as=$live package=$std class=case parent=$LeaseState name=live
+reference.owner as=$absent-case package=$std class=case parent=$LeaseState name=absent
+add.requirement-parameter as=$queue-R declaration=$finish-one name=R interface=$Queue
+requirement-parameter.operation parent=$queue-R index=0 operation=$claim
+requirement-parameter.operation parent=$queue-R index=1 operation=$lease-info
+requirement-parameter.operation parent=$queue-R index=2 operation=$complete
+type.capability-resource as=@Lease interface=$Queue
+add.parameter as=$worker function=$finish-one name=worker type=text
+add.parameter as=$now function=$finish-one name=now type=i64
+add.parameter as=$duration function=$finish-one name=lease-duration type=i64
+add.parameter as=$result function=$finish-one name=result type=bytes
+expression.block as=$finish-body
+  (match
+    (capability-call parameter:$queue-R $claim
+      (local $worker) (local $now) (local $duration))
+    (arm $live (payload lease @Lease)
+      (sequence
+        (capability-call parameter:$queue-R $lease-info (local lease))
+        (capability-call parameter:$queue-R $complete
+          (local lease) (local $now) (local $result))))
+    (arm $absent-case (bool false)))
+expression.end
+create.function as=$finish-one module=$cells name=finish-one visibility=public result=bool effect=task body=$finish-body
+effect.requirement parent=$finish-one index=0 requirement=parameter:$queue-R

@@ -598,15 +598,39 @@ fn live_pair_interruptions_preserve_failures_before_fresh_recovery() {
                 *events.borrow(),
                 [
                     "exact-capabilities",
+                    "exact-change-capabilities",
                     "exact-new",
                     "exact-status",
+                    "exact-create-plan",
+                    "exact-create-apply",
+                    "exact-find-module",
+                    "exact-find-function",
+                    "exact-find-parameter",
+                    "exact-definition-created",
+                    "exact-run-created",
+                    "exact-replace-plan",
+                    "exact-replace-apply",
+                    "exact-definition-replaced",
+                    "exact-run-replaced",
                     "exact-check",
                     "exact-build",
                     "exact-run",
                     "exact-status-final",
                     "latest-capabilities",
+                    "latest-change-capabilities",
                     "latest-new",
                     "latest-status",
+                    "latest-create-plan",
+                    "latest-create-apply",
+                    "latest-find-module",
+                    "latest-find-function",
+                    "latest-find-parameter",
+                    "latest-definition-created",
+                    "latest-run-created",
+                    "latest-replace-plan",
+                    "latest-replace-apply",
+                    "latest-definition-replaced",
+                    "latest-run-replaced",
                     "latest-check",
                     "latest-build",
                     "latest-run",
@@ -917,15 +941,29 @@ fn live_pair_receipt_fault_matrix() {
             "/installation/environment/PATH",
             "/installation/cleanup_complete",
             "/installation/candidate/file/sha256",
+            "/structural",
+            "/structural/creation/request/file/sha256",
+            "/structural/creation/logical_plan/file/sha256",
+            "/structural/replacement/request/file/sha256",
+            "/structural/replacement/logical_plan/file/sha256",
+            "/structural/function",
+            "/structural/parameter",
+            "/structural/before/function",
+            "/structural/after/parameter",
+            "/structural/created_value",
+            "/structural/replaced_value",
+            "/commands",
         ] {
             let mut value = serde_json::to_value(&baseline.routes[route_index].lifecycle)
                 .expect("lifecycle JSON");
             let field = value
                 .pointer_mut(pointer)
-                .expect("required installation field");
+                .expect("required installed lifecycle field");
             *field = match field {
                 serde_json::Value::Array(_) => serde_json::json!([]),
                 serde_json::Value::Bool(_) => serde_json::json!(false),
+                serde_json::Value::Object(_) => serde_json::Value::Null,
+                serde_json::Value::Number(_) => serde_json::json!(0),
                 _ => serde_json::json!("foreign"),
             };
             let decoded = serde_json::from_value::<lifecycle::Lifecycle>(value);
@@ -953,6 +991,80 @@ fn live_pair_receipt_fault_matrix() {
                     serde_json::json!({"fault":pointer,"rejection":"typed identity admission"}),
                 );
             }
+        }
+        // Alter original request/output bytes and all their enclosing bindings. The retained
+        // literal and arithmetic expectations must reject even when no checksum is stale.
+        for name in ["create", "replace", "run-replaced"] {
+            let route_root = baseline.routes[route_index].route.root(&options);
+            let child_path = route_root.join("lifecycle.json");
+            let child_original = fs::read(&child_path).expect("original lifecycle bytes");
+            let mut changed = serde_json::to_value(&baseline.routes[route_index].lifecycle)
+                .expect("lifecycle JSON");
+            let command_index = changed["commands"]
+                .as_array()
+                .expect("commands")
+                .iter()
+                .position(|command| command["name"] == "run-replaced")
+                .expect("replacement execution");
+            let label = if name == "run-replaced" {
+                changed["commands"][command_index]["process"]["stdout"]["path"]
+                    .as_str()
+                    .expect("execution log path")
+                    .to_owned()
+            } else {
+                format!("{name}.lkjc")
+            };
+            let fixture_path = route_root.join(&label);
+            let fixture_original = fs::read(&fixture_path).expect("original public evidence");
+            let fixture_text =
+                std::str::from_utf8(&fixture_original).expect("public evidence UTF-8");
+            let (before, after) = if name == "run-replaced" {
+                ("value=43", "value=42")
+            } else {
+                ("(i64 1)", "(i64 2)")
+            };
+            assert!(fixture_text.contains(before), "literal fault target {name}");
+            fs::write(&fixture_path, fixture_text.replacen(before, after, 1))
+                .expect("changed original public evidence");
+            if name == "run-replaced" {
+                changed["commands"][command_index]["process"]["stdout"] = serde_json::to_value(
+                    evidence::proof(&fixture_path, label).expect("rehashed output"),
+                )
+                .expect("output proof JSON");
+                changed["structural"]["replaced_value"] = serde_json::json!(42);
+            } else {
+                let review = if name == "create" {
+                    "creation"
+                } else {
+                    "replacement"
+                };
+                changed["structural"][review]["request"] =
+                    serde_json::to_value(binding(&fixture_path).expect("rehashed request"))
+                        .expect("request binding JSON");
+            }
+            let changed: lifecycle::Lifecycle = serde_json::from_value(changed)
+                .expect("well-typed consistently rehashed lifecycle");
+            fs::write(
+                &child_path,
+                evidence::encode_json(&changed).expect("canonical lifecycle"),
+            )
+            .expect("rewrite lifecycle");
+            let mut fault = baseline.clone();
+            fault.routes[route_index].lifecycle = Some(changed);
+            fs::write(
+                &path,
+                evidence::encode_json(&fault).expect("canonical pair"),
+            )
+            .expect("rewrite pair");
+            let rejected = read(&options, &verifier);
+            fs::write(&fixture_path, fixture_original).expect("restore original public evidence");
+            fs::write(&child_path, child_original).expect("restore lifecycle");
+            fs::write(&path, &original).expect("restore pair");
+            results.push(serde_json::json!({
+                "fault": format!("{}-{name}-original-bytes-rehashed", baseline.routes[route_index].route.name()),
+                "rehashed_original_and_nested_pair": true,
+                "rejection": rejected.expect_err(name).to_string(),
+            }));
         }
     }
     for pointer in ["/commands", "/residents", "/retained", "/cleanup_complete"] {

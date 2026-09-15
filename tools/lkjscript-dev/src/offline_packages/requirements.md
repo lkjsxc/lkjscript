@@ -1,10 +1,10 @@
 # Requirement-parametric ordinary-library witness
 
 These literal requests are a designed composition workload, not evidence of existing application
-adoption. `requirements.producer.lkjc` owns the typed-cell algorithm. The observer supplies only
+adoption. `requirements.producer.structural.lkjc` owns the typed-cell algorithm. The observer supplies only
 observed bases, exact package selections, executable arguments and isolated operational resources;
 it neither builds the semantic body nor performs the cell updates. Resource composition also has
-a public `DurableQueue` helper in `requirements.resource-library.lkjc`. Its transported execution
+a public `DurableQueue` helper in `requirements.resource-library.structural.lkjc`. Its transported execution
 changes an independently observed raw queue record from ready to completed with one attempt and
 the exact result bytes, then reports no available lease without changing that record. The existing
 service wire observer supplies these expected transitions. Separate deterministic resource scripts
@@ -53,12 +53,39 @@ The observer compares I64/Text bytes using independent frozen TypeObject 10 scal
 the typed-value envelope contract, then reads the ordered store directly without committing an
 observer transaction. It saves observations after each invocation, preserves failures, and creates
 fresh owned state for a new invocation after an observer correction. The repaired producer changes
-both minimum constraints and the pure factory body; an insufficient dependency replacement leaves
-consumer authority unchanged, and a sufficient public requirement edit/rebind succeeds. Original
+both minimum constraints and the pure factory body. Its independently handwritten
+`requirements.update-body.{flat,structural}.lkjc` edit replaces the substantial generic update
+body so it applies the supplied transformation twice before encoding and conditionally writing.
+This is an intentional supplier behavior change: the repaired I64 invocation advances 16 to 22,
+and the repaired Text invocation advances `a!!` to `a!!!!` with two Configuration reads. The
+original artifacts retain single transformation and all original false-condition/trap outcomes.
+The edit adds no transaction retry. An insufficient dependency replacement leaves consumer
+authority unchanged, and a sufficient public requirement edit/rebind succeeds. Original
 and repaired artifacts run after the producer and consumer authoring paths are removed; the moved
 owned consumer copy supports public recovery checks.
 
-The flat expression syntax requires a separate expression occurrence for each read and explicit
-argument edges. The checked-in requests retain this friction for a later authoring assessment;
-line/edge counts do not measure authoring time, model tokens or billing. This campaign does not add
-a parser block notation or a typed-cell intrinsic.
+The original flat producer, consumer, queue and supplier-edit literals remain unchanged as an
+independent authoring oracle. The public workflow plans both complete literal notations against
+the same base, declaration/reference prelude and request controls. Strict canonical review files
+must be byte-identical, including request commitments, typed inventories, allocated identities,
+candidate owners and retirements. It then applies the structural request with the flat plan token.
+Only the resulting structural workload performs the live cell and queue effects.
+
+Structural blocks keep explicit type/effect/requirement applications, binder Names and annotations.
+The producer uses sequential let bindings within its transaction, and the queue helper confines
+the affine lease to its match arm before borrowing and consuming it. The stronger supplier edit
+discovers both functions and all referenced parameters by their existing owners, then replaces the
+factory and update bodies. Public definition inspection verifies all seven factory and eight update
+signature identities persist. The factory's five old expression owners retire; the update's 41 old
+expression/binding owners retire. The new bodies have eight and 43 distinct expression/binding
+owners respectively. The
+`requirement_structural` observation binds these commands and the retained literal requests/reviews;
+the existing receipt reader independently admits those files.
+
+The flat producer has 145 nonempty lines, 41 expression definitions and 20 indexed expression
+argument edges; its structural counterpart has 107 lines and two exported block roots. The flat
+consumer has 273 lines, 88 expression definitions and 63 argument edges; its structural counterpart
+has 182 lines and 11 exported roots. Substantial bodies no longer require per-occurrence labels or
+indexed expression edges. Declarations, references, types, effect rows, constraints and dependency
+selections still have explicit preludes. These counts describe input assembly; they do not measure
+authoring time, model tokens, billing or parser speed.

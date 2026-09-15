@@ -23,7 +23,8 @@ use super::super::control::{
     COMPACT_TYPE_FORM_FIELDS, COMPACT_TYPE_FORMS, CompactChangeFieldForm, CompactChangeOperation,
     LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY, LOGICAL_CHANGE_PLAN_CONTRACT_VERSION,
     LOGICAL_PLAN_RECORD_DESCRIPTORS, MAXIMUM_COMPACT_INPUT_BYTES, MAXIMUM_LOGICAL_PLAN_BYTES,
-    MAXIMUM_LOGICAL_PLAN_RECORDS, PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN, render_record,
+    MAXIMUM_LOGICAL_PLAN_RECORDS, MAXIMUM_STRUCTURAL_SYNTAX_NODES, MAXIMUM_STRUCTURAL_TOKENS,
+    PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN, render_record,
 };
 use super::super::data::{
     DATA_BACKUP_CONTRACT_IDENTITY, DATA_BACKUP_CONTRACT_VERSION, DATA_STORE_CONTRACT_IDENTITY,
@@ -105,6 +106,52 @@ pub const CLI_CONTRACT_VERSION: u16 = 32;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
+
+const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
+    ("unit", "(unit)"),
+    ("bool", "(bool true|false)"),
+    ("i64", "(i64 I64)"),
+    ("text", "(text \"TEXT\")"),
+    ("static-text", "(static-text \"TEXT\")"),
+    (
+        "local",
+        "(local NAME)|(local $PARAMETER)|(local (exact LOCAL_SELECTOR))",
+    ),
+    ("constant", "(constant DECLARATION)"),
+    ("if", "(if CONDITION WHEN_TRUE WHEN_FALSE)"),
+    ("sequence", "(sequence EXPR...)"),
+    ("call", "(call FUNCTION APPLICATIONS EXPR...)"),
+    ("function-value", "(function-value FUNCTION APPLICATIONS)"),
+    ("invoke", "(invoke CALLEE EXPR...)"),
+    ("bind", "(bind CALLEE EXPR...)"),
+    (
+        "let",
+        "(let (binding NAME [(type TYPE)] INITIALIZER)... (in BODY))",
+    ),
+    (
+        "record",
+        "(record DECLARATION TYPE_APPLICATION (field FIELD EXPR)...)|(record structural (field NAME EXPR)...)",
+    ),
+    ("variant", "(variant CASE TYPE_APPLICATION [PAYLOAD])"),
+    ("field", "(field EXPR FIELD)|(field EXPR (name NAME))"),
+    ("list", "(list TYPE EXPR...)"),
+    (
+        "map",
+        "(map KEY_TYPE VALUE_TYPE (entry KEY_EXPR VALUE_EXPR)...)",
+    ),
+    (
+        "match",
+        "(match SCRUTINEE (arm CASE [(payload NAME TYPE)] BODY)...)",
+    ),
+    (
+        "capability-call",
+        "(capability-call REQUIREMENT OPERATION EXPR...)",
+    ),
+    (
+        "transaction",
+        "(transaction REQUIREMENT (binding NAME) BODY)",
+    ),
+];
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
     "lkjscript-function-definition-projection-7";
@@ -2583,6 +2630,132 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Source,
             "One decoded compact value exceeds its byte bound.",
             "Use an advertised external value input or reduce the value.",
+        ),
+        diagnostic(
+            "change_block_end",
+            DiagnosticClass::Source,
+            "An expression.end marker contains trailing fields or tokens.",
+            "Use an otherwise empty standalone expression.end line.",
+        ),
+        diagnostic(
+            "change_block_nested",
+            DiagnosticClass::Source,
+            "An expression block contains another block header.",
+            "Nest expressions with parentheses and export each block root separately.",
+        ),
+        diagnostic(
+            "change_block_stray_end",
+            DiagnosticClass::Source,
+            "An expression.end marker has no open block.",
+            "Remove the marker or add its expression.block header.",
+        ),
+        diagnostic(
+            "change_block_unclosed",
+            DiagnosticClass::Source,
+            "An expression block has no closing expression.end marker.",
+            "Complete its single expression and add a standalone expression.end line.",
+        ),
+        diagnostic(
+            "change_block_parenthesis",
+            DiagnosticClass::Source,
+            "Structural parentheses are unmatched or an expression is incomplete at its end marker.",
+            "Balance the parentheses before expression.end.",
+        ),
+        diagnostic(
+            "change_block_root_count",
+            DiagnosticClass::Source,
+            "A structural block is empty or has multiple root expressions or trailing tokens.",
+            "Supply exactly one parenthesized expression.",
+        ),
+        diagnostic(
+            "change_block_expression",
+            DiagnosticClass::Source,
+            "A structural expression or clause is not parenthesized.",
+            "Use the parenthesized form advertised by capabilities --section change.",
+        ),
+        diagnostic(
+            "change_block_atom",
+            DiagnosticClass::Source,
+            "A structural name or typed-reference position has an invalid or quoted atom.",
+            "Use an unquoted portable Name or the existing typed-reference spelling.",
+        ),
+        diagnostic(
+            "change_block_separator",
+            DiagnosticClass::Source,
+            "A quoted structural value is followed by text without a token separator.",
+            "Separate tokens with ASCII whitespace, parentheses or a comment.",
+        ),
+        diagnostic(
+            "change_block_form",
+            DiagnosticClass::Source,
+            "A structural expression has no form name or names an unknown form.",
+            "Select one of the 22 forms advertised by capabilities --section change.",
+        ),
+        diagnostic(
+            "change_block_text",
+            DiagnosticClass::Source,
+            "A structural text or static-text literal is not double quoted.",
+            "Enclose literal text in double quotes using compact escapes.",
+        ),
+        diagnostic(
+            "change_block_local_unbound",
+            DiagnosticClass::Source,
+            "A bare structural local name has no preceding binding in its current block scope.",
+            "Introduce the binding before use or use an explicit typed parameter reference.",
+        ),
+        diagnostic(
+            "change_block_arity",
+            DiagnosticClass::Source,
+            "A structural form or clause has the wrong number of operands.",
+            "Supply exactly the operands shown by the advertised structural syntax.",
+        ),
+        diagnostic(
+            "change_block_clause",
+            DiagnosticClass::Source,
+            "A structural form contains the wrong syntax wrapper.",
+            "Use its advertised binding, in, field, entry, arm or payload clause.",
+        ),
+        diagnostic(
+            "change_block_application",
+            DiagnosticClass::Source,
+            "Explicit structural application clauses are duplicated, out of order or unsupported at this position.",
+            "Use at most one types, effects and requirements clause in that order before values; nominal construction accepts only types.",
+        ),
+        diagnostic(
+            "change_block_private",
+            DiagnosticClass::Source,
+            "An outer flat edge attempts to extend a private structural block.",
+            "Put the child inside the block or let a genuine flat parent consume the exported root.",
+        ),
+        diagnostic(
+            "change_block_capacity",
+            DiagnosticClass::Resource,
+            "Cumulative structural syntax accounting or bounded allocation was exhausted.",
+            "Reduce the complete request within the advertised structural token and node bounds.",
+        ),
+        diagnostic(
+            "change_input_type_capacity",
+            DiagnosticClass::Resource,
+            "Complete change input exceeds cumulative expanded type-node admission.",
+            "Reduce repeated expanded type construction within the advertised request bound.",
+        ),
+        diagnostic(
+            "change_authored_type_depth",
+            DiagnosticClass::Resource,
+            "An expanded authored type exceeds the current type-depth bound.",
+            "Reduce nested type depth within the advertised admission.",
+        ),
+        diagnostic(
+            "change_authored_expression_depth",
+            DiagnosticClass::Resource,
+            "A normalized authored expression exceeds the combined flat and structural depth bound.",
+            "Reduce expression nesting including flat ancestors around structural roots.",
+        ),
+        diagnostic(
+            "change_block_inventory",
+            DiagnosticClass::Infrastructure,
+            "Structural lowering lost an internally owned expression or required field.",
+            "Preserve the original request and report the lowering invariant failure.",
         ),
         diagnostic(
             "change_request_missing",
@@ -5807,8 +5980,10 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ("request-commitment", "opaque-digest".to_owned()),
                     ("prepared-plan", "opaque-commitment".to_owned()),
                     ("plan-output-action", "plan-only".to_owned()),
+                    ("expression-notations", "flat|block".to_owned()),
                 ],
             )?);
+            structural_expression_records(&mut records)?;
             for descriptor in LOGICAL_PLAN_RECORD_DESCRIPTORS {
                 records.push(compact_record(
                     "change.plan-record",
@@ -7019,6 +7194,175 @@ pub fn operation_record(descriptor: &OperationDescriptor) -> Result<String, Stri
     )
 }
 
+fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String> {
+    records.push(compact_record(
+        "change.expression-block",
+        &[
+            ("header", "expression.block as=$ROOT".to_owned()),
+            ("header-fields", "as".to_owned()),
+            ("body", "exactly-one-parenthesized-expression".to_owned()),
+            ("end", "expression.end".to_owned()),
+            ("root", "ordinary-request-local-expression".to_owned()),
+            ("authority", "reviewed-authored-intent".to_owned()),
+        ],
+    )?);
+    for (name, syntax) in STRUCTURAL_EXPRESSION_SYNTAX {
+        records.push(compact_record(
+            "change.expression-syntax",
+            &[
+                ("name", (*name).to_owned()),
+                ("syntax", (*syntax).to_owned()),
+            ],
+        )?);
+    }
+    for (name, value, unit) in [
+        (
+            "maximum-input-bytes",
+            MAXIMUM_COMPACT_INPUT_BYTES as u64,
+            "bytes",
+        ),
+        (
+            "maximum-structural-tokens",
+            MAXIMUM_STRUCTURAL_TOKENS as u64,
+            "tokens",
+        ),
+        (
+            "maximum-structural-syntax-nodes",
+            MAXIMUM_STRUCTURAL_SYNTAX_NODES as u64,
+            "nodes",
+        ),
+        (
+            "default-authored-identities",
+            crate::platform::change::ChangeBudget::default()
+                .authored
+                .maximum_allocated_identities,
+            "identities",
+        ),
+        (
+            "maximum-expanded-type-nodes",
+            crate::platform::change::MAXIMUM_CHANGE_AUTHORED_TYPE_NODES,
+            "nodes",
+        ),
+        (
+            "maximum-combined-expression-depth",
+            crate::platform::kernel::contract::MAXIMUM_EXPRESSION_DEPTH as u64,
+            "depth",
+        ),
+        (
+            "maximum-type-depth",
+            crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH as u64,
+            "depth",
+        ),
+    ] {
+        records.push(compact_record(
+            "change.expression-limit",
+            &[
+                ("name", name.to_owned()),
+                ("value", value.to_string()),
+                ("unit", unit.to_owned()),
+                ("scope", "whole-request".to_owned()),
+            ],
+        )?);
+    }
+    for (name, syntax, meaning) in [
+        (
+            "metavariables",
+            "EXPR|TYPE|ROW|NAME|[...]|...",
+            "uppercase words are grammar metavariables; brackets mark optional syntax and ellipsis repetition; neither brackets nor ellipsis are input tokens",
+        ),
+        (
+            "framing",
+            "expression.block as=$ROOT NEWLINE EXPR NEWLINE expression.end",
+            "markers are standalone lines with surrounding whitespace; reject nested headers, stray or missing end markers, extra header fields, multiple body expressions and trailing tokens; quoted marker text is literal data",
+        ),
+        (
+            "tokens",
+            "ASCII-whitespace|(|)|;comment|\"TEXT\"",
+            "semicolon comments end at the physical newline outside strings; text uses compact escapes and Unicode validation; unescaped physical newlines and control characters in strings reject",
+        ),
+        (
+            "names",
+            "NAME",
+            "unquoted portable Name; declaration, member, requirement, type and row atoms use existing typed reference spellings and exact resolution",
+        ),
+        (
+            "applications",
+            "[(types TYPE...)] [(effects ROW...)] [(requirements REQUIREMENT...)]",
+            "call and function-value only; at most one clause of each kind in this order before value arguments; omission and explicit empty clauses both mean an empty vector without inference; duplicate, unknown, out-of-order or misplaced clauses reject",
+        ),
+        (
+            "type-application",
+            "[(types TYPE...)]",
+            "nominal record and variant only; existing arity, constraints, visibility and validity apply",
+        ),
+        (
+            "requirement-argument",
+            "REQUIREMENT|parameter:$R",
+            "preserve concrete requirement versus exact requirement-parameter substitution; no inferred grants or attenuation",
+        ),
+        (
+            "local",
+            "(local NAME)|(local $PARAMETER)|(local (exact param_HEX|bind_HEX))",
+            "bare NAME selects the nearest binding in this block only, including names resembling exact identities; $PARAMETER uses typed public resolution; exact requires a local identity and ordinary scope validation; no fallback or implicit closure",
+        ),
+        (
+            "let-scope",
+            "(binding NAME [(type TYPE)] INITIALIZER)",
+            "sequential and nested shadowing are allowed; resolve each initializer before introducing its distinct binder; restore the outer binding on scope exit; unbound self and forward locals reject",
+        ),
+        (
+            "payload-scope",
+            "(arm CASE (payload NAME TYPE) BODY)",
+            "a payload binding exists only in its own arm body",
+        ),
+        (
+            "transaction-scope",
+            "(transaction REQUIREMENT (binding NAME) BODY)",
+            "the distinct transaction binding exists only in BODY and has no authored type annotation; existing transaction and affine validation apply",
+        ),
+        (
+            "root-ownership",
+            "$ROOT",
+            "consume exactly once in an outer change or genuine flat parent; unused or shared roots reject; nested expressions and binders are private; flat edges cannot extend a block root or reach private children; a block cannot splice a flat expression into its interior",
+        ),
+        (
+            "delayed-references",
+            "$ALIAS|@TYPE|@ROW",
+            "public typed aliases may be declared later in the whole request; all references including unused bindings and untaken branches undergo complete validation",
+        ),
+        (
+            "occurrences-and-order",
+            "EXPR",
+            "each syntactic occurrence owns a distinct expression; only let reuses an evaluated value; preserve authored argument, sequence, field and map-entry order, callee-before-arguments and selected-branch evaluation",
+        ),
+        (
+            "normalization",
+            "flat|block",
+            "equivalent normalized authored trees preserve canonical intent, request commitments and same-base plans; preserve semantic Names, optional annotations and explicit applications; formatting, comments and request labels are not meaning",
+        ),
+        (
+            "capacity",
+            "whole-request",
+            "charge parentheses and atoms as tokens and lists/atoms as syntax nodes across blocks; admit resulting expression/binder/public identities and expanded type input/cache/copy work cumulatively; combined expression depth includes flat ancestors and starts at one; syntax wrappers add no semantic expression depth; authored defaults are unchanged",
+        ),
+        (
+            "compatibility",
+            "change plan|change apply",
+            "both notations use the same reviewed typed intent and publication; body replacement preserves its declaration and unchanged parameters; saved requests remain proposals and definition projections remain read-only; compact responses retain flat framing",
+        ),
+    ] {
+        records.push(compact_record(
+            "change.expression-rule",
+            &[
+                ("name", name.to_owned()),
+                ("syntax", syntax.to_owned()),
+                ("meaning", meaning.to_owned()),
+            ],
+        )?);
+    }
+    Ok(())
+}
+
 fn compact_record(operation: &str, fields: &[(&str, String)]) -> Result<String, String> {
     let borrowed = fields
         .iter()
@@ -7169,6 +7513,16 @@ fn validate_compact_form_grammar() -> Result<(), String> {
         COMPACT_EXPRESSION_FORMS.iter().copied(),
         "compact expression form",
     )?;
+    if STRUCTURAL_EXPRESSION_SYNTAX
+        .iter()
+        .map(|(name, _)| *name)
+        .ne(COMPACT_EXPRESSION_FORMS.iter().copied())
+        || STRUCTURAL_EXPRESSION_SYNTAX
+            .iter()
+            .any(|(_, syntax)| syntax.is_empty())
+    {
+        return Err("structural and flat expression grammar inventories differ".to_owned());
+    }
     unique(
         COMPACT_CHANGE_EDGE_DESCRIPTORS
             .iter()

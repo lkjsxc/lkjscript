@@ -59,9 +59,10 @@ and charge new traversal and metadata before growth. Preparation steps and cumul
 are reported separately from runtime payload work. Derived types use canonical identities and are
 never a second editable or serialized type authority.
 
-Language constructs are typed semantic records in canonical owner objects. There is no maintained
-source grammar. Executable-discovered compact change records describe bounded authored intent; the
-request and logical plan are non-authoritative projections. Names locate meaning, while typed stable IDs own
+Language constructs are typed semantic records in canonical owner objects. Executable-discovered
+change records and structural expression blocks describe bounded authored intent; neither a saved
+request nor a definition projection is a separately editable program authority. The request and
+logical plan remain proposals and review evidence. Names locate meaning, while typed stable IDs own
 references, continuity, generic parameters, and selected expression/member sites.
 
 Evaluation is strict and left-to-right except `if` and variant `match`, which evaluate only the
@@ -342,19 +343,47 @@ holes/reordering, and durable captured environments are outside this language sl
 ## Expressions and bindings
 
 The complete graph expression kinds are unit/bool/i64/text/static-text literals, variable,
-conditional, lexical let, sequencing, direct call with explicit type/effect arguments, function
-reference with explicit type/effect arguments, prefix binding, invocation, record construction and projection, variant
+conditional, lexical let, sequencing, direct call with explicit type/effect/requirement arguments, function
+reference with explicit type/effect/requirement arguments, prefix binding, invocation, record construction and projection, variant
 construction and match, list, map, capability operation, and lexical capability transaction.
 
 Compact change records expose unit, bool, i64, text, and static-text literals; lexical variables and
 constants; conditionals and sequencing; direct calls; lexical `let`; nominal or structural record
-construction and field projection; variants and exhaustive matches; typed lists; exact requirement
+construction and field projection; variants and exhaustive matches; typed lists and maps; exact requirement
 capability calls; lexical transactions; named `function-value` expressions with ordered explicit
-type/effect arguments; and `bind` and `invoke` with ordered expression arguments. `add.type-parameter`
-and `add.effect-parameter` add ordered stable parameters to graph functions through the current
-function surface. Map expressions and arbitrary topology creation remain outside
-this compact slice. The generated [change grammar](../generated/change-grammar.md) is the
-exhaustive public inventory; this specification does not duplicate its fields and edges.
+type/effect/requirement arguments; and `bind` and `invoke` with ordered expression arguments.
+`add.type-parameter`, `add.effect-parameter` and `add.requirement-parameter` add ordered stable
+parameters through the current declaration surface. All 22 public expression forms also have
+structural syntax inside `expression.block as=$ROOT` / `expression.end`. Declarations, signatures,
+types, rows, requirements and dependency selection keep their explicit record forms. The generated
+[change grammar](../generated/change-grammar.md) is the exhaustive public inventory;
+[the CLI contract](semantic-cli.md#structural-expression-bodies) owns block framing and lexical input.
+
+Structural syntax lowers each expression occurrence and each lexical binder into ordinary typed
+authored intent. A block exports only its root, which has the same exactly-once ownership rule as a
+flat expression fragment. Its nested expressions and bindings are private request notation, while
+the accepted owners remain inspectable through ordinary definition and owner discovery. A genuine
+flat parent may own the root; no outer edge may extend the block or address its private children,
+and a block cannot splice a separately defined flat expression into its interior.
+
+Sequential and nested lexical shadowing are permitted. A let initializer sees the preceding
+environment, then its new distinct binder is visible to later initializers and the body. The
+enclosing environment is restored on scope exit. Match payloads exist only in their own arm, and
+transaction bindings only in their transaction body. Bare structural local names select the nearest
+binding in that block; explicit typed parameter references and exact local identities retain the
+ordinary kind and scope rules. There is no cross-block lexical capture or implicit closure.
+
+Each syntactic local read is a separate expression occurrence. Only a let binding provides
+evaluated-once value reuse. Structural notation preserves left-to-right arguments, sequence items,
+record fields and map entries, callee-before-arguments order and selected-branch evaluation. It
+neither changes transaction completion nor infers generic applications, grants or retries.
+
+Equivalent flat and structural normalized authored trees retain canonical intent bytes, request
+commitments and same-base prepared candidates. Semantic binding Names, optional type annotations
+and explicit applications remain meaningful. Whitespace, comments and request-local label spelling
+are not meaning. All-form coverage does not make bare names equivalent to every exact-addressed
+flat graph: a flat reference may still select an earlier same-named binder after shadowing. Such
+exact editing remains available in the flat notation.
 
 Bindings and expression sites receive typed IDs only where operations, diagnostics, or relations
 need robust selection. Structural paths are canonical within the owning declaration. Paths, source

@@ -334,7 +334,8 @@ selection during explicit dependency replacement. The frozen old artifact remain
 The existing foreground consumer uses a literal reference prelude instead of host standard/library
 member inventories, retaining its once-only effect, transport and recovery oracles. Driver receipt
 and inventory observations are not application-side graph generators. Input/base/plan/package
-anchors remain explicit; flat expression assembly remains required.
+anchors remain explicit. Retained flat requests remain independent reference inputs for structural
+expression authoring; declarations, signatures, types and reference preludes stay explicit.
 
 ## Command lifecycle requirements
 
@@ -620,8 +621,14 @@ checkout, and executes no repository binary or script.
 After immutable publication, exact-tag and `releases/latest` assets are downloaded anonymously and
 authenticated independently by the hosted workflow (A for each route). `release transferred
 pair-run` independently strictly admits each archive/checksum into a separate extraction (V), then
-executes capabilities/new/status/check/build/run through each extraction in a fresh owned project
-(S), including the independently expected typed text `"hello"` and cleanup. It compares the complete
+installs and uses each exact executable in a fresh owned project (S). Pair receipt generation 3
+requires 19 ordered commands per route, including focused structural discovery, literal reviewed
+function creation, module/function/parameter discovery, definition inspection, reviewed body
+replacement and changed execution. Independent expected results are I64 42 before replacement,
+I64 43 after sequential shadowing, and the retained command-recipe Text `"hello"`. The declaration
+and unchanged parameter identity/contract must survive while the body root changes. Requests and
+strict logical-plan files remain bound outside cleaned application roots. Check/build/run and joined
+cleanup remain required. It compares the complete
 archive, checksum, canonical manifest and executable bytes by bounded streaming, and binds all
 admitted member modes, payloads and execution policy (E). Identical malformed inputs never reach E.
 It freshly executes and fully rereads the existing five-owner aggregate against exact in the same
@@ -871,3 +878,65 @@ interfaces and artifacts. Historical acceptance and retries preserve original id
 current validation remains necessary for current execution. No source migration is performed by
 inspection or revalidation. Frozen predecessor publication receipts keep their original verifier
 and obligations; they do not certify these language or reader changes.
+
+## Structural expression authoring obligations
+
+Structural expression acceptance uses the existing authored-intent, public CLI, offline-package
+and installed/public lifecycle owners. Independently handwritten flat and block pairs cover all
+22 expression forms, nominal and structural records, explicit T/E/R applications and later-declared
+public aliases. Equivalent normalized trees must have identical canonical authored bytes, request
+commitments, allocated identities and same-base prepared candidates, including semantic binder
+Names and absent/present annotations. Formatting, comments, alpha-renamed request labels and empty
+application clauses preserve those results. Literal, order, selector, annotation and application
+changes retain their expected commitment differences. A flat plan must admit the equivalent block
+apply and vice versa under one executable. The new parser cannot generate its own flat oracle.
+
+Scope and ownership cases require sequential same-name rebinding through an earlier initializer,
+nested shadowing with restoration, repeated names in different blocks, private match payloads and
+transaction bindings, explicit parameter aliases and exact local selectors, and a flat parent
+owning a block root. Negative cases reject unbound self/forward locals, escaped arm/transaction
+locals, wrong-function parameters, cross-block capture, unused/shared roots and flat edges extending
+blocks. Legal public labels resembling generated symbols remain usable; guessed private labels
+cannot resolve. A deliberate consequential parser or binding fault must fail its independent
+expectation and pass again after restoration.
+
+The existing requirement-parameter workload must retain literal structural producer, consumer and
+DurableQueue bodies alongside their flat references. Through the copied candidate outside the
+checkout it requires discovery, plan/apply, check/build, exact offline export/stage/bind, removal of
+authoring roots, and direct/bound I64 and Text execution. Existing independent typed bytes,
+per-store snapshots and the disjoint queue observer own expected outcomes. They retain the
+true-primary-condition/no-publication and staged-write/trap cases: `UpdateAttempt<T>` reports
+candidate data and the primary condition, not a transaction commit certificate. Parity proof is
+effect-free; live effects are not replayed as a differential parser oracle.
+
+An observed structural body replacement must use ordinary definition/owner discovery and preserve
+its declaration and unchanged parameter identities while changing a substantial body and result.
+Supplier/constraint replacement, insufficient-consumer rejection, repair and recovery stay in the
+same offline owner. Stale or altered plans must leave `HEAD` unchanged; fresh replan and original
+idempotent retry must retain their existing behavior. Independent pure map/record expected values
+with nested key/value expressions and a neutral ordered-call/lazy-branch case demonstrate ordinary
+composition without witness-specific language behavior.
+
+Input admission covers delimiter/comment spellings inside strings, malformed UTF-8 and escapes,
+I64 overflow, unknown or malformed forms and application clauses, invalid unused/untaken syntax,
+mixed valid/invalid changes, cumulative growth across blocks, near/over-depth trees, and a deep
+block below flat ancestors. Original token/expression locations and unchanged accepted state are
+required. Deep invalid cases execute in a subprocess so panic, abort and stack overflow are
+observable; admitted useful-depth cases must succeed. Structural accounting is cumulative and
+checked before allocation, and syntax wrappers do not contribute semantic expression depth. Shared
+compact response framing remains strict.
+
+Compatibility requires existing flat clients, maintained standard/lkjournal meaning and artifacts,
+authentic supported predecessor inputs, and historical-invalid-source repair through their
+existing owners. An old executable must reject a structural request without writing. The input
+revision does not require a graph migration. Both anonymous exact/latest installed routes must
+freshly advertise structural syntax and author and replace a small body through reviewed public
+requests; the full structural libraries remain in the existing offline aggregate. Original readers
+must bind retained request bytes, commands and outcomes, and reject omitted or consistently
+rehashed false observations. This adds no aggregate child or parallel evidence ledger.
+
+Retain before/after literal requests and the edit journey. Counts of bytes or lines may describe
+the removed per-occurrence labels and indexed expression edges; they establish no saved authoring
+time, model tokens, billing or execution speedup. Declaration and reference prelude burden remains
+visible. Proof dispositions and source/verifier/environment/workload bindings follow the existing
+fresh, reused, failed, cancelled, skipped, unavailable and unrun rules.

@@ -1916,6 +1916,23 @@ struct ChangeCommandRequest {
 /// engine. Compact records and direct flags converge before plan comparison, repository access,
 /// preparation, response generation, or publication.
 pub fn execute_change(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagnostic>> {
+    // The adapter admits the full mixed tree before recursive semantic owners run. Keep their
+    // supported 1,024-expression / 256-type depth usable on a bounded stack, including debug
+    // builds. The request and every partially built tree stay on this worker until it is joined.
+    std::thread::Builder::new()
+        .name("change-request".to_owned())
+        .stack_size(64 * 1_048_576)
+        .spawn(move || execute_change_on_stack(arguments))
+        .map_err(|error| {
+            single_diagnostic(internal_error(format!(
+                "cannot start change request worker: {error}"
+            )))
+        })?
+        .join()
+        .map_err(|_| single_diagnostic(internal_error("change request worker panicked")))?
+}
+
+fn execute_change_on_stack(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagnostic>> {
     let (arguments, project) = extract_global_project(arguments).map_err(single_diagnostic)?;
     if arguments.first().map(String::as_str) != Some("change") {
         return Err(single_diagnostic(usage_error(
@@ -2225,6 +2242,9 @@ fn execute_normalized_change(
     let mut prepared = base_view
         .prepare_authored_change(&normalized.semantic, normalized.options)
         .map_err(|mut errors| {
+            if let Ok(owners) = crate::platform::change::authored_source_owners(&base_view, &normalized.semantic) {
+                for error in &mut errors { normalized.origins.locate(error, &owners); }
+            }
             if let Some(result) = base_view.idempotent_result()
                 && errors.iter().any(|error| error.class == DiagnosticClass::Semantic)
             {
@@ -2236,6 +2256,11 @@ fn execute_normalized_change(
             }
             errors
         })?;
+    // Only user-authored labels are exported. Logical plans retain every allocated owner by
+    // domain/ordinal; private adapter symbols never become public request addressing syntax.
+    prepared
+        .allocated
+        .retain(|symbol, _| !normalized.origins.private.contains(symbol));
     if let Some(extraction) = &mut prepared.logical_plan.extraction {
         extraction.base_definition = Some(
             function_definition_digest_for_extraction(&base_view, extraction.function)

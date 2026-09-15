@@ -355,7 +355,9 @@ impl Default for ImpactAdmission {
             maximum_affected_owners: 10_000,
             maximum_summary_owners: 10_000,
             maximum_summary_edits: 10_000,
-            maximum_ownership_steps: 1_000_000,
+            // A public 1,024-deep expression chain traverses ownership during derivation and
+            // impact planning. One million rejects that admitted depth between those stages.
+            maximum_ownership_steps: 2_000_000,
             maximum_behavior_owners: 10_000,
             maximum_relation_edges: 100_000,
             maximum_relation_fanout: MAXIMUM_CHANGE_RELATION_FANOUT,

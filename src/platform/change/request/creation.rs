@@ -492,98 +492,116 @@ pub(super) fn collect_expression_symbols(
     expression: &AuthoredExpression,
     definitions: &mut SymbolDefinitions,
 ) -> Result<(), Diagnostic> {
-    if let Some(symbol) = &expression.symbol {
-        define_symbol(definitions, symbol, SymbolKind::Expression)?;
-    } else {
-        definitions.define_anonymous_identity()?;
+    enum Visit<'a> {
+        Expression(&'a AuthoredExpression, usize),
+        Binding(&'a str, SymbolKind),
     }
-    match &expression.operation {
-        AuthoredExpressionOperation::If {
-            condition,
-            when_true,
-            when_false,
-        } => {
-            collect_expression_symbols(condition, definitions)?;
-            collect_expression_symbols(when_true, definitions)?;
-            collect_expression_symbols(when_false, definitions)
-        }
-        AuthoredExpressionOperation::Let { bindings, body } => {
-            for binding in bindings {
-                define_symbol(definitions, &binding.symbol, SymbolKind::LexicalBinding)?;
-                collect_expression_symbols(&binding.value, definitions)?;
+    let mut stack = vec![Visit::Expression(expression, 1)];
+    while let Some(visit) = stack.pop() {
+        let (expression, depth) = match visit {
+            Visit::Binding(symbol, kind) => {
+                define_symbol(definitions, symbol, kind)?;
+                continue;
             }
-            collect_expression_symbols(body, definitions)
+            Visit::Expression(expression, depth) => (expression, depth),
+        };
+        if depth > crate::platform::kernel::contract::MAXIMUM_EXPRESSION_DEPTH {
+            return Err(request_error(
+                DiagnosticClass::Resource,
+                "change_authored_expression_depth",
+                "authored expression exceeds the maximum structural depth",
+            ));
         }
-        AuthoredExpressionOperation::Sequence { items }
-        | AuthoredExpressionOperation::List { items, .. } => {
-            collect_many_expression_symbols(items, definitions)
+        if let Some(symbol) = &expression.symbol {
+            define_symbol(definitions, symbol, SymbolKind::Expression)?;
+        } else {
+            definitions.define_anonymous_identity()?;
         }
-        AuthoredExpressionOperation::Call { arguments, .. }
-        | AuthoredExpressionOperation::CapabilityCall { arguments, .. } => {
-            collect_many_expression_symbols(arguments, definitions)
-        }
-        AuthoredExpressionOperation::Invoke { callee, arguments }
-        | AuthoredExpressionOperation::Bind { callee, arguments } => {
-            collect_expression_symbols(callee, definitions)?;
-            collect_many_expression_symbols(arguments, definitions)
-        }
-        AuthoredExpressionOperation::Record { fields, .. } => {
-            for field in fields {
-                collect_expression_symbols(&field.value, definitions)?;
+        let next = depth + 1;
+        // Reverse pushes preserve the original preorder and per-kind allocation ordinals.
+        match &expression.operation {
+            AuthoredExpressionOperation::If {
+                condition,
+                when_true,
+                when_false,
+            } => {
+                stack.push(Visit::Expression(when_false, next));
+                stack.push(Visit::Expression(when_true, next));
+                stack.push(Visit::Expression(condition, next));
             }
-            Ok(())
-        }
-        AuthoredExpressionOperation::Variant { payload, .. } => {
-            if let Some(payload) = payload {
-                collect_expression_symbols(payload, definitions)?;
-            }
-            Ok(())
-        }
-        AuthoredExpressionOperation::Field { value, .. } => {
-            collect_expression_symbols(value, definitions)
-        }
-        AuthoredExpressionOperation::Map { entries, .. } => {
-            for entry in entries {
-                collect_expression_symbols(&entry.key, definitions)?;
-                collect_expression_symbols(&entry.value, definitions)?;
-            }
-            Ok(())
-        }
-        AuthoredExpressionOperation::Match { value, arms } => {
-            collect_expression_symbols(value, definitions)?;
-            for arm in arms {
-                if let Some(binding) = &arm.payload_binding {
-                    define_symbol(
-                        definitions,
-                        &binding.symbol,
-                        SymbolKind::MatchPayloadBinding,
-                    )?;
+            AuthoredExpressionOperation::Let { bindings, body } => {
+                stack.push(Visit::Expression(body, next));
+                for binding in bindings.iter().rev() {
+                    stack.push(Visit::Expression(&binding.value, next));
+                    stack.push(Visit::Binding(&binding.symbol, SymbolKind::LexicalBinding));
                 }
-                collect_expression_symbols(&arm.body, definitions)?;
             }
-            Ok(())
+            AuthoredExpressionOperation::Sequence { items }
+            | AuthoredExpressionOperation::List { items, .. } => {
+                for expression in items.iter().rev() {
+                    stack.push(Visit::Expression(expression, next));
+                }
+            }
+            AuthoredExpressionOperation::Call { arguments, .. }
+            | AuthoredExpressionOperation::CapabilityCall { arguments, .. } => {
+                for expression in arguments.iter().rev() {
+                    stack.push(Visit::Expression(expression, next));
+                }
+            }
+            AuthoredExpressionOperation::Invoke { callee, arguments }
+            | AuthoredExpressionOperation::Bind { callee, arguments } => {
+                for expression in arguments.iter().rev() {
+                    stack.push(Visit::Expression(expression, next));
+                }
+                stack.push(Visit::Expression(callee, next));
+            }
+            AuthoredExpressionOperation::Record { fields, .. } => {
+                for field in fields.iter().rev() {
+                    stack.push(Visit::Expression(&field.value, next));
+                }
+            }
+            AuthoredExpressionOperation::Variant { payload, .. } => {
+                if let Some(payload) = payload {
+                    stack.push(Visit::Expression(payload, next));
+                }
+            }
+            AuthoredExpressionOperation::Field { value, .. } => {
+                stack.push(Visit::Expression(value, next))
+            }
+            AuthoredExpressionOperation::Map { entries, .. } => {
+                for entry in entries.iter().rev() {
+                    stack.push(Visit::Expression(&entry.value, next));
+                    stack.push(Visit::Expression(&entry.key, next));
+                }
+            }
+            AuthoredExpressionOperation::Match { value, arms } => {
+                for arm in arms.iter().rev() {
+                    stack.push(Visit::Expression(&arm.body, next));
+                    if let Some(binding) = &arm.payload_binding {
+                        stack.push(Visit::Binding(
+                            &binding.symbol,
+                            SymbolKind::MatchPayloadBinding,
+                        ));
+                    }
+                }
+                stack.push(Visit::Expression(value, next));
+            }
+            AuthoredExpressionOperation::Transaction { binding, body, .. } => {
+                stack.push(Visit::Expression(body, next));
+                stack.push(Visit::Binding(
+                    &binding.symbol,
+                    SymbolKind::TransactionBinding,
+                ));
+            }
+            AuthoredExpressionOperation::Unit {}
+            | AuthoredExpressionOperation::Bool { .. }
+            | AuthoredExpressionOperation::I64 { .. }
+            | AuthoredExpressionOperation::Text { .. }
+            | AuthoredExpressionOperation::StaticText { .. }
+            | AuthoredExpressionOperation::Local { .. }
+            | AuthoredExpressionOperation::Constant { .. }
+            | AuthoredExpressionOperation::FunctionValue { .. } => {}
         }
-        AuthoredExpressionOperation::Transaction { binding, body, .. } => {
-            define_symbol(definitions, &binding.symbol, SymbolKind::TransactionBinding)?;
-            collect_expression_symbols(body, definitions)
-        }
-        AuthoredExpressionOperation::Unit {}
-        | AuthoredExpressionOperation::Bool { .. }
-        | AuthoredExpressionOperation::I64 { .. }
-        | AuthoredExpressionOperation::Text { .. }
-        | AuthoredExpressionOperation::StaticText { .. }
-        | AuthoredExpressionOperation::Local { .. }
-        | AuthoredExpressionOperation::Constant { .. }
-        | AuthoredExpressionOperation::FunctionValue { .. } => Ok(()),
-    }
-}
-
-fn collect_many_expression_symbols(
-    expressions: &[AuthoredExpression],
-    definitions: &mut SymbolDefinitions,
-) -> Result<(), Diagnostic> {
-    for expression in expressions {
-        collect_expression_symbols(expression, definitions)?;
     }
     Ok(())
 }

@@ -1,0 +1,45 @@
+reference.owner as=$q-Queue package=$std class=declaration name=DurableQueue
+reference.owner as=$q-initialize package=$std class=operation parent=$q-Queue name=initialize
+reference.owner as=$q-enqueue package=$std class=operation parent=$q-Queue name=enqueue
+reference.owner as=$q-claim package=$std class=operation parent=$q-Queue name=claim
+reference.owner as=$q-lease-info package=$std class=operation parent=$q-Queue name=lease-info
+reference.owner as=$q-complete package=$std class=operation parent=$q-Queue name=complete
+reference.owner as=$q-bytes-from-text package=$std class=declaration name=bytes-from-text
+reference.owner as=$q-text-from-static package=$std class=declaration name=text-from-static
+reference.owner as=$q-finish-one package=$library class=declaration name=finish-one
+create.component as=$q-queue-component module=$module name=queue visibility=public
+add.requirement as=$q-jobs component=$q-queue-component name=jobs interface=$q-Queue
+requirement.operation parent=$q-jobs index=0 operation=$q-initialize
+requirement.operation parent=$q-jobs index=1 operation=$q-enqueue
+requirement.operation parent=$q-jobs index=2 operation=$q-claim
+requirement.operation parent=$q-jobs index=3 operation=$q-lease-info
+requirement.operation parent=$q-jobs index=4 operation=$q-complete
+requirement.limit parent=$q-jobs index=0 name=maximum_calls maximum=10 unit=calls
+expression.block as=$q-seed-body
+  (sequence
+    (capability-call $q-jobs $q-initialize)
+    (capability-call $q-jobs $q-enqueue
+      (call $q-text-from-static (static-text "job"))
+      (call $q-text-from-static (static-text "request"))
+      (call $q-bytes-from-text (call $q-text-from-static (static-text "payload")))
+      (i64 0)
+      (i64 0)))
+expression.end
+create.function as=$q-queue-seed module=$module name=queue-seed visibility=private result=bool effect=task body=$q-seed-body
+effect.requirement parent=$q-queue-seed index=0 requirement=$q-jobs
+expression.block as=$q-finish-body
+  (call $q-finish-one (requirements $q-jobs)
+    (call $q-text-from-static (static-text "worker"))
+    (i64 0)
+    (i64 10)
+    (call $q-bytes-from-text (call $q-text-from-static (static-text "done"))))
+expression.end
+create.function as=$q-queue-finish module=$module name=queue-finish visibility=private result=bool effect=task body=$q-finish-body
+effect.requirement parent=$q-queue-finish index=0 requirement=$q-jobs
+effect.row as=@Jobs
+effect.requirement parent=@Jobs index=0 requirement=$q-jobs
+type.task-function as=@QueueCommand result=bool effect=@Jobs
+add.port as=$q-queue-seed-port component=$q-queue-component name=queue-seed type=@QueueCommand function=$q-queue-seed
+create.target as=$q-queue-seed-target name=queue-seed component=$q-queue-component port=$q-queue-seed-port runner=command
+add.port as=$q-queue-finish-port component=$q-queue-component name=queue-finish type=@QueueCommand function=$q-queue-finish
+create.target as=$q-queue-finish-target name=queue-finish component=$q-queue-component port=$q-queue-finish-port runner=command

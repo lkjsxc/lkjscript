@@ -30,16 +30,7 @@ pub fn generated_documents() -> Result<Vec<GeneratedDocument>, String> {
         },
         GeneratedDocument {
             relative_path: "change-grammar.md",
-            bytes: registry_sections_markdown(
-                &snapshot,
-                "Compact change grammar",
-                &[
-                    RegistrySection::Change,
-                    RegistrySection::Type,
-                    RegistrySection::Expression,
-                ],
-            )?
-            .into_bytes(),
+            bytes: change_grammar_markdown(&snapshot)?.into_bytes(),
         },
         GeneratedDocument {
             relative_path: "function-definition.md",
@@ -147,6 +138,30 @@ fn diagnostics_markdown(snapshot: &CapabilitiesSnapshot) -> String {
     output
 }
 
+fn change_grammar_markdown(snapshot: &CapabilitiesSnapshot) -> Result<String, String> {
+    let mut output = generated_header(snapshot);
+    output.push_str("# Change request grammar\n\n");
+    output.push_str(
+        "Flat records and structural expression blocks lower into the same reviewed typed intent. A saved request is a proposal; the accepted meaning graph remains the program authority. Declarations, parameters, types, effects, requirements, dependencies and typed reference preludes keep their explicit records.\n\n",
+    );
+    output.push_str(
+        "With an ordinary reference/declaration prelude for `$add`, this block exports one expression root for `create.function ... body=$body` or `replace.body function=FUNCTION body=$body`:\n\n```text\nexpression.block as=$body\n  (let\n    (binding value (type i64) (i64 2))\n    (binding value (type i64) (call $add (local value) (i64 3)))\n    (in (local value)))\nexpression.end\n```\n\n",
+    );
+    output.push_str(
+        "The second initializer reads the earlier `value`; the body reads the new binding. Each occurrence and binder has distinct ownership. Only the root is exported, and it must be consumed exactly once. Nested nodes cannot be addressed by outer flat edges. All 22 structural forms, explicit application clauses, lexical rules and flat fields are advertised below. The [CLI contract](../spec/semantic-cli.md#structural-expression-bodies) explains framing, review and compatibility.\n\n",
+    );
+    append_registry_sections(
+        &mut output,
+        snapshot,
+        &[
+            RegistrySection::Change,
+            RegistrySection::Type,
+            RegistrySection::Expression,
+        ],
+    )?;
+    Ok(output)
+}
+
 fn registry_sections_markdown(
     snapshot: &CapabilitiesSnapshot,
     title: &str,
@@ -154,6 +169,15 @@ fn registry_sections_markdown(
 ) -> Result<String, String> {
     let mut output = generated_header(snapshot);
     let _ = writeln!(output, "# {title}\n");
+    append_registry_sections(&mut output, snapshot, sections)?;
+    Ok(output)
+}
+
+fn append_registry_sections(
+    output: &mut String,
+    snapshot: &CapabilitiesSnapshot,
+    sections: &[RegistrySection],
+) -> Result<(), String> {
     output.push_str(
         "The following compact records are the executable-owned current public capability.\n\n```text\n",
     );
@@ -169,7 +193,7 @@ fn registry_sections_markdown(
         })?);
     }
     output.push_str("```\n");
-    Ok(output)
+    Ok(())
 }
 
 fn builtin_standard_markdown(snapshot: &CapabilitiesSnapshot) -> Result<String, String> {

@@ -1,5 +1,7 @@
 //! Literal public requirement-parametric library with independent ordered-store observations.
 use super::*;
+#[path = "requirements_structural.rs"]
+mod structural;
 use lkjscript::platform::data::{DataKey, DataKeyPart, DataLimits, DataStore};
 use serde_json::{Value, json};
 
@@ -235,13 +237,20 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
     context.cli(None, &["capabilities", "--section", "change"], true)?;
     let mut producer = context.new_package("requirement-producer")?;
     context.stage(&producer, standard)?;
-    let accepted = context.apply(
+    let accepted = structural::apply(
+        context,
         &mut producer,
+        "producer",
+        &binding("add", standard),
         &format!(
-            "{}{}{}",
-            binding("add", standard),
+            "{}{}",
             include_str!("requirements.producer.lkjc"),
             include_str!("requirements.resource-library.lkjc")
+        ),
+        &format!(
+            "{}{}",
+            include_str!("requirements.producer.structural.lkjc"),
+            include_str!("requirements.resource-library.structural.lkjc")
         ),
     )?;
     let original_request = context
@@ -308,7 +317,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
         true,
     )?;
     let definition_before = context.receipt.commands.len();
-    context.cli(
+    let original_update = context.cli(
         Some(&producer.path),
         &[
             "inspect",
@@ -318,23 +327,38 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
             "--detail",
             "definition",
             "--limit",
-            "100",
+            "1000",
+            "--bytes",
+            "1048576",
         ],
         true,
     )?;
+    let factory_before = context.receipt.commands.len();
+    let original_factory = structural::inspect_factory(context, &producer)?;
     context.export(&mut producer)?;
     let mut consumer = context.new_package("requirement-consumer")?;
     context.stage(&consumer, standard)?;
     context.stage(&consumer, &producer)?;
-    context.apply(
+    structural::apply(
+        context,
         &mut consumer,
+        "consumer",
         &format!(
-            "{}{}{}{}{}{}",
+            "{}{}{}",
             binding("add", standard),
             binding("add", &producer),
             selection(&producer),
+        ),
+        &format!(
+            "{}{}{}",
             include_str!("requirements.consumer.lkjc"),
             include_str!("requirements.resource-consumer.lkjc"),
+            include_str!("requirements.unencodable.lkjc")
+        ),
+        &format!(
+            "{}{}{}",
+            include_str!("requirements.consumer.structural.lkjc"),
+            include_str!("requirements.resource-consumer.structural.lkjc"),
             include_str!("requirements.unencodable.lkjc")
         ),
     )?;
@@ -375,10 +399,27 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
         context.evidence.join("requirement-consumer.lkja"),
     )?;
     let original = producer.logical.clone();
-    context.apply(&mut producer, include_str!("requirements.stronger.lkjc"))?;
+    structural::apply(
+        context,
+        &mut producer,
+        "supplier",
+        "",
+        &format!(
+            "{}{}",
+            include_str!("requirements.stronger.lkjc"),
+            include_str!("requirements.update-body.flat.lkjc")
+        ),
+        &format!(
+            "{}{}",
+            include_str!("requirements.stronger.structural.lkjc"),
+            include_str!("requirements.update-body.structural.lkjc")
+        ),
+    )?;
+    let factory_after = context.receipt.commands.len();
+    let edited_factory = structural::inspect_factory(context, &producer)?;
     context.export(&mut producer)?;
     let definition_after = context.receipt.commands.len();
-    context.cli(
+    let edited_update = context.cli(
         Some(&producer.path),
         &[
             "inspect",
@@ -388,10 +429,37 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
             "--detail",
             "definition",
             "--limit",
-            "100",
+            "1000",
+            "--bytes",
+            "1048576",
         ],
         true,
     )?;
+    let supplier_plan = parse_records(
+        "requirement-supplier-review",
+        &process::read_bounded(
+            &context
+                .evidence
+                .join("requirement-supplier-structural.lkjplan"),
+            MAXIMUM_OUTPUT_BYTES,
+        )?,
+    )
+    .map_err(|_| DevError::corrupt("structural supplier review records"))?;
+    structural::validate_body_changes(
+        [&original_factory, &original_update],
+        [&edited_factory, &edited_update],
+        &supplier_plan,
+    )?;
+    let mut structural: Value =
+        serde_json::from_str(&context.receipt.observations["requirement_structural"])?;
+    structural["factory_before"] = json!(factory_before);
+    structural["factory_after"] = json!(factory_after);
+    structural["update_before"] = json!(definition_before);
+    structural["update_after"] = json!(definition_after);
+    context
+        .receipt
+        .observations
+        .insert("requirement_structural".into(), structural.to_string());
     require(
         producer.logical != original,
         "changed minimum constraint retained an old package interface identity",
@@ -531,8 +599,8 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
     expect_cell(&observations[11], 0, "direct", Some(json!(16)))?;
     expect_cell(&observations[11], 0, "trap-aux", None)?;
     expect_cell(&observations[11], 1, "aux", None)?;
-    expect_cell(&observations[12], 0, "direct", Some(json!(19)))?;
-    expect_cell(&observations[13], 1, "bound", Some(json!("a!!!")))?;
+    expect_cell(&observations[12], 0, "direct", Some(json!(22)))?;
+    expect_cell(&observations[13], 1, "bound", Some(json!("a!!!!")))?;
     // Reopening the owned recovery copy is a normal public recovery check, after execution no
     // longer has either authoring path. It must preserve the final accepted revision.
     context.cli(Some(&recovery), &["check"], true)?;
@@ -615,18 +683,19 @@ fn cases() -> [(&'static str, &'static str, &'static str, Option<Value>); 13] {
             "repaired.lkja",
             "number-direct",
             "[\"direct\"]",
-            Some(json!({"candidate":19,"primary_condition_matched":true})),
+            Some(json!({"candidate":22,"primary_condition_matched":true})),
         ),
         (
             "repaired.lkja",
             "text-bound",
             "[\"bound\"]",
-            Some(json!({"candidate":"a!!!","primary_condition_matched":true})),
+            Some(json!({"candidate":"a!!!!","primary_condition_matched":true})),
         ),
     ]
 }
 
 pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, DevError> {
+    structural::validate(receipt, root)?;
     let preflight: Value = serde_json::from_str(
         receipt
             .observations
@@ -836,8 +905,8 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
         (7, 1, "bound", json!("a!")),
         (8, 1, "bound", json!("a!!")),
         (9, 0, "aux", json!(41)),
-        (12, 0, "direct", json!(19)),
-        (13, 1, "bound", json!("a!!!")),
+        (12, 0, "direct", json!(22)),
+        (13, 1, "bound", json!("a!!!!")),
     ] {
         expect_cell(&rows[index], store, key, Some(value))?;
     }
@@ -889,7 +958,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
             } else if target == "seed-auxiliary" {
                 2
             } else if target.starts_with("text-") {
-                4
+                if artifact == "repaired.lkja" { 5 } else { 4 }
             } else {
                 3
             };

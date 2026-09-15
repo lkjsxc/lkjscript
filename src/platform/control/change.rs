@@ -1,6 +1,13 @@
 //! Closed compact-record adapter for normalized semantic changes.
 
+mod input;
+mod origins;
+mod preflight;
 mod references;
+mod structural;
+#[cfg(test)]
+mod structural_tests;
+pub(crate) use input::{MAXIMUM_STRUCTURAL_SYNTAX_NODES, MAXIMUM_STRUCTURAL_TOKENS};
 use references::ReferenceLookup;
 
 use super::{CompactField, CompactRecord, parse_records};
@@ -32,8 +39,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-19";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 19;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-20";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 20;
 pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-15";
 pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 15;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
@@ -2526,17 +2533,70 @@ pub(crate) struct NormalizedChangeRequest {
     pub semantic: AuthoredChangeSet,
     pub options: PublicationOptions,
     pub request_commitment: ChangeRequestCommitment,
+    pub origins: origins::InputOrigins,
 }
 
 pub(crate) fn decode_compact_change(
     path: &str,
     input: &[u8],
 ) -> Result<NormalizedChangeRequest, Vec<Diagnostic>> {
-    let records = parse_records(path, input)?;
-    let references = ReferenceLookup::decode(&records).map_err(|diagnostic| vec![diagnostic])?;
-    Decoder::new(records, references)
-        .decode()
-        .map_err(|diagnostic| vec![diagnostic])
+    let parsed = input::parse(path, input)?;
+    let mut origins = origins::InputOrigins::default();
+    for record in &parsed.records {
+        for field in &record.fields {
+            origins
+                .tokens
+                .entry(field.value.clone())
+                .or_insert_with(|| field.location.clone());
+            if matches!(field.name.as_str(), "as" | "binding") && field.value.starts_with('$') {
+                origins
+                    .symbols
+                    .insert(field.value.clone(), field.location.clone());
+            }
+        }
+    }
+    for (label, block) in &parsed.blocks {
+        origins
+            .symbols
+            .insert(label.clone(), block.syntax[block.root].location.clone());
+        for syntax in &block.syntax {
+            if let input::SyntaxKind::Atom {
+                value,
+                quoted: false,
+            } = &syntax.kind
+            {
+                origins
+                    .tokens
+                    .entry(value.clone())
+                    .or_insert_with(|| syntax.location.clone());
+            }
+        }
+    }
+    let references =
+        ReferenceLookup::decode(&parsed.records).map_err(|diagnostic| vec![diagnostic])?;
+    let mut symbols = structural::PrivateSymbols::new(parsed.public_labels, &parsed.records)
+        .map_err(|error| vec![error])?;
+    let mut blocks = BTreeMap::new();
+    for (label, block) in parsed.blocks {
+        blocks.insert(
+            label.clone(),
+            structural::layout(block, &label, &mut symbols).map_err(|error| vec![error])?,
+        );
+    }
+    let mut decoder = Decoder::new(parsed.records, references);
+    decoder.blocks = blocks;
+    origins.private.extend(symbols.locations.keys().cloned());
+    origins.symbols.extend(symbols.locations);
+    match decoder.decode() {
+        Ok(mut decoded) => {
+            decoded.origins = origins;
+            Ok(decoded)
+        }
+        Err(mut diagnostic) => {
+            origins.locate(&mut diagnostic, &BTreeMap::new());
+            Err(vec![diagnostic])
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -2568,7 +2628,10 @@ struct Decoder {
     changes: Vec<(&'static CompactChangeOperationDescriptor, CompactRecord)>,
     type_cache: BTreeMap<String, AuthoredType>,
     type_stack: BTreeSet<String>,
-    expression_stack: BTreeSet<String>,
+    blocks: BTreeMap<String, structural::Body>,
+    expression_ready: BTreeMap<String, AuthoredExpression>,
+    type_sizes: BTreeMap<String, usize>,
+    expanded_type_work: usize,
     expression_uses: BTreeMap<String, usize>,
 }
 
@@ -2590,7 +2653,10 @@ impl Decoder {
             changes: Vec::new(),
             type_cache: BTreeMap::new(),
             type_stack: BTreeSet::new(),
-            expression_stack: BTreeSet::new(),
+            blocks: BTreeMap::new(),
+            expression_ready: BTreeMap::new(),
+            type_sizes: BTreeMap::new(),
+            expanded_type_work: 0,
             expression_uses: BTreeMap::new(),
         }
     }
@@ -2755,9 +2821,15 @@ impl Decoder {
         let base = parse_field::<RevisionId>(&request, "base")?;
         let idempotency_key = optional(&request, "idempotency").map(str::to_owned);
         let intent = optional(&request, "intent").map(str::to_owned);
+        let expression_order = self.preflight()?;
         let type_labels = self.types.keys().cloned().collect::<Vec<_>>();
         for label in type_labels {
-            let _ = self.decode_type(&label)?;
+            let _ = self.decode_type(&label).map_err(|mut error| {
+                if error.location.is_none() {
+                    error.location = self.types.get(&label).map(|record| record.location.clone());
+                }
+                error
+            })?;
         }
         if self.changes.is_empty() {
             return Err(record_error(
@@ -2767,6 +2839,19 @@ impl Decoder {
             ));
         }
 
+        for symbol in expression_order {
+            let expression = self.decode_expression_node(&symbol).map_err(|mut error| {
+                if error.location.is_none() {
+                    error.location = self
+                        .expressions
+                        .get(&symbol)
+                        .map(|record| record.location.clone());
+                }
+                error
+            })?;
+            self.expression_ready.insert(symbol, expression);
+        }
+
         let preconditions = self
             .preconditions
             .iter()
@@ -2774,7 +2859,15 @@ impl Decoder {
             .collect::<Result<Vec<_>, _>>()?;
         let mut changes = Vec::with_capacity(self.changes.len());
         for (descriptor, record) in std::mem::take(&mut self.changes) {
-            changes.push(self.decode_change(descriptor, &record)?);
+            changes.push(
+                self.decode_change(descriptor, &record)
+                    .map_err(|mut error| {
+                        if error.location.is_none() {
+                            error.location = Some(record.location.clone());
+                        }
+                        error
+                    })?,
+            );
         }
         for (symbol, uses) in &self.expression_uses {
             if *uses == 0 {
@@ -3396,6 +3489,14 @@ impl Decoder {
                 format!("effect row {reference} is not defined"),
             ));
         }
+        let row_nodes = self.effect_row_size(reference);
+        self.admit_expanded_input(row_nodes).map_err(|mut error| {
+            error.location = self
+                .effect_rows
+                .get(reference)
+                .map(|record| record.location.clone());
+            error
+        })?;
         let requirements = self
             .ordered_record_edges("effect.requirement", reference)?
             .iter()
@@ -3433,6 +3534,42 @@ impl Decoder {
     }
 
     fn decode_type(&mut self, reference: &str) -> Result<AuthoredType, Diagnostic> {
+        let size = self.type_sizes.get(reference).copied().unwrap_or(1);
+        self.admit_expanded_input(size)?;
+        self.decode_type_admitted(reference)
+    }
+
+    fn admit_expanded_input(&mut self, size: usize) -> Result<(), Diagnostic> {
+        self.expanded_type_work = self.expanded_type_work.checked_add(size).ok_or_else(|| {
+            Diagnostic::new(
+                DiagnosticClass::Resource,
+                "change_input_type_capacity",
+                "expanded input type accounting overflowed",
+            )
+        })?;
+        if self.expanded_type_work > preflight::MAXIMUM_EXPANDED_INPUT_TYPE_NODES {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Resource,
+                "change_input_type_capacity",
+                "complete change input exceeds its expanded type/effect adapter capacity",
+            ));
+        }
+        Ok(())
+    }
+
+    fn effect_row_size(&self, reference: &str) -> usize {
+        1 + ["effect.requirement", "effect.parameter"]
+            .into_iter()
+            .map(|operation| {
+                self.record_edges
+                    .get(operation)
+                    .and_then(|parents| parents.get(reference))
+                    .map_or(0, Vec::len)
+            })
+            .sum::<usize>()
+    }
+
+    fn decode_type_admitted(&mut self, reference: &str) -> Result<AuthoredType, Diagnostic> {
         let primitive = match reference {
             "unit" => Some(AuthoredType::Unit {}),
             "bool" => Some(AuthoredType::Bool {}),
@@ -3585,8 +3722,18 @@ impl Decoder {
             }
         };
         self.type_stack.remove(reference);
+        self.admit_expanded_input(self.type_sizes.get(reference).copied().unwrap_or(1))?;
         self.type_cache.insert(reference.to_owned(), ty.clone());
         Ok(ty)
+    }
+
+    fn decode_type_field(&mut self, field: &CompactField) -> Result<AuthoredType, Diagnostic> {
+        self.decode_type(&field.value).map_err(|mut error| {
+            if error.location.is_none() {
+                error.location = Some(field.location.clone());
+            }
+            error
+        })
     }
 
     fn decode_expression(&mut self, symbol: &str) -> Result<AuthoredExpression, Diagnostic> {
@@ -3595,13 +3742,6 @@ impl Decoder {
                 DiagnosticClass::Source,
                 "change_expression_reference",
                 format!("expression reference '{symbol}' must be a $ symbol"),
-            ));
-        }
-        if !self.expression_stack.insert(symbol.to_owned()) {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Semantic,
-                "change_expression_cycle",
-                format!("expression definition cycle reaches '{symbol}'"),
             ));
         }
         let record = self.expressions.get(symbol).cloned().ok_or_else(|| {
@@ -3619,6 +3759,31 @@ impl Decoder {
             )
         })?;
         *uses = uses.saturating_add(1);
+        self.expression_ready.remove(symbol).ok_or_else(|| record_error(&record,
+            "change_expression_shared", format!("expression '{symbol}' is referenced more than once; expression definitions form one owned tree")))
+    }
+
+    fn decode_expression_node(&mut self, symbol: &str) -> Result<AuthoredExpression, Diagnostic> {
+        let record = self.expressions.get(symbol).cloned().ok_or_else(|| {
+            Diagnostic::new(
+                DiagnosticClass::Infrastructure,
+                "change_expression_inventory",
+                "expression definition is absent after preflight",
+            )
+        })?;
+        if record.operation == "expression.block" {
+            return self
+                .blocks
+                .remove(symbol)
+                .ok_or_else(|| {
+                    Diagnostic::new(
+                        DiagnosticClass::Infrastructure,
+                        "change_block_inventory",
+                        "block body is absent after framing",
+                    )
+                })?
+                .lower(self);
+        }
         let operation = match record.operation.as_str() {
             "expression.unit" => {
                 check_fields(&record, &["as"])?;
@@ -3872,7 +4037,6 @@ impl Decoder {
                 ));
             }
         };
-        self.expression_stack.remove(symbol);
         Ok(AuthoredExpression {
             symbol: Some(symbol.to_owned()),
             operation,
@@ -4021,6 +4185,7 @@ pub(crate) fn normalize_change_request(
         semantic,
         options,
         request_commitment,
+        origins: Default::default(),
     })
 }
 
@@ -4840,6 +5005,18 @@ mod tests {
 
     #[test]
     fn legacy_named_reference_baseline_goldens() {
+        fn original_budget_request(path: &str, input: &[u8]) -> NormalizedChangeRequest {
+            let decoded = decode_compact_change(path, input).unwrap();
+            assert_eq!(
+                decoded.semantic.budget.impact.maximum_ownership_steps,
+                2_000_000
+            );
+            let mut semantic = decoded.semantic;
+            // Preserve the frozen predecessor's declared budget as well as its byte/identity
+            // goldens. The public default now admits the existing 1,024-depth boundary.
+            semantic.budget.impact.maximum_ownership_steps = 1_000_000;
+            normalize_change_request(semantic, decoded.options).unwrap()
+        }
         let temporary = tempfile::tempdir().unwrap();
         let mut logical = crate::platform::kernel::tests::witness_snapshot();
         // This golden binds authentic predecessor request/base bytes, not a successor root.
@@ -4886,7 +5063,7 @@ mod tests {
                 "request base={} idempotency=legacy-reference-baseline\nexpression.i64 as=$body value=42\ncreate.function as=$new module={selector} name=legacy_reference_golden visibility=private result=i64 effect=pure body=$body\n",
                 created.current.head.revision,
             );
-            let request = decode_compact_change("legacy.lkjc", input.as_bytes()).unwrap();
+            let request = original_budget_request("legacy.lkjc", input.as_bytes());
             let bytes = crate::platform::change::canonical_authored_intent_bytes(&request.semantic)
                 .unwrap();
             let prepared = created
@@ -4906,7 +5083,7 @@ mod tests {
             "request base={} idempotency=legacy-qualified-baseline\nexpression.unit as=$body\nreplace.body function=first/callee body=$body\n",
             created.current.head.revision
         );
-        let request = decode_compact_change("qualified.lkjc", input.as_bytes()).unwrap();
+        let request = original_budget_request("qualified.lkjc", input.as_bytes());
         let bytes =
             crate::platform::change::canonical_authored_intent_bytes(&request.semantic).unwrap();
         let prepared = created

@@ -1247,6 +1247,20 @@ pub(crate) fn canonical_authored_budget_bytes(budget: ChangeBudget) -> Result<Ve
     codec::encode_budget(budget)
 }
 
+/// Descriptive source-map support. This uses the same allocation owner as lowering and grants
+/// neither admission nor publication authority; callers use it only to locate failed proposals.
+pub(crate) fn authored_source_owners<B: CanonicalBaseRead + ?Sized>(
+    base: &B,
+    request: &AuthoredChangeSet,
+) -> Result<BTreeMap<String, OwnerKey>, Diagnostic> {
+    let (definitions, _) = collect_symbol_definitions(
+        request,
+        request.budget.authored.maximum_allocated_identities,
+    )?;
+    let bytes = codec::encode_authored_intent(request, &definitions)?;
+    allocate_symbols(&allocation_seed(base, &bytes)?, &definitions)
+}
+
 fn allocation_seed<B: CanonicalBaseRead + ?Sized>(
     base: &B,
     request_bytes: &[u8],

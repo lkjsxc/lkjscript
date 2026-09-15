@@ -9,8 +9,8 @@ mod recovery;
 use installation::Acquisition;
 
 const PAIR_SCHEMA: &str = "lkjscript-transferred-pair";
-const PAIR_VERSION: u32 = 2;
-const POLICY: &str = "static-installed-pair-cleared-environment-private-state-2";
+const PAIR_VERSION: u32 = 3;
+const POLICY: &str = "static-installed-pair-cleared-environment-private-state-3";
 
 #[derive(Clone, Debug)]
 struct PairOptions {

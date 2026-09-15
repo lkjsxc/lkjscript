@@ -1,6 +1,100 @@
 //! Source-bound falsification of an actual completed target admission, through its frozen reader.
 use super::*;
 
+// Faults touch authenticated originals only while the reader runs. Restore every remembered
+// file on ordinary exits and assertion unwinding, including failures before a reader starts.
+struct OriginalFiles(BTreeMap<PathBuf, Vec<u8>>);
+
+impl OriginalFiles {
+    fn remember(&mut self, path: &Path, bytes: &[u8]) {
+        if let Some(original) = self.0.get(path) {
+            assert_eq!(original, bytes, "fault reused an unrestored original");
+        } else {
+            self.0.insert(path.to_path_buf(), bytes.to_vec());
+        }
+    }
+
+    fn restore(&self) -> std::io::Result<()> {
+        let mut failure = None;
+        for (path, bytes) in &self.0 {
+            if let Err(error) = fs::write(path, bytes) {
+                failure = Some(error);
+            }
+        }
+        failure.map_or(Ok(()), Err)
+    }
+}
+
+impl Drop for OriginalFiles {
+    fn drop(&mut self) {
+        if let Err(error) = self.restore() {
+            eprintln!("failed to restore owned admission originals: {error}");
+        }
+    }
+}
+
+fn rebind_offline_file(child: &mut Value, root: &Path, name: &str) {
+    let proof = serde_json::to_value(
+        evidence::proof(&root.join(name), name.to_owned()).expect("recomputed retained file proof"),
+    )
+    .expect("file proof JSON");
+    *child["files"]
+        .as_array_mut()
+        .expect("offline file inventory")
+        .iter_mut()
+        .find(|file| file["path"] == name)
+        .expect("retained fault file belongs to original inventory") = proof.clone();
+    for command in child["commands"].as_array_mut().expect("offline commands") {
+        for stream in ["stdout", "stderr"] {
+            if command["observation"][stream]["path"] == name {
+                command["observation"][stream] = proof.clone();
+            }
+        }
+    }
+}
+
+fn replace_record_field(input: &str, operation: &str, field: &str, value: &str) -> String {
+    let mut records =
+        parse_records("owned-receipt-fault", input.as_bytes()).expect("original public records");
+    let record = records
+        .iter_mut()
+        .find(|record| record.operation == operation)
+        .expect("independent required public record");
+    record
+        .fields
+        .iter_mut()
+        .find(|item| item.name == field)
+        .expect("independent required public field")
+        .value = value.to_owned();
+    records
+        .iter()
+        .map(|record| {
+            let fields = record
+                .fields
+                .iter()
+                .map(|item| (item.name.as_str(), item.value.as_str()))
+                .collect::<Vec<_>>();
+            lkjscript::platform::control::render_record(&record.operation, &fields)
+                .expect("canonical hostile public record")
+        })
+        .collect()
+}
+
+#[test]
+fn receipt_fault_originals_restore_on_assertion_unwind() {
+    let root = tempfile::tempdir().expect("owned restoration fixture");
+    let path = root.path().join("receipt.json");
+    fs::write(&path, b"original\n").expect("write restoration original");
+    let result = std::panic::catch_unwind(|| {
+        let mut originals = OriginalFiles(BTreeMap::new());
+        originals.remember(&path, b"original\n");
+        fs::write(&path, b"fault\n").expect("write owned fault");
+        panic!("deliberate failure before explicit restoration");
+    });
+    assert!(result.is_err());
+    assert_eq!(fs::read(&path).expect("restored original"), b"original\n");
+}
+
 #[test]
 #[ignore = "requires LKJSCRIPT_NOMINAL_ADMISSION_FIXTURE from fresh exact target admission"]
 fn live_nominal_receipt_omissions_reject_at_target_admission() {
@@ -11,6 +105,8 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
     assert!(root.is_absolute());
     let path = root.join("receipt.json");
     let original = process::read_bounded(&path, MAXIMUM_RECEIPT_BYTES).expect("actual receipt");
+    let mut originals = OriginalFiles(BTreeMap::new());
+    originals.remember(&path, &original);
     let baseline: TargetAdmissionReceipt =
         serde_json::from_slice(&original).expect("typed receipt");
     let scratch = tempfile::Builder::new()
@@ -72,7 +168,9 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
         )
         .expect("write owned aggregate");
         let rejected = invoke();
-        fs::write(&path, &original).expect("restore aggregate before assertion");
+        originals
+            .restore()
+            .expect("restore originals before assertion");
         assert_eq!(rejected.0, ProcessStatus::Failed, "missing oracle {name}");
         results.push(
             serde_json::json!({"fault":format!("omit-oracle/{name}"),"rejection":rejected.1}),
@@ -150,6 +248,7 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
                 "/observations/requirement_predecessor",
                 "/observations/requirement_queue",
                 "/observations/requirement_unencodable",
+                "/observations/requirement_structural",
                 "/observations/requirement_reject_arity",
                 "/observations/requirement_reject_scope",
                 "/observations/requirement_reject_minimum-operation",
@@ -176,6 +275,7 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
         let child_path = root.join(role.name()).join("receipt.json");
         let child_original = process::read_bounded(&child_path, MAXIMUM_RECEIPT_BYTES)
             .expect("bounded actual child receipt");
+        originals.remember(&child_path, &child_original);
         let child: Value = serde_json::from_slice(&child_original).expect("child JSON");
         for pointer in pointers {
             let mut fault = child.clone();
@@ -212,8 +312,9 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
             )
             .expect("write rebound aggregate");
             let rejected = invoke();
-            fs::write(&child_path, &child_original).expect("restore child before assertion");
-            fs::write(&path, &original).expect("restore aggregate before assertion");
+            originals
+                .restore()
+                .expect("restore originals before assertion");
             assert_eq!(
                 rejected.0,
                 ProcessStatus::Failed,
@@ -227,6 +328,243 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
             child_original
         );
     }
+    // Nested structural evidence is stored as a string in the existing observation map. Decode
+    // that string before changing each required discriminant; rebinding all containing hashes
+    // forces the frozen owner to judge the evidence rather than reject an old outer checksum.
+    let child_root = root.join(Oracle::OfflinePackages.name());
+    let child_path = child_root.join("receipt.json");
+    let child_original = process::read_bounded(&child_path, MAXIMUM_RECEIPT_BYTES)
+        .expect("restored offline receipt");
+    originals.remember(&child_path, &child_original);
+    let child: Value = serde_json::from_slice(&child_original).expect("offline JSON");
+    let structural: Value = serde_json::from_str(
+        child["observations"]["requirement_structural"]
+            .as_str()
+            .expect("structural observation string"),
+    )
+    .expect("nested structural observation");
+    let update_before = structural["update_before"]
+        .as_u64()
+        .and_then(|n| usize::try_from(n).ok())
+        .expect("original update inspection");
+    let update_after = structural["update_after"]
+        .as_u64()
+        .and_then(|n| usize::try_from(n).ok())
+        .expect("edited update inspection");
+    let before_name = format!("command-{update_before:04}.stdout");
+    let after_name = format!("command-{update_after:04}.stdout");
+    for name in [
+        "requirement-consumer-structural.lkjplan",
+        "requirement-supplier-structural.lkjplan",
+        &before_name,
+        &after_name,
+    ] {
+        let bytes = process::read_bounded(&child_root.join(name), MAXIMUM_RECEIPT_BYTES)
+            .expect("original retained structural bytes");
+        originals.remember(&child_root.join(name), &bytes);
+    }
+    let mut structural_fault = |fault: Value, label: &str, reason: Option<&str>| {
+        fs::write(
+            &child_path,
+            crate::offline_packages::encode_transferred_test_fixture(fault)
+                .expect("canonical structural evidence fault"),
+        )
+        .expect("write owned child fault");
+        let mut aggregate = baseline.clone();
+        aggregate
+            .oracles
+            .iter_mut()
+            .find(|item| item.name == Oracle::OfflinePackages.admission_name())
+            .expect("offline aggregate owner")
+            .receipt = external_evidence(&child_path).expect("rebound child proof");
+        fs::write(
+            &path,
+            evidence::encode_json(&aggregate).expect("canonical rebound aggregate"),
+        )
+        .expect("write aggregate fault");
+        let rejected = invoke();
+        originals
+            .restore()
+            .expect("restore all originals before fault assertion");
+        assert_eq!(
+            rejected.0,
+            ProcessStatus::Failed,
+            "structural fault {label}"
+        );
+        if let Some(reason) = reason {
+            assert!(
+                rejected.1.contains(reason),
+                "structural fault {label} rejected outside its intended owner: {}",
+                rejected.1
+            );
+        }
+        results.push(serde_json::json!({"role":"offline-packages","fault":label,
+            "recomputed_outer_hash":true,"rejection":rejected.1}));
+    };
+    for pointer in [
+        "/producer/commands",
+        "/producer/revision",
+        "/consumer/commands",
+        "/consumer/revision",
+        "/supplier/commands",
+        "/supplier/revision",
+        "/factory_before",
+        "/factory_after",
+        "/update_before",
+        "/update_after",
+    ] {
+        let mut observation = structural.clone();
+        *observation
+            .pointer_mut(pointer)
+            .expect("required nested structural field") = Value::Null;
+        let mut fault = child.clone();
+        fault["observations"]["requirement_structural"] = Value::String(observation.to_string());
+        structural_fault(fault, &format!("structural/omit{pointer}"), None);
+    }
+    let mut observation = structural.clone();
+    observation["producer"]["commands"] = structural["consumer"]["commands"].clone();
+    let mut fault = child.clone();
+    fault["observations"]["requirement_structural"] = Value::String(observation.to_string());
+    structural_fault(
+        fault,
+        "structural/foreign-producer-commands",
+        Some("plan changed executable"),
+    );
+
+    let mut observation = structural.clone();
+    observation["supplier"]["commands"]
+        .as_array_mut()
+        .expect("supplier commands")
+        .swap(0, 1);
+    let mut fault = child.clone();
+    fault["observations"]["requirement_structural"] = Value::String(observation.to_string());
+    structural_fault(
+        fault,
+        "structural/reordered-supplier-plans",
+        Some("plans/apply missing or reordered"),
+    );
+
+    let apply_index = structural["supplier"]["commands"][2]
+        .as_u64()
+        .and_then(|n| usize::try_from(n).ok())
+        .expect("supplier apply command");
+    let mut fault = child.clone();
+    *fault["commands"][apply_index]["command"]
+        .as_array_mut()
+        .expect("supplier command arguments")
+        .last_mut()
+        .expect("apply token") = serde_json::json!("foreign");
+    structural_fault(
+        fault,
+        "structural/foreign-flat-plan-token",
+        Some("did not consume the equivalent flat plan token"),
+    );
+
+    let name = "requirement-consumer-structural.lkjplan";
+    fs::write(
+        child_root.join(name),
+        process::read_bounded(
+            &child_root.join("requirement-producer-flat.lkjplan"),
+            MAXIMUM_RECEIPT_BYTES,
+        )
+        .expect("valid foreign review bytes"),
+    )
+    .expect("substitute one valid review");
+    let mut fault = child.clone();
+    rebind_offline_file(&mut fault, &child_root, name);
+    structural_fault(
+        fault,
+        "structural/foreign-valid-review",
+        Some("token is not bound to the strict reviewed bytes"),
+    );
+
+    let name = "requirement-supplier-structural.lkjplan";
+    let input = fs::read_to_string(child_root.join(name)).expect("restored supplier review");
+    let mut removed = false;
+    let shortened = input
+        .lines()
+        .filter(|line| {
+            if !removed && line.starts_with("logical-plan.retirement ") {
+                removed = true;
+                false
+            } else {
+                true
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    assert!(removed, "supplier review must retire replaced body owners");
+    fs::write(child_root.join(name), shortened).expect("omit one reviewed retirement");
+    let mut fault = child.clone();
+    rebind_offline_file(&mut fault, &child_root, name);
+    structural_fault(
+        fault,
+        "structural/omitted-reviewed-retirement",
+        Some("logical plan"),
+    );
+
+    let before =
+        fs::read_to_string(child_root.join(&before_name)).expect("original update definition");
+    let altered = replace_record_field(
+        &before,
+        "definition.expression",
+        "id",
+        "expr_ffffffffffffffffffffffffffffff",
+    );
+    assert_ne!(before, altered, "counterfeit owner must change observation");
+    fs::write(child_root.join(&before_name), altered).expect("counterfeit old body owner");
+    let mut fault = child.clone();
+    rebind_offline_file(&mut fault, &child_root, &before_name);
+    structural_fault(
+        fault,
+        "structural/unretired-former-body-owner",
+        Some("omitted retirement of a former body owner"),
+    );
+
+    let after = fs::read_to_string(child_root.join(&after_name)).expect("edited update definition");
+    let records = parse_records("edited-definition", after.as_bytes()).expect("public definition");
+    let duplicate = records
+        .iter()
+        .filter(|record| record.operation == "definition.expression")
+        .nth(1)
+        .expect("second edited expression")
+        .fields
+        .iter()
+        .find(|field| field.name == "id")
+        .expect("expression identity")
+        .value
+        .clone();
+    fs::write(
+        child_root.join(&after_name),
+        replace_record_field(&after, "definition.expression", "id", &duplicate),
+    )
+    .expect("duplicate an edited body owner");
+    let mut fault = child.clone();
+    rebind_offline_file(&mut fault, &child_root, &after_name);
+    structural_fault(
+        fault,
+        "structural/duplicate-edited-body-owner",
+        Some("duplicates an expression or binding identity"),
+    );
+
+    let after =
+        fs::read_to_string(child_root.join(&after_name)).expect("restored edited definition");
+    let revision = structural["producer"]["revision"]
+        .as_str()
+        .expect("original producer revision");
+    let altered = replace_record_field(&after, "definition.header", "revision", revision);
+    let altered = replace_record_field(&altered, "revision", "observed", revision);
+    fs::write(child_root.join(&after_name), altered)
+        .expect("substitute an earlier inspection revision");
+    let mut fault = child.clone();
+    rebind_offline_file(&mut fault, &child_root, &after_name);
+    structural_fault(
+        fault,
+        "structural/foreign-inspection-revision",
+        Some("inspection changed function identity, accepted revision"),
+    );
+
     assert_eq!(
         invoke().0,
         ProcessStatus::Passed,
@@ -238,7 +576,7 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
     );
     assert_eq!(
         results.len(),
-        89,
+        108,
         "complete nominal, recursive, and requirement target fault inventory"
     );
     scratch.close().expect("owned log cleanup");

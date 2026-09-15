@@ -19,7 +19,8 @@ unchanged result. The predecessor registry-named cache spelling and removed cont
 reject without aliases.
 `--generate-docs DIR` and `--verify-generated DIR` are the sole generated-document owner.
 
-The public operation set is closed: `capabilities`, `new`, top-level operational `data`, `status`,
+The public operation set is closed: `capabilities`, `new`, top-level operational `data`, native
+installation `runtime`, `status`,
 `inspect`, `query`, `change`, normalized built-in `package`, `check`, `build`, `run`, and
 artifact-runtime `serve` and `worker`.
 An unknown command or option returns `cli_usage`. There is no universal namespace, compatibility
@@ -296,9 +297,119 @@ Compact change records support `pure` and exact-requirement `task` function effe
 dependency-closed stateful slice includes `add.requirement`, `set.function-contract`, structural
 record types, lexical bindings, structural and nominal record construction/projection, typed lists,
 variants and matches, exact built-in calls, requirement-scoped capability calls, and lexical data
-transactions. Nested shapes use ordered flat fragment records and explicit parent/index
-edges. Request-local labels are notation only; normalized authored intent owns stable allocation
-and request commitment.
+transactions. Nested shapes may use ordered flat fragment records with explicit parent/index
+edges, or structural expression bodies. Request-local labels are notation only; normalized authored
+intent owns stable allocation and request commitment.
+
+### Structural expression bodies
+
+A change request may define an expression root with one block:
+
+```text
+expression.block as=$body
+  (let
+    (binding value (type i64) (i64 2))
+    (binding value (type i64) (call $add (local value) (i64 3)))
+    (in (local value)))
+expression.end
+```
+
+With its ordinary declaration/reference prelude, `create.function ... body=$body` or
+`replace.body function=FUNCTION body=$body` attaches this root. Both `change plan` and `change apply`
+accept blocks through the same input and input-file path. A saved request does not change meaning
+until reviewed publication succeeds. The definition projection remains descriptive output and is
+not accepted as request input.
+
+The header has exactly the `as` field. The body has exactly one parenthesized expression over one
+or more physical lines. `expression.end` is an otherwise empty standalone line, with surrounding
+whitespace allowed. Stray or missing markers, nested headers, duplicate roots, extra header fields,
+a second body expression, trailing tokens and an incomplete expression at the closing marker
+reject. Marker spelling inside a quoted string is literal text. Outside blocks, the existing
+compact-record framing, escaping and error behavior apply; compact responses remain strictly flat.
+
+Inside a block, ASCII whitespace separates atoms and parentheses delimit expressions and syntax
+wrappers. `;` begins a comment ending at the physical newline outside strings. Text and static-text
+literals require double quotes and use compact escapes, including Unicode validation. Unescaped
+physical newlines or control characters in strings reject. Names use the existing portable `Name`
+rules without quoted identifiers. Typed selectors, type references and effect rows keep their
+existing spellings and exact resolution. There are no bare literals, arithmetic precedence,
+implicit applications or function-name lookup.
+
+`capabilities --section change` advertises all 22 structural forms as `change.expression-syntax`
+records and their framing, scope, ownership and application rules. The generated
+[change grammar](../generated/change-grammar.md) retains the same executable-owned inventory.
+Direct calls and function values accept zero or one each of `(types TYPE...)`, `(effects ROW...)`
+and `(requirements REQUIREMENT...)`, in that order before value arguments. Omitted and explicit
+empty clauses both mean an empty vector, without inference. Duplicate, unknown, misplaced or
+out-of-order clauses reject. Nominal record and variant construction accept only the optional
+`(types TYPE...)` clause. Concrete requirements and `parameter:$R` remain distinct. Existing
+owners decide arity, constraints, visibility, empty-sequence validity, field uniqueness,
+exhaustiveness and affine eligibility.
+
+`(local NAME)` selects the nearest binding in the current block's lexical environment. It never
+falls back to a public label or an exact identity. `(local $parameter)` uses ordinary typed public
+reference resolution. `(local (exact LOCAL_SELECTOR))` explicitly selects an accepted `param_...`
+or `bind_...` identity, subject to the existing kind and scope checks. A bare name resembling one
+of those identities is still a lexical name. Structural field projection uses `(field EXPR (name
+NAME))`; `(field EXPR FIELD)` selects a nominal member.
+
+Lets permit sequential and nested shadowing. Each initializer resolves before its new binder is
+introduced, so a same-named earlier binding is available during that initializer. Every binder has
+a distinct identity, and leaving the scope restores the enclosing binding. Unbound self or forward
+locals reject. Match payload names exist only in their own arm body; a transaction binding exists
+only in its body and retains an absent type annotation. No cross-block capture or implicit closure
+is introduced. Public parameter, function, type, row and requirement aliases may still be declared
+later in the whole request. Complete validation includes unused bindings and untaken branches.
+
+A block exports only one ordinary request-local expression root. An outer change or a genuine flat
+parent may consume it exactly once. Unused or multiply consumed roots reject. Nested expressions
+and binders remain private even when user labels resemble generated symbol spellings. Outer
+argument/type/binding/field/arm or other edge records cannot extend a block root or reach private
+children. A block cannot splice a separately defined flat expression into its interior. Each
+syntactic occurrence owns a distinct expression; only let provides evaluated-once reuse. Authored
+field, map-entry, argument and sequence order, callee-before-arguments order, lazy branches,
+explicit substitutions and lexical transaction meaning are preserved.
+
+Both notations lower into `AuthoredChangeSet` and use the same complete candidate validation,
+logical planning, token checks and atomic publication. For the same normalized authored tree,
+base, operations, references, Names, annotations, budgets and publication options, flat and block
+input produce identical canonical intent, request commitments and prepared candidates. A plan
+from one notation can be applied with the other under the same executable. Comments, formatting,
+empty application clauses and local label spelling do not alter the normalized inputs. Changed
+literals, semantic Names, order, selectors or applications keep their commitment differences.
+An exact-addressed flat graph may select an earlier binder after shadowing; bare structural names
+select the nearest binder. The flat notation remains available for that exact editing.
+
+Body replacement preserves the function declaration and unchanged value/type/effect/requirement
+parameter owners. Replaced expression and binding owners follow the existing retirement rules.
+A malformed or invalid block rejects its entire request without advancing `HEAD`; stale or changed
+plans, cancellation, idempotent retries and historical-current repair retain their existing rules.
+The structural input addition changes compact-change revision 19 to 20 and leaves authored codec
+15, Graph 15, TypeObject 10, compiler 11/bytecode 7 and Artifact 19 unchanged. Old flat inputs remain
+supported; older executables reject new block syntax before any write. Review tokens remain bound
+to their executable's capabilities and verifier.
+
+Complete input remains bounded at 4 MiB. Outer flat-record bounds remain in force. Structural
+token admission is 2,560,000 across all blocks, derived from the existing 10,000-record by 256-field
+format dimensions. Each parenthesis and atom costs one token. Syntax admission is 1,000,000 nodes
+across blocks, counting list wrappers and atoms. Resulting expression/binder/public identities keep
+the existing 100,000-identity authored default. Complete expanded type/effect input, cache and copy work
+is separately bounded at 1,000,000 nodes. The public request's impact ownership-step default is
+2,000,000 (hard ceiling 10,000,000). A 1,024-deep expression chain exhausted the former 1,000,000
+default between derivation and impact planning; the revised default admits that same useful
+boundary. It changes the default review budget commitment, not canonical meaning or identities.
+Change processing uses a joined worker with a 64 MiB stack for the already bounded recursive
+semantic owners; framing, mixed-depth preflight and symbol collection are iterative. This keeps
+the declared depth usable in debug and production builds. Checked charges precede growth. Physical line count is
+not structural node admission, and budgets do not reset for each block. The authored identity
+allowance remains unchanged.
+
+Combined normalized expression depth, including flat ancestors around block roots, is admitted
+before recursive construction; the root has depth one and syntax wrapper lists add no semantic
+expression depth. The expression/type depth limits remain 1,024/256. These are finite preparation
+limits, not additional language meaning. Syntax and representative reference, type, scope and capacity
+diagnostics retain original input path, byte, line and column locations, with downstream owner/path
+context where useful.
 
 ### Reviewed named references
 

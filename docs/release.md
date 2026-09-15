@@ -92,11 +92,14 @@ Cleanup is complete. Archived-context rereading did not replay applications. The
 observations are superseded by this delivery, without rewriting their failed history or frozen inputs.
 Requirement-parameter source `104654edf866d8f5531555b0aa0731fd496d72a8` has
 passed fresh full/static-target/89-omission acceptance and normal main integration. Version 0.1.36
-remains untagged. Its additional release is deferred
-at most through acceptance of the next selected substantive composition/authoring campaign. At the
-first architectural reassessment after acceptance, select that concrete combined milestone or
-publish this capability alone; do not renew the deferral. The [roadmap](roadmap.md) owns the trigger.
-No next campaign is selected by this record.
+remains untagged. The [structural-authoring campaign](campaigns/202609150900.md) consumes its single
+substantive-campaign deferral and selects combined v0.1.36 publication at acceptance. The current
+source adds compact-change 20 without another graph/artifact generation transition. The installed
+exact/latest route lifecycle must freshly author and replace a structural body, retaining literal
+requests, reviewed identity continuity and the independently expected 42-to-43 result. Pair schema 3
+binds this evidence through the existing five-owner aggregate; target admission retains six owners.
+Full, target, rehearsal, integration, immutable publication and anonymous admission for this source
+remain pending. The [roadmap](roadmap.md) owns the delivery trigger; it cannot be deferred again.
 
 Immutable `v0.1.31`, release `386791231`, remains a retained recursive-data predecessor from
 `7ea9c99a31ecd0e5317129d2bd81ab4f8f51e02e`, with its original readers and assets unchanged.

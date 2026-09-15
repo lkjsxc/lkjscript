@@ -77,20 +77,24 @@ The [requirement-parameter campaign](campaigns/202609140938.md) implements the s
 library mechanism and honest typed-cell `UpdateAttempt<T>` workload. No earlier implementation was
 found or replaced. Final source `104654edf866d8f5531555b0aa0731fd496d72a8` passed 26 fresh full
 gates, both pinned userlands, six target owners and 89 omission faults, and is normally integrated.
-Source version 0.1.36 remains untagged. Its one-campaign
-release deferral begins at this acceptance; the trigger is acceptance of the next selected substantive
-composition/authoring campaign, with at most that one campaign of deferral. At the first architectural
-reassessment, select that concrete combined milestone or publish this capability alone. No next
-campaign has been selected, and this deferral cannot be renewed.
+The [structural-authoring campaign](campaigns/202609150900.md) is the selected substantive campaign
+and consumes that single deferral. Acceptance must publish the combined v0.1.36 milestone; if an
+independent structural blocker prevents acceptance, publish the accepted requirement capability
+alone and retain the structural blocker. This deferral cannot be renewed.
 
 The literal producer uses 145 nonempty lines, 41 expression definitions and 20 expression argument
 edges; the consumer uses 273, 88 and 63 respectively. This establishes flat assembly friction, not
-authoring time, model tokens or billing. A structural request-block adapter is a contingent candidate
-against those actual requests, not an authorized parser redesign. The producer owns operations and
+authoring time, model tokens or billing. The implemented structural request-block adapter reduces
+those literal inputs to 107 and 182 nonempty lines respectively, with two and eleven exported roots
+and no per-occurrence labels or indexed expression edges in their bodies. Explicit declaration,
+reference, type, effect, constraint and dependency preludes remain. The producer owns operations and
 its lexical transaction across caller-owned requirements; minimum sets preserve the whole supplied
 requirement. Its ordinary `UpdateAttempt<T>` cannot certify publication after arbitrary effectful
-callbacks. An observable transaction outcome or general affine transfer needs a later concrete
-blocked library and separate authority. The witness is designed composition, not existing adoption;
+callbacks: a true primary condition with no transaction publication is already observed. Evaluate a
+concrete committed-update API against this outcome after combined delivery; consider structural
+declarations or editable projections only after observing the remaining prelude/edit burden.
+General affine transfer needs a caller policy requiring ownership across a library boundary.
+These are hypotheses requiring separate authority. The witness is designed composition, not existing adoption;
 standard/`lkjournal` changes maintain compatibility. Large historical-repository revalidation cost
 remains unmeasured. This outlook is revisable and authorizes no subsequent feature work.
 

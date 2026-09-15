@@ -615,18 +615,22 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
     ) {
         match self.infer(root, context, 0) {
             Ok(actual) if actual == expected => {}
-            Ok(actual) => self.error(
-                "kernel_type_root",
-                format!(
-                    "{label} {} expects {} but its root has {}",
-                    context
-                        .declaration
-                        .map(|id| id.to_string())
-                        .unwrap_or_else(|| "expression scope".into()),
-                    self.describe_type(expected),
-                    self.describe_type(actual)
-                ),
-            ),
+            Ok(actual) => {
+                let mut error = type_error(
+                    "kernel_type_root",
+                    format!(
+                        "{label} {} expects {} but its root has {}",
+                        context
+                            .declaration
+                            .map(|id| id.to_string())
+                            .unwrap_or_else(|| "expression scope".into()),
+                        self.describe_type(expected),
+                        self.describe_type(actual)
+                    ),
+                );
+                error.notes.push(format!("expression owner: {root}"));
+                self.push_diagnostic(error);
+            }
             Err(diagnostic) => self.push_diagnostic(diagnostic),
         }
     }
@@ -651,6 +655,25 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
     }
 
     fn infer(
+        &mut self,
+        expression: ExpressionId,
+        context: &ExecutionContext,
+        depth: usize,
+    ) -> Result<TypeObjectDigest, Diagnostic> {
+        self.infer_at(expression, context, depth)
+            .map_err(|mut error| {
+                if !error
+                    .notes
+                    .iter()
+                    .any(|note| note.starts_with("expression owner: "))
+                {
+                    error.notes.push(format!("expression owner: {expression}"));
+                }
+                error
+            })
+    }
+
+    fn infer_at(
         &mut self,
         expression: ExpressionId,
         context: &ExecutionContext,

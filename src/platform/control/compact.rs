@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 pub const MAXIMUM_COMPACT_INPUT_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_COMPACT_RECORDS: usize = 10_000;
 const MAXIMUM_COMPACT_RECORD_BYTES: usize = 64 * 1_024;
-const MAXIMUM_COMPACT_FIELDS: usize = 256;
+pub(super) const MAXIMUM_COMPACT_FIELDS: usize = 256;
 const MAXIMUM_COMPACT_NAME_BYTES: usize = 64;
 const MAXIMUM_COMPACT_VALUE_BYTES: usize = 1_048_576;
 
@@ -539,7 +539,7 @@ fn parse_bare(
     Ok((line[start..cursor].to_owned(), cursor))
 }
 
-fn parse_quoted(
+pub(super) fn parse_quoted(
     path: &str,
     complete: &[u8],
     line: &str,

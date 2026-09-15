@@ -1,0 +1,57 @@
+reference.package as=$std source=builtin
+reference.owner as=$DataStore package=$std class=declaration name=DataStore
+reference.owner as=$get package=$std class=operation parent=$DataStore name=get
+reference.owner as=$put package=$std class=operation parent=$DataStore name=put
+reference.owner as=$transaction package=$std class=operation parent=$DataStore name=transaction
+reference.owner as=$schema-read package=$std class=operation parent=$DataStore name=schema-read
+reference.owner as=$module package=local class=module name=typed-cells
+reference.owner as=$update package=local class=declaration parent=$module name=attempt-update
+reference.owner as=$factory package=local class=declaration parent=$module name=make-cell-updater
+reference.owner as=$R package=local class=requirement-parameter parent=$update name=R
+reference.owner as=$factory-R package=local class=requirement-parameter parent=$factory name=R
+set.requirement-parameter as=%update-constraint parameter=$R interface=$DataStore
+requirement-parameter.operation parent=%update-constraint index=0 operation=$get
+requirement-parameter.operation parent=%update-constraint index=1 operation=$put
+requirement-parameter.operation parent=%update-constraint index=2 operation=$transaction
+requirement-parameter.operation parent=%update-constraint index=3 operation=$schema-read
+set.requirement-parameter as=%factory-constraint parameter=$factory-R interface=$DataStore
+requirement-parameter.operation parent=%factory-constraint index=0 operation=$get
+requirement-parameter.operation parent=%factory-constraint index=1 operation=$put
+requirement-parameter.operation parent=%factory-constraint index=2 operation=$transaction
+requirement-parameter.operation parent=%factory-constraint index=3 operation=$schema-read
+reference.owner as=$factory-T package=local class=type-parameter parent=$factory name=T
+reference.owner as=$factory-E package=local class=effect-parameter parent=$factory name=E
+reference.owner as=$factory-space package=local class=parameter parent=$factory name=space
+reference.owner as=$factory-default package=local class=parameter parent=$factory name=default
+reference.owner as=$factory-transform package=local class=parameter parent=$factory name=transform
+reference.owner as=$Attempt package=local class=declaration parent=$module name=UpdateAttempt
+reference.owner as=$DataKeyPart package=$std class=declaration name=DataKeyPart
+type.parameter as=@T parameter=$factory-T
+type.application as=@Attempt declaration=$Attempt
+type.argument parent=@Attempt index=0 type=@T
+type.named as=@KeyPart declaration=$DataKeyPart
+type.list as=@Key item=@KeyPart
+effect.row as=@E
+effect.parameter parent=@E index=0 parameter=$factory-E
+effect.row as=@UpdateRow
+effect.parameter parent=@UpdateRow index=0 parameter=$factory-E
+effect.requirement parent=@UpdateRow index=0 requirement=parameter:$factory-R
+type.task-function as=@Transform result=@T effect=@E
+type.argument parent=@Transform index=0 type=@T
+type.task-function as=@Update result=@Attempt effect=@UpdateRow
+type.argument parent=@Update index=0 type=static-text
+type.argument parent=@Update index=1 type=@T
+type.argument parent=@Update index=2 type=@Transform
+type.argument parent=@Update index=3 type=@Key
+expression.block as=$new-factory-body
+  (let
+    (binding selected-function (type @Update)
+      (function-value $update
+        (types @T) (effects @E) (requirements parameter:$factory-R)))
+    (in
+      (bind (local selected-function)
+        (local $factory-space)
+        (local $factory-default)
+        (local $factory-transform))))
+expression.end
+replace.body function=$factory body=$new-factory-body

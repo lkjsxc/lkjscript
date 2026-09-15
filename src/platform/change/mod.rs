@@ -40,6 +40,7 @@ pub use budget::{
     StagingBudgetWork, TestAdmission, TestBudgetWork, ValidationAdmission, ValidationBudgetWork,
     WitnessReadAdmission, WitnessUpdateAdmission, WitnessUpdateWork,
 };
+pub(crate) use budget::{MAXIMUM_CHANGE_ALLOCATED_IDENTITIES, MAXIMUM_CHANGE_AUTHORED_TYPE_NODES};
 pub use delta::{CanonicalDelta, CanonicalNormalization, ExactEdit, PrimitiveEdit};
 pub use derived::{DerivedDelta, DerivedValueEdit, RelationDelta, derive_local_delta};
 pub use impact::{
@@ -75,7 +76,9 @@ pub use request::{
     ResolvedOwnerReference, ResolvedReferenceBindings, ResolvedReferencePackage,
     lower_authored_changes,
 };
-pub(crate) use request::{canonical_authored_budget_bytes, canonical_authored_intent_bytes};
+pub(crate) use request::{
+    authored_source_owners, canonical_authored_budget_bytes, canonical_authored_intent_bytes,
+};
 pub use summary_delta::{
     OwnerSummaryEdit, SummaryDelta, derive_summary_delta, derive_summary_delta_for,
 };
