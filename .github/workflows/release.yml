@@ -1200,6 +1200,14 @@ jobs:
             ${{ runner.temp }}/public-verification/pair/receipt.json
             ${{ runner.temp }}/public-verification/pair/exact/lifecycle.json
             ${{ runner.temp }}/public-verification/pair/latest/lifecycle.json
+            ${{ runner.temp }}/public-verification/pair/exact/create.lkjc
+            ${{ runner.temp }}/public-verification/pair/exact/create.logical-plan
+            ${{ runner.temp }}/public-verification/pair/exact/replace.lkjc
+            ${{ runner.temp }}/public-verification/pair/exact/replace.logical-plan
+            ${{ runner.temp }}/public-verification/pair/latest/create.lkjc
+            ${{ runner.temp }}/public-verification/pair/latest/create.logical-plan
+            ${{ runner.temp }}/public-verification/pair/latest/replace.lkjc
+            ${{ runner.temp }}/public-verification/pair/latest/replace.logical-plan
             ${{ runner.temp }}/public-verification/pair/*/*.log
             ${{ runner.temp }}/public-verification/pair/*/artifact.lkja
             ${{ runner.temp }}/public-verification/pair/*/extracted/*
