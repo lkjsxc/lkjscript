@@ -129,8 +129,19 @@ stack overflow and subsequent impact-budget exhaustion were repaired without red
 limit: public changes join a 64 MiB worker and the default ownership-step allowance is now 2,000,000
 (formerly 1,000,000; explicit old budgets retain their commitments). Literal structural cell/queue
 requests passed transported execution and substantial supplier edits against independent flat
-references. Full, target, integration, publication and anonymous acceptance for this source are
-pending; the campaign records exact proof and delivery revisions separately. The combined release
+references. Frozen source `eea968b910ac62c3feab95a8896fff1a91904a17` passed all 26 fresh full
+gates with zero reuse, both pinned static userlands, six target owners and 108 original-reader
+omission/tamper cases. Its deterministic dry-run package passes strict admission. The maintained
+standard/lkjournal meaning and artifact equality gates pass without semantic-asset changes.
+Earlier failed full attempts remain failures: two expectation/policy mismatches, an installation
+lock-release defect, and a local compiler SIGKILL associated with the observed memory ceiling.
+The narrow lock correction and one-job compilation recovery are recorded in the campaign.
+The local installed pair also passes both 19-command routes and one five-owner suite with cleanup;
+each route authors 42 and replaces its body to return 43 while retaining its signature owners.
+All 107 pair-reader faults reject as required and the restored originals pass the product reader.
+Source `eea968b9` was normally fast-forwarded to main on 2026-09-15. Hosted rehearsal
+`34918782215/1`, immutable publication and anonymous acceptance remain pending; the campaign records
+exact proof and delivery revisions separately. The combined release
 deferral cannot be renewed.
 
 The typed meaning graph is the sole current editable program authority. A project root contains a strict

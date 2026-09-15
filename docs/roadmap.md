@@ -81,6 +81,12 @@ The [structural-authoring campaign](campaigns/202609150900.md) is the selected s
 and consumes that single deferral. Acceptance must publish the combined v0.1.36 milestone; if an
 independent structural blocker prevents acceptance, publish the accepted requirement capability
 alone and retain the structural blocker. This deferral cannot be renewed.
+Frozen combined source `eea968b910ac62c3feab95a8896fff1a91904a17` now passes 26 fresh full
+gates, both pinned userlands, six target owners, 108 original-reader faults and deterministic
+dry-run package admission. The local installed pair passes both routes and one five-owner suite.
+All 107 pair-reader faults reject and restored originals pass. The exact accepted source is normally
+integrated into main. Exact-source hosted rehearsal `34918782215/1`, immutable publication and
+anonymous public acceptance remain delivery gates; this does not renew the consumed deferral.
 
 The literal producer uses 145 nonempty lines, 41 expression definitions and 20 expression argument
 edges; the consumer uses 273, 88 and 63 respectively. This establishes flat assembly friction, not

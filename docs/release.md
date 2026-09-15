@@ -98,8 +98,17 @@ source adds compact-change 20 without another graph/artifact generation transiti
 exact/latest route lifecycle must freshly author and replace a structural body, retaining literal
 requests, reviewed identity continuity and the independently expected 42-to-43 result. Pair schema 3
 binds this evidence through the existing five-owner aggregate; target admission retains six owners.
-Full, target, rehearsal, integration, immutable publication and anonymous admission for this source
-remain pending. The [roadmap](roadmap.md) owns the delivery trigger; it cannot be deferred again.
+Frozen combined source `eea968b910ac62c3feab95a8896fff1a91904a17` passes 26 fresh full gates,
+both pinned static userlands, all six target owners and 108 original-reader omission/tamper cases.
+Its deterministic dry-run package passes strict admission. The local installed pair passes both
+19-command routes, two-version recovery and one five-owner suite with cleanup. All 107 pair-reader
+faults reject and restored originals pass. The accepted source was normally integrated into main
+on 2026-09-15; reporting descendants do not retarget it. Read-only rehearsal
+`34918782215/1` selects that exact source; hosted fresh full and exact static admission passed,
+and package preparation is running at the recorded work boundary. Complete hosted acceptance,
+immutable publication and anonymous admission remain pending. Failed/cancelled predecessors and
+the local memory-related compiler failure remain in the campaign record. The
+[roadmap](roadmap.md) owns the delivery trigger; it cannot be deferred again.
 
 Immutable `v0.1.31`, release `386791231`, remains a retained recursive-data predecessor from
 `7ea9c99a31ecd0e5317129d2bd81ab4f8f51e02e`, with its original readers and assets unchanged.
