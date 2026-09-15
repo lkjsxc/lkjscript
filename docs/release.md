@@ -90,25 +90,14 @@ package, six-target, simulated-pair and anonymous-public-pair readers pass. Publ
 binds independently admitted exact/latest routes and one fresh five-owner suite within the pair.
 Cleanup is complete. Archived-context rereading did not replay applications. The preceding pending
 observations are superseded by this delivery, without rewriting their failed history or frozen inputs.
-Requirement-parameter source `104654edf866d8f5531555b0aa0731fd496d72a8` has
-passed fresh full/static-target/89-omission acceptance and normal main integration. Version 0.1.36
-remains untagged. The [structural-authoring campaign](campaigns/202609150900.md) consumes its single
-substantive-campaign deferral and selects combined v0.1.36 publication at acceptance. The current
-source adds compact-change 20 without another graph/artifact generation transition. The installed
-exact/latest route lifecycle must freshly author and replace a structural body, retaining literal
-requests, reviewed identity continuity and the independently expected 42-to-43 result. Pair schema 3
-binds this evidence through the existing five-owner aggregate; target admission retains six owners.
-Frozen combined source `eea968b910ac62c3feab95a8896fff1a91904a17` passes 26 fresh full gates,
-both pinned static userlands, all six target owners and 108 original-reader omission/tamper cases.
-Its deterministic dry-run package passes strict admission. The local installed pair passes both
-19-command routes, two-version recovery and one five-owner suite with cleanup. All 107 pair-reader
-faults reject and restored originals pass. The accepted source was normally integrated into main
-on 2026-09-15; reporting descendants do not retarget it. Read-only rehearsal
-`34918782215/1` selects that exact source; hosted fresh full and exact static admission passed,
-and package preparation is running at the recorded work boundary. Complete hosted acceptance,
-immutable publication and anonymous admission remain pending. Failed/cancelled predecessors and
-the local memory-related compiler failure remain in the campaign record. The
-[roadmap](roadmap.md) owns the delivery trigger; it cannot be deferred again.
+The [structural-authoring campaign](campaigns/202609150900.md) consumed the accepted requirement
+library's single-campaign deferral. Combined source `eea968b910ac62c3feab95a8896fff1a91904a17`
+is normally integrated and frozen. The [delivery continuation](campaigns/202609151412.md) admits
+successful rehearsal `34918782215/1` through its authenticated originals and matching readers.
+Annotated v0.1.36 object `a8cacb9c574005079a7532e4f9e7d140c51ccc40` selects that source;
+tag-push publisher `34933268953/1` owns the remaining fresh publication and anonymous acceptance
+gates. The [current delivery summary](status.md#combined-release-delivery) records their disposition.
+Later documentation and guidance commits do not retarget this release source.
 
 Immutable `v0.1.31`, release `386791231`, remains a retained recursive-data predecessor from
 `7ea9c99a31ecd0e5317129d2bd81ab4f8f51e02e`, with its original readers and assets unchanged.
@@ -454,6 +443,10 @@ is active. Later accepted development or reporting commits may follow that sourc
 clone with its own `.git` directory when necessary; select the accepted release source as HEAD
 without rewinding main. Create and push only the annotated tag:
 
+Prepare useful release notes in an owned file before creating the tag. Describe the shipped
+capability and compatibility boundaries; do not claim pending public acceptance has passed.
+The publisher uses this exact annotation as the immutable release notes.
+
 ```sh
 git fetch --prune origin
 release_source=$(git rev-parse --verify 'HEAD^{commit}')
@@ -464,7 +457,7 @@ release_tag="v$(cargo metadata --locked --no-deps --format-version 1 |
   jq -er '.packages[] | select(.name == "lkjscript") | .version')"
 test -z "$(git ls-remote --tags origin "refs/tags/$release_tag" "refs/tags/$release_tag^{}")"
 gh release view "$release_tag" --repo lkjsxc/lkjscript && exit 1 || true
-git tag -a "$release_tag" -m "lkjscript $release_tag"
+git tag -a "$release_tag" -F /absolute/path/release-notes.txt
 test "$(git cat-file -t "refs/tags/$release_tag")" = tag
 tag_object_sha=$(git rev-parse "refs/tags/$release_tag")
 test "$(git rev-parse "refs/tags/$release_tag^{}")" = "$(git rev-parse HEAD)"
@@ -499,8 +492,10 @@ one `release transferred pair-run --acquisition anonymous` in mandatory release 
 downloaded scripts execute with the real downloader and each acquires its embedded exact-tag archive;
 there are no URL overrides or acquisition fixtures in public proof. Rust independently admits each strict
 archive and static executable into a create-new extraction, compares complete archive/checksum/
-installer/manifest/executable bytes and admitted modes, and runs the documented capabilities/new/status/check/
-build/run lifecycle through each installed pinned executable with independently expected typed text `"hello"`.
+installer/manifest/executable bytes and admitted modes. Each installed pinned executable freshly
+advertises structural syntax, authors a body returning 42, and replaces it to return 43 through
+reviewed changes while preserving the declaration and unchanged parameter owners. Each route also
+checks, builds and runs the original template with independently expected typed text `"hello"`.
 A final status confirms the accepted revision remains healthy. Each route has a private project and
 supervised cleanup. The pair then freshly executes the existing five-owner suite once against exact,
 with boundary `exact-download`. Latest binds that actual aggregate within this invocation; it does

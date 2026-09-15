@@ -1,8 +1,26 @@
 # Current status
 
-Status date: 2026-09-14 UTC. This file describes implemented checkout reality. Executable-derived
+Status date: 2026-09-15 UTC. This file describes implemented checkout reality. Executable-derived
 public guides live under [generated](generated), including the
 [operation guide](generated/operations.md); this file does not duplicate them.
+
+## Combined release delivery
+
+The [structural predecessor](campaigns/202609150900.md) and
+[delivery continuation](campaigns/202609151412.md) preserve the implementation and original proof.
+Frozen product source is `eea968b910ac62c3feab95a8896fff1a91904a17`. Rehearsal `34918782215/1`
+completed successfully at 03:38:14Z. Its five authenticated original ZIPs are retained; verifier,
+strict package, six-target and installed-pair readers passed under the archived context. Original
+preparation binds the retained full receipt's 26 fresh gates and zero reuse. This is authenticated
+evidence rereading, with simulated acquisition; no local application replay was performed.
+
+Annotated v0.1.36 object `a8cacb9c574005079a7532e4f9e7d140c51ccc40` was pushed at 05:34 UTC
+with useful release notes and the exact existing selector binding. Publisher `34933268953/1`
+selects that source. At 05:40 UTC its identity preflight had passed and its host-verifier build
+was running; the fresh source/target/package and later gates remained pending. Immutable publication and anonymous
+exact/latest acceptance remain incomplete. v0.1.35 remains the accepted public product. Resume the
+owning run, retain and admit its original publisher/public evidence, then advance public claims.
+The consumed delivery deferral cannot be renewed; later reporting commits preserve frozen inputs.
 
 ## Current authority and maintained consumers
 
@@ -139,10 +157,8 @@ The narrow lock correction and one-job compilation recovery are recorded in the 
 The local installed pair also passes both 19-command routes and one five-owner suite with cleanup;
 each route authors 42 and replaces its body to return 43 while retaining its signature owners.
 All 107 pair-reader faults reject as required and the restored originals pass the product reader.
-Source `eea968b9` was normally fast-forwarded to main on 2026-09-15. Hosted rehearsal
-`34918782215/1`, immutable publication and anonymous acceptance remain pending; the campaign records
-exact proof and delivery revisions separately. The combined release
-deferral cannot be renewed.
+Source `eea968b9` was normally fast-forwarded to main on 2026-09-15. Its remaining delivery is
+tracked in the [combined release summary](#combined-release-delivery).
 
 The typed meaning graph is the sole current editable program authority. A project root contains a strict
 `GraphRepository`: `HEAD`, immutable packs, an object catalog, optional exact package transports,
@@ -252,8 +268,15 @@ revalidation is reported out of band; earlier results are not relabelled as fres
 
 ## Public binary release
 
-[`v0.1.32`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.32) is the current supported immutable
-release, ID `387465958`, published at 2026-09-12T05:28:53Z. Annotated tag
+The current supported immutable release is
+[`v0.1.35`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.35), release `388511109`,
+from source `4306ef64783462a8dda48f2a855a88482d1faec8`. Its publication and anonymous installed
+acceptance are closed. The [combined release summary](#combined-release-delivery) tracks v0.1.36.
+
+### Earlier effect-library publication
+
+Immutable [`v0.1.32`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.32), release
+`387465958`, was published at 2026-09-12T05:28:53Z. Annotated tag
 `562aadb5ac17a2f9009a1d99174ffd1f82e8b3cf` selects source
 `67baaf0b081842e0e2e3745e8d5503e22cc791e4`. Its 21,915,904-byte static-musl executable has SHA-256
 `863f337769a594a1961921f24bd278e23fbe52a689403f2c56b21986dce537ad`.
@@ -359,7 +382,8 @@ release, or assets. Its structured evidence remains in
 
 The supported immutable public release is `0.1.35`, from frozen source `4306ef64`.
 It includes task iteration, foreground commands, installation, named references and finite callable
-admission. Requirement-parameter source `0.1.36` has the separate bounded release trigger above.
+admission. Accepted requirement-parameter and structural-authoring source `0.1.36` is now in the
+combined publication lane described above.
 The product retains the exact-requirement-bound affine
 handoff, identity-preserving extraction, incremental catalog, graph-owned structured sessions, and
 adds signature-indexed inbound HTTP path captures, code-complete offline package composition,

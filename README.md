@@ -6,7 +6,7 @@ mutable locators; stable typed identities preserve continuity. Source text, comp
 indexes, compiler caches, artifacts, deployment descriptors, and runtime handles are projections
 or consumers rather than alternate program truths.
 
-The supported v0.1.32 executable provides offline command, signature-indexed inbound HTTP, structured
+The supported v0.1.35 executable provides offline command, signature-indexed inbound HTTP, structured
 interactive WebSocket, deployment-bound outbound HTTPS, and reviewed stateful HTTP application
 lifecycles through one copied binary. They create typed meaning graph projects, inspect and change
 accepted meaning, run graph-owned tests, build deterministic artifact bundles, and execute through
@@ -14,20 +14,21 @@ the standalone deployment boundary without Cargo, a checkout, or an application 
 stateful workflow uses a deployment-selected first-party local data root and durable queue; no
 product or public verification path provisions PostgreSQL.
 
-Immutable `v0.1.32` adds ordinary effect-polymorphic task libraries, retained callbacks and recursive
-nominal payload composition. Its independent exact/latest downloads passed both small lifecycles
-and the bound public suite. The [delivery reconciliation](docs/campaigns/202609121214.md) binds
-the source, target, immutable publication and both download boundaries.
+Immutable `v0.1.35` includes effect-polymorphic task libraries, retained callbacks, recursive
+nominal payloads, native runtime installation, typed named references and finite generic callable
+admission. Its anonymous exact/latest installed lifecycles and bound public suite passed.
+The [delivery reconciliation](docs/campaigns/202609140938.md)
+and [release procedure](docs/release.md) retain its publication and original-reader evidence.
 
-Current source adds foreground artifact commands and selects their combined release with task
-iteration. `run --deployment PATH` runs a pure or task Command entry once, using exact operator
+The published product includes foreground artifact commands and task iteration.
+`run --deployment PATH` runs a pure or task Command entry once, using exact operator
 grants, and closes its owned work before success. Omitted command policies mean no cumulative
 instruction/allocation/collection/capability-call quota and no implicit deadline. Structural,
 codec, adapter and per-grant limits remain enforced. Project `run TARGET` remains a bounded pure
 differential route. See the [foreground campaign](docs/campaigns/202609121842.md) for delivery status.
 
 The supported release selects exact source commit
-`67baaf0b081842e0e2e3745e8d5503e22cc791e4`. The release includes public exact
+`4306ef64783462a8dda48f2a855a88482d1faec8`. The release includes public exact
 built-in dependency, component, requirement, function-backed port, and command/HTTP/interactive
 target authoring. Product 0.1.21 replaces a universal HTTP target port with stable graph-owned exact
 method/path route owners and retains the exact relational `interactive` target whose graph-owned
@@ -100,7 +101,7 @@ runtime environments; unconstrained parameters, secrets, streams, and resources 
 capture-safe subset. The capture-safe cutover used Graph 12 while preserving monomorphic TypeObject
 10 bytes and persisted typed-data layouts; the nominal cutover advances graph admission to Graph 13
 and retains the maintained application's semantic owners.
-The supported v0.1.32 release extends that foundation with explicit effect parameters, authority-free task
+The v0.1.32 release extended that foundation with explicit effect parameters, authority-free task
 function values and graph-owned `task-fold-left` / `task-map`. A pure factory can return a bound task
 callback; an offline generic library invokes it under the consumer's exact allowance and checked
 grants. Graph 14 adds a distinct task-callable envelope while preserving unchanged pure/type/data
@@ -111,9 +112,15 @@ Source version 0.1.36 adds explicit requirement parameters: an ordinary transpor
 perform constrained operations and own a transaction through caller-supplied exact requirements.
 Minimum operation sets preserve the supplied whole requirement and confer no deployment grant.
 The typed-cell witness returns an `UpdateAttempt<T>` describing its candidate and primary condition;
-a normal return is not a transaction publication certificate. This source capability has a bounded
-release deferral; see its [campaign and proof](docs/campaigns/202609140938.md) and
+a normal return is not a transaction publication certificate. See its
+[campaign and proof](docs/campaigns/202609140938.md) and
 [language contract](docs/spec/language.md#explicit-requirement-parameters).
+
+The accepted v0.1.36 source also supports nested structural expression bodies, lexical bindings,
+explicit T/E/R applications and reviewed body replacement that preserves signature owners.
+Flat requests remain supported. The combined release has entered publication; its
+[delivery continuation](docs/campaigns/202609151412.md) tracks the remaining publisher and
+anonymous installed-product gates. The supported download below is v0.1.35 until those gates pass.
 
 The [capture-safe evidence](docs/evidence/202609091625-capture-safe-generics.json) records the current
 generic factory, graph-owned function-constant, exact offline closure, negative constraints, and
@@ -269,7 +276,7 @@ Keep the previous executable and immutable bundles for recovery; no operational 
 
 ### HTTP application from the public binary
 
-The immutable v0.1.32 download above exposes this complete workflow from the same copied executable:
+The supported download above exposes this complete workflow from the same copied executable:
 
 ```sh
 mkdir -p /tmp/lkjscript-http-demo
@@ -308,7 +315,7 @@ the operating-system-selected loopback address. `SIGINT` performs bounded gracef
 
 ### Nostr relay information from the public binary
 
-The immutable v0.1.32 download can create the complete closed NIP-11 information slice:
+The supported download can create the complete closed NIP-11 information slice:
 
 ```sh
 mkdir -p /tmp/lkjscript-relay-info-demo
@@ -337,7 +344,7 @@ normative [outbound client contract](docs/spec/outbound-http-client.md).
 
 ### Stateful HTTP and first-party data
 
-The immutable v0.1.32 download exposes the complete first-party boundary and topology authoring
+The supported download exposes the complete first-party boundary and topology authoring
 through one copied candidate's application-facing discovery:
 
 ```sh
@@ -349,7 +356,7 @@ through one copied candidate's application-facing discovery:
 ./lkjscript package builtin inspect owner interface decl_...
 ```
 
-The exact public identity query `./lkjscript --version` prints only `lkjscript 0.1.32`.
+The exact public identity query `./lkjscript --version` prints only `lkjscript 0.1.35`.
 
 Public compact change records can add an exact staged built-in dependency,
 components, requirements, function-backed ports, command/HTTP/interactive targets, interfaces,
@@ -467,7 +474,7 @@ Queries read canonical owner bindings and committed namespace/relation witnesses
 Growing results use bounded pages and revision-bound `qcont_` continuations; query never writes a
 cursor, index, or semantic revision.
 
-The public v0.1.32 executable can obtain one complete admitted local neighborhood
+The supported executable can obtain one complete admitted local neighborhood
 without coordinating repeated one-hop reads:
 
 ```sh
@@ -482,7 +489,7 @@ repository, package, revision, root, direction, depth, ordering, and resume sect
 and byte limits may change between requests. `./lkjscript capabilities query` reports the fixed
 depth, owner, relation, witness, map, store, decode, continuation, and output bounds.
 
-The public v0.1.32 executable can project one complete accepted local function definition through
+The supported executable can project one complete accepted local function definition through
 stateless pages:
 
 ```sh

@@ -73,20 +73,12 @@ completed on 2026-09-14T16:13:06Z. Immutable v0.1.35 release `388511109`, anonym
 installed acceptance and original package/six-target/pair readers passed. That independent delivery
 is closed; its frozen inputs and failed history stay intact.
 
-The [requirement-parameter campaign](campaigns/202609140938.md) implements the selected ordinary
-library mechanism and honest typed-cell `UpdateAttempt<T>` workload. No earlier implementation was
-found or replaced. Final source `104654edf866d8f5531555b0aa0731fd496d72a8` passed 26 fresh full
-gates, both pinned userlands, six target owners and 89 omission faults, and is normally integrated.
-The [structural-authoring campaign](campaigns/202609150900.md) is the selected substantive campaign
-and consumes that single deferral. Acceptance must publish the combined v0.1.36 milestone; if an
-independent structural blocker prevents acceptance, publish the accepted requirement capability
-alone and retain the structural blocker. This deferral cannot be renewed.
-Frozen combined source `eea968b910ac62c3feab95a8896fff1a91904a17` now passes 26 fresh full
-gates, both pinned userlands, six target owners, 108 original-reader faults and deterministic
-dry-run package admission. The local installed pair passes both routes and one five-owner suite.
-All 107 pair-reader faults reject and restored originals pass. The exact accepted source is normally
-integrated into main. Exact-source hosted rehearsal `34918782215/1`, immutable publication and
-anonymous public acceptance remain delivery gates; this does not renew the consumed deferral.
+The [requirement-parameter campaign](campaigns/202609140938.md) and accepted
+[structural-authoring campaign](campaigns/202609150900.md) have consumed the single delivery deferral.
+The [delivery continuation](campaigns/202609151412.md) has started their combined publication from
+the unchanged frozen source. Close its publisher and anonymous installed-product gates before
+selecting another capability; the [current summary](status.md#combined-release-delivery) owns the
+remaining disposition. This deferral cannot be renewed.
 
 The literal producer uses 145 nonempty lines, 41 expression definitions and 20 expression argument
 edges; the consumer uses 273, 88 and 63 respectively. This establishes flat assembly friction, not
