@@ -215,6 +215,7 @@ impl Reference<'_> {
             ExpressionOperation::Unit { .. }
             | ExpressionOperation::Bool { .. }
             | ExpressionOperation::I64 { .. }
+            | ExpressionOperation::F64 { .. }
             | ExpressionOperation::Text { .. }
             | ExpressionOperation::StaticText { .. }
             | ExpressionOperation::Constant { .. } => Ok(Value::Plain),

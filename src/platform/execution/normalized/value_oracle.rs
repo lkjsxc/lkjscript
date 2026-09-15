@@ -90,6 +90,7 @@ pub(super) fn inspect(
             (NormalizedValue::Unit, TypeForm::Unit)
             | (NormalizedValue::Bool(_), TypeForm::Bool)
             | (NormalizedValue::I64(_), TypeForm::I64)
+            | (NormalizedValue::F64(_), TypeForm::F64)
             | (NormalizedValue::Bytes(_), TypeForm::Bytes)
             | (NormalizedValue::Text(_), TypeForm::Text)
             | (NormalizedValue::StaticText(_), TypeForm::StaticText) => {}

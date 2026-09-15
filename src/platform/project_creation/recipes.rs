@@ -615,6 +615,7 @@ fn authored_type(
         TypeForm::Unit => AuthoredType::Unit {},
         TypeForm::Bool => AuthoredType::Bool {},
         TypeForm::I64 => AuthoredType::I64 {},
+        TypeForm::F64 => AuthoredType::F64 {},
         TypeForm::Bytes => AuthoredType::Bytes {},
         TypeForm::Text => AuthoredType::Text {},
         TypeForm::StaticText => AuthoredType::StaticText {},

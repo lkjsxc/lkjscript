@@ -1,0 +1,91 @@
+reference.owner as=$DataStore package=$std class=declaration name=DataStore
+reference.owner as=$DataEntry package=$std class=declaration name=DataEntry
+reference.owner as=$DataExpectation package=$std class=declaration name=DataExpectation
+reference.owner as=$DataKeyPart package=$std class=declaration name=DataKeyPart
+reference.owner as=$get package=$std class=operation parent=$DataStore name=get
+reference.owner as=$put package=$std class=operation parent=$DataStore name=put
+reference.owner as=$transaction package=$std class=operation parent=$DataStore name=transaction
+reference.owner as=$entry-value package=$std class=field parent=$DataEntry name=value
+reference.owner as=$text-key package=$std class=case parent=$DataKeyPart name=Text
+reference.owner as=$Missing package=$std class=case parent=$DataExpectation name=Missing
+reference.owner as=$length package=$std class=declaration name=list-length
+reference.owner as=$first package=$std class=declaration name=list-get
+reference.owner as=$equal package=$std class=declaration name=i64-equal
+reference.owner as=$Outcome package=$std class=declaration name=TransactionOutcome
+reference.owner as=$Reason package=$std class=declaration name=TransactionAbortReason
+reference.owner as=$Committed package=$std class=case parent=$Outcome name=Committed
+reference.owner as=$Aborted package=$std class=case parent=$Outcome name=Aborted
+reference.owner as=$ConditionFailed package=$std class=case parent=$Reason name=ConditionFailed
+reference.owner as=$Conflict package=$std class=case parent=$Reason name=Conflict
+type.named as=@Entry declaration=$DataEntry
+type.list as=@Entries item=@Entry
+type.named as=@KeyPart declaration=$DataKeyPart
+type.application as=@StatsOutcome declaration=$Outcome
+type.argument parent=@StatsOutcome index=0 type=@Stats
+create.component as=$data-component module=$module name=numerical-data visibility=public
+add.requirement as=$store component=$data-component name=statistics-store interface=$DataStore
+requirement.operation parent=$store index=0 operation=$get
+requirement.operation parent=$store index=1 operation=$put
+requirement.operation parent=$store index=2 operation=$transaction
+requirement.limit parent=$store index=0 name=maximum_calls maximum=100 unit=calls
+effect.row as=@DataEffects
+effect.requirement parent=@DataEffects index=0 requirement=$store
+type.task-function as=@SavePort result=@StatsOutcome effect=@DataEffects
+type.argument parent=@SavePort index=0 type=text
+type.argument parent=@SavePort index=1 type=@Stats
+type.task-function as=@LoadPort result=@Accumulation effect=@DataEffects
+type.argument parent=@LoadPort index=0 type=text
+type.task-function as=@AfterCommitPort result=f64 effect=@DataEffects
+type.argument parent=@AfterCommitPort index=0 type=text
+type.argument parent=@AfterCommitPort index=1 type=@Stats
+
+add.parameter as=$save-key function=$save name=key type=text
+add.parameter as=$save-state function=$save name=state type=@Stats
+expression.block as=$save-body
+  (transaction-outcome $store (types @Stats)
+    (outcome $Outcome $Reason $Committed $Aborted $ConditionFailed $Conflict)
+    (binding save-statistics)
+    (sequence
+      (capability-call $store $put
+        (static-text "statistics")
+        (list @KeyPart (variant $text-key (local $save-key)))
+        (call $encode (types @Stats) (local $save-state))
+        (variant $Missing))
+      (local $save-state)))
+expression.end
+create.function as=$save module=$module name=save visibility=private result=@StatsOutcome effect=task body=$save-body
+effect.requirement parent=$save index=0 requirement=$store
+add.port as=$save-port component=$data-component name=save type=@SavePort function=$save
+create.target as=$save-target name=save component=$data-component port=$save-port runner=command
+
+add.parameter as=$load-key function=$load name=key type=text
+expression.block as=$load-body
+  (let
+    (binding entries (type @Entries)
+      (capability-call $store $get
+        (static-text "statistics")
+        (list @KeyPart (variant $text-key (local $load-key)))))
+    (in
+      (if (call $equal (call $length (types @Entry) (local entries)) (i64 0))
+        (variant $InvalidArithmetic)
+        (variant $Accumulated
+          (call $decode (types @Stats)
+            (field (call $first (types @Entry) (local entries) (i64 0)) $entry-value)
+            (call $empty))))))
+expression.end
+create.function as=$load module=$module name=load visibility=private result=@Accumulation effect=task body=$load-body
+effect.requirement parent=$load index=0 requirement=$store
+add.port as=$load-port component=$data-component name=load type=@LoadPort function=$load
+create.target as=$load-target name=load component=$data-component port=$load-port runner=command
+
+add.parameter as=$after-key function=$after-commit name=key type=text
+add.parameter as=$after-state function=$after-commit name=state type=@Stats
+expression.block as=$after-body
+  (sequence
+    (call $save (local $after-key) (local $after-state))
+    (f64 inf))
+expression.end
+create.function as=$after-commit module=$module name=after-commit visibility=private result=f64 effect=task body=$after-body
+effect.requirement parent=$after-commit index=0 requirement=$store
+add.port as=$after-port component=$data-component name=after-commit type=@AfterCommitPort function=$after-commit
+create.target as=$after-target name=after-commit component=$data-component port=$after-port runner=command

@@ -6,6 +6,12 @@ canonical typed application data, the ordered `DataStore`, configuration, secret
 randomness, identifiers, password hashing, byte streams, deployment-bound outbound HTTP, named
 object storage, durable queues, and structured interactive-session events and decisions.
 
+The core module exports ordinary F64 arithmetic (`f64-add`, `f64-subtract`, `f64-multiply`,
+`f64-divide`, `f64-negate`, `f64-abs`, `f64-sqrt`), comparisons (`f64-less`, `f64-less-equal`),
+predicates (`f64-is-finite`, `f64-is-nan`), and explicit text/integer boundaries
+(`f64-from-i64`, `f64-to-i64-result`, `f64-parse-result`, `f64-to-text`). Exceptional arithmetic
+produces full binary64 values. Algorithms and finite-only policies belong in graph libraries.
+
 An external declaration is not arbitrary FFI. Its dotted implementation name must match the
 closed semantic-validator/runtime intrinsic inventory before publication or execution. Capability
 interfaces own typed operations, failure behavior, idempotency, possible visibility, and limits;
@@ -29,12 +35,12 @@ Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_961fb9773948313d606f11bd69785a055d0609477555f370a4dfdbc08d0a0044`;
-- package revision: `package_revision_53634416f408feddc2207ca97dc064e855d94ae6ca670f8bf39810a9eea58410`;
-- package transport: `package_transport_a7ab2c4b6ff765b3aeae27f15f0b51445f58d61608a41ccd01b4d24b3b66cf20`;
-- artifact manifest: `artifact_manifest_c95278bfaf2fb19617a3f5cd9ae9d17adbb0e8eb107e096409a3f07003a2b3a9`;
-- artifact bundle: `artifact_bundle_211413a3907045a45fa68acddfd45d8ad7d31a08a8bbdd7ea28a5525bdc2b3f8`;
-- 895 live semantic owners, 144 compiler units, and 33 graph tests.
+- semantic revision: `rev_19be6fa1bf22b7b139c3c0773c792c00518fa2e17fd6468da77076a0dc01eeb4`;
+- package revision: `package_revision_1377b907ba6d62ef959900436e171c9939b2d4049476eb24703facbbd296cd53`;
+- package transport: `package_transport_5bd92b9f67d08bf91b75fd31be1399ed8fcfc9eac179f2539e9858afc752d2ce`;
+- artifact manifest: `artifact_manifest_4080b0e6142643a3a900c2fd1ea1059cf23fa97ad7ac873e56ad6aafeab38f43`;
+- artifact bundle: `artifact_bundle_5b0b02915881f0f52497004de467f21f4dbabfa99585c8985e3d8932d4fc6e87`;
+- 949 live semantic owners, 163 compiler units, and 37 graph tests.
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose
 ordinary parametric records with pure functions. Mapping invokes the first callback then the second,

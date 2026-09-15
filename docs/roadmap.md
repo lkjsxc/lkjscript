@@ -75,20 +75,17 @@ is closed; its frozen inputs and failed history stay intact.
 
 The [requirement-parameter campaign](campaigns/202609140938.md) and accepted
 [structural-authoring campaign](campaigns/202609150900.md) have consumed the single delivery deferral.
-The [delivery continuation](campaigns/202609151412.md) has started their combined publication from
-the unchanged frozen source. The [transaction-completion mandate](campaigns/202609151502.md)
-supersedes only the prohibition on independent mutable capability development while the frozen
-publisher owns delivery. Its original-reader and anonymous installed-product gates remain due;
-the [current summary](status.md#combined-release-delivery) owns their disposition. The consumed
-deferral cannot be renewed or moved to the new source.
+The [delivery continuation](campaigns/202609151412.md) retains the failed, unproduced v0.1.37
+source and tag. The [binary64 mandate](campaigns/202609152217.md) selects F64 as the final companion
+to accepted transaction completion and one combined successor with the launch/retention repairs.
+Acceptance, material blockage or abandonment of F64 triggers delivery without another deferral.
+The [current summary](status.md#combined-release-delivery) owns the observed release disposition.
+Independent callback effects still require an application policy for replay and idempotency.
 
-The transaction-completion increment has passed engineering acceptance and normal integration
-independently of that recovery lane. Its separate publication is deferred for at most one further
-substantive campaign. At the next architectural reassessment select a concrete companion
-or publish the accepted increment alone. Acceptance, material blockage or abandonment of that
-companion triggers publication without another deferral. Any due additive recovery takes precedence
-in the publication lane. This does not select automatic retry: independent callback effects still
-require an application policy for replay and idempotency.
+Numerical algorithms and failure policy belong in ordinary graph libraries. After the scalar
+contract is accepted, real workload measurements should guide richer mathematics, packed numeric
+storage or execution improvements. This direction implies no tensor-performance or scientific
+package claim and selects no additional campaign.
 
 The [structural campaign](campaigns/202609150900.md) retains the original literal size observations;
 they establish assembly friction, not authoring time, model tokens or billing. Explicit declaration,

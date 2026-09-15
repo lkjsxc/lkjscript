@@ -637,6 +637,7 @@ fn property_types(
             TypeForm::Unit
             | TypeForm::Bool
             | TypeForm::I64
+            | TypeForm::F64
             | TypeForm::Bytes
             | TypeForm::Text
             | TypeForm::StaticText => {}

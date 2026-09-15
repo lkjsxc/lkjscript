@@ -30,13 +30,100 @@ mod nominal_encoding_tests {
     use crate::platform::kernel::{DeclarationReference, TypeForm};
 
     #[test]
+    fn f64_type_and_literal_have_disjoint_canonical_generations() {
+        use crate::platform::binary64::Binary64;
+        use crate::platform::kernel::{ExpressionOperation, ExpressionRecord};
+        let object = TypeObject::new(TypeForm::F64).unwrap();
+        let (digest, bytes) = encode_type_object(&object).unwrap();
+        assert_eq!(&bytes[..8], b"LKJF6401");
+        assert_eq!(&bytes[18..20], &[1, 1]);
+        assert_eq!(decode_type_object(&bytes, digest).unwrap(), object);
+        let disguised = packed::encode(
+            TYPE_OBJECT_MAGIC,
+            TYPE_OBJECT_ENVELOPE_DOMAIN,
+            &object,
+            MAXIMUM_TYPE_OBJECT_BYTES,
+        )
+        .unwrap();
+        assert!(decode_type_object(&disguised, TypeObjectDigest::of(&disguised)).is_err());
+        for (version, tag) in [(0_u16, 1_u8), (10, 1), (1, 0), (1, 2)] {
+            let malformed = packed::encode(
+                super::super::contract::F64_TYPE_MAGIC,
+                super::super::contract::F64_TYPE_ENVELOPE_DOMAIN,
+                &(version, tag),
+                MAXIMUM_TYPE_OBJECT_BYTES,
+            )
+            .unwrap();
+            assert!(decode_type_object(&malformed, TypeObjectDigest::of(&malformed)).is_err());
+        }
+        let id = crate::platform::semantic_id::ExpressionId::migrate(b"f64-canonical-owner", 0);
+        let mut expression = ExpressionRecord::new(
+            id,
+            ExpressionOperation::F64 {
+                value: Binary64::parse("nan").unwrap(),
+            },
+        )
+        .unwrap();
+        let owner = OwnerRecord::Expression(expression.clone());
+        let (digest, bytes) = encode_owner(&owner).unwrap();
+        assert_eq!(&bytes[..8], b"LKJOWN17");
+        assert_eq!(
+            decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
+            owner
+        );
+        for (generation, magic, domain) in [
+            (
+                15,
+                super::super::contract::REQUIREMENT_OWNER_MAGIC,
+                super::super::contract::REQUIREMENT_OWNER_ENVELOPE_DOMAIN,
+            ),
+            (
+                16,
+                super::super::contract::TRANSACTION_OWNER_MAGIC,
+                super::super::contract::TRANSACTION_OWNER_ENVELOPE_DOMAIN,
+            ),
+        ] {
+            expression.contract_version = generation;
+            let disguised = OwnerRecord::Expression(expression.clone());
+            assert_eq!(
+                encode_owner(&disguised).unwrap_err().code,
+                "kernel_expression_generation"
+            );
+            let raw =
+                packed::encode(magic, domain, &disguised, MAXIMUM_OWNER_OBJECT_BYTES).unwrap();
+            assert_eq!(
+                decode_owner(
+                    &raw,
+                    disguised.owner(),
+                    disguised.kind(),
+                    OwnerObjectDigest::of(&raw)
+                )
+                .unwrap_err()
+                .code,
+                "kernel_expression_generation"
+            );
+        }
+        expression.contract_version = 17;
+        expression.operation = ExpressionOperation::F64 {
+            value: Binary64::parse("0").unwrap(),
+        };
+        let positive = encode_owner(&OwnerRecord::Expression(expression.clone())).unwrap();
+        expression.operation = ExpressionOperation::F64 {
+            value: Binary64::parse("-0").unwrap(),
+        };
+        let negative = encode_owner(&OwnerRecord::Expression(expression)).unwrap();
+        assert_ne!(positive.0, negative.0);
+        assert_ne!(positive.1, negative.1);
+    }
+
+    #[test]
     fn transaction_outcome_encoding_preserves_ordinary_predecessors_and_rejects_false_generation() {
         use crate::platform::kernel::{
             ExpressionOperation, ExpressionRecord, TransactionOutcomeContract,
         };
         use crate::platform::semantic_id::{BindingId, ExpressionId, RequirementId};
         let id = ExpressionId::migrate(b"transaction-outcome-generation", 0);
-        for generation in [14, 15, 16] {
+        for generation in [14, 15, 16, 17] {
             let mut expression = ExpressionRecord::new(id, ExpressionOperation::Unit {}).unwrap();
             expression.contract_version = generation;
             let owner = OwnerRecord::Expression(expression);
@@ -66,6 +153,7 @@ mod nominal_encoding_tests {
             },
         )
         .unwrap();
+        expression.contract_version = 16;
         let owner = OwnerRecord::Expression(expression.clone());
         let (digest, bytes) = encode_owner(&owner).unwrap();
         assert_eq!(&bytes[..8], b"LKJOWN16");
@@ -348,6 +436,13 @@ pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>)
             super::contract::REQUIREMENT_OWNER_MAGIC,
             super::contract::REQUIREMENT_OWNER_ENVELOPE_DOMAIN,
         )
+    } else if record.header().contract_version
+        == super::contract::TRANSACTION_GRAPH_CONTRACT_VERSION
+    {
+        (
+            super::contract::TRANSACTION_OWNER_MAGIC,
+            super::contract::TRANSACTION_OWNER_ENVELOPE_DOMAIN,
+        )
     } else {
         (OWNER_MAGIC, OWNER_ENVELOPE_DOMAIN)
     };
@@ -395,6 +490,20 @@ pub fn decode_owner(
             ));
         }
         record
+    } else if bytes.starts_with(&super::contract::TRANSACTION_OWNER_MAGIC) {
+        let record: OwnerRecord = packed::decode(
+            bytes,
+            super::contract::TRANSACTION_OWNER_MAGIC,
+            super::contract::TRANSACTION_OWNER_ENVELOPE_DOMAIN,
+            MAXIMUM_OWNER_OBJECT_BYTES,
+        )?;
+        if record.header().contract_version != super::contract::TRANSACTION_GRAPH_CONTRACT_VERSION {
+            return Err(codec_error(
+                "kernel_owner_encoding_generation",
+                "transaction envelope has a foreign owner generation",
+            ));
+        }
+        record
     } else {
         packed::decode(
             bytes,
@@ -423,6 +532,15 @@ pub fn decode_owner(
 
 pub fn encode_type_object(object: &TypeObject) -> Result<(TypeObjectDigest, Vec<u8>), Diagnostic> {
     object.validate_local()?;
+    if matches!(object.form, super::TypeForm::F64) {
+        let bytes = packed::encode(
+            super::contract::F64_TYPE_MAGIC,
+            super::contract::F64_TYPE_ENVELOPE_DOMAIN,
+            &(object.contract_version, 1_u8),
+            MAXIMUM_TYPE_OBJECT_BYTES,
+        )?;
+        return Ok((TypeObjectDigest::of(&bytes), bytes));
+    }
     if let super::TypeForm::TaskFunction {
         parameters,
         result,
@@ -511,6 +629,30 @@ pub fn decode_type_object(
         TypeObjectDigest::of(bytes).bytes(),
         "type",
     )?;
+    if bytes.starts_with(&super::contract::F64_TYPE_MAGIC) {
+        let (contract_version, tag): (u16, u8) = packed::decode(
+            bytes,
+            super::contract::F64_TYPE_MAGIC,
+            super::contract::F64_TYPE_ENVELOPE_DOMAIN,
+            MAXIMUM_TYPE_OBJECT_BYTES,
+        )?;
+        if tag != 1 {
+            return Err(codec_error("kernel_f64_type_tag", "unknown F64 type tag"));
+        }
+        let object = TypeObject {
+            contract_version,
+            form: super::TypeForm::F64,
+        };
+        let (digest, canonical) = encode_type_object(&object)?;
+        verify_canonical(
+            bytes,
+            &canonical,
+            digest.bytes(),
+            expected_digest.bytes(),
+            "type",
+        )?;
+        return Ok(object);
+    }
     if bytes.starts_with(&super::contract::TASK_FUNCTION_MAGIC)
         || bytes.starts_with(&super::contract::REQUIREMENT_TASK_FUNCTION_MAGIC)
     {

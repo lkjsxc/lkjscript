@@ -39,6 +39,58 @@ impl ReferenceState<'_> {
                     None => CheckedValue::primitive(&self.schema, NormalizedValue::Unit),
                 }
             }
+            "core.f64.parse-result" => {
+                let [value] = arguments.as_slice() else {
+                    return Err(reference_type_error("F64 parser requires one argument"));
+                };
+                let NormalizedValue::Text(text) = value.raw() else {
+                    return Err(reference_type_error("F64 parser requires text"));
+                };
+                let number = Binary64::parse(text);
+                self.result_record([
+                    (
+                        "valid",
+                        CheckedValue::primitive(
+                            &self.schema,
+                            NormalizedValue::Bool(number.is_some()),
+                        )?,
+                    ),
+                    (
+                        "value",
+                        CheckedValue::primitive(
+                            &self.schema,
+                            NormalizedValue::F64(
+                                number.unwrap_or_else(|| Binary64::from_float(0.0)),
+                            ),
+                        )?,
+                    ),
+                ])
+            }
+            "core.f64.to-i64-result" => {
+                let [value] = arguments.as_slice() else {
+                    return Err(reference_type_error("F64 conversion requires one argument"));
+                };
+                let NormalizedValue::F64(number) = value.raw() else {
+                    return Err(reference_type_error("F64 conversion requires F64"));
+                };
+                let converted = reference_f64_to_i64(number.to_float());
+                self.result_record([
+                    (
+                        "valid",
+                        CheckedValue::primitive(
+                            &self.schema,
+                            NormalizedValue::Bool(converted.is_some()),
+                        )?,
+                    ),
+                    (
+                        "value",
+                        CheckedValue::primitive(
+                            &self.schema,
+                            NormalizedValue::I64(converted.unwrap_or_default()),
+                        )?,
+                    ),
+                ])
+            }
             "core.i64.parse-result" => {
                 let [value] = arguments.as_slice() else {
                     return Err(reference_type_error("integer parser has foreign arity"));

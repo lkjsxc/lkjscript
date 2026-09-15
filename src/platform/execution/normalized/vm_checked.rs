@@ -83,6 +83,7 @@ impl Value {
             NormalizedValue::Unit
                 | NormalizedValue::Bool(_)
                 | NormalizedValue::I64(_)
+                | NormalizedValue::F64(_)
                 | NormalizedValue::Bytes(_)
                 | NormalizedValue::Text(_)
                 | NormalizedValue::StaticText(_)
@@ -722,6 +723,7 @@ impl Admission<'_> {
                 TypeForm::Unit
                 | TypeForm::Bool
                 | TypeForm::I64
+                | TypeForm::F64
                 | TypeForm::Bytes
                 | TypeForm::Text
                 | TypeForm::StaticText
@@ -893,7 +895,8 @@ impl Admission<'_> {
             match (value, &object.form) {
                 (NormalizedValue::Unit, TypeForm::Unit)
                 | (NormalizedValue::Bool(_), TypeForm::Bool)
-                | (NormalizedValue::I64(_), TypeForm::I64) => {}
+                | (NormalizedValue::I64(_), TypeForm::I64)
+                | (NormalizedValue::F64(_), TypeForm::F64) => {}
                 (NormalizedValue::Text(text), TypeForm::Text)
                 | (NormalizedValue::StaticText(text), TypeForm::StaticText) => {
                     self.allocate(text.len() as u64)?

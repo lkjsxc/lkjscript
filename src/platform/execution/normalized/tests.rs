@@ -3,6 +3,9 @@
 #[path = "recursive_tests.rs"]
 mod recursive_tests;
 
+#[path = "f64_codec_tests.rs"]
+mod f64_codec_tests;
+
 #[path = "iteration_tests.rs"]
 mod iteration_tests;
 
@@ -23,6 +26,12 @@ pub(crate) mod requirement_tests;
 
 #[path = "transaction_outcome_tests.rs"]
 pub(crate) mod transaction_outcome_tests;
+
+#[path = "f64_tests.rs"]
+mod f64_tests;
+
+#[path = "f64_effect_tests.rs"]
+mod f64_effect_tests;
 
 use super::capability::{
     NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilities,
@@ -54,7 +63,7 @@ fn graph14_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
     );
     assert_eq!(
         crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-        16
+        17
     );
     assert_eq!(
         crate::platform::kernel::contract::TYPE_OBJECT_CONTRACT_VERSION,

@@ -39,10 +39,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-21";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 21;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-16";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 16;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-22";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 22;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-17";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 17;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -328,7 +328,7 @@ impl CompactChangeFieldForm {
             Self::Name => "[A-Za-z_][A-Za-z0-9_-]{0,127}",
             Self::DeclarationVisibility => "private|package|public",
             Self::FunctionEffect => "pure|task",
-            Self::TypeReference => "unit|bool|i64|bytes|text|static-text|secret|@NAME",
+            Self::TypeReference => "unit|bool|i64|f64|bytes|text|static-text|secret|@NAME",
             Self::ExpressionReference => "$NAME",
             Self::DeletePolicy => "reject|owned-closure",
             Self::OwnerParent => "package|$REFERENCE_ALIAS|DOMAIN_HEX",
@@ -1494,6 +1494,7 @@ pub const COMPACT_TYPE_FORMS: &[&str] = &[
     "unit",
     "bool",
     "i64",
+    "f64",
     "bytes",
     "text",
     "static-text",
@@ -1522,6 +1523,7 @@ pub const COMPACT_EXPRESSION_FORMS: &[&str] = &[
     "unit",
     "bool",
     "i64",
+    "f64",
     "text",
     "static-text",
     "local",
@@ -1585,6 +1587,12 @@ pub(crate) const COMPACT_TYPE_FORM_FIELDS: &[CompactFormField] = &[
     },
     CompactFormField {
         form: "i64",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "f64",
         name: "as",
         required: true,
         syntax: "@NAME",
@@ -1783,6 +1791,18 @@ pub(crate) const COMPACT_EXPRESSION_FORM_FIELDS: &[CompactFormField] = &[
         name: "value",
         required: true,
         syntax: "signed-i64",
+    },
+    CompactFormField {
+        form: "f64",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "f64",
+        name: "value",
+        required: true,
+        syntax: "json-decimal|nan|inf|-inf",
     },
     CompactFormField {
         form: "text",
@@ -3647,6 +3667,7 @@ impl Decoder {
             "unit" => Some(AuthoredType::Unit {}),
             "bool" => Some(AuthoredType::Bool {}),
             "i64" => Some(AuthoredType::I64 {}),
+            "f64" => Some(AuthoredType::F64 {}),
             "bytes" => Some(AuthoredType::Bytes {}),
             "text" => Some(AuthoredType::Text {}),
             "static-text" => Some(AuthoredType::StaticText {}),
@@ -3681,13 +3702,14 @@ impl Decoder {
             )
         })?;
         let ty = match record.operation.as_str() {
-            "type.unit" | "type.bool" | "type.i64" | "type.bytes" | "type.text"
+            "type.unit" | "type.bool" | "type.i64" | "type.f64" | "type.bytes" | "type.text"
             | "type.static-text" | "type.secret" => {
                 check_fields(&record, &["as"])?;
                 match record.operation.as_str() {
                     "type.unit" => AuthoredType::Unit {},
                     "type.bool" => AuthoredType::Bool {},
                     "type.i64" => AuthoredType::I64 {},
+                    "type.f64" => AuthoredType::F64 {},
                     "type.bytes" => AuthoredType::Bytes {},
                     "type.text" => AuthoredType::Text {},
                     "type.static-text" => AuthoredType::StaticText {},
@@ -3871,6 +3893,12 @@ impl Decoder {
             "expression.i64" => {
                 check_fields(&record, &["as", "value"])?;
                 AuthoredExpressionOperation::I64 {
+                    value: parse_field(&record, "value")?,
+                }
+            }
+            "expression.f64" => {
+                check_fields(&record, &["as", "value"])?;
+                AuthoredExpressionOperation::F64 {
                     value: parse_field(&record, "value")?,
                 }
             }
@@ -4320,6 +4348,8 @@ fn change_request_commitment(
     // Adding an expression must not change reviewed request identities for unchanged bytes.
     let codec_identity = if intent.starts_with(b"LKJACR14") || intent.starts_with(b"LKJACR15") {
         "lkjscript-authored-change-codec-15"
+    } else if intent.starts_with(b"LKJACR16") {
+        "lkjscript-authored-change-codec-16"
     } else {
         AUTHORED_CHANGE_CODEC_IDENTITY
     };

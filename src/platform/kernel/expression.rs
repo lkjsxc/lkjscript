@@ -51,6 +51,12 @@ impl ExpressionRecord {
                 "transaction-outcome requires Graph Contract 16",
             ));
         }
+        if matches!(self.operation, ExpressionOperation::F64 { .. }) && self.contract_version < 17 {
+            return Err(expression_error(
+                "kernel_expression_generation",
+                "F64 literals require Graph Contract 17",
+            ));
+        }
         validate_operation(&self.operation)
     }
 
@@ -174,6 +180,9 @@ pub enum ExpressionOperation {
         body: ExpressionId,
         outcome: TransactionOutcomeContract,
         type_argument: TypeObjectDigest,
+    },
+    F64 {
+        value: crate::platform::binary64::Binary64,
     },
 }
 
@@ -447,6 +456,7 @@ fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic>
         ExpressionOperation::Unit {}
         | ExpressionOperation::Bool { .. }
         | ExpressionOperation::I64 { .. }
+        | ExpressionOperation::F64 { .. }
         | ExpressionOperation::Local { .. }
         | ExpressionOperation::Constant { .. }
         | ExpressionOperation::If { .. }
@@ -603,6 +613,7 @@ fn expression_children(operation: &ExpressionOperation) -> Vec<ExpressionChild> 
         ExpressionOperation::Unit {}
         | ExpressionOperation::Bool { .. }
         | ExpressionOperation::I64 { .. }
+        | ExpressionOperation::F64 { .. }
         | ExpressionOperation::Text { .. }
         | ExpressionOperation::StaticText { .. }
         | ExpressionOperation::Local { .. }

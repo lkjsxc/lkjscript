@@ -6,13 +6,15 @@ use super::prepare::{NormalizedProgram, NormalizedTarget};
 use super::reference::{
     NormalizedReferenceBinding, NormalizedReferenceInterpreter, NormalizedReferenceObservation,
     NormalizedReferenceOwnerRead, NormalizedReferenceRead, NormalizedReferenceReadWork,
-    reference_equal,
+    reference_observation_equal,
 };
 use super::value::NormalizedValue;
-use super::vm::{NormalizedRunObservation, NormalizedRunPolicy, NormalizedVm, normalized_equal};
+use super::vm::{
+    NormalizedRunObservation, NormalizedRunPolicy, NormalizedVm, normalized_observation_equal,
+};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
-use crate::platform::json::{JsonLimits, decode_strict};
+use crate::platform::json::{JsonLimits, decode_application};
 use crate::platform::kernel::{ComparisonPolicy, Name, OwnerKey, TypeForm, TypeObjectDigest};
 use crate::platform::package::RunnerKind;
 use crate::platform::publication::RepositoryView;
@@ -341,15 +343,17 @@ pub fn run_graph_tests(
         }
         let (production_equal, reference_equal) = match comparison {
             ComparisonPolicy::Exact => (
-                normalized_equal(&production.0.0, &production.1.0).map_err(execution_diagnostic)?,
-                reference_equal(&oracle.0.0, &oracle.1.0).map_err(execution_diagnostic)?,
+                normalized_observation_equal(&production.0.0, &production.1.0)
+                    .map_err(execution_diagnostic)?,
+                reference_observation_equal(&oracle.0.0, &oracle.1.0)
+                    .map_err(execution_diagnostic)?,
             ),
         };
         if production_equal != reference_equal {
             return Err(runner_error(
                 DiagnosticClass::Infrastructure,
                 "normalized_test_comparison_differential",
-                "production and reference equality semantics disagree",
+                "production and reference test observations disagree",
             ));
         }
         if !production_equal {
@@ -416,7 +420,7 @@ pub(crate) fn prepare_command_invocation(
     }
     let (parameter_types, result_type, task) = function_type(program, port.function_type)?;
     require_json_encoding(program, result_type, false, json_limits, control)?;
-    let arguments = decode_strict(arguments_json, json_limits)?;
+    let arguments = decode_application(arguments_json, json_limits)?;
     let arguments = arguments.as_array().ok_or_else(|| {
         runner_error(
             DiagnosticClass::Source,

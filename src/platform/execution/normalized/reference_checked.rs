@@ -72,6 +72,7 @@ impl Value {
         match datum {
             NormalizedValue::Unit
             | NormalizedValue::I64(_)
+            | NormalizedValue::F64(_)
             | NormalizedValue::Bool(_)
             | NormalizedValue::Text(_)
             | NormalizedValue::StaticText(_)
@@ -637,6 +638,7 @@ impl ReferenceState<'_> {
                 TypeForm::Unit if matches!(node, NormalizedValue::Unit) => {}
                 TypeForm::Bool if matches!(node, NormalizedValue::Bool(_)) => {}
                 TypeForm::I64 if matches!(node, NormalizedValue::I64(_)) => {}
+                TypeForm::F64 if matches!(node, NormalizedValue::F64(_)) => {}
                 TypeForm::Text | TypeForm::StaticText | TypeForm::Bytes => {
                     let length = match (ty, node) {
                         (TypeForm::Text, NormalizedValue::Text(text))
@@ -1477,6 +1479,7 @@ impl ReferenceState<'_> {
                 TypeForm::Unit
                 | TypeForm::Bool
                 | TypeForm::I64
+                | TypeForm::F64
                 | TypeForm::Bytes
                 | TypeForm::Text
                 | TypeForm::StaticText

@@ -495,6 +495,7 @@ fn visit_expression(
         ExpressionOperation::Unit {}
         | ExpressionOperation::Bool { .. }
         | ExpressionOperation::I64 { .. }
+        | ExpressionOperation::F64 { .. }
         | ExpressionOperation::Text { .. }
         | ExpressionOperation::StaticText { .. }
         | ExpressionOperation::Local { .. }

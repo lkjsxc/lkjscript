@@ -30,8 +30,29 @@ Rehearsal `34953636796/1` passed, and all five authenticated original handoffs p
 readers, including 26 fresh full gates, six target owners and the simulated installed pair.
 The earlier `34952573731/1` was cancelled before full/target/package execution. Annotated v0.1.37
 object `51ecaabf3a6dfbaef0f842e95c4fc480dced0b6d` selects exact `8baafff7`; its tag-push publisher
-`34965341260/1` started at 11:49:02Z. Fresh publication and anonymous original-reader acceptance
-remain pending. The consumed delivery deferral remains due until that boundary closes.
+`34965341260/1` failed at 12:24:24Z in fresh full verification: 25 gates passed and workspace
+tests hit `ExecutableFileBusy` before a structural test subprocess launched. Later jobs were
+skipped; v0.1.37 was not produced. Its tag/source and acquired original failure evidence remain
+preserved. The [binary64 mandate](campaigns/202609152217.md) selects one new combined successor,
+including the launch/retention repairs, existing capabilities and F64 if accepted. No newer
+publisher is active at startup; v0.1.36 remains the latest download and v0.1.35 the last closed
+public milestone. Combined publication and original-reader acceptance remain due.
+
+## Binary64 increment
+
+The [binary64 mandate](campaigns/202609152217.md) adds ordinary F64 values, both reviewed literal
+notations, general standard operations, finite decimal JSON and full-domain typed binary data.
+Numerical equality uses IEEE leaves; canonical identity and evaluator observation use normalized
+bits. Integer behavior and existing data encodings remain unchanged. Graph 17, compiler 13 /
+bytecode 9 and Artifact 21 detect the new meaning while retaining genuine supported predecessors.
+
+The copied executable's transported graph statistics library passes direct and consumer-nominal
+samples, a reviewed calibration edit, merging, process restart from typed checkpoint bytes and the
+4,096-sample exact oracle. Its granted data witness observes the committed value after later
+nonfinite JSON output fails. These are fresh focused development results; final source/target,
+installed-pair and original-reader acceptance remain due. The shared integration-test helper now
+retries only a busy failed spawn and never replays a child that started. Existing standard and
+`lkjournal` assets were rebuilt through public operations; operational data was not migrated.
 
 ## Transaction completion increment
 
@@ -48,11 +69,11 @@ owners, and 114 target-reader fault cases with healthy recovery. The imported li
 two-public-writer conflict, body edit/dependency repair and independent reopened-store observations.
 Normal main integration is `3fdddef3e98f120c7f58bc3719b3d22595847a20`, with the exact tested tree.
 
-Product 0.1.38 retains authentic Graph 14/15 and Artifact 18/19 readers; new Graph 16/Artifact 20
-meaning requires the current runtime. Application-data formats are unchanged. Neither v0.1.36 nor
-its v0.1.37 recovery includes this capability. Separate publication is deferred for at most one
-substantive companion under the [next-campaign trigger](roadmap.md); no new publisher is selected
-for this increment now. Detailed identities, failures, cleanup and limitations stay in the campaign.
+That accepted source retains authentic Graph 14/15 and Artifact 18/19 readers; its Graph 16/Artifact 20
+meaning requires a supporting runtime. Application-data formats are unchanged. Neither v0.1.36 nor
+the frozen v0.1.37 recovery includes this capability. The [binary64 mandate](campaigns/202609152217.md)
+selects its final companion and combined delivery; no further deferral remains. Detailed identities,
+failures, cleanup and limitations stay in the campaign.
 
 ## Current authority and maintained consumers
 
@@ -208,23 +229,23 @@ remain canonical and unchanged.
 
 | Consumer | Exact current identity |
 |---|---|
-| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_961fb9773948313d606f11bd69785a055d0609477555f370a4dfdbc08d0a0044`; state `semantic_state_55fce8fc5ae09aee13ed39eda25481fbd7066971f3fc239b009e191a2f22917e` |
-| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_8d08786d726857b359788570f174cd4a30fec5f7e6843a5ed35b3f03e2583c29`; state `semantic_state_64fac59540dd4be2e20fd701a5f66fe334db1a43c82b9914d96def1576e4f862` |
-| built-in standard dependency | package revision `package_revision_53634416f408feddc2207ca97dc064e855d94ae6ca670f8bf39810a9eea58410`; transport `package_transport_a7ab2c4b6ff765b3aeae27f15f0b51445f58d61608a41ccd01b4d24b3b66cf20`; artifact manifest `artifact_manifest_c95278bfaf2fb19617a3f5cd9ae9d17adbb0e8eb107e096409a3f07003a2b3a9` |
+| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_19be6fa1bf22b7b139c3c0773c792c00518fa2e17fd6468da77076a0dc01eeb4`; state `semantic_state_d736ee4dfbda8465fa3ec0a87d968c06efdb2c622ed236d6a5b4bada7b9fb9b7` |
+| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_29c95cfe92810bf3669a3943a9b3582f69047017bb43bd3e93942c5ea94f28ff`; state `semantic_state_3484e33ab9a2691e962e2a80077aa26628d58876cef7bce5f541baa830c8e801` |
+| built-in standard dependency | package revision `package_revision_1377b907ba6d62ef959900436e171c9939b2d4049476eb24703facbbd296cd53`; transport `package_transport_5bd92b9f67d08bf91b75fd31be1399ed8fcfc9eac179f2539e9858afc752d2ce`; artifact manifest `artifact_manifest_4080b0e6142643a3a900c2fd1ea1059cf23fa97ad7ac873e56ad6aafeab38f43` |
 
-The standard package owns 895 live semantic owners, 144 compiler units, and 33 graph tests. Its
-current artifact has 546,503 bytes. `lkjournal` owns 2,040 live semantic owners and one exact standard
-dependency; its two-package artifact has 234 compiler units and 1,306,041 bytes. Its complete
-dependency closure has 40 graph tests. Current successor production/reference acceptance is pending
+The standard package owns 949 live semantic owners, 163 compiler units, and 37 graph tests. Its
+current artifact has 584,470 bytes. `lkjournal` owns 2,040 live semantic owners and one exact standard
+dependency; its two-package artifact has 253 compiler units and 1,344,008 bytes. Its complete
+dependency closure has 44 graph tests. Current successor production/reference acceptance is pending
 the fresh full profile.
 
 Maintained derived assets are:
 
 | Path | Role | SHA-256 |
 |---|---|---|
-| `packages/standard/generated/standard.lkjp` | code-complete standard source container, 392,816 bytes | `1d4a4a821b88c9de6fb40533db31f7eff25fe666070482c66ae8b3a4ff702662` |
-| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 546,503 bytes | `7a34683a8c3ec1c91152af5ae389d8defa0c754ab7e7a374159c69d3b3a5398a` |
-| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 1,306,041 bytes | `b9e365448e208594e5a3548308330fd2c67679aecb882f365d8cc08b72085d56` |
+| `packages/standard/generated/standard.lkjp` | code-complete standard source container, 414,559 bytes | `f817744dad407ec97a8e86fe3a3293e05e6b5793338c4901d7983e3870724735` |
+| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 584,470 bytes | `24be2f4fe7d5479e5a960089b4dee8d1a6fe321000087ab4e1f6155b29a3cfff` |
+| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 1,344,008 bytes | `5b5452b01d67e5d3b09308f5ba9ecd53945b7f2926f20cda92eca9d036e7be8d` |
 
 The built-in transport and artifact are compiled into the executable and strictly cross-checked.
 Product verification regenerates maintained owners and compares exact bytes. Service verification

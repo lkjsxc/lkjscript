@@ -191,7 +191,12 @@ pub(super) fn validate<R: SessionShapeRead>(
         complete.insert(ty);
         let object = closure.object(ty)?;
         match &object.form {
-            TypeForm::Unit | TypeForm::Bool | TypeForm::I64 | TypeForm::Bytes | TypeForm::Text => {}
+            TypeForm::Unit
+            | TypeForm::Bool
+            | TypeForm::I64
+            | TypeForm::F64
+            | TypeForm::Bytes
+            | TypeForm::Text => {}
             TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
                 let arguments = match &object.form {
                     TypeForm::Applied { arguments, .. } => &arguments[..],

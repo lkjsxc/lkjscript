@@ -4,6 +4,7 @@ use super::value::{
     ComponentIndex, FunctionIndex, OperationIndex, PortIndex, RecordLayoutIndex, RequirementIndex,
     VariantLayoutIndex,
 };
+use crate::platform::binary64::Binary64;
 use crate::platform::compiler::LoadedArtifact;
 use crate::platform::compiler::manifest::{CompilationBinding, CompilationManifest};
 use crate::platform::compiler::unit::{
@@ -91,6 +92,7 @@ pub enum NormalizedInstruction {
     Unit,
     Bool(bool),
     I64(i64),
+    F64(Binary64),
     Text(Arc<str>),
     StaticText(Arc<str>),
     LoadLocal {
@@ -2417,6 +2419,7 @@ fn translate_code(
             CompiledInstruction::Unit => NormalizedInstruction::Unit,
             CompiledInstruction::Bool(value) => NormalizedInstruction::Bool(*value),
             CompiledInstruction::I64(value) => NormalizedInstruction::I64(*value),
+            CompiledInstruction::F64(value) => NormalizedInstruction::F64(*value),
             CompiledInstruction::Text(text) => NormalizedInstruction::Text(resolve_text(
                 artifact,
                 index_ref(&unit.tables.texts, *text, "normalized text")?,

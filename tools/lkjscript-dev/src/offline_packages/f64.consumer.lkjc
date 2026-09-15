@@ -1,0 +1,181 @@
+reference.package as=$std source=builtin
+reference.owner as=$fadd package=$std class=declaration name=f64-add
+reference.owner as=$text-equal package=$std class=declaration name=text-equal
+reference.owner as=$encode package=$std class=declaration name=data-encode
+reference.owner as=$decode package=$std class=declaration name=data-decode-or
+reference.owner as=$sqrt package=$std class=declaration name=f64-sqrt
+reference.owner as=$multiply package=$std class=declaration name=f64-multiply
+reference.owner as=$divide package=$std class=declaration name=f64-divide
+reference.owner as=$negate package=$std class=declaration name=f64-negate
+reference.owner as=$format package=$std class=declaration name=f64-to-text
+reference.owner as=$Stats package=$library class=declaration name=Stats
+reference.owner as=$count package=$library class=field parent=$Stats name=count
+reference.owner as=$mean package=$library class=field parent=$Stats name=mean
+reference.owner as=$m2 package=$library class=field parent=$Stats name=m2
+reference.owner as=$Accumulation package=$library class=declaration name=Accumulation
+reference.owner as=$Accumulated package=$library class=case parent=$Accumulation name=Accumulated
+reference.owner as=$InvalidSample package=$library class=case parent=$Accumulation name=InvalidSample
+reference.owner as=$InvalidArithmetic package=$library class=case parent=$Accumulation name=InvalidArithmetic
+reference.owner as=$Result package=$library class=declaration name=StatisticsResult
+reference.owner as=$summarize package=$library class=declaration name=summarize
+reference.owner as=$accumulate package=$library class=declaration name=accumulate
+reference.owner as=$continue package=$library class=declaration name=continue
+reference.owner as=$finish package=$library class=declaration name=finalize
+reference.owner as=$merge package=$library class=declaration name=merge
+reference.owner as=$empty package=$library class=declaration name=empty
+type.named as=@Stats declaration=$Stats
+type.named as=@Accumulation declaration=$Accumulation
+type.named as=@Result declaration=$Result
+type.list as=@Numbers item=f64
+create.module as=$module name=numerical-consumer
+create.component as=$component module=$module name=numerical visibility=public
+type.function as=@DirectPort result=@Result
+type.argument parent=@DirectPort index=0 type=@Numbers
+type.function as=@StatePort result=@Accumulation
+type.argument parent=@StatePort index=0 type=@Numbers
+type.function as=@MergePort result=@Result
+type.argument parent=@MergePort index=0 type=@Numbers
+type.argument parent=@MergePort index=1 type=@Numbers
+
+add.parameter as=$identity-input function=$identity name=value type=f64
+expression.block as=$identity-body
+  (local $identity-input)
+expression.end
+create.function as=$identity module=$module name=identity visibility=private result=f64 effect=pure body=$identity-body
+
+add.parameter as=$direct-items function=$direct name=items type=@Numbers
+expression.block as=$direct-body
+  (call $summarize (types f64) (local $direct-items) (function-value $identity))
+expression.end
+create.function as=$direct module=$module name=direct visibility=private result=@Result effect=pure body=$direct-body
+add.port as=$direct-port component=$component name=direct type=@DirectPort function=$direct
+create.target as=$direct-target name=direct component=$component port=$direct-port runner=command
+
+add.parameter as=$state-items function=$state name=items type=@Numbers
+expression.block as=$state-body
+  (call $accumulate (types f64) (local $state-items) (function-value $identity))
+expression.end
+create.function as=$state module=$module name=state visibility=private result=@Accumulation effect=pure body=$state-body
+add.port as=$state-port component=$component name=state type=@StatePort function=$state
+create.target as=$state-target name=state component=$component port=$state-port runner=command
+
+create.record as=$Measurement module=$module name=Measurement visibility=public
+add.field as=$label record=$Measurement name=label type=text
+add.field as=$value record=$Measurement name=value type=f64
+type.named as=@Measurement declaration=$Measurement
+type.list as=@Measurements item=@Measurement
+type.function as=@Projection result=f64
+type.argument parent=@Projection index=0 type=@Measurement
+type.function as=@MeasurementsPort result=@Result
+type.argument parent=@MeasurementsPort index=0 type=@Measurements
+type.argument parent=@MeasurementsPort index=1 type=f64
+
+add.parameter as=$calibrate-offset function=$calibrate name=offset type=f64
+add.parameter as=$calibrate-item function=$calibrate name=item type=@Measurement
+expression.block as=$calibrate-body
+  (if (call $text-equal (field (local $calibrate-item) $label) (text "invalid"))
+    (f64 nan)
+    (call $fadd (field (local $calibrate-item) $value) (local $calibrate-offset)))
+expression.end
+create.function as=$calibrate module=$module name=calibrate visibility=private result=f64 effect=pure body=$calibrate-body
+
+add.parameter as=$factory-offset function=$factory name=offset type=f64
+expression.block as=$factory-body
+  (bind (function-value $calibrate) (local $factory-offset))
+expression.end
+create.function as=$factory module=$module name=make-calibration visibility=private result=@Projection effect=pure body=$factory-body
+
+add.parameter as=$measurements-items function=$measurements name=items type=@Measurements
+add.parameter as=$measurements-offset function=$measurements name=offset type=f64
+expression.block as=$measurements-body
+  (let
+    (binding projection (type @Projection) (call $factory (local $measurements-offset)))
+    (in (call $summarize (types @Measurement) (local $measurements-items) (local projection))))
+expression.end
+create.function as=$measurements module=$module name=measurements visibility=private result=@Result effect=pure body=$measurements-body
+add.port as=$measurements-port component=$component name=measurements type=@MeasurementsPort function=$measurements
+create.target as=$measurements-target name=measurements component=$component port=$measurements-port runner=command
+
+add.parameter as=$join-a function=$join name=a type=@Accumulation
+add.parameter as=$join-b function=$join name=b type=@Accumulation
+expression.block as=$join-body
+  (match (local $join-a)
+    (arm $InvalidSample (variant $InvalidSample))
+    (arm $InvalidArithmetic (variant $InvalidArithmetic))
+    (arm $Accumulated (payload a @Stats)
+      (match (local $join-b)
+        (arm $InvalidSample (variant $InvalidSample))
+        (arm $InvalidArithmetic (variant $InvalidArithmetic))
+        (arm $Accumulated (payload b @Stats) (call $merge (local a) (local b))))))
+expression.end
+create.function as=$join module=$module name=join visibility=private result=@Accumulation effect=pure body=$join-body
+
+add.parameter as=$merged-a function=$merged name=a type=@Numbers
+add.parameter as=$merged-b function=$merged name=b type=@Numbers
+expression.block as=$merged-body
+  (call $finish
+    (call $join
+      (call $accumulate (types f64) (local $merged-a) (function-value $identity))
+      (call $accumulate (types f64) (local $merged-b) (function-value $identity))))
+expression.end
+create.function as=$merged module=$module name=merged visibility=private result=@Result effect=pure body=$merged-body
+add.port as=$merged-port component=$component name=merged type=@MergePort function=$merged
+create.target as=$merged-target name=merged component=$component port=$merged-port runner=command
+
+create.variant as=$Checkpoint module=$module name=Checkpoint visibility=public
+add.case as=$Saved variant=$Checkpoint name=Saved payload=bytes
+add.case as=$CheckpointInvalidSample variant=$Checkpoint name=InvalidSample
+add.case as=$CheckpointInvalidArithmetic variant=$Checkpoint name=InvalidArithmetic
+type.named as=@Checkpoint declaration=$Checkpoint
+type.function as=@CheckpointPort result=@Checkpoint
+type.argument parent=@CheckpointPort index=0 type=@Numbers
+type.function as=@ResumePort result=@Result
+type.argument parent=@ResumePort index=0 type=bytes
+type.argument parent=@ResumePort index=1 type=@Numbers
+
+add.parameter as=$checkpoint-items function=$checkpoint name=items type=@Numbers
+expression.block as=$checkpoint-body
+  (match (call $accumulate (types f64) (local $checkpoint-items) (function-value $identity))
+    (arm $Accumulated (payload state @Stats) (variant $Saved (call $encode (types @Stats) (local state))))
+    (arm $InvalidSample (variant $CheckpointInvalidSample))
+    (arm $InvalidArithmetic (variant $CheckpointInvalidArithmetic)))
+expression.end
+create.function as=$checkpoint module=$module name=checkpoint visibility=private result=@Checkpoint effect=pure body=$checkpoint-body
+add.port as=$checkpoint-port component=$component name=checkpoint type=@CheckpointPort function=$checkpoint
+create.target as=$checkpoint-target name=checkpoint component=$component port=$checkpoint-port runner=command
+
+add.parameter as=$resume-bytes function=$resume name=checkpoint type=bytes
+add.parameter as=$resume-items function=$resume name=items type=@Numbers
+expression.block as=$resume-body
+  (call $finish
+    (call $continue (types f64)
+      (local $resume-items)
+      (variant $Accumulated
+        (call $decode (types @Stats) (local $resume-bytes)
+          (record $Stats
+            (field $count (i64 -1))
+            (field $mean (f64 0.0))
+            (field $m2 (f64 0.0)))))
+      (function-value $identity)))
+expression.end
+create.function as=$resume module=$module name=resume visibility=private result=@Result effect=pure body=$resume-body
+add.port as=$resume-port component=$component name=resume type=@ResumePort function=$resume
+create.target as=$resume-target name=resume component=$component port=$resume-port runner=command
+
+type.list as=@Texts item=text
+type.function as=@ScalarPort result=@Texts
+expression.block as=$scalar-body
+  (list text
+    (call $format (call $sqrt (f64 2.0)))
+    (call $format
+      (call $fadd (f64 1.0) (f64 0.00000000000000011102230246251565404236316680908203125)))
+    (call $format (call $divide (f64 5e-324) (f64 2.0)))
+    (call $format (call $divide (f64 1.5e-323) (f64 2.0)))
+    (call $format (call $multiply (f64 1.7976931348623157e308) (f64 2.0)))
+    (call $format (call $divide (f64 0.0) (f64 0.0)))
+    (call $format (call $divide (f64 1.0) (f64 -0.0)))
+    (call $format (call $negate (f64 0.0))))
+expression.end
+create.function as=$scalar module=$module name=scalar-observation visibility=private result=@Texts effect=pure body=$scalar-body
+add.port as=$scalar-port component=$component name=scalar-observation type=@ScalarPort function=$scalar
+create.target as=$scalar-target name=scalar-observation component=$component port=$scalar-port runner=command

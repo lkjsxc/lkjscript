@@ -2683,6 +2683,7 @@ fn oracle_expression_form(operation: &ExpressionOperation) -> &'static str {
         ExpressionOperation::Unit {} => "unit",
         ExpressionOperation::Bool { .. } => "bool",
         ExpressionOperation::I64 { .. } => "i64",
+        ExpressionOperation::F64 { .. } => "f64",
         ExpressionOperation::Text { .. } => "text",
         ExpressionOperation::StaticText { .. } => "static_text",
         ExpressionOperation::Local { .. } => "local",
@@ -2814,7 +2815,7 @@ mod tests {
         let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
         let before = std::fs::read(project.join("HEAD")).expect("standard HEAD before oracle");
         let inventory = semantic_inventory(&project).expect("standard semantic inventory");
-        assert_eq!(inventory.owners, 895);
+        assert_eq!(inventory.owners, 949);
         assert_eq!(inventory.modules, 13);
         assert!(inventory.functions > 0);
         assert!(inventory.relations > 0);

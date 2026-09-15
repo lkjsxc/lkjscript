@@ -257,6 +257,7 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
                 "/observations/requirement_reject_forwarding",
                 "/observations/requirement_reject_interface",
                 "/observations/requirement_reject_callback-row",
+                "/observations/f64",
             ],
         ),
         (
@@ -377,11 +378,66 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
             .expect("original retained structural bytes");
         originals.remember(&child_root.join(name), &bytes);
     }
-    let mut structural_fault = |fault: Value, label: &str, reason: Option<&str>| {
+    let numerical: Value = serde_json::from_str(
+        child["observations"]["f64"]
+            .as_str()
+            .expect("numerical observation string"),
+    )
+    .expect("nested numerical observation");
+    let numerical_command = |name: &str| {
+        numerical["calls"]
+            .as_array()
+            .expect("numerical invocation inventory")
+            .iter()
+            .find(|call| call["name"] == name)
+            .expect("independently selected numerical case")["command"]
+            .as_u64()
+            .and_then(|index| usize::try_from(index).ok())
+            .expect("numerical command index")
+    };
+    let numerical_scale = format!("command-{:04}.stdout", numerical_command("scale"));
+    let numerical_small = format!("command-{:04}.stdout", numerical_command("direct-small"));
+    let numerical_after = format!(
+        "command-{:04}.stdout",
+        numerical["inspect_after"]
+            .as_u64()
+            .expect("edited calibration inspection")
+    );
+    let numerical_originals = [
+        "f64-producer.lkjc",
+        "f64-consumer.lkjc",
+        "f64-edit.lkjc",
+        "f64-producer.lkjplan",
+        "f64-consumer.lkjplan",
+        "f64-edit.lkjplan",
+        "f64-input-scale.json",
+        "f64-input-resume.json",
+        "f64-checkpoint.json",
+    ];
+    for name in numerical_originals.into_iter().chain([
+        "f64-input-direct-small.json",
+        "f64-after.lkja",
+        numerical_scale.as_str(),
+        numerical_small.as_str(),
+        numerical_after.as_str(),
+    ]) {
+        let bytes = process::read_bounded(&child_root.join(name), MAXIMUM_RECEIPT_BYTES)
+            .expect("original retained numerical bytes");
+        originals.remember(&child_root.join(name), &bytes);
+    }
+    let numerical_before_artifact =
+        process::read_bounded(&child_root.join("f64-before.lkja"), MAXIMUM_RECEIPT_BYTES)
+            .expect("original valid artifact before projection replacement");
+    assert_ne!(
+        numerical_before_artifact,
+        fs::read(child_root.join("f64-after.lkja")).expect("original edited artifact"),
+        "projection edit produced distinct artifact bytes"
+    );
+    let mut offline_fault = |fault: Value, label: &str, reason: Option<&str>| {
         fs::write(
             &child_path,
             crate::offline_packages::encode_transferred_test_fixture(fault)
-                .expect("canonical structural evidence fault"),
+                .expect("canonical offline original evidence fault"),
         )
         .expect("write owned child fault");
         let mut aggregate = baseline.clone();
@@ -403,12 +459,12 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
         assert_eq!(
             rejected.0,
             ProcessStatus::Failed,
-            "structural fault {label}"
+            "offline original fault {label}"
         );
         if let Some(reason) = reason {
             assert!(
                 rejected.1.contains(reason),
-                "structural fault {label} rejected outside its intended owner: {}",
+                "offline original fault {label} rejected outside its intended owner: {}",
                 rejected.1
             );
         }
@@ -433,13 +489,13 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
             .expect("required nested structural field") = Value::Null;
         let mut fault = child.clone();
         fault["observations"]["requirement_structural"] = Value::String(observation.to_string());
-        structural_fault(fault, &format!("structural/omit{pointer}"), None);
+        offline_fault(fault, &format!("structural/omit{pointer}"), None);
     }
     let mut observation = structural.clone();
     observation["producer"]["commands"] = structural["consumer"]["commands"].clone();
     let mut fault = child.clone();
     fault["observations"]["requirement_structural"] = Value::String(observation.to_string());
-    structural_fault(
+    offline_fault(
         fault,
         "structural/foreign-producer-commands",
         Some("plan changed executable"),
@@ -452,7 +508,7 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
         .swap(0, 1);
     let mut fault = child.clone();
     fault["observations"]["requirement_structural"] = Value::String(observation.to_string());
-    structural_fault(
+    offline_fault(
         fault,
         "structural/reordered-supplier-plans",
         Some("plans/apply missing or reordered"),
@@ -468,7 +524,7 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
         .expect("supplier command arguments")
         .last_mut()
         .expect("apply token") = serde_json::json!("foreign");
-    structural_fault(
+    offline_fault(
         fault,
         "structural/foreign-flat-plan-token",
         Some("did not consume the equivalent flat plan token"),
@@ -486,7 +542,7 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
     .expect("substitute one valid review");
     let mut fault = child.clone();
     rebind_offline_file(&mut fault, &child_root, name);
-    structural_fault(
+    offline_fault(
         fault,
         "structural/foreign-valid-review",
         Some("token is not bound to the strict reviewed bytes"),
@@ -512,7 +568,7 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
     fs::write(child_root.join(name), shortened).expect("omit one reviewed retirement");
     let mut fault = child.clone();
     rebind_offline_file(&mut fault, &child_root, name);
-    structural_fault(
+    offline_fault(
         fault,
         "structural/omitted-reviewed-retirement",
         Some("logical plan"),
@@ -530,7 +586,7 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
     fs::write(child_root.join(&before_name), altered).expect("counterfeit old body owner");
     let mut fault = child.clone();
     rebind_offline_file(&mut fault, &child_root, &before_name);
-    structural_fault(
+    offline_fault(
         fault,
         "structural/unretired-former-body-owner",
         Some("omitted retirement of a former body owner"),
@@ -556,7 +612,7 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
     .expect("duplicate an edited body owner");
     let mut fault = child.clone();
     rebind_offline_file(&mut fault, &child_root, &after_name);
-    structural_fault(
+    offline_fault(
         fault,
         "structural/duplicate-edited-body-owner",
         Some("duplicates an expression or binding identity"),
@@ -573,7 +629,7 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
         .expect("substitute an earlier inspection revision");
     let mut fault = child.clone();
     rebind_offline_file(&mut fault, &child_root, &after_name);
-    structural_fault(
+    offline_fault(
         fault,
         "structural/foreign-inspection-revision",
         Some("inspection changed function identity, accepted revision"),
@@ -591,7 +647,7 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
     .expect("withhold owned completed outcome literal");
     let mut fault = child.clone();
     rebind_offline_file(&mut fault, &child_root, name);
-    structural_fault(
+    offline_fault(
         fault,
         "transaction-outcome/omit-literal-consumer",
         Some("independent literal library request changed"),
@@ -611,7 +667,7 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
     .expect("forge accepted candidate for a suppressed transaction");
     let mut fault = child.clone();
     rebind_offline_file(&mut fault, &child_root, &condition_name);
-    structural_fault(
+    offline_fault(
         fault,
         "transaction-outcome/condition-failed-forged-as-committed",
         Some("requirement result, operation count, or cleanup differs"),
@@ -635,7 +691,7 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
     .expect("withhold owned number-store HEAD identity");
     let mut fault = child.clone();
     rebind_offline_file(&mut fault, &child_root, name);
-    structural_fault(
+    offline_fault(
         fault,
         "transaction-outcome/omit-physical-head-identities",
         Some("independent store revision, complete cells, or entry bytes omitted"),
@@ -648,10 +704,183 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
         .as_array_mut()
         .expect("offline retained files")
         .retain(|file| file["path"] != predecessor_artifact);
-    structural_fault(
+    offline_fault(
         fault,
         "transaction-outcome/omit-authentic-predecessor-artifact",
         None,
+    );
+
+    // Remove each original and its enclosing file-inventory entry together. A consistently
+    // rehashed aggregate still needs the literal numerical authoring and checkpoint materials.
+    for name in numerical_originals {
+        fs::remove_file(child_root.join(name)).expect("withhold owned numerical original");
+        let mut fault = child.clone();
+        let files = fault["files"]
+            .as_array_mut()
+            .expect("offline original files");
+        let original_count = files.len();
+        files.retain(|file| file["path"] != name);
+        assert_eq!(
+            files.len() + 1,
+            original_count,
+            "original inventory owns {name}"
+        );
+        offline_fault(fault, &format!("f64/omit-original/{name}"), None);
+    }
+
+    let output = fs::read_to_string(child_root.join(&numerical_scale))
+        .expect("original independently expected scale result");
+    let records = parse_records("numerical-scale-result", output.as_bytes())
+        .expect("original numerical result records");
+    let value = records
+        .iter()
+        .find(|record| record.operation == "execution")
+        .expect("numerical execution")
+        .fields
+        .iter()
+        .find(|field| field.name == "value")
+        .expect("numerical result value")
+        .value
+        .as_str();
+    let expected_variance = "\"population-variance\":87381.328125";
+    assert_eq!(value.matches(expected_variance).count(), 1);
+    let changed = value.replacen(expected_variance, "\"population-variance\":87381.5", 1);
+    fs::write(
+        child_root.join(&numerical_scale),
+        replace_record_field(&output, "execution", "value", &changed),
+    )
+    .expect("alter one scale field without reparsing other binary64 results");
+    let mut fault = child.clone();
+    rebind_offline_file(&mut fault, &child_root, &numerical_scale);
+    offline_fault(
+        fault,
+        "f64/rehashed-independent-scale-result",
+        Some("F64 scale:"),
+    );
+
+    // Substitute a coherent alternative workload in both supplied input and command, and make
+    // its reported mean agree. The reader must retain the selected independently fixed fixture.
+    let name = "f64-input-direct-small.json";
+    let input = fs::read_to_string(child_root.join(name)).expect("original small input");
+    assert_eq!(input, "[[0.5,1.5,2.5,3.5]]");
+    let changed_input = "[[1.5,2.5,3.5,4.5]]";
+    fs::write(child_root.join(name), changed_input).expect("replace selected numerical input");
+    let output =
+        fs::read_to_string(child_root.join(&numerical_small)).expect("original small result");
+    let records = parse_records("numerical-small-result", output.as_bytes())
+        .expect("original small result records");
+    let value = records
+        .iter()
+        .find(|record| record.operation == "execution")
+        .expect("small execution")
+        .fields
+        .iter()
+        .find(|field| field.name == "value")
+        .expect("small result value")
+        .value
+        .as_str();
+    assert_eq!(value.matches("\"mean\":2.0").count(), 1);
+    let changed = value.replacen("\"mean\":2.0", "\"mean\":3.0", 1);
+    fs::write(
+        child_root.join(&numerical_small),
+        replace_record_field(&output, "execution", "value", &changed),
+    )
+    .expect("supply corresponding alternative numerical result");
+    let mut fault = child.clone();
+    *fault["commands"][numerical_command("direct-small")]["command"]
+        .as_array_mut()
+        .expect("selected invocation arguments")
+        .last_mut()
+        .expect("literal JSON arguments") = Value::String(changed_input.to_owned());
+    rebind_offline_file(&mut fault, &child_root, name);
+    rebind_offline_file(&mut fault, &child_root, &numerical_small);
+    offline_fault(
+        fault,
+        "f64/rehashed-substituted-input-command-and-result",
+        Some("F64 retained runtime input differs"),
+    );
+
+    let output = fs::read_to_string(child_root.join(&numerical_after))
+        .expect("original edited calibration definition");
+    let records = parse_records("edited-numerical-definition", output.as_bytes())
+        .expect("original calibration records");
+    let parameter_types = records
+        .iter()
+        .filter(|record| record.operation == "definition.parameter")
+        .map(|record| {
+            record
+                .fields
+                .iter()
+                .find(|field| field.name == "type")
+                .expect("retained calibration parameter type")
+                .value
+                .clone()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(parameter_types.len(), 2);
+    assert_ne!(
+        parameter_types[0], parameter_types[1],
+        "offset and Measurement types differ"
+    );
+    fs::write(
+        child_root.join(&numerical_after),
+        replace_record_field(&output, "definition.parameter", "type", &parameter_types[1]),
+    )
+    .expect("change the retained offset type without changing its identity");
+    let mut fault = child.clone();
+    rebind_offline_file(&mut fault, &child_root, &numerical_after);
+    offline_fault(
+        fault,
+        "f64/rehashed-calibration-parameter-type",
+        Some("F64 projection edit changed its complete retained signature or header"),
+    );
+
+    let output = fs::read_to_string(child_root.join(&numerical_after))
+        .expect("restored edited calibration definition");
+    let previous = numerical["before"]["revision"]
+        .as_str()
+        .expect("original consumer revision");
+    let changed = replace_record_field(&output, "definition.header", "revision", previous);
+    let changed = replace_record_field(&changed, "revision", "observed", previous);
+    fs::write(child_root.join(&numerical_after), changed)
+        .expect("substitute a foreign accepted revision in the edited inspection");
+    let mut fault = child.clone();
+    rebind_offline_file(&mut fault, &child_root, &numerical_after);
+    offline_fault(
+        fault,
+        "f64/rehashed-calibration-inspection-revision",
+        Some("F64 calibration inspection changed accepted revision"),
+    );
+
+    let mut observation = numerical.clone();
+    assert_ne!(
+        observation["standard"]["transport"],
+        observation["producer"]["transport"]
+    );
+    observation["standard"]["transport"] = observation["producer"]["transport"].clone();
+    let mut fault = child.clone();
+    fault["observations"]["f64"] = Value::String(observation.to_string());
+    offline_fault(
+        fault,
+        "f64/rehashed-foreign-standard-transport",
+        Some("F64 standard identity differs from original copied-product discovery"),
+    );
+
+    // These are genuine valid artifact bytes from the same workload before its accepted edit.
+    // Recompute both file checksums so the independent source binding must reject the swap.
+    let name = "f64-after.lkja";
+    fs::write(child_root.join(name), &numerical_before_artifact)
+        .expect("substitute the original valid preceding artifact");
+    let mut fault = child.clone();
+    fault["observations"]["artifact-f64-after"] = serde_json::to_value(
+        archive::sha256_bytes(&numerical_before_artifact).expect("recomputed artifact SHA-256"),
+    )
+    .expect("artifact digest JSON");
+    rebind_offline_file(&mut fault, &child_root, name);
+    offline_fault(
+        fault,
+        "f64/rehashed-valid-artifact-from-before-edit",
+        Some("F64 original artifact/source binding"),
     );
 
     assert_eq!(
@@ -665,8 +894,8 @@ fn live_nominal_receipt_omissions_reject_at_target_admission() {
     );
     assert_eq!(
         results.len(),
-        114,
-        "complete nominal, recursive, and requirement target fault inventory"
+        130,
+        "complete nominal, recursive, requirement, and numerical target fault inventory"
     );
     scratch.close().expect("owned log cleanup");
     archive::write_new(&root.join("nominal-receipt-faults.json"), &evidence::encode_json(&serde_json::json!({

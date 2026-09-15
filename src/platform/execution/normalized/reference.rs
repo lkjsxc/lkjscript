@@ -13,6 +13,7 @@ use super::value::{
 };
 use super::value_schema::NormalizedValueSchema;
 use super::vm::NormalizedRunPolicy;
+use crate::platform::binary64::Binary64;
 use crate::platform::diagnostic::DiagnosticClass;
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::json::JsonLimits;
@@ -1729,6 +1730,9 @@ impl ReferenceState<'_> {
             ExpressionOperation::I64 { value } => {
                 CheckedValue::primitive(&self.schema, NormalizedValue::I64(value))
             }
+            ExpressionOperation::F64 { value } => {
+                CheckedValue::primitive(&self.schema, NormalizedValue::F64(value))
+            }
             ExpressionOperation::Text { value } => self.text(value).and_then(|value| {
                 CheckedValue::primitive(&self.schema, NormalizedValue::Text(value))
             }),
@@ -3014,6 +3018,65 @@ fn reference_intrinsic(
                 "identity host received a foreign arity",
             )),
         },
+        "core.f64.add" | "core.f64.subtract" | "core.f64.multiply" | "core.f64.divide" => {
+            let (left, right) = reference_f64_pair(&arguments)?;
+            let answer = match implementation {
+                "core.f64.add" => left + right,
+                "core.f64.subtract" => left - right,
+                "core.f64.multiply" => left * right,
+                _ => left / right,
+            };
+            Ok(NormalizedValue::F64(Binary64::from_float(answer)))
+        }
+        "core.f64.negate" => reference_unary_f64(&arguments, |number| -number),
+        "core.f64.abs" => reference_unary_f64(&arguments, f64::abs),
+        "core.f64.sqrt" => reference_unary_f64(&arguments, f64::sqrt),
+        "core.f64.less" | "core.f64.less-equal" => {
+            let (left, right) = reference_f64_pair(&arguments)?;
+            let ordered = match implementation {
+                "core.f64.less" => left < right,
+                _ => left <= right,
+            };
+            Ok(NormalizedValue::Bool(ordered))
+        }
+        "core.f64.is-finite" | "core.f64.is-nan" => {
+            let number = reference_f64_argument(&arguments)?;
+            let predicate = match implementation {
+                "core.f64.is-finite" => number.is_finite(),
+                _ => number.is_nan(),
+            };
+            Ok(NormalizedValue::Bool(predicate))
+        }
+        "core.f64.from-i64" => match arguments.as_slice() {
+            [NormalizedValue::I64(number)] => {
+                Ok(NormalizedValue::F64(Binary64::from_float(*number as f64)))
+            }
+            _ => Err(reference_type_error("F64 conversion requires one integer")),
+        },
+        "core.f64.to-i64-result" => {
+            let converted = reference_f64_to_i64(reference_f64_argument(&arguments)?);
+            reference_structural_record(vec![
+                ("value", NormalizedValue::I64(converted.unwrap_or_default())),
+                ("valid", NormalizedValue::Bool(converted.is_some())),
+            ])
+        }
+        "core.f64.parse-result" => match arguments.as_slice() {
+            [NormalizedValue::Text(text)] => {
+                let number = Binary64::parse(text);
+                reference_structural_record(vec![
+                    (
+                        "value",
+                        NormalizedValue::F64(number.unwrap_or_else(|| Binary64::from_float(0.0))),
+                    ),
+                    ("valid", NormalizedValue::Bool(number.is_some())),
+                ])
+            }
+            _ => Err(reference_type_error("F64 parser requires one text value")),
+        },
+        "core.f64.to-text" => match arguments.as_slice() {
+            [NormalizedValue::F64(number)] => Ok(NormalizedValue::text(number.to_text())),
+            _ => Err(reference_type_error("F64 formatter requires one F64 value")),
+        },
         "core.i64.add" => reference_binary_i64(
             arguments,
             i64::checked_add,
@@ -3802,6 +3865,11 @@ fn reference_json_error(error: crate::platform::diagnostic::Diagnostic) -> Execu
     let class = match error.class {
         crate::platform::diagnostic::DiagnosticClass::Resource => ExecutionFailureClass::Resource,
         crate::platform::diagnostic::DiagnosticClass::Cancelled => ExecutionFailureClass::Cancelled,
+        crate::platform::diagnostic::DiagnosticClass::Semantic
+            if error.code == "normalized_json_nonfinite" =>
+        {
+            ExecutionFailureClass::Trap
+        }
         _ => ExecutionFailureClass::Infrastructure,
     };
     ExecutionError::new(class, error.code, "typed JSON operation failed")
@@ -3811,10 +3879,32 @@ pub(crate) fn reference_equal(
     left: &NormalizedValue,
     right: &NormalizedValue,
 ) -> Result<bool, ExecutionError> {
+    reference_compare(left, right, false)
+}
+
+pub(crate) fn reference_observation_equal(
+    left: &NormalizedValue,
+    right: &NormalizedValue,
+) -> Result<bool, ExecutionError> {
+    reference_compare(left, right, true)
+}
+
+fn reference_compare(
+    left: &NormalizedValue,
+    right: &NormalizedValue,
+    observation: bool,
+) -> Result<bool, ExecutionError> {
     match (left, right) {
         (NormalizedValue::Unit, NormalizedValue::Unit) => Ok(true),
         (NormalizedValue::Bool(left), NormalizedValue::Bool(right)) => Ok(left == right),
         (NormalizedValue::I64(left), NormalizedValue::I64(right)) => Ok(left == right),
+        (NormalizedValue::F64(left), NormalizedValue::F64(right)) => {
+            if observation {
+                Ok(left.bits() == right.bits())
+            } else {
+                Ok(left.to_float() == right.to_float())
+            }
+        }
         (NormalizedValue::Bytes(left), NormalizedValue::Bytes(right)) => Ok(left == right),
         (NormalizedValue::Text(left), NormalizedValue::Text(right))
         | (NormalizedValue::StaticText(left), NormalizedValue::StaticText(right)) => {
@@ -3830,7 +3920,7 @@ pub(crate) fn reference_equal(
                 fields: right,
             }),
         ) => {
-            let contents = reference_equal_sequence(left, right)?;
+            let contents = reference_equal_sequence(left, right, observation)?;
             Ok(left_layout == right_layout && contents)
         }
         (
@@ -3839,7 +3929,7 @@ pub(crate) fn reference_equal(
         ) => {
             let mut equal = left.len() == right.len();
             for ((left_name, left), (right_name, right)) in left.iter().zip(right.iter()) {
-                let values = reference_equal(left, right)?;
+                let values = reference_compare(left, right, observation)?;
                 equal &= left_name == right_name && values;
             }
             for (_, value) in left
@@ -3847,7 +3937,7 @@ pub(crate) fn reference_equal(
                 .skip(right.len())
                 .chain(right.iter().skip(left.len()))
             {
-                reference_equal(value, value)?;
+                reference_compare(value, value, observation)?;
             }
             Ok(equal)
         }
@@ -3863,11 +3953,12 @@ pub(crate) fn reference_equal(
                 payload: right,
             },
         ) => {
-            let payloads = reference_optional_equality(left.as_deref(), right.as_deref())?;
+            let payloads =
+                reference_optional_equality(left.as_deref(), right.as_deref(), observation)?;
             Ok(left_layout == right_layout && left_case == right_case && payloads)
         }
         (NormalizedValue::Option(left), NormalizedValue::Option(right)) => {
-            reference_optional_equality(left.as_deref(), right.as_deref())
+            reference_optional_equality(left.as_deref(), right.as_deref(), observation)
         }
         (
             NormalizedValue::Result {
@@ -3879,20 +3970,20 @@ pub(crate) fn reference_equal(
                 value: right,
             },
         ) => {
-            let contents = reference_equal(left, right)?;
+            let contents = reference_compare(left, right, observation)?;
             Ok(left_case == right_case && contents)
         }
         (NormalizedValue::List(left), NormalizedValue::List(right)) => {
             let mut equal = left.len() == right.len();
             for (left, right) in left.iter().zip(right.iter()) {
-                equal &= reference_equal(left, right)?;
+                equal &= reference_compare(left, right, observation)?;
             }
             for value in left
                 .iter()
                 .skip(right.len())
                 .chain(right.iter().skip(left.len()))
             {
-                reference_equal(value, value)?;
+                reference_compare(value, value, observation)?;
             }
             Ok(equal)
         }
@@ -3900,9 +3991,9 @@ pub(crate) fn reference_equal(
             let mut equal = left.len() == right.len();
             for (key, left) in left.iter() {
                 let values = match right.get(key) {
-                    Some(right) => reference_equal(left, right)?,
+                    Some(right) => reference_compare(left, right, observation)?,
                     None => {
-                        reference_equal(left, left)?;
+                        reference_compare(left, left, observation)?;
                         false
                     }
                 };
@@ -3910,7 +4001,7 @@ pub(crate) fn reference_equal(
             }
             for (key, value) in right.iter() {
                 if !left.contains_key(key) {
-                    reference_equal(value, value)?;
+                    reference_compare(value, value, observation)?;
                     equal = false;
                 }
             }
@@ -3929,8 +4020,8 @@ pub(crate) fn reference_equal(
             ))
         }
         _ => {
-            reference_equal(left, left)?;
-            reference_equal(right, right)?;
+            reference_compare(left, left, observation)?;
+            reference_compare(right, right, observation)?;
             Ok(false)
         }
     }
@@ -3939,12 +4030,13 @@ pub(crate) fn reference_equal(
 fn reference_optional_equality(
     left: Option<&NormalizedValue>,
     right: Option<&NormalizedValue>,
+    observation: bool,
 ) -> Result<bool, ExecutionError> {
     if let (Some(left), Some(right)) = (left, right) {
-        return reference_equal(left, right);
+        return reference_compare(left, right, observation);
     }
     for value in left.into_iter().chain(right) {
-        reference_equal(value, value)?;
+        reference_compare(value, value, observation)?;
     }
     Ok(left.is_none() && right.is_none())
 }
@@ -3952,19 +4044,58 @@ fn reference_optional_equality(
 fn reference_equal_sequence(
     left: &[NormalizedValue],
     right: &[NormalizedValue],
+    observation: bool,
 ) -> Result<bool, ExecutionError> {
     let mut equal = left.len() == right.len();
     for (left, right) in left.iter().zip(right.iter()) {
-        equal &= reference_equal(left, right)?;
+        equal &= reference_compare(left, right, observation)?;
     }
     for value in left
         .iter()
         .skip(right.len())
         .chain(right.iter().skip(left.len()))
     {
-        reference_equal(value, value)?;
+        reference_compare(value, value, observation)?;
     }
     Ok(equal)
+}
+
+fn reference_f64_pair(arguments: &[NormalizedValue]) -> Result<(f64, f64), ExecutionError> {
+    match arguments {
+        [NormalizedValue::F64(left), NormalizedValue::F64(right)] => {
+            Ok((left.to_float(), right.to_float()))
+        }
+        _ => Err(reference_type_error(
+            "binary F64 operation requires two F64 values",
+        )),
+    }
+}
+
+fn reference_f64_argument(arguments: &[NormalizedValue]) -> Result<f64, ExecutionError> {
+    match arguments {
+        [NormalizedValue::F64(number)] => Ok(number.to_float()),
+        _ => Err(reference_type_error(
+            "unary F64 operation requires one F64 value",
+        )),
+    }
+}
+
+fn reference_unary_f64(
+    arguments: &[NormalizedValue],
+    operation: fn(f64) -> f64,
+) -> Result<NormalizedValue, ExecutionError> {
+    let answer = operation(reference_f64_argument(arguments)?);
+    Ok(NormalizedValue::F64(Binary64::from_float(answer)))
+}
+
+fn reference_f64_to_i64(number: f64) -> Option<i64> {
+    if !number.is_finite()
+        || number < -9_223_372_036_854_775_808.0
+        || number >= 9_223_372_036_854_775_808.0
+    {
+        return None;
+    }
+    Some(number.trunc() as i64)
 }
 
 fn reference_binary_i64(
@@ -4100,6 +4231,7 @@ fn reference_value_cost(value: &NormalizedValue) -> Result<(u64, u64), Execution
             NormalizedValue::Unit
             | NormalizedValue::Bool(_)
             | NormalizedValue::I64(_)
+            | NormalizedValue::F64(_)
             | NormalizedValue::Function { .. }
             | NormalizedValue::Resource(_) => {}
         }

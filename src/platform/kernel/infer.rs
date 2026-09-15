@@ -703,6 +703,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             ExpressionOperation::Unit {} => self.canonical_type(TypeForm::Unit),
             ExpressionOperation::Bool { .. } => self.canonical_type(TypeForm::Bool),
             ExpressionOperation::I64 { .. } => self.canonical_type(TypeForm::I64),
+            ExpressionOperation::F64 { .. } => self.canonical_type(TypeForm::F64),
             ExpressionOperation::Text { .. } => self.canonical_type(TypeForm::Text),
             ExpressionOperation::StaticText { .. } => self.canonical_type(TypeForm::StaticText),
             ExpressionOperation::Local { value } => self.local_type(value, context, next),
@@ -1506,6 +1507,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 TypeForm::Unit
                 | TypeForm::Bool
                 | TypeForm::I64
+                | TypeForm::F64
                 | TypeForm::Bytes
                 | TypeForm::Text
                 | TypeForm::StaticText

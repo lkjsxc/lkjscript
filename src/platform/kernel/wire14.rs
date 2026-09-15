@@ -737,7 +737,8 @@ impl TryFrom<super::ExpressionOperation> for ExpressionOperation14 {
             super::ExpressionOperation::Bind { callee, arguments } => {
                 Self::Bind { callee, arguments }
             }
-            super::ExpressionOperation::TransactionOutcome { .. } => return Err(extension()),
+            super::ExpressionOperation::TransactionOutcome { .. }
+            | super::ExpressionOperation::F64 { .. } => return Err(extension()),
         })
     }
 }

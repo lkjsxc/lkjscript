@@ -434,7 +434,7 @@ fn concurrent_dependency_apply_has_one_complete_winner_and_one_stale_candidate()
             .check(&crate::platform::execution::ExecutionControl::uncancelled())
             .unwrap()
             .passed,
-        33
+        37
     );
 }
 
@@ -5860,6 +5860,7 @@ fn authored_type_builder_interns_every_unrestricted_graph_nine_type_form() {
             TypeForm::Unit => "unit",
             TypeForm::Bool => "bool",
             TypeForm::I64 => "i64",
+            TypeForm::F64 => "f64",
             TypeForm::Bytes => "bytes",
             TypeForm::Text => "text",
             TypeForm::StaticText => "static_text",

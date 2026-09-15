@@ -116,6 +116,7 @@ struct Writer {
     maximum: usize,
     requirement_extension: bool,
     outcome_extension: bool,
+    f64_extension: bool,
 }
 
 impl Writer {
@@ -125,11 +126,14 @@ impl Writer {
             maximum,
             requirement_extension: false,
             outcome_extension: false,
+            f64_extension: false,
         }
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.outcome_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+        if self.f64_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR17");
+        } else if self.outcome_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR16");
         } else if self.requirement_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR15");
@@ -1165,6 +1169,10 @@ impl Writer {
                 AuthoredType::Unit {} => self.tag(1)?,
                 AuthoredType::Bool {} => self.tag(2)?,
                 AuthoredType::I64 {} => self.tag(3)?,
+                AuthoredType::F64 {} => {
+                    self.f64_extension = true;
+                    self.tag(19)?;
+                }
                 AuthoredType::Bytes {} => self.tag(4)?,
                 AuthoredType::Text {} => self.tag(5)?,
                 AuthoredType::StaticText {} => self.tag(6)?,
@@ -1475,6 +1483,11 @@ impl Writer {
             AuthoredExpressionOperation::I64 { value } => {
                 self.tag(3)?;
                 self.i64(*value)
+            }
+            AuthoredExpressionOperation::F64 { value } => {
+                self.f64_extension = true;
+                self.tag(27)?;
+                self.raw(&value.bits().to_le_bytes())
             }
             AuthoredExpressionOperation::Text { value } => {
                 self.tag(4)?;

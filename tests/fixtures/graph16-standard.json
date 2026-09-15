@@ -1,0 +1,10 @@
+{
+  "source_commit": "0b6a9c08017fa7565408acfda10d3ce3b3c40c04",
+  "producer_graph_contract": 16,
+  "accepted_graph_contract": 15,
+  "artifact_original_path": "packages/standard/generated/standard.lkja",
+  "transport_original_path": "packages/standard/generated/standard.lkjp",
+  "artifact_sha256": "7a34683a8c3ec1c91152af5ae389d8defa0c754ab7e7a374159c69d3b3a5398a",
+  "transport_sha256": "1d4a4a821b88c9de6fb40533db31f7eff25fe666070482c66ae8b3a4ff702662",
+  "provenance": "Exact checked-in predecessor bytes copied before F64 implementation and standard regeneration. The Graph 16 producer retained this library's accepted Graph 15 root and older unchanged owners; graph16 in these filenames identifies the producer generation. No fixture regeneration or identity allocation."
+}

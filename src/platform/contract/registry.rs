@@ -111,6 +111,7 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
     ("unit", "(unit)"),
     ("bool", "(bool true|false)"),
     ("i64", "(i64 I64)"),
+    ("f64", "(f64 DECIMAL|nan|inf|-inf)"),
     ("text", "(text \"TEXT\")"),
     ("static-text", "(static-text \"TEXT\")"),
     (
@@ -688,7 +689,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
-            magic_values: &["LKJOWN13", "LKJSMR01", "LKJDEP13", "LKJRET13"],
+            magic_values: &["LKJOWN17", "LKJSMR01", "LKJDEP14", "LKJRET14"],
             digest_domains: &[
                 super::super::kernel::contract::OWNER_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::ROOT_ENVELOPE_DOMAIN,
@@ -713,9 +714,10 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
-            magic_values: &["LKJTYP10"],
+            magic_values: &["LKJTYP10", "LKJF6401"],
             digest_domains: &[
                 super::super::kernel::contract::TYPE_OBJECT_ENVELOPE_DOMAIN,
+                super::super::kernel::contract::F64_TYPE_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::TYPE_OBJECT_DIGEST_DOMAIN,
             ],
         },
@@ -860,7 +862,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
-            magic_values: &["LKJWIT08"],
+            magic_values: &["LKJWIT09"],
             digest_domains: &[
                 witness_contract::WITNESS_ENVELOPE_DOMAIN,
                 witness_contract::VALIDATION_WITNESS_DIGEST_DOMAIN,
@@ -871,7 +873,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             key: ContractKey::SemanticValidator,
             name: "semantic validator",
             identity: witness_contract::VALIDATOR_CONTRACT_IDENTITY,
-            version: 10,
+            version: witness_contract::VALIDATOR_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
@@ -897,7 +899,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
             predecessor_policy: REJECT,
-            magic_values: &["LKJACR14", "LKJABG01"],
+            magic_values: &["LKJACR14", "LKJACR15", "LKJACR16", "LKJACR17", "LKJABG01"],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
                 CHANGE_REQUEST_COMMITMENT_DOMAIN,
@@ -1041,7 +1043,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
-            magic_values: &["LKJCUN08"],
+            magic_values: &["LKJCUN13"],
             digest_domains: &[
                 COMPILER_UNIT_ENVELOPE_DOMAIN,
                 COMPILER_UNIT_KEY_DOMAIN,
@@ -1063,7 +1065,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJAMF17"],
+            magic_values: &["LKJAMF21"],
             digest_domains: &[
                 ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
                 storage_contract::ARTIFACT_MANIFEST_DIGEST_DOMAIN,
@@ -1077,7 +1079,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJART17", "LKJAEN17"],
+            magic_values: &["LKJART21", "LKJAEN21"],
             digest_domains: &[
                 ARTIFACT_BUNDLE_DIGEST_DOMAIN,
                 ARTIFACT_BUNDLE_CHECKSUM_DOMAIN,
@@ -4172,8 +4174,44 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "kernel_expression_generation",
             DiagnosticClass::Semantic,
-            "A transaction-outcome expression claims a graph generation that cannot represent it.",
-            "Use a runtime that admits Graph 16 and preserve authentic predecessor bytes.",
+            "An expression claims a graph generation that cannot represent its meaning.",
+            "Use Graph 17 for F64 literals or Graph 16 and later for transaction outcomes; preserve authentic predecessor bytes.",
+        ),
+        diagnostic(
+            "kernel_type_contract",
+            DiagnosticClass::Semantic,
+            "A type object's version disagrees with the canonical envelope for its form.",
+            "Use the disjoint F64 envelope version 1 for F64 and preserve unchanged predecessor type encodings.",
+        ),
+        diagnostic(
+            "kernel_type_graph_generation",
+            DiagnosticClass::Semantic,
+            "A graph contains a type newer than its declared generation, including unused types.",
+            "Author F64 through a Graph 17 product; do not place its type envelope inside an older graph.",
+        ),
+        diagnostic(
+            "kernel_owner_graph_generation",
+            DiagnosticClass::Semantic,
+            "An owner contains meaning newer than its own generation or containing graph.",
+            "Publish the complete validated candidate through the current product instead of relabeling predecessor content.",
+        ),
+        diagnostic(
+            "kernel_f64_type_tag",
+            DiagnosticClass::Corrupt,
+            "The disjoint F64 type envelope contains an unknown scalar tag.",
+            "Reacquire or rebuild the exact canonical type object; F64 envelope version 1 uses tag 1.",
+        ),
+        diagnostic(
+            "compiler_unit_f64_generation",
+            DiagnosticClass::Source,
+            "A compiled F64 literal instruction claims a predecessor compiler or bytecode generation.",
+            "Rebuild from accepted meaning with compiler unit 13 and bytecode 9; preserve predecessor artifacts.",
+        ),
+        diagnostic(
+            "artifact_f64_graph_generation",
+            DiagnosticClass::Corrupt,
+            "An artifact contains F64 meaning in a package, owner or unit claiming an older generation.",
+            "Rebuild the complete exact package closure with Graph 17 support; a newer outer artifact does not authorize older units to contain F64.",
         ),
         diagnostic(
             "kernel_transaction_outcome_identity",
@@ -4300,6 +4338,18 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Resource,
             "Whole-application JSON eligibility exceeds its bounded temporary metadata allowance.",
             "Reduce the concrete type closure; no partial value is returned.",
+        ),
+        diagnostic(
+            "normalized_json_nonfinite",
+            DiagnosticClass::Semantic,
+            "A typed JSON result contains NaN or infinity, including a nested F64 value.",
+            "Check finiteness or return an ordinary failure variant before JSON encoding; earlier effects may already be visible, completed transactions stay completed, and automatic retry is not safe.",
+        ),
+        diagnostic(
+            "normalized_data_f64",
+            DiagnosticClass::Corrupt,
+            "A typed binary F64 payload is truncated or contains a noncanonical NaN.",
+            "Supply eight little-endian binary64 bytes and the canonical NaN bits 0x7ff8000000000000 under the exact typed layout.",
         ),
         diagnostic(
             "session_state_arity",
@@ -6461,6 +6511,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 "unit",
                 "bool",
                 "i64",
+                "f64",
                 "text",
                 "static_text",
                 "local",
@@ -6921,6 +6972,103 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     (
                         "authority",
                         "disposable-preparation-bound-derivation".to_owned(),
+                    ),
+                ],
+            )?);
+            records.push(compact_record(
+                "execution.f64",
+                &[
+                    ("type", "f64".to_owned()),
+                    (
+                        "domain",
+                        "ieee-binary64-including-subnormals-signed-zero-infinity-canonical-nan"
+                            .to_owned(),
+                    ),
+                    ("nan-bits", "0x7ff8000000000000".to_owned()),
+                    ("intrinsic-prefix", "core.f64.".to_owned()),
+                    (
+                        "arithmetic",
+                        "add,subtract,multiply,divide,negate,abs,sqrt".to_owned(),
+                    ),
+                    ("predicates", "less,less-equal,is-finite,is-nan".to_owned()),
+                    (
+                        "rounding",
+                        "nearest-even-per-operation-in-authored-order".to_owned(),
+                    ),
+                    ("overflow", "infinity".to_owned()),
+                    ("underflow", "gradual-with-zero-sign-preserved".to_owned()),
+                    ("invalid-arithmetic", "canonical-nan".to_owned()),
+                    (
+                        "value-equality",
+                        "recursive-ieee-nan-unequal-zeros-equal".to_owned(),
+                    ),
+                    (
+                        "observation-equality",
+                        "normalized-bits-nan-reflexive-zeros-distinct".to_owned(),
+                    ),
+                    ("implicit-coercion", "none".to_owned()),
+                    ("map-and-data-keys", "excluded".to_owned()),
+                    ("library-policy", "ordinary-graph-functions".to_owned()),
+                ],
+            )?);
+            records.push(compact_record(
+                "execution.f64-conversion",
+                &[
+                    (
+                        "from-i64",
+                        "core.f64.from-i64:I64-to-F64-nearest-even".to_owned(),
+                    ),
+                    (
+                        "to-i64",
+                        "core.f64.to-i64-result:F64-to-{valid:Bool,value:I64}".to_owned(),
+                    ),
+                    (
+                        "integer-admission",
+                        "finite-truncate-toward-zero-in[-2^63,2^63)".to_owned(),
+                    ),
+                    ("integer-failure", "valid=false,value=0".to_owned()),
+                    (
+                        "parse",
+                        "core.f64.parse-result:Text-to-{valid:Bool,value:F64}".to_owned(),
+                    ),
+                    ("token", "json-decimal|nan|inf|-inf".to_owned()),
+                    ("decimal-overflow", "reject".to_owned()),
+                    ("parse-failure", "valid=false,value=+0.0".to_owned()),
+                    ("format", "core.f64.to-text:F64-to-Text".to_owned()),
+                    ("finite-format", "ryu-shortest-roundtrip".to_owned()),
+                    ("special-format", "-0.0,nan,inf,-inf".to_owned()),
+                    (
+                        "identity",
+                        "canonical-bits-independent-of-decimal-spelling".to_owned(),
+                    ),
+                ],
+            )?);
+            records.push(compact_record(
+                "execution.f64-transport",
+                &[
+                    (
+                        "json-input",
+                        "finite-integer-fraction-exponent-with-correct-rounding-and-signed-zero"
+                            .to_owned(),
+                    ),
+                    ("json-i64", "exact-integer-syntax-and-range".to_owned()),
+                    ("control-numbers", "strict-integer-policies".to_owned()),
+                    (
+                        "json-output",
+                        "finite-number-or-normalized_json_nonfinite".to_owned(),
+                    ),
+                    (
+                        "output-publication",
+                        "complete-bounded-buffer-before-success".to_owned(),
+                    ),
+                    (
+                        "typed-data",
+                        "layout-tag-10-eight-little-endian-bytes-full-value-domain".to_owned(),
+                    ),
+                    ("noncanonical-nan-input", "reject".to_owned()),
+                    (
+                        "earlier-effects",
+                        "preserved-on-later-output-failure-no-automatic-retry".to_owned(),
                     ),
                 ],
             )?);

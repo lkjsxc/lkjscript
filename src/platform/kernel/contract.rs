@@ -1,17 +1,22 @@
 //! Supported graph generations, current type-object codec, and hostile-decoder limits.
 
-pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph-16";
-pub const GRAPH_CONTRACT_VERSION: u16 = 16;
+pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph-17";
+pub const GRAPH_CONTRACT_VERSION: u16 = 17;
+pub const TRANSACTION_GRAPH_CONTRACT_VERSION: u16 = 16;
 pub const REQUIREMENT_GRAPH_CONTRACT_VERSION: u16 = 15;
 pub const PREDECESSOR_GRAPH_CONTRACT_VERSION: u16 = 14;
 pub const fn supported_graph_contract(version: u16) -> bool {
     version == GRAPH_CONTRACT_VERSION
+        || version == TRANSACTION_GRAPH_CONTRACT_VERSION
         || version == REQUIREMENT_GRAPH_CONTRACT_VERSION
         || version == PREDECESSOR_GRAPH_CONTRACT_VERSION
 }
-/// TypeForm is unchanged by expression generations. Its bytes and layout identities stay current.
+/// Existing base type bytes and identities stay unchanged; extensions use disjoint envelopes.
 pub const TYPE_OBJECT_CONTRACT_IDENTITY: &str = "lkjscript-type-object-10";
 pub const TYPE_OBJECT_CONTRACT_VERSION: u16 = 10;
+pub const F64_TYPE_CONTRACT_VERSION: u16 = 1;
+pub const F64_TYPE_MAGIC: [u8; 8] = *b"LKJF6401";
+pub const F64_TYPE_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.f64-type-envelope.v1";
 pub const NOMINAL_APPLICATION_CONTRACT_VERSION: u16 = 1;
 pub const TASK_FUNCTION_CONTRACT_VERSION: u16 = 1;
 pub const TASK_FUNCTION_MAGIC: [u8; 8] = *b"LKJTFN01";
@@ -24,7 +29,8 @@ pub const NOMINAL_APPLICATION_ENVELOPE_DOMAIN: &str =
     "lkjscript.kernel.nominal-application-envelope.v1";
 pub const SEMANTIC_STATE_CONTRACT_VERSION: u16 = 1;
 
-pub const OWNER_MAGIC: [u8; 8] = *b"LKJOWN16";
+pub const OWNER_MAGIC: [u8; 8] = *b"LKJOWN17";
+pub const TRANSACTION_OWNER_MAGIC: [u8; 8] = *b"LKJOWN16";
 pub const REQUIREMENT_OWNER_MAGIC: [u8; 8] = *b"LKJOWN15";
 pub const PREDECESSOR_OWNER_MAGIC: [u8; 8] = *b"LKJOWN14";
 pub const TYPE_OBJECT_MAGIC: [u8; 8] = *b"LKJTYP10";
@@ -32,7 +38,8 @@ pub const ROOT_MAGIC: [u8; 8] = *b"LKJSMR01";
 pub const DEPENDENCY_MAGIC: [u8; 8] = *b"LKJDEP14";
 pub const RETIREMENT_MAGIC: [u8; 8] = *b"LKJRET14";
 
-pub const OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v16";
+pub const OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v17";
+pub const TRANSACTION_OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v16";
 pub const REQUIREMENT_OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v15";
 pub const PREDECESSOR_OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v14";
 pub const TYPE_OBJECT_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.type-envelope.v10";

@@ -709,7 +709,7 @@ pub fn parse_foreground_run(arguments: &[String]) -> Result<ForegroundRunOptions
     let arguments =
         option_value(&arguments[1..], "--arguments")?.unwrap_or_else(|| "[]".to_owned());
     let value =
-        super::json::decode_strict(arguments.as_bytes(), super::json::JsonLimits::default())?;
+        super::json::decode_application(arguments.as_bytes(), super::json::JsonLimits::default())?;
     if !value.is_array() {
         return Err(usage_error("--arguments must be one JSON array"));
     }
@@ -4681,6 +4681,10 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                 fields.push(("form", "i64".to_owned()));
                 fields.push(("value", value.to_string()));
             }
+            ExpressionOperation::F64 { value } => {
+                fields.push(("form", "f64".to_owned()));
+                fields.push(("value", value.to_text()));
+            }
             ExpressionOperation::Text { value } | ExpressionOperation::StaticText { value } => {
                 fields.push((
                     "form",
@@ -5280,6 +5284,7 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
             ExpressionOperation::Unit {}
             | ExpressionOperation::Bool { .. }
             | ExpressionOperation::I64 { .. }
+            | ExpressionOperation::F64 { .. }
             | ExpressionOperation::Text { .. }
             | ExpressionOperation::StaticText { .. }
             | ExpressionOperation::Local { .. }

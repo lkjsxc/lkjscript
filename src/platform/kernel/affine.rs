@@ -427,6 +427,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
             ExpressionOperation::Unit {}
             | ExpressionOperation::Bool { .. }
             | ExpressionOperation::I64 { .. }
+            | ExpressionOperation::F64 { .. }
             | ExpressionOperation::Text { .. }
             | ExpressionOperation::StaticText { .. }
             | ExpressionOperation::Constant { .. } => Ok(EvaluatedValue::Unrestricted),

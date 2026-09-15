@@ -156,7 +156,7 @@ pub(super) fn layout(
         let mut scoped = false;
         match form {
             "unit" => arity(&block, id, args, 0)?,
-            "bool" | "i64" | "constant" => {
+            "bool" | "i64" | "f64" | "constant" => {
                 arity(&block, id, args, 1)?;
                 node.record.fields.push(block.field(
                     args[0],
@@ -636,6 +636,9 @@ fn lower_node(
             value: parse_bool(record, "value")?,
         },
         "expression.i64" => AuthoredExpressionOperation::I64 {
+            value: parse_field(record, "value")?,
+        },
+        "expression.f64" => AuthoredExpressionOperation::F64 {
             value: parse_field(record, "value")?,
         },
         "expression.text" => AuthoredExpressionOperation::Text {

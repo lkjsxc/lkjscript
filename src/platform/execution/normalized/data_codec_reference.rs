@@ -9,6 +9,7 @@ use super::value::{
     NormalizedMapKey, NormalizedRecord, NormalizedValue, RecordLayoutIndex, VariantLayoutIndex,
 };
 use super::value_schema::NormalizedValueSchema;
+use crate::platform::binary64::Binary64;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::ExecutionControl;
 use crate::platform::kernel::{TypeForm, TypeObjectDigest};
@@ -166,6 +167,9 @@ fn write_value(
         (TypeForm::I64, NormalizedValue::I64(value)) => {
             write_bytes(output, &value.to_be_bytes())?;
         }
+        (TypeForm::F64, NormalizedValue::F64(value)) => {
+            write_bytes(output, &value.bits().to_le_bytes())?;
+        }
         (TypeForm::Bytes, NormalizedValue::Bytes(value)) => write_blob(output, value)?,
         (TypeForm::Text, NormalizedValue::Text(value)) => write_blob(output, value.as_bytes())?,
         (
@@ -291,6 +295,21 @@ fn read_value(
             )),
         },
         TypeForm::I64 => Ok(NormalizedValue::I64(input.read_i64("normalized_data_i64")?)),
+        TypeForm::F64 => {
+            let scalar = input.read_exact(8, "normalized_data_f64")?;
+            let bits = u64::from_le_bytes([
+                scalar[0], scalar[1], scalar[2], scalar[3], scalar[4], scalar[5], scalar[6],
+                scalar[7],
+            ]);
+            Binary64::from_bits(bits)
+                .map(NormalizedValue::F64)
+                .ok_or_else(|| {
+                    corrupt_error(
+                        "normalized_data_f64",
+                        "typed data binary64 value contains a noncanonical NaN",
+                    )
+                })
+        }
         TypeForm::Bytes => Ok(NormalizedValue::bytes(
             input.read_blob("normalized_data_bytes")?,
         )),
@@ -444,6 +463,7 @@ fn describe_type(
         TypeForm::Unit => write_bytes(description, &[0])?,
         TypeForm::Bool => write_bytes(description, &[1])?,
         TypeForm::I64 => write_bytes(description, &[2])?,
+        TypeForm::F64 => write_bytes(description, &[10])?,
         TypeForm::Bytes => write_bytes(description, &[3])?,
         TypeForm::Text => write_bytes(description, &[4])?,
         TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
@@ -533,6 +553,12 @@ fn describe_type(
             describe_type(program, *item, ancestors, description, depth + 1, control)?;
         }
         TypeForm::Map { key, value } => {
+            if !matches!(
+                form(program, *key)?,
+                TypeForm::Bool | TypeForm::I64 | TypeForm::Bytes | TypeForm::Text
+            ) {
+                return Err(unsupported("unordered map key"));
+            }
             write_bytes(description, &[8])?;
             describe_type(program, *key, ancestors, description, depth + 1, control)?;
             describe_type(program, *value, ancestors, description, depth + 1, control)?;

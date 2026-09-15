@@ -1,6 +1,6 @@
 //! Exact first-party standard package material embedded in the released executable.
 //!
-//! The maintained Graph 14 package owns both generated assets. This module validates the complete
+//! The maintained Graph 17 package owns both generated assets. This module validates the complete
 //! package transport and artifact closure before exposing either one to project creation, linking,
 //! inspection, or export.
 
@@ -32,11 +32,11 @@ const STANDARD_TRANSPORT_CONTAINER: &[u8] =
 const STANDARD_ARTIFACT: &[u8] = include_bytes!("../../packages/standard/generated/standard.lkja");
 const STANDARD_PACKAGE: &str = "pkg_10000000000000000000000000000001";
 const STANDARD_SEMANTIC_REVISION: &str =
-    "rev_961fb9773948313d606f11bd69785a055d0609477555f370a4dfdbc08d0a0044";
+    "rev_19be6fa1bf22b7b139c3c0773c792c00518fa2e17fd6468da77076a0dc01eeb4";
 const STANDARD_PACKAGE_REVISION: &str =
-    "package_revision_53634416f408feddc2207ca97dc064e855d94ae6ca670f8bf39810a9eea58410";
+    "package_revision_1377b907ba6d62ef959900436e171c9939b2d4049476eb24703facbbd296cd53";
 const STANDARD_PACKAGE_TRANSPORT: &str =
-    "package_transport_a7ab2c4b6ff765b3aeae27f15f0b51445f58d61608a41ccd01b4d24b3b66cf20";
+    "package_transport_5bd92b9f67d08bf91b75fd31be1399ed8fcfc9eac179f2539e9858afc752d2ce";
 const COMMAND_TEXT_FROM_STATIC: &str = "text-from-static";
 const COMMAND_TEXT_FROM_STATIC_IMPLEMENTATION: &str = "core.text.from-static";
 const HTTP_BYTES_FROM_TEXT: &str = "bytes-from-text";

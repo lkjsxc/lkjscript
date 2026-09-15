@@ -622,11 +622,13 @@ checkout, and executes no repository binary or script.
 After immutable publication, exact-tag and `releases/latest` assets are downloaded anonymously and
 authenticated independently by the hosted workflow (A for each route). `release transferred
 pair-run` independently strictly admits each archive/checksum into a separate extraction (V), then
-installs and uses each exact executable in a fresh owned project (S). Pair receipt generation 3
-requires 19 ordered commands per route, including focused structural discovery, literal reviewed
+installs and uses each exact executable in a fresh owned project (S). Pair receipt generation 4
+requires 27 ordered commands per route, including structural and F64 discovery, literal reviewed
 function creation, module/function/parameter discovery, definition inspection, reviewed body
 replacement and changed execution. Independent expected results are I64 42 before replacement,
-I64 43 after sequential shadowing, and the retained command-recipe Text `"hello"`. The declaration
+I64 43 after sequential shadowing, F64 1.75 then 2.75 after the shared reviewed replacement,
+negative-zero formatting as `"-0.0"`, and the retained command-recipe Text `"hello"`. Decimal and
+negative-zero JSON inputs are retained alongside both original requests and plans. The declaration
 and unchanged parameter identity/contract must survive while the body root changes. Requests and
 strict logical-plan files remain bound outside cleaned application roots. Check/build/run and joined
 cleanup remain required. It compares the complete
@@ -910,7 +912,7 @@ and obligations; they do not certify these language or reader changes.
 
 Structural expression acceptance uses the existing authored-intent, public CLI, offline-package
 and installed/public lifecycle owners. Independently handwritten flat and block pairs cover all
-23 expression forms, nominal and structural records, explicit T/E/R applications and later-declared
+advertised expression forms, nominal and structural records, explicit T/E/R applications and later-declared
 public aliases. Equivalent normalized trees must have identical canonical authored bytes, request
 commitments, allocated identities and same-base prepared candidates, including semantic binder
 Names and absent/present annotations. Formatting, comments, alpha-renamed request labels and empty
@@ -958,8 +960,9 @@ Compatibility requires existing flat clients, maintained standard/lkjournal mean
 authentic supported predecessor inputs, and historical-invalid-source repair through their
 existing owners. An old executable must reject a structural request without writing. The input
 revision does not require a graph migration. Both anonymous exact/latest installed routes must
-freshly advertise structural syntax and author and replace a small body through reviewed public
-requests; the full structural libraries remain in the existing offline aggregate. Original readers
+freshly advertise structural syntax and ordinary F64 operations, and author and replace a small
+body through reviewed public requests. The full structural and numerical libraries remain in the
+existing offline aggregate. Original readers
 must bind retained request bytes, commands and outcomes, and reject omitted or consistently
 rehashed false observations. This adds no aggregate child or parallel evidence ledger.
 
@@ -968,3 +971,74 @@ the removed per-occurrence labels and indexed expression edges; they establish n
 time, model tokens, billing or execution speedup. Declaration and reference prelude burden remains
 visible. Proof dispositions and source/verifier/environment/workload bindings follow the existing
 fresh, reused, failed, cancelled, skipped, unavailable and unrun rules.
+
+## Binary64 computation obligations
+
+F64 extends the existing kernel, evaluator, public CLI, offline-package, typed-data and installed
+acceptance owners. VM/reference agreement is necessary but cannot prove their shared scalar
+representation. Independent fixed bit vectors cover exact arithmetic, nearest-even halfway cases,
+signed zero, minimum subnormal, gradual underflow, overflow, infinities, canonical NaN and square
+root. In particular, `sqrt(2)` is `0x3ff6a09e667f3bcd` and `1 + 2^-53` is exactly `1`.
+A bounded arithmetic or canonicalization fault must fail the corresponding fixed expectation.
+Numerical equality must reject shared lists and nominal values containing NaN while equating the
+two zero signs. Representation observations instead require canonical NaN reflexivity and distinct
+zero signs, including graph-test expected values.
+
+Input proof retains flat/structural literal parity, reviewed plan/apply bindings, project and
+artifact decimal command arguments, typed JSON built-ins and exact I64 endpoints and values above
+`2^53`. I64 rejects fraction/exponent spellings. F64 conversion cases include `-2^63`, the greatest
+binary64 value below `2^63`, `2^63`, NaN and both infinities. Numeric token preparation must not make
+malformed original JSON acceptable; string escapes, numeric-looking keys, duplicate fields,
+adjacent values, truncation, trailing input and all existing size/depth/item/string limits remain
+required. Decimal overflow rejects; signed underflow and `-0` preserve their signs. The exact
+midpoint `1.00000000000000011102230246251565404236316680908203125`, including its equivalent
+integer mantissa followed by 800 zeros and exponent `e-853`, must round to `0x3ff0000000000000`.
+This fixed case discriminates a round-trip parser that mishandles long halfway decimal tokens.
+
+Independent byte expectations require eight little-endian bytes under F64 layout tag 10, including
+finite, signed-zero, infinite and canonical-NaN values in nested nominal/list data. Both data codecs
+must reject rehashed noncanonical NaNs, wrong schemas, truncation and trailing bytes. Authentic
+predecessor integer bytes and identities remain exact. Complete graph, package and artifact loaders
+independently reject new numeric types, literals, instructions and malformed intrinsic signatures
+under predecessor generations, including unused and unreachable closure positions. Genuine supported
+predecessor projects, packages and artifacts still inspect, check, rebuild and execute. An old
+executable rejects new meaning without modifying accepted source or application data. Record any
+disposable catalog maintenance separately: accepted HEAD/pack preservation does not imply zero
+filesystem writes by an older project reader. F64 map/data keys remain inadmissible even for empty
+collections.
+
+The existing offline-package owner must retain a separately authored, transported ordinary Welford
+statistics library, a consumer-owned Measurement nominal type and bound calibration projection.
+The copied candidate alone discovers, authors, reviews, exports/imports, builds and runs the
+library outside the language checkout. Producer paths are unavailable during consumer execution.
+Direct F64 and generic nominal inputs, ordinary list folding, specified-order merging, and reviewed
+projection replacement adding `1.0` must produce independent expected results: the edit increases
+the mean by one and preserves variance. Nonfinite projected samples and overflowing finite-input
+accumulation select ordinary declared failure cases; no successful invalid accumulator or clamping
+is accepted. Empty input has no invented mean and count arithmetic remains checked I64.
+
+| Runtime samples | Count | Mean | m2 | Population variance |
+|---|---:|---:|---:|---:|
+| `0.5, 1.5, 2.5, 3.5` | 4 | 2 | 5 | 1.25 |
+| `2^40 + {0.25, 0.5, 0.75, 1.0}` as literal decimal inputs | 4 | `2^40 + 0.625` | 0.3125 | 0.078125 |
+| `1000000 + i/4`, `i=0..4095` | 4096 | 1000511.875 | 357913920 | 87381.328125 |
+
+The dyadic fields require exact values. Square-root results use independently fixed correctly
+rounded expectations or tolerances declared against high-precision expectations before execution.
+Two-half merge and halfway checkpoint/restart use the specified second fixture and operation order.
+The driver may transfer opaque typed checkpoint bytes; accumulation runs as graph functions across
+a terminated process and a fresh decoder process. Different floating evaluation orders generally
+need not agree bit for bit. The large fixture establishes runtime composition, not throughput.
+
+External argument rejection precedes adapter invocation. Nonfinite JSON output yields a classified
+error with no successful payload. A separately granted disposable data workflow must prove that a
+completed write survives later numeric JSON-output failure and restart; it executes once without
+automatic retry. Existing effect/cleanup evidence owners independently observe visibility and
+transaction completion. Live effects are never replayed for differential verification.
+
+Fresh source and separate exact-target acceptance include these existing behavioral owners. The
+anonymous exact/latest installed pair must discover F64 and author/use the numerical witness, with
+complete literal requests, plans, supplied samples, checkpoints and actual results retained in the
+existing evidence inventory. Matching original readers reject missing or consistently rehashed
+false material. Retrospective regenerated requests do not replace originals, and a successful upload
+or subjob does not establish public acceptance. This introduces no aggregate child or proof framework.

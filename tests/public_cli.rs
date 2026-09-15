@@ -871,6 +871,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         "unit",
         "bool",
         "i64",
+        "f64",
         "text",
         "static-text",
         "local",
@@ -927,6 +928,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         expected_expression_forms
     );
     for (name, syntax) in [
+        ("f64", "(f64 DECIMAL|nan|inf|-inf)"),
         (
             "local",
             "(local NAME)|(local $PARAMETER)|(local (exact LOCAL_SELECTOR))",
@@ -1170,7 +1172,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .expect("type reference field form");
     assert_eq!(
         compact_field(type_reference, "syntax"),
-        Some("unit|bool|i64|bytes|text|static-text|secret|@NAME")
+        Some("unit|bool|i64|f64|bytes|text|static-text|secret|@NAME")
     );
     let query = compact_success(&["capabilities", "query"]);
     assert_eq!(
@@ -1851,7 +1853,7 @@ fn normalized_query_and_maintained_check_build_are_dependency_closed() {
     let tests = compact_success(&["--project", APPLICATION, "check"]);
     assert_eq!(
         compact_field(compact_record(&tests, "tests"), "passed"),
-        Some("40")
+        Some("44")
     );
     assert_eq!(
         compact_field(compact_record(&tests, "tests"), "differential"),
@@ -2974,7 +2976,7 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
         &["--project", path(&project), "check"],
     );
     let tests = compact_record(&checked, "tests");
-    assert_eq!(compact_field(tests, "passed"), Some("34"));
+    assert_eq!(compact_field(tests, "passed"), Some("38"));
     assert_eq!(compact_field(tests, "failed"), Some("0"));
     assert_eq!(compact_field(tests, "differential"), Some("equal"));
     assert_eq!(
@@ -3042,7 +3044,7 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
     );
     assert_eq!(
         compact_field(compact_record(&checked_after, "tests"), "passed"),
-        Some("34")
+        Some("38")
     );
 
     let artifact = temporary.path().join("sample.lkja");

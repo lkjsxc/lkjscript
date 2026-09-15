@@ -6,6 +6,9 @@ mod nominal_session_tests;
 #[path = "effect_tests.rs"]
 mod effect_tests;
 
+#[path = "f64_tests.rs"]
+mod f64_tests;
+
 use super::*;
 use crate::platform::change::{AuthoredChange, AuthoredChangeSet, ChangeBudget, PrimitiveEdit};
 use crate::platform::kernel::{

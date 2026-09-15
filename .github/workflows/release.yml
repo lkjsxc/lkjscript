@@ -1208,6 +1208,10 @@ jobs:
             ${{ runner.temp }}/public-verification/pair/latest/create.logical-plan
             ${{ runner.temp }}/public-verification/pair/latest/replace.lkjc
             ${{ runner.temp }}/public-verification/pair/latest/replace.logical-plan
+            ${{ runner.temp }}/public-verification/pair/exact/numerical-input.json
+            ${{ runner.temp }}/public-verification/pair/exact/numerical-negative-zero.json
+            ${{ runner.temp }}/public-verification/pair/latest/numerical-input.json
+            ${{ runner.temp }}/public-verification/pair/latest/numerical-negative-zero.json
             ${{ runner.temp }}/public-verification/pair/*/*.log
             ${{ runner.temp }}/public-verification/pair/*/artifact.lkja
             ${{ runner.temp }}/public-verification/pair/*/extracted/*

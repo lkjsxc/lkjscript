@@ -27,7 +27,7 @@ pub(in crate::release::transferred) fn process_hook(
     spec
 }
 
-fn fixture_members(root: &Path) -> Vec<archive::tests::TestMember> {
+pub(super) fn fixture_members(root: &Path) -> Vec<archive::tests::TestMember> {
     let owner = crate::release::target::tests::elf_fixture(&[(0, 0)]);
     let candidate = root.join("elf");
     fs::write(&candidate, &owner).expect("test-only ELF");
@@ -599,6 +599,7 @@ fn live_pair_interruptions_preserve_failures_before_fresh_recovery() {
                 [
                     "exact-capabilities",
                     "exact-change-capabilities",
+                    "exact-runners-capabilities",
                     "exact-new",
                     "exact-status",
                     "exact-create-plan",
@@ -606,18 +607,26 @@ fn live_pair_interruptions_preserve_failures_before_fresh_recovery() {
                     "exact-find-module",
                     "exact-find-function",
                     "exact-find-parameter",
+                    "exact-find-numerical-function",
+                    "exact-find-numerical-parameter",
                     "exact-definition-created",
+                    "exact-numerical-definition-created",
                     "exact-run-created",
+                    "exact-numerical-run-created",
+                    "exact-numerical-run-negative-zero",
                     "exact-replace-plan",
                     "exact-replace-apply",
                     "exact-definition-replaced",
+                    "exact-numerical-definition-replaced",
                     "exact-run-replaced",
+                    "exact-numerical-run-replaced",
                     "exact-check",
                     "exact-build",
                     "exact-run",
                     "exact-status-final",
                     "latest-capabilities",
                     "latest-change-capabilities",
+                    "latest-runners-capabilities",
                     "latest-new",
                     "latest-status",
                     "latest-create-plan",
@@ -625,12 +634,19 @@ fn live_pair_interruptions_preserve_failures_before_fresh_recovery() {
                     "latest-find-module",
                     "latest-find-function",
                     "latest-find-parameter",
+                    "latest-find-numerical-function",
+                    "latest-find-numerical-parameter",
                     "latest-definition-created",
+                    "latest-numerical-definition-created",
                     "latest-run-created",
+                    "latest-numerical-run-created",
+                    "latest-numerical-run-negative-zero",
                     "latest-replace-plan",
                     "latest-replace-apply",
                     "latest-definition-replaced",
+                    "latest-numerical-definition-replaced",
                     "latest-run-replaced",
+                    "latest-numerical-run-replaced",
                     "latest-check",
                     "latest-build",
                     "latest-run",
@@ -883,6 +899,7 @@ fn live_pair_receipt_fault_matrix() {
     for pointer in [
         "/observations/generic_capture_factory",
         "/observations/imported_capture_constraint",
+        "/observations/f64",
         "/recursive/scale_sum",
         "/recursive/results/retained",
         "/recursive/session/messages",
@@ -952,6 +969,16 @@ fn live_pair_receipt_fault_matrix() {
             "/structural/after/parameter",
             "/structural/created_value",
             "/structural/replaced_value",
+            "/numerical",
+            "/numerical/function",
+            "/numerical/parameter",
+            "/numerical/before/function",
+            "/numerical/after/parameter",
+            "/numerical/decimal_input/file/sha256",
+            "/numerical/negative_zero_input/file/sha256",
+            "/numerical/created_bits",
+            "/numerical/replaced_bits",
+            "/numerical/negative_zero_text",
             "/commands",
         ] {
             let mut value = serde_json::to_value(&baseline.routes[route_index].lifecycle)
@@ -994,51 +1021,98 @@ fn live_pair_receipt_fault_matrix() {
         }
         // Alter original request/output bytes and all their enclosing bindings. The retained
         // literal and arithmetic expectations must reject even when no checksum is stale.
-        for name in ["create", "replace", "run-replaced"] {
+        for name in [
+            "create",
+            "replace",
+            "run-replaced",
+            "create-plan",
+            "replace-plan",
+            "numerical-create",
+            "numerical-replace",
+            "numerical-run-created",
+            "numerical-run-replaced",
+            "numerical-input",
+            "numerical-negative-zero",
+        ] {
             let route_root = baseline.routes[route_index].route.root(&options);
             let child_path = route_root.join("lifecycle.json");
             let child_original = fs::read(&child_path).expect("original lifecycle bytes");
             let mut changed = serde_json::to_value(&baseline.routes[route_index].lifecycle)
                 .expect("lifecycle JSON");
+            let command_name = if name.starts_with("numerical-run-") {
+                name
+            } else {
+                "run-replaced"
+            };
             let command_index = changed["commands"]
                 .as_array()
                 .expect("commands")
                 .iter()
-                .position(|command| command["name"] == "run-replaced")
+                .position(|command| command["name"] == command_name)
                 .expect("replacement execution");
-            let label = if name == "run-replaced" {
+            let is_result = name == "run-replaced" || name.starts_with("numerical-run-");
+            let label = if is_result {
                 changed["commands"][command_index]["process"]["stdout"]["path"]
                     .as_str()
                     .expect("execution log path")
                     .to_owned()
             } else {
-                format!("{name}.lkjc")
+                match name {
+                    "numerical-create" => "create.lkjc".to_owned(),
+                    "numerical-replace" => "replace.lkjc".to_owned(),
+                    "create-plan" => "create.logical-plan".to_owned(),
+                    "replace-plan" => "replace.logical-plan".to_owned(),
+                    "numerical-input" | "numerical-negative-zero" => format!("{name}.json"),
+                    _ => format!("{name}.lkjc"),
+                }
             };
             let fixture_path = route_root.join(&label);
             let fixture_original = fs::read(&fixture_path).expect("original public evidence");
             let fixture_text =
                 std::str::from_utf8(&fixture_original).expect("public evidence UTF-8");
-            let (before, after) = if name == "run-replaced" {
-                ("value=43", "value=42")
-            } else {
-                ("(i64 1)", "(i64 2)")
+            let (before, after) = match name {
+                "run-replaced" => ("value=43", "value=42"),
+                "create-plan" | "replace-plan" => ("\n", "\r\n"),
+                "numerical-create" => ("(f64 0.5)", "(f64 0.75)"),
+                "numerical-replace" => ("(f64 1.0)", "(f64 2.0)"),
+                "numerical-run-created" => ("value=1.75", "value=1.5"),
+                "numerical-run-replaced" => ("value=2.75", "value=2.5"),
+                "numerical-input" => ("[1.25e0]", "[1.25]"),
+                "numerical-negative-zero" => ("[-0.0]", "[0.0]"),
+                _ => ("(i64 1)", "(i64 2)"),
             };
             assert!(fixture_text.contains(before), "literal fault target {name}");
             fs::write(&fixture_path, fixture_text.replacen(before, after, 1))
                 .expect("changed original public evidence");
-            if name == "run-replaced" {
+            if is_result {
                 changed["commands"][command_index]["process"]["stdout"] = serde_json::to_value(
                     evidence::proof(&fixture_path, label).expect("rehashed output"),
                 )
                 .expect("output proof JSON");
-                changed["structural"]["replaced_value"] = serde_json::json!(42);
+                match name {
+                    "numerical-run-created" => {
+                        changed["numerical"]["created_bits"] =
+                            serde_json::json!(0x3ff8_0000_0000_0000_u64)
+                    }
+                    "numerical-run-replaced" => {
+                        changed["numerical"]["replaced_bits"] =
+                            serde_json::json!(0x4004_0000_0000_0000_u64)
+                    }
+                    _ => changed["structural"]["replaced_value"] = serde_json::json!(42),
+                }
             } else {
-                let review = if name == "create" {
-                    "creation"
-                } else {
-                    "replacement"
+                let pointer = match name {
+                    "create" | "numerical-create" => "/structural/creation/request",
+                    "replace" | "numerical-replace" => "/structural/replacement/request",
+                    "create-plan" => "/structural/creation/logical_plan",
+                    "replace-plan" => "/structural/replacement/logical_plan",
+                    "numerical-input" => "/numerical/decimal_input",
+                    "numerical-negative-zero" => "/numerical/negative_zero_input",
+                    _ => panic!("unknown original fault"),
                 };
-                changed["structural"][review]["request"] =
+                *changed
+                    .pointer_mut(pointer)
+                    .expect("original evidence binding") =
                     serde_json::to_value(binding(&fixture_path).expect("rehashed request"))
                         .expect("request binding JSON");
             }
@@ -1064,6 +1138,26 @@ fn live_pair_receipt_fault_matrix() {
                 "fault": format!("{}-{name}-original-bytes-rehashed", baseline.routes[route_index].route.name()),
                 "rehashed_original_and_nested_pair": true,
                 "rejection": rejected.expect_err(name).to_string(),
+            }));
+        }
+        for name in [
+            "create.lkjc",
+            "create.logical-plan",
+            "replace.lkjc",
+            "replace.logical-plan",
+            "numerical-input.json",
+            "numerical-negative-zero.json",
+        ] {
+            let route = baseline.routes[route_index].route;
+            let input = route.root(&options).join(name);
+            let saved = input.with_extension("saved-original");
+            assert!(!saved.exists(), "owned missing-original fixture path");
+            fs::rename(&input, &saved).expect("withhold original");
+            let rejected = read(&options, &verifier);
+            fs::rename(&saved, &input).expect("restore exact original");
+            results.push(serde_json::json!({
+                "fault":format!("{}-{name}-missing-original", route.name()),
+                "rejection":rejected.expect_err("missing original").to_string(),
             }));
         }
     }

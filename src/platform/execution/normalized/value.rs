@@ -1,6 +1,7 @@
 //! Runtime-only dense values for normalized Graph 14 execution.
 
 use super::resource::NormalizedResourceHandle;
+use crate::platform::binary64::Binary64;
 use crate::platform::kernel::{Name, TypeObjectDigest};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -85,6 +86,7 @@ pub enum NormalizedValue {
     Unit,
     Bool(bool),
     I64(i64),
+    F64(Binary64),
     Bytes(Arc<[u8]>),
     Text(Arc<str>),
     StaticText(Arc<str>),
@@ -167,6 +169,7 @@ impl NormalizedValue {
             Self::Unit
             | Self::Bool(_)
             | Self::I64(_)
+            | Self::F64(_)
             | Self::Bytes(_)
             | Self::Text(_)
             | Self::StaticText(_) => true,
@@ -192,6 +195,7 @@ impl NormalizedMapKey {
                 Some(Self::Text(value.to_string()))
             }
             NormalizedValue::Unit
+            | NormalizedValue::F64(_)
             | NormalizedValue::Record(_)
             | NormalizedValue::Variant { .. }
             | NormalizedValue::Option(_)

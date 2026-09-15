@@ -1,0 +1,18 @@
+reference.package as=$std source=builtin
+reference.owner as=$fadd package=$std class=declaration name=f64-add
+reference.owner as=$text-equal package=$std class=declaration name=text-equal
+reference.owner as=$module package=local class=module name=numerical-consumer
+reference.owner as=$Measurement package=local class=declaration parent=$module name=Measurement
+reference.owner as=$label package=local class=field parent=$Measurement name=label
+reference.owner as=$value package=local class=field parent=$Measurement name=value
+reference.owner as=$calibrate package=local class=declaration parent=$module name=calibrate
+reference.owner as=$offset package=local class=parameter parent=$calibrate name=offset
+reference.owner as=$item package=local class=parameter parent=$calibrate name=item
+expression.block as=$edited-calibration
+  (if (call $text-equal (field (local $item) $label) (text "invalid"))
+    (f64 nan)
+    (call $fadd
+      (call $fadd (field (local $item) $value) (local $offset))
+      (f64 1.0)))
+expression.end
+replace.body function=$calibrate body=$edited-calibration

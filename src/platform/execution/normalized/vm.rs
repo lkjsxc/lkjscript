@@ -14,6 +14,7 @@ use super::value::{
     FunctionIndex, NormalizedMapKey, NormalizedRecord, NormalizedValue, RequirementIndex,
     VariantLayoutIndex,
 };
+use crate::platform::binary64::Binary64;
 use crate::platform::diagnostic::DiagnosticClass;
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::json::JsonLimits;
@@ -699,6 +700,9 @@ impl Machine<'_> {
                 }
                 NormalizedInstruction::I64(value) => {
                     self.push_scalar(NormalizedValue::I64(value))?
+                }
+                NormalizedInstruction::F64(value) => {
+                    self.push_scalar(NormalizedValue::F64(value))?
                 }
                 NormalizedInstruction::Text(value) => {
                     self.push_scalar(NormalizedValue::Text(value))?
@@ -2346,6 +2350,7 @@ fn value_cost(value: &NormalizedValue) -> Result<(u64, u64), ExecutionError> {
             NormalizedValue::Unit
             | NormalizedValue::Bool(_)
             | NormalizedValue::I64(_)
+            | NormalizedValue::F64(_)
             | NormalizedValue::Function { .. }
             | NormalizedValue::Resource(_) => {}
         }
@@ -2375,6 +2380,71 @@ fn call_core_intrinsic(
             [value] => Ok(value.clone()),
             _ => Err(type_error("identity host received a foreign arity")),
         },
+        "core.f64.add" => binary_f64(arguments, |left, right| left + right),
+        "core.f64.subtract" => binary_f64(arguments, |left, right| left - right),
+        "core.f64.multiply" => binary_f64(arguments, |left, right| left * right),
+        "core.f64.divide" => binary_f64(arguments, |left, right| left / right),
+        "core.f64.negate" | "core.f64.abs" | "core.f64.sqrt" => {
+            let value = f64_argument(&arguments)?;
+            let result = match implementation {
+                "core.f64.negate" => -value,
+                "core.f64.abs" => value.abs(),
+                _ => value.sqrt(),
+            };
+            Ok(NormalizedValue::F64(Binary64::from_float(result)))
+        }
+        "core.f64.less" | "core.f64.less-equal" => {
+            let (left, right) = f64_pair(&arguments)?;
+            Ok(NormalizedValue::Bool(
+                if implementation == "core.f64.less" {
+                    left < right
+                } else {
+                    left <= right
+                },
+            ))
+        }
+        "core.f64.is-finite" | "core.f64.is-nan" => {
+            let value = f64_argument(&arguments)?;
+            Ok(NormalizedValue::Bool(
+                if implementation == "core.f64.is-finite" {
+                    value.is_finite()
+                } else {
+                    value.is_nan()
+                },
+            ))
+        }
+        "core.f64.from-i64" => {
+            let [NormalizedValue::I64(value)] = arguments.as_slice() else {
+                return Err(type_error("F64 conversion received a foreign value"));
+            };
+            Ok(NormalizedValue::F64(Binary64::from_float(*value as f64)))
+        }
+        "core.f64.to-i64-result" => {
+            let converted = f64_to_i64(f64_argument(&arguments)?);
+            normalized_structural_record([
+                ("valid", NormalizedValue::Bool(converted.is_some())),
+                ("value", NormalizedValue::I64(converted.unwrap_or_default())),
+            ])
+        }
+        "core.f64.parse-result" => {
+            let [NormalizedValue::Text(value)] = arguments.as_slice() else {
+                return Err(type_error("F64 parser received a foreign value"));
+            };
+            let parsed = Binary64::parse(value);
+            normalized_structural_record([
+                ("valid", NormalizedValue::Bool(parsed.is_some())),
+                (
+                    "value",
+                    NormalizedValue::F64(parsed.unwrap_or_else(|| Binary64::from_float(0.0))),
+                ),
+            ])
+        }
+        "core.f64.to-text" => {
+            let [NormalizedValue::F64(value)] = arguments.as_slice() else {
+                return Err(type_error("F64 formatter received a foreign value"));
+            };
+            Ok(NormalizedValue::text(value.to_text()))
+        }
         "core.i64.add" => binary_i64(arguments, i64::checked_add, "integer addition overflow"),
         "core.i64.subtract" => {
             binary_i64(arguments, i64::checked_sub, "integer subtraction overflow")
@@ -3008,6 +3078,9 @@ fn normalized_json_error(error: crate::platform::diagnostic::Diagnostic) -> Exec
         match error.class {
             DiagnosticClass::Resource => ExecutionFailureClass::Resource,
             DiagnosticClass::Cancelled => ExecutionFailureClass::Cancelled,
+            DiagnosticClass::Semantic if error.code == "normalized_json_nonfinite" => {
+                ExecutionFailureClass::Trap
+            }
             _ => ExecutionFailureClass::Infrastructure,
         },
         error.code,
@@ -3019,10 +3092,30 @@ pub(crate) fn normalized_equal(
     left: &NormalizedValue,
     right: &NormalizedValue,
 ) -> Result<bool, ExecutionError> {
+    normalized_compare(left, right, false)
+}
+
+pub(crate) fn normalized_observation_equal(
+    left: &NormalizedValue,
+    right: &NormalizedValue,
+) -> Result<bool, ExecutionError> {
+    normalized_compare(left, right, true)
+}
+
+fn normalized_compare(
+    left: &NormalizedValue,
+    right: &NormalizedValue,
+    observation: bool,
+) -> Result<bool, ExecutionError> {
     match (left, right) {
         (NormalizedValue::Unit, NormalizedValue::Unit) => Ok(true),
         (NormalizedValue::Bool(left), NormalizedValue::Bool(right)) => Ok(left == right),
         (NormalizedValue::I64(left), NormalizedValue::I64(right)) => Ok(left == right),
+        (NormalizedValue::F64(left), NormalizedValue::F64(right)) => Ok(if observation {
+            left.bits() == right.bits()
+        } else {
+            left.to_float() == right.to_float()
+        }),
         (NormalizedValue::Bytes(left), NormalizedValue::Bytes(right)) => Ok(left == right),
         (NormalizedValue::Text(left), NormalizedValue::Text(right))
         | (NormalizedValue::StaticText(left), NormalizedValue::StaticText(right)) => {
@@ -3037,7 +3130,7 @@ pub(crate) fn normalized_equal(
                 layout: right_layout,
                 fields: right,
             }),
-        ) => Ok(equal_sequences(left, right)? && left_layout == right_layout),
+        ) => Ok(equal_sequences(left, right, observation)? && left_layout == right_layout),
         (
             NormalizedValue::Record(NormalizedRecord::Structural { fields: left }),
             NormalizedValue::Record(NormalizedRecord::Structural { fields: right }),
@@ -3045,9 +3138,11 @@ pub(crate) fn normalized_equal(
             let mut equal = left.len() == right.len();
             for index in 0..left.len().max(right.len()) {
                 equal &= match (left.get(index), right.get(index)) {
-                    (Some((a, left)), Some((b, right))) => normalized_equal(left, right)? && a == b,
+                    (Some((a, left)), Some((b, right))) => {
+                        normalized_compare(left, right, observation)? && a == b
+                    }
                     (Some((_, value)), None) | (None, Some((_, value))) => {
-                        normalized_equal(value, value)?;
+                        normalized_compare(value, value, observation)?;
                         false
                     }
                     (None, None) => false,
@@ -3066,11 +3161,13 @@ pub(crate) fn normalized_equal(
                 case: right_case,
                 payload: right,
             },
-        ) => Ok(equal_optional(left.as_deref(), right.as_deref())?
-            && left_layout == right_layout
-            && left_case == right_case),
+        ) => Ok(
+            equal_optional(left.as_deref(), right.as_deref(), observation)?
+                && left_layout == right_layout
+                && left_case == right_case,
+        ),
         (NormalizedValue::Option(left), NormalizedValue::Option(right)) => {
-            equal_optional(left.as_deref(), right.as_deref())
+            equal_optional(left.as_deref(), right.as_deref(), observation)
         }
         (
             NormalizedValue::Result {
@@ -3081,7 +3178,7 @@ pub(crate) fn normalized_equal(
                 success: right_case,
                 value: right,
             },
-        ) => Ok(normalized_equal(left, right)? && left_case == right_case),
+        ) => Ok(normalized_compare(left, right, observation)? && left_case == right_case),
         (NormalizedValue::List(left), NormalizedValue::List(right)) => {
             let mut equal = left.len() == right.len();
             let mut left = left.iter();
@@ -3091,18 +3188,18 @@ pub(crate) fn normalized_equal(
                 if pair == (None, None) {
                     break;
                 }
-                equal &= equal_optional(pair.0, pair.1)?;
+                equal &= equal_optional(pair.0, pair.1, observation)?;
             }
             Ok(equal)
         }
         (NormalizedValue::Map(left), NormalizedValue::Map(right)) => {
             let mut equal = left.len() == right.len();
             for (key, left) in left.iter() {
-                equal &= equal_optional(Some(left), right.get(key))?;
+                equal &= equal_optional(Some(left), right.get(key), observation)?;
             }
             for (key, right) in right.iter() {
                 if !left.contains_key(key) {
-                    normalized_equal(right, right)?;
+                    normalized_compare(right, right, observation)?;
                     equal = false;
                 }
             }
@@ -3119,8 +3216,8 @@ pub(crate) fn normalized_equal(
             "live resources do not support semantic equality",
         )),
         _ => {
-            normalized_equal(left, left)?;
-            normalized_equal(right, right)?;
+            normalized_compare(left, left, observation)?;
+            normalized_compare(right, right, observation)?;
             Ok(false)
         }
     }
@@ -3129,12 +3226,13 @@ pub(crate) fn normalized_equal(
 fn equal_optional(
     left: Option<&NormalizedValue>,
     right: Option<&NormalizedValue>,
+    observation: bool,
 ) -> Result<bool, ExecutionError> {
     match (left, right) {
         (None, None) => Ok(true),
-        (Some(left), Some(right)) => normalized_equal(left, right),
+        (Some(left), Some(right)) => normalized_compare(left, right, observation),
         (Some(value), None) | (None, Some(value)) => {
-            normalized_equal(value, value)?;
+            normalized_compare(value, value, observation)?;
             Ok(false)
         }
     }
@@ -3143,12 +3241,52 @@ fn equal_optional(
 fn equal_sequences(
     left: &[NormalizedValue],
     right: &[NormalizedValue],
+    observation: bool,
 ) -> Result<bool, ExecutionError> {
     let mut equal = left.len() == right.len();
     for index in 0..left.len().max(right.len()) {
-        equal &= equal_optional(left.get(index), right.get(index))?;
+        equal &= equal_optional(left.get(index), right.get(index), observation)?;
     }
     Ok(equal)
+}
+
+fn binary_f64(
+    arguments: Vec<NormalizedValue>,
+    operation: fn(f64, f64) -> f64,
+) -> Result<NormalizedValue, ExecutionError> {
+    let (left, right) = f64_pair(&arguments)?;
+    Ok(NormalizedValue::F64(Binary64::from_float(operation(
+        left, right,
+    ))))
+}
+
+fn f64_pair(arguments: &[NormalizedValue]) -> Result<(f64, f64), ExecutionError> {
+    let [NormalizedValue::F64(left), NormalizedValue::F64(right)] = arguments else {
+        return Err(type_error(
+            "F64 intrinsic received a foreign value or arity",
+        ));
+    };
+    Ok((left.to_float(), right.to_float()))
+}
+
+fn f64_argument(arguments: &[NormalizedValue]) -> Result<f64, ExecutionError> {
+    let [NormalizedValue::F64(value)] = arguments else {
+        return Err(type_error(
+            "F64 intrinsic received a foreign value or arity",
+        ));
+    };
+    Ok(value.to_float())
+}
+
+fn f64_to_i64(value: f64) -> Option<i64> {
+    // i64::MAX as f64 is 2^63, already outside the integer domain.
+    if value.is_finite()
+        && (-9_223_372_036_854_775_808.0..9_223_372_036_854_775_808.0).contains(&value)
+    {
+        Some(value.trunc() as i64)
+    } else {
+        None
+    }
 }
 
 fn binary_i64(

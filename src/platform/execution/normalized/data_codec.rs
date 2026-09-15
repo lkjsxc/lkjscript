@@ -3,6 +3,7 @@
 use super::prepare::{NormalizedProgram, NormalizedRecordLayout, NormalizedVariantLayout};
 use super::value::{NormalizedMapKey, NormalizedRecord, NormalizedValue};
 use super::value_schema::NormalizedValueSchema;
+use crate::platform::binary64::Binary64;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::ExecutionControl;
 use crate::platform::kernel::{TypeForm, TypeObjectDigest};
@@ -167,6 +168,9 @@ fn encode_value(
         (NormalizedValue::I64(value), TypeForm::I64) => {
             append_bytes(output, &value.to_be_bytes())?;
         }
+        (NormalizedValue::F64(value), TypeForm::F64) => {
+            append_bytes(output, &value.bits().to_le_bytes())?;
+        }
         (NormalizedValue::Bytes(value), TypeForm::Bytes) => push_blob(output, value)?,
         (NormalizedValue::Text(value), TypeForm::Text) => push_blob(output, value.as_bytes())?,
         (
@@ -303,6 +307,25 @@ fn decode_value(
             )),
         },
         TypeForm::I64 => Ok(NormalizedValue::I64(cursor.i64("normalized_data_i64")?)),
+        TypeForm::F64 => {
+            let bytes = cursor.take(8, "normalized_data_f64")?;
+            let bytes: [u8; 8] = bytes.try_into().map_err(|_| {
+                codec_error(
+                    DiagnosticClass::Corrupt,
+                    "normalized_data_f64",
+                    "typed data binary64 value is truncated",
+                )
+            })?;
+            Binary64::from_bits(u64::from_le_bytes(bytes))
+                .map(NormalizedValue::F64)
+                .ok_or_else(|| {
+                    codec_error(
+                        DiagnosticClass::Corrupt,
+                        "normalized_data_f64",
+                        "typed data binary64 value contains a noncanonical NaN",
+                    )
+                })
+        }
         TypeForm::Bytes => Ok(NormalizedValue::bytes(
             cursor.blob("normalized_data_bytes")?,
         )),
@@ -464,6 +487,7 @@ fn describe_layout(
         TypeForm::Unit => append_bytes(output, &[0])?,
         TypeForm::Bool => append_bytes(output, &[1])?,
         TypeForm::I64 => append_bytes(output, &[2])?,
+        TypeForm::F64 => append_bytes(output, &[10])?,
         TypeForm::Bytes => append_bytes(output, &[3])?,
         TypeForm::Text => append_bytes(output, &[4])?,
         TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
@@ -529,6 +553,12 @@ fn describe_layout(
             describe_layout(program, *item, active, output, depth + 1, control)?;
         }
         TypeForm::Map { key, value } => {
+            if !matches!(
+                type_form(program, *key)?,
+                TypeForm::Bool | TypeForm::I64 | TypeForm::Bytes | TypeForm::Text
+            ) {
+                return Err(unsupported("unordered map key"));
+            }
             append_bytes(output, &[8])?;
             describe_layout(program, *key, active, output, depth + 1, control)?;
             describe_layout(program, *value, active, output, depth + 1, control)?;

@@ -436,6 +436,14 @@ impl FullValidator<'_> {
             if !self.consume_work() {
                 return;
             }
+            if self.snapshot.root.graph_contract_version < 17
+                && matches!(object.form, TypeForm::F64)
+            {
+                self.error(
+                    "kernel_type_graph_generation",
+                    "F64 type requires Graph Contract 17",
+                );
+            }
             if self.snapshot.root.graph_contract_version
                 == super::contract::PREDECESSOR_GRAPH_CONTRACT_VERSION
                 && matches!(&object.form, TypeForm::TaskFunction { effect, .. } if effect.requirements.iter().any(|requirement| requirement.concrete().is_none()))

@@ -9,6 +9,7 @@ mod effects_iteration_program;
 mod effects_program;
 mod effects_resources;
 mod effects_traversal;
+mod f64;
 mod finite;
 mod foreground;
 mod foreground_program;
@@ -123,10 +124,10 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
                     .ok_or_else(|| DevError::usage("missing --case name"))?;
                 if !matches!(
                     selected.as_str(),
-                    "finite-callable" | "validator-upgrade" | "requirement-parameters"
+                    "finite-callable" | "validator-upgrade" | "requirement-parameters" | "f64"
                 ) {
                     return Err(DevError::usage(
-                        "offline-packages --case accepts finite-callable, validator-upgrade, or requirement-parameters",
+                        "offline-packages --case accepts finite-callable, validator-upgrade, requirement-parameters, or f64",
                     ));
                 }
                 selected_case = Some(selected);
@@ -172,7 +173,8 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
                 Some("finite-callable") => "lkjscript-offline-finite-callable-1",
                 Some("validator-upgrade") => "lkjscript-offline-validator-upgrade-1",
                 Some("requirement-parameters") => "lkjscript-offline-requirement-parameters-2",
-                _ => "lkjscript-offline-packages-acceptance-13",
+                Some("f64") => "lkjscript-offline-f64-1",
+                _ => "lkjscript-offline-packages-acceptance-14",
             }
             .to_owned(),
             status: "failed".to_owned(),
@@ -202,6 +204,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         Some("finite-callable") => finite::focused(&mut context),
         Some("validator-upgrade") => finite::upgrade(&mut context),
         Some("requirement-parameters") => requirements::focused(&mut context),
+        Some("f64") => f64::focused(&mut context),
         _ => workflow(&mut context),
     })
     .and_then(|()| {
@@ -1202,7 +1205,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         "producers_absent_before_execution".to_owned(),
         "true".to_owned(),
     );
-    context.check(&a, 37, 5)?;
+    context.check(&a, 41, 5)?;
     context.run(&a, 11)?;
     let mapped = context.cli(
         Some(&a.path),
@@ -1466,7 +1469,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         ],
         "change_authored_stale_base",
     )?;
-    context.check(&a, 37, 5)?;
+    context.check(&a, 41, 5)?;
     context.run(&a, 12)?;
     context.cache_recovery(&a, "a2")?;
     let second = context.export(&mut a)?;
@@ -1544,6 +1547,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     named::workflow(context, &standard)?;
     finite::workflow(context, &standard)?;
     requirements::workflow(context, &standard)?;
+    f64::workflow(context, &standard)?;
     Ok(())
 }
 
@@ -1850,7 +1854,7 @@ pub(crate) fn read_transferred_receipt(
         "offline receipt encoding or path is noncanonical",
     )?;
     require(
-        receipt.schema == "lkjscript-offline-packages-acceptance-13"
+        receipt.schema == "lkjscript-offline-packages-acceptance-14"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -1990,10 +1994,10 @@ pub(crate) fn read_transferred_receipt(
     }
     verify_file_inventory(&receipt, &root)?;
     require(
-        receipt.inventories.len() == 33
-            && receipt.transport_digests.len() == 33
-            && receipt.producer_inventories.len() == 33,
-        "complete producer, replacement, HTTP, foreground and requirement source inventories missing",
+        receipt.inventories.len() == 36
+            && receipt.transport_digests.len() == 36
+            && receipt.producer_inventories.len() == 36,
+        "complete producer, replacement, HTTP, foreground, requirement and numerical source inventories missing",
     )?;
     for (index, inventory) in receipt.inventories.iter().enumerate() {
         verify_producer_inventory(&receipt.producer_inventories[index], inventory)?;
@@ -2031,6 +2035,7 @@ pub(crate) fn read_transferred_receipt(
     let named_commands = named::validate(&receipt, &root)?;
     let finite_installed_commands = finite::validate(&receipt, &root)?;
     requirements::validate(&receipt, &root)?;
+    f64::validate(&receipt, &root)?;
     let named_cwd = Path::new(&receipt.isolated_root)
         .join("named-unrelated")
         .display()

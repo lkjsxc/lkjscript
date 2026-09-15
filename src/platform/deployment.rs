@@ -1603,7 +1603,7 @@ impl PreparedDeployment {
         Diagnostic,
     > {
         // Bound the argument container before acquiring or preparing any artifact resources.
-        super::json::decode_strict(arguments, super::json::JsonLimits::default())?;
+        super::json::decode_application(arguments, super::json::JsonLimits::default())?;
         let admitted = AdmittedDeployment::load(path, control)?;
         let name = Name::new(admitted.descriptor.target.clone())?;
         if admitted

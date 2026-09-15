@@ -24,6 +24,41 @@ pub fn validate_intrinsic(
 
 fn validate_shape(implementation: &str, signature: &IntrinsicSignature) -> Result<(), Diagnostic> {
     let valid = match implementation {
+        "core.f64.add" | "core.f64.subtract" | "core.f64.multiply" | "core.f64.divide" => exact(
+            signature,
+            &[IntrinsicType::F64, IntrinsicType::F64],
+            &IntrinsicType::F64,
+        ),
+        "core.f64.negate" | "core.f64.abs" | "core.f64.sqrt" => {
+            exact(signature, &[IntrinsicType::F64], &IntrinsicType::F64)
+        }
+        "core.f64.less" | "core.f64.less-equal" => exact(
+            signature,
+            &[IntrinsicType::F64, IntrinsicType::F64],
+            &IntrinsicType::Bool,
+        ),
+        "core.f64.is-finite" | "core.f64.is-nan" => {
+            exact(signature, &[IntrinsicType::F64], &IntrinsicType::Bool)
+        }
+        "core.f64.from-i64" => exact(signature, &[IntrinsicType::I64], &IntrinsicType::F64),
+        "core.f64.to-i64-result" => {
+            exact(signature, &[IntrinsicType::F64], &parse_i64_result_type())
+        }
+        "core.f64.parse-result" => exact(
+            signature,
+            &[IntrinsicType::Text],
+            &record(vec![
+                IntrinsicField {
+                    name: "valid".to_owned(),
+                    ty: IntrinsicType::Bool,
+                },
+                IntrinsicField {
+                    name: "value".to_owned(),
+                    ty: IntrinsicType::F64,
+                },
+            ]),
+        ),
+        "core.f64.to-text" => exact(signature, &[IntrinsicType::F64], &IntrinsicType::Text),
         "core.i64.add" | "core.i64.subtract" | "core.i64.multiply" | "core.i64.divide" => exact(
             signature,
             &[IntrinsicType::I64, IntrinsicType::I64],
@@ -268,6 +303,7 @@ fn json_decodable(ty: &IntrinsicType) -> bool {
         IntrinsicType::Unit
         | IntrinsicType::Bool
         | IntrinsicType::I64
+        | IntrinsicType::F64
         | IntrinsicType::Bytes
         | IntrinsicType::Text
         | IntrinsicType::Nominal(_, _) => true,
@@ -289,6 +325,7 @@ enum IntrinsicType {
     Unit,
     Bool,
     I64,
+    F64,
     Bytes,
     Text,
     StaticText,
@@ -338,6 +375,7 @@ fn legacy_type(ty: &ResolvedType) -> IntrinsicType {
         ResolvedType::Unit => IntrinsicType::Unit,
         ResolvedType::Bool => IntrinsicType::Bool,
         ResolvedType::I64 => IntrinsicType::I64,
+        ResolvedType::F64 => IntrinsicType::F64,
         ResolvedType::Bytes => IntrinsicType::Bytes,
         ResolvedType::Text => IntrinsicType::Text,
         ResolvedType::StaticText => IntrinsicType::StaticText,
@@ -449,6 +487,7 @@ fn kernel_type(
         TypeForm::Unit => IntrinsicType::Unit,
         TypeForm::Bool => IntrinsicType::Bool,
         TypeForm::I64 => IntrinsicType::I64,
+        TypeForm::F64 => IntrinsicType::F64,
         TypeForm::Bytes => IntrinsicType::Bytes,
         TypeForm::Text => IntrinsicType::Text,
         TypeForm::StaticText => IntrinsicType::StaticText,

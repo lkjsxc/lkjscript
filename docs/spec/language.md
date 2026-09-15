@@ -116,7 +116,7 @@ boundary. Valid calls with pending work retain that work and remain ordinary cal
 
 The closed current type surface is:
 
-- `Unit`, `Bool`, checked signed `I64`, immutable `Bytes`, UTF-8 `Text`, and compile-time
+- `Unit`, `Bool`, checked signed `I64`, binary64 `F64`, immutable `Bytes`, UTF-8 `Text`, and compile-time
   `StaticText`;
 - opaque `Secret`, typed live `Resource` handles, and exact-interface
   `CapabilityResource<Interface>` values;
@@ -161,6 +161,57 @@ advances semantic HEAD nor produces a successful result receipt.
 Live resources, secrets, streams, database transactions, queue leases, and runtime handles never
 enter durable graph values. A durable literal has one canonical typed encoding and an owning
 decoder bound.
+
+## Binary64 computation
+
+`F64`, authored as `f64`, is an ordinary immutable scalar in structural and nominal data, lists,
+explicit generics, pure binding, permitted retained state and typed persistence. It adds no
+implicit coercion, capture permission or authority. F64 is excluded from map and application-data
+keys. I64 retains its exact integer domain and checked arithmetic.
+
+The domain includes finite binary64 values, subnormals, both zeros, both infinities and one quiet
+NaN with bits `0x7ff8000000000000`. Every NaN-producing operation normalizes to that value; every
+other bit is preserved. Add, subtract, multiply, divide and square root use nearest-even rounding
+after each operation, in authored order. There is no reassociation, implicit fused multiply-add,
+flush-to-zero, selectable rounding mode or floating exception flag. Overflow produces infinity;
+underflow rounds gradually. Nonzero divided by zero produces the appropriately signed infinity;
+zero divided by zero and other invalid arithmetic produce canonical NaN. Negation and absolute
+value preserve these rules. The supported native primitive set makes no transcendental promise
+beyond correctly rounded square root. Rust's [binary64 and square-root contract](https://doc.rust-lang.org/std/primitive.f64.html#method.sqrt)
+supplies these operations; its unspecified NaN payload is normalized explicitly.
+
+`core.value.equal` compares F64 leaves numerically: NaN is unequal to everything, including itself,
+and the two zeros are equal. This rule recurses through every aggregate even when both operands
+share one immutable object. `core.f64.less` and `core.f64.less-equal` are false if either operand
+is NaN. `core.f64.is-finite` and `core.f64.is-nan` allow ordinary libraries to choose failure policy;
+there is no implicit total floating order.
+
+Representation equality instead compares normalized bits: NaN is reflexive and zero signs differ.
+Canonical identity, evaluator agreement and graph-test expected-value comparison use representation
+equality at F64 leaves and preserve all previous nonfloat comparison behavior. They do not invoke
+program equality to compare NaN observations. VM and reference execution retain separate dispatch
+and recursive comparators.
+
+`core.f64.from-i64` explicitly rounds an I64 to nearest-even binary64. `core.f64.to-i64-result`
+truncates toward zero and returns `{valid: Bool, value: I64}`. It rejects nonfinite values and
+values outside `[-2^63, 2^63)`, returning false and integer zero as deterministic failure filler.
+The upper bound is strict: binary64 rounding of `i64::MAX` is already `2^63`.
+
+Floating literals have flat form `expression.f64 as=$VALUE value=TOKEN` and structural form
+`(f64 TOKEN)`. Both lower to identical typed intent. Tokens use the locale-independent JSON
+decimal grammar (optional fraction/exponent), or exactly `nan`, `inf`, `-inf`. Integer-form decimal
+tokens are legal here. Whitespace, leading plus, hexadecimal notation, underscores and locale
+separators are invalid. Decimal overflow is invalid; underflow rounds to a signed subnormal or
+zero. Conversion uses the complete original token and correctly rounded Rust decimal parsing.
+Equivalent decimal spellings produce the same canonical numeric meaning; existing reviewed
+request and idempotency bindings remain in force.
+
+`core.f64.parse-result` applies that grammar to Text and returns `{valid: Bool, value: F64}`;
+failure returns false and positive zero. `core.f64.to-text` uses Ryu shortest round-trip finite
+formatting, with `-0.0`, `nan`, `inf`, `-inf` for the distinguished spellings. Text presentation
+does not define graph identity. Numerical accumulation, merging, finiteness policy and invalid
+result variants belong in ordinary libraries. Floating addition and merging are not associative;
+different evaluation orders need not produce identical bits.
 
 ## Affine capability resources
 
@@ -213,7 +264,7 @@ Functions own stable value-parameter identities, exact result, effect, and body.
 may call only pure meaning. A task function declares the capability aliases and exact interfaces it
 may perform. Components bind requirements and ports; deployment grants remain external authority.
 
-There is no ambient overload resolution, global mutation, floating point, set type, user scheduler
+There is no ambient overload resolution, global mutation, set type, user scheduler
 primitive, dynamic evaluation, type-class/trait constraint, or implicit generic inference.
 
 ## Explicit rank-1 generics
@@ -408,10 +459,10 @@ Unresolved or ambiguous references may occur only in typed non-executable draft 
 
 ## Equality, tests, and failures
 
-Value equality is type-directed and deterministic. Function values and live resources do not
+Value equality is type-directed and deterministic, with the F64 numerical rule above. Function values and live resources do not
 support semantic equality; resource and secret values do not provide durable equality. Tests own
 actual and expected typed expressions and pass only when bytecode and the independent semantic
-reference interpreter produce equal values and failure observations.
+reference interpreter produce equal representation values and failure observations.
 
 A typed `Result` is ordinary expected program data. Trap, capability failure, possible external
 visibility, resource exhaustion, cancellation, corruption, and infrastructure failure are

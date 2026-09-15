@@ -181,7 +181,7 @@ fn normalized_input_cannot_reuse_admission_after_in_memory_mutation() {
     assert_eq!(error.code, "artifact_current_admission_binding");
 }
 
-fn replace_unit(
+pub(super) fn replace_unit(
     loaded: &LoadedArtifact,
     old: ObjectKey,
     unit: &CompilationUnit,
@@ -189,9 +189,15 @@ fn replace_unit(
 ) -> Vec<u8> {
     // Neutral envelope construction deliberately bypasses the production compiler and writer's
     // admission. Every changed enclosing digest is recomputed before the strict reader runs.
+    let (magic, domain) = match unit.contract_version {
+        11 => (*b"LKJCUN11", "lkjscript.compiler-unit-envelope.v11"),
+        12 => (*b"LKJCUN12", "lkjscript.compiler-unit-envelope.v12"),
+        13 => (*b"LKJCUN13", "lkjscript.compiler-unit-envelope.v13"),
+        other => panic!("unexpected forged-unit generation {other}"),
+    };
     let bytes = crate::platform::packed::encode(
-        super::super::unit::COMPILER_UNIT_MAGIC,
-        super::super::unit::COMPILER_UNIT_ENVELOPE_DOMAIN,
+        magic,
+        domain,
         unit,
         super::super::unit::MAXIMUM_COMPILER_UNIT_BYTES,
     )

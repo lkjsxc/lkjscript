@@ -1,0 +1,211 @@
+reference.package as=$std source=builtin
+reference.owner as=$add package=$std class=declaration name=add
+reference.owner as=$equal package=$std class=declaration name=i64-equal
+reference.owner as=$less package=$std class=declaration name=less
+reference.owner as=$and package=$std class=declaration name=bool-and
+reference.owner as=$fold package=$std class=declaration name=list-fold-left
+reference.owner as=$fadd package=$std class=declaration name=f64-add
+reference.owner as=$subtract package=$std class=declaration name=f64-subtract
+reference.owner as=$multiply package=$std class=declaration name=f64-multiply
+reference.owner as=$divide package=$std class=declaration name=f64-divide
+reference.owner as=$sqrt package=$std class=declaration name=f64-sqrt
+reference.owner as=$finite package=$std class=declaration name=f64-is-finite
+reference.owner as=$from-i64 package=$std class=declaration name=f64-from-i64
+create.module as=$module name=statistics
+create.record as=$Stats module=$module name=Stats visibility=public
+add.field as=$count record=$Stats name=count type=i64
+add.field as=$mean record=$Stats name=mean type=f64
+add.field as=$m2 record=$Stats name=m2 type=f64
+type.named as=@Stats declaration=$Stats
+create.variant as=$Accumulation module=$module name=Accumulation visibility=public
+add.case as=$Accumulated variant=$Accumulation name=Accumulated payload=@Stats
+add.case as=$InvalidSample variant=$Accumulation name=InvalidSample
+add.case as=$InvalidArithmetic variant=$Accumulation name=InvalidArithmetic
+type.named as=@Accumulation declaration=$Accumulation
+create.record as=$Summary module=$module name=Summary visibility=public
+add.field as=$summary-count record=$Summary name=count type=i64
+add.field as=$summary-mean record=$Summary name=mean type=f64
+add.field as=$summary-m2 record=$Summary name=m2 type=f64
+add.field as=$variance record=$Summary name=population-variance type=f64
+add.field as=$deviation record=$Summary name=standard-deviation type=f64
+type.named as=@Summary declaration=$Summary
+create.variant as=$Result module=$module name=StatisticsResult visibility=public
+add.case as=$Empty variant=$Result name=Empty
+add.case as=$Ready variant=$Result name=Ready payload=@Summary
+add.case as=$ResultInvalidSample variant=$Result name=InvalidSample
+add.case as=$ResultInvalidArithmetic variant=$Result name=InvalidArithmetic
+type.named as=@Result declaration=$Result
+
+expression.block as=$empty-body
+  (record $Stats
+    (field $count (i64 0))
+    (field $mean (f64 0.0))
+    (field $m2 (f64 0.0)))
+expression.end
+create.function as=$empty module=$module name=empty visibility=public result=@Stats effect=pure body=$empty-body
+
+add.parameter as=$valid-state function=$valid name=state type=@Stats
+expression.block as=$valid-body
+  (if (call $less (field (local $valid-state) $count) (i64 0))
+    (bool false)
+    (call $and
+      (call $finite (field (local $valid-state) $mean))
+      (call $finite (field (local $valid-state) $m2))))
+expression.end
+create.function as=$valid module=$module name=valid-state visibility=private result=bool effect=pure body=$valid-body
+
+add.parameter as=$update-state function=$update name=state type=@Stats
+add.parameter as=$update-sample function=$update name=sample type=f64
+expression.block as=$update-body
+  (if (call $finite (local $update-sample))
+    (if (call $valid (local $update-state))
+      (let
+        (binding n (type i64)
+          (call $add (field (local $update-state) $count) (i64 1)))
+        (binding delta (type f64)
+          (call $subtract (local $update-sample) (field (local $update-state) $mean)))
+        (binding mean (type f64)
+          (call $fadd (field (local $update-state) $mean)
+            (call $divide (local delta) (call $from-i64 (local n)))))
+        (binding m2 (type f64)
+          (call $fadd (field (local $update-state) $m2)
+            (call $multiply (local delta) (call $subtract (local $update-sample) (local mean)))))
+        (in
+          (if (call $and (call $finite (local mean)) (call $finite (local m2)))
+            (variant $Accumulated
+              (record $Stats
+                (field $count (local n))
+                (field $mean (local mean))
+                (field $m2 (local m2))))
+            (variant $InvalidArithmetic))))
+      (variant $InvalidArithmetic))
+    (variant $InvalidSample))
+expression.end
+create.function as=$update module=$module name=update visibility=public result=@Accumulation effect=pure body=$update-body
+
+add.type-parameter as=$advance-T declaration=$advance name=T
+type.parameter as=@AdvanceT parameter=$advance-T
+type.function as=@AdvanceProjection result=f64
+type.argument parent=@AdvanceProjection index=0 type=@AdvanceT
+add.parameter as=$advance-projection function=$advance name=projection type=@AdvanceProjection
+add.parameter as=$advance-state function=$advance name=state type=@Accumulation
+add.parameter as=$advance-item function=$advance name=item type=@AdvanceT
+expression.block as=$advance-body
+  (match (local $advance-state)
+    (arm $Accumulated (payload state @Stats)
+      (call $update (local state) (invoke (local $advance-projection) (local $advance-item))))
+    (arm $InvalidSample (variant $InvalidSample))
+    (arm $InvalidArithmetic (variant $InvalidArithmetic)))
+expression.end
+create.function as=$advance module=$module name=advance visibility=private result=@Accumulation effect=pure body=$advance-body
+
+add.type-parameter as=$continue-T declaration=$continue name=T
+type.parameter as=@ContinueT parameter=$continue-T
+type.list as=@ContinueItems item=@ContinueT
+type.function as=@ContinueProjection result=f64
+type.argument parent=@ContinueProjection index=0 type=@ContinueT
+add.parameter as=$continue-items function=$continue name=items type=@ContinueItems
+add.parameter as=$continue-state function=$continue name=state type=@Accumulation
+add.parameter as=$continue-projection function=$continue name=projection type=@ContinueProjection
+expression.block as=$continue-body
+  (call $fold (types @ContinueT @Accumulation)
+    (local $continue-items)
+    (local $continue-state)
+    (bind (function-value $advance (types @ContinueT)) (local $continue-projection)))
+expression.end
+create.function as=$continue module=$module name=continue visibility=public result=@Accumulation effect=pure body=$continue-body
+
+add.type-parameter as=$accumulate-T declaration=$accumulate name=T
+type.parameter as=@AccumulateT parameter=$accumulate-T
+type.list as=@AccumulateItems item=@AccumulateT
+type.function as=@AccumulateProjection result=f64
+type.argument parent=@AccumulateProjection index=0 type=@AccumulateT
+add.parameter as=$accumulate-items function=$accumulate name=items type=@AccumulateItems
+add.parameter as=$accumulate-projection function=$accumulate name=projection type=@AccumulateProjection
+expression.block as=$accumulate-body
+  (call $continue (types @AccumulateT)
+    (local $accumulate-items)
+    (variant $Accumulated (call $empty))
+    (local $accumulate-projection))
+expression.end
+create.function as=$accumulate module=$module name=accumulate visibility=public result=@Accumulation effect=pure body=$accumulate-body
+
+add.parameter as=$merge-a function=$merge name=a type=@Stats
+add.parameter as=$merge-b function=$merge name=b type=@Stats
+expression.block as=$merge-body
+  (if (call $and (call $valid (local $merge-a)) (call $valid (local $merge-b)))
+    (if (call $equal (field (local $merge-a) $count) (i64 0))
+      (variant $Accumulated (local $merge-b))
+      (if (call $equal (field (local $merge-b) $count) (i64 0))
+        (variant $Accumulated (local $merge-a))
+        (let
+          (binding n (type i64)
+            (call $add (field (local $merge-a) $count) (field (local $merge-b) $count)))
+          (binding delta (type f64)
+            (call $subtract (field (local $merge-b) $mean) (field (local $merge-a) $mean)))
+          (binding mean (type f64)
+            (call $fadd (field (local $merge-a) $mean)
+              (call $multiply (local delta)
+                (call $divide (call $from-i64 (field (local $merge-b) $count))
+                  (call $from-i64 (local n))))))
+          (binding m2 (type f64)
+            (call $fadd
+              (call $fadd (field (local $merge-a) $m2) (field (local $merge-b) $m2))
+              (call $multiply (call $multiply (local delta) (local delta))
+                (call $divide
+                  (call $multiply
+                    (call $from-i64 (field (local $merge-a) $count))
+                    (call $from-i64 (field (local $merge-b) $count)))
+                  (call $from-i64 (local n))))))
+          (in
+            (if (call $and (call $finite (local mean)) (call $finite (local m2)))
+              (variant $Accumulated
+                (record $Stats
+                  (field $count (local n))
+                  (field $mean (local mean))
+                  (field $m2 (local m2))))
+              (variant $InvalidArithmetic))))))
+    (variant $InvalidArithmetic))
+expression.end
+create.function as=$merge module=$module name=merge visibility=public result=@Accumulation effect=pure body=$merge-body
+
+add.parameter as=$finish-state function=$finish name=state type=@Accumulation
+expression.block as=$finish-body
+  (match (local $finish-state)
+    (arm $InvalidSample (variant $ResultInvalidSample))
+    (arm $InvalidArithmetic (variant $ResultInvalidArithmetic))
+    (arm $Accumulated (payload state @Stats)
+      (if (call $valid (local state))
+        (if (call $equal (field (local state) $count) (i64 0))
+          (variant $Empty)
+          (let
+            (binding variance (type f64)
+              (call $divide (field (local state) $m2)
+                (call $from-i64 (field (local state) $count))))
+            (binding deviation (type f64) (call $sqrt (local variance)))
+            (in
+              (if (call $and (call $finite (local variance)) (call $finite (local deviation)))
+                (variant $Ready
+                  (record $Summary
+                    (field $summary-count (field (local state) $count))
+                    (field $summary-mean (field (local state) $mean))
+                    (field $summary-m2 (field (local state) $m2))
+                    (field $variance (local variance))
+                    (field $deviation (local deviation))))
+                (variant $ResultInvalidArithmetic)))))
+        (variant $ResultInvalidArithmetic))))
+expression.end
+create.function as=$finish module=$module name=finalize visibility=public result=@Result effect=pure body=$finish-body
+
+add.type-parameter as=$summarize-T declaration=$summarize name=T
+type.parameter as=@SummarizeT parameter=$summarize-T
+type.list as=@SummarizeItems item=@SummarizeT
+type.function as=@SummarizeProjection result=f64
+type.argument parent=@SummarizeProjection index=0 type=@SummarizeT
+add.parameter as=$summarize-items function=$summarize name=items type=@SummarizeItems
+add.parameter as=$summarize-projection function=$summarize name=projection type=@SummarizeProjection
+expression.block as=$summarize-body
+  (call $finish
+    (call $accumulate (types @SummarizeT) (local $summarize-items) (local $summarize-projection)))
+expression.end
+create.function as=$summarize module=$module name=summarize visibility=public result=@Result effect=pure body=$summarize-body

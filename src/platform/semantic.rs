@@ -78,6 +78,7 @@ pub enum ResolvedType {
     Unit,
     Bool,
     I64,
+    F64,
     Bytes,
     Text,
     StaticText,
@@ -105,6 +106,7 @@ impl ResolvedType {
             Self::Unit
             | Self::Bool
             | Self::I64
+            | Self::F64
             | Self::Bytes
             | Self::Text
             | Self::StaticText
@@ -5223,6 +5225,7 @@ fn substitute_type(
         ResolvedType::Unit => ResolvedType::Unit,
         ResolvedType::Bool => ResolvedType::Bool,
         ResolvedType::I64 => ResolvedType::I64,
+        ResolvedType::F64 => ResolvedType::F64,
         ResolvedType::Bytes => ResolvedType::Bytes,
         ResolvedType::Text => ResolvedType::Text,
         ResolvedType::StaticText => ResolvedType::StaticText,

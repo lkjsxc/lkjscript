@@ -161,6 +161,7 @@ pub enum AuthoredType {
     Unit {},
     Bool {},
     I64 {},
+    F64 {},
     Bytes {},
     Text {},
     StaticText {},
@@ -327,6 +328,9 @@ pub enum AuthoredExpressionOperation {
     },
     I64 {
         value: i64,
+    },
+    F64 {
+        value: crate::platform::binary64::Binary64,
     },
     Text {
         value: String,
@@ -614,6 +618,7 @@ pub(super) fn collect_expression_symbols(
             AuthoredExpressionOperation::Unit {}
             | AuthoredExpressionOperation::Bool { .. }
             | AuthoredExpressionOperation::I64 { .. }
+            | AuthoredExpressionOperation::F64 { .. }
             | AuthoredExpressionOperation::Text { .. }
             | AuthoredExpressionOperation::StaticText { .. }
             | AuthoredExpressionOperation::Local { .. }
@@ -732,6 +737,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             AuthoredType::Unit {} => TypeForm::Unit,
             AuthoredType::Bool {} => TypeForm::Bool,
             AuthoredType::I64 {} => TypeForm::I64,
+            AuthoredType::F64 {} => TypeForm::F64,
             AuthoredType::Bytes {} => TypeForm::Bytes,
             AuthoredType::Text {} => TypeForm::Text,
             AuthoredType::StaticText {} => TypeForm::StaticText,
@@ -985,6 +991,9 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             }
             AuthoredExpressionOperation::I64 { value } => {
                 ExpressionOperation::I64 { value: *value }
+            }
+            AuthoredExpressionOperation::F64 { value } => {
+                ExpressionOperation::F64 { value: *value }
             }
             AuthoredExpressionOperation::Text { value } => ExpressionOperation::Text {
                 value: TextValue::Inline {

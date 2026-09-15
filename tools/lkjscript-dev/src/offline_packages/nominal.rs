@@ -510,7 +510,7 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
     context.receipt.nominal.producer_removed_before_execution =
         !library.path.exists() && !library.container.exists();
     context.build(&consumer, "nominal-after-producer-removal")?;
-    context.check(&consumer, 33, 3)?;
+    context.check(&consumer, 37, 3)?;
     for (name, original_items, changed_items) in [
         ("i64", json!([1, 2, 4]), json!([-2, 0, 9])),
         ("text", json!(["a", "bc"]), json!(["changed"])),

@@ -9,6 +9,29 @@ pub(super) fn hostile_bundle(
     objects: &BTreeMap<ObjectKey, Vec<u8>>,
 ) -> Vec<u8> {
     assert!(objects.len() < 10_000);
+    let (magic, end_magic, checksum_domain) = match manifest.contract_version {
+        18 => (
+            *b"LKJART18",
+            *b"LKJAEN18",
+            "lkjscript.artifact-bundle.complete.v18",
+        ),
+        19 => (
+            *b"LKJART19",
+            *b"LKJAEN19",
+            "lkjscript.artifact-bundle.complete.v19",
+        ),
+        20 => (
+            *b"LKJART20",
+            *b"LKJAEN20",
+            "lkjscript.artifact-bundle.complete.v20",
+        ),
+        21 => (
+            *b"LKJART21",
+            *b"LKJAEN21",
+            "lkjscript.artifact-bundle.complete.v21",
+        ),
+        other => panic!("unexpected forged-artifact generation {other}"),
+    };
     let (digest, manifest_bytes) = manifest.encode().unwrap();
     let mut builder = PackBuilder::default();
     for (key, bytes) in objects {
@@ -16,8 +39,8 @@ pub(super) fn hostile_bundle(
     }
     let segments = builder.seal_targeted(4 * 1024 * 1024).unwrap();
     let mut bytes = Vec::new();
-    bytes.extend_from_slice(&ARTIFACT_BUNDLE_MAGIC);
-    bytes.extend_from_slice(&ARTIFACT_CONTRACT_VERSION.to_be_bytes());
+    bytes.extend_from_slice(&magic);
+    bytes.extend_from_slice(&manifest.contract_version.to_be_bytes());
     bytes.extend_from_slice(&0_u16.to_be_bytes());
     bytes.extend_from_slice(&(manifest_bytes.len() as u64).to_be_bytes());
     bytes.extend_from_slice(&(segments.len() as u64).to_be_bytes());
@@ -29,11 +52,11 @@ pub(super) fn hostile_bundle(
         bytes.extend_from_slice(&segment.bytes);
     }
     assert!(bytes.len() < 4 * 1024 * 1024);
-    let mut hash = blake3::Hasher::new_derive_key(ARTIFACT_BUNDLE_CHECKSUM_DOMAIN);
+    let mut hash = blake3::Hasher::new_derive_key(checksum_domain);
     hash.update(&(bytes.len() as u64).to_be_bytes());
     hash.update(&bytes);
     bytes.extend_from_slice(hash.finalize().as_bytes());
-    bytes.extend_from_slice(&ARTIFACT_BUNDLE_END_MAGIC);
+    bytes.extend_from_slice(&end_magic);
     bytes
 }
 

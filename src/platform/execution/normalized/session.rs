@@ -1631,6 +1631,7 @@ impl ValueMeter {
             (NormalizedValue::Unit, TypeForm::Unit) => self.charge(0),
             (NormalizedValue::Bool(_), TypeForm::Bool) => self.charge(1),
             (NormalizedValue::I64(_), TypeForm::I64) => self.charge(8),
+            (NormalizedValue::F64(_), TypeForm::F64) => self.charge(8),
             (NormalizedValue::Bytes(value), TypeForm::Bytes) => self.charge(value.len()),
             (NormalizedValue::Text(value), TypeForm::Text) => self.charge(value.len()),
             (NormalizedValue::Option(value), TypeForm::Option { item }) => {

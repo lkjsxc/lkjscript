@@ -48,16 +48,16 @@ use std::fmt;
 #[path = "artifact_code.rs"]
 mod code_admission;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-20";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-20";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 20;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF20";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART20";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN20";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-21";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-21";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 21;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF21";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART21";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN21";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v20";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v20";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v20";
+    "lkjscript.artifact-manifest-envelope.v21";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v21";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v21";
 pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v18";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
@@ -97,6 +97,15 @@ fn artifact_wire(version: u16) -> Result<ArtifactWire, Diagnostic> {
             manifest_domain: "lkjscript.artifact-manifest-envelope.v19",
             digest_domain: "lkjscript.artifact-bundle.v19",
             checksum_domain: "lkjscript.artifact-bundle.complete.v19",
+        }),
+        20 => Ok(ArtifactWire {
+            version,
+            manifest_magic: *b"LKJAMF20",
+            bundle_magic: *b"LKJART20",
+            end_magic: *b"LKJAEN20",
+            manifest_domain: "lkjscript.artifact-manifest-envelope.v20",
+            digest_domain: "lkjscript.artifact-bundle.v20",
+            checksum_domain: "lkjscript.artifact-bundle.complete.v20",
         }),
         ARTIFACT_CONTRACT_VERSION => Ok(ArtifactWire {
             version,
@@ -339,6 +348,8 @@ impl ArtifactManifest {
             18
         } else if bytes.starts_with(b"LKJAMF19") {
             19
+        } else if bytes.starts_with(b"LKJAMF20") {
+            20
         } else {
             ARTIFACT_CONTRACT_VERSION
         })?;
@@ -372,13 +383,15 @@ impl ArtifactManifest {
     }
 
     fn validate(&self) -> Result<(), Diagnostic> {
-        if !matches!(self.contract_version, 18 | 19 | ARTIFACT_CONTRACT_VERSION)
-            || (self.contract_version == 18
-                && (
-                    self.graph_contract_version,
-                    self.compiler_contract_version,
-                    self.bytecode_contract_version,
-                ) != (14, 10, 6))
+        if !matches!(
+            self.contract_version,
+            18 | 19 | 20 | ARTIFACT_CONTRACT_VERSION
+        ) || (self.contract_version == 18
+            && (
+                self.graph_contract_version,
+                self.compiler_contract_version,
+                self.bytecode_contract_version,
+            ) != (14, 10, 6))
             || (self.contract_version == 19
                 && !matches!(
                     (
@@ -388,13 +401,22 @@ impl ArtifactManifest {
                     ),
                     (14, 10, 6) | (15, 11, 7)
                 ))
+            || (self.contract_version == 20
+                && !matches!(
+                    (
+                        self.graph_contract_version,
+                        self.compiler_contract_version,
+                        self.bytecode_contract_version
+                    ),
+                    (14, 10, 6) | (15, 11, 7) | (16, 12, 8)
+                ))
             || !matches!(
                 (
                     self.graph_contract_version,
                     self.compiler_contract_version,
                     self.bytecode_contract_version
                 ),
-                (14, 10, 6) | (15, 11, 7) | (16, 12, 8)
+                (14, 10, 6) | (15, 11, 7) | (16, 12, 8) | (17, 13, 9)
             )
             || self.compilation_manifest_contract_version != COMPILATION_MANIFEST_CONTRACT_VERSION
         {
@@ -2247,6 +2269,8 @@ fn trace_object_closure(
 
     let mut units = BTreeMap::<(PackageId, OwnerKey), CompilationUnit>::new();
     let mut type_roots = BTreeSet::new();
+    let mut predecessor_type_roots = BTreeSet::new();
+    let mut predecessor_packages = BTreeSet::new();
     let mut blobs = BTreeMap::new();
     let mut interfaces = BTreeMap::new();
     for package in &manifest.packages {
@@ -2266,6 +2290,16 @@ fn trace_object_closure(
             &store,
             &mut store_work,
         )?;
+        if revision.graph_contract_version < 17 {
+            predecessor_packages.insert(package.package);
+            if interface
+                .type_objects
+                .values()
+                .any(|object| matches!(object.form, TypeForm::F64))
+            {
+                return Err(f64_generation_error());
+            }
+        }
         if crate::platform::package_interface::package_interface_digest_for_graph(
             package.package,
             package.interface_owners.content_root(),
@@ -2339,6 +2373,9 @@ fn trace_object_closure(
                         ));
                     }
                     type_roots.extend(unit.tables.types.iter().copied());
+                    if unit.graph_contract_version < 17 || revision.graph_contract_version < 17 {
+                        predecessor_type_roots.extend(unit.tables.types.iter().copied());
+                    }
                     for text in &unit.tables.texts {
                         if let super::unit::CompiledText::Blob { digest, bytes } = text
                             && let Some(previous) = blobs.insert(*digest, *bytes)
@@ -2392,6 +2429,16 @@ fn trace_object_closure(
         &mut store_work,
         &mut work.map,
     )?;
+    if reference_owners
+        .iter()
+        .chain(runtime_owners.iter())
+        .any(|((package, _), record)| {
+            predecessor_packages.contains(package)
+                && matches!(record, OwnerRecord::Expression(expression) if matches!(expression.operation, ExpressionOperation::F64 { .. }))
+        })
+    {
+        return Err(f64_generation_error());
+    }
     let relocations = validate_unit_relocations(&units)?;
 
     let mut types = BTreeMap::new();
@@ -2407,6 +2454,9 @@ fn trace_object_closure(
             &mut store_work,
         )?;
         let object = decode_type_object(&bytes, digest)?;
+        if manifest.graph_contract_version < 17 && matches!(object.form, TypeForm::F64) {
+            return Err(f64_generation_error());
+        }
         match &object.form {
             TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. }
                 if !relocations
@@ -2433,6 +2483,7 @@ fn trace_object_closure(
         type_roots.extend(object.child_types());
         types.insert(digest, object);
     }
+    validate_predecessor_type_closure(predecessor_type_roots, &types)?;
     validate_artifact_nominal_meaning(
         manifest,
         &units,
@@ -2469,6 +2520,53 @@ fn trace_object_closure(
     }
     work.store.add(store_work);
     Ok(store.visited())
+}
+
+fn f64_generation_error() -> Diagnostic {
+    artifact_error(
+        DiagnosticClass::Corrupt,
+        "artifact_f64_graph_generation",
+        "F64 meaning requires Graph 17 in its package and compiler-unit contracts",
+    )
+}
+
+/// A current artifact may contain genuine older units. Its outer generation cannot authorize
+/// an F64 type hidden in an unused parameter, nested application or other older-unit table.
+fn validate_predecessor_type_closure(
+    mut pending: BTreeSet<TypeObjectDigest>,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+) -> Result<(), Diagnostic> {
+    let mut visited = BTreeSet::new();
+    let mut remaining = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
+    while let Some(digest) = pending.pop_first() {
+        if visited.contains(&digest) {
+            continue;
+        }
+        let object = types.get(&digest).ok_or_else(|| {
+            artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_type_generation_missing",
+                "compiler-unit generation admission references a missing exact type",
+            )
+        })?;
+        remaining = object
+            .child_type_count()
+            .checked_add(1)
+            .and_then(|count| remaining.checked_sub(count))
+            .ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Resource,
+                    "artifact_type_generation_work",
+                    "compiler-unit generation admission exceeds the validation work bound",
+                )
+            })?;
+        if matches!(object.form, TypeForm::F64) {
+            return Err(f64_generation_error());
+        }
+        visited.insert(digest);
+        pending.extend(object.child_types());
+    }
+    Ok(())
 }
 
 enum ArtifactSessionRecord {

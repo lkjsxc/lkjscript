@@ -1,5 +1,8 @@
 //! Focused normalized-kernel contract tests.
 
+#[path = "f64_admission_tests.rs"]
+pub(crate) mod f64_admission_tests;
+
 use super::*;
 use crate::platform::package::RunnerKind;
 use crate::platform::persistent_map::{MapRoot, PageDigest};
@@ -1762,10 +1765,17 @@ fn canonical_kernel_codec_manifest_is_frozen() {
     let (mut snapshot, _) = prototype_snapshot();
     assert_eq!(
         manifest(&snapshot, contract::GRAPH_CONTRACT_IDENTITY),
+        "6469f29fb9d33af7e62d491602de53106aaa2b57f18045c1001923c5ce815211"
+    );
+    // Preserve genuine predecessor identities under their own exact generations.
+    snapshot.root.graph_contract_version = 16;
+    for owner in snapshot.owners.values_mut() {
+        owner.set_encoding_for_edit(16);
+    }
+    assert_eq!(
+        manifest(&snapshot, "lkjscript-meaning-graph-16"),
         "c8aacde3d692096bc7e701b445b36861fbcca57d3530f8e0c17e02083b3127f8"
     );
-    // Preserve the authentic Graph 15 golden while admitting the additive Graph 16 envelope.
-    // Type objects and every predecessor owner retain their old canonical bytes.
     snapshot.root.graph_contract_version = 15;
     for owner in snapshot.owners.values_mut() {
         owner.set_encoding_for_edit(15);

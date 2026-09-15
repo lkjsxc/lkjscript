@@ -335,6 +335,14 @@ rules without quoted identifiers. Typed selectors, type references and effect ro
 existing spellings and exact resolution. There are no bare literals, arithmetic precedence,
 implicit applications or function-name lookup.
 
+F64 is explicit in both notations: `type.f64 as=@number` declares a local type alias,
+`expression.f64 as=$value value=-0.0` declares a flat literal, and `(f64 -0.0)` is its structural
+form. Integer-form decimal tokens inside an F64 literal still have F64 type. The scalar
+[language contract](language.md#binary64-computation) owns decimal/special-token parsing,
+nearest-even rounding, signed zero and fallible conversions. Both notations preserve the same
+normalized bits and reviewed meaning for equivalent decimal spellings. An I64 expression does
+not become F64 without an explicit conversion.
+
 `capabilities --section change` advertises all structural forms as `change.expression-syntax`
 records and their framing, scope, ownership and application rules. The generated
 [change grammar](../generated/change-grammar.md) retains the same executable-owned inventory.
@@ -392,13 +400,16 @@ Body replacement preserves the function declaration and unchanged value/type/eff
 parameter owners. Replaced expression and binding owners follow the existing retirement rules.
 A malformed or invalid block rejects its entire request without advancing `HEAD`; stale or changed
 plans, cancellation, idempotent retries and historical-current repair retain their existing rules.
-Current compact-change revision 21 adds transaction outcomes to both notations. Only requests
-using the new expression select authored intent generation 16; compatible intent 14/15 retains
-its codec-15 commitment domain and original allocation identities. New meaning uses Graph 16,
-compiler 12/bytecode 8 and Artifact 20. TypeObject 10 remains unchanged, and supported Graph 14/15
-and Artifact 18/19 inputs retain their original meaning. Older executables reject unsupported
-syntax or artifact generations before any write. Review tokens remain bound to their executable's
-capabilities and verifier, so a changed review context requires a new plan.
+Requests containing F64 types or literals select authored intent generation 17. Transaction-outcome
+requests without F64 retain generation 16 and its codec-16 commitment; compatible intent 14/15
+retains the codec-15 commitment and original allocation identities. F64 meaning uses Graph 17,
+compiler 13/bytecode 9 and Artifact 21, with a disjoint F64 type envelope. Base TypeObject 10 remains
+unchanged; supported Graph 14/15/16 and Artifact 18/19/20 inputs retain their original meaning.
+Older executables reject unsupported syntax or artifact generations before accepted publication
+or adapter invocation. An older project reader may rebuild its disposable physical catalog before
+reporting an unsupported HEAD; accepted HEAD and immutable pack bytes, and application data, remain
+unchanged. Review tokens remain bound to their executable's capabilities and verifier, so a changed review context
+requires a new plan.
 
 Complete input remains bounded at 4 MiB. Outer flat-record bounds remain in force. Structural
 token admission is 2,560,000 across all blocks, derived from the existing 10,000-record by 256-field
@@ -728,6 +739,28 @@ types, effects, live capability authority and accounting still apply. Normative 
 independent fault sensitivity and the forwarding matrix are owned by the verification specification.
 
 The argument adapter accepts one strict bounded JSON array and converts it to typed runtime values.
+Application numeric admission retains complete decimal tokens and correctly rounds F64 integer,
+fraction and exponent spellings. It deliberately preserves `-0` and `-0.0`. I64 admission remains
+exact, including values above `2^53`, and rejects fraction/exponent spellings such as `1.0` and
+`1e0`. Decimal overflow such as `1e400` rejects. Control schemas, manifests and security inputs
+retain their strict integer policies. Byte/depth/item/string limits, duplicate fields, invalid
+strings and trailing input reject under both policies. Typed JSON built-ins and project/artifact
+commands use the same application policy.
+
+`capabilities --section runners` advertises the F64 arithmetic, comparison, parse/format,
+conversion and transport policies in `execution.f64`, `execution.f64-conversion` and
+`execution.f64-transport`. Ordinary standard declarations use the existing built-in package
+discovery and exact signature inspection, for example `package builtin query owners --name
+f64-parse-result`. These records add no execution operation or application-specific primitive.
+
+Finite F64 output is a JSON number. NaN and infinity fail explicitly with
+`normalized_json_nonfinite`, never null, strings or partial successful JSON. F64 is potentially
+encodable and therefore passes type preflight; encoding checks the actual value. The entire
+bounded result is buffered before success. JSON's finite boundary follows
+[RFC 8259 section 6](https://www.rfc-editor.org/rfc/rfc8259.html#section-6) and does not limit
+internal or typed-binary values. A transaction committed before later output failure remains
+committed; missing output supplies no rollback or retry evidence.
+
 Run selects an exact root target by current public name, requires command runner kind and a pure
 entry, executes once in the normalized VM and once in the canonical reference interpreter, and
 rejects disagreement. It emits the typed result plus bounded production/reference observations.

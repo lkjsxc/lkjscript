@@ -300,6 +300,58 @@ impl Machine<'_> {
             }
             "core.map.get" | "core.map.get-or" | "core.map.contains" | "core.map.insert"
             | "core.map.remove" | "core.map.entries" => self.checked_map(implementation, arguments),
+            "core.f64.parse-result" => {
+                let [value] = arguments.as_slice() else {
+                    return Err(type_error("F64 parser received a foreign arity"));
+                };
+                let NormalizedValue::Text(value) = value.raw() else {
+                    return Err(type_error("F64 parser received a foreign value"));
+                };
+                let parsed = Binary64::parse(value);
+                self.intrinsic_record([
+                    (
+                        "valid",
+                        CheckedValue::scalar(
+                            self.program,
+                            NormalizedValue::Bool(parsed.is_some()),
+                        )?,
+                    ),
+                    (
+                        "value",
+                        CheckedValue::scalar(
+                            self.program,
+                            NormalizedValue::F64(
+                                parsed.unwrap_or_else(|| Binary64::from_float(0.0)),
+                            ),
+                        )?,
+                    ),
+                ])
+            }
+            "core.f64.to-i64-result" => {
+                let [value] = arguments.as_slice() else {
+                    return Err(type_error("F64 conversion received a foreign arity"));
+                };
+                let NormalizedValue::F64(value) = value.raw() else {
+                    return Err(type_error("F64 conversion received a foreign value"));
+                };
+                let converted = f64_to_i64(value.to_float());
+                self.intrinsic_record([
+                    (
+                        "valid",
+                        CheckedValue::scalar(
+                            self.program,
+                            NormalizedValue::Bool(converted.is_some()),
+                        )?,
+                    ),
+                    (
+                        "value",
+                        CheckedValue::scalar(
+                            self.program,
+                            NormalizedValue::I64(converted.unwrap_or_default()),
+                        )?,
+                    ),
+                ])
+            }
             "core.i64.parse-result" => {
                 let [value] = arguments.as_slice() else {
                     return Err(type_error("integer parser received a foreign arity"));

@@ -20,7 +20,9 @@ pub struct TypeObject {
 impl TypeObject {
     pub fn new(form: TypeForm) -> Result<Self, Diagnostic> {
         let object = Self {
-            contract_version: if let TypeForm::TaskFunction { effect, .. } = &form {
+            contract_version: if matches!(form, TypeForm::F64) {
+                super::contract::F64_TYPE_CONTRACT_VERSION
+            } else if let TypeForm::TaskFunction { effect, .. } = &form {
                 task_generation(effect)
             } else if matches!(form, TypeForm::Applied { .. }) {
                 super::contract::NOMINAL_APPLICATION_CONTRACT_VERSION
@@ -34,7 +36,9 @@ impl TypeObject {
     }
 
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
-        let expected = if let TypeForm::TaskFunction { effect, .. } = &self.form {
+        let expected = if matches!(self.form, TypeForm::F64) {
+            super::contract::F64_TYPE_CONTRACT_VERSION
+        } else if let TypeForm::TaskFunction { effect, .. } = &self.form {
             task_generation(effect)
         } else if matches!(self.form, TypeForm::Applied { .. }) {
             super::contract::NOMINAL_APPLICATION_CONTRACT_VERSION
@@ -75,6 +79,7 @@ impl TypeObject {
             TypeForm::Unit
             | TypeForm::Bool
             | TypeForm::I64
+            | TypeForm::F64
             | TypeForm::Bytes
             | TypeForm::Text
             | TypeForm::StaticText
@@ -129,6 +134,7 @@ impl TypeObject {
             TypeForm::Unit
             | TypeForm::Bool
             | TypeForm::I64
+            | TypeForm::F64
             | TypeForm::Bytes
             | TypeForm::Text
             | TypeForm::StaticText
@@ -195,6 +201,8 @@ pub enum TypeForm {
         result: TypeObjectDigest,
         effect: super::EffectRow,
     },
+    /// A disjoint envelope preserves every predecessor type object's bytes.
+    F64,
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]

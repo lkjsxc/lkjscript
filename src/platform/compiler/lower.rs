@@ -1315,6 +1315,9 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
             ExpressionOperation::I64 { value } => {
                 self.push(CompiledInstruction::I64(value))?;
             }
+            ExpressionOperation::F64 { value } => {
+                self.push(CompiledInstruction::F64(value))?;
+            }
             ExpressionOperation::Text { value } => {
                 let text = self.unit.tables.text(compiled_text(value))?;
                 self.push(CompiledInstruction::Text(text))?;

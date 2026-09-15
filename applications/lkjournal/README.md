@@ -20,11 +20,11 @@ Current normalized identity:
 
 - repository: `repo_95f988c5423fe3eb823c329ef0832d51`;
 - package: `pkg_20000000000000000000000000000001`;
-- semantic revision: `rev_8d08786d726857b359788570f174cd4a30fec5f7e6843a5ed35b3f03e2583c29`;
-- semantic state: `semantic_state_64fac59540dd4be2e20fd701a5f66fe334db1a43c82b9914d96def1576e4f862`;
-- package revision: `package_revision_949a083a27a40d25080ee7c92de2b1994ff2de3bd47fced9d682f72de433e2f4`;
-- artifact manifest: `artifact_manifest_c6ed10419dcd66967816f28b34f1fea389b5fce6d8cb8dfe517f1ac47d371717`;
-- artifact bundle: `artifact_bundle_2f450216ed21db0e95118141d451c8a478c85bcc0fe7429f8b28c5d72d95d889`;
+- semantic revision: `rev_29c95cfe92810bf3669a3943a9b3582f69047017bb43bd3e93942c5ea94f28ff`;
+- semantic state: `semantic_state_3484e33ab9a2691e962e2a80077aa26628d58876cef7bce5f541baa830c8e801`;
+- package revision: `package_revision_8a73c9bd175c365e4d45dc33a77c7f6b99a9ca939b0ae24acc589f15d4091ce6`;
+- artifact manifest: `artifact_manifest_a6ac7df6e3d6983c1e1ed61e420520ea6313e79d0f5539424d574dca5505da7c`;
+- artifact bundle: `artifact_bundle_e4f1a6eb30543e43f20c061f50214354bee0e9aad7c2307028950f9d5c1a10f3`;
 - 2,040 live root semantic owners and one exact built-in standard dependency.
 
 The original Graph 13 materialization preserved all existing application owner identities and behavior.
@@ -32,10 +32,9 @@ Its exact standard dependency includes graph-owned composition, persistent-list 
 this cutover changes encoding, the dependency and generated artifact. Unchanged nominal and nested typed-data bytes retain their layout
 identities and require no operational-data migration.
 
-The transaction-completion campaign replaces only the exact standard supplier selection through
-public plan/apply and rebuilds the artifact under the successor compiler. All 2,040 application
-owners and deployment settings remain unchanged; this is a compatibility cutover, not adoption
-of the designed typed-cell library. No application data migration occurs.
+The binary64 campaign updates the exact standard supplier selection through public plan/apply and
+rebuilds the artifact under the successor compiler. All 2,040 application owners and deployment
+settings retain their meaning. The application requires no data migration.
 
 ## Inspect and verify current authority
 
@@ -52,8 +51,8 @@ target/release/lkjscript build --project applications/lkjournal \
   --output /tmp/lkjournal-current.lkja
 ```
 
-Check compiles and links the exact two-package closure with 90 application and 234 total compiler
-units, then runs 7 application tests plus 33 standard tests. All 40 must agree between normalized
+Check compiles and links the exact two-package closure with 90 application and 253 total compiler
+units, then runs 7 application tests plus 37 standard tests. All 44 must agree between normalized
 bytecode and the canonical reference interpreter.
 `generated/lkjournal.lkja` is the deterministic maintained artifact bundle output. Check and build do
 not change accepted `HEAD`.
@@ -83,9 +82,9 @@ empty 404 and invokes none of them.
 
 ## Current service, interactive, and worker boundary
 
-All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,306,041-byte
+All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,344,008-byte
 artifact bundle above (SHA-256
-`b9e365448e208594e5a3548308330fd2c67679aecb882f365d8cc08b72085d56`). The service descriptor
+`5b5452b01d67e5d3b09308f5ba9ecd53945b7f2926f20cda92eca9d036e7be8d`). The service descriptor
 resolves `serve`, the worker descriptor resolves `work`, and `live.deployment.json` resolves
 `lkjournal-live-1`. Preparation strictly loads the standalone bundle,
 validates the runner, route-indexed handler and component requirement closure, grants, secrets, and adapters, and emits

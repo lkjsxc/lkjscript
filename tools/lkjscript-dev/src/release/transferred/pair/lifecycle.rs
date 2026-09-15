@@ -4,9 +4,10 @@ use lkjscript::platform::control::{CompactRecord, decode_logical_change_plan};
 const TIMEOUT: Duration = Duration::from_secs(120);
 const MAXIMUM_REQUEST_BYTES: u64 = 64 * 1024;
 const MAXIMUM_REVIEW_BYTES: u64 = 1024 * 1024;
-const COMMANDS: [&str; 19] = [
+const COMMANDS: [&str; 27] = [
     "capabilities",
     "change-capabilities",
+    "runners-capabilities",
     "new",
     "status",
     "create-plan",
@@ -14,12 +15,19 @@ const COMMANDS: [&str; 19] = [
     "find-module",
     "find-function",
     "find-parameter",
+    "find-numerical-function",
+    "find-numerical-parameter",
     "definition-created",
+    "numerical-definition-created",
     "run-created",
+    "numerical-run-created",
+    "numerical-run-negative-zero",
     "replace-plan",
     "replace-apply",
     "definition-replaced",
+    "numerical-definition-replaced",
     "run-replaced",
+    "numerical-run-replaced",
     "check",
     "build",
     "run",
@@ -29,6 +37,8 @@ const COMMANDS: [&str; 19] = [
 // Literal product authoring. Only the accepted base is supplied by the surrounding request.
 const CREATE_BODY: &str = r#"reference.package as=$standard source=builtin
 reference.owner as=$add package=$standard class=declaration name=add
+reference.owner as=$f64-add package=$standard class=declaration name=f64-add
+reference.owner as=$f64-to-text package=$standard class=declaration name=f64-to-text
 create.module as=$module name=structural
 expression.block as=$adjust-body
   (let
@@ -45,7 +55,28 @@ type.function as=@Entry result=i64
 create.component as=$component module=$module name=application visibility=private
 add.port as=$port component=$component name=main type=@Entry function=$entry
 create.target as=$target name=structural component=$component port=$port runner=command
+expression.block as=$calibrate-body
+  (call $f64-add (local $sample) (f64 0.5))
+expression.end
+create.function as=$calibrate module=$module name=calibrate visibility=private result=f64 effect=pure body=$calibrate-body
+add.parameter as=$sample function=$calibrate name=sample type=f64
+type.function as=@Numerical result=f64
+type.argument parent=@Numerical index=0 type=f64
+add.port as=$numerical-port component=$component name=numerical type=@Numerical function=$calibrate
+create.target as=$numerical-target name=numerical component=$component port=$numerical-port runner=command
+expression.block as=$format-body
+  (call $f64-to-text (local $number))
+expression.end
+create.function as=$format module=$module name=format-number visibility=private result=text effect=pure body=$format-body
+add.parameter as=$number function=$format name=number type=f64
+type.function as=@NumberText result=text
+type.argument parent=@NumberText index=0 type=f64
+add.port as=$format-port component=$component name=number-text type=@NumberText function=$format
+create.target as=$format-target name=number-text component=$component port=$format-port runner=command
 "#;
+
+const NUMERICAL_INPUT: &str = "[1.25e0]";
+const NEGATIVE_ZERO_INPUT: &str = "[-0.0]";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -87,6 +118,20 @@ struct StructuralAuthoring {
     replaced_value: i64,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct NumericalAuthoring {
+    function: String,
+    parameter: String,
+    before: Definition,
+    after: Definition,
+    decimal_input: FileBinding,
+    negative_zero_input: FileBinding,
+    created_bits: u64,
+    replaced_bits: u64,
+    negative_zero_text: String,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Lifecycle {
@@ -99,6 +144,7 @@ pub(super) struct Lifecycle {
     pub(super) commands: Vec<Command>,
     revision: Option<String>,
     structural: Option<StructuralAuthoring>,
+    numerical: Option<NumericalAuthoring>,
     artifact: Option<FileBinding>,
     value: Option<String>,
     pub(super) started_unix_nanoseconds: u128,
@@ -122,6 +168,15 @@ struct Progress {
     after: Option<Definition>,
     created_value: Option<i64>,
     replaced_value: Option<i64>,
+    numerical_function: Option<String>,
+    numerical_parameter: Option<String>,
+    numerical_before: Option<Definition>,
+    numerical_after: Option<Definition>,
+    decimal_input: Option<FileBinding>,
+    negative_zero_input: Option<FileBinding>,
+    numerical_created_bits: Option<u64>,
+    numerical_replaced_bits: Option<u64>,
+    negative_zero_text: Option<String>,
     artifact: Option<FileBinding>,
     value: Option<String>,
 }
@@ -143,6 +198,7 @@ impl Progress {
                 r#"request base={} idempotency=installed-structural-replace
 reference.package as=$standard source=builtin
 reference.owner as=$add package=$standard class=declaration name=add
+reference.owner as=$f64-add package=$standard class=declaration name=f64-add
 expression.block as=$replacement
   (let
     (binding value (type i64) (local (exact {})))
@@ -150,10 +206,18 @@ expression.block as=$replacement
     (in (call $add (local value) (i64 1))))
 expression.end
 replace.body function={} body=$replacement
+expression.block as=$numerical-replacement
+  (call $f64-add
+    (call $f64-add (local (exact {})) (f64 0.5))
+    (f64 1.0))
+expression.end
+replace.body function={} body=$numerical-replacement
 "#,
                 required(&self.creation, "creation review")?.candidate,
                 required(&self.parameter, "discovered parameter")?,
-                required(&self.function, "discovered function")?
+                required(&self.function, "discovered function")?,
+                required(&self.numerical_parameter, "discovered numerical parameter")?,
+                required(&self.numerical_function, "discovered numerical function")?
             )),
             _ => Err(DevError::corrupt("unknown route request")),
         }
@@ -184,6 +248,7 @@ replace.body function={} body=$replacement
         let arguments = match name {
             "capabilities" => vec!["capabilities"],
             "change-capabilities" => vec!["capabilities", "--section", "change"],
+            "runners-capabilities" => vec!["capabilities", "--section", "runners"],
             "new" => vec!["new", &project, "--template", "command", "--name", "hello"],
             "status" | "status-final" => vec!["status"],
             "create-plan" | "replace-plan" => {
@@ -222,6 +287,22 @@ replace.body function={} body=$replacement
                 "--parent",
                 required(&self.function, "discovered function")?,
             ],
+            "find-numerical-function" => vec![
+                "query",
+                "find",
+                "declaration",
+                "calibrate",
+                "--parent",
+                required(&self.module, "discovered module")?,
+            ],
+            "find-numerical-parameter" => vec![
+                "query",
+                "find",
+                "parameter",
+                "sample",
+                "--parent",
+                required(&self.numerical_function, "discovered numerical function")?,
+            ],
             "definition-created" | "definition-replaced" => vec![
                 "inspect",
                 "owner",
@@ -234,7 +315,25 @@ replace.body function={} body=$replacement
                 "--bytes",
                 "65536",
             ],
+            "numerical-definition-created" | "numerical-definition-replaced" => vec![
+                "inspect",
+                "owner",
+                "pure_function",
+                required(&self.numerical_function, "discovered numerical function")?,
+                "--detail",
+                "definition",
+                "--limit",
+                "100",
+                "--bytes",
+                "65536",
+            ],
             "run-created" | "run-replaced" => vec!["run", "structural"],
+            "numerical-run-created" | "numerical-run-replaced" => {
+                vec!["run", "numerical", "--arguments", NUMERICAL_INPUT]
+            }
+            "numerical-run-negative-zero" => {
+                vec!["run", "number-text", "--arguments", NEGATIVE_ZERO_INPUT]
+            }
             "check" => vec!["check"],
             "build" => vec!["build", "--output", &artifact],
             "run" => vec!["run", "main"],
@@ -245,7 +344,10 @@ replace.body function={} body=$replacement
                 .display()
                 .to_string(),
         ];
-        if !matches!(name, "capabilities" | "change-capabilities" | "new") {
+        if !matches!(
+            name,
+            "capabilities" | "change-capabilities" | "runners-capabilities" | "new"
+        ) {
             command.extend(["--project".to_owned(), project.clone()]);
         }
         command.extend(arguments.into_iter().map(str::to_owned));
@@ -261,7 +363,14 @@ replace.body function={} body=$replacement
     ) -> Result<(), DevError> {
         if matches!(
             name,
-            "run-created" | "run-replaced" | "check" | "build" | "run"
+            "run-created"
+                | "run-replaced"
+                | "numerical-run-created"
+                | "numerical-run-replaced"
+                | "numerical-run-negative-zero"
+                | "check"
+                | "build"
+                | "run"
         ) {
             require(
                 value(records, "authority", "revision")?
@@ -274,6 +383,10 @@ replace.body function={} body=$replacement
             "change-capabilities" => {
                 capabilities(records, manifest)?;
                 structural_capabilities(records)?;
+            }
+            "runners-capabilities" => {
+                capabilities(records, manifest)?;
+                numerical_capabilities(records)?;
             }
             "new" => {
                 let revision = value(records, "revision", "id")?.to_owned();
@@ -341,7 +454,11 @@ replace.body function={} body=$replacement
                 )?;
                 self.revision = Some(review.candidate.clone());
             }
-            "find-module" | "find-function" | "find-parameter" => {
+            "find-module"
+            | "find-function"
+            | "find-parameter"
+            | "find-numerical-function"
+            | "find-numerical-parameter" => {
                 require(
                     value(records, "revision", "observed")?
                         == required(&self.revision, "current revision")?
@@ -355,6 +472,18 @@ replace.body function={} body=$replacement
                         "pure_function",
                         Some(required(&self.module, "module")?),
                         "decl_",
+                    ),
+                    "find-numerical-function" => (
+                        "calibrate",
+                        "pure_function",
+                        Some(required(&self.module, "module")?),
+                        "decl_",
+                    ),
+                    "find-numerical-parameter" => (
+                        "sample",
+                        "parameter",
+                        Some(required(&self.numerical_function, "numerical function")?),
+                        "param_",
                     ),
                     _ => (
                         "input",
@@ -382,6 +511,8 @@ replace.body function={} body=$replacement
                 match name {
                     "find-module" => self.module = Some(id),
                     "find-function" => self.function = Some(id),
+                    "find-numerical-function" => self.numerical_function = Some(id),
+                    "find-numerical-parameter" => self.numerical_parameter = Some(id),
                     _ => self.parameter = Some(id),
                 }
             }
@@ -393,6 +524,8 @@ replace.body function={} body=$replacement
                     required(&self.module, "module")?,
                     required(&self.function, "function")?,
                     required(&self.parameter, "parameter")?,
+                    "adjust",
+                    "input",
                     if after { 8 } else { 5 },
                     if after { 2 } else { 1 },
                 )?;
@@ -409,6 +542,32 @@ replace.body function={} body=$replacement
                     self.before = Some(definition);
                 }
             }
+            "numerical-definition-created" | "numerical-definition-replaced" => {
+                let after = name == "numerical-definition-replaced";
+                let definition = definition(
+                    records,
+                    required(&self.revision, "current revision")?,
+                    required(&self.module, "module")?,
+                    required(&self.numerical_function, "numerical function")?,
+                    required(&self.numerical_parameter, "numerical parameter")?,
+                    "calibrate",
+                    "sample",
+                    if after { 5 } else { 3 },
+                    0,
+                )?;
+                if after {
+                    let before = required(&self.numerical_before, "original numerical definition")?;
+                    require(
+                        definition.function == before.function
+                            && definition.parameter == before.parameter
+                            && definition.body != before.body,
+                        "numerical replacement lost unchanged owners or retained its old body",
+                    )?;
+                    self.numerical_after = Some(definition);
+                } else {
+                    self.numerical_before = Some(definition);
+                }
+            }
             "run-created" | "run-replaced" => {
                 let expected = if name == "run-created" { 42 } else { 43 };
                 let observed: i64 = serde_json::from_str(value(records, "execution", "value")?)?;
@@ -423,6 +582,43 @@ replace.body function={} body=$replacement
                 } else {
                     self.replaced_value = Some(observed);
                 }
+            }
+            "numerical-run-created" | "numerical-run-replaced" => {
+                let input = literal_input(root, "numerical-input.json", NUMERICAL_INPUT)?;
+                // Independently fixed dyadic results: 1.25 + 0.5 = 1.75; then add 1.0 = 2.75.
+                let expected = if name == "numerical-run-created" {
+                    0x3ffc_0000_0000_0000
+                } else {
+                    0x4006_0000_0000_0000
+                };
+                let observed: f64 = serde_json::from_str(value(records, "execution", "value")?)?;
+                require(
+                    observed.to_bits() == expected
+                        && value(records, "execution", "target")? == "numerical"
+                        && value(records, "execution", "differential")? == "equal",
+                    "numerical route did not produce its independently expected F64 bits",
+                )?;
+                self.decimal_input = Some(input);
+                if name == "numerical-run-created" {
+                    self.numerical_created_bits = Some(observed.to_bits());
+                } else {
+                    self.numerical_replaced_bits = Some(observed.to_bits());
+                }
+            }
+            "numerical-run-negative-zero" => {
+                self.negative_zero_input = Some(literal_input(
+                    root,
+                    "numerical-negative-zero.json",
+                    NEGATIVE_ZERO_INPUT,
+                )?);
+                let observed: String = serde_json::from_str(value(records, "execution", "value")?)?;
+                require(
+                    observed == "-0.0"
+                        && value(records, "execution", "target")? == "number-text"
+                        && value(records, "execution", "differential")? == "equal",
+                    "numerical route lost the external negative zero sign or standard formatting",
+                )?;
+                self.negative_zero_text = Some(observed);
             }
             "check" => checked(records)?,
             "build" => {
@@ -457,6 +653,31 @@ replace.body function={} body=$replacement
             replaced_value: *required(&self.replaced_value, "replacement result")?,
         })
     }
+
+    fn numerical(&self) -> Result<NumericalAuthoring, DevError> {
+        Ok(NumericalAuthoring {
+            function: required(&self.numerical_function, "numerical function")?.clone(),
+            parameter: required(&self.numerical_parameter, "numerical parameter")?.clone(),
+            before: required(&self.numerical_before, "original numerical definition")?.clone(),
+            after: required(&self.numerical_after, "replacement numerical definition")?.clone(),
+            decimal_input: required(&self.decimal_input, "decimal input")?.clone(),
+            negative_zero_input: required(&self.negative_zero_input, "negative zero input")?
+                .clone(),
+            created_bits: *required(&self.numerical_created_bits, "created numerical result")?,
+            replaced_bits: *required(&self.numerical_replaced_bits, "replaced numerical result")?,
+            negative_zero_text: required(&self.negative_zero_text, "negative zero formatting")?
+                .clone(),
+        })
+    }
+}
+
+fn literal_input(root: &Path, name: &str, expected: &str) -> Result<FileBinding, DevError> {
+    let path = root.join(name);
+    require(
+        process::read_bounded(&path, MAXIMUM_REQUEST_BYTES)? == expected.as_bytes(),
+        "route retained numerical input differs from its literal command arguments",
+    )?;
+    binding(&path)
 }
 
 pub(super) fn run(
@@ -488,6 +709,7 @@ pub(super) fn run(
             .collect(),
         revision: None,
         structural: None,
+        numerical: None,
         artifact: None,
         value: None,
         started_unix_nanoseconds: super::super::super::unix_nanoseconds()?,
@@ -515,6 +737,20 @@ pub(super) fn run(
                 archive::write_new(
                     &root.join(format!("{kind}.lkjc")),
                     progress.request(kind)?.as_bytes(),
+                    0o644,
+                )?;
+            }
+            if *name == "numerical-run-created" {
+                archive::write_new(
+                    &root.join("numerical-input.json"),
+                    NUMERICAL_INPUT.as_bytes(),
+                    0o644,
+                )?;
+            }
+            if *name == "numerical-run-negative-zero" {
+                archive::write_new(
+                    &root.join("numerical-negative-zero.json"),
+                    NEGATIVE_ZERO_INPUT.as_bytes(),
                     0o644,
                 )?;
             }
@@ -559,6 +795,7 @@ pub(super) fn run(
             evidence::publish_json(&path, &receipt)?;
         }
         receipt.structural = Some(progress.structural()?);
+        receipt.numerical = Some(progress.numerical()?);
         require(!control.cancelled(), "route lifecycle cancelled")
     })();
     let cleanup_started = Instant::now();
@@ -628,8 +865,9 @@ pub(super) fn validate(
         receipt.revision == progress.initial_revision
             && receipt.artifact == progress.artifact
             && receipt.value == progress.value
-            && receipt.structural.as_ref() == Some(&progress.structural()?),
-        "route structural authoring or result evidence differs from its original observations",
+            && receipt.structural.as_ref() == Some(&progress.structural()?)
+            && receipt.numerical.as_ref() == Some(&progress.numerical()?),
+        "route structural or numerical authoring and result evidence differs from its originals",
     )
 }
 
@@ -667,13 +905,24 @@ fn read_command(
         &process::read_bounded(&root.join(&p.stdout.path), MAXIMUM_OUTPUT_BYTES)?,
     )?;
     let (expected_command, expected_status) = match command.name.as_str() {
-        "change-capabilities" => ("capabilities.section", "success"),
+        "change-capabilities" | "runners-capabilities" => ("capabilities.section", "success"),
         "status-final" => ("status", "success"),
         "create-plan" | "replace-plan" => ("change.plan", "prepared"),
         "create-apply" | "replace-apply" => ("change.apply", "accepted"),
-        "find-module" | "find-function" | "find-parameter" => ("query.find", "success"),
-        "definition-created" | "definition-replaced" => ("inspect.owner.definition", "success"),
-        "run-created" | "run-replaced" => ("run", "success"),
+        "find-module"
+        | "find-function"
+        | "find-parameter"
+        | "find-numerical-function"
+        | "find-numerical-parameter" => ("query.find", "success"),
+        "definition-created"
+        | "definition-replaced"
+        | "numerical-definition-created"
+        | "numerical-definition-replaced" => ("inspect.owner.definition", "success"),
+        "run-created"
+        | "run-replaced"
+        | "numerical-run-created"
+        | "numerical-run-replaced"
+        | "numerical-run-negative-zero" => ("run", "success"),
         name => (name, "success"),
     };
     require(
@@ -733,6 +982,7 @@ fn structural_capabilities(records: &[CompactRecord]) -> Result<(), DevError> {
                 "unit",
                 "bool",
                 "i64",
+                "f64",
                 "text",
                 "static-text",
                 "local",
@@ -752,8 +1002,28 @@ fn structural_capabilities(records: &[CompactRecord]) -> Result<(), DevError> {
                 "match",
                 "capability-call",
                 "transaction",
+                "transaction-outcome",
             ],
         "installed route structural form inventory differs",
+    )
+}
+
+fn numerical_capabilities(records: &[CompactRecord]) -> Result<(), DevError> {
+    require(
+        value(records, "execution.f64", "type")? == "f64"
+            && value(records, "execution.f64", "nan-bits")? == "0x7ff8000000000000"
+            && value(records, "execution.f64", "intrinsic-prefix")? == "core.f64."
+            && value(records, "execution.f64", "value-equality")?
+                == "recursive-ieee-nan-unequal-zeros-equal"
+            && value(records, "execution.f64", "observation-equality")?
+                == "normalized-bits-nan-reflexive-zeros-distinct"
+            && value(records, "execution.f64-conversion", "format")?
+                == "core.f64.to-text:F64-to-Text"
+            && value(records, "execution.f64-transport", "json-input")?
+                == "finite-integer-fraction-exponent-with-correct-rounding-and-signed-zero"
+            && value(records, "execution.f64-transport", "json-output")?
+                == "finite-number-or-normalized_json_nonfinite",
+        "installed route does not advertise the ordinary binary64 contract",
     )
 }
 
@@ -767,6 +1037,8 @@ fn definition(
     module: &str,
     function: &str,
     parameter: &str,
+    function_name: &str,
+    parameter_name: &str,
     expressions: usize,
     bindings: usize,
 ) -> Result<Definition, DevError> {
@@ -779,11 +1051,11 @@ fn definition(
                     "{}/{module}",
                     value(records, "definition.header", "package")?
                 )
-            && value(records, "definition.function", "name")? == "adjust"
+            && value(records, "definition.function", "name")? == function_name
             && value(records, "definition.function", "parameters")? == "1"
             && value(records, "definition.parameter", "id")? == parameter
             && value(records, "definition.parameter", "parent")? == function
-            && value(records, "definition.parameter", "name")? == "input"
+            && value(records, "definition.parameter", "name")? == parameter_name
             && value(records, "definition.parameter", "index")? == "0"
             && value(records, "definition.parameter", "use")? == "unrestricted"
             && records
@@ -834,3 +1106,7 @@ fn hello(records: &[CompactRecord]) -> Result<(), DevError> {
         "route command did not produce independently expected typed text hello",
     )
 }
+
+#[cfg(test)]
+#[path = "lifecycle_tests.rs"]
+mod tests;

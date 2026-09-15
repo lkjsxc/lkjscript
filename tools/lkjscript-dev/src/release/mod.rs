@@ -2113,6 +2113,10 @@ mod tests {
             "pair/latest/create.logical-plan",
             "pair/latest/replace.lkjc",
             "pair/latest/replace.logical-plan",
+            "pair/exact/numerical-input.json",
+            "pair/exact/numerical-negative-zero.json",
+            "pair/latest/numerical-input.json",
+            "pair/latest/numerical-negative-zero.json",
             "pair/full-suite/receipt.json",
             "pair/*/extracted/*",
         ] {

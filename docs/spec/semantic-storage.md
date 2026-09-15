@@ -195,13 +195,13 @@ mapping, or cross-filesystem atomic visibility.
 
 ## Transaction outcomes and supported predecessor bytes
 
-The current semantic model is Graph 16 and strictly admits authentic Graph 14 and Graph 15 content.
+The current semantic model is Graph 17 and strictly admits authentic Graph 14, 15 and 16 content.
 `LKJOWN14` owners decode through the exact predecessor wire layout; `LKJOWN15` carries requirement
 parameters, typed operands and explicit applications. `LKJOWN16` adds the exact lexical transaction
 outcome expression. Older generations cannot encode newer extensions. Canonical re-encoding uses
 each admitted object's generation.
 Unchanged objects retain their stored bytes and IDs. Actual reviewed edits produce successor owner
-objects and a Graph 16 root; read, inspection and current revalidation do not migrate accepted HEAD,
+objects and a current root; read, inspection and current revalidation do not migrate accepted HEAD,
 historical records or application data.
 
 TypeObject 10 and `LKJTFN01` version 1 retain their exact encodings. A task-function row containing a
@@ -217,7 +217,7 @@ compiler unit 11 / bytecode 7 / Graph 15 carry requirement applications and symb
 Compiler unit 12 / bytecode 8 / Graph 16 add exact paired outcome continuations and result authority.
 Compiler-unit keys and canonical bytes use the admitted compiler generation. Compilation manifest 3
 retains its layout and explicitly binds these supported graph/compiler/bytecode combinations.
-Artifact 20 extends the containing envelope; strict Artifact 18 and 19 decoding preserves their
+Artifact 20 extends the transaction-containing envelope; strict Artifact 18 and 19 decoding preserves their
 original supported tuples, including Graph 15 / compiler 11 / bytecode 7 in Artifact 19.
 A containing older generation cannot admit newer meaning. The predecessor executable
 rejects the unsupported generation before execution, rather than ignoring application operands.
@@ -230,3 +230,30 @@ a completely valid reviewed candidate. Accepted retries return their original re
 identities. There is one editable accepted authority and no predecessor execution engine. Retirement
 of this predecessor decoder requires an explicit future support/migration decision; installation
 and runtime selection perform no graph or application-data migration.
+
+## Binary64 encodings and consumers
+
+F64 type objects use the disjoint `LKJF6401` envelope, version 1 and scalar tag 1. Base
+TypeObject 10, nominal application and task-function bytes/digests stay unchanged. Graph 17
+`LKJOWN17` appends a floating literal; its payload is exactly eight normalized binary64 bytes in
+little-endian order. Canonical writers normalize NaN to `0x7ff8000000000000`; strict scalar readers
+reject all other NaN bit patterns. The type envelope's canonical re-encoding rejects an F64 form
+placed under the base type envelope. Complete graph validation rejects F64 even in unused types
+or unreachable expressions under an older graph generation.
+
+Compiler unit 13 / bytecode 9 appends the corresponding fixed-width literal instruction.
+Artifact 21 admits this combination and retains complete Artifact 18/19/20 readers. Unit keys,
+headers, domains and predecessor bytes use their original generations. Independent package and
+artifact readers revalidate the full source/type/code closure, including each package's generation
+inside a newer outer artifact. Rehashed F64 instructions or nested signatures under predecessor
+units reject. Existing compilation-manifest, package/interface/transport and physical data-store
+envelopes need no scalar-specific fields: their exact type identities and graph-generation
+bindings identify the extension. These boundaries do not infer compatibility from a successful
+producer check or checksum.
+
+Authored-intent bytes select `LKJACR17` only when an F64 type/literal occurs, with explicit type tag
+19 and expression tag 27 plus eight little-endian bytes. Existing integer requests retain their
+original generation, commitments and allocated identities. Floating formatting and equivalent
+decimal spellings do not enter numeric identity. Old products reject the new type/graph/artifact
+generation before execution or accepted writes; inspection and current revalidation preserve
+genuine predecessor source and application data.

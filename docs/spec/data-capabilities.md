@@ -80,6 +80,13 @@ failures; they do not select the fallback. Layout traversal and each separate ne
 owning cancellation control in both codecs. JSON, SQL rows, Rust layout, serde shape, and host filesystem representation are not data
 authority. Production and canonical-reference codecs are separate implementations and must agree.
 
+F64 uses layout tag 10 and exactly eight little-endian binary64 payload bytes. Finite values,
+subnormals, signed zeros, infinities and canonical NaN round-trip, including nested nominal/list
+values. Readers reject noncanonical NaNs; writers normalize them through the scalar representation.
+Existing layout tags, envelope 1, integer big-endian payloads and all predecessor bytes remain exact.
+Only an F64-containing schema gains the new layout description; there is no migration of integer
+data or the physical engine. F64 is excluded from map keys and `DataKeyPart`, including empty maps.
+
 Applied nominal records and variants use layout tag 9, followed by every ordered argument's complete
 type description and the substituted declaration/member layout. Tag 5 and all unchanged monomorphic
 bytes remain exact. A phantom argument therefore affects the expected layout even if it affects no

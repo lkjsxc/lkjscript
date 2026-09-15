@@ -738,6 +738,7 @@ pub(super) fn read_focused(path: &Path, candidate: &Path, verifier: &Path) -> Re
             "lkjscript-offline-finite-callable-1"
                 | "lkjscript-offline-validator-upgrade-1"
                 | "lkjscript-offline-requirement-parameters-2"
+                | "lkjscript-offline-f64-1"
         ) && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -764,6 +765,12 @@ pub(super) fn read_focused(path: &Path, candidate: &Path, verifier: &Path) -> Re
         predecessor::validate(&receipt, root)?
     } else if receipt.schema == "lkjscript-offline-requirement-parameters-2" {
         super::requirements::validate(&receipt, root)?
+    } else if receipt.schema == "lkjscript-offline-f64-1" {
+        require(
+            receipt.inventories.len() == 3,
+            "F64 focused source inventories incomplete",
+        )?;
+        super::f64::validate(&receipt, root)?
     } else {
         validate(&receipt, root)?
     };

@@ -1469,6 +1469,7 @@ fn replace_expression_reference(
         ExpressionOperation::Unit {}
         | ExpressionOperation::Bool { .. }
         | ExpressionOperation::I64 { .. }
+        | ExpressionOperation::F64 { .. }
         | ExpressionOperation::Text { .. }
         | ExpressionOperation::StaticText { .. }
         | ExpressionOperation::Local { .. }

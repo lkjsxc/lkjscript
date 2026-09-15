@@ -1,0 +1,51 @@
+{
+  "source_commit": "93b73f87ac480343b62fd05f298f5c144d7adeb5",
+  "producer_graph_contract": 16,
+  "accepted_library_graph_contract": 16,
+  "predecessor_executable_sha256": "f0c6f398eed1e1056fc66fc03d8af5db5235f7533faeddea70494be084b3094b",
+  "matching_verifier_sha256": "a16cee1203b9156d743dc7d7f64a2c2112270e887db2d28626a737c016dbc687",
+  "original_target_admission": ".artifacts/transaction-202609151502/final-93b73f87/target-admission/receipt.json",
+  "original_offline_receipt": ".artifacts/transaction-202609151502/final-93b73f87/target-admission/offline-packages/receipt.json",
+  "library_package": "pkg_c3ac6626858fa11763dfe69466d4f25c",
+  "library_revision": "rev_7c281c95546c010db2d0587e92636b281ad1aa0ce7124bd755036f519fd9da72",
+  "library_package_revision": "package_revision_0528bf6c37becea151d02b4ce34f08f897bb76e60f69e1a9a3a203c3abafe1ad",
+  "library_transport": "package_transport_105f8fa068e50a32762f61e220086a11cf073620369c70be4baeb94fa02d5778",
+  "consumer_package": "pkg_2967b8dffdb0d39b4fb41198784be609",
+  "consumer_revision": "rev_6e98af16a90acdaef82b41a8491ec11dd6d7312da815b19411289820bc55fc44",
+  "consumer_bundle": "artifact_bundle_90d3efba04601441578e65a1cf33aba1591be13d1bd17377f26aba4cbe5d420a",
+  "original_execution": {
+    "target": "empty-outcome",
+    "arguments": "[]",
+    "expected_result": {
+      "case": "Committed",
+      "value": null
+    },
+    "command": 669,
+    "stdout": ".artifacts/transaction-202609151502/final-93b73f87/target-admission/offline-packages/command-0669.stdout"
+  },
+  "files": [
+    {
+      "fixture": "graph16-transaction-library.lkjp",
+      "original": ".artifacts/transaction-202609151502/final-93b73f87/target-admission/offline-packages/transport-32.lkjp",
+      "bytes": 419787,
+      "sha256": "12d0ea2f750fa29e149c5b0546f0086011573c985faccf88b9606aab0429b956"
+    },
+    {
+      "fixture": "graph16-transaction-consumer.lkja",
+      "original": ".artifacts/transaction-202609151502/final-93b73f87/target-admission/offline-packages/requirement-consumer.lkja",
+      "bytes": 747597,
+      "sha256": "8e5a9c0b21afe5121a6004ab801de4b0404a7ba1943059d40f0918ee5953671a"
+    }
+  ],
+  "provenance": "Exact retained source container and consumer artifact from the accepted pre-F64 transaction campaign; no re-encoding, regeneration, source edits, or replacement identity allocation. The consumer includes this exact library package revision. Test deployment settings and empty disposable data stores are fresh current runtime inputs, not historical originals.",
+  "matching_original_reader_recheck": {
+    "status": "passed",
+    "source_commit": "93b73f87ac480343b62fd05f298f5c144d7adeb5",
+    "receipt_sha256": "c70d172ef6a43b42c8760a0909283bb7bc29e97bf4a16ef588a9d63b3b7cc33b",
+    "retained_output": ".artifacts/f64-202609152217/graph16-original-admission-matching-context.stdout",
+    "retained_output_sha256": "7d58896133f27e111e9fe0715171205c70eb6bd1992a0a9f61c429cec2e7f913",
+    "context": "Matching original verifier and candidate, with its original lkjournal artifact from source-93b73f87.tar bound read-only in a private mount namespace. Namespace and all child processes were joined; host checkout unchanged.",
+    "archived_service_artifact_sha256": "b9e365448e208594e5a3548308330fd2c67679aecb882f365d8cc08b72085d56",
+    "initial_wrong_context_failure_retained": ".artifacts/f64-202609152217/graph16-original-admission.stderr"
+  }
+}

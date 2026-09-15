@@ -5,9 +5,10 @@ use super::value::{
     NormalizedMapKey, NormalizedRecord, NormalizedValue, RecordLayoutIndex, VariantLayoutIndex,
 };
 use super::value_schema::NormalizedValueSchema;
+use crate::platform::binary64::Binary64;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::ExecutionControl;
-use crate::platform::json::{JsonLimits, decode_strict};
+use crate::platform::json::{JsonLimits, decode_application};
 use crate::platform::kernel::{TypeForm, TypeObjectDigest};
 use base64::Engine;
 use serde_json::{Map, Value as JsonValue};
@@ -34,7 +35,7 @@ pub(crate) fn decode_typed_with_control(
     control: &ExecutionControl,
 ) -> Result<NormalizedValue, Diagnostic> {
     checkpoint(control)?;
-    let value = decode_strict(bytes, limits)?;
+    let value = decode_application(bytes, limits)?;
     decode_value_with_control(program, &value, ty, limits, control)
 }
 
@@ -293,6 +294,12 @@ fn from_json(
             .as_i64()
             .map(NormalizedValue::I64)
             .ok_or_else(|| type_error(path, "expected signed 64-bit integer")),
+        TypeForm::F64 => value
+            .as_f64()
+            .filter(|value| value.is_finite())
+            .map(Binary64::from_float)
+            .map(NormalizedValue::F64)
+            .ok_or_else(|| type_error(path, "expected finite binary64 JSON number")),
         TypeForm::Bytes => decode_bytes(value, path),
         TypeForm::Text => value
             .as_str()
@@ -532,6 +539,17 @@ fn to_json(
         (NormalizedValue::Unit, TypeForm::Unit) => Ok(JsonValue::Null),
         (NormalizedValue::Bool(value), TypeForm::Bool) => Ok(JsonValue::Bool(*value)),
         (NormalizedValue::I64(value), TypeForm::I64) => Ok(JsonValue::from(*value)),
+        (NormalizedValue::F64(value), TypeForm::F64) => {
+            serde_json::Number::from_f64(value.to_float())
+                .map(JsonValue::Number)
+                .ok_or_else(|| {
+                    json_error(
+                        DiagnosticClass::Semantic,
+                        "normalized_json_nonfinite",
+                        format!("{path}: nonfinite F64 cannot be encoded as JSON"),
+                    )
+                })
+        }
         (NormalizedValue::Bytes(value), TypeForm::Bytes) => {
             state.charge(1, path)?;
             let encoded_length = value

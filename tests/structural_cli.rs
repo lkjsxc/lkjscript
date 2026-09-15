@@ -735,3 +735,83 @@ fn authentic_predecessor_rejects_structural_input_before_writing() {
     ]);
     assert_eq!(head, std::fs::read(public.project.join("HEAD")).unwrap());
 }
+
+#[test]
+fn copied_binary_f64_review_parity_decimal_ingress_and_canonical_observation() {
+    let public = Public::new("minimal");
+    let discovery = public.success(&["capabilities", "--section", "change"]);
+    assert!(
+        discovery
+            .iter()
+            .flat_map(|record| &record.fields)
+            .any(|field| field.value == "f64")
+    );
+    let declarations = r#"create.module as=$numeric name=numeric
+type.f64 as=@Float
+create.external as=$add module=$numeric name=add-floats visibility=private result=@Float implementation=core.f64.add
+add.parameter as=$left function=$add name=left type=f64
+add.parameter as=$right function=$add name=right type=f64
+create.external as=$format module=$numeric name=format-float visibility=private result=text implementation=core.f64.to-text
+add.parameter as=$formatted function=$format name=value type=f64
+create.function as=$calculate module=$numeric name=calculate visibility=private result=f64 effect=pure body=$body
+add.parameter as=$input function=$calculate name=input type=f64
+expression.block as=$show-body
+  (call $format (local $shown))
+expression.end
+create.function as=$show module=$numeric name=show visibility=private result=text effect=pure body=$show-body
+add.parameter as=$shown function=$show name=value type=f64
+expression.block as=$inf-body
+  (f64 inf)
+expression.end
+create.function as=$infinite module=$numeric name=infinite visibility=private result=f64 effect=pure body=$inf-body
+type.function as=@Calculate result=f64
+type.argument parent=@Calculate index=0 type=f64
+type.function as=@Show result=text
+type.argument parent=@Show index=0 type=f64
+type.function as=@Infinite result=f64
+create.component as=$component module=$numeric name=Numbers visibility=package
+add.port as=$calculate-port component=$component name=calculate type=@Calculate function=$calculate
+add.port as=$show-port component=$component name=show type=@Show function=$show
+add.port as=$infinite-port component=$component name=infinite type=@Infinite function=$infinite
+create.target as=$calculate-target name=calculate component=$component port=$calculate-port runner=command
+create.target as=$show-target name=show component=$component port=$show-port runner=command
+create.target as=$infinite-target name=infinite component=$component port=$infinite-port runner=command
+"#;
+    let header = format!(
+        "request base={} idempotency=binary64-public\n",
+        public.revision()
+    );
+    let flat = public.write("f64-flat.lkjc", &format!("{header}{declarations}expression.local as=$read value=$input\nexpression.f64 as=$half value=5e-1\nexpression.call as=$body function=$add\nexpression.argument parent=$body index=0 expression=$read\nexpression.argument parent=$body index=1 expression=$half\n"));
+    let block = public.write("f64-block.lkjc", &format!("{header}{declarations}expression.block as=$body\n(call $add (local $input) (f64 0.5))\nexpression.end\n"));
+    let flat_plan = public.plan(&flat);
+    let block_plan = public.plan(&block);
+    let token = field(record(&flat_plan, "plan"), "token");
+    assert_eq!(token, field(record(&block_plan, "plan"), "token"));
+    for symbol in ["$body", "$calculate", "$input"] {
+        assert_eq!(identity(&flat_plan, symbol), identity(&block_plan, symbol));
+    }
+    public.apply(&block, token);
+    assert_eq!(public.run("calculate", "[1.5]"), json!(2.0));
+    assert_eq!(public.run("show", "[-0]"), json!("-0.0"));
+    assert_eq!(public.run("show", "[-0.0]"), json!("-0.0"));
+    assert_eq!(
+        public.run("show", "[9007199254740993]"),
+        json!("9007199254740992.0")
+    );
+    for input in ["[1e400]", "[1.]", "[nan]", "[\"1.0\"]"] {
+        public.failure(&[
+            "--project",
+            path(&public.project),
+            "run",
+            "show",
+            "--arguments",
+            input,
+        ]);
+    }
+    let failure = public.failure(&["--project", path(&public.project), "run", "infinite"]);
+    assert_eq!(
+        field(record(&failure, "diagnostic"), "code"),
+        "normalized_json_nonfinite"
+    );
+    public.success(&["--project", path(&public.project), "check"]);
+}

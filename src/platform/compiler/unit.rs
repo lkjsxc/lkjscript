@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-12";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 12;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-8";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 8;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN12";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v12";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v12";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-13";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 13;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-9";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 9;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN13";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v13";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v13";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -74,6 +74,8 @@ impl CompilationUnitKey {
             "lkjscript.compiler-unit-key.v10"
         } else if compiler_contract_version == 11 {
             "lkjscript.compiler-unit-key.v11"
+        } else if compiler_contract_version == 12 {
+            "lkjscript.compiler-unit-key.v12"
         } else {
             COMPILER_UNIT_KEY_DOMAIN
         });
@@ -375,6 +377,8 @@ pub enum CompiledInstruction {
         binding: u32,
         outcome: CompiledTransactionOutcome,
     },
+    /// Fixed little-endian scalar bytes; predecessor instruction ordinals remain unchanged.
+    F64(crate::platform::binary64::Binary64),
 }
 
 #[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
@@ -424,6 +428,13 @@ impl CompilationUnit {
                 self,
                 MAXIMUM_COMPILER_UNIT_BYTES,
             )?
+        } else if self.contract_version == 12 {
+            crate::platform::packed::encode(
+                *b"LKJCUN12",
+                "lkjscript.compiler-unit-envelope.v12",
+                self,
+                MAXIMUM_COMPILER_UNIT_BYTES,
+            )?
         } else {
             crate::platform::packed::encode(
                 COMPILER_UNIT_MAGIC,
@@ -463,6 +474,13 @@ impl CompilationUnit {
                 "lkjscript.compiler-unit-envelope.v11",
                 MAXIMUM_COMPILER_UNIT_BYTES,
             )?
+        } else if bytes.starts_with(b"LKJCUN12") {
+            crate::platform::packed::decode(
+                bytes,
+                *b"LKJCUN12",
+                "lkjscript.compiler-unit-envelope.v12",
+                MAXIMUM_COMPILER_UNIT_BYTES,
+            )?
         } else {
             crate::platform::packed::decode(
                 bytes,
@@ -490,7 +508,7 @@ impl CompilationUnit {
                 self.bytecode_contract_version,
                 self.graph_contract_version
             ),
-            (10, 6, 14) | (11, 7, 15) | (12, 8, 16)
+            (10, 6, 14) | (11, 7, 15) | (12, 8, 16) | (13, 9, 17)
         ) {
             return Err(unit_error(
                 DiagnosticClass::Source,
@@ -503,6 +521,13 @@ impl CompilationUnit {
                 DiagnosticClass::Source,
                 "compiler_unit_transaction_outcome_generation",
                 "transaction outcomes require compiler-unit 12 and bytecode 8",
+            ));
+        }
+        if self.contract_version < 13 && self.payload.uses_f64() {
+            return Err(unit_error(
+                DiagnosticClass::Source,
+                "compiler_unit_f64_generation",
+                "F64 instructions require compiler-unit 13 and bytecode 9",
             ));
         }
         if self.source.package.bytes() == [0; 16] {
@@ -598,6 +623,22 @@ impl CompilationTables {
 }
 
 impl CompilationPayload {
+    fn uses_f64(&self) -> bool {
+        let contains = |code: &CompiledCode| {
+            code.instructions
+                .iter()
+                .any(|instruction| matches!(instruction, CompiledInstruction::F64(_)))
+        };
+        match self {
+            Self::Function { code, .. } | Self::Constant { code, .. } => contains(code),
+            Self::Test { actual, expected, .. } => contains(actual) || contains(expected),
+            Self::Component { ports, .. } => ports.iter().any(|port| {
+                matches!(&port.implementation, CompiledPortImplementation::Expression(code) if contains(code))
+            }),
+            _ => false,
+        }
+    }
+
     fn uses_transaction_outcome(&self) -> bool {
         let contains = |code: &CompiledCode| {
             code.instructions.iter().any(|instruction| {
@@ -1398,7 +1439,12 @@ impl CompiledInstruction {
                 }
                 Ok(())
             }
-            Self::Unit | Self::Bool(_) | Self::I64(_) | Self::Drop | Self::Return => Ok(()),
+            Self::Unit
+            | Self::Bool(_)
+            | Self::I64(_)
+            | Self::F64(_)
+            | Self::Drop
+            | Self::Return => Ok(()),
         }
     }
 }
@@ -1639,6 +1685,7 @@ fn stack_effect(instruction: &CompiledInstruction) -> Result<(usize, usize), Dia
         CompiledInstruction::Unit
         | CompiledInstruction::Bool(_)
         | CompiledInstruction::I64(_)
+        | CompiledInstruction::F64(_)
         | CompiledInstruction::Text(_)
         | CompiledInstruction::StaticText(_)
         | CompiledInstruction::LoadLocal { .. }

@@ -161,6 +161,24 @@ struct Pair {
 // Additional cases distinguish nominal/structural selectors and both variant payload shapes.
 const PAIRS: &[Pair] = &[
     Pair {
+        name: "f64",
+        result: "f64",
+        flat: "expression.f64 as=$body value=5e-1\n",
+        block: "(f64 0.5)",
+    },
+    Pair {
+        name: "f64-negative-zero",
+        result: "f64",
+        flat: "expression.f64 as=$body value=-0\n",
+        block: "(f64 -0.0)",
+    },
+    Pair {
+        name: "f64-nan",
+        result: "f64",
+        flat: "expression.f64 as=$body value=nan\n",
+        block: "(f64 nan)",
+    },
+    Pair {
         name: "unit",
         result: "unit",
         flat: "expression.unit as=$body\n",
