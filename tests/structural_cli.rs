@@ -5,11 +5,11 @@
     reason = "public subprocess acceptance reports assertion failures"
 )]
 
+mod support;
+
 use lkjscript::platform::control::{CompactRecord, parse_records};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
-use std::fs::{File, OpenOptions};
-use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -31,20 +31,7 @@ impl Public {
         assert!(source.is_absolute());
         let directory = tempfile::tempdir().unwrap();
         let executable = directory.path().join("lkjscript");
-        let stage = directory.path().join("candidate.stage");
-        let mut source = File::open(source).unwrap();
-        let permissions = source.metadata().unwrap().permissions();
-        let mut destination = OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(&stage)
-            .unwrap();
-        io::copy(&mut source, &mut destination).unwrap();
-        destination.set_permissions(permissions).unwrap();
-        destination.sync_all().unwrap();
-        drop(destination);
-        drop(source);
-        std::fs::rename(stage, &executable).unwrap();
+        support::copy_executable(source, &executable);
         let project = directory.path().join("author");
         let public = Self {
             directory,
@@ -63,13 +50,14 @@ impl Public {
     }
 
     fn output(&self, arguments: &[&str]) -> Output {
-        Command::new(&self.executable)
-            .args(arguments)
-            .current_dir(self.directory.path())
-            .env_clear()
-            .env("LANG", "C")
-            .output()
-            .unwrap()
+        support::output(
+            Command::new(&self.executable)
+                .args(arguments)
+                .current_dir(self.directory.path())
+                .env_clear()
+                .env("LANG", "C"),
+        )
+        .unwrap()
     }
 
     fn success(&self, arguments: &[&str]) -> Vec<CompactRecord> {

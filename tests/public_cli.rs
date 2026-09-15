@@ -4,24 +4,23 @@
     reason = "the black-box test harness uses panic-on-failure assertions"
 )]
 
+mod support;
+
 use lkjscript::platform::contract::MAXIMUM_CLI_RESPONSE_BYTES;
 use lkjscript::platform::control::{CompactRecord, decode_logical_change_plan, parse_records};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
-use std::fs::{File, OpenOptions};
-use std::io::{self, BufRead, BufReader, Read};
+use std::fs::File;
+use std::io::{BufRead, BufReader, Read};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
-use std::thread;
-use std::time::Duration;
+use support::copy_executable;
 
 const APPLICATION: &str = "applications/lkjournal";
 const RELEASE_CANDIDATE_ENVIRONMENT: &str = "LKJSCRIPT_RELEASE_CANDIDATE";
-const EXECUTABLE_BUSY_ATTEMPTS: usize = 12;
-const EXECUTABLE_BUSY_DELAY: Duration = Duration::from_millis(50);
 
 #[test]
 fn runtime_inventory_is_project_independent_and_closed_output_preserves_primary_failure() {
@@ -34,13 +33,14 @@ fn runtime_inventory_is_project_independent_and_closed_output_preserves_primary_
     )
     .unwrap();
     let prefix = temporary.path().join("absent prefix");
-    let result = Command::new(&executable)
-        .args(["runtime", "list", "--prefix", path(&prefix)])
-        .current_dir(temporary.path())
-        .env_clear()
-        .env("PATH", "")
-        .output()
-        .unwrap();
+    let result = support::output(
+        Command::new(&executable)
+            .args(["runtime", "list", "--prefix", path(&prefix)])
+            .current_dir(temporary.path())
+            .env_clear()
+            .env("PATH", ""),
+    )
+    .unwrap();
     assert!(result.status.success());
     let records = parse_records("runtime inventory", &result.stdout).unwrap();
     assert_eq!(
@@ -56,25 +56,27 @@ fn runtime_inventory_is_project_independent_and_closed_output_preserves_primary_
         vec!["runtime", "list", "--activate"],
     ] {
         assert!(
-            !Command::new(&executable)
-                .args(args)
-                .current_dir(temporary.path())
-                .env_clear()
-                .output()
-                .unwrap()
-                .status
-                .success()
+            !support::output(
+                Command::new(&executable)
+                    .args(args)
+                    .current_dir(temporary.path())
+                    .env_clear(),
+            )
+            .unwrap()
+            .status
+            .success()
         );
     }
-    let mut child = Command::new(&executable)
-        .args(["runtime", "select", "v0.1.32", "--prefix", path(&prefix)])
-        .current_dir(temporary.path())
-        .env_clear()
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    drop(child.stdout.take());
+    let mut child = support::spawn(
+        Command::new(&executable)
+            .args(["runtime", "select", "v0.1.32", "--prefix", path(&prefix)])
+            .current_dir(temporary.path())
+            .env_clear()
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped()),
+    )
+    .unwrap();
+    drop(child.take_stdout());
     let failed = child.wait_with_output().unwrap();
     assert!(!failed.status.success());
     let diagnostic: Value = serde_json::from_slice(&failed.stderr).unwrap();
@@ -290,31 +292,6 @@ fn binary() -> PathBuf {
     candidate
 }
 
-fn copy_executable(source: &Path, destination: &Path) {
-    let stage = destination.with_extension("stage");
-    let mut input = File::open(source).expect("open executable for isolated copy");
-    let permissions = input
-        .metadata()
-        .expect("inspect executable permissions")
-        .permissions();
-    let mut output = OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(&stage)
-        .expect("create private executable stage");
-    io::copy(&mut input, &mut output).expect("copy executable into private stage");
-    output
-        .set_permissions(permissions)
-        .expect("preserve executable permissions");
-    output.sync_all().expect("synchronize executable stage");
-    drop(output);
-    drop(input);
-    std::fs::rename(stage, destination).expect("publish closed executable copy");
-    File::open(destination.parent().expect("copied executable parent"))
-        .and_then(|directory| directory.sync_all())
-        .expect("synchronize copied executable visibility");
-}
-
 fn command(arguments: &[&str]) -> Output {
     command_at(&binary(), Path::new(env!("CARGO_MANIFEST_DIR")), arguments)
 }
@@ -324,56 +301,14 @@ fn command_at(executable: &Path, directory: &Path, arguments: &[&str]) -> Output
         "run public CLI '{}' with {arguments:?}",
         executable.display()
     );
-    retry_executable_busy(|| {
+    support::output(
         Command::new(executable)
             .args(arguments)
             .current_dir(directory)
             .env_clear()
-            .env("LANG", "C")
-            .output()
-    })
+            .env("LANG", "C"),
+    )
     .expect(&context)
-}
-
-fn retry_executable_busy<T>(mut operation: impl FnMut() -> io::Result<T>) -> io::Result<T> {
-    let mut attempt = 1_usize;
-    loop {
-        match operation() {
-            Err(error)
-                if error.kind() == io::ErrorKind::ExecutableFileBusy
-                    && attempt < EXECUTABLE_BUSY_ATTEMPTS =>
-            {
-                thread::sleep(EXECUTABLE_BUSY_DELAY);
-                attempt += 1;
-            }
-            result => return result,
-        }
-    }
-}
-
-#[test]
-fn copied_binary_spawn_retries_transient_executable_busy() {
-    let mut attempts = 0_usize;
-    let observed = retry_executable_busy(|| {
-        attempts += 1;
-        if attempts < 3 {
-            Err(io::Error::from(io::ErrorKind::ExecutableFileBusy))
-        } else {
-            Ok("started")
-        }
-    })
-    .expect("transient executable busy result");
-    assert_eq!(observed, "started");
-    assert_eq!(attempts, 3);
-
-    let mut exhausted_attempts = 0_usize;
-    let error = retry_executable_busy(|| -> io::Result<()> {
-        exhausted_attempts += 1;
-        Err(io::Error::from(io::ErrorKind::ExecutableFileBusy))
-    })
-    .expect_err("persistent executable busy result");
-    assert_eq!(error.kind(), io::ErrorKind::ExecutableFileBusy);
-    assert_eq!(exhausted_attempts, EXECUTABLE_BUSY_ATTEMPTS);
 }
 
 fn compact_success(arguments: &[&str]) -> Vec<CompactRecord> {
@@ -2888,23 +2823,24 @@ fn interrupted_copied_query_after_reads_and_rendering_writes_no_repository_bytes
     drop(applied);
 
     let before = content_inventory(&project);
-    let mut child = Command::new(&copied_binary)
-        .args([
-            "--project",
-            path(&project),
-            "query",
-            "owners",
-            "--limit",
-            "1000",
-            "--bytes",
-            "4194304",
-        ])
-        .current_dir(temporary.path())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn interruptible copied query");
-    let mut stdout = child.stdout.take().expect("interruptible query stdout");
+    let mut child = support::spawn(
+        Command::new(&copied_binary)
+            .args([
+                "--project",
+                path(&project),
+                "query",
+                "owners",
+                "--limit",
+                "1000",
+                "--bytes",
+                "4194304",
+            ])
+            .current_dir(temporary.path())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped()),
+    )
+    .expect("spawn interruptible copied query");
+    let mut stdout = child.take_stdout().expect("interruptible query stdout");
     let mut first_output_byte = [0_u8; 1];
     stdout
         .read_exact(&mut first_output_byte)
@@ -7175,16 +7111,17 @@ fn copied_binary_authors_builds_and_serves_interactive_topology_from_minimal() {
     )
     .expect("write interactive descriptor");
     let before_serve = std::fs::read(project.join("HEAD")).expect("HEAD before serve");
-    let mut child = Command::new(&copied_binary)
-        .args(["serve", "--deployment", path(&descriptor)])
-        .current_dir(temporary.path())
-        .env_clear()
-        .env("LANG", "C")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn authored interactive service");
-    let mut output = BufReader::new(child.stdout.take().expect("interactive service stdout"));
+    let mut child = support::spawn(
+        Command::new(&copied_binary)
+            .args(["serve", "--deployment", path(&descriptor)])
+            .current_dir(temporary.path())
+            .env_clear()
+            .env("LANG", "C")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped()),
+    )
+    .expect("spawn authored interactive service");
+    let mut output = BufReader::new(child.take_stdout().expect("interactive service stdout"));
     let mut ready = String::new();
     output
         .read_line(&mut ready)
