@@ -955,6 +955,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         "match",
         "capability-call",
         "transaction",
+        "transaction-outcome",
     ];
     assert_eq!(
         expression_section
@@ -1008,6 +1009,10 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "transaction",
             "(transaction REQUIREMENT (binding NAME) BODY)",
         ),
+        (
+            "transaction-outcome",
+            "(transaction-outcome REQUIREMENT (types TYPE) (outcome OUTCOME REASON COMMITTED ABORTED CONDITION-FAILED CONFLICT) (binding NAME) BODY)",
+        ),
     ] {
         assert!(change_section.iter().any(|record| {
             record.operation == "change.expression-syntax"
@@ -1050,6 +1055,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "let-scope",
             "payload-scope",
             "transaction-scope",
+            "transaction-outcome",
             "root-ownership",
             "delayed-references",
             "occurrences-and-order",
