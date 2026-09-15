@@ -34,9 +34,12 @@ object `51ecaabf3a6dfbaef0f842e95c4fc480dced0b6d` selects exact `8baafff7`; its 
 tests hit `ExecutableFileBusy` before a structural test subprocess launched. Later jobs were
 skipped; v0.1.37 was not produced. Its tag/source and acquired original failure evidence remain
 preserved. The [binary64 mandate](campaigns/202609152217.md) selects one new combined successor,
-including the launch/retention repairs, existing capabilities and F64 if accepted. No newer
-publisher is active at startup; v0.1.36 remains the latest download and v0.1.35 the last closed
-public milestone. Combined publication and original-reader acceptance remain due.
+including the launch/retention repairs, existing capabilities and F64 if accepted. Clean candidate
+`256edf0018ce1fd9935e9f9af9cbe428a6b93514` is pushed on `codex/f64-202609152217`.
+Read-only rehearsal `34988075601/1` selects that exact source; at 15:29 UTC its build job
+`104445250259` was building the host verifier. Fresh full/target, package and installed-pair proof
+remain pending. Main integration, publication and public original-reader acceptance follow those
+gates. v0.1.36 remains the latest download and v0.1.35 the last closed public milestone.
 
 ## Binary64 increment
 
@@ -49,8 +52,9 @@ bytecode 9 and Artifact 21 detect the new meaning while retaining genuine suppor
 The copied executable's transported graph statistics library passes direct and consumer-nominal
 samples, a reviewed calibration edit, merging, process restart from typed checkpoint bytes and the
 4,096-sample exact oracle. Its granted data witness observes the committed value after later
-nonfinite JSON output fails. These are fresh focused development results; final source/target,
-installed-pair and original-reader acceptance remain due. The shared integration-test helper now
+nonfinite JSON output fails. The strengthened focused original reader also passes. These are fresh
+development results; final source/target, installed-pair and public original-reader acceptance
+remain due. The shared integration-test helper now
 retries only a busy failed spawn and never replays a child that started. Existing standard and
 `lkjournal` assets were rebuilt through public operations; operational data was not migrated.
 
