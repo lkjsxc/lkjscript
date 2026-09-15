@@ -4316,7 +4316,14 @@ fn change_request_commitment(
     let intent = crate::platform::change::canonical_authored_intent_bytes(request)?;
     let budget = crate::platform::change::canonical_authored_budget_bytes(request.budget)?;
     let mut hasher = blake3::Hasher::new_derive_key(CHANGE_REQUEST_COMMITMENT_DOMAIN);
-    hash_digest_field(&mut hasher, AUTHORED_CHANGE_CODEC_IDENTITY.as_bytes())?;
+    // Codec 15 committed both compatible intent generations under this exact identity.
+    // Adding an expression must not change reviewed request identities for unchanged bytes.
+    let codec_identity = if intent.starts_with(b"LKJACR14") || intent.starts_with(b"LKJACR15") {
+        "lkjscript-authored-change-codec-15"
+    } else {
+        AUTHORED_CHANGE_CODEC_IDENTITY
+    };
+    hash_digest_field(&mut hasher, codec_identity.as_bytes())?;
     hash_digest_field(&mut hasher, &intent)?;
     hash_digest_field(&mut hasher, &budget)?;
     hash_optional_digest_field(&mut hasher, options.idempotency_key.as_deref())?;

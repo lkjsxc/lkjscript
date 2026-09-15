@@ -10,7 +10,8 @@ factory, parametric/recursive payloads, complete paginated definitions and inter
 consumer configuration/data rows, reviewed contract/dependency changes, and exact source/artifact
 binding. The transferred reader independently requires complete results at lengths 0, 1, 31, 32,
 33, 4,097 and 8,192, ordered repeated-key writes, restart persistence, transaction commit/rollback,
-forbidden nested transactions, nontransactional partial visibility and preserved older-bundle behavior.
+same-canonical transaction reentry rejection, nontransactional partial visibility and preserved
+older-bundle behavior.
 The stateful HTTP owner supplies the shared disposable listener/data lifecycle.
 
 The source-bound effect observations use separate neutral grants for production and canonical

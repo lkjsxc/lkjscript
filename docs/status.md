@@ -37,8 +37,9 @@ The [selected mandate](campaigns/202609151502.md) adds ordinary typed lexical co
 public authoring, exact nominal authority, compiler and both evaluators pass focused validation.
 The imported library witness and its reader pass 123 public commands, 22 current outcomes and
 15 authentic predecessor executions, including a two-public-writer conflict and independent data observations.
-Fresh full/static-target acceptance and normal feature integration are still unrun. Mutable product
-version is 0.1.38; neither v0.1.36 nor its v0.1.37 recovery includes this capability.
+Fresh full acceptance is pending after diagnosed commitment/golden corrections; static-target
+acceptance and normal feature integration remain unrun. Mutable product version is 0.1.38;
+neither v0.1.36 nor its v0.1.37 recovery includes this capability.
 
 ## Current authority and maintained consumers
 
