@@ -357,7 +357,7 @@ parameters through the current declaration surface. All 22 public expression for
 structural syntax inside `expression.block as=$ROOT` / `expression.end`. Declarations, signatures,
 types, rows, requirements and dependency selection keep their explicit record forms. The generated
 [change grammar](../generated/change-grammar.md) is the exhaustive public inventory;
-[the CLI contract](semantic-cli.md#structural-expression-bodies) owns block framing and lexical input.
+[the change input specification](semantic-cli.md#structural-expression-bodies) owns block framing and lexical input.
 
 Structural syntax lowers each expression occurrence and each lexical binder into ordinary typed
 authored intent. A block exports only its root, which has the same exactly-once ownership rule as a

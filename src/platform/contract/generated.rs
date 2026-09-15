@@ -148,7 +148,7 @@ fn change_grammar_markdown(snapshot: &CapabilitiesSnapshot) -> Result<String, St
         "With an ordinary reference/declaration prelude for `$add`, this block exports one expression root for `create.function ... body=$body` or `replace.body function=FUNCTION body=$body`:\n\n```text\nexpression.block as=$body\n  (let\n    (binding value (type i64) (i64 2))\n    (binding value (type i64) (call $add (local value) (i64 3)))\n    (in (local value)))\nexpression.end\n```\n\n",
     );
     output.push_str(
-        "The second initializer reads the earlier `value`; the body reads the new binding. Each occurrence and binder has distinct ownership. Only the root is exported, and it must be consumed exactly once. Nested nodes cannot be addressed by outer flat edges. All 22 structural forms, explicit application clauses, lexical rules and flat fields are advertised below. The [CLI contract](../spec/semantic-cli.md#structural-expression-bodies) explains framing, review and compatibility.\n\n",
+        "The second initializer reads the earlier `value`; the body reads the new binding. Each occurrence and binder has distinct ownership. Only the root is exported, and it must be consumed exactly once. Nested nodes cannot be addressed by outer flat edges. All 22 structural forms, explicit application clauses, lexical rules and flat fields are advertised below. The [change input specification](../spec/semantic-cli.md#structural-expression-bodies) explains framing, review and compatibility.\n\n",
     );
     append_registry_sections(
         &mut output,

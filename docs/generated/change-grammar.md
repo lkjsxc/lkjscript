@@ -15,7 +15,7 @@ expression.block as=$body
 expression.end
 ```
 
-The second initializer reads the earlier `value`; the body reads the new binding. Each occurrence and binder has distinct ownership. Only the root is exported, and it must be consumed exactly once. Nested nodes cannot be addressed by outer flat edges. All 22 structural forms, explicit application clauses, lexical rules and flat fields are advertised below. The [CLI contract](../spec/semantic-cli.md#structural-expression-bodies) explains framing, review and compatibility.
+The second initializer reads the earlier `value`; the body reads the new binding. Each occurrence and binder has distinct ownership. Only the root is exported, and it must be consumed exactly once. Nested nodes cannot be addressed by outer flat edges. All 22 structural forms, explicit application clauses, lexical rules and flat fields are advertised below. The [change input specification](../spec/semantic-cli.md#structural-expression-bodies) explains framing, review and compatibility.
 
 The following compact records are the executable-owned current public capability.
 

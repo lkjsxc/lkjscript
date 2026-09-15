@@ -185,7 +185,10 @@ fn authentic_predecessor_validity_repair_history_and_retry() {
                 &["change", "apply", "--input", request, "--plan", old_token],
             ))
             .unwrap_err();
-            assert_eq!(errors[0].code, "change_prepared_plan_mismatch");
+            // The current impact-work default is part of the request commitment. This authentic
+            // token binds the predecessor's old default, so rejection now precedes preparation.
+            // Keep the original request/token/accepted bytes and require the exact current code.
+            assert_eq!(errors[0].code, "change_request_commitment_mismatch");
             assert_eq!(
                 inventory(&root),
                 before_retry,
