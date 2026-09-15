@@ -81,6 +81,18 @@ trait Checkpoints {
 struct Ordinary;
 impl Checkpoints for Ordinary {}
 
+struct InstallationLock(File);
+
+impl Drop for InstallationLock {
+    fn drop(&mut self) {
+        // Closing only this descriptor can leave its flock held by a duplicate inherited
+        // during concurrent process creation. Release this operation's open description
+        // explicitly; independently opened installation locks remain unaffected. The
+        // owned File is still closed if the kernel reports an unlock error during drop.
+        let _ = rustix::fs::flock(&self.0, rustix::fs::FlockOperation::Unlock);
+    }
+}
+
 pub fn resolve_prefix(explicit: Option<&str>) -> Result<PathBuf, Diagnostic> {
     let prefix = match explicit {
         Some(value) => PathBuf::from(value),
@@ -440,7 +452,7 @@ impl Root {
         this.pointer()?;
         Ok(Some(this))
     }
-    fn lock(&self, exclusive: bool) -> Result<File, Diagnostic> {
+    fn lock(&self, exclusive: bool) -> Result<InstallationLock, Diagnostic> {
         let lock = fs::file_at(&self.root, LOCK)?;
         fs::owned(&lock)?;
         let operation = if exclusive {
@@ -458,7 +470,7 @@ impl Root {
                 io_error(error)
             }
         })?;
-        Ok(lock)
+        Ok(InstallationLock(lock))
     }
     fn recheck(&self) -> Result<(), Diagnostic> {
         let prefix =

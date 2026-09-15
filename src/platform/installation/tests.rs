@@ -97,7 +97,7 @@ fn native_failure_state_model_and_restart() {
         let prefix = temp.path().join("prefix");
         let (a, digest) = archive(temp.path(), "v0.1.34");
         let error = install_with(&prefix, &a, &digest, true, &Fail(point)).unwrap_err();
-        let inventory = list(&prefix).unwrap();
+        let inventory = list(&prefix).unwrap_or_else(|error| panic!("{point}: {error:?}"));
         assert!(inventory.versions.len() <= 1, "{point}");
         if let Some(tag) = inventory.selected {
             assert_eq!(tag, "v0.1.34");
@@ -134,6 +134,40 @@ fn native_prefix_conflicts_never_touch_unrelated_sentinels() {
         assert_eq!(fs::read(&sentinel).unwrap(), b"unrelated");
     }
 }
+#[test]
+fn completed_installation_releases_its_lock_with_a_retained_description() {
+    for unwind in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        let prefix = temp.path().join("prefix");
+        let root = Root::open(&prefix, true, &Ordinary).unwrap().unwrap();
+        let held = root.lock(true).unwrap();
+        // A duplicate models the same open-file description temporarily inherited by a
+        // concurrently spawned child before exec closes its CLOEXEC descriptors.
+        let duplicate = held.0.try_clone().unwrap();
+        assert_eq!(list(&prefix).unwrap_err().code, "runtime_busy");
+        if unwind {
+            assert!(
+                std::panic::catch_unwind(|| {
+                    let _held = held;
+                    panic!("owned operation unwinds");
+                })
+                .is_err()
+            );
+        } else {
+            drop(held);
+        }
+        assert!(
+            list(&prefix).is_ok(),
+            "operation ended, duplicate still open"
+        );
+        let next = root.lock(true).unwrap();
+        drop(duplicate);
+        assert_eq!(list(&prefix).unwrap_err().code, "runtime_busy");
+        drop(next);
+        assert!(list(&prefix).is_ok());
+    }
+}
+
 #[test]
 fn native_lock_is_os_owned_and_concurrent_installations_converge() {
     let temp = tempfile::tempdir().unwrap();
