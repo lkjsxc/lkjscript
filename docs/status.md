@@ -26,20 +26,33 @@ The [delivery continuation](campaigns/202609151412.md) owns additive v0.1.37 rec
 `eea968b9`, correcting public evidence retention without transaction-outcome meaning. Initial repair
 `3b32f2fc` is normally integrated by `7590a121`. Corrected source `8baafff7` regenerates its eight
 version-dependent guides through the matching product and is integrated by `3372cb3e`.
-Rehearsal `34953636796/1` owns fresh acceptance of that exact recovery source; the earlier
-`34952573731/1` was cancelled before full/target/package execution. The consumed delivery deferral
-remains due until public original-reader admission closes.
+Rehearsal `34953636796/1` passed, and all five authenticated original handoffs passed their matching
+readers, including 26 fresh full gates, six target owners and the simulated installed pair.
+The earlier `34952573731/1` was cancelled before full/target/package execution. Annotated v0.1.37
+object `51ecaabf3a6dfbaef0f842e95c4fc480dced0b6d` selects exact `8baafff7`; its tag-push publisher
+`34965341260/1` started at 11:49:02Z. Fresh publication and anonymous original-reader acceptance
+remain pending. The consumed delivery deferral remains due until that boundary closes.
 
 ## Transaction completion increment
 
 The [selected mandate](campaigns/202609151502.md) adds ordinary typed lexical completion through
-`transaction-outcome`. Physical condition/no-change/conflict and publication-fault tests pass;
-public authoring, exact nominal authority, compiler and both evaluators pass focused validation.
-The imported library witness and its reader pass 123 public commands, 22 current outcomes and
-15 authentic predecessor executions, including a two-public-writer conflict and independent data observations.
-Fresh full acceptance is pending after diagnosed commitment/golden corrections; static-target
-acceptance and normal feature integration remain unrun. Mutable product version is 0.1.38;
-neither v0.1.36 nor its v0.1.37 recovery includes this capability.
+`transaction-outcome`. An ordinary imported generic library returns `Committed(T)` only after its
+transaction completes, or `Aborted(ConditionFailed | Conflict)` without exposing the candidate.
+Legacy `transaction` keeps its body result and classified conflict error. Read-only completion
+retains its original snapshot; independent callback effects retain their own visibility.
+
+Exact source `93b73f87ac480343b62fd05f298f5c144d7adeb5` passed all 26 full gates freshly with
+stable inputs and zero reuse, separate static-musl admission in both pinned userlands and all six
+owners, and 114 target-reader fault cases with healthy recovery. The imported library proof covers
+123 public commands, 22 current outcomes and 15 authentic predecessor executions, including
+two-public-writer conflict, body edit/dependency repair and independent reopened-store observations.
+Normal main integration is `3fdddef3e98f120c7f58bc3719b3d22595847a20`, with the exact tested tree.
+
+Product 0.1.38 retains authentic Graph 14/15 and Artifact 18/19 readers; new Graph 16/Artifact 20
+meaning requires the current runtime. Application-data formats are unchanged. Neither v0.1.36 nor
+its v0.1.37 recovery includes this capability. Separate publication is deferred for at most one
+substantive companion under the [next-campaign trigger](roadmap.md); no new publisher is selected
+for this increment now. Detailed identities, failures, cleanup and limitations stay in the campaign.
 
 ## Current authority and maintained consumers
 

@@ -94,10 +94,15 @@ The [structural-authoring campaign](campaigns/202609150900.md) consumed the acce
 library's single-campaign deferral. Combined source `eea968b910ac62c3feab95a8896fff1a91904a17`
 is normally integrated and frozen. The [delivery continuation](campaigns/202609151412.md) admits
 successful rehearsal `34918782215/1` through its authenticated originals and matching readers.
-Annotated v0.1.36 object `a8cacb9c574005079a7532e4f9e7d140c51ccc40` selects that source;
-tag-push publisher `34933268953/1` owns the remaining fresh publication and anonymous acceptance
-gates. The [current delivery summary](status.md#combined-release-delivery) records their disposition.
-Later documentation and guidance commits do not retarget this release source.
+Annotated v0.1.36 object `a8cacb9c574005079a7532e4f9e7d140c51ccc40` selects that source.
+Publisher `34933268953/1` published immutable assets, but its public original reader rejects eight
+omitted authoring inputs/plans. The delivery continuation owns the smallest additive retention
+repair, frozen at `8baafff7f67b55481cda8d67f8945b78af80be4d`. Rehearsal `34953636796/1` and all
+matching original readers passed. Annotated v0.1.37 object
+`51ecaabf3a6dfbaef0f842e95c4fc480dced0b6d` starts publisher `34965341260/1`; its publication and
+anonymous acceptance remain due. The [current delivery summary](status.md#combined-release-delivery)
+owns that disposition. Later transaction development and reporting do not retarget either frozen
+source, and neither release includes transaction-outcome meaning.
 
 Immutable `v0.1.31`, release `386791231`, remains a retained recursive-data predecessor from
 `7ea9c99a31ecd0e5317129d2bd81ab4f8f51e02e`, with its original readers and assets unchanged.

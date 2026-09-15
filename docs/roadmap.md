@@ -82,9 +82,9 @@ publisher owns delivery. Its original-reader and anonymous installed-product gat
 the [current summary](status.md#combined-release-delivery) owns their disposition. The consumed
 deferral cannot be renewed or moved to the new source.
 
-The selected transaction-completion increment may proceed independently of that recovery lane.
-After its engineering acceptance and integration, its separate publication is deferred for at most
-one further substantive campaign. At the next architectural reassessment select a concrete companion
+The transaction-completion increment has passed engineering acceptance and normal integration
+independently of that recovery lane. Its separate publication is deferred for at most one further
+substantive campaign. At the next architectural reassessment select a concrete companion
 or publish the accepted increment alone. Acceptance, material blockage or abandonment of that
 companion triggers publication without another deferral. Any due additive recovery takes precedence
 in the publication lane. This does not select automatic retry: independent callback effects still
@@ -92,11 +92,11 @@ require an application policy for replay and idempotency.
 
 The [structural campaign](campaigns/202609150900.md) retains the original literal size observations;
 they establish assembly friction, not authoring time, model tokens or billing. Explicit declaration,
-reference, type, effect, constraint and dependency preludes remain. The selected completion API lets
-the library own finalization across a caller-supplied requirement; fresh acceptance must establish
-the result through transport, callback failures and independent store observations.
+reference, type, effect, constraint and dependency preludes remain. The completion API lets the
+library own finalization across a caller-supplied requirement; fresh source and static-target
+acceptance establish the result through transport, callback failures and independent store observations.
 
-After completion, the difficult composition boundary is transaction ownership: a helper owning a
+The remaining difficult composition boundary is transaction ownership: a helper owning a
 transaction still cannot join an already active transaction on the same canonical requirement.
 Conflict describes that store's non-publication, while independent callback effects can survive.
 Retries therefore need workload-specific idempotency and effect analysis. Evaluate useful ordinary
