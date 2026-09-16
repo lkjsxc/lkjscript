@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-09-15 UTC. This file describes implemented checkout reality. Executable-derived
+Status date: 2026-09-16 UTC. This file describes implemented checkout reality. Executable-derived
 public guides live under [generated](generated), including the
 [operation guide](generated/operations.md); this file does not duplicate them.
 
@@ -34,12 +34,18 @@ object `51ecaabf3a6dfbaef0f842e95c4fc480dced0b6d` selects exact `8baafff7`; its 
 tests hit `ExecutableFileBusy` before a structural test subprocess launched. Later jobs were
 skipped; v0.1.37 was not produced. Its tag/source and acquired original failure evidence remain
 preserved. The [binary64 mandate](campaigns/202609152217.md) selects one new combined successor,
-including the launch/retention repairs, existing capabilities and F64 if accepted. Clean candidate
-`256edf0018ce1fd9935e9f9af9cbe428a6b93514` is pushed on `codex/f64-202609152217`.
-Read-only rehearsal `34988075601/1` selects that exact source; at 15:29 UTC its build job
-`104445250259` was building the host verifier. Fresh full/target, package and installed-pair proof
-remain pending. Main integration, publication and public original-reader acceptance follow those
-gates. v0.1.36 remains the latest download and v0.1.35 the last closed public milestone.
+including the launch/retention repairs, existing capabilities and F64 if accepted. Its exact-source
+rehearsal `34988075601/1` at `256edf0018ce1fd9935e9f9af9cbe428a6b93514` failed: 25 of 26 full
+gates passed freshly; workspace tests stopped at a stale Artifact 20 consumer assertion against
+the correctly produced Artifact 21. Target, package and installed proof were skipped.
+
+The [corrective continuation](campaigns/202609161407.md) retains the authenticated failed ZIP and
+original logs, reproduces that failure, and changes only the consumer test's explicit current
+expectation and version-neutral name. Fresh affected service/public/structural tests pass; the
+bounded transition audit found no further current-generation mismatch. A new corrective source
+must pass fresh full/target, package and installed-pair proof before integration/publication and
+anonymous original-reader acceptance. v0.1.38 remains unused; v0.1.36 is the latest download and
+v0.1.35 the last closed public milestone.
 
 ## Binary64 increment
 
