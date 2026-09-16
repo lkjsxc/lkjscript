@@ -508,8 +508,10 @@ test "$(gh variable list --repo lkjsxc/lkjscript --json name,value \
 git push origin "refs/tags/$release_tag"
 ```
 
-Before writing the variable, record its exact prior value and reconcile it to a completed release;
-exclude queued, in-progress, waiting, requested, pending, or foreign publishers. Compare the prior
+Before writing the variable, record its exact prior value and reconcile it to its terminal owning
+attempt and actual publication state. A terminal failed attempt without a release is a legitimate
+previous owner when its successor has been explicitly selected; preserve its immutable identities
+and failed history. Exclude queued, in-progress, waiting, requested, pending, or foreign publishers. Compare the prior
 value again immediately before the write. This read/check/write is not atomic compare-and-swap.
 Before tag push, restore the prior value only if the field still contains this attempt's tag object
 and no tag/run has acquired it. After tag push retain the binding for the owning run. A release-only

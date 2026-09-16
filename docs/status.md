@@ -6,38 +6,31 @@ public guides live under [generated](generated), including the
 
 ## Combined release delivery
 
-The [numerical-library delivery continuation](campaigns/202609161809.md) integrated the coherent
-binary64/requirement/structural/transaction lineage and current guidance by normal fast-forward at
-`a5b2d62bcbecc2975b71b4cb450747a3b0c968d2`; remote main subsequently reached reporting commit
-`14de12ea708530c4c2c0bfe7e0cb0547a56a5efe`. Both contain exact verified source
-`7dce6b73769346f792c7f2c71d77d41dc8695dae` (S).
+The [numerical-library milestone closure](campaigns/202609162154.md) consumes the completed corrective
+rehearsal at exact source `7083f9a6d56ed702017942e100c3696fc6f35308` (T), tree
+`e12b89965176dcb166f69c9e32441f71588b7b9f`, selected v0.1.38. The existing numerical,
+requirement-library, structural-authoring and transaction-completion lineage is already on main.
+T adds only the tested preservation of original file permissions in the target fault helper.
 
-S rehearsal `35070583339/1` completed successfully at 10:01:45 UTC on 2026-09-16: 26 fresh full
-gates, zero reuse, complete six-owner/two-userland static target, strict preparation and the whole
-installed pair. All five authenticated original ZIPs are retained. Its verifier, package and target
-readers pass; original preparation binds its exact full/target receipts. Its matching installed
-original reader also passes in the restored hosted context, without replaying applications. Publication and anonymous jobs were correctly skipped for this dry run.
+Rehearsal `35083514716/1` completed successfully. All five actual ZIPs match authenticated metadata
+and are retained locally. T's original full proof contains 26 fresh gates, zero reuse and stable
+inputs; its genuine preparation read that matching full receipt. Fresh matching verifier, strict
+package and target rereads pass, including six maintained owners and both pinned userlands.
+The original workspace proof includes the helper regression and all 119 contributor tests.
+The matching hosted installed `pair-verify` also passes without replaying applications, with both
+routes, all five owners, all eight literal request/plan originals and terminal cleanup.
 
-A required target fault test exposed a test-only restoration defect: deleted private plans were
-recreated as 0644 instead of their original 0600. Production readers correctly rejected the drift.
-Correction `7083f9a6d56ed702017942e100c3696fc6f35308` (T) preserves original permissions and extends
-the existing regression. The old helper fails that regression; corrected 119 contributor tests,
-formatting and strict lint pass. T's copied harness passes all 130 target faults against S originals,
-including baseline/recovery and complete byte/mode restoration. This is repair regression evidence,
-not final-source T target acceptance. The exact-S twelve-case pair interruption proof also passes;
-healthy local recovery and pair/transferred reader matrices remain unrun.
+These establish T's main prerequisites. The existing continuation is being integrated with the
+supplied guidance, mandate and a bounded selector-owner clarification; its documentation changes
+are validated separately from frozen T. Final-T target faults, twelve interruptions, one fresh
+healthy local recovery and both receipt matrices remain separate public prerequisites. The
+[release procedure](release.md#main-integration-and-public-closure) keeps these boundaries explicit.
 
-T is retained in the existing continuation pending its own integration prerequisites. The only new
-read-only rehearsal is `35083514716/1`, exact T, selected v0.1.38, dispatched after S finished. At
-10:16:25 UTC job `104752845576` was running fresh full verification. T's fresh full/target/preparation and
-installed/fault/public gates remain open; the [release procedure](release.md#main-integration-and-public-closure)
-keeps integration and public closure separate. No tag, publisher or selector update occurred.
-
-Immutable v0.1.36 remains the latest download with its failed public original-reader closure
-preserved; v0.1.35 is the last fully closed public milestone. The v0.1.37 failed publisher and tag
-remain preserved. Their history belongs to the [delivery predecessor](campaigns/202609151412.md);
-F64, cutover and allowance history belongs to their linked campaigns. No numerical semantics,
-workload, compatibility generation or timeout changed in this delivery continuation.
+Immutable v0.1.36 remains the latest download; its failed public original-reader closure and the
+failed v0.1.37 publisher/tag remain preserved. v0.1.35 remains the last fully closed public milestone.
+The selected v0.1.38 tag/publisher is not yet created. No numerical semantics, workload, compatibility
+generation or timeout changes in this continuation. Detailed source/run/evidence and resumption
+identities belong to the [active campaign](campaigns/202609162154.md).
 
 ## Binary64 increment
 
