@@ -6,37 +6,38 @@ public guides live under [generated](generated), including the
 
 ## Combined release delivery
 
-The [numerical-library delivery continuation](campaigns/202609161809.md) owns integration and the
-already-due combined public milestone. Frozen source is
-`7dce6b73769346f792c7f2c71d77d41dc8695dae` (tree `41104b16607c220e263768be3cf29bfe00bbab8d`).
-It includes binary64, requirement libraries, structural authoring, transaction completion and the
-launch, original-evidence retention and complete-process allowance corrections.
+The [numerical-library delivery continuation](campaigns/202609161809.md) integrated the coherent
+binary64/requirement/structural/transaction lineage and current guidance by normal fast-forward at
+`a5b2d62bcbecc2975b71b4cb450747a3b0c968d2`; remote main subsequently reached reporting commit
+`14de12ea708530c4c2c0bfe7e0cb0547a56a5efe`. Both contain exact verified source
+`7dce6b73769346f792c7f2c71d77d41dc8695dae` (S).
 
-Rehearsal `35070583339/1` passed all 26 full gates freshly with stable inputs and zero reuse,
-complete static-musl admission across six behavioral owners and both pinned userlands, and strict
-release/verifier preparation. Four authenticated original ZIPs are retained. Their exact verifier,
-package and target readers pass; successful original preparation binds the exact full and target
-receipts. These are source-bound hosted results and local original-reader admission, not a new
-full run at this reporting descendant. Normal fast-forward integration reached remote main at
-`a5b2d62bcbecc2975b71b4cb450747a3b0c968d2`; fetched remote ancestry contains exact S. The [release procedure](release.md#main-integration-and-public-closure) separates
-that boundary from public closure.
+S rehearsal `35070583339/1` completed successfully at 10:01:45 UTC on 2026-09-16: 26 fresh full
+gates, zero reuse, complete six-owner/two-userland static target, strict preparation and the whole
+installed pair. All five authenticated original ZIPs are retained. Its verifier, package and target
+readers pass; original preparation binds its exact full/target receipts. Its matching installed
+original reader also passes in the restored hosted context, without replaying applications. Publication and anonymous jobs were correctly skipped for this dry run.
 
-At 2026-09-16 09:43 UTC, installed job `104739797791` was running. Whole installed invocation,
-its original pair reader, final-source fault/recovery proof, immutable publication and anonymous
-exact/latest acceptance remain open. The target fault matrix exposed a test-helper restoration
-defect: deleting/recreating private review plans loses their original file modes, and the production
-reader correctly rejects the changed evidence before the intended numerical fault. Its baseline
-passed; no numerical product defect was found. The failed attempt is retained and a narrow helper
-correction is required before publication. The exact-S pair interruption matrix passed all twelve
-cases with joined cleanup; its fresh healthy recovery and reader matrices remain unrun. No publisher or v0.1.38 tag has been created. Historical
-failures and earlier source identities remain in the [binary64](campaigns/202609152217.md),
-[cutover](campaigns/202609161407.md) and [full-lifecycle](campaigns/202609161630.md) campaigns.
-The selected 3,600-second offline allowance and 120-minute application jobs are unchanged.
+A required target fault test exposed a test-only restoration defect: deleted private plans were
+recreated as 0644 instead of their original 0600. Production readers correctly rejected the drift.
+Correction `7083f9a6d56ed702017942e100c3696fc6f35308` (T) preserves original permissions and extends
+the existing regression. The old helper fails that regression; corrected 119 contributor tests,
+formatting and strict lint pass. T's copied harness passes all 130 target faults against S originals,
+including baseline/recovery and complete byte/mode restoration. This is repair regression evidence,
+not final-source T target acceptance. The exact-S twelve-case pair interruption proof also passes;
+healthy local recovery and pair/transferred reader matrices remain unrun.
 
-Immutable v0.1.36 remains the latest download, with its failed public original-reader closure
-preserved; v0.1.35 remains the last fully closed public milestone. The failed v0.1.37 publisher
-and immutable tag remain preserved; its separate recovery was superseded by this combined
-successor. The [delivery predecessor](campaigns/202609151412.md) owns those original observations.
+T is retained in the existing continuation pending its own integration prerequisites. The only new
+read-only rehearsal is `35083514716/1`, exact T, selected v0.1.38, dispatched after S finished. At
+10:16:25 UTC job `104752845576` was running fresh full verification. T's fresh full/target/preparation and
+installed/fault/public gates remain open; the [release procedure](release.md#main-integration-and-public-closure)
+keeps integration and public closure separate. No tag, publisher or selector update occurred.
+
+Immutable v0.1.36 remains the latest download with its failed public original-reader closure
+preserved; v0.1.35 is the last fully closed public milestone. The v0.1.37 failed publisher and tag
+remain preserved. Their history belongs to the [delivery predecessor](campaigns/202609151412.md);
+F64, cutover and allowance history belongs to their linked campaigns. No numerical semantics,
+workload, compatibility generation or timeout changed in this delivery continuation.
 
 ## Binary64 increment
 
