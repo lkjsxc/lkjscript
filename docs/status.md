@@ -20,9 +20,11 @@ The original workspace proof includes the helper regression and all 119 contribu
 The matching hosted installed `pair-verify` also passes without replaying applications, with both
 routes, all five owners, all eight literal request/plan originals and terminal cleanup.
 
-These establish T's main prerequisites. The existing continuation is being integrated with the
-supplied guidance, mandate and a bounded selector-owner clarification; its documentation changes
-are validated separately from frozen T. Final-T target faults, twelve interruptions, one fresh
+Remote main reached reporting descendant `9e8d80b3f8984cbe759eb10d1aa3be7f9f737d8c` by ordinary
+fast-forward, retaining exact T ancestry. The supplied guidance, mandate and bounded selector-owner
+clarification passed the local changed-path closure and independent review separately from T.
+The final-T target matrix passes all 130 faults, including the independent F64 scale rejection,
+healthy baseline/recovery and unchanged original bytes/modes. Twelve interruptions, one fresh
 healthy local recovery and both receipt matrices remain separate public prerequisites. The
 [release procedure](release.md#main-integration-and-public-closure) keeps these boundaries explicit.
 
@@ -44,8 +46,9 @@ The copied executable's transported graph statistics library passes direct and c
 samples, a reviewed calibration edit, merging, process restart from typed checkpoint bytes and the
 4,096-sample exact oracle. Its granted data witness observes the committed value after later
 nonfinite JSON output fails. The strengthened focused original reader also passes. The exact frozen
-source now passes fresh full and complete static-target acceptance; installed-pair, source-bound
-faults and public original-reader closure remain due. The shared integration-test helper now
+source now passes fresh full and complete static-target acceptance; fresh local post-interruption
+pair recovery, remaining source-bound faults and public original-reader closure remain due.
+The shared integration-test helper now
 retries only a busy failed spawn and never replays a child that started. Existing standard and
 `lkjournal` assets were rebuilt through public operations; operational data was not migrated.
 
