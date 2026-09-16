@@ -42,10 +42,12 @@ the correctly produced Artifact 21. Target, package and installed proof were ski
 The [corrective continuation](campaigns/202609161407.md) retains the authenticated failed ZIP and
 original logs, reproduces that failure, and changes only the consumer test's explicit current
 expectation and version-neutral name. Fresh affected service/public/structural tests pass; the
-bounded transition audit found no further current-generation mismatch. A new corrective source
-must pass fresh full/target, package and installed-pair proof before integration/publication and
-anonymous original-reader acceptance. v0.1.38 remains unused; v0.1.36 is the latest download and
-v0.1.35 the last closed public milestone.
+bounded transition audit found no further current-generation mismatch. Frozen corrective source
+`a5bad65c14e118e47f774ecaac0f5adce4259f7d` is pushed on `codex/f64-cutover-202609161407`.
+Matching rehearsal `35059467604/1` was building its host verifier at 05:29:11 UTC. Fresh full/target,
+package/installed proof and original-reader/fault acceptance remain pending before integration
+and publication. v0.1.38 remains unused; v0.1.36 is the latest download and v0.1.35 the last closed
+public milestone. The continuation owns exact identities and resumption actions.
 
 ## Binary64 increment
 
