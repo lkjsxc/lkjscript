@@ -17,8 +17,8 @@ complete static-musl admission across six behavioral owners and both pinned user
 release/verifier preparation. Four authenticated original ZIPs are retained. Their exact verifier,
 package and target readers pass; successful original preparation binds the exact full and target
 receipts. These are source-bound hosted results and local original-reader admission, not a new
-full run at this reporting descendant. Main integration is ready; the last refreshed remote main
-is `0b6a9c08`. The [release procedure](release.md#main-integration-and-public-closure) separates
+full run at this reporting descendant. Normal fast-forward integration reached remote main at
+`a5b2d62bcbecc2975b71b4cb450747a3b0c968d2`; fetched remote ancestry contains exact S. The [release procedure](release.md#main-integration-and-public-closure) separates
 that boundary from public closure.
 
 At 2026-09-16 09:43 UTC, installed job `104739797791` was running. Whole installed invocation,
@@ -27,7 +27,8 @@ exact/latest acceptance remain open. The target fault matrix exposed a test-help
 defect: deleting/recreating private review plans loses their original file modes, and the production
 reader correctly rejects the changed evidence before the intended numerical fault. Its baseline
 passed; no numerical product defect was found. The failed attempt is retained and a narrow helper
-correction is required before publication. No publisher or v0.1.38 tag has been created. Historical
+correction is required before publication. The exact-S pair interruption matrix passed all twelve
+cases with joined cleanup; its fresh healthy recovery and reader matrices remain unrun. No publisher or v0.1.38 tag has been created. Historical
 failures and earlier source identities remain in the [binary64](campaigns/202609152217.md),
 [cutover](campaigns/202609161407.md) and [full-lifecycle](campaigns/202609161630.md) campaigns.
 The selected 3,600-second offline allowance and 120-minute application jobs are unchanged.
