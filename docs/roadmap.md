@@ -82,8 +82,9 @@ That delivery trigger is consumed: F64 is implemented and the combined successor
 [full-lifecycle continuation](campaigns/202609161630.md) corrected the inconsistent verification
 allowance. The [numerical-library milestone closure](campaigns/202609162154.md) consumes the completed
 corrective rehearsal at its existing exact source, with main integration and public closure kept
-separate. Final-source fault/recovery admission and the already-due immutable publication remain
-the finite delivery obligations; pending delivery permits no new feature deferral.
+separate. Final-source fault/recovery admission is complete. The already-due immutable publication
+and its original-evidence admission remain the finite delivery obligations; pending delivery permits
+no new feature deferral.
 The [current summary](status.md#combined-release-delivery) owns the observed release disposition.
 Independent callback effects still require an application policy for replay and idempotency.
 

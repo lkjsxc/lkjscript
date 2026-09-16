@@ -582,6 +582,12 @@ with `--ignored --exact`, then perform the genuine `pair-run` into `pair`. Expli
 `release::transferred::fault_tests::live_receipt_fault_matrix` with
 `LKJSCRIPT_TRANSFERRED_FIXTURE_ROOT` naming its `full-suite`. These source-bound fault tests restore
 original evidence; they are not fresh product behavioral observations or default full rehearsals.
+For the copied debug harness, scope `RUST_MIN_STACK=8388608` to these two receipt-matrix test
+invocations. The [original pair fault execution](campaigns/202609150900.md#local-delivery-proof-ordinary-integration-and-resumption--2026-09-15-utc)
+records default-stack overflow and recovery of the unchanged driver with that test-thread context.
+Do not apply this setting to product execution or change application deadlines. Retain a failed
+test invocation, verify original bytes/modes and production-reader recovery before correcting its
+test context; that correction does not authorize another healthy application run.
 The next selected user-visible release milestone must exercise this public workflow. The installation campaign explicitly selects additive publication after source, target and transferred
 acceptance. It does not select deployment or automatic future releases.
 

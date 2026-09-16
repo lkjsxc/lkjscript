@@ -20,12 +20,17 @@ The original workspace proof includes the helper regression and all 119 contribu
 The matching hosted installed `pair-verify` also passes without replaying applications, with both
 routes, all five owners, all eight literal request/plan originals and terminal cleanup.
 
-Remote main reached reporting descendant `9e8d80b3f8984cbe759eb10d1aa3be7f9f737d8c` by ordinary
+Remote main reached reporting descendant `d676a0c4899e046e89a10939c25e857e2037fb9c` by ordinary
 fast-forward, retaining exact T ancestry. The supplied guidance, mandate and bounded selector-owner
 clarification passed the local changed-path closure and independent review separately from T.
 The final-T target matrix passes all 130 faults, including the independent F64 scale rejection,
-healthy baseline/recovery and unchanged original bytes/modes. Twelve interruptions, one fresh
-healthy local recovery and both receipt matrices remain separate public prerequisites. The
+healthy baseline/recovery and unchanged original bytes/modes. All twelve interruptions and one
+subsequent fresh healthy local pair have passed, including both installed routes and the single
+five-owner suite. The pair reader matrix passes 156 rejection entries with original recovery;
+its initial debug default-stack failure is retained, and only the copied test process uses the
+documented 8 MiB stack context. The standalone transferred matrix passes all 268 rejection entries,
+followed by original production `pair-verify`, preserved bytes/modes/links and joined cleanup.
+The selected immutable publication and its original public evidence remain pending. The
 [release procedure](release.md#main-integration-and-public-closure) keeps these boundaries explicit.
 
 Immutable v0.1.36 remains the latest download; its failed public original-reader closure and the
@@ -46,8 +51,9 @@ The copied executable's transported graph statistics library passes direct and c
 samples, a reviewed calibration edit, merging, process restart from typed checkpoint bytes and the
 4,096-sample exact oracle. Its granted data witness observes the committed value after later
 nonfinite JSON output fails. The strengthened focused original reader also passes. The exact frozen
-source now passes fresh full and complete static-target acceptance; fresh local post-interruption
-pair recovery, remaining source-bound faults and public original-reader closure remain due.
+source now passes fresh full and complete static-target acceptance and the one fresh local
+post-interruption pair recovery. Both final source-bound reader matrices and original recovery
+now pass; selected publication and public original-reader closure remain due.
 The shared integration-test helper now
 retries only a busy failed spawn and never replays a child that started. Existing standard and
 `lkjournal` assets were rebuilt through public operations; operational data was not migrated.
