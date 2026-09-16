@@ -54,6 +54,13 @@ authenticated size/hash bindings. Final-source proof, source-bound fault obligat
 and combined public delivery remain due. v0.1.38 remains unused; v0.1.36 is the latest download
 and v0.1.35 the last fully closed public milestone.
 
+Frozen correction `7dce6b73769346f792c7f2c71d77d41dc8695dae` passes 119 contributor tests,
+formatting and affected strict lint. Exact-source read-only rehearsal `35070583339/1` was building
+its host verifier at 07:51:45 UTC, after successful identity admission and dependency setup. New
+full/target/package/installed proof and its original-reader/fault gates are not yet complete.
+Reporting follows the frozen source separately; main remains `0b6a9c08`. The campaign ending
+records retained originals, prepared readers and the exact next action.
+
 ## Binary64 increment
 
 The [binary64 mandate](campaigns/202609152217.md) adds ordinary F64 values, both reviewed literal
