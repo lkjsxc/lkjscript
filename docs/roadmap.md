@@ -79,8 +79,10 @@ The [delivery continuation](campaigns/202609151412.md) retains the failed, unpro
 source and tag. The [binary64 mandate](campaigns/202609152217.md) selects F64 as the final companion
 to accepted transaction completion and one combined successor with the launch/retention repairs.
 That delivery trigger is consumed: F64 is implemented and the combined successor is due. The
-[full-lifecycle continuation](campaigns/202609161630.md) corrects the inconsistent verification
-allowance and owns remaining acceptance and delivery; pending CI permits no new feature deferral.
+[full-lifecycle continuation](campaigns/202609161630.md) corrected the inconsistent verification
+allowance. The [numerical-library delivery continuation](campaigns/202609161809.md) now owns main
+integration and remaining public closure as separate boundaries; pending delivery permits no new
+feature deferral.
 The [current summary](status.md#combined-release-delivery) owns the observed release disposition.
 Independent callback effects still require an application policy for replay and idempotency.
 

@@ -210,6 +210,31 @@ admission does not establish the suitability of an old candidate for a new relea
 source, candidate, verifier, run/attempt and workload bindings, cleanliness, package/version/tag
 agreement and immutable release identities. Reconcile divergence normally without rewriting history.
 
+## Main integration and public closure
+
+Integration and public closure have separate prerequisites. The
+[numerical-library delivery continuation](campaigns/202609161809.md) revises their scheduling while
+preserving the required proof. For its unchanged candidate, integration requires exact-source fresh
+full, complete exact static-target admission including every named behavioral owner and both pinned
+userlands, maintained consumer/generated-asset consistency, and affected verifier correctness checks.
+Admit authenticated matching full, target and preparation evidence through their original readers;
+the preparation must bind that exact source and target. Once these conditions and actual repository
+protection gates pass, integrate normally without waiting solely for later installed, publisher or
+anonymous-acquisition jobs. A known product or compatibility defect still blocks acceptance.
+
+Public closure additionally requires complete installed/transferred lifecycles, matching original
+readers and required fault/recovery proof, followed by immutable publication and anonymous exact/latest
+acceptance below. These remain open obligations after integration. A passing substep or main push
+cannot establish whole-run or public acceptance, and pending protection gates cannot be bypassed.
+
+Keep the release source and live event SHA fixed while the mutable line advances. Review the actual
+diff from the verified source to the integration commit, validate its scope separately, and verify
+that remote main contains both the accepted result and the frozen source. Reporting, guidance and
+delivery-order changes do not transfer full evidence to the descendant; changes to source, verifier,
+workflow or other execution inputs require refreshed affected proof on the real corrective source.
+Reuse the mutable continuation and report on main after integration; a healthy frozen release does
+not require another reporting branch or rehearsal merely to record its progress.
+
 ## Pinned build and verification inputs
 
 `rust-toolchain.toml` pins Rust/Cargo 1.98.0, rustfmt, clippy, and the musl x86-64 Rust target. The
@@ -409,7 +434,8 @@ work boundary; another read needs a changed state or a specific diagnostic quest
 independent work while the run executes. If only external waiting remains, hand off the exact
 commit, run/attempt, observed state, remaining required checks and the next `gh run view` action.
 Do not watch indefinitely, poll, fetch unchanged logs repeatedly or merge around pending protection.
-Download artifacts only after completion, and retain the explicit failing artifact-ID/digest checks.
+Download an artifact after its producing upload completes; later workflow jobs may still be running.
+Retain the explicit failing artifact-ID/digest checks.
 If the existing run used defective source-selection or admission code, preserve its failure and
 dispatch the corrected workflow source as a new run. Do not relabel old receipts or retarget a
 healthy frozen candidate merely because main advanced.

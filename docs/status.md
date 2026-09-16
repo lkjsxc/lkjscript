@@ -6,60 +6,36 @@ public guides live under [generated](generated), including the
 
 ## Combined release delivery
 
-The [structural predecessor](campaigns/202609150900.md) and
-[delivery continuation](campaigns/202609151412.md) preserve the implementation and original proof.
-Frozen product source is `eea968b910ac62c3feab95a8896fff1a91904a17`. Rehearsal `34918782215/1`
-completed successfully at 03:38:14Z. Its five authenticated original ZIPs are retained; verifier,
-strict package, six-target and installed-pair readers passed under the archived context. Original
-preparation binds the retained full receipt's 26 fresh gates and zero reuse. This is authenticated
-evidence rereading, with simulated acquisition; no local application replay was performed.
+The [numerical-library delivery continuation](campaigns/202609161809.md) owns integration and the
+already-due combined public milestone. Frozen source is
+`7dce6b73769346f792c7f2c71d77d41dc8695dae` (tree `41104b16607c220e263768be3cf29bfe00bbab8d`).
+It includes binary64, requirement libraries, structural authoring, transaction completion and the
+launch, original-evidence retention and complete-process allowance corrections.
 
-Immutable v0.1.36 release `388927116` was published at 07:00:57Z from annotated object
-`a8cacb9c574005079a7532e4f9e7d140c51ccc40`. Publisher `34933268953/1` reports success, and its
-original verifier/preparation, strict package, six-target and prepublication-pair readers pass.
-Public original-reader admission fails: eight exact/latest authoring requests and logical plans
-are missing from the authenticated public handoff. No matching retained originals were found.
-The immutable assets and failed admission remain preserved; v0.1.35 remains the last fully closed
-public milestone.
+Rehearsal `35070583339/1` passed all 26 full gates freshly with stable inputs and zero reuse,
+complete static-musl admission across six behavioral owners and both pinned userlands, and strict
+release/verifier preparation. Four authenticated original ZIPs are retained. Their exact verifier,
+package and target readers pass; successful original preparation binds the exact full and target
+receipts. These are source-bound hosted results and local original-reader admission, not a new
+full run at this reporting descendant. Main integration is ready; the last refreshed remote main
+is `0b6a9c08`. The [release procedure](release.md#main-integration-and-public-closure) separates
+that boundary from public closure.
 
-The [delivery continuation](campaigns/202609151412.md) owns additive v0.1.37 recovery from frozen
-`eea968b9`, correcting public evidence retention without transaction-outcome meaning. Initial repair
-`3b32f2fc` is normally integrated by `7590a121`. Corrected source `8baafff7` regenerates its eight
-version-dependent guides through the matching product and is integrated by `3372cb3e`.
-Rehearsal `34953636796/1` passed, and all five authenticated original handoffs passed their matching
-readers, including 26 fresh full gates, six target owners and the simulated installed pair.
-The earlier `34952573731/1` was cancelled before full/target/package execution. Annotated v0.1.37
-object `51ecaabf3a6dfbaef0f842e95c4fc480dced0b6d` selects exact `8baafff7`; its tag-push publisher
-`34965341260/1` failed at 12:24:24Z in fresh full verification: 25 gates passed and workspace
-tests hit `ExecutableFileBusy` before a structural test subprocess launched. Later jobs were
-skipped; v0.1.37 was not produced. Its tag/source and acquired original failure evidence remain
-preserved. The [binary64 mandate](campaigns/202609152217.md) selects one new combined successor,
-including the launch/retention repairs, existing capabilities and F64 if accepted. Its exact-source
-rehearsal `34988075601/1` at `256edf0018ce1fd9935e9f9af9cbe428a6b93514` failed: 25 of 26 full
-gates passed freshly; workspace tests stopped at a stale Artifact 20 consumer assertion against
-the correctly produced Artifact 21. Target, package and installed proof were skipped.
+At 2026-09-16 09:43 UTC, installed job `104739797791` was running. Whole installed invocation,
+its original pair reader, final-source fault/recovery proof, immutable publication and anonymous
+exact/latest acceptance remain open. The target fault matrix exposed a test-helper restoration
+defect: deleting/recreating private review plans loses their original file modes, and the production
+reader correctly rejects the changed evidence before the intended numerical fault. Its baseline
+passed; no numerical product defect was found. The failed attempt is retained and a narrow helper
+correction is required before publication. No publisher or v0.1.38 tag has been created. Historical
+failures and earlier source identities remain in the [binary64](campaigns/202609152217.md),
+[cutover](campaigns/202609161407.md) and [full-lifecycle](campaigns/202609161630.md) campaigns.
+The selected 3,600-second offline allowance and 120-minute application jobs are unchanged.
 
-The [corrective continuation](campaigns/202609161407.md) retains the authenticated failed ZIP and
-original logs, reproduces that failure, and changes only the consumer test's explicit current
-expectation and version-neutral name. Fresh affected service/public/structural tests pass; the
-bounded transition audit found no further current-generation mismatch. Frozen corrective source
-`a5bad65c14e118e47f774ecaac0f5adce4259f7d` is pushed on `codex/f64-cutover-202609161407`.
-Matching rehearsal `35059467604/1` completed with failure: fresh full, exact static target and
-strict packaging passed, then the installed pair timed out its offline-packages child at 1,800
-seconds. The child's earlier successful-looking receipt did not establish terminal completion.
-Publication and anonymous acceptance were skipped. The [full-lifecycle continuation](campaigns/202609161630.md)
-owns the shared 3,600-second complete-process allowance, 120-minute application jobs, bounded
-failure diagnostics and new exact-source acceptance. All five original handoffs are retained with
-authenticated size/hash bindings. Final-source proof, source-bound fault obligations, integration
-and combined public delivery remain due. v0.1.38 remains unused; v0.1.36 is the latest download
-and v0.1.35 the last fully closed public milestone.
-
-Frozen correction `7dce6b73769346f792c7f2c71d77d41dc8695dae` passes 119 contributor tests,
-formatting and affected strict lint. Exact-source read-only rehearsal `35070583339/1` was building
-its host verifier at 07:51:45 UTC, after successful identity admission and dependency setup. New
-full/target/package/installed proof and its original-reader/fault gates are not yet complete.
-Reporting follows the frozen source separately; main remains `0b6a9c08`. The campaign ending
-records retained originals, prepared readers and the exact next action.
+Immutable v0.1.36 remains the latest download, with its failed public original-reader closure
+preserved; v0.1.35 remains the last fully closed public milestone. The failed v0.1.37 publisher
+and immutable tag remain preserved; its separate recovery was superseded by this combined
+successor. The [delivery predecessor](campaigns/202609151412.md) owns those original observations.
 
 ## Binary64 increment
 
@@ -72,9 +48,9 @@ bytecode 9 and Artifact 21 detect the new meaning while retaining genuine suppor
 The copied executable's transported graph statistics library passes direct and consumer-nominal
 samples, a reviewed calibration edit, merging, process restart from typed checkpoint bytes and the
 4,096-sample exact oracle. Its granted data witness observes the committed value after later
-nonfinite JSON output fails. The strengthened focused original reader also passes. These are fresh
-development results; final source/target, installed-pair and public original-reader acceptance
-remain due. The shared integration-test helper now
+nonfinite JSON output fails. The strengthened focused original reader also passes. The exact frozen
+source now passes fresh full and complete static-target acceptance; installed-pair, source-bound
+faults and public original-reader closure remain due. The shared integration-test helper now
 retries only a busy failed spawn and never replays a child that started. Existing standard and
 `lkjournal` assets were rebuilt through public operations; operational data was not migrated.
 

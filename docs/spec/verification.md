@@ -614,6 +614,22 @@ release-candidate prerequisite, alternate adapter, dual reader/writer, or public
 
 ## Package and public-release evidence
 
+Main integration and public closure are distinct proof boundaries. The
+[numerical-library delivery continuation](../campaigns/202609161809.md) requires exact-source fresh
+full, complete exact static-target admission, maintained consumer/generated-asset consistency and
+affected verifier correctness checks before integration. Authenticated matching full, target and
+preparation evidence must be admitted by the original readers. Complete target admission includes
+all named behavioral owners and both pinned userlands; ELF inspection alone is insufficient.
+Once these and actual repository gates pass, later installed, publisher and anonymous-acquisition
+work need not delay integration. Known product or compatibility failures still block acceptance.
+
+The installed/transferred original-reader and fault/recovery obligations, immutable publication and
+anonymous exact/latest acceptance below remain required for public closure. Integration cannot
+reclassify them as passed or waive their substantive checks. Preserve the exact verified source and
+validate the integration descendant's actual changes separately; the
+[release procedure](../release.md#main-integration-and-public-closure) owns delivery ordering and
+remote-main containment.
+
 Release preparation requires fresh successful source-full and target-admission receipts bound to
 the same commit and candidate. Manifest and receipt schemas explicitly represent static linkage and
 must reject predecessor dynamic-only metadata. Two notice generations and two packages must be
@@ -705,7 +721,10 @@ must be fresh.
 The harness owns gate dependencies, exact fingerprints, bounded child logs, required outputs,
 timeouts, and fresh/reused/skipped/unavailable/failed classification. Reuse is valid only when the
 harness proves every semantic and operational input identical and the profile permits it. Final
-product and full verification run after final code, generated assets, evidence, and documentation.
+product and full verification bind the final code, generated assets and relevant execution inputs,
+including normative obligations. Later reporting or guidance changes require review and validation
+of their actual scope; they cannot relabel the frozen source's evidence as a descendant's full run.
+Changes that affect execution or its required proof refresh the affected acceptance.
 The release CLI lifecycle gate binds the final release executable output after Cargo test-feature
 unification. Copied application oracles depend on that gate, so no concurrent release build can
 replace their selected candidate path while they verify exact candidate and private-copy equality.

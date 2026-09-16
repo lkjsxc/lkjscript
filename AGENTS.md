@@ -2,68 +2,63 @@
 
 ## Mission and authority
 
-Build a general-purpose language in which humans and agents can author, compose, maintain and distribute substantial programs through the product executable. Prefer coherent semantics and ordinary libraries over application-specific compiler behavior.
+Build a general-purpose language in which humans and agents can author, compose, maintain and distribute substantial programs through the product executable. Prefer coherent semantics and ordinary libraries over application-specific compiler behavior. Architecture is revisable with evidence, preserved guarantees and an explicit transition; historical campaigns and incidental implementation limits are not permanent user requirements.
 
-The accepted typed meaning graph is the current canonical editable program authority. Input notations, names, projections, indexes and compiled products have distinct roles. Operational data, secrets, installations and deployment settings have separate owners. Architecture is revisable with evidence, preserved guarantees and an explicit transition; historical campaign exclusions and incidental limits are not permanent user requirements.
+The accepted typed meaning graph is the current canonical editable program authority. Input notations propose changes; projections, names, indexes and compiled products have different roles. Operational data, secrets, installations and deployment settings have separate owners.
 
-Follow current user direction and higher-priority instructions. This file and available tools do not grant authority. Replacing the file does not reload an active session's instructions.
+Follow current user direction and higher-priority instructions. For delegated implementation campaigns, normal non-forced pushes to main and ordinary configured CI/release use are authorized within actual permissions and repository protections. Accepted work should reach remote main, not stop on a topic branch or at PR creation. This does not authorize production deployment, destructive operational-data changes, purchases, billing or credential changes, access-control changes, protection bypasses or rewriting published history. Replacing this file does not reload an active session's instructions.
 
-## Startup and safe changes
+## Safe startup and working lineage
 
-Inspect actual branch/HEAD, index/worktree, relevant untracked files, stashes, remotes and divergence. Read applicable guidance, the mandate and relevant campaign endings. Reconcile material obligations as complete, actionable, blocked or superseded. An architect's revision is an observation, never a reset target. Check toolchain, memory/disk capacity and active jobs before expensive work.
+Inspect actual HEAD/branch, index/worktree, relevant untracked work, stashes, worktrees, remotes, divergence, applicable guidance and active local/remote jobs before editing. Read the mandate and relevant predecessor endings. An architect's revision is an observation, never a reset target. Reconcile material obligations as completed, actionable, blocked or explicitly superseded. Check the pinned toolchain and available memory/disk before expensive work.
 
-Preserve unrelated work, secrets, operational state and published identities. Use isolated work when needed. Stage intended paths and review the staged diff; do not use broad staging, destructive cleanup or history rewriting to manufacture a clean result. Use owned disposable resources for destructive tests. Join owned processes and clean up owned temporary resources without touching unrelated services. Keep binaries, logs and `.artifacts` output out of tracked narrative.
+Preserve unrelated changes, operational state, secrets and immutable publication identities. Stage intended paths and review the staged diff. Do not use destructive cleanup or broad staging to manufacture a clean result. Redact credentials from observations. Destructive tests use owned disposable resources; join owned processes and clean up their resources without touching unrelated services.
 
-Archive the initial mandate unchanged under `docs/campaigns`; append concise reconciliation, execution and resumption records. Preserve both originals on a filename collision. Reconcile a supplied root candidate with legitimate intervening changes and install it in the mutable development checkout before substantive work. Never add guidance or reporting to frozen release inputs merely to make them current.
+Prefer main and normal mainline delivery when the checkout and collaboration permit it. Use isolation for a concrete reason, normally one mutable campaign lineage, and reuse an appropriate existing lineage for a continuation. A frozen release commit does not freeze main. Keep required release inputs fixed, but do not create a permanent reporting branch for every observation.
 
-Delegate independent bounded work with clear ownership and one responsible integrator.
+Read existing applicable guidance, reconcile a supplied root candidate with legitimate intervening instructions, and install it in the mutable checkout before substantive work. Never update frozen release inputs merely to add guidance. Archive the initial mandate unchanged under `docs/campaigns`; append concise, clearly separated reconciliation/execution/resumption records. Preserve both originals on a filename collision. Keep binaries, logs and `.artifacts` output out of tracked narrative.
 
-## Navigation
+Delegate bounded independent work with clear ownership and one responsible integrator.
+
+## Navigation and ownership
 
 Paths are relative to the repository root. Follow actual callers and narrower owners before editing.
 
-| Area | Maintained entry points |
+| Area | Entry points |
 | --- | --- |
-| Public operations | `src/bin/lkjscript.rs`; `src/platform/cli.rs`; `src/platform/control/`; `src/platform/normalized_query.rs` |
-| Typed authoring and publication | `src/platform/control/change/`; `src/platform/change/`; `src/platform/publication/` |
-| Meaning and physical graph storage | `src/platform/kernel/`; `GraphRepository`; `src/platform/storage/` |
-| Packages and compilation | `src/platform/package_interface.rs`; `src/platform/package_transport/`; `src/platform/compiler/` |
+| Public operations and authoring | `src/bin/lkjscript.rs`; `src/platform/cli.rs`; `src/platform/control/`; `src/platform/change/`; `src/platform/publication/` |
+| Meaning, storage and inspection | `src/platform/kernel/`; `src/platform/storage/`; `src/platform/normalized_query.rs` |
+| Libraries and compilation | `src/platform/package_interface.rs`; `src/platform/package_transport/`; `src/platform/compiler/` |
 | Execution and application data | `src/platform/execution/normalized/`; `src/platform/execution/control.rs`; `src/platform/data.rs` |
-| Runtime and installation | `src/platform/runtime.rs`; `src/platform/deployment.rs`; `src/platform/installation/` |
-| Discovery and built-ins | `src/platform/project_creation/`; `src/platform/contract/`; `src/platform/builtin_standard.rs` |
-| Consumers and contributor proof | `packages/standard/`; `applications/lkjournal/`; `tests/`; `tools/lkjscript-dev/src/` |
+| Runtime and distribution | `src/platform/runtime.rs`; `src/platform/deployment.rs`; `src/platform/installation/` |
+| Discovery and maintained consumers | `src/platform/project_creation/`; `src/platform/contract/`; `src/platform/builtin_standard.rs`; `packages/standard/`; `applications/lkjournal/` |
+| Contributor proof and delivery | `tests/`; `tools/lkjscript-dev/src/check/`; `tools/lkjscript-dev/src/release/`; `.github/workflows/release.yml` |
 
-`docs/spec` owns normative semantics. Start with the affected language, semantic-authority, semantic-storage, semantic-cli, effects-capabilities, data-capabilities or packages-components document. `docs/spec/verification.md` and `tools/lkjscript-dev/src/check/` own verification; `docs/release.md` and `tools/lkjscript-dev/src/release/` own publication.
-
-`docs/status.md` holds current findings; `docs/roadmap.md` holds revisable direction. Link history to its existing campaign owner instead of copying chronology into current summaries.
+`docs/spec/` owns normative semantics, including language, semantic authority/storage/CLI, effects, data and packages. `docs/spec/verification.md` owns proof obligations; `docs/release.md` owns publication. `docs/status.md` holds concise current findings and `docs/roadmap.md` holds revisable direction. Link historical evidence to its existing owner rather than copying chronology into these summaries.
 
 Generate accepted assets through their maintained owner. `src/platform/contributor.rs` is a read-only observation surface, not an accepted graph writer. Generate `docs/generated` through matching product discovery, not another hand-maintained grammar.
 
-## Cross-cutting guarantees
+## Essential guarantees
 
-Public authoring passes through typed intent, complete validation, review and publication. Input notations propose changes; inspection projections describe meaning. Preserve lexical/generic scope, visibility, typed references, authored order, identity continuity and review bindings. Exact name resolution grants neither mutation nor execution authority.
+Public authoring passes through typed intent, complete validation, review and publication. Preserve lexical/generic scope, visibility, typed references, authored order, identity continuity and review bindings. Name resolution grants neither mutation nor execution authority. Recheck under the publication lock and persist content before atomic exposure. Invalid, stale, cancelled or exhausted requests cannot partially publish meaning. Preserve accepted inputs and immutable results on idempotent retry; a failed derived operation does not undo an accepted write.
 
-Recheck under the publication lock, persist content before atomic exposure, and preserve accepted inputs and immutable results on idempotent retry. Invalid, stale, cancelled or exhausted requests cannot partially publish meaning. Failure of a derived operation does not undo an accepted write.
-
-Preserve types, substitutions, provenance, effects and evaluation order through transport, compilation and execution. Admit the complete relevant closure, including unused arguments and unreachable syntax. Separate semantic validity from finite preparation capacity. Loaders independently admit producer content; caches bind actual context.
+Preserve types, substitutions, provenance, effects and evaluation order through transport, compilation and execution. Admit the complete relevant closure, including unused arguments and unreachable syntax. Separate semantic validity from finite preparation capacity. Loaders independently admit producer content; caches bind actual context. Historical acceptance and current validity are distinct: never rewrite history or treat old receipts as present execution permission.
 
 Callable identity, declared effects and deployment grants are distinct. Invocation requires current allowance and exact grants through imports, binding and tail calls. Pure execution cannot invoke a task callable even with an empty effect row. Preserve affine ownership, consumption, borrowing, capture safety and raw/retained-value admission.
 
-Admit target/type/grant contracts and intrinsically unencodable external results before live adapters or secrets; reject invalid external arguments before effects. A transaction's atomicity covers only its actual authority. Earlier effects may survive failure. Cleanup failure, missing output or cancellation does not prove rollback or safe retry. Do not replay live effects for differential verification. Join owned resources on all exits; dropping a future alone is not cleanup.
+Admit target/type/grant contracts and intrinsically unencodable external results before live adapters or secrets; reject invalid external arguments before effects. A transaction is atomic only within its real authority. Earlier independent effects may survive failure. Cleanup failure, missing output or cancellation does not prove rollback or safe retry. Do not replay live effects for differential verification. Join owned resources on every exit; dropping a future alone is not cleanup.
 
-Ordinary trusted execution needs no invented instruction budget. Optional metering, cumulative quotas, live limits, input limits, cancellation, deadlines and profiling have different purposes. Use checked accounting and admission before growth. Observational overflow is not quota exhaustion. Safe Rust, static linkage and quotas do not establish hostile-code isolation.
+Ordinary trusted execution requires no invented instruction budget. Optional metering, cumulative quotas, live limits, input bounds, cancellation, deadlines and profiling have different purposes. Use checked accounting and admission before growth. Observational overflow is not quota exhaustion. Safe Rust, static linkage and resource limits do not establish a hostile-code sandbox.
 
-Separate logical identity, semantic revision, encoding, artifacts, runtime layout and application data. Canonical bytes cannot depend on addresses, physical placement, hash iteration, paths or wall time. Compatibility changes need detection, consumer analysis, migration or clear rejection, and viable recovery. Never silently discard live data or reinterpret settings. Temporary bridges need identified consumers and retirement conditions.
+Separate logical identity, semantic revision, encoding, application artifacts, runtime installation and application data. Canonical bytes cannot depend on addresses, physical placement, hash iteration, paths or wall time. Compatibility changes require detection, consumer analysis, migration or clear rejection, and viable recovery. Never silently discard live data or reinterpret settings. Bridges need identified consumers and retirement conditions.
 
-Authenticate historical acceptance separately from current validity without rewriting history. Current proof binds exact meaning, dependencies and validator. Old receipts do not authorize current execution. Revalidation preserves HEAD/identity; repair requires a completely valid post-change candidate.
-
-Distinguish an installed runtime, runtime-dependent application artifacts and executables embedding a runtime. Prove static distribution for selected targets. Sharing installation bytes implies neither a daemon nor shared process fate. Installation and selection do not migrate application data or authorize execution.
+Distinguish an installed runtime, runtime-dependent application artifacts and self-contained executables. Sharing installation bytes implies neither a daemon nor shared process fate. Installation/selection does not migrate application data or grant execution authority. Prove static distribution for the selected target rather than claiming universal portability.
 
 ## Development and verification
 
-Use the pinned toolchain, manifests and lockfiles, safe Rust and production lint guarantees. First-party contributor semantics belong in existing Rust tooling. Preserve no-Python and product-surface gates unless the task deliberately revises their policy with equivalent protection.
+Use the pinned toolchain, manifests and lockfiles, safe Rust and production lint guarantees. First-party contributor semantics belong in existing Rust tooling. Preserve no-Python and product-surface gates unless the current task deliberately revises their policy with equivalent protection.
 
-Source-verified contributor entry points:
+Maintained contributor entry points:
 
 ```sh
 cargo build --release --locked -p lkjscript-dev
@@ -73,24 +68,34 @@ cargo run --release --locked -p lkjscript-dev -- check full --fresh --machine
 target/release/lkjscript-dev release target
 ```
 
-These are choices, not a mandatory sequence. The last command prints target policy; discover build/admit arguments from maintained dispatchers and `docs/release.md`. `check changed` reads current Git-status paths, not a commit range; source/test changes select full. A clean-tree changed check does not establish campaign acceptance. Full requires fresh evidence.
+These are alternatives, not a mandatory sequence. Check parsing/selection lives in `tools/lkjscript-dev/src/check/`; release arguments live in its maintained dispatchers and `docs/release.md`. `check changed` selects current Git-status paths, not a commit range. A clean-tree changed check does not prove a committed campaign. Full requires fresh evidence.
 
-Discover application operations through `lkjscript capabilities` and maintained guides. Proposed interfaces do not exist until implemented and advertised. New public capabilities require fresh authoring and use through a copied candidate executable outside the language checkout. Retain literal inputs; hidden generators or privileged storage edits cannot substitute for authoring. Keep generated guides, built-in assets and maintained consumers consistent.
+Discover product operations with `lkjscript capabilities` and maintained guides. New public capability requires fresh authoring and use through a copied candidate executable outside the language checkout, retaining literal inputs. A hidden host application or privileged storage edit is not a language capability. Keep discovery, generated guides, built-in assets and maintained consumers consistent.
 
-Use focused feedback while iterating, then dependency-complete acceptance after relevant inputs stabilize. Honor maintained gates and widen when impact is uncertain. Avoid overlapping profiles solely for reassurance. Concurrent Cargo builds can replace release outputs through feature unification; respect `release_command_lifecycle` dependencies and immutable executable copies.
+Use focused feedback while iterating and dependency-complete acceptance once relevant inputs stabilize. Honor maintained gates; widen coverage when impact is uncertain. Do not run overlapping full profiles solely for reassurance. Concurrent Cargo builds can replace outputs through feature unification; respect existing gate dependencies and immutable executable copies.
 
-Map claims to independent expected results and meaningful failure cases. Changed machinery cannot be its own oracle. Use deterministic reference adapters disjoint from live effects. Performance claims require equivalent behavior, baseline, workload/environment, relevant stages and limitations; retain unfavorable results. Elapsed time and output bytes do not establish model-token or billing savings.
+Map material claims to independent expected results and meaningful failure cases. Changed machinery cannot be its own oracle. Use controlled reference adapters, not live-effect replay. Performance claims require equivalent behavior, a baseline, workload/environment, stage boundaries and limitations. Retain unfavorable results; elapsed time or output bytes alone do not establish model-token or billing savings.
 
-Reuse evidence only with valid source, verifier, environment, workload and trust bindings. A cache is not a correctness certificate. Rerun affected proof after relevant changes or failures. Separate tested source, frozen release source, distributed bytes and later reporting commits; avoid circular report/hash/retest obligations. Label fresh, valid reused, failed, cancelled, skipped, unavailable and unrun results accurately. Extend existing proof owners before introducing permanent machinery.
+Reuse evidence only with valid source, verifier, environment, workload and trust bindings. A cache is not a correctness certificate. Relevant changes or failures invalidate affected proof. Distinguish tested source, frozen release source, distributed bytes and later reporting/guidance commits; do not fabricate proof at a descendant or require a report to certify its own hash. Review and validate a descendant's actual changes separately. Report fresh, valid reused, failed, cancelled, skipped, unavailable and unrun states accurately.
 
-## Integration, publication and return
+## Main integration and branch completion
 
-Complete selected behavior, consumer transition, documentation, retirement and required proof. Preserve useful work if a separate dependency blocks completion. If the selected outcome already exists with required proof and delivery, reconcile it and report satisfaction; do not invent another campaign.
+Complete behavior, affected consumers, generated assets, documentation, migration/retirement and required integration proof. Refresh remote main and protections before integrating. Incorporate intervening work without overwriting it and revalidate consequential interactions. Use normal fast-forward or merge-based delivery; if a PR is actually required, complete the permitted merge path rather than treating an open PR as completion.
 
-Refresh permissions, protections, divergence and consequential automatic effects before authorized integration. Complete ordinary integration when authorized and ready. Do not bypass gates, force-push, alter permissions or overwrite immutable publication identities. Repository publication and production deployment are separate actions.
+Verify remote main contains the accepted result and record its actual revision and relation to the tested source. Squash/cherry-pick equivalence does not transfer exact-source evidence or establish ancestry. Do not force-push, weaken protections or pretend an untested integration commit was the original candidate.
 
-Follow the maintained release protocol. Batch useful milestones and reconcile inherited delivery commitments; a deferral needs an observable trigger. Preserve accepted frozen sources while authorized development proceeds independently. Serialize publishers, inspect matching attempts and inputs before dispatch or rerun, and reuse healthy work. Public delivery requires prescribed anonymous acquisition, distributed behavior and original-reader admission; an upload or green subjob is insufficient.
+Separate integration readiness from public-release readiness. A release-only external wait need not keep accepted development off main. Preserve correctness and maintained integration gates; revise an unnecessarily coupled ordering explicitly at its owner rather than silently ignoring it. Known product defects are not release-only exceptions.
 
-Do useful independent work while remote jobs run. Avoid indefinite watches, sleep/status loops, repeated unchanged logs and hidden polling. Inspect at meaningful work boundaries or for concrete diagnosis. If only external completion remains, report source, run/attempt, observed state, missing gate, retained evidence and the next resumption action. Do not promise unattended monitoring.
+Reconcile inherited temporary branches/worktrees. Remove clearly campaign-owned references only after confirming integration or justified supersession, preservation of all unique work, unchanged tips, and no active job or required reference dependency. Keep frozen refs while needed; retire them when that responsibility ends. Never delete unmerged work merely to reduce branch count or disturb unrelated stashes/worktrees.
 
-Return actual revisions and actions, useful outcomes, verification and limitations, compatibility impact, preserved work and cleanup. Report engineering, verification, integration, publication and public acceptance separately. Keep campaign objectives, matrices, identities, measurements and historical incidents outside this file.
+If integration is blocked, preserve and reuse the outstanding lineage. Name the exact gate, permission, conflict or dependency, its source/run identity and concrete resumption action. A local commit, pushed topic branch or PR is not remote-main completion.
+
+## Publication, waiting and return
+
+Use the maintained release owner. Publish meaningful milestones, reconcile inherited due delivery and attach any deferral to an observable trigger. Repository publication and production deployment are separate. Serialize shared release identities, inspect matching attempts before dispatch, and reuse healthy work. Preserve immutable tags/assets and genuine failed history; defective published releases normally require additive correction.
+
+Public delivery requires the prescribed anonymous acquisition, distributed/installed behavior and matching original-reader admission. A green subjob or upload is insufficient. Keep originals long enough for their actual resumption need. Do not change frozen inputs or restart a healthy pipeline merely to append a report.
+
+Do useful independent work while remote jobs run. No indefinite watches, sleep/status loops, repeated unchanged logs or hidden polling. Inspect at meaningful work boundaries or for concrete diagnosis. If only external completion remains, return source, run/attempt, observed state, missing gate, retained evidence and the next action. Do not promise unattended monitoring.
+
+Return what became possible, actual revisions/actions, proof and limitations, compatibility impact, remote-main status, public-release status, cleanup/retention reasons and exact blockers. Keep campaign IDs, run identities, measurements, acceptance matrices and incident history out of this root file.
