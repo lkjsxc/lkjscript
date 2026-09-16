@@ -20,7 +20,7 @@ The original workspace proof includes the helper regression and all 119 contribu
 The matching hosted installed `pair-verify` also passes without replaying applications, with both
 routes, all five owners, all eight literal request/plan originals and terminal cleanup.
 
-Remote main reached reporting descendant `d676a0c4899e046e89a10939c25e857e2037fb9c` by ordinary
+Remote main reached reporting descendant `924a819a6f0cc4013e25fa80a15f3757c38be89d` by ordinary
 fast-forward, retaining exact T ancestry. The supplied guidance, mandate and bounded selector-owner
 clarification passed the local changed-path closure and independent review separately from T.
 The final-T target matrix passes all 130 faults, including the independent F64 scale rejection,
@@ -35,9 +35,12 @@ The selected immutable publication and its original public evidence remain pendi
 
 Immutable v0.1.36 remains the latest download; its failed public original-reader closure and the
 failed v0.1.37 publisher/tag remain preserved. v0.1.35 remains the last fully closed public milestone.
-The selected v0.1.38 tag/publisher is not yet created. No numerical semantics, workload, compatibility
-generation or timeout changes in this continuation. Detailed source/run/evidence and resumption
-identities belong to the [active campaign](campaigns/202609162154.md).
+Annotated v0.1.38 object `d711b4cb7385243283e4cdc53999c8b65fc2bbf6` selects exact T. Its one normal
+tag push started [publisher `35117655769/1`](https://github.com/lkjsxc/lkjscript/actions/runs/35117655769),
+which is in progress; its own fresh gates, anonymous installed acceptance and original-reader
+closure are pending. No numerical semantics, workload, compatibility generation or timeout changes
+in this continuation. Detailed source/run/evidence and resumption identities belong to the
+[active campaign](campaigns/202609162154.md).
 
 ## Binary64 increment
 
