@@ -2,22 +2,43 @@
 use super::*;
 
 // Faults touch authenticated originals only while the reader runs. Restore every remembered
-// file on ordinary exits and assertion unwinding, including failures before a reader starts.
-struct OriginalFiles(BTreeMap<PathBuf, Vec<u8>>);
+// file's bytes and permissions on ordinary exits and assertion unwinding, including failures
+// before a reader starts or after an omission fault removes a private review plan.
+struct OriginalFile {
+    bytes: Vec<u8>,
+    permissions: fs::Permissions,
+}
+
+struct OriginalFiles(BTreeMap<PathBuf, OriginalFile>);
 
 impl OriginalFiles {
     fn remember(&mut self, path: &Path, bytes: &[u8]) {
+        let metadata = fs::symlink_metadata(path).expect("owned original file metadata");
+        assert!(metadata.is_file(), "owned original must be a regular file");
         if let Some(original) = self.0.get(path) {
-            assert_eq!(original, bytes, "fault reused an unrestored original");
+            assert_eq!(original.bytes, bytes, "fault reused an unrestored original");
+            assert_eq!(
+                original.permissions.mode(),
+                metadata.permissions().mode(),
+                "fault reused unrestored original permissions"
+            );
         } else {
-            self.0.insert(path.to_path_buf(), bytes.to_vec());
+            self.0.insert(
+                path.to_path_buf(),
+                OriginalFile {
+                    bytes: bytes.to_vec(),
+                    permissions: metadata.permissions(),
+                },
+            );
         }
     }
 
     fn restore(&self) -> std::io::Result<()> {
         let mut failure = None;
-        for (path, bytes) in &self.0 {
-            if let Err(error) = fs::write(path, bytes) {
+        for (path, original) in &self.0 {
+            if let Err(error) = fs::write(path, &original.bytes)
+                .and_then(|()| fs::set_permissions(path, original.permissions.clone()))
+            {
                 failure = Some(error);
             }
         }
@@ -84,15 +105,50 @@ fn replace_record_field(input: &str, operation: &str, field: &str, value: &str) 
 fn receipt_fault_originals_restore_on_assertion_unwind() {
     let root = tempfile::tempdir().expect("owned restoration fixture");
     let path = root.path().join("receipt.json");
+    let plan = root.path().join("review.lkjplan");
     fs::write(&path, b"original\n").expect("write restoration original");
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o640))
+        .expect("set original receipt permissions");
+    fs::write(&plan, b"original plan\n").expect("write private review original");
+    fs::set_permissions(&plan, fs::Permissions::from_mode(0o600))
+        .expect("set original private review permissions");
     let result = std::panic::catch_unwind(|| {
         let mut originals = OriginalFiles(BTreeMap::new());
         originals.remember(&path, b"original\n");
+        originals.remember(&plan, b"original plan\n");
         fs::write(&path, b"fault\n").expect("write owned fault");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+            .expect("alter existing receipt permissions");
+        fs::remove_file(&plan).expect("withhold private review original");
+        fs::write(&plan, b"recreated fault\n").expect("recreate owned review fault");
+        fs::set_permissions(&plan, fs::Permissions::from_mode(0o644))
+            .expect("set recreated permissions independently of process umask");
         panic!("deliberate failure before explicit restoration");
     });
     assert!(result.is_err());
     assert_eq!(fs::read(&path).expect("restored original"), b"original\n");
+    assert_eq!(
+        fs::read(&plan).expect("restored private review"),
+        b"original plan\n"
+    );
+    assert_eq!(
+        fs::metadata(&plan)
+            .expect("restored private review metadata")
+            .permissions()
+            .mode()
+            & 0o7777,
+        0o600,
+        "private review permissions must survive removal and recreation"
+    );
+    assert_eq!(
+        fs::metadata(&path)
+            .expect("restored receipt metadata")
+            .permissions()
+            .mode()
+            & 0o7777,
+        0o640,
+        "existing receipt permissions must be restored after a mode change"
+    );
 }
 
 #[test]
