@@ -300,23 +300,11 @@ pub(super) fn command(
     }
     let receipt = run(&options, &verifier, &cancellation.control)?;
     summary(&options, &receipt)?;
-    Ok(if receipt.status == Status::FreshPassed {
-        0
-    } else {
-        1
-    })
+    Ok(receipt.status.exit_code())
 }
 
-fn run(
-    options: &PairOptions,
-    verifier: &Path,
-    control: &process::ProcessControl,
-) -> Result<PairReceipt, DevError> {
-    super::super::require_absolute_extraction_output(&options.evidence_root)?;
-    fs::create_dir(&options.evidence_root)?;
-    fs::set_permissions(&options.evidence_root, fs::Permissions::from_mode(0o700))?;
-    let started = Instant::now();
-    let mut receipt = PairReceipt {
+fn initial_receipt(options: &PairOptions, verifier: &Path) -> Result<PairReceipt, DevError> {
+    Ok(PairReceipt {
         schema: SchemaIdentity {
             identity: PAIR_SCHEMA.to_owned(),
             version: PAIR_VERSION,
@@ -363,14 +351,12 @@ fn run(
         recovery: None,
         cleanup_complete: false,
         failure: None,
-    };
-    persist(options, &receipt)?;
-    let result = execute_pair(options, verifier, &mut receipt, control);
-    receipt.completed_unix_nanoseconds = Some(super::super::unix_nanoseconds()?);
-    receipt.elapsed_nanoseconds = elapsed(started)?;
-    receipt.cleanup_complete = clean(options, &receipt)?;
+    })
+}
+
+fn record_result(receipt: &mut PairReceipt, result: Result<(), DevError>, cancelled: bool) {
     match result {
-        Ok(()) if receipt.cleanup_complete && !control.cancelled() => {
+        Ok(()) if receipt.cleanup_complete && !cancelled => {
             receipt.status = Status::FreshPassed;
             receipt.phase = "complete".to_owned();
         }
@@ -382,6 +368,24 @@ fn run(
             });
         }
     }
+}
+
+fn run(
+    options: &PairOptions,
+    verifier: &Path,
+    control: &process::ProcessControl,
+) -> Result<PairReceipt, DevError> {
+    super::super::require_absolute_extraction_output(&options.evidence_root)?;
+    fs::create_dir(&options.evidence_root)?;
+    fs::set_permissions(&options.evidence_root, fs::Permissions::from_mode(0o700))?;
+    let started = Instant::now();
+    let mut receipt = initial_receipt(options, verifier)?;
+    persist(options, &receipt)?;
+    let result = execute_pair(options, verifier, &mut receipt, control);
+    receipt.completed_unix_nanoseconds = Some(super::super::unix_nanoseconds()?);
+    receipt.elapsed_nanoseconds = elapsed(started)?;
+    receipt.cleanup_complete = clean(options, &receipt)?;
+    record_result(&mut receipt, result, control.cancelled());
     if receipt.status == Status::FreshPassed {
         let validation_started = Instant::now();
         if let Err(error) = validate(&receipt, options, verifier) {
@@ -488,10 +492,7 @@ fn execute_pair(
     let aggregate = execute(&single, verifier, &manifest, control, &mut || {
         checkpoint(options, verifier, &frozen, control)
     })?;
-    require(
-        aggregate.status == Status::FreshPassed,
-        "pair behavioral aggregate failed",
-    )?;
+    require_completed_aggregate(&aggregate)?;
     let equality = receipt
         .equality
         .as_ref()
@@ -509,6 +510,34 @@ fn execute_pair(
         expensive_executions: aggregate.children.len(),
     });
     checkpoint(options, verifier, receipt, control)
+}
+
+fn require_completed_aggregate(aggregate: &Receipt) -> Result<(), DevError> {
+    if aggregate.status == Status::FreshPassed {
+        return Ok(());
+    }
+    let failure = aggregate
+        .children
+        .iter()
+        .find(|child| matches!(child.status, Status::Failed | Status::Unavailable))
+        .and_then(|child| child.failure.clone())
+        .unwrap_or_else(|| {
+            bounded_diagnostic(
+                aggregate
+                    .failure
+                    .as_deref()
+                    .unwrap_or("aggregate did not complete"),
+            )
+        });
+    Err(DevError::corrupt(format!(
+        "pair behavioral aggregate failed: {failure}; aggregate evidence={}",
+        bounded_diagnostic(
+            &Path::new(&aggregate.evidence_root)
+                .join("receipt.json")
+                .display()
+                .to_string()
+        ),
+    )))
 }
 
 fn checkpoint(
@@ -1080,12 +1109,17 @@ fn parse_options(
     })
 }
 fn summary(options: &PairOptions, receipt: &PairReceipt) -> Result<(), DevError> {
-    let identity = receipt_identity(&options.evidence_root.join("receipt.json"))?;
-    println!(
-        "{}",
-        serde_json::json!({"status": if receipt.status == Status::FreshPassed {"passed"} else {"failed"}, "scope":receipt.scope, "tag":receipt.tag,"source_commit":receipt.source_commit,"receipt":identity,"suite":receipt.suite,"cleanup_complete":receipt.cleanup_complete,"failure":receipt.failure,"elapsed_nanoseconds":receipt.elapsed_nanoseconds})
-    );
+    println!("{}", summary_value(options, receipt)?);
     Ok(())
+}
+fn summary_value(
+    options: &PairOptions,
+    receipt: &PairReceipt,
+) -> Result<serde_json::Value, DevError> {
+    let identity = receipt_identity(&options.evidence_root.join("receipt.json"))?;
+    Ok(
+        serde_json::json!({"status": if receipt.status == Status::FreshPassed {"passed"} else {"failed"}, "scope":receipt.scope, "tag":receipt.tag,"source_commit":receipt.source_commit,"receipt":identity,"suite":receipt.suite,"cleanup_complete":receipt.cleanup_complete,"failure":receipt.failure,"elapsed_nanoseconds":receipt.elapsed_nanoseconds}),
+    )
 }
 
 #[cfg(test)]

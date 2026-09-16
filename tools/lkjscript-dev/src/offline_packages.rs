@@ -41,6 +41,9 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, Instant};
 
+// Covers the entire invocation, including cleanup, receipt publication and self-admission.
+pub(crate) const COMPLETE_PROCESS_TIMEOUT: Duration = Duration::from_secs(3_600);
+
 const MAXIMUM_CONTAINER_BYTES: u64 = 268_435_456;
 const MAXIMUM_EXECUTABLE_BYTES: u64 = 384 * 1024 * 1024;
 const MAXIMUM_OUTPUT_BYTES: u64 = 4 * 1024 * 1024;

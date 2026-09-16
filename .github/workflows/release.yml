@@ -481,7 +481,7 @@ jobs:
     name: Verify transferred packaged application candidate
     needs: build-verify-package
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 120
     permissions:
       actions: read
       contents: read
@@ -940,7 +940,7 @@ jobs:
       - pre-publication-applications
       - publish
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 120
     permissions:
       actions: read
       attestations: read

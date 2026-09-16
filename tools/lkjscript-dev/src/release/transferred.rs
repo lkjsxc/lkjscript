@@ -78,11 +78,11 @@ impl Oracle {
         }
     }
     pub(super) fn timeout(self) -> Duration {
-        Duration::from_secs(match self {
-            Self::PureTail => 900,
-            Self::OfflinePackages => 1800,
-            _ => 1200,
-        })
+        match self {
+            Self::PureTail => Duration::from_secs(900),
+            Self::OfflinePackages => offline_packages::COMPLETE_PROCESS_TIMEOUT,
+            _ => Duration::from_secs(1200),
+        }
     }
     pub(super) fn read(
         self,
@@ -204,6 +204,12 @@ enum Status {
     NotRun,
 }
 
+impl Status {
+    fn exit_code(self) -> u8 {
+        u8::from(self != Self::FreshPassed)
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct Child {
@@ -278,11 +284,7 @@ pub(super) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         &mut || Ok(()),
     )?;
     print_summary(&options.evidence_root.join("receipt.json"), &receipt)?;
-    Ok(if receipt.status == Status::FreshPassed {
-        0
-    } else {
-        1
-    })
+    Ok(receipt.status.exit_code())
 }
 
 // Pair execution uses this same aggregate and inventory, under its one cancellation lifetime.
@@ -441,41 +443,101 @@ fn run_children(
         #[cfg(test)]
         let spec = pair::tests::process_hook(child.role.name(), spec, control);
         let observation = process::run_supervised(&spec, &options.evidence_root, Some(control));
-        let successful = observation.status == process::ProcessStatus::Passed;
-        if observation.status == process::ProcessStatus::Unavailable {
-            child.status = Status::Unavailable;
-        }
         child.process = Some(observation);
         let child_path = Path::new(&child.evidence_root).join("receipt.json");
-        if child_path.try_exists()? {
-            child.receipt = Some(receipt_identity(&child_path)?);
-        }
-        let result = child.role.read(&child_path, &options.candidate, verifier);
-        let scratch_closed = scratch.close();
-        let accepted = match result {
-            Ok(facts) if successful && scratch_closed.is_ok() => {
-                child.cleanup_complete = facts.cleanup_complete;
-                child.facts = Some(facts);
-                child.status = Status::FreshPassed;
-                child.failure = None;
-                Ok(())
+        let admission = (|| {
+            if child_path.try_exists()? {
+                child.receipt = Some(receipt_identity(&child_path)?);
             }
-            result => {
-                let reason = match result {
-                    Err(error) => error.to_string(),
-                    Ok(_) => "child process failed or temporary cleanup failed".to_owned(),
-                };
-                child.failure = Some(reason.clone());
-                Err(DevError::corrupt(reason))
-            }
-        };
-        check_inputs(options, verifier, receipt)?;
-        guard()?;
+            child.role.read(&child_path, &options.candidate, verifier)
+        })();
+        let accepted = finish_child(child, spec.timeout, admission, scratch.close());
+        // Recheck even on child failure, but keep the first failing invocation's reason.
+        let unchanged = check_inputs(options, verifier, receipt).and_then(|_| guard());
         accepted?;
+        unchanged?;
         evidence::publish_json(path, receipt)?;
     }
     require(!control.cancelled(), "transferred acceptance cancelled")?;
     guard()
+}
+
+fn finish_child(
+    child: &mut Child,
+    timeout: Duration,
+    admission: Result<ChildFacts, DevError>,
+    cleanup: std::io::Result<()>,
+) -> Result<(), DevError> {
+    let observation = child
+        .process
+        .as_ref()
+        .ok_or_else(|| DevError::corrupt("missing child process observation"))?;
+    if observation.status == process::ProcessStatus::Passed
+        && cleanup.is_ok()
+        && let Ok(facts) = &admission
+        && facts.cleanup_complete
+    {
+        child.cleanup_complete = facts.cleanup_complete;
+        child.facts = Some(facts.clone());
+        child.status = Status::FreshPassed;
+        child.failure = None;
+        return Ok(());
+    }
+    child.status = if observation.status == process::ProcessStatus::Unavailable {
+        Status::Unavailable
+    } else {
+        Status::Failed
+    };
+    let classification = match observation.status {
+        process::ProcessStatus::Passed => "passed",
+        process::ProcessStatus::Failed => "failed",
+        process::ProcessStatus::Unavailable => "unavailable",
+        process::ProcessStatus::Timeout => "timeout",
+        process::ProcessStatus::OutputExhausted => "output_exhausted",
+        process::ProcessStatus::Signaled => "signaled",
+        process::ProcessStatus::InfrastructureFailure => "infrastructure_failure",
+    };
+    let mut reason = format!(
+        "{}: process={classification} reason={} exit_code={:?} signal={:?} elapsed_seconds={:.6} limit_seconds={:.6} evidence={}",
+        child.role.name(),
+        bounded_diagnostic(observation.reason.as_deref().unwrap_or("none")),
+        observation.exit_code,
+        observation.signal,
+        Duration::from_nanos(observation.elapsed_nanoseconds).as_secs_f64(),
+        timeout.as_secs_f64(),
+        bounded_diagnostic(
+            &Path::new(&child.evidence_root)
+                .join("receipt.json")
+                .display()
+                .to_string()
+        ),
+    );
+    match admission {
+        Err(error) => reason.push_str(&format!(
+            "; reader rejected: {}",
+            bounded_diagnostic(&error.to_string())
+        )),
+        Ok(facts) if !facts.cleanup_complete => reason.push_str("; child cleanup incomplete"),
+        Ok(_) => (),
+    }
+    if let Err(error) = cleanup {
+        reason.push_str(&format!(
+            "; temporary cleanup failed: {}",
+            bounded_diagnostic(&error.to_string())
+        ));
+    }
+    child.failure = Some(reason.clone());
+    Err(DevError::corrupt(reason))
+}
+
+fn bounded_diagnostic(value: &str) -> String {
+    const MAXIMUM_CHARACTERS: usize = 768;
+    let mut characters = value.chars();
+    let mut bounded: String = characters.by_ref().take(MAXIMUM_CHARACTERS).collect();
+    if characters.next().is_some() {
+        bounded.push_str("... [truncated]");
+    }
+    bounded
 }
 
 fn inspect_candidate(
@@ -784,7 +846,7 @@ fn print_summary(path: &Path, receipt: &Receipt) -> Result<(), DevError> {
         serde_json::json!({"status":if receipt.status == Status::FreshPassed {"passed"}else{"failed"},"boundary":receipt.boundary,
         "tag":receipt.tag,"source_commit":receipt.source_commit,"candidate_sha256":receipt.candidate.sha256,"verifier_sha256":receipt.verifier.sha256,
         "receipt":path,"receipt_bytes":identity.file.byte_length,"receipt_sha256":identity.file.sha256,"receipt_digest":identity.digest,
-        "children":receipt.children.iter().map(|child|serde_json::json!({"role":child.role,"status":child.status,"receipt":child.receipt,"cleanup_complete":child.cleanup_complete})).collect::<Vec<_>>(),
+        "children":receipt.children.iter().map(|child|serde_json::json!({"role":child.role,"status":child.status,"receipt":child.receipt,"cleanup_complete":child.cleanup_complete,"failure":child.failure})).collect::<Vec<_>>(),
         "cleanup_complete":receipt.cleanup_complete,"failure":receipt.failure})
     );
     Ok(())

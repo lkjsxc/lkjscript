@@ -441,6 +441,12 @@ files are retained; incomplete state is published before invocation. Neither a c
 obsolete receipt generation suffices. `release admission-verify` and preparation likewise re-read
 each named target receipt through its existing owner.
 
+Offline-packages has the same owner-defined 3,600-second complete-process allowance in source,
+target and transferred acceptance, including evidence finalization and terminal exit. Both hosted
+application jobs (pre-publication and anonymous public acceptance) have separate 120-minute outer
+limits; these do not promise that every child can use its individual maximum in one run. The build
+and publication jobs retain their 180-minute and 30-minute limits.
+
 ## Exact tag and immutable publication
 
 After the exact release source is clean, normally pushed, reachable from `origin/main`, and its

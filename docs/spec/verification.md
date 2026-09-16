@@ -509,6 +509,16 @@ candidate receives only `LANG`, and the workflow never invokes Cargo or reads ma
 generated source assets, or compiled dependency assets. An explicit evidence root supports
 transferred no-checkout execution by the copied verifier and exact candidate.
 
+The offline owner defines one 3,600-second complete-process allowance, selected by the source
+check registry and the shared target/transferred oracle inventory. It covers startup through
+terminal exit, including cleanup, evidence publication and child self-admission. Per-command
+deadlines and output limits remain separate. A successful-looking intermediate receipt cannot
+replace successful process completion or the parent's independent reader admission. This is
+contributor operational policy, not a language execution budget.
+Transferred and pair failure summaries retain the first failed owner's process classification,
+reason, elapsed time, allowance and evidence location. A zero exit followed by reader rejection
+remains distinct from timeout, cancellation, output exhaustion and incomplete cleanup.
+
 Only public authoring creates D's private helper, public offset and bound-callable factory, B's doubling function, C's
 negating function, and A's sum. The independently fixed diamond has five distinct packages and eight
 edges including shared standard arithmetic. After producer deletion it must return 11, remain 11

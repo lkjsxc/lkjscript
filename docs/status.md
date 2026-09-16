@@ -44,10 +44,15 @@ original logs, reproduces that failure, and changes only the consumer test's exp
 expectation and version-neutral name. Fresh affected service/public/structural tests pass; the
 bounded transition audit found no further current-generation mismatch. Frozen corrective source
 `a5bad65c14e118e47f774ecaac0f5adce4259f7d` is pushed on `codex/f64-cutover-202609161407`.
-Matching rehearsal `35059467604/1` was building its host verifier at 05:29:11 UTC. Fresh full/target,
-package/installed proof and original-reader/fault acceptance remain pending before integration
-and publication. v0.1.38 remains unused; v0.1.36 is the latest download and v0.1.35 the last closed
-public milestone. The continuation owns exact identities and resumption actions.
+Matching rehearsal `35059467604/1` completed with failure: fresh full, exact static target and
+strict packaging passed, then the installed pair timed out its offline-packages child at 1,800
+seconds. The child's earlier successful-looking receipt did not establish terminal completion.
+Publication and anonymous acceptance were skipped. The [full-lifecycle continuation](campaigns/202609161630.md)
+owns the shared 3,600-second complete-process allowance, 120-minute application jobs, bounded
+failure diagnostics and new exact-source acceptance. All five original handoffs are retained with
+authenticated size/hash bindings. Final-source proof, source-bound fault obligations, integration
+and combined public delivery remain due. v0.1.38 remains unused; v0.1.36 is the latest download
+and v0.1.35 the last fully closed public milestone.
 
 ## Binary64 increment
 

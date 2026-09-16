@@ -78,14 +78,17 @@ The [requirement-parameter campaign](campaigns/202609140938.md) and accepted
 The [delivery continuation](campaigns/202609151412.md) retains the failed, unproduced v0.1.37
 source and tag. The [binary64 mandate](campaigns/202609152217.md) selects F64 as the final companion
 to accepted transaction completion and one combined successor with the launch/retention repairs.
-Acceptance, material blockage or abandonment of F64 triggers delivery without another deferral.
+That delivery trigger is consumed: F64 is implemented and the combined successor is due. The
+[full-lifecycle continuation](campaigns/202609161630.md) corrects the inconsistent verification
+allowance and owns remaining acceptance and delivery; pending CI permits no new feature deferral.
 The [current summary](status.md#combined-release-delivery) owns the observed release disposition.
 Independent callback effects still require an application policy for replay and idempotency.
 
-Numerical algorithms and failure policy belong in ordinary graph libraries. After the scalar
-contract is accepted, real workload measurements should guide richer mathematics, packed numeric
-storage or execution improvements. This direction implies no tensor-performance or scientific
-package claim and selects no additional campaign.
+Numerical algorithms and failure policy belong in ordinary graph libraries. After delivery,
+measured ordinary numerical/data-processing authoring should identify whether repeated preparation
+and checking, data representation or further transaction composition is the limiting dependency.
+Representative measurements can revise that direction; it selects no additional campaign or
+numerical-throughput claim.
 
 The [structural campaign](campaigns/202609150900.md) retains the original literal size observations;
 they establish assembly friction, not authoring time, model tokens or billing. Explicit declaration,

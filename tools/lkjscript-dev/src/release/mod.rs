@@ -1954,6 +1954,20 @@ mod tests {
     }
 
     #[test]
+    fn target_and_transferred_oracles_select_complete_process_allowances() {
+        assert_eq!(
+            transferred::ORACLES.map(|role| (role.name(), role.timeout().as_secs())),
+            [
+                ("distributed-http", 1200),
+                ("outbound-http", 1200),
+                ("offline-packages", 3600),
+                ("pure-tail", 900),
+                ("stateful-http", 1200),
+            ]
+        );
+    }
+
+    #[test]
     fn release_workflow_pins_actions_and_separates_publication_authority() {
         let workflow = release_workflow();
         for line in workflow.lines().map(str::trim) {
@@ -1998,6 +2012,20 @@ mod tests {
             .split_once("\n  post-release:\n")
             .expect("post-release job")
             .1;
+        for (job, expected) in [
+            (build, "timeout-minutes: 180"),
+            (pre_publication, "timeout-minutes: 120"),
+            (publish, "timeout-minutes: 30"),
+            (post_release, "timeout-minutes: 120"),
+        ] {
+            assert_eq!(
+                job.lines()
+                    .map(str::trim)
+                    .filter(|line| line.starts_with("timeout-minutes:"))
+                    .collect::<Vec<_>>(),
+                [expected]
+            );
+        }
         assert!(build.contains("release-upload.outputs.artifact-id"));
         assert!(build.contains("verifier-upload.outputs.artifact-id"));
         assert!(build.contains("verifier-upload.outputs.artifact-digest"));

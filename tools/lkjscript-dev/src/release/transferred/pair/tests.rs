@@ -27,6 +27,245 @@ pub(in crate::release::transferred) fn process_hook(
     spec
 }
 
+// These finite synthetic children test completion and diagnostic propagation only. They do not
+// produce accepted application receipts; the original-reader matrices use genuine full suites.
+#[test]
+fn provisional_child_completion_preserves_failed_pair_receipt_and_summary() {
+    let fixture = tempfile::tempdir().expect("owned completion fixture");
+    let members = fixture_members(fixture.path());
+    let manifest: ReleaseManifest = serde_json::from_slice(&members[4].bytes).expect("manifest");
+    let candidate = fixture.path().join("elf");
+    fs::set_permissions(&candidate, fs::Permissions::from_mode(0o755)).expect("candidate mode");
+    let manifest_path = fixture.path().join("manifest.json");
+    fs::write(&manifest_path, &members[4].bytes).expect("manifest bytes");
+    let verifier = fixture.path().join("verifier");
+    fs::write(&verifier, b"test-only verifier binding").expect("verifier binding");
+    let handoff = fixture.path().join("handoff.json");
+    fs::write(&handoff, b"test-only handoff binding").expect("handoff binding");
+    let mut failed_attempts = Vec::new();
+    for case in [
+        "timeout",
+        "reader-rejection",
+        "cleanup-failure",
+        "incomplete-cleanup",
+        "healthy",
+    ] {
+        let root = fixture.path().join(case);
+        fs::create_dir(&root).expect("case root");
+        let options = PairOptions {
+            verify: false,
+            exact_assets: root.join("exact-assets"),
+            latest_assets: root.join("latest-assets"),
+            tag: manifest.source.expected_release_tag.clone(),
+            commit: manifest.source.tagged_commit_sha.clone(),
+            publication: PublicationMode::DryRun,
+            acquisition: Acquisition::Simulated,
+            evidence_root: root.join("pair"),
+            verifier_identity: handoff.clone(),
+            expected_verifier_sha256: "0".repeat(64),
+            expected_verifier_bytes: 1,
+        };
+        for route in [Route::Exact, Route::Latest] {
+            fs::create_dir(route.assets(&options)).expect("independent input directory");
+            for name in [
+                archive::ARCHIVE_NAME,
+                archive::CHECKSUM_NAME,
+                crate::release::bootstrap::NAME,
+            ] {
+                fs::write(
+                    route.assets(&options).join(name),
+                    b"test-only input binding",
+                )
+                .expect("input binding");
+            }
+        }
+        let aggregate_root = options.evidence_root.join("full-suite");
+        let child_root = aggregate_root.join("offline-packages");
+        fs::create_dir_all(&child_root).expect("child evidence root");
+        let scratch = tempfile::Builder::new()
+            .prefix(".child-state-")
+            .tempdir_in(&aggregate_root)
+            .expect("owned child scratch");
+        let script = if case == "timeout" {
+            "printf '%s\\n' '{\"status\":\"fresh passed\"}' > \"$1/receipt.json\"; setsid sleep 60 & echo $! > \"$1/descendant.pid\"; wait"
+        } else {
+            "printf '%s\\n' '{\"status\":\"fresh passed\"}' > \"$1/receipt.json\""
+        };
+        let spec = process::ProcessSpec {
+            command: vec![
+                "/bin/sh".to_owned(),
+                "-c".to_owned(),
+                script.to_owned(),
+                "fixture".to_owned(),
+                child_root.display().to_string(),
+            ],
+            cwd: scratch.path().to_path_buf(),
+            environment: BTreeMap::from([("PATH".to_owned(), "/usr/bin:/bin".to_owned())]),
+            timeout: if case == "timeout" {
+                Duration::from_millis(350)
+            } else {
+                Duration::from_secs(3)
+            },
+            maximum_stdout_bytes: 1024,
+            maximum_stderr_bytes: 1024,
+            stdout_path: aggregate_root.join("offline-packages.stdout.log"),
+            stderr_path: aggregate_root.join("offline-packages.stderr.log"),
+            unavailable_exit_code: None,
+        };
+        let observation = process::run_supervised(&spec, &aggregate_root, None);
+        let child_path = child_root.join("receipt.json");
+        let provisional: serde_json::Value =
+            serde_json::from_slice(&fs::read(&child_path).expect("provisional record"))
+                .expect("provisional JSON");
+        assert_eq!(provisional, serde_json::json!({"status":"fresh passed"}));
+        let mut child = Child {
+            role: Oracle::OfflinePackages,
+            evidence_root: child_root.display().to_string(),
+            status: Status::Failed,
+            command: spec.command.clone(),
+            process: Some(observation),
+            receipt: Some(receipt_identity(&child_path).expect("retained provisional identity")),
+            facts: None,
+            cleanup_complete: false,
+            failure: Some("child invocation incomplete".to_owned()),
+        };
+        // Admit a zero-exit corrupt record with the real owner. For other cases, independent unit
+        // facts isolate the terminal-exit and cleanup conjunction without forging a real receipt.
+        let admission = if case == "reader-rejection" {
+            child.role.read(&child_path, &candidate, &verifier)
+        } else {
+            Ok(ChildFacts {
+                candidate_sha256: "0".repeat(64),
+                verifier_sha256: "1".repeat(64),
+                elapsed_nanoseconds: 1,
+                commands: 1,
+                runners: 1,
+                requests: 1,
+                cleanup_complete: case != "incomplete-cleanup",
+            })
+        };
+        let scratch_path = scratch.path().to_path_buf();
+        scratch.close().expect("owned scratch removed");
+        let cleanup = if case == "cleanup-failure" {
+            Err(std::io::Error::other("injected temporary cleanup failure"))
+        } else {
+            Ok(())
+        };
+        let completion = finish_child(&mut child, spec.timeout, admission, cleanup);
+        assert!(!scratch_path.exists());
+        if case == "healthy" {
+            completion.expect("finite normal completion");
+            assert_eq!(child.status, Status::FreshPassed);
+            assert_eq!(child.status.exit_code(), 0);
+            continue;
+        }
+        assert!(completion.is_err(), "{case}");
+        assert_eq!(child.status, Status::Failed);
+        let observation = child.process.as_ref().expect("terminal observation");
+        if case == "timeout" {
+            assert_eq!(observation.status, process::ProcessStatus::Timeout);
+            let pid =
+                fs::read_to_string(child_root.join("descendant.pid")).expect("descendant identity");
+            if let Ok(stat) = fs::read_to_string(format!("/proc/{}/stat", pid.trim())) {
+                assert!(
+                    stat.rsplit_once(") ")
+                        .expect("proc stat")
+                        .1
+                        .starts_with('Z'),
+                    "owned descendant survived: {stat}"
+                );
+            }
+        } else {
+            assert_eq!(observation.status, process::ProcessStatus::Passed);
+            assert_eq!(observation.exit_code, Some(0));
+        }
+        let aggregate = Receipt {
+            schema: SchemaIdentity {
+                identity: SCHEMA.to_owned(),
+                version: SCHEMA_VERSION,
+            },
+            status: Status::Failed,
+            boundary: Boundary::PrePublication,
+            tag: options.tag.clone(),
+            source_commit: options.commit.clone(),
+            publication: options.publication,
+            product: manifest.product.clone(),
+            capabilities_digest: manifest.executable.capabilities_digest.clone(),
+            target: target::TARGET_TRIPLE.to_owned(),
+            target_policy_sha256: target::policy_sha256().expect("target policy"),
+            evidence_root: aggregate_root.display().to_string(),
+            started_unix_nanoseconds: 1,
+            completed_unix_nanoseconds: Some(2),
+            elapsed_nanoseconds: observation.elapsed_nanoseconds,
+            hosted_context: crate::release::hosted_context(),
+            manifest: external(&manifest_path).expect("manifest identity"),
+            candidate: target::observe_candidate(&candidate).expect("candidate identity"),
+            verifier: external(&verifier).expect("verifier identity"),
+            verifier_mode: 0o755,
+            children: vec![child],
+            cleanup_complete: false,
+            // A later guard must not hide the first child's process classification.
+            failure: Some("later guard rejection".to_owned()),
+        };
+        evidence::publish_json(&aggregate_root.join("receipt.json"), &aggregate)
+            .expect("failed aggregate");
+        let mut parent = initial_receipt(&options, &verifier).expect("initial pair receipt");
+        parent.phase = "full-suite".to_owned();
+        parent.cleanup_complete = true;
+        record_result(&mut parent, require_completed_aggregate(&aggregate), false);
+        persist(&options, &parent).expect("failed parent persisted");
+        let encoded_summary =
+            serde_json::to_vec(&summary_value(&options, &parent).expect("actual pair summary"))
+                .expect("summary encoding");
+        let summary: serde_json::Value =
+            serde_json::from_slice(&encoded_summary).expect("summary JSON");
+        assert_eq!(summary["status"], "failed");
+        assert_eq!(parent.status.exit_code(), 1);
+        let failure = summary["failure"]
+            .as_str()
+            .expect("top-level failure reason");
+        for detail in [
+            "offline-packages",
+            "elapsed_seconds=",
+            "limit_seconds=",
+            "evidence=",
+            "aggregate evidence=",
+        ] {
+            assert!(
+                failure.contains(detail),
+                "{case}: missing {detail}: {failure}"
+            );
+        }
+        let expected = match case {
+            "timeout" => "process=timeout reason=timeout",
+            "reader-rejection" => "reader rejected:",
+            "cleanup-failure" => "temporary cleanup failed:",
+            "incomplete-cleanup" => "child cleanup incomplete",
+            _ => unreachable!(),
+        };
+        assert!(failure.contains(expected), "{case}: {failure}");
+        if case != "timeout" {
+            assert!(
+                failure.contains("process=passed reason=none"),
+                "{case}: {failure}"
+            );
+            assert!(!failure.contains("process=timeout"), "{case}: {failure}");
+        }
+        let receipt_path = options.evidence_root.join("receipt.json");
+        let saved = fs::read(&receipt_path).expect("failed parent bytes");
+        let persisted: PairReceipt = serde_json::from_slice(&saved).expect("typed failed parent");
+        assert_eq!(persisted.status, Status::Failed);
+        assert_eq!(persisted.failure, parent.failure);
+        failed_attempts.push((receipt_path, saved));
+    }
+    for (path, original) in failed_attempts {
+        assert_eq!(
+            fs::read(path).expect("old failed attempt preserved"),
+            original
+        );
+    }
+}
+
 pub(super) fn fixture_members(root: &Path) -> Vec<archive::tests::TestMember> {
     let owner = crate::release::target::tests::elf_fixture(&[(0, 0)]);
     let candidate = root.join("elf");

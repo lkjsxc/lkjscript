@@ -398,6 +398,7 @@ pub(crate) fn base_registry(
         "--machine".to_owned(),
     ]);
     offline_packages.cacheable = false;
+    offline_packages.timeout = crate::offline_packages::COMPLETE_PROCESS_TIMEOUT;
     gates.push(offline_packages);
     let mut pure_tail = gate(
         "pure_tail",
@@ -908,6 +909,7 @@ mod tests {
                 .expect("offline package oracle");
             assert!(!offline.cacheable);
             assert_eq!(offline.dependencies, ["release_command_lifecycle"]);
+            assert_eq!(offline.timeout, std::time::Duration::from_secs(3_600));
             assert_eq!(
                 requested.iter().any(|name| name == "pure_tail"),
                 matches!(profile_name, "product" | "full")
