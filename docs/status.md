@@ -27,9 +27,11 @@ required non-publishing [candidate 35245606101/1](https://github.com/lkjsxc/lkjs
 passed at that exact product source on 2026-09-17T17:31:02Z. Its three essential handoffs remain
 available, with earliest observed expiry 2026-10-01T17:30:28Z. The
 [consume correction](campaigns/202609180528.md) makes unavailable/cancelled authority and inconsistent
-process/state results fail at the workflow wrapper and terminal. Its separate corrected-controller
-consumer remains unrun; hosted cutover closure is incomplete. No new-format live publication has
-been exercised. The first public
+process/state results fail at the workflow wrapper and terminal. Verified implementation
+`3f5281d84cb01f6c13f69278e0d7a4a5c6015e79` is integrated into remote main. Its
+[consumer 35272533706/1](https://github.com/lkjsxc/lkjscript/actions/runs/35272533706) selects the
+original P producer and is running from that corrected controller source; hosted cutover closure
+remains incomplete. No new-format live publication has been exercised. The first public
 use is triggered by a useful selected public capability, important fix or explicit user request.
 
 ## Binary64 increment
