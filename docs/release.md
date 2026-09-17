@@ -139,6 +139,14 @@ to be reachable from freshly resolved main. Artifact names or caller-supplied ha
 It then runs the small transfer lifecycle without product builds or broad application replay.
 Read-only publication preflight reports an independent authorized/rejected result. For the private
 0.1.38 cutover candidate, the existing tag selects different content and must reject.
+Successful consumption requires both a completed authority decision and successful transfer/installed
+lifecycle with joined cleanup. A zero-exit authority process must report `promotion_authorized`;
+a failed process is tolerable only for `consume` with a `rejected` result from `operation=authority`
+and a nonempty reason. Missing, malformed, contradictory, unavailable, cancelled or incomplete
+results fail the invocation, even if its controller job otherwise reports success. Diagnostic states
+remain retained where CI permits; cancellation does not guarantee that a terminal upload ran.
+An accepted rejection grants no publication permission. `promote` and `resume-publication` still
+require authorization; `resume-public` retains its separate read-only public check.
 
 For a future release with separate publication authorization, first prepare meaningful notes and an
 ordinary annotated tag selecting the accepted product commit. Refresh remote main, exact tag/release

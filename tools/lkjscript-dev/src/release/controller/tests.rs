@@ -899,8 +899,189 @@ fn workflow_process(
 }
 
 #[test]
+fn actual_workflow_authority_requires_a_completed_consistent_decision() {
+    let script = workflow_script("Independently admit current publication authority and occupancy");
+    let authorized = r#"{"status":"promotion_authorized","authority":{}}"#;
+    let rejected =
+        r#"{"status":"rejected","operation":"authority","reason":"annotated tag source differs"}"#;
+    let unavailable =
+        r#"{"status":"unavailable","operation":"authority","reason":"API unavailable"}"#;
+    let cancelled = r#"{"status":"cancelled","operation":"authority","reason":"cancelled after joined cleanup"}"#;
+    let mut mismatches = Vec::new();
+    for (label, exit, state, consume_passes, output) in [
+        ("authorized", 0, Some(authorized), true, "authorized"),
+        ("rejected", 1, Some(rejected), true, "rejected"),
+        ("unavailable", 1, Some(unavailable), false, "unavailable"),
+        ("cancelled", 1, Some(cancelled), false, "cancelled"),
+        ("missing", 1, None, false, ""),
+        ("malformed", 1, Some("{"), false, ""),
+        (
+            "unknown",
+            1,
+            Some(r#"{"status":"unexpected","operation":"authority","reason":"unknown"}"#),
+            false,
+            "",
+        ),
+        (
+            "incomplete",
+            1,
+            Some(r#"{"status":"incomplete","operation":"authority"}"#),
+            false,
+            "",
+        ),
+        (
+            "wrong-operation",
+            1,
+            Some(r#"{"status":"rejected","operation":"select","reason":"wrong producer"}"#),
+            false,
+            "",
+        ),
+        (
+            "missing-reason",
+            1,
+            Some(r#"{"status":"rejected","operation":"authority"}"#),
+            false,
+            "",
+        ),
+        (
+            "empty-reason",
+            1,
+            Some(r#"{"status":"rejected","operation":"authority","reason":""}"#),
+            false,
+            "",
+        ),
+        (
+            "malformed-reason",
+            1,
+            Some(r#"{"status":"rejected","operation":"authority","reason":[]}"#),
+            false,
+            "",
+        ),
+        (
+            "missing-status",
+            1,
+            Some(r#"{"operation":"authority","reason":"missing status"}"#),
+            false,
+            "",
+        ),
+        (
+            "malformed-status",
+            1,
+            Some(r#"{"status":["rejected"],"operation":"authority","reason":"bad status"}"#),
+            false,
+            "",
+        ),
+        (
+            "newline-status",
+            1,
+            Some(r#"{"status":"rejected\n","operation":"authority","reason":"bad status"}"#),
+            false,
+            "",
+        ),
+        (
+            "nul-status",
+            1,
+            Some(r#"{"status":"rejected\u0000","operation":"authority","reason":"bad status"}"#),
+            false,
+            "",
+        ),
+        (
+            "multiple-results",
+            1,
+            Some(&format!("{rejected}\n{unavailable}")),
+            false,
+            "",
+        ),
+        ("successful-rejection", 0, Some(rejected), false, ""),
+        ("successful-unavailable", 0, Some(unavailable), false, ""),
+        ("successful-cancelled", 0, Some(cancelled), false, ""),
+        ("successful-missing", 0, None, false, ""),
+        ("successful-malformed", 0, Some("{"), false, ""),
+        (
+            "successful-multiple",
+            0,
+            Some(&format!("{authorized}\n{rejected}")),
+            false,
+            "",
+        ),
+        ("failed-authorization", 1, Some(authorized), false, ""),
+    ] {
+        for operation in ["consume", "promote", "resume-publication"] {
+            let temporary = tempfile::tempdir().expect("owned authority fixture");
+            let root = temporary.path();
+            fs::create_dir(root.join("controller-tool")).expect("fixture controller directory");
+            let controller = root.join("controller-tool/lkjscript-release-controller");
+            fs::write(
+                &controller,
+                br##"#!/bin/sh
+set -eu
+test "$#" = 5
+test "$1" = authority
+test "$2" = --selection && test "$3" = "$RUNNER_TEMP/selection/selection.json"
+test "$4" = --output && test "$5" = "$RUNNER_TEMP/authority"
+printf '%s\n' "$*" >> "$RUNNER_TEMP/invocations"
+mkdir "$5"
+if test -f "$RUNNER_TEMP/fixture-state.json"; then
+  cp "$RUNNER_TEMP/fixture-state.json" "$5/state.json"
+fi
+exit "$FIXTURE_EXIT"
+"##,
+            )
+            .expect("independent authority process adapter");
+            fs::set_permissions(&controller, fs::Permissions::from_mode(0o755))
+                .expect("adapter mode");
+            if let Some(state) = state {
+                fs::write(root.join("fixture-state.json"), state)
+                    .expect("controller state fixture");
+            }
+            let output_path = root.join("github-output");
+            fs::write(&output_path, "").expect("step output fixture");
+            let result = workflow_process(
+                &script,
+                root,
+                &[
+                    ("OPERATION", operation),
+                    ("FIXTURE_EXIT", &exit.to_string()),
+                    (
+                        "GITHUB_OUTPUT",
+                        output_path.to_str().expect("fixture output path"),
+                    ),
+                ],
+            );
+            let expected = consume_passes && (operation == "consume" || exit == 0);
+            let actual_output = fs::read_to_string(&output_path).expect("actual step output");
+            let expected_output = if output.is_empty() {
+                String::new()
+            } else {
+                format!("status={output}\n")
+            };
+            if result.status.success() != expected || actual_output != expected_output {
+                mismatches.push(format!("{operation}/{label}: success={}, output={actual_output:?}, expected success={expected}, output={expected_output:?}", result.status.success()));
+            }
+            assert_eq!(
+                fs::read_to_string(root.join("invocations"))
+                    .expect("independent invocation trace")
+                    .lines()
+                    .count(),
+                1
+            );
+            if let Some(state) = state {
+                assert_eq!(
+                    fs::read_to_string(root.join("authority/state.json"))
+                        .expect("retained diagnostic")
+                        .as_str(),
+                    state
+                );
+            }
+        }
+    }
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+}
+
+#[test]
 fn actual_workflow_terminal_owner_cannot_pass_missing_skipped_failed_or_cancelled_required_jobs() {
     let script = workflow_script("Require every stage selected by this invocation");
+    let mut mismatches = Vec::new();
     for (operation, candidate, controller, publication, public, authority, passes) in [
         (
             "candidate",
@@ -940,6 +1121,75 @@ fn actual_workflow_terminal_owner_cannot_pass_missing_skipped_failed_or_cancelle
         ),
         (
             "consume", "skipped", "success", "skipped", "skipped", "rejected", true,
+        ),
+        (
+            "consume",
+            "skipped",
+            "success",
+            "skipped",
+            "skipped",
+            "authorized",
+            true,
+        ),
+        (
+            "consume",
+            "skipped",
+            "success",
+            "skipped",
+            "skipped",
+            "unavailable",
+            false,
+        ),
+        (
+            "consume",
+            "skipped",
+            "success",
+            "skipped",
+            "skipped",
+            "cancelled",
+            false,
+        ),
+        (
+            "consume",
+            "skipped",
+            "success",
+            "skipped",
+            "skipped",
+            "incomplete",
+            false,
+        ),
+        (
+            "consume", "skipped", "success", "skipped", "skipped", "", false,
+        ),
+        (
+            "consume", "skipped", "success", "skipped", "skipped", "{}", false,
+        ),
+        (
+            "consume", "skipped", "success", "skipped", "skipped", "unknown", false,
+        ),
+        (
+            "consume",
+            "skipped",
+            "success",
+            "skipped",
+            "skipped",
+            "promotion_authorized",
+            false,
+        ),
+        (
+            "consume", "skipped", "", "skipped", "skipped", "rejected", false,
+        ),
+        (
+            "consume", "skipped", "skipped", "skipped", "skipped", "rejected", false,
+        ),
+        (
+            "consume",
+            "skipped",
+            "cancelled",
+            "skipped",
+            "skipped",
+            "rejected",
+            false,
         ),
         (
             "consume", "skipped", "failure", "skipped", "skipped", "rejected", false,
@@ -1054,32 +1304,52 @@ fn actual_workflow_terminal_owner_cannot_pass_missing_skipped_failed_or_cancelle
                 ("LATEST_SOURCE", CONTROLLER),
             ],
         );
-        assert_eq!(
-            result.status.success(),
-            passes,
-            "{operation}/{candidate}/{controller}/{publication}/{public}/{authority}: {}",
-            String::from_utf8_lossy(&result.stderr)
-        );
         let terminal: Value = serde_json::from_slice(
             &fs::read(temporary.path().join("release-terminal.json"))
                 .expect("failed and successful terminal retained"),
         )
         .expect("actual terminal JSON");
         assert_eq!(terminal["public_verification"], public);
+        assert_eq!(terminal["promotion_authority"], authority);
+        assert_eq!(terminal["controller"], controller);
         assert_eq!(terminal["latest"], "superseded");
-        if !passes {
-            assert_eq!(terminal["status"], "incomplete");
+        let expected_status = if !passes {
+            "incomplete"
+        } else {
+            match operation {
+                "candidate" => "candidate_accepted",
+                "consume" => "candidate_consumed_read_only",
+                "promote" | "resume-publication" => "immutable_published_and_public_verified",
+                "resume-public" => "public_recheck_passed",
+                _ => unreachable!(),
+            }
+        };
+        if result.status.success() != passes || terminal["status"] != expected_status {
+            mismatches.push(format!("{operation}/{candidate}/{controller}/{publication}/{public}/{authority}: success={}, status={}, expected success={passes}, status={expected_status}", result.status.success(), terminal["status"]));
         }
     }
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
 }
 
 #[test]
 fn actual_public_smoke_script_resumes_failed_smoke_without_build_or_broad_owner_invocations() {
-    let script = workflow_script("Verify the actual public installed lifecycle");
-    for exact_only in [false, true] {
+    for boundary in ["transfer", "public-pair", "public-exact"] {
+        let transfer = boundary == "transfer";
+        let exact_only = boundary == "public-exact";
+        let script = workflow_script(if transfer {
+            "Admit transfer and run the small installed lifecycle"
+        } else {
+            "Verify the actual public installed lifecycle"
+        });
         let temporary = tempfile::tempdir().expect("owned smoke boundary fixture");
         let root = temporary.path();
         fs::create_dir_all(root.join("selection/verifier")).expect("fixture verifier handoff");
+        fs::create_dir(root.join("selection/assets")).expect("fixture original assets");
+        fs::write(
+            root.join("selection/assets/unchanged"),
+            b"original asset bytes",
+        )
+        .expect("fixture candidate bytes");
         fs::create_dir_all(root.join("public-acquisition/exact")).expect("exact acquisition");
         if !exact_only {
             fs::create_dir(root.join("public-acquisition/latest")).expect("latest acquisition");
@@ -1122,6 +1392,8 @@ printf '{"status":"passed","fixture":"boundary process adapter only"}\n'
             "offline-packages",
             "pure-tail",
             "stateful-http",
+            "gh",
+            "curl",
         ] {
             let guard = guards.join(program);
             fs::write(&guard, b"#!/bin/sh\nprintf '%s\\n' \"$0\" >> \"$(dirname -- \"$0\")/forbidden.log\"\nexit 94\n").expect("forbidden tool adapter");
@@ -1140,11 +1412,63 @@ printf '{"status":"passed","fixture":"boundary process adapter only"}\n'
             "{}",
             String::from_utf8_lossy(&failure.stderr)
         );
+        let terminal_script = workflow_script("Require every stage selected by this invocation");
+        let terminal_environment = |controller| {
+            [
+                ("OPERATION", "consume"),
+                ("CANDIDATE", "skipped"),
+                ("CONTROLLER", controller),
+                ("PUBLISH", "skipped"),
+                ("PUBLIC", "skipped"),
+                ("AUTHORITY", "rejected"),
+                ("LATEST_STATE", ""),
+                ("LATEST_TAG", ""),
+                ("LATEST_SOURCE", ""),
+            ]
+        };
+        if transfer {
+            let terminal =
+                workflow_process(&terminal_script, root, &terminal_environment("failure"));
+            assert!(
+                !terminal.status.success(),
+                "failed transfer cannot be consumed"
+            );
+            let state: Value = serde_json::from_slice(
+                &fs::read(root.join("release-terminal.json")).expect("failed consume terminal"),
+            )
+            .expect("terminal JSON");
+            assert_eq!(state["status"], "incomplete");
+            // A fresh hosted invocation has a new runner directory; preserve the selected
+            // producer while removing only this fixture's previous simulated acquisition.
+            fs::remove_dir_all(root.join("transfer-latest")).expect("owned failed transfer copy");
+        }
         let recovery = workflow_process(&script, root, &[("PATH", &path), ("GITHUB_RUN_ID", "19")]);
         assert!(
             recovery.status.success(),
             "{}",
             String::from_utf8_lossy(&recovery.stderr)
+        );
+        if transfer {
+            let terminal =
+                workflow_process(&terminal_script, root, &terminal_environment("success"));
+            assert!(
+                terminal.status.success(),
+                "recovered transfer can be consumed"
+            );
+            let state: Value = serde_json::from_slice(
+                &fs::read(root.join("release-terminal.json")).expect("recovered consume terminal"),
+            )
+            .expect("terminal JSON");
+            assert_eq!(state["status"], "candidate_consumed_read_only");
+            assert_eq!(state["promotion_authority"], "rejected");
+            assert_eq!(
+                fs::read(root.join("transfer-latest/unchanged")).expect("transferred bytes"),
+                b"original asset bytes"
+            );
+        }
+        assert_eq!(
+            fs::read(root.join("selection/assets/unchanged")).expect("original bytes"),
+            b"original asset bytes"
         );
         assert_eq!(
             fs::read(root.join("selection/selection.json")).expect("retained selection"),
@@ -1162,7 +1486,11 @@ printf '{"status":"passed","fixture":"boundary process adapter only"}\n'
             "release transferred pair-run "
         }));
         assert!(lines[0].contains(SOURCE));
-        assert!(lines[0].contains("--acquisition anonymous"));
+        assert!(lines[0].contains(if transfer {
+            "--acquisition simulated"
+        } else {
+            "--acquisition anonymous"
+        }));
         assert_eq!(lines[0].contains("--latest-assets"), !exact_only);
     }
 }

@@ -18,14 +18,18 @@ in this execution. Genuine v0.1.36/v0.1.37 failures remain in their existing cam
 failure or missing manual observation has been relabelled. The successful rehearsal and local
 fault/recovery proof are recorded in the [predecessor ending](campaigns/202609162154.md).
 
-The [current campaign](campaigns/202609180007.md) implements publication-neutral content,
+The [cutover campaign](campaigns/202609180007.md) implements publication-neutral content,
 once-per-candidate acceptance, exact-artifact promotion and boundary resumption. It requests no
 new version, tag, public release or release-control change. Implementation
 `a5e77bf4f071744060aa4330b36da79391df8fc6` is integrated into remote main. Local contributor tests
 passed 139/139 executed tests, plus native compatibility and a real small lifecycle fixture; the
 required non-publishing [candidate 35245606101/1](https://github.com/lkjsxc/lkjscript/actions/runs/35245606101)
-is in progress, and its separate exact-producer read-only consumer remains unrun. The campaign is
-incomplete until those hosted gates pass; no new-format live publication has been exercised. The first public
+passed at that exact product source on 2026-09-17T17:31:02Z. Its three essential handoffs remain
+available, with earliest observed expiry 2026-10-01T17:30:28Z. The
+[consume correction](campaigns/202609180528.md) makes unavailable/cancelled authority and inconsistent
+process/state results fail at the workflow wrapper and terminal. Its separate corrected-controller
+consumer remains unrun; hosted cutover closure is incomplete. No new-format live publication has
+been exercised. The first public
 use is triggered by a useful selected public capability, important fix or explicit user request.
 
 ## Binary64 increment

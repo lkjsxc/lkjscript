@@ -279,12 +279,16 @@ jobs:
           set -euo pipefail
           if "$RUNNER_TEMP/controller-tool/lkjscript-release-controller" authority \
               --selection "$RUNNER_TEMP/selection/selection.json" --output "$RUNNER_TEMP/authority"; then
+            jq -e -s 'length == 1 and .[0].status == "promotion_authorized"' \
+              "$RUNNER_TEMP/authority/state.json" > /dev/null
             echo 'status=authorized' >> "$GITHUB_OUTPUT"
           else
-            observed=$(jq -er '.status' "$RUNNER_TEMP/authority/state.json")
-            case "$observed" in rejected|unavailable|cancelled) ;; *) exit 1 ;; esac
+            observed=$(jq -e -r -s 'select(length == 1) | .[0] |
+              select(.operation == "authority" and (.reason | type == "string" and length > 0)) |
+              .status | select(. == "rejected" or . == "unavailable" or . == "cancelled")' \
+              "$RUNNER_TEMP/authority/state.json")
             echo "status=$observed" >> "$GITHUB_OUTPUT"
-            test "$OPERATION" = consume
+            test "$OPERATION" = consume && test "$observed" = rejected
           fi
       - name: Admit transfer and run the small installed lifecycle
         if: inputs.operation == 'consume' || inputs.operation == 'promote'
@@ -485,7 +489,9 @@ jobs:
             candidate)
               if test "$CANDIDATE" = success; then status=candidate_accepted; result=0; fi ;;
             consume)
-              if test "$CONTROLLER" = success; then status=candidate_consumed_read_only; result=0; fi ;;
+              if test "$CONTROLLER" = success && { test "$AUTHORITY" = authorized || test "$AUTHORITY" = rejected; }; then
+                status=candidate_consumed_read_only; result=0
+              fi ;;
             promote|resume-publication)
               if test "$CONTROLLER" = success && test "$AUTHORITY" = authorized && \
                   test "$PUBLISH" = success && test "$PUBLIC" = success; then
