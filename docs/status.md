@@ -20,8 +20,12 @@ fault/recovery proof are recorded in the [predecessor ending](campaigns/20260916
 
 The [current campaign](campaigns/202609180007.md) implements publication-neutral content,
 once-per-candidate acceptance, exact-artifact promotion and boundary resumption. It requests no
-new version, tag, public release or release-control change. Implementation and fresh non-publishing
-hosted proof are in progress; no new-format live publication has been exercised. The first public
+new version, tag, public release or release-control change. Implementation
+`a5e77bf4f071744060aa4330b36da79391df8fc6` is integrated into remote main. Local contributor tests
+passed 139/139 executed tests, plus native compatibility and a real small lifecycle fixture; the
+required non-publishing [candidate 35245606101/1](https://github.com/lkjsxc/lkjscript/actions/runs/35245606101)
+is in progress, and its separate exact-producer read-only consumer remains unrun. The campaign is
+incomplete until those hosted gates pass; no new-format live publication has been exercised. The first public
 use is triggered by a useful selected public capability, important fix or explicit user request.
 
 ## Binary64 increment
