@@ -1,4 +1,4 @@
-//! One small two-version recovery/continuity witness per pair, alongside the existing five owners.
+//! One two-version recovery/continuity witness per accepted candidate.
 use super::*;
 use lkjscript::platform::control::CompactRecord;
 use std::io::Write;
@@ -383,7 +383,7 @@ fn admit_predecessor(options: &PairOptions) -> Result<archive::VerifiedArchive, 
     require(
         admitted.manifest.source.expected_release_tag == OLD_TAG
             && admitted.manifest.source.tagged_commit_sha == OLD_SOURCE
-            && admitted.manifest.publication_mode == PublicationMode::Release,
+            && admitted.manifest.legacy_publication_mode() == Some(PublicationMode::Release),
         "predecessor historical identity differs",
     )?;
     Ok(admitted)

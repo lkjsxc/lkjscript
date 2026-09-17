@@ -1,16 +1,25 @@
-//! Within-invocation binding, never cross-run reuse or public acquisition authentication.
+//! Strict transport smoke and once-per-candidate installation acceptance.
 use super::*;
 use std::io::Read;
 use std::os::unix::fs::MetadataExt;
 
 mod installation;
+mod legacy;
 mod lifecycle;
 mod recovery;
 use installation::Acquisition;
 
 const PAIR_SCHEMA: &str = "lkjscript-transferred-pair";
-const PAIR_VERSION: u32 = 4;
-const POLICY: &str = "static-installed-pair-cleared-environment-private-state-4";
+const PAIR_VERSION: u32 = 5;
+const POLICY: &str = "static-installed-pair-cleared-environment-private-state-5";
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum Tier {
+    BoundarySmoke,
+    BoundaryExactSmoke,
+    CandidateInstallation,
+}
 
 #[derive(Clone, Debug)]
 struct PairOptions {
@@ -19,7 +28,7 @@ struct PairOptions {
     latest_assets: PathBuf,
     tag: String,
     commit: String,
-    publication: PublicationMode,
+    tier: Tier,
     acquisition: Acquisition,
     evidence_root: PathBuf,
     verifier_identity: PathBuf,
@@ -209,21 +218,6 @@ struct Equality {
 #[serde(rename_all = "kebab-case")]
 enum Disposition {
     FreshExecution,
-    BoundWithinSamePair,
-}
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct SuiteBinding {
-    exact: Disposition,
-    latest: Disposition,
-    source_aggregate: ReceiptIdentity,
-    equality_digest: evidence::VerificationDigest,
-    pair_root: String,
-    scope: Scope,
-    hosted_context: HostedContext,
-    started_unix_nanoseconds: u128,
-    completed_unix_nanoseconds: u128,
-    expensive_executions: usize,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -263,7 +257,7 @@ struct PairReceipt {
     scope: Scope,
     tag: String,
     source_commit: String,
-    publication: PublicationMode,
+    tier: Tier,
     acquisition: Acquisition,
     evidence_root: String,
     target: String,
@@ -277,10 +271,10 @@ struct PairReceipt {
     elapsed_nanoseconds: u64,
     equality_nanoseconds: u64,
     receipt_verification_nanoseconds: u64,
-    routes: [RouteReceipt; 2],
+    routes: Vec<RouteReceipt>,
     equality: Option<Equality>,
-    suite: Option<SuiteBinding>,
     recovery: Option<recovery::Recovery>,
+    legacy: Option<legacy::LegacyUpgrade>,
     cleanup_complete: bool,
     failure: Option<String>,
 }
@@ -293,12 +287,28 @@ pub(super) fn command(
     let verifier = std::env::current_exe()?.canonicalize()?;
     validate_options(&options, &verifier)?;
     let cancellation = Cancellation::new()?;
-    if options.verify {
-        let receipt = read_controlled(&options, &verifier, Some(&cancellation.control))?;
-        summary(&options, &receipt)?;
-        return Ok(0);
+    let control = cancellation.control.clone();
+    let outcome = if options.verify {
+        read_controlled(&options, &verifier, Some(&cancellation.control))
+    } else {
+        run(&options, &verifier, &cancellation.control)
+    };
+    let joined = cancellation.finish().and_then(|()| {
+        require(
+            !control.cancelled(),
+            "boundary cancelled during joined cleanup",
+        )
+    });
+    let mut receipt = outcome?;
+    if let Err(error) = joined {
+        if !options.verify {
+            receipt.status = Status::Failed;
+            receipt.cleanup_complete = false;
+            receipt.failure = Some(error.to_string());
+            persist(&options, &receipt)?;
+        }
+        return Err(error);
     }
-    let receipt = run(&options, &verifier, &cancellation.control)?;
     summary(&options, &receipt)?;
     Ok(receipt.status.exit_code())
 }
@@ -314,7 +324,7 @@ fn initial_receipt(options: &PairOptions, verifier: &Path) -> Result<PairReceipt
         scope: scope(options.acquisition),
         tag: options.tag.clone(),
         source_commit: options.commit.clone(),
-        publication: options.publication,
+        tier: options.tier,
         acquisition: options.acquisition,
         evidence_root: options.evidence_root.display().to_string(),
         target: target::TARGET_TRIPLE.to_owned(),
@@ -328,27 +338,38 @@ fn initial_receipt(options: &PairOptions, verifier: &Path) -> Result<PairReceipt
         elapsed_nanoseconds: 0,
         equality_nanoseconds: 0,
         receipt_verification_nanoseconds: 0,
-        routes: [
-            RouteReceipt {
+        routes: if options.tier == Tier::BoundaryExactSmoke {
+            vec![RouteReceipt {
                 route: Route::Exact,
                 inputs: inputs(&options.exact_assets)?,
                 admission: None,
                 extraction: None,
                 admission_nanoseconds: 0,
                 lifecycle: None,
-            },
-            RouteReceipt {
-                route: Route::Latest,
-                inputs: inputs(&options.latest_assets)?,
-                admission: None,
-                extraction: None,
-                admission_nanoseconds: 0,
-                lifecycle: None,
-            },
-        ],
+            }]
+        } else {
+            vec![
+                RouteReceipt {
+                    route: Route::Exact,
+                    inputs: inputs(&options.exact_assets)?,
+                    admission: None,
+                    extraction: None,
+                    admission_nanoseconds: 0,
+                    lifecycle: None,
+                },
+                RouteReceipt {
+                    route: Route::Latest,
+                    inputs: inputs(&options.latest_assets)?,
+                    admission: None,
+                    extraction: None,
+                    admission_nanoseconds: 0,
+                    lifecycle: None,
+                },
+            ]
+        },
         equality: None,
-        suite: None,
         recovery: None,
+        legacy: None,
         cleanup_complete: false,
         failure: None,
     })
@@ -416,7 +437,7 @@ fn execute_pair(
     receipt: &mut PairReceipt,
     control: &process::ProcessControl,
 ) -> Result<(), DevError> {
-    for index in 0..2 {
+    for index in 0..receipt.routes.len() {
         checkpoint(options, verifier, receipt, control)?;
         let route = receipt.routes[index].route;
         receipt.phase = format!("{}-admission", route.name());
@@ -445,10 +466,12 @@ fn execute_pair(
     let started = Instant::now();
     receipt.phase = "equality".to_owned();
     persist(options, receipt)?;
-    receipt.equality = Some(compare(options, &receipt.routes)?);
+    if options.tier != Tier::BoundaryExactSmoke {
+        receipt.equality = Some(compare(options, &receipt.routes)?);
+    }
     receipt.equality_nanoseconds = elapsed(started)?;
     persist(options, receipt)?;
-    for index in 0..2 {
+    for index in 0..receipt.routes.len() {
         checkpoint(options, verifier, receipt, control)?;
         let route = receipt.routes[index].route;
         receipt.phase = format!("{}-lifecycle", route.name());
@@ -470,74 +493,31 @@ fn execute_pair(
         )?;
         checkpoint(options, verifier, receipt, control)?;
     }
-    receipt.phase = "installation-recovery".to_owned();
-    persist(options, receipt)?;
-    receipt.recovery = Some(recovery::run(
-        options,
-        receipt.routes[0]
-            .admission
-            .as_ref()
-            .ok_or_else(|| DevError::corrupt("missing recovery archive"))?,
-        control,
-    )?);
-    persist(options, receipt)?;
-    receipt.phase = "full-suite".to_owned();
-    persist(options, receipt)?;
-    #[cfg(test)]
-    tests::phase_hook("before-suite", control);
-    let frozen = receipt.clone();
-    let single = single_options(options);
-    let manifest = load_manifest(&single)?;
-    let suite_started = super::super::unix_nanoseconds()?;
-    let aggregate = execute(&single, verifier, &manifest, control, &mut || {
-        checkpoint(options, verifier, &frozen, control)
-    })?;
-    require_completed_aggregate(&aggregate)?;
-    let equality = receipt
-        .equality
-        .as_ref()
-        .ok_or_else(|| DevError::corrupt("equality missing"))?;
-    receipt.suite = Some(SuiteBinding {
-        exact: Disposition::FreshExecution,
-        latest: Disposition::BoundWithinSamePair,
-        source_aggregate: receipt_identity(&single.evidence_root.join("receipt.json"))?,
-        equality_digest: evidence::VerificationDigest::of(&evidence::encode_json(equality)?),
-        pair_root: receipt.evidence_root.clone(),
-        scope: receipt.scope,
-        hosted_context: receipt.hosted_context.clone(),
-        started_unix_nanoseconds: suite_started,
-        completed_unix_nanoseconds: super::super::unix_nanoseconds()?,
-        expensive_executions: aggregate.children.len(),
-    });
-    checkpoint(options, verifier, receipt, control)
-}
-
-fn require_completed_aggregate(aggregate: &Receipt) -> Result<(), DevError> {
-    if aggregate.status == Status::FreshPassed {
-        return Ok(());
+    if options.tier == Tier::CandidateInstallation {
+        receipt.phase = "installation-recovery".to_owned();
+        persist(options, receipt)?;
+        receipt.recovery = Some(recovery::run(
+            options,
+            receipt.routes[0]
+                .admission
+                .as_ref()
+                .ok_or_else(|| DevError::corrupt("missing recovery archive"))?,
+            control,
+        )?);
+        persist(options, receipt)?;
+        receipt.phase = "legacy-manager-recovery".to_owned();
+        persist(options, receipt)?;
+        receipt.legacy = Some(legacy::run(
+            options,
+            &receipt.routes[0]
+                .admission
+                .clone()
+                .ok_or_else(|| DevError::corrupt("missing legacy recovery archive"))?,
+            control,
+        )?);
+        persist(options, receipt)?;
     }
-    let failure = aggregate
-        .children
-        .iter()
-        .find(|child| matches!(child.status, Status::Failed | Status::Unavailable))
-        .and_then(|child| child.failure.clone())
-        .unwrap_or_else(|| {
-            bounded_diagnostic(
-                aggregate
-                    .failure
-                    .as_deref()
-                    .unwrap_or("aggregate did not complete"),
-            )
-        });
-    Err(DevError::corrupt(format!(
-        "pair behavioral aggregate failed: {failure}; aggregate evidence={}",
-        bounded_diagnostic(
-            &Path::new(&aggregate.evidence_root)
-                .join("receipt.json")
-                .display()
-                .to_string()
-        ),
-    )))
+    checkpoint(options, verifier, receipt, control)
 }
 
 fn checkpoint(
@@ -564,8 +544,17 @@ fn frozen_inputs(
             && context()? == receipt.hosted_context,
         "pair verifier, handoff, environment or hosted context changed",
     )?;
+    let expected_routes = if options.tier == Tier::BoundaryExactSmoke {
+        vec![Route::Exact]
+    } else {
+        vec![Route::Exact, Route::Latest]
+    };
     require(
-        receipt.routes[0].route == Route::Exact && receipt.routes[1].route == Route::Latest,
+        receipt
+            .routes
+            .iter()
+            .map(|route| route.route)
+            .eq(expected_routes),
         "pair routes omitted, duplicated or reordered",
     )?;
     for route in &receipt.routes {
@@ -585,14 +574,14 @@ fn frozen_inputs(
                     extraction(&route.route.extraction(options), admitted)? == *observed,
                     "pair extraction changed",
                 )?;
-                let mut single = single_options(options);
-                single.candidate = route.route.extraction(options).join("lkjscript");
-                single.manifest = route
-                    .route
-                    .extraction(options)
-                    .join("RELEASE-MANIFEST.json");
                 require(
-                    load_manifest(&single)? == admitted.manifest,
+                    process::read_bounded(
+                        &route
+                            .route
+                            .extraction(options)
+                            .join("RELEASE-MANIFEST.json"),
+                        1024 * 1024,
+                    )? == archive::canonical_json(&admitted.manifest)?,
                     "admission manifest differs from actual extraction",
                 )?;
             }
@@ -617,8 +606,8 @@ fn validate_admission(
     require(
         admitted.manifest.source.expected_release_tag == options.tag
             && admitted.manifest.source.tagged_commit_sha == options.commit
-            && admitted.manifest.publication_mode == options.publication,
-        "pair tag, source or publication mismatch",
+            && admitted.manifest.is_publication_neutral(),
+        "pair tag, source or neutral content encoding mismatch",
     )?;
     require(
         archive::sha256_bytes(&archive::canonical_json(&admitted.manifest)?)?
@@ -639,7 +628,11 @@ fn validate_admission(
     )
 }
 
-fn compare(options: &PairOptions, routes: &[RouteReceipt; 2]) -> Result<Equality, DevError> {
+fn compare(options: &PairOptions, routes: &[RouteReceipt]) -> Result<Equality, DevError> {
+    require(
+        routes.len() == 2,
+        "equality requires both independent routes",
+    )?;
     for route in routes {
         require(
             route.admission.is_some() && route.extraction.is_some(),
@@ -730,31 +723,6 @@ fn stream_equal(left: &Path, right: &Path) -> Result<u64, DevError> {
     Ok(length)
 }
 
-fn single_options(options: &PairOptions) -> Options {
-    Options {
-        verify: true,
-        candidate: installation::candidate(options, Route::Exact),
-        manifest: installation::candidate(options, Route::Exact)
-            .with_file_name("RELEASE-MANIFEST.json"),
-        tag: options.tag.clone(),
-        commit: options.commit.clone(),
-        publication: options.publication,
-        boundary: match options.acquisition {
-            Acquisition::Anonymous => Boundary::ExactDownload,
-            Acquisition::Simulated => Boundary::PrePublication,
-        },
-        verifier_identity: options.verifier_identity.clone(),
-        expected_verifier_sha256: options.expected_verifier_sha256.clone(),
-        expected_verifier_bytes: options.expected_verifier_bytes,
-        evidence_root: options.evidence_root.join("full-suite"),
-    }
-}
-
-#[cfg(test)]
-fn read(options: &PairOptions, verifier: &Path) -> Result<PairReceipt, DevError> {
-    read_controlled(options, verifier, None)
-}
-
 fn read_controlled(
     options: &PairOptions,
     verifier: &Path,
@@ -816,7 +784,7 @@ fn validate(receipt: &PairReceipt, options: &PairOptions, verifier: &Path) -> Re
             && receipt.cleanup_complete
             && receipt.acquisition == options.acquisition
             && receipt.scope == scope(options.acquisition)
-            && receipt.publication == options.publication
+            && receipt.tier == options.tier
             && receipt.tag == options.tag
             && receipt.source_commit == options.commit
             && receipt.evidence_root == options.evidence_root.display().to_string()
@@ -845,61 +813,56 @@ fn validate(receipt: &PairReceipt, options: &PairOptions, verifier: &Path) -> Re
             "route lifecycle is outside this pair",
         )?;
     }
-    recovery::validate(
-        options,
-        receipt.routes[0]
-            .admission
-            .as_ref()
-            .ok_or_else(|| DevError::corrupt("missing recovery admission"))?,
-        receipt
-            .recovery
-            .as_ref()
-            .ok_or_else(|| DevError::corrupt("missing two-version recovery proof"))?,
-    )?;
-    let equality = receipt
-        .equality
-        .as_ref()
-        .ok_or_else(|| DevError::corrupt("missing complete content equality"))?;
-    let suite = receipt
-        .suite
-        .as_ref()
-        .ok_or_else(|| DevError::corrupt("missing source aggregate binding"))?;
-    let single = single_options(options);
-    require(
-        suite.exact == Disposition::FreshExecution
-            && suite.latest == Disposition::BoundWithinSamePair
-            && suite.expensive_executions == ORACLES.len()
-            && suite.pair_root == receipt.evidence_root
-            && suite.scope == receipt.scope
-            && suite.hosted_context == receipt.hosted_context
-            && suite.equality_digest
-                == evidence::VerificationDigest::of(&evidence::encode_json(equality)?)
-            && suite.source_aggregate
-                == receipt_identity(&single.evidence_root.join("receipt.json"))?,
-        "pair shared disposition or source reference is foreign",
-    )?;
-    let manifest = load_manifest(&single)?;
-    let aggregate = read_receipt(&single, verifier, &manifest)?;
-    require(
-        aggregate.hosted_context == receipt.hosted_context
-            && aggregate.children.len() == suite.expensive_executions
-            && suite.started_unix_nanoseconds >= receipt.started_unix_nanoseconds
-            && aggregate.started_unix_nanoseconds >= suite.started_unix_nanoseconds
-            && aggregate
-                .completed_unix_nanoseconds
-                .is_some_and(|v| v <= suite.completed_unix_nanoseconds)
-            && Some(suite.completed_unix_nanoseconds) <= receipt.completed_unix_nanoseconds
-            && receipt.routes.iter().all(|r| {
-                r.lifecycle
-                    .as_ref()
-                    .is_some_and(|l| l.completed_unix_nanoseconds <= suite.started_unix_nanoseconds)
-            }),
-        "source aggregate is outside this pair invocation",
-    )?;
+    match (options.tier, &receipt.recovery) {
+        (Tier::CandidateInstallation, Some(recovered)) => recovery::validate(
+            options,
+            receipt.routes[0]
+                .admission
+                .as_ref()
+                .ok_or_else(|| DevError::corrupt("missing recovery admission"))?,
+            recovered,
+        )?,
+        (Tier::BoundarySmoke | Tier::BoundaryExactSmoke, None) => (),
+        _ => {
+            return Err(DevError::corrupt(
+                "installation recovery disposition disagrees with tier",
+            ));
+        }
+    }
+    match (options.tier, &receipt.legacy) {
+        (Tier::CandidateInstallation, Some(legacy)) => legacy::validate(options, legacy)?,
+        (Tier::BoundarySmoke | Tier::BoundaryExactSmoke, None) => (),
+        _ => {
+            return Err(DevError::corrupt(
+                "legacy recovery disposition disagrees with tier",
+            ));
+        }
+    }
+    if options.tier == Tier::BoundaryExactSmoke {
+        require(
+            receipt.equality.is_none(),
+            "exact-only boundary asserted latest equality",
+        )?;
+    } else {
+        require(
+            receipt.equality.as_ref() == Some(&compare(options, &receipt.routes)?),
+            "pair content equality is missing or changed",
+        )?;
+    }
     require(clean(options, receipt)?, "pair cleanup incomplete")
 }
 
 fn clean(options: &PairOptions, receipt: &PairReceipt) -> Result<bool, DevError> {
+    for directory in ["recovery", "legacy-manager"] {
+        if options
+            .evidence_root
+            .join(directory)
+            .join("runtime")
+            .try_exists()?
+        {
+            return Ok(false);
+        }
+    }
     for route in &receipt.routes {
         if !route.lifecycle.as_ref().is_some_and(|l| l.cleanup_complete) {
             return Ok(false);
@@ -913,17 +876,10 @@ fn clean(options: &PairOptions, receipt: &PairReceipt) -> Result<bool, DevError>
             return Ok(false);
         }
     }
-    let single = options.evidence_root.join("full-suite");
-    if !single.is_dir() {
-        return Ok(false);
-    }
-    if fs::read_dir(single)?.any(|entry| {
-        entry.map_or(true, |e| {
-            e.file_name().to_string_lossy().starts_with(".child-state-")
-        })
-    }) {
-        return Ok(false);
-    }
+    require(
+        !options.evidence_root.join("full-suite").try_exists()?,
+        "boundary unexpectedly contains broad application evidence",
+    )?;
     Ok(true)
 }
 fn persist(options: &PairOptions, receipt: &PairReceipt) -> Result<(), DevError> {
@@ -983,7 +939,9 @@ fn context() -> Result<HostedContext, DevError> {
 }
 fn validate_options(options: &PairOptions, verifier: &Path) -> Result<(), DevError> {
     directory(&options.exact_assets)?;
-    directory(&options.latest_assets)?;
+    if options.tier != Tier::BoundaryExactSmoke {
+        directory(&options.latest_assets)?;
+    }
     require(
         options.evidence_root.is_absolute(),
         "pair evidence root must be absolute",
@@ -1012,21 +970,28 @@ fn validate_options(options: &PairOptions, verifier: &Path) -> Result<(), DevErr
         ) && !verifier.starts_with(&options.evidence_root),
         "pair output overlaps verifier handoff",
     )?;
-    require(
-        options.exact_assets != options.latest_assets
-            && !options.exact_assets.starts_with(&options.latest_assets)
-            && !options.latest_assets.starts_with(&options.exact_assets),
-        "pair routes must have separate canonical directories",
-    )?;
-    for input in [&options.exact_assets, &options.latest_assets] {
+    if options.tier != Tier::BoundaryExactSmoke {
+        require(
+            options.exact_assets != options.latest_assets
+                && !options.exact_assets.starts_with(&options.latest_assets)
+                && !options.latest_assets.starts_with(&options.exact_assets),
+            "pair routes must have separate canonical directories",
+        )?;
+    }
+    let inputs = if options.tier == Tier::BoundaryExactSmoke {
+        vec![&options.exact_assets]
+    } else {
+        vec![&options.exact_assets, &options.latest_assets]
+    };
+    for input in &inputs {
         require(
             !options.evidence_root.starts_with(input) && !input.starts_with(&options.evidence_root),
             "pair input and output roots overlap",
         )?;
-        inputs(input)?;
+        self::inputs(input)?;
     }
     let mut identities = std::collections::BTreeSet::new();
-    for directory in [&options.exact_assets, &options.latest_assets] {
+    for directory in inputs {
         for name in [
             archive::ARCHIVE_NAME,
             archive::CHECKSUM_NAME,
@@ -1062,7 +1027,6 @@ fn parse_options(
             "--latest-assets",
             "--tag",
             "--commit",
-            "--publication",
             "--acquisition",
             "--evidence-root",
             "--verifier-identity",
@@ -1071,19 +1035,26 @@ fn parse_options(
         ],
     )?;
     let exact_assets = PathBuf::from(verifier::required(&mut values, "--exact-assets")?);
-    let latest_assets = PathBuf::from(verifier::required(&mut values, "--latest-assets")?);
+    let exact_only = matches!(operation, "exact-run" | "exact-verify");
+    let latest_assets = if exact_only {
+        require(
+            !values.contains_key("--latest-assets"),
+            "exact-only boundary cannot claim latest assets",
+        )?;
+        PathBuf::new()
+    } else {
+        PathBuf::from(verifier::required(&mut values, "--latest-assets")?)
+    };
     let tag = verifier::required(&mut values, "--tag")?;
     verifier::validate_tag(&tag)?;
     let commit = verifier::required(&mut values, "--commit")?;
     super::super::validate_git_sha(&commit, "pair source")?;
-    let publication =
-        super::super::parse_publication(verifier::required(&mut values, "--publication")?)?;
     let acquisition = match verifier::required(&mut values, "--acquisition")?.as_str() {
         "simulated" => Acquisition::Simulated,
-        "anonymous" if publication == PublicationMode::Release => Acquisition::Anonymous,
+        "anonymous" => Acquisition::Anonymous,
         _ => {
             return Err(DevError::usage(
-                "pair acquisition must be simulated, or anonymous with release publication",
+                "pair acquisition must be simulated or anonymous",
             ));
         }
     };
@@ -1095,12 +1066,26 @@ fn parse_options(
         .filter(|n| *n > 0)
         .ok_or_else(|| DevError::usage("expected verifier bytes must be positive"))?;
     Ok(PairOptions {
-        verify: operation == "pair-verify",
+        verify: matches!(
+            operation,
+            "pair-verify" | "exact-verify" | "installation-verify"
+        ),
         exact_assets,
         latest_assets,
         tag,
         commit,
-        publication,
+        tier: match operation {
+            "pair-run" | "pair-verify" => Tier::BoundarySmoke,
+            "exact-run" | "exact-verify" => Tier::BoundaryExactSmoke,
+            "installation-run" | "installation-verify" if acquisition == Acquisition::Simulated => {
+                Tier::CandidateInstallation
+            }
+            _ => {
+                return Err(DevError::usage(
+                    "installation acceptance requires simulated acquisition",
+                ));
+            }
+        },
         acquisition,
         evidence_root: PathBuf::from(verifier::required(&mut values, "--evidence-root")?),
         verifier_identity: PathBuf::from(verifier::required(&mut values, "--verifier-identity")?),
@@ -1118,7 +1103,7 @@ fn summary_value(
 ) -> Result<serde_json::Value, DevError> {
     let identity = receipt_identity(&options.evidence_root.join("receipt.json"))?;
     Ok(
-        serde_json::json!({"status": if receipt.status == Status::FreshPassed {"passed"} else {"failed"}, "scope":receipt.scope, "tag":receipt.tag,"source_commit":receipt.source_commit,"receipt":identity,"suite":receipt.suite,"cleanup_complete":receipt.cleanup_complete,"failure":receipt.failure,"elapsed_nanoseconds":receipt.elapsed_nanoseconds}),
+        serde_json::json!({"status": if receipt.status == Status::FreshPassed {"passed"} else {"failed"}, "scope":receipt.scope, "tier":receipt.tier,"tag":receipt.tag,"source_commit":receipt.source_commit,"receipt":identity,"heavy_owner_invocations":0,"product_build_invocations":0,"cleanup_complete":receipt.cleanup_complete,"failure":receipt.failure,"elapsed_nanoseconds":receipt.elapsed_nanoseconds}),
     )
 }
 

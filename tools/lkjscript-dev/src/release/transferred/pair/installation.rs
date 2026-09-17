@@ -1,5 +1,6 @@
 //! Installed-route proof within this pair. Original script bytes are always executed unchanged.
 use super::*;
+use crate::release::admission;
 use lkjscript::platform::control::CompactRecord;
 use std::ffi::OsStr;
 use std::os::unix::fs::MetadataExt;
@@ -19,7 +20,7 @@ pub(super) struct Installation {
     command: Vec<String>,
     environment: BTreeMap<String, String>,
     process: process::ProcessObservation,
-    cleanup: Option<process::ProcessObservation>,
+    cleanup: Vec<CleanupCommand>,
     container_id: Option<FileBinding>,
     installed: Vec<FileBinding>,
     receipt: FileBinding,
@@ -27,6 +28,13 @@ pub(super) struct Installation {
     pointer: String,
     fixture_requests: Option<FileBinding>,
     pub(super) cleanup_complete: bool,
+}
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CleanupCommand {
+    name: String,
+    command: Vec<String>,
+    process: process::ProcessObservation,
 }
 pub(super) fn prefix(options: &PairOptions, route: Route) -> PathBuf {
     route.root(options).join("installation")
@@ -45,13 +53,11 @@ fn archive_url(options: &PairOptions) -> String {
         archive::ARCHIVE_NAME
     )
 }
-fn container_name(options: &PairOptions, route: Route) -> Result<String, DevError> {
-    Ok(format!(
-        "lkjscript-bootstrap-{}-{}",
-        route.name(),
-        &archive::sha256_bytes(options.evidence_root.as_os_str().as_encoded_bytes())?.as_str()
-            [..16]
-    ))
+fn role(route: Route) -> &'static str {
+    match route {
+        Route::Exact => "musl",
+        Route::Latest => "older-glibc",
+    }
 }
 fn image(route: Route) -> &'static str {
     match route {
@@ -59,68 +65,68 @@ fn image(route: Route) -> &'static str {
         Route::Latest => target::OLDER_GLIBC_USERLAND_IMAGE,
     }
 }
+fn pinned_userland(options: &PairOptions) -> bool {
+    options.tier == Tier::CandidateInstallation
+}
 fn command(options: &PairOptions, route: Route) -> Result<Vec<String>, DevError> {
     let script = route
         .assets(options)
         .join(super::super::super::bootstrap::NAME);
-    let mut args = match options.acquisition {
-        Acquisition::Anonymous => vec!["/bin/sh".to_owned()],
-        Acquisition::Simulated => {
-            let uid = fs::metadata(route.root(options))?.uid();
-            let gid = fs::metadata(route.root(options))?.gid();
-            vec![
-                "docker".to_owned(),
-                "run".to_owned(),
-                "--name".to_owned(),
-                container_name(options, route)?,
-                "--cidfile".to_owned(),
-                route
-                    .root(options)
-                    .join("bootstrap-container.id")
-                    .display()
-                    .to_string(),
-                "--platform".to_owned(),
-                "linux/amd64".to_owned(),
-                "--network".to_owned(),
-                "none".to_owned(),
-                "--user".to_owned(),
-                format!("{uid}:{gid}"),
-                "--volume".to_owned(),
-                format!(
-                    "{}:{}",
-                    options.evidence_root.display(),
-                    options.evidence_root.display()
-                ),
-                "--volume".to_owned(),
-                format!(
-                    "{}:{}:ro",
-                    route.assets(options).display(),
-                    route.assets(options).display()
-                ),
-                "--env".to_owned(),
-                format!(
-                    "PATH={}/acquisition-fixture:/usr/bin:/bin",
-                    route.root(options).display()
-                ),
-                "--env".to_owned(),
-                format!("TMPDIR={}/runtime", route.root(options).display()),
-                "--env".to_owned(),
-                format!(
-                    "LKJSCRIPT_FIXTURE_ARCHIVE={}",
-                    route.assets(options).join(archive::ARCHIVE_NAME).display()
-                ),
-                "--env".to_owned(),
-                format!("LKJSCRIPT_FIXTURE_URL={}", archive_url(options)),
-                "--env".to_owned(),
-                format!(
-                    "LKJSCRIPT_FIXTURE_LOG={}/acquisition-requests.txt",
-                    route.root(options).display()
-                ),
-                "--entrypoint".to_owned(),
-                "/bin/sh".to_owned(),
-                image(route).to_owned(),
-            ]
-        }
+    let mut args = if !pinned_userland(options) {
+        vec!["/bin/sh".to_owned()]
+    } else {
+        let uid = fs::metadata(route.root(options))?.uid();
+        let gid = fs::metadata(route.root(options))?.gid();
+        let owned = admission::read_owned_container(&route.root(options), role(route))?
+            .ok_or_else(|| DevError::corrupt("bootstrap container ownership intent missing"))?;
+        let mut command = vec!["docker".to_owned(), "run".to_owned()];
+        command.extend(admission::owned_container_options(
+            &route.root(options),
+            &owned,
+        ));
+        command.extend([
+            "--platform".to_owned(),
+            "linux/amd64".to_owned(),
+            "--network".to_owned(),
+            "none".to_owned(),
+            "--user".to_owned(),
+            format!("{uid}:{gid}"),
+            "--volume".to_owned(),
+            format!(
+                "{}:{}",
+                options.evidence_root.display(),
+                options.evidence_root.display()
+            ),
+            "--volume".to_owned(),
+            format!(
+                "{}:{}:ro",
+                route.assets(options).display(),
+                route.assets(options).display()
+            ),
+            "--env".to_owned(),
+            format!(
+                "PATH={}/acquisition-fixture:/usr/bin:/bin",
+                route.root(options).display()
+            ),
+            "--env".to_owned(),
+            format!("TMPDIR={}/runtime", route.root(options).display()),
+            "--env".to_owned(),
+            format!(
+                "LKJSCRIPT_FIXTURE_ARCHIVE={}",
+                route.assets(options).join(archive::ARCHIVE_NAME).display()
+            ),
+            "--env".to_owned(),
+            format!("LKJSCRIPT_FIXTURE_URL={}", archive_url(options)),
+            "--env".to_owned(),
+            format!(
+                "LKJSCRIPT_FIXTURE_LOG={}/acquisition-requests.txt",
+                route.root(options).display()
+            ),
+            "--entrypoint".to_owned(),
+            "/bin/sh".to_owned(),
+            image(route).to_owned(),
+        ]);
+        command
     };
     args.extend([
         script.display().to_string(),
@@ -130,7 +136,7 @@ fn command(options: &PairOptions, route: Route) -> Result<Vec<String>, DevError>
     Ok(args)
 }
 fn environment(options: &PairOptions, route: Route) -> BTreeMap<String, String> {
-    BTreeMap::from([
+    let mut values = BTreeMap::from([
         ("LANG".to_owned(), "C".to_owned()),
         ("PATH".to_owned(), "/usr/bin:/bin".to_owned()),
         (
@@ -141,7 +147,31 @@ fn environment(options: &PairOptions, route: Route) -> BTreeMap<String, String> 
             "TMPDIR".to_owned(),
             route.root(options).join("runtime").display().to_string(),
         ),
-    ])
+    ]);
+    if options.acquisition == Acquisition::Simulated && !pinned_userland(options) {
+        let root = route.root(options);
+        values.insert(
+            "PATH".to_owned(),
+            format!(
+                "{}:/usr/bin:/bin",
+                root.join("acquisition-fixture").display()
+            ),
+        );
+        values.insert(
+            "LKJSCRIPT_FIXTURE_ARCHIVE".to_owned(),
+            route
+                .assets(options)
+                .join(archive::ARCHIVE_NAME)
+                .display()
+                .to_string(),
+        );
+        values.insert("LKJSCRIPT_FIXTURE_URL".to_owned(), archive_url(options));
+        values.insert(
+            "LKJSCRIPT_FIXTURE_LOG".to_owned(),
+            root.join("acquisition-requests.txt").display().to_string(),
+        );
+    }
+    values
 }
 const CURL_FIXTURE: &str = "#!/bin/sh\nset -eu\nprintf '%s\\n' \"$@\" > \"$LKJSCRIPT_FIXTURE_LOG\"\noutput=''\nurl=''\nwhile [ \"$#\" -gt 0 ]; do\n case \"$1\" in --output) output=$2; shift 2 ;; *) url=$1; shift ;; esac\ndone\n[ \"$url\" = \"$LKJSCRIPT_FIXTURE_URL\" ]\n[ -n \"$output\" ]\ncp \"$LKJSCRIPT_FIXTURE_ARCHIVE\" \"$output\"\n";
 
@@ -163,6 +193,11 @@ pub(super) fn run(
         // Latest has moved in the simulated origin after these script bytes were acquired.
         archive::write_new(&fixture.join("latest-tag"), b"v999.0.0\n", 0o644)?;
     }
+    let owned = if pinned_userland(options) {
+        Some(admission::prepare_owned_container(&root, role(route))?)
+    } else {
+        None
+    };
     let command = command(options, route)?;
     let environment = environment(options, route);
     let spec = process::ProcessSpec {
@@ -177,49 +212,46 @@ pub(super) fn run(
         unavailable_exit_code: None,
     };
     let observation = process::run_supervised(&spec, &root, Some(control));
-    let container_path = root.join("bootstrap-container.id");
-    let container_id = if options.acquisition == Acquisition::Simulated && container_path.is_file()
-    {
-        let bytes = process::read_bounded(&container_path, 128)?;
-        let id = std::str::from_utf8(&bytes)
-            .map_err(|_| DevError::corrupt("owned container ID is not UTF-8"))?
-            .trim();
+    let mut cleanup = Vec::new();
+    let cleanup_result = owned.as_ref().map_or(Ok(()), |owned| {
+        admission::cleanup_owned_container(&root, owned, |name, command| {
+            let spec = process::ProcessSpec {
+                command: command.clone(),
+                cwd: root.clone(),
+                environment: environment.clone(),
+                timeout: Duration::from_secs(30),
+                maximum_stdout_bytes: MAXIMUM_OUTPUT_BYTES,
+                maximum_stderr_bytes: MAXIMUM_OUTPUT_BYTES,
+                stdout_path: root.join(format!("{name}.stdout.log")),
+                stderr_path: root.join(format!("{name}.stderr.log")),
+                unavailable_exit_code: None,
+            };
+            let observation = process::run(&spec, &root);
+            let observed = CleanupCommand {
+                name: name.to_owned(),
+                command,
+                process: observation,
+            };
+            let output = cleanup_output(&root, &observed);
+            cleanup.push(observed);
+            output
+        })
+    });
+    // Publish original cleanup observations even when bootstrap failed or was cancelled.
+    evidence::publish_json(&root.join("bootstrap-cleanup.json"), &cleanup)?;
+    let cleanup_complete = cleanup_result.is_ok();
+    cleanup_result?;
+    let container_id = if let Some(owned) = &owned {
         require(
-            id.len() == 64
-                && id
-                    .bytes()
-                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
-            "owned container ID malformed; preserve the failure and inspect only this fixture",
+            admission::owned_container_cid(&root, owned)?.is_some(),
+            "successful bootstrap omitted its complete container identity",
         )?;
-        Some((binding(&container_path)?, id.to_owned()))
+        Some(binding(
+            &root.join(format!("{}-container.cid", role(route))),
+        )?)
     } else {
         None
     };
-    let cleanup = if let Some((_, id)) = &container_id {
-        let cleanup = process::ProcessSpec {
-            command: vec![
-                "docker".to_owned(),
-                "rm".to_owned(),
-                "--force".to_owned(),
-                id.clone(),
-            ],
-            cwd: root.clone(),
-            environment: environment.clone(),
-            timeout: Duration::from_secs(30),
-            maximum_stdout_bytes: MAXIMUM_OUTPUT_BYTES,
-            maximum_stderr_bytes: MAXIMUM_OUTPUT_BYTES,
-            stdout_path: root.join("bootstrap-cleanup.stdout.log"),
-            stderr_path: root.join("bootstrap-cleanup.stderr.log"),
-            unavailable_exit_code: None,
-        };
-        Some(process::run(&cleanup, &root))
-    } else {
-        None
-    };
-    let cleanup_complete = options.acquisition == Acquisition::Anonymous
-        || cleanup
-            .as_ref()
-            .is_some_and(|p| p.status == process::ProcessStatus::Passed);
     require(
         observation.status == process::ProcessStatus::Passed && cleanup_complete,
         "bootstrap execution or owned container cleanup failed; retain logs and owned prefix",
@@ -238,7 +270,7 @@ pub(super) fn run(
         environment,
         process: observation,
         cleanup,
-        container_id: container_id.map(|(proof, _)| proof),
+        container_id,
         installed,
         receipt,
         candidate,
@@ -282,6 +314,32 @@ fn payloads(
         "installed static target differs",
     )?;
     Ok(payloads)
+}
+fn cleanup_output(root: &Path, observed: &CleanupCommand) -> Result<Vec<u8>, DevError> {
+    let p = &observed.process;
+    require(
+        p.status == process::ProcessStatus::Passed
+            && p.exit_code == Some(0)
+            && p.signal.is_none()
+            && p.reason.is_none()
+            && !p.stdout_limit_exhausted
+            && !p.stderr_limit_exhausted
+            && p.stdout_limit_bytes == MAXIMUM_OUTPUT_BYTES
+            && p.stderr_limit_bytes == MAXIMUM_OUTPUT_BYTES,
+        "owned bootstrap cleanup failed, was interrupted or exhausted",
+    )?;
+    for (proof, suffix) in [(&p.stdout, "stdout"), (&p.stderr, "stderr")] {
+        let name = format!("{}.{}.log", observed.name, suffix);
+        regular(&root.join(&name))?;
+        require(
+            proof.path == name && *proof == evidence::proof(&root.join(&name), name.clone())?,
+            "owned bootstrap cleanup original log changed",
+        )?;
+    }
+    process::read_bounded(
+        &root.join(format!("{}.stdout.log", observed.name)),
+        MAXIMUM_OUTPUT_BYTES,
+    )
 }
 pub(super) fn validate(
     options: &PairOptions,
@@ -358,7 +416,7 @@ pub(super) fn validate(
     match options.acquisition {
         Acquisition::Anonymous => require(
             receipt.fixture_requests.is_none()
-                && receipt.cleanup.is_none()
+                && receipt.cleanup.is_empty()
                 && receipt.container_id.is_none()
                 && !root.join("acquisition-fixture").exists(),
             "public acquisition contains simulated inputs",
@@ -371,10 +429,15 @@ pub(super) fn validate(
             )?;
             require(
                 receipt.fixture_requests == Some(binding(&root.join("acquisition-requests.txt"))?)
-                    && receipt.container_id == Some(binding(&root.join("bootstrap-container.id"))?)
-                    && receipt.cleanup.as_ref().is_some_and(|p| {
-                        p.status == process::ProcessStatus::Passed && p.exit_code == Some(0)
-                    }),
+                    && if pinned_userland(options) {
+                        receipt.container_id
+                            == Some(binding(
+                                &root.join(format!("{}-container.cid", role(route))),
+                            )?)
+                            && !receipt.cleanup.is_empty()
+                    } else {
+                        receipt.container_id.is_none() && receipt.cleanup.is_empty()
+                    },
                 "simulated acquisition or cleanup observation missing",
             )?;
             let requested = String::from_utf8(process::read_bounded(
@@ -425,41 +488,30 @@ pub(super) fn validate(
                     && output.file_name() == Some(OsStr::new("archive.tar.gz")),
                 "bootstrap acquisition escaped its private temporary storage",
             )?;
-            let cleanup = receipt
-                .cleanup
-                .as_ref()
-                .ok_or_else(|| DevError::corrupt("container cleanup missing"))?;
-            require(
-                cleanup.signal.is_none()
-                    && cleanup.reason.is_none()
-                    && !cleanup.stdout_limit_exhausted
-                    && !cleanup.stderr_limit_exhausted,
-                "container cleanup was interrupted or exhausted",
-            )?;
-            for (proof, name) in [
-                (&cleanup.stdout, "bootstrap-cleanup.stdout.log"),
-                (&cleanup.stderr, "bootstrap-cleanup.stderr.log"),
-            ] {
-                require(
-                    proof.path == name
-                        && *proof == evidence::proof(&root.join(name), name.to_owned())?,
-                    "container cleanup log changed",
-                )?;
+            if !pinned_userland(options) {
+                return Ok(());
             }
+            let owned = admission::read_owned_container(&root, role(route))?
+                .ok_or_else(|| DevError::corrupt("bootstrap ownership intent missing"))?;
+            let mut observations = receipt.cleanup.iter();
+            admission::cleanup_owned_container(&root, &owned, |name, command| {
+                let observed = observations
+                    .next()
+                    .ok_or_else(|| DevError::corrupt("owned cleanup observation missing"))?;
+                require(
+                    observed.name == name && observed.command == command,
+                    "owned cleanup command was redirected or skipped",
+                )?;
+                cleanup_output(&root, observed)
+            })?;
             require(
-                process::read_bounded(
-                    &root.join("bootstrap-cleanup.stdout.log"),
-                    MAXIMUM_OUTPUT_BYTES,
-                )? == format!(
-                    "{}\n",
-                    String::from_utf8_lossy(&process::read_bounded(
-                        &root.join("bootstrap-container.id"),
-                        128
-                    )?)
-                    .trim()
-                )
-                .as_bytes(),
-                "container cleanup targeted another owner",
+                observations.next().is_none(),
+                "unexpected extra owned cleanup command",
+            )?;
+            require(
+                process::read_bounded(&root.join("bootstrap-cleanup.json"), MAXIMUM_RECEIPT_BYTES)?
+                    == evidence::encode_json(&receipt.cleanup)?,
+                "bootstrap cleanup original receipt changed",
             )?;
         }
     }

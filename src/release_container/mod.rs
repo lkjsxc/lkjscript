@@ -2,6 +2,7 @@
 //! contributor release production adds its current pinned tool and provenance policy.
 
 mod elf;
+mod encoding;
 pub mod model;
 pub use elf::inspect_static_elf_bytes;
 use model::{ReleaseManifest, Sha256Digest};
@@ -239,19 +240,39 @@ pub fn validate_manifest(manifest: &ReleaseManifest) -> Result<(), ContainerErro
     )?;
     validate_git_sha(&manifest.source.tagged_commit_sha, "manifest commit SHA")?;
     validate_capabilities_digest(&manifest.executable.capabilities_digest)?;
-    match (
-        manifest.publication_mode,
-        manifest.source.annotated_tag_object_sha.as_deref(),
-    ) {
-        (model::PublicationMode::DryRun, None) => {}
-        (model::PublicationMode::Release, Some(object)) => {
-            validate_git_sha(object, "manifest annotated tag object SHA")?;
+    match &manifest.encoding {
+        model::ManifestEncoding::PublicationNeutral { build } => {
+            if build.command
+                != [
+                    "cargo",
+                    "build",
+                    "--release",
+                    "--locked",
+                    "--bin",
+                    "lkjscript",
+                    "--target",
+                    TARGET_TRIPLE,
+                ]
+            {
+                return Err(ContainerError::corrupt(
+                    "neutral manifest build command is not the admitted target configuration",
+                ));
+            }
         }
-        _ => {
-            return Err(ContainerError::corrupt(
-                "manifest tag-object state disagrees with publication mode",
-            ));
-        }
+        model::ManifestEncoding::Legacy {
+            publication_mode,
+            annotated_tag_object_sha,
+        } => match (publication_mode, annotated_tag_object_sha.as_deref()) {
+            (model::PublicationMode::DryRun, None) => {}
+            (model::PublicationMode::Release, Some(object)) => {
+                validate_git_sha(object, "manifest annotated tag object SHA")?;
+            }
+            _ => {
+                return Err(ContainerError::corrupt(
+                    "manifest tag-object state disagrees with publication mode",
+                ));
+            }
+        },
     }
     if manifest.executable.elf.class != "ELF64"
         || manifest.executable.elf.machine != "x86-64"

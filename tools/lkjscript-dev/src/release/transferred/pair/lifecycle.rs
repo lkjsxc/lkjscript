@@ -4,7 +4,7 @@ use lkjscript::platform::control::{CompactRecord, decode_logical_change_plan};
 const TIMEOUT: Duration = Duration::from_secs(120);
 const MAXIMUM_REQUEST_BYTES: u64 = 64 * 1024;
 const MAXIMUM_REVIEW_BYTES: u64 = 1024 * 1024;
-const COMMANDS: [&str; 27] = [
+const COMMANDS: [&str; 30] = [
     "capabilities",
     "change-capabilities",
     "runners-capabilities",
@@ -27,11 +27,14 @@ const COMMANDS: [&str; 27] = [
     "definition-replaced",
     "numerical-definition-replaced",
     "run-replaced",
+    "rejected-apply",
+    "run-after-rejection",
     "numerical-run-replaced",
     "check",
     "build",
     "run",
     "status-final",
+    "standalone-structural",
 ];
 
 // Literal product authoring. Only the accepted base is supplied by the surrounding request.
@@ -219,6 +222,7 @@ replace.body function={} body=$numerical-replacement
                 required(&self.numerical_parameter, "discovered numerical parameter")?,
                 required(&self.numerical_function, "discovered numerical function")?
             )),
+            "rejected" => Ok(self.request("replace")?.replace("(f64 1.0)", "(f64 2.0)")),
             _ => Err(DevError::corrupt("unknown route request")),
         }
     }
@@ -232,7 +236,9 @@ replace.body function={} body=$numerical-replacement
         let root = route.root(options);
         let project = root.join("runtime/project").display().to_string();
         let artifact = root.join("artifact.lkja").display().to_string();
-        let request_name = if name.starts_with("create-") {
+        let request_name = if name == "rejected-apply" {
+            "rejected"
+        } else if name.starts_with("create-") {
             "create"
         } else {
             "replace"
@@ -243,6 +249,10 @@ replace.body function={} body=$numerical-replacement
             .to_string();
         let plan = root
             .join(format!("{request_name}.logical-plan"))
+            .display()
+            .to_string();
+        let deployment = root
+            .join("standalone.deployment.json")
             .display()
             .to_string();
         let arguments = match name {
@@ -262,7 +272,7 @@ replace.body function={} body=$numerical-replacement
                 "--plan",
                 &required(&self.creation, "creation review")?.token,
             ],
-            "replace-apply" => vec![
+            "replace-apply" | "rejected-apply" => vec![
                 "change",
                 "apply",
                 "--input-file",
@@ -327,7 +337,7 @@ replace.body function={} body=$numerical-replacement
                 "--bytes",
                 "65536",
             ],
-            "run-created" | "run-replaced" => vec!["run", "structural"],
+            "run-created" | "run-replaced" | "run-after-rejection" => vec!["run", "structural"],
             "numerical-run-created" | "numerical-run-replaced" => {
                 vec!["run", "numerical", "--arguments", NUMERICAL_INPUT]
             }
@@ -337,6 +347,7 @@ replace.body function={} body=$numerical-replacement
             "check" => vec!["check"],
             "build" => vec!["build", "--output", &artifact],
             "run" => vec!["run", "main"],
+            "standalone-structural" => vec!["run", "--deployment", &deployment],
             _ => return Err(DevError::corrupt("unknown lifecycle operation")),
         };
         let mut command = vec![
@@ -346,7 +357,11 @@ replace.body function={} body=$numerical-replacement
         ];
         if !matches!(
             name,
-            "capabilities" | "change-capabilities" | "runners-capabilities" | "new"
+            "capabilities"
+                | "change-capabilities"
+                | "runners-capabilities"
+                | "new"
+                | "standalone-structural"
         ) {
             command.extend(["--project".to_owned(), project.clone()]);
         }
@@ -365,6 +380,7 @@ replace.body function={} body=$numerical-replacement
             name,
             "run-created"
                 | "run-replaced"
+                | "run-after-rejection"
                 | "numerical-run-created"
                 | "numerical-run-replaced"
                 | "numerical-run-negative-zero"
@@ -568,7 +584,7 @@ replace.body function={} body=$numerical-replacement
                     self.numerical_before = Some(definition);
                 }
             }
-            "run-created" | "run-replaced" => {
+            "run-created" | "run-replaced" | "run-after-rejection" => {
                 let expected = if name == "run-created" { 42 } else { 43 };
                 let observed: i64 = serde_json::from_str(value(records, "execution", "value")?)?;
                 require(
@@ -582,6 +598,32 @@ replace.body function={} body=$numerical-replacement
                 } else {
                     self.replaced_value = Some(observed);
                 }
+            }
+            "rejected-apply" => {
+                require(
+                    process::read_bounded(&root.join("rejected.lkjc"), MAXIMUM_REQUEST_BYTES)?
+                        == self.request("rejected")?.as_bytes(),
+                    "rejected edit literal changed",
+                )?;
+                require(
+                    value(records, "result", "status")? == "failure"
+                        && value(records, "diagnostic", "code")?
+                            == "change_request_commitment_mismatch",
+                    "mismatched reviewed edit was not specifically rejected",
+                )?;
+            }
+            "standalone-structural" => {
+                require(
+                    !root.join("runtime/project").exists(),
+                    "standalone execution retained the authoring project",
+                )?;
+                require(
+                    value(records, "execution", "value")? == "43"
+                        && value(records, "execution", "execution-mode")? == "production"
+                        && value(records, "execution", "verification")? == "not-performed",
+                    "standalone installed artifact produced an unexpected result or execution mode",
+                )?;
+                validate_descriptor(root)?;
             }
             "numerical-run-created" | "numerical-run-replaced" => {
                 let input = literal_input(root, "numerical-input.json", NUMERICAL_INPUT)?;
@@ -671,6 +713,29 @@ replace.body function={} body=$numerical-replacement
     }
 }
 
+fn validate_descriptor(root: &Path) -> Result<(), DevError> {
+    let mut original: serde_json::Value = serde_json::from_slice(&process::read_bounded(
+        &root.join("starter-command.deployment.json"),
+        MAXIMUM_REQUEST_BYTES,
+    )?)?;
+    require(
+        original["artifact"] == "generated/application.lkja"
+            && original["target"] == "main"
+            && original["grants"] == serde_json::json!([])
+            && original["secrets"] == serde_json::json!([]),
+        "standalone source descriptor differs from the discovered empty-grant starter",
+    )?;
+    original["artifact"] = serde_json::Value::String("artifact.lkja".to_owned());
+    original["target"] = serde_json::Value::String("structural".to_owned());
+    require(
+        process::read_bounded(
+            &root.join("standalone.deployment.json"),
+            MAXIMUM_REQUEST_BYTES,
+        )? == evidence::encode_json(&original)?,
+        "standalone descriptor differs from the retained ordinary operation settings",
+    )
+}
+
 fn literal_input(root: &Path, name: &str, expected: &str) -> Result<FileBinding, DevError> {
     let path = root.join(name);
     require(
@@ -740,6 +805,33 @@ pub(super) fn run(
                     0o644,
                 )?;
             }
+            if *name == "rejected-apply" {
+                archive::write_new(
+                    &root.join("rejected.lkjc"),
+                    progress.request("rejected")?.as_bytes(),
+                    0o644,
+                )?;
+            }
+            if *name == "standalone-structural" {
+                let original = process::read_bounded(
+                    &runtime.join("project/command.deployment.json"),
+                    MAXIMUM_REQUEST_BYTES,
+                )?;
+                archive::write_new(
+                    &root.join("starter-command.deployment.json"),
+                    &original,
+                    0o644,
+                )?;
+                let mut descriptor: serde_json::Value = serde_json::from_slice(&original)?;
+                descriptor["artifact"] = serde_json::Value::String("artifact.lkja".to_owned());
+                descriptor["target"] = serde_json::Value::String("structural".to_owned());
+                archive::write_new(
+                    &root.join("standalone.deployment.json"),
+                    &evidence::encode_json(&descriptor)?,
+                    0o644,
+                )?;
+                fs::remove_dir_all(runtime.join("project"))?;
+            }
             if *name == "numerical-run-created" {
                 archive::write_new(
                     &root.join("numerical-input.json"),
@@ -786,7 +878,9 @@ pub(super) fn run(
                     "route accepted mutation did not advance HEAD",
                 )?;
                 head = Some(next);
-            } else if let Some(head) = &head {
+            } else if let Some(head) = &head
+                && *name != "standalone-structural"
+            {
                 require(
                     process::read_bounded(&runtime.join("project/HEAD"), 4096)? == *head,
                     "route read-only lifecycle changed accepted HEAD",
@@ -881,10 +975,15 @@ fn read_command(
         .as_ref()
         .ok_or_else(|| DevError::corrupt("route process result missing"))?;
     require(
-        p.status == process::ProcessStatus::Passed
-            && p.exit_code == Some(0)
-            && p.signal.is_none()
-            && p.reason.is_none()
+        (if command.name == "rejected-apply" {
+            p.status == process::ProcessStatus::Failed
+                && p.exit_code.is_some_and(|value| value != 0)
+                && p.reason.as_deref() == Some("nonzero_exit")
+        } else {
+            p.status == process::ProcessStatus::Passed
+                && p.exit_code == Some(0)
+                && p.reason.is_none()
+        }) && p.signal.is_none()
             && !p.stdout_limit_exhausted
             && !p.stderr_limit_exhausted
             && p.stdout_limit_bytes == MAXIMUM_OUTPUT_BYTES
@@ -909,6 +1008,7 @@ fn read_command(
         "status-final" => ("status", "success"),
         "create-plan" | "replace-plan" => ("change.plan", "prepared"),
         "create-apply" | "replace-apply" => ("change.apply", "accepted"),
+        "rejected-apply" => ("change", "failure"),
         "find-module"
         | "find-function"
         | "find-parameter"
@@ -920,6 +1020,8 @@ fn read_command(
         | "numerical-definition-replaced" => ("inspect.owner.definition", "success"),
         "run-created"
         | "run-replaced"
+        | "run-after-rejection"
+        | "standalone-structural"
         | "numerical-run-created"
         | "numerical-run-replaced"
         | "numerical-run-negative-zero" => ("run", "success"),

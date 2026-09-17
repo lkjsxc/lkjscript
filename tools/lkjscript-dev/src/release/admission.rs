@@ -1,4 +1,6 @@
 use super::archive;
+mod cleanup;
+mod originals;
 use super::model::{
     EvidenceClassification, ExternalEvidence, HostedContext, SchemaIdentity,
     VerificationClassification,
@@ -9,6 +11,12 @@ use crate::error::DevError;
 use crate::evidence;
 use crate::process::{self, ProcessObservation, ProcessSpec, ProcessStatus};
 use crate::service;
+pub(super) use cleanup::cleanup_owned_resources;
+pub(super) use cleanup::{
+    cid as owned_container_cid, options as owned_container_options,
+    prepare as prepare_owned_container, read as read_owned_container,
+    remove_with as cleanup_owned_container,
+};
 use lkjscript::platform::control::{CompactRecord, parse_records};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -20,7 +28,7 @@ use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const ADMISSION_SCHEMA: &str = "lkjscript-target-admission-receipt";
-const ADMISSION_SCHEMA_VERSION: u32 = 4;
+const ADMISSION_SCHEMA_VERSION: u32 = 5;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(120);
 const ORACLE_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 const IMAGE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
@@ -61,7 +69,7 @@ struct CommandEvidence {
     process: ProcessObservation,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct ImageIdentity {
     requested: String,
@@ -98,6 +106,7 @@ struct UserlandObservation {
     differential_equal: bool,
     container_cleanup_complete: bool,
     temporary_root_removed: bool,
+    temporary_root: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -378,6 +387,7 @@ pub(super) fn read_receipt(
             service::read_receipt(child_path, candidate)?;
         }
     }
+    originals::verify(path, &receipt, candidate, &verifier)?;
     Ok(receipt)
 }
 
@@ -520,50 +530,40 @@ fn run_userland(
     let rootfs_archive = temporary_path.join("rootfs.tar");
     let rootfs = temporary_path.join("rootfs");
     fs::create_dir(&rootfs)?;
-    let container = format!(
-        "lkjscript-admission-{}-{}-{}",
-        safe_name(&policy.role)?,
-        std::process::id(),
-        unix_nanoseconds()?
-    );
+    let owned = cleanup::prepare(&context.evidence_root, &policy.role)?;
     let create = context.external_success(
         &format!("{}-container-create", policy.role),
-        vec![
-            "docker".to_owned(),
-            "create".to_owned(),
-            "--name".to_owned(),
-            container.clone(),
-            "--network".to_owned(),
-            "host".to_owned(),
-            policy.image.clone(),
-            "/bin/true".to_owned(),
-        ],
+        cleanup::create_command(&context.evidence_root, &owned, &policy.image),
         COMMAND_TIMEOUT,
     );
-    create?;
-    let export_result = context.external_success(
-        &format!("{}-container-export", policy.role),
-        vec![
-            "docker".to_owned(),
-            "export".to_owned(),
-            "--output".to_owned(),
-            rootfs_archive.display().to_string(),
-            container.clone(),
-        ],
-        IMAGE_TIMEOUT,
-    );
-    let cleanup = context.external_success(
-        &format!("{}-container-remove", policy.role),
-        vec![
-            "docker".to_owned(),
-            "rm".to_owned(),
-            "--force".to_owned(),
-            container,
-        ],
-        COMMAND_TIMEOUT,
-    );
-    export_result?;
-    cleanup?;
+    let export_result = create.and_then(|_| {
+        let id = cleanup::cid(&context.evidence_root, &owned)?
+            .ok_or_else(|| DevError::corrupt("successful container create omitted its CID"))?;
+        context.external_success(
+            &format!("{}-container-export", policy.role),
+            vec![
+                "docker".to_owned(),
+                "export".to_owned(),
+                "--output".to_owned(),
+                rootfs_archive.display().to_string(),
+                id,
+            ],
+            IMAGE_TIMEOUT,
+        )
+    });
+    let resource_root = context.evidence_root.clone();
+    let cleanup = cleanup::remove_with(&resource_root, &owned, |name, command| {
+        context.external_success(name, command, COMMAND_TIMEOUT)
+    });
+    match (export_result, cleanup) {
+        (Ok(_), Ok(())) => {}
+        (Err(primary), Err(cleanup)) => {
+            return Err(DevError::infrastructure(format!(
+                "{primary}; cleanup also failed: {cleanup}"
+            )));
+        }
+        (Err(error), _) | (_, Err(error)) => return Err(error),
+    }
     let rootfs_metadata = archive::ensure_regular(&rootfs_archive, "exported userland rootfs")?;
     if rootfs_metadata.len() == 0 || rootfs_metadata.len() > MAXIMUM_ROOTFS_ARCHIVE_BYTES {
         return Err(DevError::corrupt(
@@ -585,7 +585,14 @@ fn run_userland(
         IMAGE_TIMEOUT,
     )?;
     let (rootfs_sha256, rootfs_bytes) = archive::sha256_file(&rootfs_archive)?;
-    let (os_release_sha256, os_release) = rootfs_os_release(&rootfs, policy)?;
+    let (os_release_sha256, os_release, os_release_bytes) = rootfs_os_release(&rootfs, policy)?;
+    archive::write_new(
+        &context
+            .evidence_root
+            .join(format!("{}-os-release", policy.role)),
+        &os_release_bytes,
+        0o644,
+    )?;
     let work = rootfs.join("work");
     if fs::symlink_metadata(&work).is_ok() {
         return Err(DevError::corrupt(
@@ -799,6 +806,20 @@ fn run_userland(
             "userland clean and incremental artifacts differ",
         ));
     }
+    archive::copy_new(
+        &artifact_host,
+        &context
+            .evidence_root
+            .join(format!("{}-incremental.lkja", policy.role)),
+        0o644,
+    )?;
+    archive::copy_new(
+        &rootfs.join("work/application-clean.lkja"),
+        &context
+            .evidence_root
+            .join(format!("{}-clean.lkja", policy.role)),
+        0o644,
+    )?;
     let run = candidate_command(
         context,
         policy,
@@ -812,9 +833,9 @@ fn run_userland(
     let execution = required_record(&run_records, "execution")?;
     let execution_value = required_field(execution, "value")?.to_owned();
     let differential_equal = required_field(execution, "differential")? == "equal";
-    if !differential_equal {
+    if !differential_equal || execution_value != "\"hello\"" {
         return Err(DevError::corrupt(
-            "userland production and reference execution disagree",
+            "userland execution differs from independently expected text hello or its reference",
         ));
     }
     let rejected = candidate_command(
@@ -857,6 +878,7 @@ fn run_userland(
         differential_equal,
         container_cleanup_complete: true,
         temporary_root_removed: !Path::new(&temporary_root_text).exists(),
+        temporary_root: temporary_root_text,
     })
 }
 
@@ -868,6 +890,17 @@ fn candidate_command(
     arguments: &[&str],
     expected: Expected,
 ) -> Result<Vec<u8>, DevError> {
+    let command = candidate_invocation(rootfs, arguments);
+    context.invoke(
+        &format!("{}-candidate-{name}", policy.role),
+        command,
+        expected,
+        COMMAND_TIMEOUT,
+        false,
+    )
+}
+
+fn candidate_invocation(rootfs: &Path, arguments: &[&str]) -> Vec<String> {
     let uid = rustix::process::getuid().as_raw();
     let gid = rustix::process::getgid().as_raw();
     let mut command = vec![
@@ -886,13 +919,7 @@ fn candidate_command(
         "/work/lkjscript".to_owned(),
     ];
     command.extend(arguments.iter().map(|item| (*item).to_owned()));
-    context.invoke(
-        &format!("{}-candidate-{name}", policy.role),
-        command,
-        expected,
-        COMMAND_TIMEOUT,
-        false,
-    )
+    command
 }
 
 fn run_oracles(
@@ -1109,7 +1136,7 @@ fn inspect_image(bytes: &[u8], policy: &UserlandPolicy) -> Result<ImageIdentity,
 fn rootfs_os_release(
     rootfs: &Path,
     policy: &UserlandPolicy,
-) -> Result<(String, Vec<String>), DevError> {
+) -> Result<(String, Vec<String>, Vec<u8>), DevError> {
     let requested = rootfs.join("etc/os-release");
     let metadata = fs::symlink_metadata(&requested)?;
     let path = if metadata.file_type().is_symlink() {
@@ -1146,7 +1173,7 @@ fn rootfs_os_release(
         ));
     }
     let digest = archive::sha256_bytes(&bytes)?;
-    Ok((digest.as_str().to_owned(), lines))
+    Ok((digest.as_str().to_owned(), lines, bytes))
 }
 
 fn require_machine_passed(label: &str, bytes: &[u8]) -> Result<Value, DevError> {
@@ -1438,7 +1465,7 @@ mod tests {
     #[test]
     fn admission_schema_and_required_classifications_are_stable() {
         assert_eq!(ADMISSION_SCHEMA, "lkjscript-target-admission-receipt");
-        assert_eq!(ADMISSION_SCHEMA_VERSION, 4);
+        assert_eq!(ADMISSION_SCHEMA_VERSION, 5);
         assert_eq!(
             [
                 "static_linkage",

@@ -38,6 +38,19 @@ pub fn entry(arguments: impl IntoIterator<Item = OsString>) -> ExitCode {
     }
 }
 
+/// The trusted release controller deliberately exposes no candidate execution command.
+pub fn release_controller_entry(arguments: impl IntoIterator<Item = OsString>) -> ExitCode {
+    let mut arguments = arguments.into_iter();
+    let _program = arguments.next();
+    match release::controller::command(arguments) {
+        Ok(code) => ExitCode::from(code),
+        Err(error) => {
+            let _ = writeln!(io::stderr(), "lkjscript-release-controller: {error}");
+            ExitCode::from(2)
+        }
+    }
+}
+
 fn run(arguments: impl IntoIterator<Item = OsString>) -> Result<u8, DevError> {
     let mut arguments = arguments.into_iter();
     let _program = arguments.next();
@@ -70,13 +83,13 @@ fn run(arguments: impl IntoIterator<Item = OsString>) -> Result<u8, DevError> {
         Some("__fixture") => check::fixture(arguments),
         Some("help") | Some("--help") | Some("-h") | None => {
             println!(
-                "usage: lkjscript-dev release transferred <pair-run|pair-verify> --exact-assets ABSOLUTE_DIRECTORY --latest-assets ABSOLUTE_DIRECTORY --tag TAG --commit SOURCE_COMMIT --publication release|dry-run --evidence-root ABSOLUTE_DIRECTORY --verifier-identity ABSOLUTE_FILE --expected-verifier-sha256 SHA256 --expected-verifier-bytes BYTES (pair-run requires an absent evidence root; pair-verify executes no applications; dry-run is local rehearsal)"
+                "usage: lkjscript-dev release transferred <pair-run|pair-verify|installation-run|installation-verify> --exact-assets ABSOLUTE_DIRECTORY --latest-assets ABSOLUTE_DIRECTORY --tag TAG --commit SOURCE_COMMIT --acquisition simulated|anonymous --evidence-root ABSOLUTE_DIRECTORY --verifier-identity ABSOLUTE_FILE --expected-verifier-sha256 SHA256 --expected-verifier-bytes BYTES (run requires an absent evidence root; verify reads originals; exact-run/exact-verify omit latest-assets)"
             );
             println!(
                 "usage: lkjscript-dev pure-tail --binary PATH --evidence-root ABSENT_ABSOLUTE_PATH [--machine] | lkjscript-dev pure-tail-probe PROJECT (bounded resource evidence subprocess)"
             );
             println!(
-                "usage: lkjscript-dev check <focused|changed|product|service|full|self-test> ... | lkjscript-dev data-oracle --binary PATH --bbs-receipt PATH --service-receipt PATH [--machine] | lkjscript-dev distributed-http [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev function-extraction-oracle --project PATH --function DECL --expression EXPR [--output ABSENT_PATH] | lkjscript-dev outbound-http [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev stateful-http [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev policy <no-python|product-surface> [--binary PATH] [--machine] | lkjscript-dev measure --cwd PATH --output DIR -- COMMAND [ARG ...] | lkjscript-dev release <target|build|admit|admission-verify|verifier|transferred|prepare|verify> ... | lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> ... | lkjscript-dev service [--binary PATH] [--machine]"
+                "usage: lkjscript-dev check <focused|changed|product|service|full|release-source|self-test> ... | lkjscript-dev data-oracle --binary PATH --bbs-receipt PATH --service-receipt PATH [--machine] | lkjscript-dev distributed-http [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev function-extraction-oracle --project PATH --function DECL --expression EXPR [--output ABSENT_PATH] | lkjscript-dev outbound-http [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev stateful-http [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev policy <no-python|product-surface> [--binary PATH] [--machine] | lkjscript-dev measure --cwd PATH --output DIR -- COMMAND [ARG ...] | lkjscript-dev release <target|build|admit|admission-verify|verifier|transferred|prepare|candidate|controller|verify> ... | lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> ... | lkjscript-dev service [--binary PATH] [--machine]"
             );
             Ok(0)
         }

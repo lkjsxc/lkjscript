@@ -67,6 +67,33 @@ impl GateRegistry {
             .collect())
     }
 
+    pub(super) fn input_commands(
+        &self,
+        selected: &[String],
+    ) -> Result<BTreeSet<(String, String)>, DevError> {
+        let produced = selected
+            .iter()
+            .map(|name| self.gate(name))
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flat_map(|gate| gate.required_outputs.iter().map(|path| path_string(path)))
+            .collect::<BTreeSet<_>>();
+        let mut commands = BTreeSet::new();
+        for name in selected {
+            let gate = self.gate(name)?;
+            let command = gate
+                .command
+                .first()
+                .ok_or_else(|| DevError::infrastructure("empty gate command"))?;
+            // A built executable is bound by its producing gate and each consuming
+            // fingerprint, not by unrelated/missing bytes before that build runs.
+            if !produced.contains(command) {
+                commands.insert((command.clone(), gate.identity_command()[0].clone()));
+            }
+        }
+        Ok(commands)
+    }
+
     pub(crate) fn manifest(
         &self,
         requested: &[String],
@@ -745,6 +772,31 @@ pub(crate) fn profile(name: &str) -> Option<Vec<String>> {
             "service_acceptance",
             "diff_check",
         ],
+        // The six copied-candidate behavioral owners run against the final archive
+        // executable at target admission. This profile retains their source/reference
+        // tests, policy, host configuration and maintained-asset prerequisites.
+        "release-source" => &[
+            "fmt",
+            "checker_self_test",
+            "rust_only_tooling",
+            "clippy",
+            "workspace_tests",
+            "release_build",
+            "release_command_lifecycle",
+            "generated_public_guides",
+            "product_surface_audit",
+            "standard_package_test",
+            "application_package_test",
+            "standard_artifact_build",
+            "standard_artifact_compare",
+            "builtin_package_export",
+            "builtin_package_compare",
+            "builtin_transport_export",
+            "builtin_transport_compare",
+            "application_artifact_build",
+            "application_artifact_compare",
+            "diff_check",
+        ],
         _ => return None,
     };
     Some(values.iter().map(|value| (*value).to_owned()).collect())
@@ -955,5 +1007,56 @@ mod tests {
             assert_eq!(oracle.dependencies, ["release_command_lifecycle"], "{name}");
             assert!(!oracle.cacheable, "{name}");
         }
+    }
+
+    #[test]
+    fn release_source_and_exact_candidate_cover_full_without_repeating_aggregate_owners() {
+        let temporary = tempfile::tempdir().expect("temporary registry repository");
+        let registry = base_registry(temporary.path(), temporary.path(), Path::new("/bin/true"))
+            .expect("maintained registry");
+        let full = registry
+            .closure(&profile("full").expect("full"))
+            .expect("full closure");
+        let source = registry
+            .closure(&profile("release-source").expect("release source"))
+            .expect("release-source closure");
+        // Literal inventory independent of the release-source selector.
+        let candidate = [
+            "distributed_http_application",
+            "outbound_http_application",
+            "offline_packages",
+            "pure_tail",
+            "stateful_http_application",
+            "service_acceptance",
+        ];
+        assert_eq!(full.len(), 26);
+        assert_eq!(source.len(), super::super::RELEASE_SOURCE_GATE_COUNT);
+        for name in candidate {
+            assert!(full.iter().any(|value| value == name));
+            assert!(!source.iter().any(|value| value == name));
+        }
+        for name in &full {
+            assert!(
+                source.contains(name) || candidate.contains(&name.as_str()),
+                "lost {name}"
+            );
+        }
+        assert!(
+            source
+                .iter()
+                .any(|name| name == "release_command_lifecycle")
+        );
+        assert!(source.iter().any(|name| name == "workspace_tests"));
+        assert_ne!(
+            registry
+                .profile_digest("full", &profile("full").expect("full"))
+                .expect("full identity"),
+            registry
+                .profile_digest(
+                    "release-source",
+                    &profile("release-source").expect("source")
+                )
+                .expect("source identity")
+        );
     }
 }

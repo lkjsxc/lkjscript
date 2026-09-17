@@ -1,642 +1,209 @@
 # Release procedure
 
-GitHub Releases are the sole public binary distribution path. A release is derived from one exact
-source commit. Its tag, target, candidate, archive, manifest, checksum, bootstrap, asset digest, attestation,
-and verification receipts are distribution identities and evidence; none can select or edit
-accepted program meaning.
+GitHub Releases are the public binary distribution path. Accept one finalized candidate, nominate
+its exact producer run and attempt, and promote its unchanged archive, checksum and bootstrap.
+Content identity, behavioral acceptance and publication authority are separate decisions.
 
-Immutable `v0.1.32`, release `387465958`, remains a verified predecessor, from source
-`67baaf0b081842e0e2e3745e8d5503e22cc791e4`. Dry run `34626667719/1` and tag run
-`34671245722/1` passed. Both anonymous public routes independently acquired and admitted the
-candidate and ran their small lifecycles; one fresh suite was bound within that pair. EFF-7 and
-the first hosted pair are closed in the [iteration reconciliation](campaigns/202609121214.md).
+Immutable [v0.1.38](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.38) already publishes source
+`7083f9a6d56ed702017942e100c3696fc6f35308`. Publisher
+[35117655769/1](https://github.com/lkjsxc/lkjscript/actions/runs/35117655769) passed all four hosted
+jobs, including anonymous exact/latest installed application acceptance and attestations. Its separate
+later manual original-reader closure was not performed by the current campaign. That historical gap
+does not make the release unavailable or create a recurring reconstruction obligation. Genuine
+v0.1.36/v0.1.37 failures remain in the [delivery history](campaigns/202609151412.md) and
+[numerical milestone ending](campaigns/202609162154.md). The
+[former procedure](https://github.com/lkjsxc/lkjscript/blob/108ca2777fc202b543f48816a99b7db519542f97/docs/release.md)
+describes those frozen producers; the procedure below governs new candidates only.
 
-The [foreground campaign](campaigns/202609121842.md) selects one combined task-iteration and
-foreground-command release. Current offline-package receipt 10 retains the foreground child
-at source, target, transferred and public acceptance. Existing exact-source dry-run, annotated-tag,
-immutability control and public-pair gates still apply. A descriptor may omit command execution
-and runtime policy only on a matching foreground-capable executable; retain numeric descriptors
-and the previous executable with immutable bundles for recovery. No operational-data migration
-is part of publication. The failed original dry run `34693887632/1` reached its offline-package outer
-deadline. Corrected two-asset source `c34114fc` passed fresh full, exact six-owner target and package
-proof and is integrated. Matching dry run `34700198909/1` passed, and its downloaded handoffs
-passed the original compatible readers. Annotated v0.1.33 tag object
-`9a4e1c065b7c20459e318b83e67bfd041b74e911` selects that source. Tag run `34705135744/1` and public
-job `103598708262` passed. Immutable release `387660511` was published at 2026-09-12T18:15:41Z;
-its anonymous exact/latest pair and attestations are authenticated. That frozen source retains
-receipt 8 and two assets.
+The [cutover campaign](campaigns/202609180007.md) selects non-publishing candidate and read-only
+consumer proof. It authorizes no new version, tag, release or release-control write. First public use
+of the new encoding follows the next selected useful public capability, important product fix or
+explicit release request. Choose that future version/source before candidate creation. A private
+candidate built with occupied version 0.1.38 is never the public v0.1.38 release.
 
-The installation campaign separately selects v0.1.34 at accepted source
-`037a13483321497737a30ade6df88950bb19e0de`, receipt 9 and the third bootstrap asset. Matching hosted
-dry run `34706128684/1` passed; publication/public jobs were skipped. Its authenticated original
-handoffs passed their original readers. Annotated object `d96d1623495d8c13968d99f567ea77e79b158237`
-and the retained scoped control select publisher `34760117554/1`. Build/full/target/packaging and the
-pre-publication installed pair passed. Immutable release `387929218` published all three assets at
-2026-09-13T14:42:22Z. Anonymous exact/latest acquisition and all attestations passed; public job
-`103740119904` completed its installed application pair and final evidence upload. Publisher
-`34760117554/1` completed successfully at 2026-09-13T15:17:53Z. Final artifact `10320391118`
-and pair receipt `verification_f6ff1a63fc67f11d29993c115c460f2b892e1c55d015e4f8d50ef640d8a71d9b`
-passed the retained original reader after archived path/mode/environment reconstruction. The exact
-route ran the five aggregate children freshly; latest was bound within that same pair. Cleanup is
-complete. This is authenticated hosted evidence rereading, not fresh local acquisition or execution.
-INS-7 is closed; v0.1.34 remains an immutable verified predecessor.
+## Content and compatibility
 
-The newer typed named-reference source increment uses offline receipt 10. It is absent from the
-frozen installer release. Accepted source `5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847` passed 26
-fresh full gates and is integrated on main; later reporting commits do not replace that proof.
-The [finite callable campaign](campaigns/202609140057-collision-1.md) consumes its one-campaign
-deferral and selects a combined release, with candidate version v0.1.35. Its frozen offline receipt 11
-adds the transported pure/task alternator, finite reset, strict hostile-artifact rejection and
-authentic historical/current validation repair through both copied and pinned absolute runtimes.
-The existing six target and five installed/public aggregate owners retain their boundaries.
-Corrected source
-`0735cc78e41fc77166ca4fff61d0b1b5392c851c` passed 78 focused copied public commands and exact
-historical retry receipt identities. The 2026-09-13 reconciliation confirms that remote main
-`6b0c19beafafc40d859274dc057f6212372dc57d` already contains that correction. Prior-source rehearsal
-`34777722470/1` at `9cf26ecde03be6b77b3dc9e7e58628f17cd23c66` succeeded at
-2026-09-13T21:09:55Z, including full, target, package and the transferred installed pair. Its
-publication/public jobs were skipped. These original results remain source-specific and cannot
-certify the later accepted-retry correction. Corrected rehearsal `34779065098/1` failed at
-2026-09-13T21:10:08Z in **Validate workflow and release identity**; toolchain installation, builds,
-semantic/target/package checks and later jobs were skipped. The retrieved log prints the shell and
-exit 1 without tracing the exact failing command. Independently, the source and Git ancestry show
-that its old dry-run predicate rejects a frozen candidate when main has advanced beyond it.
-Earlier queued/running observations remain in their campaign records; neither run is a publisher.
+The canonical manifest discriminator is `format: "lkjscript-release-content-1"`. It binds the product
+version/intended tag, exact product commit, repository, target/build policy and command, pinned Rust
+and Cargo, lockfile, static ELF executable, license/notices and deterministic packaging. It contains
+no publication mode, remote tag object, promotion permission, consuming run or reporting commit.
+This encoding identity does not add a human-facing language/runtime version. Graph, compiler,
+program-artifact and application-data generations do not change.
 
-The [stable-candidate campaign](campaigns/202609140703-collision-1.md) repaired that admission policy
-and mutable-ref checkout while preserving the selected combined delivery. Its new exact-source
-rehearsal and later publisher completed the required source/target/package/installed proof,
-original-reader admission and normal integration. The older failed attempt and its unchanged
-inputs remain historical evidence; see the [campaign evidence](evidence/202609140057-finite-callable.json).
+The public assets are exactly `lkjscript-x86_64-unknown-linux-musl.tar.gz`, `SHA256SUMS` and
+`install.sh`. The archive contains only the ordered `lkjscript/` directory, executable, license,
+third-party notices and manifest. The checksum has one exact archive entry. The existing bootstrap
+binds exact immutable URLs and lengths/hashes, extracts the new manager and delegates native
+installation to it. It requires no Cargo, Python or checkout. Installation grants no application
+authority and performs no operational-data migration.
 
-The repaired workflow/tooling source is frozen at `4306ef64783462a8dda48f2a855a88482d1faec8`,
-with 47 focused release tests and strict clippy passed. Its pushed source branch is
-`codex/stable-release-202609140703`; new read-only rehearsal `34786835189/1`, created
-2026-09-13T22:27:10Z, records that exact event SHA and completed successfully at
-2026-09-14T00:12:35Z. All five authenticated artifacts are retained; original package, target and
-installed-pair readers pass, with the original prepare binding 26 fresh full gates and zero reuse.
-The exact-source 76-omission target test also passes with restored original bytes. This is admitted
-rehearsal, with publication/public jobs appropriately skipped. Its subsequent immutable/public delivery
-is recorded below. Preserve the frozen branch and original readers; later
-reporting descendants do not change the release candidate.
+New native readers also strictly admit authentic supported legacy manifests and installed receipts,
+retaining their original canonical encoding. Legacy declared publication remains unverified;
+neutral content claims no publication provenance. Neither implies authenticity. Unknown fields,
+ambiguous formats, unsafe members, links/traversal, extra entries, wrong modes, checksum/ELF/version
+mismatches and conflicting immutable slots still reject. Existing slots and pinned runtime paths
+remain intact. Older managers may reject neutral content before changing an installation; the exact
+new bootstrap is the upgrade/recovery route. Do not edit old manifests, receipts, tags or assets.
 
-The selected v0.1.35 publication is now complete. Annotated object
-`c90758848312705af6bb2f896831fbed27d353e5` selects frozen `4306ef64`, integrated by normal push
-through `e49a5835`. Publisher `34847832173/1` completed successfully at 2026-09-14T16:13:06Z;
-immutable release `388511109` was published at 15:34:40Z. All mandatory source/target/package and
-installed gates passed. Original authenticated publisher artifacts are retained, and their matching
-package, six-target, simulated-pair and anonymous-public-pair readers pass. Public pair
-`verification_05d477e78766a48c240e7a8dae948bca4f95434e7497a178a28c3254021cbb62`
-binds independently admitted exact/latest routes and one fresh five-owner suite within the pair.
-Cleanup is complete. Archived-context rereading did not replay applications. The preceding pending
-observations are superseded by this delivery, without rewriting their failed history or frozen inputs.
-The [structural-authoring campaign](campaigns/202609150900.md) consumed the accepted requirement
-library's single-campaign deferral. Combined source `eea968b910ac62c3feab95a8896fff1a91904a17`
-is normally integrated and frozen. The [delivery continuation](campaigns/202609151412.md) admits
-successful rehearsal `34918782215/1` through its authenticated originals and matching readers.
-Annotated v0.1.36 object `a8cacb9c574005079a7532e4f9e7d140c51ccc40` selects that source.
-Publisher `34933268953/1` published immutable assets, but its public original reader rejects eight
-omitted authoring inputs/plans. The delivery continuation owns the smallest additive retention
-repair, frozen at `8baafff7f67b55481cda8d67f8945b78af80be4d`. Rehearsal `34953636796/1` and all
-matching original readers passed. Annotated v0.1.37 object
-`51ecaabf3a6dfbaef0f842e95c4fc480dced0b6d` selected publisher `34965341260/1`, which failed fresh
-full verification on a pre-launch `ExecutableFileBusy`; no release was produced. The
-[binary64 mandate](campaigns/202609152217.md) explicitly supersedes separate v0.1.37 delivery with
-one combined successor. The [current delivery summary](status.md#combined-release-delivery) owns
-its disposition. Neither preserved frozen source includes transaction-outcome meaning.
+## Coverage and admission
 
-Immutable `v0.1.31`, release `386791231`, remains a retained recursive-data predecessor from
-`7ea9c99a31ecd0e5317129d2bd81ab4f8f51e02e`, with its original readers and assets unchanged.
+`check full --fresh` remains an honest standalone complete profile with its existing 26 gates.
+Release acceptance instead requires the dependency-complete union below; a profile label alone is
+never equivalent proof. The [verification specification](spec/verification.md) owns the full mapping.
 
-The previous immutable `v0.1.30`, release `386193815`, remains preserved. Annotated tag
-`b45b3f3dc0ab5e52f28c7dd0910f8f1faa3d1e5c` selects source
-`35269961fc66fc308785913190a10843ee175aaa`. Dry run `34454845131` and tag run `34461031325`
-passed on attempt 1. Each ran 26 fresh source gates, static inspection, both pinned userlands,
-all six target oracles, strict packaging and all five checkout-free transferred owners. Only the
-tag run published. Its anonymous exact-version and latest downloads independently passed integrity,
-release/asset attestations, strict extraction and all five behavioral owners before byte comparison.
-Exact identities and bounded proof are in the
-[public nominal evidence](evidence/202609101130-parametric-nominal-public-milestone.json).
+| Previous claim | Current required owner |
+| --- | --- |
+| Source/reference, safe Rust, lint, tooling/checker correctness, generated assets, maintained consumers | Fresh `check release-source`: 20 gates, including retained default/all-feature distinctions |
+| External service, distributed HTTP, outbound HTTP, offline packages, pure tail, stateful HTTP | Six target owners once against the executable extracted from the final archive |
+| Static linkage and both pinned userlands | Native ELF admission and the existing exact target admission |
+| Installed lifecycle, upgrade, retained runtime/selection and two-version recovery | Candidate installation tier once; real bootstrap/native installation |
+| Transfer and anonymous exact/latest acquisition | Authenticated inventory/byte identity, strict native admission and small installed create/edit/build/run lifecycles |
+| Original-reader admission | Producing CI context before the candidate terminal is accepted |
 
-This release distributes the implemented parametric nominal-data foundation. Immutable v0.1.29
-passed exact-download behavior but failed latest acceptance when verifier process observation raced
-with task exit; its same-input recovery failed on the same error. A narrow verifier correction
-required additive v0.1.30 and renewed proof. Both v0.1.29 and every earlier tag and asset remain
-unchanged. The campaign made two authorized writes to the existing release-control variable,
-one for each annotated tag, with enabled-immutability administrator reads and prior-value checks.
-The immutable-release setting itself was not changed; read/check/write is not atomic.
+Source-only probes embedded in behavioral owners remain owned by those original readers; the target
+verifier is source-built. Necessary reference/unit work and host-verifier configurations are not
+second distributable product builds. Workloads, assertions and individual owner deadlines remain
+unchanged. The candidate supervisor has a finite outer allowance covering the existing target-owner
+allowances; no completed broad owner is replayed merely because bytes crossed a job boundary.
 
-Upgrading the executable does not migrate repositories, artifacts or operational data. Older
-incompatible Graph 12/Artifact 16 inputs reject without an automatic converter. Retain backups/exports
-and the matching predecessor executable for unsupported inputs. Operational data is not disposable
-derived state, and unchanged operational formats do not guarantee universal application compatibility.
-No deployment or live-data migration was performed. Later reporting commits do not replace the tagged
-release-source identity. Historical release evidence remains retained in its original owners.
+The checker retains immutable output copies for its gates before later Cargo configurations can
+replace shared target paths. Its original reader checks exact source inputs, registry dependency
+closure, verifier/runtime/environment, commands, logs, retained outputs and fresh terminal outcomes.
+The target and installation readers admit their original evidence in the same owning environment.
+A forged summary, omitted/skipped/failed stage, cancellation or incomplete cleanup cannot yield
+candidate acceptance. Diagnostic originals need not be relocatable; portability applies to the
+admitted terminal decision under authenticated service provenance, not arbitrary filesystem replay.
 
-## Identity and authority
+## Build and accept a candidate
 
-The root `Cargo.toml` package version owns the human-facing release snapshot and its exact annotated
-`vMAJOR.MINOR.PATCH` tag. It is the only version presented by current public product metadata.
-Internal storage, compiler, artifact, deployment, runtime, adapter, repository, and contributor-tool
-compatibility identities remain independently owned as described by
-[the release and contract version decision](decisions/20260829-release-contract-version-authority.md).
-
-`lkjscript-dev release target` is the sole executable owner of the current release target triple,
-archive name, static-linkage policy, native build inputs, and pinned test userlands. The current
-policy selects one archive target:
-
-```text
-lkjscript-x86_64-unknown-linux-musl.tar.gz
-```
-
-Workflow shell consumes the emitted policy; it does not maintain a second target catalog. Another
-architecture, operating system, or dynamic compatibility asset requires separate admission and is
-not part of the current release matrix.
-
-Before release work, fetch and inspect remote state without rewriting it:
+The maintained `Release` workflow uses explicit `workflow_dispatch` on main. It has no tag-triggered
+build or automatic PR/workflow-run artifact execution. Inspect existing sources/runs before dispatch,
+reuse healthy accepted work, and record the exact resulting event SHA and attempt.
 
 ```sh
-git fetch --prune origin
-git status --short
-git rev-parse HEAD origin/main
-git tag --list --sort=version:refname
-gh release list --repo lkjsxc/lkjscript
-gh api repos/lkjsxc/lkjscript/immutable-releases
-gh run list --repo lkjsxc/lkjscript --workflow Release --limit 20
-```
-
-Reconcile the exact remote main, current checkout and retained release clone with the relevant
-campaign's ending and resumption records. Refresh terminal job conclusions and their exact inputs;
-a previous pending label is not current state. Preserve healthy frozen sources and original
-handoffs, including their artifact IDs, digests, expiration and original verifier context. Observe
-local toolchain/resources and active jobs before starting expensive work. A previously failed
-workflow cannot acquire a repaired workflow definition through a same-input rerun.
-
-The immutable-release setting must report `enabled: true`. GitHub's settings endpoint requires
-repository administration authority, which is deliberately unavailable to the publication job.
-Immediately before tag push, an administrator binds the observed setting to the exact annotated
-tag-object SHA in the non-secret repository variable
-`LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA`. The isolated publish job checks that value and uses
-only its ephemeral workflow token.
-
-Source selection precedes ancestry admission. The workflow has three explicit modes:
-
-| Mode | Selected product source and required identity |
-|---|---|
-| Manual dry run | Checkout the dispatch event's full commit SHA and require actual HEAD to equal it before toolchain installation. A dispatch branch is only a handle; later movement cannot change the candidate. |
-| Tag-push publication | Checkout the event's exact source SHA, require HEAD equality, and require the exact version's annotated tag to peel to that commit. A moved or mismatching tag rejects. |
-| Manual publication of an existing annotated tag | Checkout the requested validated tag and require HEAD to equal its peeled commit. This product source may differ from the dispatch event commit supplying the workflow definition; record both identities separately. |
-
-The workflow identity preflight and `release::source_facts` resolve candidate commit **S** and the
-fetched `origin/main` commit **M** to immutable commit IDs before evaluating this common policy:
-
-| Relation | Read-only dry run | Publication |
-|---|---|---|
-| S = M | Admit | Admit, subject to exact annotated tag and remaining gates |
-| M is a proper ancestor of S | Admit | Reject until ordinary integration makes S reachable from main |
-| S is a proper ancestor of M | Admit the frozen candidate | Admit, subject to exact annotated tag and remaining gates |
-| Diverged or disconnected history | Reject | Reject |
-| Missing main/history/object, invalid source, wrong repository origin or failed Git invocation | Reject with a source or infrastructure diagnostic | Reject |
-
-Read the main ref once per admission check and use its resolved ID in both ancestry directions.
-Git ancestry exit 1 means a false relation; other failures cannot become a successful alternate
-branch. Use the existing full-history checkout and reject history that cannot answer the check.
-The stricter publication rule still requires S to be reachable from M, plus the remote annotated
-tag-object and scoped-control checks in the isolated publication job.
-
-Ancestry never selects new bytes or transfers evidence between sources. Main may advance with
-reporting or implementation changes while S stays frozen; no filename whitelist applies. This
-admission does not establish the suitability of an old candidate for a new release. Preserve exact
-source, candidate, verifier, run/attempt and workload bindings, cleanliness, package/version/tag
-agreement and immutable release identities. Reconcile divergence normally without rewriting history.
-
-## Main integration and public closure
-
-Integration and public closure have separate prerequisites. The
-[numerical-library delivery continuation](campaigns/202609161809.md) revises their scheduling while
-preserving the required proof. For its unchanged candidate, integration requires exact-source fresh
-full, complete exact static-target admission including every named behavioral owner and both pinned
-userlands, maintained consumer/generated-asset consistency, and affected verifier correctness checks.
-Admit authenticated matching full, target and preparation evidence through their original readers;
-the preparation must bind that exact source and target. Once these conditions and actual repository
-protection gates pass, integrate normally without waiting solely for later installed, publisher or
-anonymous-acquisition jobs. A known product or compatibility defect still blocks acceptance.
-
-Public closure additionally requires complete installed/transferred lifecycles, matching original
-readers and required fault/recovery proof, followed by immutable publication and anonymous exact/latest
-acceptance below. These remain open obligations after integration. A passing substep or main push
-cannot establish whole-run or public acceptance, and pending protection gates cannot be bypassed.
-
-Keep the release source and live event SHA fixed while the mutable line advances. Review the actual
-diff from the verified source to the integration commit, validate its scope separately, and verify
-that remote main contains both the accepted result and the frozen source. Reporting, guidance and
-delivery-order changes do not transfer full evidence to the descendant; changes to source, verifier,
-workflow or other execution inputs require refreshed affected proof on the real corrective source.
-Reuse the mutable continuation and report on main after integration; a healthy frozen release does
-not require another reporting branch or rehearsal merely to record its progress.
-
-## Pinned build and verification inputs
-
-`rust-toolchain.toml` pins Rust/Cargo 1.98.0, rustfmt, clippy, and the musl x86-64 Rust target. The
-typed target policy pins the Ubuntu musl compiler packages by exact version, URL, and SHA-256 and
-pins one Linux/amd64 musl userland and one Linux/amd64 older-glibc userland by platform-manifest
-digest. `cargo-about` 0.9.2 remains independently pinned by its downloaded archive
-and executable SHA-256 in the first-party release owner and workflow.
-
-The first-party data cutover has a separate contributor-only PostgreSQL 16.15 differential/resource
-receipt. It must be fresh for that source campaign, but PostgreSQL is deliberately absent from the
-product dependency graph, target policy, service gate, transferred verifier, release handoff, and
-publication/anonymous-download jobs.
-
-Inspect the canonical policy before installing its exact native inputs:
-
-```sh
-cargo build --release --locked -p lkjscript-dev
-target/release/lkjscript-dev release target
-```
-
-The host verifier is a normal host executable. The product candidate is built separately through
-the repository-owned target command, which records Cargo/rustc/musl compiler identities, the exact
-command, process resource observation, source commit, target-policy digest, candidate mode, bytes,
-SHA-256, and static ELF inspection:
-
-```sh
-evidence_parent=/absolute/private/evidence-parent
-mkdir -m 0700 "$evidence_parent"
-target/release/lkjscript-dev release build \
-  --output "$evidence_parent/lkjscript" \
-  --receipt "$evidence_parent/build-receipt.json"
-target/release/lkjscript-dev release admit \
-  --candidate "$evidence_parent/lkjscript" \
-  --build-receipt "$evidence_parent/build-receipt.json" \
-  --evidence-root "$evidence_parent/target-admission"
-```
-
-Target admission independently parses the exact candidate as ELF64 little-endian x86-64. It rejects
-an interpreter program header, any runtime `DT_NEEDED` entry, a GLIBC version requirement, a foreign
-machine, malformed or trailing linkage input, and a target-policy mismatch. It then runs the complete
-copied-binary command lifecycle with network unavailable during candidate execution in both pinned
-userlands. Finally it runs the exact candidate through the maintained distributed HTTP, transferred
-stateful HTTP, transferred outbound HTTP, transferred offline-package composition, transferred
-pure-tail execution, and standalone
-service oracles. The offline-package oracle reconstructs retained source containers independently,
-checks the fixed 11/12 diamond and standalone HTTP body without producer directories, and binds
-its complete command/file inventories to target-admission receipt 4. Offline receipt 6 additionally
-requires the finite-recursive tree library and consumers, complete shape/ordered results, exact
-dependency replacement, public recursive sessions, restarted typed storage and fault recovery.
-It also requires the effect-parametric task library, pure bound factory, complete ordered
-configuration/data results, activation/grant and stopping observations, transaction/restart recovery
-and exact dependency/artifact replacement. The public pair strictly admits both routes and executes
-each small command lifecycle; its exact route freshly executes the full five-owner suite once and
-latest binds that within-pair evidence after equality checks. It does not fabricate fresh latest
-child receipts or repeat the full suite for latest.
-The pure-tail oracle binds
-the exact candidate's long copied-public executions, bounded-stack resource probes, and isolated
-transactional HTTP success, rollback, cancellation, and cleanup. The outbound oracle uses
-only isolated loopback HTTP/TLS/DNS fixtures and contacts no live relay. Required unavailable,
-stale, foreign, reused, skipped,
-failed, or unrun evidence cannot produce a passing target-admission receipt.
-
-The userland observations establish only the named tested userland boundary. Static linkage does not
-prove compatibility with every Linux kernel, CPU, container runtime, filesystem, or host policy.
-
-## Fresh source proof and deterministic package
-
-Commit final implementation, workflow, normative, generated, target and release-procedure inputs
-before freezing the candidate and verifier. Run the required fresh source profile and rebuild/admit
-that exact candidate once through the selected hosted rehearsal; these commands are the corresponding
-local entry points when local proof is needed:
-
-```sh
-cargo run --release --locked -p lkjscript-dev -- check full --fresh --machine
-target/release/lkjscript-dev release build \
-  --output /absolute/absent/path/lkjscript \
-  --receipt /absolute/absent/path/build-receipt.json
-target/release/lkjscript-dev release admit \
-  --candidate /absolute/path/lkjscript \
-  --build-receipt /absolute/path/build-receipt.json \
-  --evidence-root /absolute/absent/path/target-admission
-```
-
-The full-check driver uses Cargo's release profile so its frozen executable fits the existing
-verifier byte bound. This does not change the full profile's selected gates, their Cargo/test
-options, freshness policy, or required outcomes.
-
-Any candidate-changing edit selects a new source and refreshes affected proof. A later reporting
-commit may describe the frozen result without becoming its source or requiring a circular report/
-hash/retest loop. `check changed` selects from current Git status, so a clean committed checkout's
-narrow result cannot replace campaign acceptance. Keep copied candidates and verifiers immutable
-while other Cargo builds run. The publication workflow performs its own required fresh proof;
-rehearsal evidence is not promoted across runs in place of it.
-
-Prepare the release with both receipts:
-
-```sh
-product_version=$(cargo metadata --locked --no-deps --format-version 1 |
-  jq -er '.packages[] | select(.name == "lkjscript") | .version')
-release_tag="v$product_version"
-target/release/lkjscript-dev release prepare \
-  --candidate /absolute/path/lkjscript \
-  --cargo-about /absolute/path/cargo-about \
-  --cargo-about-archive /absolute/path/cargo-about.tar.gz \
-  --output /absolute/absent/path/release-output \
-  --tag "$release_tag" \
-  --publication dry-run \
-  --full-verification-receipt /absolute/path/full/receipt.json \
-  --target-admission-receipt /absolute/path/target-admission/receipt.json \
-  --require-full-verification
-target/release/lkjscript-dev release verify \
-  --archive /absolute/path/release-output/lkjscript-x86_64-unknown-linux-musl.tar.gz \
-  --checksums /absolute/path/release-output/SHA256SUMS \
-  --receipt /absolute/path/release-output/release-receipt.json \
-  --extract-to /absolute/absent/path/verified-release \
-  --expected-tag "$release_tag" \
-  --expected-publication dry-run
-```
-
-Preparation generates target-filtered third-party notices twice from the locked offline production
-closure, creates two archives, and requires byte equality. The archive inventory is exactly one
-`lkjscript/` directory containing the executable, root license, generated third-party notices, and
-canonical release manifest. `SHA256SUMS` contains exactly the one archive entry. Only after the exact
-archive is finalized, the release owner renders `install.sh` from one source template. This third asset
-binds the exact repository/tag/target and archive/executable lengths and digests; it is outside the archive.
-`release verify` requires that exact deterministic script beside the archive. Release receipt 3 binds
-all three asset identities; predecessor receipt 2 and two-asset workflows remain with their frozen readers. Strict verification
-rejects nonregular inputs, links, traversal, duplicates, extras, incorrect order/mode/timestamp,
-noncanonical or predecessor metadata, target/linkage contradiction, checksum corruption, extraction
-conflict, and candidate mismatch. `release verify --extract-to` makes the validated directory visible
-through one create-new boundary, so workflow shell never owns archive parsing.
-
-Current public release metadata binds the product name and version, source, target policy,
-executable bytes and ELF facts, opaque capabilities digest, toolchain, locked closure, notices, and
-deterministic packaging. It contains no separate format or subsystem version. The private release
-receipt additionally binds fresh source and target-admission evidence; that contributor evidence is
-not shipped as public product metadata.
-
-The shared production `release_container` owner admits historical canonical payloads with bounded
-native gzip/tar, SHA-256 and static ELF checks. Installation never invokes contributor tools or external
-processes. Current release production separately enforces the exact pinned Rust, notice-tool and
-packaging policy; historical admission does not weaken producer policy. An install receipt records
-declared dry-run/release mode as unverified publication, not an authenticity claim.
-
-The bootstrap trusts its selected GitHub HTTPS source and uses embedded digests to bind subsequent
-bytes. It accepts only `--prefix`, performs bounded exact-URL acquisition, extracts only the manager
-into private temporary storage, and delegates to `runtime install --activate`. Rust exclusively owns
-archive admission, installation locks, immutable slots and atomic selection. PATH and shell profiles
-are untouched. See the [public installation commands](../README.md#download-and-install).
-
-Each pair additionally installs immutable public v0.1.32, checks exact/idempotent selection and manager
-recovery, and holds two independent HTTP starter bundles alive through a default change. The original
-foreground owner still supplies the independent arithmetic, once-only counter and cleanup expectations.
-Its artifact invocations use the exact installed runtime path; authoring uses its isolated copy.
-Receipt 9 binds that path and digest; historical receipt 8 remains with the frozen two-asset owner.
-No effects are replayed for a reference comparison. Retained binaries, receipts, descriptors and
-artifacts remain bound; generated authoring projects and owned live processes are cleaned.
-
-## Hosted dry run
-
-The `Release` workflow runs on explicit `ubuntu-24.04`. Its read-only checkout job builds the host
-verifier and exact musl candidate separately, runs fresh full and target admission, prepares the
-deterministic package, and uploads a four-file release handoff plus a two-file application-verifier
-handoff. The latter is a typed private handoff that binds the exact verifier bytes, tag, source
-commit, mode, and the roles in private handoff version 4 release-verify, distributed-http, outbound-http,
-offline-packages, pure-tail, and stateful-http.
-
-A second read-only job has no checkout. It downloads both handoffs by artifact ID and digest, verifies
-the verifier before restoring its executable mode, safely extracts and re-inspects the candidate,
-and runs `release transferred pair-run --acquisition simulated` over independent copies of all three assets. The unchanged generated bootstrap runs in both pinned userlands with controlled exact-URL acquisition. Both installed small lifecycles and one two-version recovery witness precede the single five-owner aggregate. Stateful verification uses only an explicit absolute
-create-new evidence root and an isolated first-party data store; it provisions no database server or
-container. Outbound verification uses a separate create-new root and deterministic local raw
-HTTP/TLS fixtures. All five child receipts must pass their complete current typed readers before the publication job
-can run.
-
-Set `release_dispatch_ref` to an existing ref that resolves to the final source and supplies its
-final workflow definition. Record that source before dispatch, then confirm the run's event
-`head_sha` equals it. The workflow checks out that immutable event SHA even if the dispatch ref
-later advances:
-
-```sh
-release_source=$(git rev-parse --verify 'HEAD^{commit}')
-gh workflow run Release --repo lkjsxc/lkjscript --ref "$release_dispatch_ref" \
-  -f publish=false -f tag="$release_tag"
+gh workflow run release.yml --repo lkjsxc/lkjscript --ref main -f operation=candidate
 gh run view --repo lkjsxc/lkjscript RUN_ID --json headSha,status,conclusion,jobs
 gh api repos/lkjsxc/lkjscript/actions/runs/RUN_ID --jq '{id,run_attempt,head_sha,status,conclusion}'
-gh run download --repo lkjsxc/lkjscript RUN_ID \
-  --name release-handoff-RUN_ID-RUN_ATTEMPT \
-  --dir /absolute/absent/path/hosted-handoff
-gh run download --repo lkjsxc/lkjscript RUN_ID \
-  --name pre-publication-application-evidence-RUN_ID-RUN_ATTEMPT \
-  --dir /absolute/absent/path/hosted-application-evidence
 ```
 
-Inspect matching runs before a selected dispatch. Observe once initially and once at a meaningful
-work boundary; another read needs a changed state or a specific diagnostic question. Complete
-independent work while the run executes. If only external waiting remains, hand off the exact
-commit, run/attempt, observed state, remaining required checks and the next `gh run view` action.
-Do not watch indefinitely, poll, fetch unchanged logs repeatedly or merge around pending protection.
-Download an artifact after its producing upload completes; later workflow jobs may still be running.
-Retain the explicit failing artifact-ID/digest checks.
-If the existing run used defective source-selection or admission code, preserve its failure and
-dispatch the corrected workflow source as a new run. Do not relabel old receipts or retarget a
-healthy frozen candidate merely because main advanced.
+The workflow installs Rust/Cargo 1.98.0, pinned native musl packages and both pinned userland images
+from the maintained `release target` policy. It verifies cargo-about 0.9.2 by archive and executable
+digests. Fixed target production requires a config-free `CARGO_HOME` and rejects unbound compiler,
+linker, target or code-generation overrides. Ordinary source tests may retain their own toolchain
+configuration. The selected verifier is copied once and stays immutable across other Cargo builds.
 
-The dry run must freshly pass build, full, all six named target oracles, package, and the
-installed pair and five-owner transferred operation. Its publish and post-release jobs must be
-skipped, and no tag, draft, release, public asset or publication-control mutation may be created.
-Evidence from another commit, workflow, target policy,
-candidate, verifier, image, or run attempt is stale.
-
-The bounded transferred operation runs from the already verified two-file verifier handoff. It
-requires the extracted executable and canonical manifest from `release verify --extract-to`, the
-expected source/tag/publication context, and externally supplied verifier bytes/hash:
+The corresponding owner operations, when local execution is justified, are:
 
 ```sh
-/absolute/verifier-handoff/lkjscript-dev release transferred run \
-  --candidate /absolute/verified-release/lkjscript \
-  --manifest /absolute/verified-release/RELEASE-MANIFEST.json \
-  --tag "$release_tag" --commit "$release_source" --publication dry-run \
-  --boundary pre-publication --evidence-root /absolute/absent/transferred-evidence \
-  --verifier-identity /absolute/verifier-handoff/verifier-identity.json \
-  --expected-verifier-sha256 "$verifier_sha256" --expected-verifier-bytes "$verifier_bytes"
+VERIFIER=/absolute/immutable/lkjscript-dev
+"$VERIFIER" check release-source --fresh --machine
+"$VERIFIER" release build --output /absolute/new/lkjscript --receipt /absolute/new/build.json
+"$VERIFIER" release prepare \
+  --candidate /absolute/new/lkjscript \
+  --cargo-about /absolute/pinned/cargo-about \
+  --cargo-about-archive /absolute/pinned/cargo-about.tar.gz \
+  --output /absolute/new/assets --tag vMAJOR.MINOR.PATCH
+"$VERIFIER" release verifier prepare --executable "$VERIFIER" \
+  --output /absolute/new/verifier --tag vMAJOR.MINOR.PATCH --commit EXACT_PRODUCT_SHA
+/absolute/new/verifier/lkjscript-dev release candidate accept \
+  --assets /absolute/new/assets \
+  --source-receipt /absolute/repository/.artifacts/lkjscript-dev/check/RUN/receipt.json \
+  --build-receipt /absolute/new/build.json \
+  --verifier-identity /absolute/new/verifier/verifier-identity.json \
+  --evidence-root /absolute/new/acceptance --output /absolute/new/release-receipt.json
 ```
 
-`release transferred verify` takes the same arguments to re-read existing evidence without rerunning
-behavior. It cannot certify a different root, boundary, source, candidate, or verifier. Retries use
-new roots and retain failed attempts. The aggregate, all child receipts, and bounded command/output
-files are retained; incomplete state is published before invocation. Neither a child status flag nor
-obsolete receipt generation suffices. `release admission-verify` and preparation likewise re-read
-each named target receipt through its existing owner.
+All paths shown as new must be absent and owned. Keep source-check and acceptance process inputs
+stable. `prepare` generates notices twice, constructs final neutral content and renders the final
+bootstrap. Its result is `constructed`, never accepted/promotable. `candidate accept` extracts the
+final executable, independently compares deterministic packaging without rebuilding it, admits
+source proof, runs the six owners and pinned environments, runs installation/recovery, invokes the
+original readers and joins owned resources before emitting `candidate_accepted`. Failures retain
+incomplete/failed/cancelled/unavailable state and their stage logs. No asset is rewritten to obtain
+acceptance or later permission.
 
-Offline-packages has the same owner-defined 3,600-second complete-process allowance in source,
-target and transferred acceptance, including evidence finalization and terminal exit. Both hosted
-application jobs (pre-publication and anonymous public acceptance) have separate 120-minute outer
-limits; these do not promise that every child can use its individual maximum in one run. The build
-and publication jobs retain their 180-minute and 30-minute limits.
+## Select, promote and resume
 
-## Exact tag and immutable publication
-
-After the exact release source is clean, normally pushed, reachable from `origin/main`, and its
-hosted dry run is fresh, recheck that the intended tag and release are unused and no relevant run
-is active. Later accepted development or reporting commits may follow that source. Use an isolated
-clone with its own `.git` directory when necessary; select the accepted release source as HEAD
-without rewinding main. Create and push only the annotated tag:
-
-Prepare useful release notes in an owned file before creating the tag. Describe the shipped
-capability and compatibility boundaries; do not claim pending public acceptance has passed.
-The publisher uses this exact annotation as the immutable release notes.
+Select an exact producer, including its original attempt, with a separate read-only invocation:
 
 ```sh
-git fetch --prune origin
-release_source=$(git rev-parse --verify 'HEAD^{commit}')
-release_main=$(git rev-parse --verify 'refs/remotes/origin/main^{commit}')
-git merge-base --is-ancestor "$release_source" "$release_main"
-git status --short
-release_tag="v$(cargo metadata --locked --no-deps --format-version 1 |
-  jq -er '.packages[] | select(.name == "lkjscript") | .version')"
-test -z "$(git ls-remote --tags origin "refs/tags/$release_tag" "refs/tags/$release_tag^{}")"
-gh release view "$release_tag" --repo lkjsxc/lkjscript && exit 1 || true
-git tag -a "$release_tag" -F /absolute/path/release-notes.txt
-test "$(git cat-file -t "refs/tags/$release_tag")" = tag
-tag_object_sha=$(git rev-parse "refs/tags/$release_tag")
-test "$(git rev-parse "refs/tags/$release_tag^{}")" = "$(git rev-parse HEAD)"
-test "$(gh api repos/lkjsxc/lkjscript/immutable-releases --jq '.enabled')" = true
-gh variable set LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA \
-  --repo lkjsxc/lkjscript --body "$tag_object_sha"
-test "$(gh variable list --repo lkjsxc/lkjscript --json name,value \
-  --jq '.[] | select(.name == "LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA") | .value')" \
-  = "$tag_object_sha"
-git push origin "refs/tags/$release_tag"
+gh workflow run release.yml --repo lkjsxc/lkjscript --ref main \
+  -f operation=consume -f producer_run=RUN_ID -f producer_attempt=ATTEMPT
 ```
 
-Before writing the variable, record its exact prior value and reconcile it to its terminal owning
-attempt and actual publication state. A terminal failed attempt without a release is a legitimate
-previous owner when its successor has been explicitly selected; preserve its immutable identities
-and failed history. Exclude queued, in-progress, waiting, requested, pending, or foreign publishers. Compare the prior
-value again immediately before the write. This read/check/write is not atomic compare-and-swap.
-Before tag push, restore the prior value only if the field still contains this attempt's tag object
-and no tag/run has acquired it. After tag push retain the binding for the owning run. A release-only
-grant does not authorize changing immutability or any other settings.
+The controller comes from that invocation's integrated mainline workflow source; its revision is
+recorded separately from product source. It authenticates repository/head repository, allowed event
+and workflow, exact run/attempt, successful mandatory job/steps, terminal contract, artifact IDs,
+service ZIP digests, exact inventories and expected asset/verifier bytes. It requires product source
+to be reachable from freshly resolved main. Artifact names or caller-supplied hashes are insufficient.
+It then runs the small transfer lifecycle without product builds or broad application replay.
+Read-only publication preflight reports an independent authorized/rejected result. For the private
+0.1.38 cutover candidate, the existing tag selects different content and must reject.
 
-The tag push owns publication. The only `contents: write` job receives the verified release handoff,
-performs no checkout, and executes no repository binary or script. It checks the remote annotated tag
-and administrator binding, creates or resumes only the exact draft, uploads only missing exact assets
-without clobber, verifies all three GitHub asset digests, and publishes immutable latest state. Do not
-manually create a parallel release.
+For a future release with separate publication authorization, first prepare meaningful notes and an
+ordinary annotated tag selecting the accepted product commit. Refresh remote main, exact tag/release
+occupancy, relevant jobs and enabled immutability. The existing repository control
+`LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA` must bind that exact annotated object. Only an explicitly
+authorized operator may change this scoped control or create/push the tag. Reconcile its prior owner
+and terminal release state, compare the prior value immediately before any authorized write, and
+read it back. That read/check/write is not atomic compare-and-swap. Preserve prior immutable objects
+and genuine failures; never change immutability, credentials, access or protections to make admission
+pass. A tag push alone starts no build or publication.
 
-## Anonymous public acceptance
-
-The post-release job anonymously downloads separate exact-tag and `releases/latest` archive/checksum/
-bootstrap triples. Acquisition clears inherited authentication and curl configuration; separate authenticated
-metadata and attestation reads admit every asset identity. It then invokes
-one `release transferred pair-run --acquisition anonymous` in mandatory release mode. The original
-downloaded scripts execute with the real downloader and each acquires its embedded exact-tag archive;
-there are no URL overrides or acquisition fixtures in public proof. Rust independently admits each strict
-archive and static executable into a create-new extraction, compares complete archive/checksum/
-installer/manifest/executable bytes and admitted modes. Each installed pinned executable freshly
-advertises structural syntax, authors a body returning 42, and replaces it to return 43 through
-reviewed changes while preserving the declaration and unchanged parameter owners. Each route also
-checks, builds and runs the original template with independently expected typed text `"hello"`.
-A final status confirms the accepted revision remains healthy. Each route has a private project and
-supervised cleanup. The pair then freshly executes the existing five-owner suite once against exact,
-with boundary `exact-download`. Latest binds that actual aggregate within this invocation; it does
-not receive a fabricated fresh five-child receipt. Its small lifecycle is separately fresh.
+With those prerequisites established, explicitly dispatch:
 
 ```sh
-/absolute/verifier/lkjscript-dev release transferred pair-run \
-  --exact-assets /absolute/exact-assets --latest-assets /absolute/latest-assets \
-  --tag "$release_tag" --commit "$release_source" --publication release \
-  --acquisition anonymous \
-  --evidence-root /absolute/absent/pair \
-  --verifier-identity /absolute/verifier/verifier-identity.json \
-  --expected-verifier-sha256 "$verifier_sha256" --expected-verifier-bytes "$verifier_bytes"
+gh workflow run release.yml --repo lkjsxc/lkjscript --ref main \
+  -f operation=promote -f producer_run=RUN_ID -f producer_attempt=ATTEMPT
 ```
 
-`pair-verify` accepts the same arguments and strictly rereads the pair, both admissions, lifecycles
-and every actual child receipt without executing applications. Input directories must be separate
-canonical absolute directories containing exactly the target-owned archive, `SHA256SUMS`, and `install.sh`;
-symlinks, aliases, hard-linked inputs and pre-existing output roots reject. Both routes, the verifier
-and its handoff are reobserved around each expensive child and before terminal acceptance. Failed,
-cancelled, unavailable, output-exhausted, changed or unclean attempts remain non-passing; retries
-use new roots. Evidence retains route receipts/logs and the small built artifacts required by their
-reader, plus the one actual aggregate and all child records. Generated projects are removed.
+The publisher receives only the trusted controller and selected bytes. It executes no candidate,
+transferred verifier or handoff script, has no Cargo build path, and uses bounded pinned operations.
+Only its job receives write permission. It rechecks source/main, annotated object/source/version,
+scoped authorization, occupancy and exact bytes before publication. It promotes the already accepted
+three assets unchanged and verifies actual immutable state. Attestations establish provenance, not
+semantic correctness or permission; supported GitHub release/asset verification checks actual subjects.
 
-`--acquisition simulated` is explicitly a **local pair rehearsal**, for either declared dry-run or final
-release package bytes. `--acquisition anonymous` requires a release manifest. Prepare from a clean source commit
-using fresh full and exact target-admission receipts, the unchanged product-version tag string and
-the pinned notice tool; create a matching verifier handoff and two independent local input copies.
-The pair's real child aggregate uses `pre-publication` for simulated acquisition. This requires no new
-tag or release and proves no anonymous acquisition or GitHub authenticity. Release and rehearsal
-evidence cannot substitute for each other. Source-full, six-owner target and independent fresh
-pre-publication acceptance remain mandatory for a selected publication. The contributor command
-owns admission/execution/equality/cleanup; the hosted workflow owns public acquisition/authenticity
-and successful overall completion. The [decision](decisions/20260911-bound-public-pair.md) records
-the policy change and its trusted-runner limits.
+A failed publication/API boundary resumes with `operation=resume-publication` and the same exact
+producer selectors. A matching immutable release is idempotent. An owned partial draft may receive
+only missing matching assets after source/owner/inventory checks. Foreign/conflicting drafts and
+published mismatches reject without deletion, replacement or retagging. Fresh authority is always
+required. Successful product construction and broad acceptance do not rerun.
 
-For owner development, run the release/process Cargo filters and list exact ignored test names.
-With genuinely prepared inputs under `LKJSCRIPT_PAIR_REHEARSAL_ROOT` (`verifier`, `exact-assets`,
-`latest-assets` and the actual preparation `release-receipt.json`), explicitly run
-`release::transferred::pair::tests::live_pair_interruptions_preserve_failures_before_fresh_recovery`
-with `--ignored --exact`, then perform the genuine `pair-run` into `pair`. Explicitly run
-`release::transferred::pair::tests::live_pair_receipt_fault_matrix` with
-`LKJSCRIPT_PAIR_FIXTURE_ROOT` naming that completed pair and
-`release::transferred::fault_tests::live_receipt_fault_matrix` with
-`LKJSCRIPT_TRANSFERRED_FIXTURE_ROOT` naming its `full-suite`. These source-bound fault tests restore
-original evidence; they are not fresh product behavioral observations or default full rehearsals.
-For the copied debug harness, scope `RUST_MIN_STACK=8388608` to these two receipt-matrix test
-invocations. The [original pair fault execution](campaigns/202609150900.md#local-delivery-proof-ordinary-integration-and-resumption--2026-09-15-utc)
-records default-stack overflow and recovery of the unchanged driver with that test-thread context.
-Do not apply this setting to product execution or change application deadlines. Retain a failed
-test invocation, verify original bytes/modes and production-reader recovery before correcting its
-test context; that correction does not authorize another healthy application run.
-The next selected user-visible release milestone must exercise this public workflow. The installation campaign explicitly selects additive publication after source, target and transferred
-acceptance. It does not select deployment or automatic future releases.
+A failed public boundary uses `operation=resume-public`, again selecting the original producer.
+Exact and latest acquisition have distinct identities. Selected publication requires latest to be
+this candidate; a moved alias cannot silently pass. A later read-only recheck may record the actual
+new latest identity as superseded/not applicable and still check immutable exact content. No different
+bytes are executed or certified as the candidate. Reproducible product/installer defects require a
+real corrected candidate; transient acquisition failure only repeats its failed boundary.
 
-An independent token-free transport check may repeat:
+GitHub reruns preserve the original event SHA/ref. To use a fixed controller from newer main, dispatch
+a new consumer instead of assuming a rerun changes workflow source. Producer attempt and consumer
+attempt always remain separate. Serialize promotion and public/latest checks through the workflow's
+shared publication concurrency group; independent read-only candidate work has separate concurrency.
 
-```sh
-curl --fail --location --output /absolute/path/exact.tar.gz \
-  "https://github.com/lkjsxc/lkjscript/releases/download/$release_tag/lkjscript-x86_64-unknown-linux-musl.tar.gz"
-curl --fail --location --output /absolute/path/latest.tar.gz \
-  https://github.com/lkjsxc/lkjscript/releases/latest/download/lkjscript-x86_64-unknown-linux-musl.tar.gz
-cmp /absolute/path/exact.tar.gz /absolute/path/latest.tar.gz
-gh release verify "$release_tag" --repo lkjsxc/lkjscript
-gh release verify-asset "$release_tag" /absolute/path/exact.tar.gz \
-  --repo lkjsxc/lkjscript
-```
+## Retention and terminal results
 
-Current-public README and status claims advance only after exact and latest anonymous acceptance has
-passed. A published release without that evidence is externally committed but not closed.
+Essential candidate assets, verifier and terminal acceptance handoffs request **14 days** through
+GitHub artifacts. Selection records actual artifact IDs, digests and service expiry; repository/service
+limits may shorten retention. Missing, ambiguous or expired trusted material reports unavailable,
+with a new-candidate or separately authorized trusted-recovery action. It never silently rebuilds and
+labels the result reuse. Preserve originals needed for a real failure diagnosis; do not create an
+unlimited evidence service or execute them with publishing credentials.
 
-## Recovery and maintenance
+Changed product source/version, required configuration, executable/assets, verifier/workload,
+environment or trust inputs invalidate affected proof. A later reporting or controller-only revision
+receives its own appropriate checks and does not relabel the candidate source. Public rechecking with
+immutable public bytes and a separately trusted compatible verifier cannot manufacture lost historical
+acceptance; the ordinary selected resume path requires its retained trusted handoffs.
 
-Before tag push, correct the exact source or workflow defect, create a new final source commit, and
-rerun every invalidated fresh boundary. An unpushed local tag may be removed only after proving it
-never reached the remote.
+CI's terminal result distinguishes candidate accepted, promotion authorized/rejected, immutable assets
+published, and public verification passed/failed/unavailable. Mandatory skipped stages cannot produce
+whole-operation success. An upload, green child or main push alone is insufficient. Fixture writes
+prove controller behavior, not GitHub publication or live attestation issuance.
 
-Once a tag is pushed, never move or delete it. An unchanged exact tag with only a transient,
-idempotent orchestration failure may use the bounded repository recovery dispatch after proving it
-cannot create contradictory state:
-
-```sh
-gh workflow run Release --repo lkjsxc/lkjscript --ref main \
-  -f publish=true -f tag="$release_tag"
-```
-
-Inspect matching runs and exact tag/control/asset state first; reuse healthy owning work. In this
-manual mode the tag's peeled commit remains the product source even when the workflow definition
-comes from a later dispatch event commit. Do not demand equality between those two distinct
-identities, and do not weaken the remote tag-object/control checks or any fresh proof boundary.
-Complete original-reader admission of full, target, package and installed evidence before continuing
-the selected publisher; delivery closes only after anonymous exact/latest installed acceptance and
-its original-reader admission.
-
-Any change to the selected product source, its workflow inputs, target, verifier, package, or
-candidate after tag push requires the smallest unused additive patch. Once a release is published,
-never edit, unpublish, replace, relabel, or delete it or its assets. Read-only propagation and
-verification may retry within the bounded
-workflow policy; a content defect recovers only through a new patch identity.
-
-Official actions remain pinned to full commit SHAs. Review changes to action SHAs, toolchain,
-native-package digests, userland images, cargo-about digests, runner labels, and resource
-measurements as explicit release inputs. Static linkage is directly inspected evidence, not build
-provenance, binary signing, hostile-code isolation, or universal Linux portability.
+Main integration and public closure remain separate. Honor actual protections, integrate independently
+main-ready work normally and verify remote ancestry. If hosted acceptance is still pending, report
+that campaign gate as incomplete. At meaningful work boundaries inspect the exact run; if external
+completion is the sole dependency, return its observed state, retained identities, missing gate and
+next concrete action. Do not start a duplicate run or promise unattended monitoring.

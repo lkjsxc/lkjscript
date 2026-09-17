@@ -1,6 +1,106 @@
 use super::*;
 use lkjscript::platform::control::{parse_records, render_record};
 
+/// Feedback for changed boundary authoring/reader logic, never new-candidate acceptance.
+/// The caller supplies owned, absent storage and the frozen public v0.1.38 triple.
+#[test]
+#[ignore = "requires an explicitly supplied frozen v0.1.38 archive and owned absent evidence root"]
+fn live_small_lifecycle_with_frozen_v0138() {
+    let source = PathBuf::from(
+        std::env::var_os("LKJSCRIPT_LIFECYCLE_FIXTURE_ASSETS").expect("frozen assets"),
+    );
+    let root = PathBuf::from(
+        std::env::var_os("LKJSCRIPT_LIFECYCLE_FIXTURE_ROOT").expect("owned absent root"),
+    );
+    assert!(source.is_absolute() && root.is_absolute() && !root.exists());
+    assert_eq!(
+        archive::sha256_file(&source.join(archive::ARCHIVE_NAME))
+            .expect("public archive digest")
+            .0
+            .as_str(),
+        "fa10e7afb09c06e4a243f421050a0497ca9acd331cdf34c046650c85aef377aa"
+    );
+    fs::create_dir(&root).expect("owned evidence");
+    let root = root.canonicalize().expect("canonical evidence");
+    fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).expect("private root");
+    let assets = root.join("assets");
+    fs::create_dir(&assets).expect("owned assets");
+    for name in [
+        archive::ARCHIVE_NAME,
+        archive::CHECKSUM_NAME,
+        crate::release::bootstrap::NAME,
+    ] {
+        fs::copy(source.join(name), assets.join(name)).expect("immutable fixture copy");
+    }
+    let options = PairOptions {
+        verify: false,
+        exact_assets: assets,
+        latest_assets: PathBuf::new(),
+        tag: "v0.1.38".to_owned(),
+        commit: "7083f9a6d56ed702017942e100c3696fc6f35308".to_owned(),
+        tier: Tier::BoundaryExactSmoke,
+        acquisition: Acquisition::Simulated,
+        evidence_root: root.clone(),
+        verifier_identity: PathBuf::new(),
+        expected_verifier_sha256: "0".repeat(64),
+        expected_verifier_bytes: 1,
+    };
+    let route = Route::Exact;
+    let route_root = route.root(&options);
+    fs::create_dir(&route_root).expect("route");
+    fs::set_permissions(&route_root, fs::Permissions::from_mode(0o700)).expect("private route");
+    let control = process::ProcessControl::default();
+    let admitted = archive::admit_archive(
+        &options.exact_assets.join(archive::ARCHIVE_NAME),
+        &options.exact_assets.join(archive::CHECKSUM_NAME),
+        &route_root,
+        &route.extraction(&options),
+        &control,
+    )
+    .expect("genuine historical archive admission");
+    assert_eq!(admitted.manifest.source.tagged_commit_sha, options.commit);
+    let receipt = run(&options, route, &admitted, &control).expect("lifecycle result retained");
+    assert_eq!(
+        receipt.status,
+        Status::FreshPassed,
+        "{}",
+        receipt.failure.as_deref().unwrap_or("no diagnostic")
+    );
+    validate(&options, route, &admitted, &receipt).expect("maintained original reader");
+    for fault in ["omitted-command", "cleanup-failed", "missing-installation"] {
+        let mut changed = receipt.clone();
+        match fault {
+            "omitted-command" => {
+                changed.commands.pop();
+            }
+            "cleanup-failed" => changed.cleanup_complete = false,
+            _ => changed.installation = None,
+        }
+        evidence::publish_json(&route_root.join("lifecycle.json"), &changed)
+            .expect("owned forged producer");
+        assert!(
+            validate(&options, route, &admitted, &changed).is_err(),
+            "{fault}"
+        );
+    }
+    evidence::publish_json(&route_root.join("lifecycle.json"), &receipt).expect("restore original");
+    let rejected = route_root.join("rejected.lkjc");
+    let original = fs::read(&rejected).expect("literal rejected edit");
+    fs::write(&rejected, b"changed retained request\n").expect("owned falsification");
+    assert!(validate(&options, route, &admitted, &receipt).is_err());
+    fs::write(&rejected, original).expect("restore exact original");
+    validate(&options, route, &admitted, &receipt).expect("restored original recovers");
+    println!(
+        "{}",
+        serde_json::json!({"fixture": "frozen-public-v0.1.38-small-lifecycle", "root": root,
+        "source": options.commit, "commands": receipt.commands.len(), "broad_application_invocations": 0,
+        "product_builds": 0, "elapsed_nanoseconds": receipt.elapsed_nanoseconds,
+        "created": receipt.structural.as_ref().expect("structural").created_value,
+        "edited": receipt.structural.as_ref().expect("structural").replaced_value,
+        "new_candidate_acceptance": false })
+    );
+}
+
 fn output(target: &str, result: &str, differential: &str) -> Vec<CompactRecord> {
     let authority =
         render_record("authority", &[("revision", "reader-fixture")]).expect("fixture authority");

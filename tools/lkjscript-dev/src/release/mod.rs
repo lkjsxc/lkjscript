@@ -1,22 +1,23 @@
 mod admission;
 mod archive;
 mod bootstrap;
+mod candidate;
+pub(crate) mod controller;
 mod model;
 mod target;
 mod transferred;
 mod verifier;
 
 use crate::error::DevError;
-use crate::process::{self, ProcessObservation, ProcessSpec, ProcessStatus};
-use archive::{ARCHIVE_NAME, CHECKSUM_NAME, RECEIPT_NAME};
+use crate::process::{self, ProcessSpec, ProcessStatus};
+use archive::{ARCHIVE_NAME, CHECKSUM_NAME};
 use model::{
-    ArtifactIdentity, EvidenceClassification, ExecutableIdentity, ExternalEvidence, HostedContext,
-    NoticeIdentity, PackagingIdentity, PayloadIdentity, ProductIdentity, PublicationMode,
-    RECEIPT_SCHEMA, RECEIPT_SCHEMA_VERSION, ReleaseManifest, ReleaseReceipt, SchemaIdentity,
-    Sha256Digest, SourceIdentity, ToolchainIdentity, VerificationClassification,
+    BuildIdentity, ExecutableIdentity, HostedContext, ManifestEncoding, NoticeIdentity,
+    PackagingIdentity, PayloadIdentity, ProductIdentity, PublicationMode, ReleaseManifest,
+    Sha256Digest, SourceIdentity, ToolchainIdentity,
 };
 use serde::Serialize;
-use serde_json::Value;
+
 use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsString;
@@ -35,20 +36,6 @@ const CARGO_ABOUT_ARCHIVE_SHA256: &str =
     "9099a59e820c38a68b9d65f300662a567d56562f9a10f6aa4c7e86c17c2566af";
 const CARGO_ABOUT_EXECUTABLE_SHA256: &str =
     "b06bd6a8bfd726cffb90e3e0588e3e0b1cfbb582bf6a34f4c1c2692ba8f2e7b8";
-const EXPECTED_CLASSIFICATIONS: [&str; 11] = [
-    "source_identity",
-    "toolchain",
-    "cargo_about",
-    "notice_generation",
-    "candidate_capabilities",
-    "candidate_lifecycle",
-    "full_verification",
-    "target_admission",
-    "deterministic_packaging",
-    "archive_verification",
-    "checksum_integrity",
-];
-
 #[derive(Debug)]
 struct PrepareOptions {
     candidate: PathBuf,
@@ -56,10 +43,6 @@ struct PrepareOptions {
     cargo_about_archive: PathBuf,
     output: PathBuf,
     tag: String,
-    publication_mode: PublicationMode,
-    full_verification_receipt: Option<PathBuf>,
-    target_admission_receipt: PathBuf,
-    require_full_verification: bool,
 }
 
 #[derive(Debug)]
@@ -79,24 +62,12 @@ struct SourceFacts {
     tag: String,
     commit_sha: String,
     commit_timestamp_unix_seconds: u64,
-    tag_object_sha: Option<String>,
 }
 
 #[derive(Debug)]
 struct CapabilitiesFacts {
     product_version: String,
     capabilities_digest: String,
-}
-
-#[derive(Debug)]
-struct FullVerificationFacts {
-    evidence: ExternalEvidence,
-    selected_gates: usize,
-}
-
-#[derive(Debug)]
-struct TargetAdmissionFacts {
-    evidence: ExternalEvidence,
 }
 
 pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u8, DevError> {
@@ -110,6 +81,8 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         "transferred" => transferred::command(arguments),
         "verifier" => verifier::command(arguments),
         "prepare" => prepare(parse_prepare(arguments)?),
+        "candidate" => candidate::command(arguments),
+        "controller" => controller::command(arguments),
         "verify" => verify(parse_verify(arguments)?),
         value => Err(DevError::usage(format!(
             "unknown release subcommand '{value}'"
@@ -119,21 +92,13 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
 
 fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
     let started = Instant::now();
-    let started_unix_nanoseconds = unix_nanoseconds()?;
     let repository = repository_root()?;
     require_absolute_regular_executable(&options.candidate, "release candidate")?;
     require_absolute_regular_executable(&options.cargo_about, "cargo-about executable")?;
     require_absolute_regular(&options.cargo_about_archive, "cargo-about archive")?;
     require_absolute_output(&options.output)?;
-    if let Some(path) = &options.full_verification_receipt {
-        require_absolute_regular(path, "full verification receipt")?;
-    }
-    require_absolute_regular(
-        &options.target_admission_receipt,
-        "target admission receipt",
-    )?;
     ensure_clean_checkout(&repository)?;
-    let source = source_facts(&repository, &options.tag, options.publication_mode)?;
+    let source = source_facts(&repository, &options.tag)?;
     let toolchain = toolchain_facts(&repository)?;
     let tar_version = command_version("tar", &["--version"], &repository)?;
     let gzip_version = command_version("gzip", &["--version"], &repository)?;
@@ -197,22 +162,6 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
         )));
     }
 
-    let full_verification = options
-        .full_verification_receipt
-        .as_deref()
-        .map(|path| inspect_full_verification(path, &source.commit_sha))
-        .transpose()?;
-    if options.require_full_verification && full_verification.is_none() {
-        return Err(DevError::usage(
-            "--require-full-verification requires --full-verification-receipt",
-        ));
-    }
-    let target_admission = inspect_target_admission(
-        &options.target_admission_receipt,
-        &source.commit_sha,
-        &options.candidate,
-    )?;
-
     let notice_one = work.path().join("THIRD-PARTY-LICENSES-1.html");
     let notice_two = work.path().join("THIRD-PARTY-LICENSES-2.html");
     generate_notices(
@@ -236,21 +185,25 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
     }
     audit_notice(&notice_one)?;
 
-    let candidate_lifecycle =
-        run_candidate_lifecycle(&repository, &release_candidate, work.path())?;
-    let candidate_after = archive::ensure_regular(&release_candidate, "release candidate")?;
-    let (candidate_sha256_after, candidate_bytes_after) = archive::sha256_file(&release_candidate)?;
-    if candidate_sha256 != candidate_sha256_after
-        || candidate_bytes != candidate_bytes_after
-        || candidate_after.permissions().mode() & 0o111 == 0
-    {
-        return Err(DevError::infrastructure(
-            "private release candidate changed during exact-candidate acceptance",
-        ));
-    }
-
     let manifest = ReleaseManifest {
-        publication_mode: options.publication_mode,
+        encoding: ManifestEncoding::PublicationNeutral {
+            build: BuildIdentity {
+                target_policy_sha256: Sha256Digest::new(target::policy_sha256()?)
+                    .map_err(DevError::corrupt)?,
+                command: [
+                    "cargo",
+                    "build",
+                    "--release",
+                    "--locked",
+                    "--bin",
+                    "lkjscript",
+                    "--target",
+                    TARGET_TRIPLE,
+                ]
+                .map(str::to_owned)
+                .to_vec(),
+            },
+        },
         product: ProductIdentity {
             name: PACKAGE_NAME.to_owned(),
             version: source.product_version.clone(),
@@ -260,7 +213,6 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
             expected_release_tag: source.tag.clone(),
             tagged_commit_sha: source.commit_sha.clone(),
             commit_timestamp_unix_seconds: source.commit_timestamp_unix_seconds,
-            annotated_tag_object_sha: source.tag_object_sha.clone(),
         },
         target_triple: TARGET_TRIPLE.to_owned(),
         toolchain,
@@ -317,88 +269,19 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
         &manifest_bytes,
     )?;
     let package_one = work.path().join("package-one");
-    let package_two = work.path().join("package-two");
-    fs::create_dir(&package_one)
-        .and_then(|()| fs::create_dir(&package_two))
-        .map_err(|error| {
-            DevError::infrastructure(format!("create packaging directories: {error}"))
-        })?;
+    fs::create_dir(&package_one)?;
     let archive_one = archive::create_archive(
         &payload_parent,
         &package_one.join(target::TAR_NAME),
         source.commit_timestamp_unix_seconds,
     )?;
-    let archive_two = archive::create_archive(
-        &payload_parent,
-        &package_two.join(target::TAR_NAME),
-        source.commit_timestamp_unix_seconds,
-    )?;
-    require_equal_files(
-        &archive_one,
-        &archive_two,
-        "deterministic release packaging",
-    )?;
     let verify_one = work.path().join("verify-one");
-    let verify_two = work.path().join("verify-two");
-    fs::create_dir(&verify_one)
-        .and_then(|()| fs::create_dir(&verify_two))
-        .map_err(|error| {
-            DevError::infrastructure(format!("create archive verification directories: {error}"))
-        })?;
+    fs::create_dir(&verify_one)?;
     let verified_one =
         archive::verify_archive(&archive_one, &verify_one, Some(&release_candidate))?;
-    let verified_two =
-        archive::verify_archive(&archive_two, &verify_two, Some(&release_candidate))?;
-    if verified_one.archive_sha256 != verified_two.archive_sha256
-        || verified_one.archive_byte_length != verified_two.archive_byte_length
-        || verified_one.manifest_sha256 != verified_two.manifest_sha256
-    {
-        return Err(DevError::corrupt(
-            "repeated release preparations produced different identities",
-        ));
-    }
     validate_manifest(&verified_one.manifest)?;
     let checksum_bytes = checksum_bytes(&verified_one.archive_sha256);
     verify_checksum_bytes(&checksum_bytes, &verified_one.archive_sha256)?;
-    let checksum_sha256 = archive::sha256_bytes(&checksum_bytes)?;
-    let completed_unix_nanoseconds = unix_nanoseconds()?;
-    let classifications = classifications(
-        &full_verification,
-        &target_admission,
-        verified_one.members.len(),
-    );
-    let receipt = ReleaseReceipt {
-        schema: SchemaIdentity {
-            identity: RECEIPT_SCHEMA.to_owned(),
-            version: RECEIPT_SCHEMA_VERSION,
-        },
-        publication_mode: options.publication_mode,
-        release_tag: source.tag.clone(),
-        commit_sha: source.commit_sha.clone(),
-        started_unix_nanoseconds,
-        completed_unix_nanoseconds,
-        elapsed_nanoseconds: duration_nanoseconds(started.elapsed()),
-        hosted_context: hosted_context(),
-        manifest_sha256: verified_one.manifest_sha256.clone(),
-        archive: ArtifactIdentity {
-            name: ARCHIVE_NAME.to_owned(),
-            byte_length: verified_one.archive_byte_length,
-            sha256: verified_one.archive_sha256.clone(),
-        },
-        checksum_file: ArtifactIdentity {
-            name: CHECKSUM_NAME.to_owned(),
-            byte_length: checksum_bytes.len() as u64,
-            sha256: checksum_sha256,
-        },
-        installer: bootstrap::identity(&verified_one)?,
-        full_verification_receipt: full_verification.map(|facts| facts.evidence),
-        target_admission_receipt: target_admission.evidence,
-        candidate_lifecycle,
-        classifications,
-    };
-    validate_receipt(&receipt, &verified_one)?;
-    let receipt_bytes = archive::canonical_json(&receipt)?;
-
     let output_stage = tempfile::Builder::new()
         .prefix(".lkjscript-release-output-")
         .tempdir_in(parent)
@@ -409,11 +292,6 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
     archive::write_new(
         &output_stage.path().join(CHECKSUM_NAME),
         &checksum_bytes,
-        0o644,
-    )?;
-    archive::write_new(
-        &output_stage.path().join(RECEIPT_NAME),
-        &receipt_bytes,
         0o644,
     )?;
     archive::write_new(
@@ -429,39 +307,19 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
     publish_directory_no_replace(output_stage.path(), &options.output)?;
     archive::synchronize_directory(parent)?;
 
-    #[derive(Serialize)]
-    struct Summary<'a> {
-        status: &'static str,
-        publication_mode: &'static str,
-        tag: &'a str,
-        commit_sha: &'a str,
-        output: String,
-        archive: &'static str,
-        archive_bytes: u64,
-        archive_sha256: &'a str,
-        checksums: &'static str,
-        receipt: &'static str,
-        receipt_sha256: String,
-    }
-    let receipt_sha256 = archive::sha256_file(&options.output.join(RECEIPT_NAME))?.0;
-    let summary = Summary {
-        status: "passed",
-        publication_mode: options.publication_mode.as_str(),
-        tag: &source.tag,
-        commit_sha: &source.commit_sha,
-        output: options.output.to_string_lossy().into_owned(),
-        archive: ARCHIVE_NAME,
-        archive_bytes: verified_one.archive_byte_length,
-        archive_sha256: verified_one.archive_sha256.as_str(),
-        checksums: CHECKSUM_NAME,
-        receipt: RECEIPT_NAME,
-        receipt_sha256: receipt_sha256.as_str().to_owned(),
-    };
+    // Assets are finalized here; construction is deliberately not candidate acceptance.
+    work.close()
+        .map_err(|error| DevError::infrastructure(format!("close construction work: {error}")))?;
     println!(
         "{}",
-        serde_json::to_string(&summary).map_err(|error| DevError::infrastructure(format!(
-            "encode release summary: {error}"
-        )))?
+        serde_json::to_string(&serde_json::json!({
+            "status": "constructed", "tag": source.tag, "commit_sha": source.commit_sha,
+            "output": options.output, "archive": ARCHIVE_NAME,
+            "archive_bytes": verified_one.archive_byte_length,
+            "archive_sha256": verified_one.archive_sha256,
+            "elapsed_nanoseconds": duration_nanoseconds(started.elapsed()),
+            "accepted": false
+        }))?
     );
     Ok(0)
 }
@@ -500,7 +358,7 @@ fn verify(options: VerifyOptions) -> Result<u8, DevError> {
         )));
     }
     if let Some(mode) = options.expected_publication_mode
-        && verified.manifest.publication_mode != mode
+        && verified.manifest.legacy_publication_mode() != Some(mode)
     {
         return Err(DevError::corrupt(format!(
             "publication mode mismatch: expected '{}'",
@@ -512,24 +370,7 @@ fn verify(options: VerifyOptions) -> Result<u8, DevError> {
     })?;
     verify_checksum_bytes(&checksum, &verified.archive_sha256)?;
     if let Some(path) = &options.receipt {
-        let bytes = fs::read(path)
-            .map_err(|error| DevError::infrastructure(format!("read release receipt: {error}")))?;
-        let receipt: ReleaseReceipt = serde_json::from_slice(&bytes)
-            .map_err(|error| DevError::corrupt(format!("decode release receipt: {error}")))?;
-        if archive::canonical_json(&receipt)? != bytes {
-            return Err(DevError::corrupt(
-                "release receipt is not in canonical first-party encoding",
-            ));
-        }
-        validate_receipt(&receipt, &verified)?;
-        let checksum_digest = archive::sha256_bytes(&checksum)?;
-        if receipt.checksum_file.sha256 != checksum_digest
-            || receipt.checksum_file.byte_length != checksum.len() as u64
-        {
-            return Err(DevError::corrupt(
-                "release receipt checksum-file binding mismatch",
-            ));
-        }
+        candidate::verify_assets_receipt(path, parent, &verified)?;
     }
     if let Some(extract_to) = &options.extract_to {
         archive::extract_verified_archive(&options.archive, work.path(), extract_to, &verified)?;
@@ -555,7 +396,7 @@ fn verify(options: VerifyOptions) -> Result<u8, DevError> {
         status: "passed",
         tag: &verified.manifest.source.expected_release_tag,
         commit_sha: &verified.manifest.source.tagged_commit_sha,
-        publication_mode: verified.manifest.publication_mode.as_str(),
+        publication_mode: verified.manifest.publication_provenance(),
         archive_bytes: verified.archive_byte_length,
         archive_sha256: verified.archive_sha256.as_str(),
         manifest_sha256: verified.manifest_sha256.as_str(),
@@ -582,26 +423,11 @@ fn parse_prepare(
     mut arguments: impl Iterator<Item = OsString>,
 ) -> Result<PrepareOptions, DevError> {
     let mut values = BTreeMap::new();
-    let mut require_full_verification = false;
     while let Some(argument) = crate::next_utf8(&mut arguments, "release prepare option")? {
-        if argument == "--require-full-verification" {
-            if require_full_verification {
-                return Err(DevError::usage(
-                    "duplicate --require-full-verification option",
-                ));
-            }
-            require_full_verification = true;
-            continue;
-        }
         let name = match argument.as_str() {
-            "--candidate"
-            | "--cargo-about"
-            | "--cargo-about-archive"
-            | "--output"
-            | "--tag"
-            | "--publication"
-            | "--full-verification-receipt"
-            | "--target-admission-receipt" => argument,
+            "--candidate" | "--cargo-about" | "--cargo-about-archive" | "--output" | "--tag" => {
+                argument
+            }
             value => {
                 return Err(DevError::usage(format!(
                     "unknown release prepare option '{value}'"
@@ -614,22 +440,12 @@ fn parse_prepare(
             return Err(DevError::usage(format!("duplicate option '{name}'")));
         }
     }
-    let publication_mode = parse_publication(required(&mut values, "--publication")?)?;
-    let full_verification_receipt = values
-        .remove("--full-verification-receipt")
-        .map(PathBuf::from);
-    let target_admission_receipt =
-        PathBuf::from(required(&mut values, "--target-admission-receipt")?);
     let options = PrepareOptions {
         candidate: PathBuf::from(required(&mut values, "--candidate")?),
         cargo_about: PathBuf::from(required(&mut values, "--cargo-about")?),
         cargo_about_archive: PathBuf::from(required(&mut values, "--cargo-about-archive")?),
         output: PathBuf::from(required(&mut values, "--output")?),
         tag: required(&mut values, "--tag")?,
-        publication_mode,
-        full_verification_receipt,
-        target_admission_receipt,
-        require_full_verification,
     };
     if !values.is_empty() {
         return Err(DevError::usage("unconsumed release prepare options"));
@@ -786,11 +602,7 @@ fn ensure_clean_checkout(repository: &Path) -> Result<(), DevError> {
     Ok(())
 }
 
-fn source_facts(
-    repository: &Path,
-    tag: &str,
-    publication_mode: PublicationMode,
-) -> Result<SourceFacts, DevError> {
+fn source_facts(repository: &Path, tag: &str) -> Result<SourceFacts, DevError> {
     let (package_name, product_version) = package_identity(&repository.join("Cargo.toml"))?;
     if package_name != PACKAGE_NAME {
         return Err(DevError::corrupt(format!(
@@ -844,54 +656,19 @@ fn source_facts(
         1024,
     )?;
     validate_git_sha(&main_sha, "origin/main commit")?;
-    if !git_is_ancestor(repository, &commit_sha, &main_sha)? {
-        match publication_mode {
-            PublicationMode::DryRun => {
-                if !git_is_ancestor(repository, &main_sha, &commit_sha)? {
-                    return Err(DevError::corrupt(format!(
-                        "dry-run source {commit_sha} and main {main_sha} have diverged or disconnected history"
-                    )));
-                }
-            }
-            PublicationMode::Release => {
-                return Err(DevError::corrupt(format!(
-                    "release source {commit_sha} must be reachable from origin/main {main_sha}"
-                )));
-            }
-        }
+    if !git_is_ancestor(repository, &commit_sha, &main_sha)?
+        && !git_is_ancestor(repository, &main_sha, &commit_sha)?
+    {
+        return Err(DevError::corrupt(format!(
+            "candidate source {commit_sha} and main {main_sha} have diverged or disconnected history"
+        )));
     }
-    let tag_object_sha = match publication_mode {
-        PublicationMode::DryRun => None,
-        PublicationMode::Release => {
-            let reference = format!("refs/tags/{tag}");
-            let kind = command_text("git", &["cat-file", "-t", &reference], repository, 1024)?;
-            if kind != "tag" {
-                return Err(DevError::corrupt(format!(
-                    "release tag '{tag}' is not annotated"
-                )));
-            }
-            let tagged_commit = command_text(
-                "git",
-                &["rev-parse", &format!("{reference}^{{commit}}")],
-                repository,
-                1024,
-            )?;
-            if tagged_commit != commit_sha {
-                return Err(DevError::corrupt(format!(
-                    "release tag '{tag}' does not target current HEAD"
-                )));
-            }
-            let object = command_text("git", &["rev-parse", &reference], repository, 1024)?;
-            validate_git_sha(&object, "annotated tag object")?;
-            Some(object)
-        }
-    };
+    // An intended tag is content, not an observation of remote tag existence or authority.
     Ok(SourceFacts {
         product_version,
         tag: tag.to_owned(),
         commit_sha,
         commit_timestamp_unix_seconds,
-        tag_object_sha,
     })
 }
 
@@ -1143,191 +920,6 @@ fn audit_notice(path: &Path) -> Result<(), DevError> {
     Ok(())
 }
 
-fn run_candidate_lifecycle(
-    repository: &Path,
-    candidate: &Path,
-    work: &Path,
-) -> Result<ProcessObservation, DevError> {
-    let mut environment = process::environment();
-    environment.insert(
-        "LKJSCRIPT_RELEASE_CANDIDATE".to_owned(),
-        candidate.to_string_lossy().into_owned(),
-    );
-    let observation = process::run(
-        &ProcessSpec {
-            command: vec![
-                "cargo".to_owned(),
-                "test".to_owned(),
-                "--locked".to_owned(),
-                "--release".to_owned(),
-                "--test".to_owned(),
-                "public_cli".to_owned(),
-                "copied_binary_completes_normalized_standard_dependent_command_lifecycle"
-                    .to_owned(),
-                "--".to_owned(),
-                "--exact".to_owned(),
-            ],
-            cwd: repository.to_path_buf(),
-            environment,
-            timeout: Duration::from_secs(900),
-            maximum_stdout_bytes: 16 * 1024 * 1024,
-            maximum_stderr_bytes: 16 * 1024 * 1024,
-            stdout_path: work.join("candidate-lifecycle.stdout"),
-            stderr_path: work.join("candidate-lifecycle.stderr"),
-            unavailable_exit_code: None,
-        },
-        repository,
-    );
-    if observation.status != ProcessStatus::Passed {
-        return Err(DevError::infrastructure(format!(
-            "exact-candidate copied-binary lifecycle failed with {:?}: {}",
-            observation.status,
-            observation.reason.as_deref().unwrap_or("no reason")
-        )));
-    }
-    Ok(observation)
-}
-
-fn inspect_full_verification(
-    path: &Path,
-    commit_sha: &str,
-) -> Result<FullVerificationFacts, DevError> {
-    let bytes = fs::read(path).map_err(|error| {
-        DevError::infrastructure(format!("read full verification receipt: {error}"))
-    })?;
-    if bytes.len() > 128 * 1024 * 1024 {
-        return Err(DevError::corrupt(
-            "full verification receipt exceeds 128 MiB",
-        ));
-    }
-    let value: Value = serde_json::from_slice(&bytes)
-        .map_err(|error| DevError::corrupt(format!("decode full verification receipt: {error}")))?;
-    let object = value
-        .as_object()
-        .ok_or_else(|| DevError::corrupt("full verification receipt is not an object"))?;
-    require_json_string(object, "status", "passed")?;
-    require_json_string(object, "profile", "full")?;
-    require_json_string(object, "git_head", commit_sha)?;
-    require_json_bool(object, "input_stable", true)?;
-    require_json_bool(object, "fresh_required", true)?;
-    require_json_u64(object, "reused_passed_gates", 0)?;
-    let selected = object
-        .get("selected_gates")
-        .and_then(Value::as_array)
-        .ok_or_else(|| DevError::corrupt("full receipt selected_gates is missing"))?;
-    let fresh = object
-        .get("fresh_passed_gates")
-        .and_then(Value::as_u64)
-        .ok_or_else(|| DevError::corrupt("full receipt fresh_passed_gates is missing"))?;
-    if fresh != selected.len() as u64 {
-        return Err(DevError::corrupt(
-            "full verification receipt contains non-fresh gates",
-        ));
-    }
-    let gates = object
-        .get("gates")
-        .and_then(Value::as_array)
-        .ok_or_else(|| DevError::corrupt("full receipt gates are missing"))?;
-    let mut service_passed = false;
-    let mut distributed_http_passed = false;
-    let mut outbound_http_passed = false;
-    for gate in gates {
-        let gate = gate
-            .as_object()
-            .ok_or_else(|| DevError::corrupt("full receipt gate is not an object"))?;
-        require_json_string(gate, "status", "passed")?;
-        require_json_string(gate, "execution", "fresh")?;
-        if gate.get("name").and_then(Value::as_str) == Some("service_acceptance") {
-            service_passed = true;
-        }
-        if gate.get("name").and_then(Value::as_str) == Some("distributed_http_application") {
-            distributed_http_passed = true;
-        }
-        if gate.get("name").and_then(Value::as_str) == Some("outbound_http_application") {
-            outbound_http_passed = true;
-        }
-    }
-    if !service_passed {
-        return Err(DevError::corrupt(
-            "full verification receipt lacks fresh passed service acceptance",
-        ));
-    }
-    if !distributed_http_passed {
-        return Err(DevError::corrupt(
-            "full verification receipt lacks fresh passed distributed HTTP acceptance",
-        ));
-    }
-    if !outbound_http_passed {
-        return Err(DevError::corrupt(
-            "full verification receipt lacks fresh passed outbound HTTP acceptance",
-        ));
-    }
-    let (sha256, length) = archive::sha256_file(path)?;
-    Ok(FullVerificationFacts {
-        evidence: ExternalEvidence {
-            path: path.to_string_lossy().into_owned(),
-            byte_length: length,
-            sha256,
-        },
-        selected_gates: selected.len(),
-    })
-}
-
-fn inspect_target_admission(
-    path: &Path,
-    commit_sha: &str,
-    candidate: &Path,
-) -> Result<TargetAdmissionFacts, DevError> {
-    admission::read_receipt(path, candidate, commit_sha)?;
-    let (sha256, byte_length) = archive::sha256_file(path)?;
-    Ok(TargetAdmissionFacts {
-        evidence: ExternalEvidence {
-            path: path.display().to_string(),
-            byte_length,
-            sha256,
-        },
-    })
-}
-
-fn require_json_string(
-    object: &serde_json::Map<String, Value>,
-    name: &str,
-    expected: &str,
-) -> Result<(), DevError> {
-    if object.get(name).and_then(Value::as_str) != Some(expected) {
-        return Err(DevError::corrupt(format!(
-            "full verification receipt field '{name}' is not '{expected}'"
-        )));
-    }
-    Ok(())
-}
-
-fn require_json_bool(
-    object: &serde_json::Map<String, Value>,
-    name: &str,
-    expected: bool,
-) -> Result<(), DevError> {
-    if object.get(name).and_then(Value::as_bool) != Some(expected) {
-        return Err(DevError::corrupt(format!(
-            "full verification receipt field '{name}' is not {expected}"
-        )));
-    }
-    Ok(())
-}
-
-fn require_json_u64(
-    object: &serde_json::Map<String, Value>,
-    name: &str,
-    expected: u64,
-) -> Result<(), DevError> {
-    if object.get(name).and_then(Value::as_u64) != Some(expected) {
-        return Err(DevError::corrupt(format!(
-            "full verification receipt field '{name}' is not {expected}"
-        )));
-    }
-    Ok(())
-}
-
 fn validate_manifest(manifest: &ReleaseManifest) -> Result<(), DevError> {
     lkjscript::release_container::validate_manifest(manifest)?;
     if manifest.product.name != PACKAGE_NAME
@@ -1360,19 +952,12 @@ fn validate_manifest(manifest: &ReleaseManifest) -> Result<(), DevError> {
     )?;
     validate_git_sha(&manifest.source.tagged_commit_sha, "manifest commit SHA")?;
     validate_capabilities_digest(&manifest.executable.capabilities_digest)?;
-    match (
-        manifest.publication_mode,
-        manifest.source.annotated_tag_object_sha.as_deref(),
-    ) {
-        (PublicationMode::DryRun, None) => {}
-        (PublicationMode::Release, Some(object)) => {
-            validate_git_sha(object, "manifest annotated tag object SHA")?;
-        }
-        _ => {
-            return Err(DevError::corrupt(
-                "manifest tag-object state disagrees with publication mode",
-            ));
-        }
+    if let ManifestEncoding::PublicationNeutral { build } = &manifest.encoding
+        && build.target_policy_sha256.as_str() != target::policy_sha256()?
+    {
+        return Err(DevError::corrupt(
+            "manifest target policy differs from this producer",
+        ));
     }
     if manifest.executable.elf.class != "ELF64"
         || manifest.executable.elf.machine != "x86-64"
@@ -1398,142 +983,6 @@ fn validate_manifest(manifest: &ReleaseManifest) -> Result<(), DevError> {
         ));
     }
     Ok(())
-}
-
-fn validate_receipt(
-    receipt: &ReleaseReceipt,
-    archive: &archive::VerifiedArchive,
-) -> Result<(), DevError> {
-    if receipt.schema.identity != RECEIPT_SCHEMA
-        || receipt.schema.version != RECEIPT_SCHEMA_VERSION
-        || receipt.publication_mode != archive.manifest.publication_mode
-        || receipt.release_tag != archive.manifest.source.expected_release_tag
-        || receipt.commit_sha != archive.manifest.source.tagged_commit_sha
-        || receipt.manifest_sha256 != archive.manifest_sha256
-        || receipt.archive.name != ARCHIVE_NAME
-        || receipt.archive.byte_length != archive.archive_byte_length
-        || receipt.archive.sha256 != archive.archive_sha256
-        || receipt.installer != bootstrap::identity(archive)?
-        || receipt.checksum_file.name != CHECKSUM_NAME
-        || receipt.candidate_lifecycle.status != ProcessStatus::Passed
-        || receipt.completed_unix_nanoseconds < receipt.started_unix_nanoseconds
-    {
-        return Err(DevError::corrupt("release receipt binding mismatch"));
-    }
-    if receipt.classifications.len() != EXPECTED_CLASSIFICATIONS.len() {
-        return Err(DevError::corrupt(
-            "release receipt classification inventory mismatch",
-        ));
-    }
-    for (observed, expected) in receipt.classifications.iter().zip(EXPECTED_CLASSIFICATIONS) {
-        if observed.name != expected {
-            return Err(DevError::corrupt(
-                "release receipt classification order mismatch",
-            ));
-        }
-        if observed.name != "full_verification"
-            && observed.classification != EvidenceClassification::FreshPassed
-        {
-            return Err(DevError::corrupt(format!(
-                "release receipt classification '{}' is not fresh passed",
-                observed.name
-            )));
-        }
-    }
-    let full = receipt
-        .classifications
-        .iter()
-        .find(|classification| classification.name == "full_verification")
-        .ok_or_else(|| DevError::corrupt("full verification classification is missing"))?;
-    match (
-        full.classification,
-        receipt.full_verification_receipt.as_ref(),
-    ) {
-        (EvidenceClassification::FreshPassed, Some(_))
-        | (EvidenceClassification::NotProvided, None) => {
-            if receipt.target_admission_receipt.byte_length == 0 {
-                Err(DevError::corrupt(
-                    "target admission receipt evidence is empty",
-                ))
-            } else {
-                Ok(())
-            }
-        }
-        _ => Err(DevError::corrupt(
-            "full verification classification disagrees with its evidence",
-        )),
-    }
-}
-
-fn classifications(
-    full: &Option<FullVerificationFacts>,
-    target_admission: &TargetAdmissionFacts,
-    member_count: usize,
-) -> Vec<VerificationClassification> {
-    let fresh = |name: &str, detail: String| VerificationClassification {
-        name: name.to_owned(),
-        classification: EvidenceClassification::FreshPassed,
-        detail,
-    };
-    vec![
-        fresh(
-            "source_identity",
-            "clean exact Git source validated".to_owned(),
-        ),
-        fresh("toolchain", format!("Rust/Cargo {TOOLCHAIN_CHANNEL}")),
-        fresh(
-            "cargo_about",
-            format!("cargo-about {CARGO_ABOUT_VERSION} archive and executable pinned"),
-        ),
-        fresh(
-            "notice_generation",
-            "two locked offline generations were byte-equal".to_owned(),
-        ),
-        fresh(
-            "candidate_capabilities",
-            format!(
-                "lkjscript {} product identity and capabilities digest validated",
-                lkjscript::PRODUCT_VERSION
-            ),
-        ),
-        fresh(
-            "candidate_lifecycle",
-            "exact candidate completed copied-binary lifecycle".to_owned(),
-        ),
-        match full {
-            Some(facts) => fresh(
-                "full_verification",
-                format!(
-                    "{} fresh gates including service and distributed HTTP acceptance",
-                    facts.selected_gates
-                ),
-            ),
-            None => VerificationClassification {
-                name: "full_verification".to_owned(),
-                classification: EvidenceClassification::NotProvided,
-                detail: "not provided to this preparation".to_owned(),
-            },
-        },
-        fresh(
-            "target_admission",
-            format!(
-                "exact {} candidate admitted by {} bytes of bound evidence",
-                TARGET_TRIPLE, target_admission.evidence.byte_length
-            ),
-        ),
-        fresh(
-            "deterministic_packaging",
-            "two same-input archive preparations were byte-equal".to_owned(),
-        ),
-        fresh(
-            "archive_verification",
-            format!("strictly verified {member_count} ordered ustar members"),
-        ),
-        fresh(
-            "checksum_integrity",
-            "exact one-line SHA256SUMS binding validated".to_owned(),
-        ),
-    ]
 }
 
 fn checksum_bytes(digest: &Sha256Digest) -> Vec<u8> {
@@ -1968,269 +1417,21 @@ mod tests {
     }
 
     #[test]
-    fn release_workflow_pins_actions_and_separates_publication_authority() {
+    fn release_workflow_pins_actions_and_has_no_tag_triggered_build() {
         let workflow = release_workflow();
+        assert!(!workflow.contains("  push:"));
         for line in workflow.lines().map(str::trim) {
             let Some(action) = line.strip_prefix("uses: ") else {
                 continue;
             };
-            let (_, revision) = action
-                .split_once('@')
-                .expect("workflow action has an explicit revision");
-            let revision = revision
-                .split_whitespace()
-                .next()
-                .expect("workflow action revision");
-            assert_eq!(revision.len(), 40, "action is not pinned: {action}");
+            let (_, revision) = action.split_once('@').expect("pinned action");
+            let revision = revision.split_whitespace().next().expect("revision");
+            assert_eq!(revision.len(), 40);
             assert!(
                 revision
                     .bytes()
-                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
-                "action is not pinned to a full SHA: {action}"
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
             );
         }
-        let jobs = workflow.split_once("\njobs:\n").expect("workflow jobs").1;
-        let build = jobs
-            .split_once("\n  pre-publication-applications:\n")
-            .expect("pre-publication job")
-            .0;
-        let pre_publication = jobs
-            .split_once("\n  pre-publication-applications:\n")
-            .expect("pre-publication job")
-            .1
-            .split_once("\n  publish:\n")
-            .expect("publish job")
-            .0;
-        let publish = jobs
-            .split_once("\n  publish:\n")
-            .expect("publish job")
-            .1
-            .split_once("\n  post-release:\n")
-            .expect("post-release job")
-            .0;
-        let post_release = jobs
-            .split_once("\n  post-release:\n")
-            .expect("post-release job")
-            .1;
-        for (job, expected) in [
-            (build, "timeout-minutes: 180"),
-            (pre_publication, "timeout-minutes: 120"),
-            (publish, "timeout-minutes: 30"),
-            (post_release, "timeout-minutes: 120"),
-        ] {
-            assert_eq!(
-                job.lines()
-                    .map(str::trim)
-                    .filter(|line| line.starts_with("timeout-minutes:"))
-                    .collect::<Vec<_>>(),
-                [expected]
-            );
-        }
-        assert!(build.contains("release-upload.outputs.artifact-id"));
-        assert!(build.contains("verifier-upload.outputs.artifact-id"));
-        assert!(build.contains("verifier-upload.outputs.artifact-digest"));
-        assert!(build.contains("target/release/lkjscript-dev"));
-        assert!(build.contains(".artifacts/lkjscript-dev/distributed-http/*/receipt.json"));
-        assert!(build.contains(".artifacts/lkjscript-dev/outbound-http/*/receipt.json"));
-        assert!(build.contains(".artifacts/lkjscript-dev/stateful-http/*/receipt.json"));
-        assert!(build.contains("release admit"));
-        assert!(build.contains("release verifier prepare"));
-        assert!(build.contains("rustup target add --toolchain 1.98.0 \"$target_triple\""));
-        assert!(build.contains("name: ${{ env.RELEASE_HANDOFF }}"));
-        assert!(build.contains("name: ${{ env.VERIFIER_HANDOFF }}"));
-        assert!(pre_publication.contains("actions: read"));
-        assert!(pre_publication.contains("contents: read"));
-        assert!(!pre_publication.contains("contents: write"));
-        assert!(!pre_publication.contains("actions/checkout"));
-        assert!(!pre_publication.contains("cargo "));
-        assert!(pre_publication.contains("release verify"));
-        assert!(pre_publication.contains("release verifier verify"));
-        assert!(pre_publication.contains("--extract-to"));
-        assert!(pre_publication.contains("distributed-http"));
-        assert!(pre_publication.contains("outbound-http"));
-        assert!(pre_publication.contains("stateful-http"));
-        assert!(pre_publication.contains("release transferred pair-run"));
-        assert!(pre_publication.contains("--acquisition simulated"));
-        for role in [
-            "distributed-http",
-            "outbound-http",
-            "offline-packages",
-            "pure-tail",
-            "stateful-http",
-        ] {
-            assert!(
-                pre_publication.contains(&format!("/{role}/*")),
-                "missing retained child {role}"
-            );
-        }
-        assert!(pre_publication.contains("--expected-verifier-sha256"));
-        assert!(pre_publication.contains("--expected-verifier-bytes"));
-        assert!(
-            !pre_publication.contains(".result."),
-            "behavioral admission belongs to typed readers"
-        );
-        assert!(pre_publication.contains("--evidence-root"));
-        assert!(pre_publication.contains("env -i LANG=C"));
-        assert!(!pre_publication.contains("tar -"));
-        assert!(pre_publication.contains("release_artifact_digest"));
-        assert!(pre_publication.contains("verifier_artifact_digest"));
-        let verifier_hash = pre_publication
-            .find("observed_sha=$(sha256sum \"$verifier\"")
-            .expect("verifier hash before mode restoration");
-        let verifier_chmod = pre_publication
-            .find("chmod 0755 \"$verifier\"")
-            .expect("verified mode restoration");
-        assert!(verifier_hash < verifier_chmod);
-        assert!(publish.contains("contents: write"));
-        assert!(publish.contains("- pre-publication-applications"));
-        assert!(!publish.contains("actions/checkout"));
-        assert!(!publish.contains("cargo "));
-        assert!(!publish.contains("target/"));
-        assert!(!publish.contains("distributed-http"));
-        assert!(!publish.contains("outbound-http"));
-        assert!(!publish.contains("VERIFIER_HANDOFF"));
-        assert!(!publish.contains("VERIFIER_EXECUTABLE"));
-        assert!(publish.contains("--notes-file"));
-        assert!(!publish.contains("--notes-from-tag"));
-        assert!(publish.contains("releases?per_page=100&page=1"));
-        assert!(publish.contains("releases?per_page=100&page=2"));
-        assert!(publish.contains("release discovery pending attempt="));
-        assert!(publish.contains("for attempt in $(seq 1 12)"));
-        assert!(!publish.contains("releases/tags/$TAG"));
-        assert!(publish.contains("https://uploads.github.com/"));
-        assert!(!publish.contains("gh release upload"));
-        assert!(publish.contains(".name == $tag"));
-        assert!(workflow.contains("anonymous download propagation attempts="));
-        assert!(workflow.contains("asset attestation propagation attempts="));
-        assert!(post_release.contains("attestations: read"));
-        assert!(post_release.contains("actions: read"));
-        assert!(post_release.contains("contents: read"));
-        assert!(!post_release.contains("contents: write"));
-        assert!(!post_release.contains("attestations: write"));
-        assert!(!post_release.contains("actions/checkout"));
-        assert!(!post_release.contains("cargo "));
-        assert!(post_release.contains("--exact-assets \"$EXACT\" --latest-assets \"$LATEST\""));
-        assert!(!post_release.contains(".executable.cli_contract"));
-        assert!(!post_release.contains(".executable.executable_registry_digest"));
-        assert!(!post_release.contains("verify_public_application"));
-        assert!(!post_release.contains("release transferred run"));
-        assert!(post_release.contains("--acquisition anonymous"));
-        assert_eq!(
-            post_release.matches("release transferred pair-run").count(),
-            1
-        );
-        assert!(!post_release.contains("          cmp "));
-        assert!(post_release.contains("--publication release"));
-        assert!(!post_release.contains("--publication dry-run"));
-        assert!(post_release.contains("release verifier verify"));
-        assert!(post_release.contains("distributed-http"));
-        assert!(post_release.contains("outbound-http"));
-        assert!(post_release.contains("stateful-http"));
-        assert!(post_release.contains(
-            "GITHUB_RUN_ID=\"$GITHUB_RUN_ID\" GITHUB_RUN_ATTEMPT=\"$GITHUB_RUN_ATTEMPT\""
-        ));
-        for retained in [
-            "pair/receipt.json",
-            "pair/exact/lifecycle.json",
-            "pair/latest/lifecycle.json",
-            "pair/exact/create.lkjc",
-            "pair/exact/create.logical-plan",
-            "pair/exact/replace.lkjc",
-            "pair/exact/replace.logical-plan",
-            "pair/latest/create.lkjc",
-            "pair/latest/create.logical-plan",
-            "pair/latest/replace.lkjc",
-            "pair/latest/replace.logical-plan",
-            "pair/exact/numerical-input.json",
-            "pair/exact/numerical-negative-zero.json",
-            "pair/latest/numerical-input.json",
-            "pair/latest/numerical-negative-zero.json",
-            "pair/full-suite/receipt.json",
-            "pair/*/extracted/*",
-        ] {
-            assert!(post_release.contains(retained), "missing {retained}");
-        }
-        assert!(post_release.contains("if: always()"));
-        for role in [
-            "distributed-http",
-            "outbound-http",
-            "offline-packages",
-            "pure-tail",
-            "stateful-http",
-        ] {
-            assert!(
-                post_release.contains(&format!("/{role}/*")),
-                "missing retained child {role}"
-            );
-        }
-        assert!(post_release.contains("--expected-verifier-sha256"));
-        assert!(post_release.contains("--expected-verifier-bytes"));
-        assert!(
-            !post_release.contains(".result."),
-            "behavioral admission belongs to typed readers"
-        );
-        assert!(post_release.contains("--evidence-root"));
-        assert!(post_release.contains("env -i LANG=C"));
-        assert!(!post_release.contains("tar -"));
-        assert!(post_release.contains("public-application-verification-evidence-"));
-        assert!(!post_release.contains("--template command"));
-        assert!(!post_release.contains("run main"));
-        assert!(
-            !post_release.contains(
-                "digest=c63d0c4653d6de50e6f375d6da14bfb9101bba5a438aba5c0ae10a9dd27dbc43"
-            )
-        );
-        for forbidden in [
-            "--clobber",
-            "ubuntu-latest",
-            "push --force",
-            "pull_request_target",
-            "cancel-in-progress: true",
-        ] {
-            assert!(
-                !workflow.contains(forbidden),
-                "workflow contains {forbidden}"
-            );
-        }
-        assert!(workflow.contains("persist-credentials: false"));
-        assert!(workflow.contains("cancel-in-progress: false"));
-        assert!(!workflow.contains(".oracles =="));
-        assert!(build.contains("release admission-verify"));
-        assert!(
-            build.contains("cargo run --release --locked -p lkjscript-dev -- check full --machine")
-        );
-        assert!(build.contains("/acceptance/offline-packages/*"));
-        assert!(build.contains("/acceptance/pure-tail/*"));
-        let evidence_output = build
-            .find("echo \"evidence=$root\"")
-            .expect("early target evidence path");
-        assert!(evidence_output < build.find(" release build ").expect("candidate build"));
-        assert!(publish.contains("needs.build-verify-package.result == 'success'"));
-        assert!(publish.contains("needs.pre-publication-applications.result == 'success'"));
-        assert!(post_release.contains("latest-archive-attestation.json"));
-        assert!(post_release.contains("latest-checksum-attestation.json"));
-        let pair_run = post_release
-            .find("release transferred pair-run")
-            .expect("pair consumer");
-        for authentication in [
-            "latest-archive-attestation.json",
-            "latest-checksum-attestation.json",
-            "release verifier verify",
-            "\"$EXACT/$RELEASE_ARCHIVE\"",
-            "\"$EXACT/$RELEASE_CHECKSUMS\"",
-        ] {
-            assert!(
-                post_release
-                    .find(authentication)
-                    .expect("mandatory authentication")
-                    < pair_run
-            );
-        }
-        assert_eq!(workflow.matches("contents: write").count(), 1);
-        assert!(workflow.contains("CARGO_HOME=$RUNNER_TEMP/cargo-home"));
-        assert!(workflow.contains("cargo fetch --locked"));
-        assert!(!build.contains("postgres_image"));
-        assert!(!workflow.contains("postgres:16-alpine"));
-        assert!(workflow.matches("timeout-minutes:").count() >= 3);
     }
 }

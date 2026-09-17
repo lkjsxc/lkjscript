@@ -175,7 +175,6 @@ enum Boundary {
 
 #[derive(Debug)]
 struct Options {
-    verify: bool,
     candidate: PathBuf,
     manifest: PathBuf,
     tag: String,
@@ -254,9 +253,17 @@ struct Receipt {
 pub(super) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u8, DevError> {
     let operation =
         crate::next_utf8(&mut arguments, "transferred operation")?.ok_or_else(|| {
-            DevError::usage("release transferred requires run, verify, pair-run or pair-verify")
+            DevError::usage("release transferred requires pair-run, pair-verify, installation-run, installation-verify or legacy-verify")
         })?;
-    if matches!(operation.as_str(), "pair-run" | "pair-verify") {
+    if matches!(
+        operation.as_str(),
+        "pair-run"
+            | "pair-verify"
+            | "exact-run"
+            | "exact-verify"
+            | "installation-run"
+            | "installation-verify"
+    ) {
         return pair::command(&operation, arguments);
     }
     let options = parse_options(&operation, arguments)?;
@@ -270,330 +277,21 @@ pub(super) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         options.expected_verifier_bytes,
     )?;
     let manifest = load_manifest(&options)?;
-    if options.verify {
-        let receipt = read_receipt(&options, &verifier_path, &manifest)?;
-        print_summary(&options.evidence_root.join("receipt.json"), &receipt)?;
-        return Ok(0);
-    }
-    let cancellation = Cancellation::new()?;
-    let receipt = execute(
-        &options,
-        &verifier_path,
-        &manifest,
-        &cancellation.control,
-        &mut || Ok(()),
-    )?;
+    let receipt = read_receipt(&options, &verifier_path, &manifest)?;
     print_summary(&options.evidence_root.join("receipt.json"), &receipt)?;
     Ok(receipt.status.exit_code())
 }
 
-// Pair execution uses this same aggregate and inventory, under its one cancellation lifetime.
-// The guard binds both admitted routes around every expensive invocation.
-fn execute(
-    options: &Options,
-    verifier_path: &Path,
-    manifest: &ReleaseManifest,
-    control: &process::ProcessControl,
-    guard: &mut dyn FnMut() -> Result<(), DevError>,
-) -> Result<Receipt, DevError> {
-    super::require_absolute_extraction_output(&options.evidence_root)?;
-    fs::create_dir(&options.evidence_root)?;
-    fs::set_permissions(&options.evidence_root, fs::Permissions::from_mode(0o700))?;
-    let started = Instant::now();
-    let mut receipt = Receipt {
-        schema: SchemaIdentity {
-            identity: SCHEMA.to_owned(),
-            version: SCHEMA_VERSION,
-        },
-        status: Status::NotRun,
-        boundary: options.boundary,
-        tag: options.tag.clone(),
-        source_commit: options.commit.clone(),
-        publication: options.publication,
-        product: manifest.product.clone(),
-        capabilities_digest: manifest.executable.capabilities_digest.clone(),
-        target: manifest.target_triple.clone(),
-        target_policy_sha256: target::policy_sha256()?,
-        evidence_root: options.evidence_root.display().to_string(),
-        started_unix_nanoseconds: super::unix_nanoseconds()?,
-        completed_unix_nanoseconds: None,
-        elapsed_nanoseconds: 0,
-        hosted_context: super::hosted_context(),
-        manifest: external(&options.manifest)?,
-        candidate: target::observe_candidate(&options.candidate)?,
-        verifier: external(verifier_path)?,
-        verifier_mode: 0o755,
-        children: ORACLES
-            .into_iter()
-            .map(|role| Child {
-                role,
-                evidence_root: options
-                    .evidence_root
-                    .join(role.name())
-                    .display()
-                    .to_string(),
-                status: Status::NotRun,
-                command: vec![
-                    verifier_path.display().to_string(),
-                    role.name().to_owned(),
-                    "--binary".to_owned(),
-                    options.candidate.display().to_string(),
-                    "--evidence-root".to_owned(),
-                    options
-                        .evidence_root
-                        .join(role.name())
-                        .display()
-                        .to_string(),
-                    "--machine".to_owned(),
-                ],
-                process: None,
-                receipt: None,
-                facts: None,
-                cleanup_complete: false,
-                failure: None,
-            })
-            .collect(),
-        cleanup_complete: false,
-        failure: None,
-    };
-    let path = options.evidence_root.join("receipt.json");
-    // Persist incomplete state before any candidate/child execution. An interrupted attempt never looks passed.
-    evidence::publish_json(&path, &receipt)?;
-    let result = run_children(
-        options,
-        verifier_path,
-        manifest,
-        &mut receipt,
-        &path,
-        control,
-        guard,
-    );
-    receipt.completed_unix_nanoseconds = Some(super::unix_nanoseconds()?);
-    receipt.elapsed_nanoseconds = u64::try_from(started.elapsed().as_nanos())
-        .map_err(|_| DevError::corrupt("transfer elapsed overflow"))?;
-    receipt.cleanup_complete = receipt.children.iter().all(|child| child.cleanup_complete);
-    match result {
-        Ok(()) => receipt.status = Status::FreshPassed,
-        Err(error) => {
-            receipt.status = Status::Failed;
-            receipt.failure = Some(error.to_string());
-        }
-    }
-    if receipt.status == Status::FreshPassed
-        && let Err(error) = validate_receipt(&receipt, options, verifier_path, manifest)
-    {
-        receipt.status = Status::Failed;
-        receipt.failure = Some(error.to_string());
-    }
-    evidence::publish_json(&path, &receipt)?;
-    if receipt.status == Status::FreshPassed {
-        read_receipt(options, verifier_path, manifest)?;
-    }
-    Ok(receipt)
-}
-
-fn run_children(
-    options: &Options,
-    verifier: &Path,
-    manifest: &ReleaseManifest,
-    receipt: &mut Receipt,
-    path: &Path,
-    control: &process::ProcessControl,
-    guard: &mut dyn FnMut() -> Result<(), DevError>,
-) -> Result<(), DevError> {
-    guard()?;
-    let capabilities = inspect_candidate(options, control)?;
-    require(
-        capabilities.product_version == manifest.product.version
-            && capabilities.capabilities_digest == manifest.executable.capabilities_digest,
-        "actual candidate capabilities differ from manifest",
-    )?;
-    for index in 0..receipt.children.len() {
-        require(!control.cancelled(), "transferred acceptance cancelled")?;
-        check_inputs(options, verifier, receipt)?;
-        guard()?;
-        // Child temporary projects/services live in an owned root; receipt/log roots remain separate.
-        let scratch = tempfile::Builder::new()
-            .prefix(".child-state-")
-            .tempdir_in(&options.evidence_root)?;
-        let child = &mut receipt.children[index];
-        child.status = Status::Failed;
-        child.failure = Some("child invocation incomplete".to_owned());
-        evidence::publish_json(path, receipt)?;
-        let child = &mut receipt.children[index];
-        let spec = process::ProcessSpec {
-            command: child.command.clone(),
-            cwd: scratch.path().to_path_buf(),
-            environment: BTreeMap::from([
-                ("LANG".to_owned(), "C".to_owned()),
-                ("PATH".to_owned(), "/usr/bin:/bin".to_owned()),
-                ("TMPDIR".to_owned(), scratch.path().display().to_string()),
-            ]),
-            timeout: child.role.timeout(),
-            maximum_stdout_bytes: MAXIMUM_OUTPUT_BYTES,
-            maximum_stderr_bytes: MAXIMUM_OUTPUT_BYTES,
-            stdout_path: options
-                .evidence_root
-                .join(format!("{}.stdout.log", child.role.name())),
-            stderr_path: options
-                .evidence_root
-                .join(format!("{}.stderr.log", child.role.name())),
-            unavailable_exit_code: Some(2),
-        };
-        #[cfg(test)]
-        let spec = pair::tests::process_hook(child.role.name(), spec, control);
-        let observation = process::run_supervised(&spec, &options.evidence_root, Some(control));
-        child.process = Some(observation);
-        let child_path = Path::new(&child.evidence_root).join("receipt.json");
-        let admission = (|| {
-            if child_path.try_exists()? {
-                child.receipt = Some(receipt_identity(&child_path)?);
-            }
-            child.role.read(&child_path, &options.candidate, verifier)
-        })();
-        let accepted = finish_child(child, spec.timeout, admission, scratch.close());
-        // Recheck even on child failure, but keep the first failing invocation's reason.
-        let unchanged = check_inputs(options, verifier, receipt).and_then(|_| guard());
-        accepted?;
-        unchanged?;
-        evidence::publish_json(path, receipt)?;
-    }
-    require(!control.cancelled(), "transferred acceptance cancelled")?;
-    guard()
-}
-
-fn finish_child(
-    child: &mut Child,
-    timeout: Duration,
-    admission: Result<ChildFacts, DevError>,
-    cleanup: std::io::Result<()>,
-) -> Result<(), DevError> {
-    let observation = child
-        .process
-        .as_ref()
-        .ok_or_else(|| DevError::corrupt("missing child process observation"))?;
-    if observation.status == process::ProcessStatus::Passed
-        && cleanup.is_ok()
-        && let Ok(facts) = &admission
-        && facts.cleanup_complete
-    {
-        child.cleanup_complete = facts.cleanup_complete;
-        child.facts = Some(facts.clone());
-        child.status = Status::FreshPassed;
-        child.failure = None;
-        return Ok(());
-    }
-    child.status = if observation.status == process::ProcessStatus::Unavailable {
-        Status::Unavailable
-    } else {
-        Status::Failed
-    };
-    let classification = match observation.status {
-        process::ProcessStatus::Passed => "passed",
-        process::ProcessStatus::Failed => "failed",
-        process::ProcessStatus::Unavailable => "unavailable",
-        process::ProcessStatus::Timeout => "timeout",
-        process::ProcessStatus::OutputExhausted => "output_exhausted",
-        process::ProcessStatus::Signaled => "signaled",
-        process::ProcessStatus::InfrastructureFailure => "infrastructure_failure",
-    };
-    let mut reason = format!(
-        "{}: process={classification} reason={} exit_code={:?} signal={:?} elapsed_seconds={:.6} limit_seconds={:.6} evidence={}",
-        child.role.name(),
-        bounded_diagnostic(observation.reason.as_deref().unwrap_or("none")),
-        observation.exit_code,
-        observation.signal,
-        Duration::from_nanos(observation.elapsed_nanoseconds).as_secs_f64(),
-        timeout.as_secs_f64(),
-        bounded_diagnostic(
-            &Path::new(&child.evidence_root)
-                .join("receipt.json")
-                .display()
-                .to_string()
-        ),
-    );
-    match admission {
-        Err(error) => reason.push_str(&format!(
-            "; reader rejected: {}",
-            bounded_diagnostic(&error.to_string())
-        )),
-        Ok(facts) if !facts.cleanup_complete => reason.push_str("; child cleanup incomplete"),
-        Ok(_) => (),
-    }
-    if let Err(error) = cleanup {
-        reason.push_str(&format!(
-            "; temporary cleanup failed: {}",
-            bounded_diagnostic(&error.to_string())
-        ));
-    }
-    child.failure = Some(reason.clone());
-    Err(DevError::corrupt(reason))
-}
-
-fn bounded_diagnostic(value: &str) -> String {
-    const MAXIMUM_CHARACTERS: usize = 768;
-    let mut characters = value.chars();
-    let mut bounded: String = characters.by_ref().take(MAXIMUM_CHARACTERS).collect();
-    if characters.next().is_some() {
-        bounded.push_str("... [truncated]");
-    }
-    bounded
-}
-
-fn inspect_candidate(
-    options: &Options,
-    control: &process::ProcessControl,
-) -> Result<super::CapabilitiesFacts, DevError> {
-    let scratch = tempfile::Builder::new()
-        .prefix(".child-state-")
-        .tempdir_in(&options.evidence_root)?;
-    let result = (|| {
-        let mut outputs = Vec::new();
-        for (name, argument) in [
-            ("candidate-capabilities", "capabilities"),
-            ("candidate-version", "--version"),
-        ] {
-            let spec = process::ProcessSpec {
-                command: vec![options.candidate.display().to_string(), argument.to_owned()],
-                cwd: scratch.path().to_path_buf(),
-                environment: BTreeMap::from([
-                    ("LANG".to_owned(), "C".to_owned()),
-                    ("PATH".to_owned(), "/usr/bin:/bin".to_owned()),
-                    ("TMPDIR".to_owned(), scratch.path().display().to_string()),
-                ]),
-                timeout: Duration::from_secs(120),
-                maximum_stdout_bytes: 1024 * 1024,
-                maximum_stderr_bytes: MAXIMUM_OUTPUT_BYTES,
-                stdout_path: options.evidence_root.join(format!("{name}.stdout.log")),
-                stderr_path: options.evidence_root.join(format!("{name}.stderr.log")),
-                unavailable_exit_code: None,
-            };
-            let observation = process::run_supervised(&spec, &options.evidence_root, Some(control));
-            require(
-                observation.status == process::ProcessStatus::Passed,
-                "candidate capability process failed or cancelled",
-            )?;
-            outputs.push(
-                String::from_utf8(process::read_bounded(&spec.stdout_path, 1024 * 1024)?)
-                    .map_err(|_| DevError::corrupt("capabilities are not UTF-8"))?,
-            );
-        }
-        super::parse_capabilities(&outputs[0], outputs[1].trim())
-    })();
-    scratch.close()?;
-    result
-}
-
 // The command owns this signal lifetime and joins it before returning. No signal handler runs
 // application work; it only asks the bounded child supervisor to terminate its owned tree.
-struct Cancellation {
-    control: process::ProcessControl,
+pub(super) struct Cancellation {
+    pub(super) control: process::ProcessControl,
     stop: Option<tokio::sync::oneshot::Sender<()>>,
     thread: Option<std::thread::JoinHandle<()>>,
 }
 
 impl Cancellation {
-    fn new() -> Result<Self, DevError> {
+    pub(super) fn new() -> Result<Self, DevError> {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_io()
             .build()?;
@@ -623,6 +321,20 @@ impl Cancellation {
             stop: Some(stop),
             thread: Some(thread),
         })
+    }
+
+    pub(super) fn finish(mut self) -> Result<(), DevError> {
+        if let Some(stop) = self.stop.take() {
+            let _ = stop.send(());
+        }
+        if let Some(thread) = self.thread.take() {
+            thread.join().map_err(|_| {
+                DevError::infrastructure(
+                    "release cancellation listener failed during joined cleanup",
+                )
+            })?;
+        }
+        Ok(())
     }
 }
 impl Drop for Cancellation {
@@ -656,7 +368,7 @@ fn load_manifest(options: &Options) -> Result<ReleaseManifest, DevError> {
     require(
         manifest.source.expected_release_tag == options.tag
             && manifest.source.tagged_commit_sha == options.commit
-            && manifest.publication_mode == options.publication
+            && manifest.legacy_publication_mode() == Some(options.publication)
             && manifest.target_triple == target::TARGET_TRIPLE
             && (options.boundary == Boundary::PrePublication
                 || options.publication == PublicationMode::Release),
@@ -855,15 +567,11 @@ fn parse_options(
     operation: &str,
     arguments: impl Iterator<Item = OsString>,
 ) -> Result<Options, DevError> {
-    let verify = match operation {
-        "run" => false,
-        "verify" => true,
-        _ => {
-            return Err(DevError::usage(
-                "transferred operation must be run or verify",
-            ));
-        }
-    };
+    if operation != "legacy-verify" {
+        return Err(DevError::usage(
+            "transferred aggregate production is retired; legacy-verify only reads existing evidence",
+        ));
+    }
     let mut values = verifier::parse_values(
         arguments,
         &[
@@ -902,7 +610,6 @@ fn parse_options(
         .filter(|n| *n > 0)
         .ok_or_else(|| DevError::usage("expected verifier bytes must be positive"))?;
     Ok(Options {
-        verify,
         candidate: PathBuf::from(verifier::required(&mut values, "--candidate")?),
         manifest: PathBuf::from(verifier::required(&mut values, "--manifest")?),
         tag,
@@ -953,7 +660,7 @@ mod tests {
     }
     #[test]
     fn options_and_paths_reject_foreign_or_ambiguous_input() {
-        assert!(parse_options("run", [].into_iter()).is_err());
+        assert!(parse_options("legacy-verify", [].into_iter()).is_err());
         assert!(parse_options("fallback", [].into_iter()).is_err());
         assert!(parse_options("run", ["--unknown", "x"].into_iter().map(OsString::from)).is_err());
         assert!(regular(Path::new("relative")).is_err());

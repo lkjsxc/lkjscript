@@ -60,9 +60,32 @@ pub struct ProductIdentity {
 pub struct SourceIdentity {
     pub repository: String,
     pub expected_release_tag: String,
+    #[serde(rename = "commit_sha")]
     pub tagged_commit_sha: String,
     pub commit_timestamp_unix_seconds: u64,
-    pub annotated_tag_object_sha: Option<String>,
+}
+
+/// A content encoding identity, not a language, runtime, or public product version.
+pub const PUBLICATION_NEUTRAL_FORMAT: &str = "lkjscript-release-content-1";
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct BuildIdentity {
+    pub target_policy_sha256: Sha256Digest,
+    pub command: Vec<String>,
+}
+
+/// Legacy event claims remain readable without becoming current publication authority.
+/// New release production must select `PublicationNeutral`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ManifestEncoding {
+    PublicationNeutral {
+        build: BuildIdentity,
+    },
+    Legacy {
+        publication_mode: PublicationMode,
+        annotated_tag_object_sha: Option<String>,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -146,10 +169,9 @@ pub struct PackagingIdentity {
     pub members: Vec<ArchiveMemberIdentity>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReleaseManifest {
-    pub publication_mode: PublicationMode,
+    pub encoding: ManifestEncoding,
     pub product: ProductIdentity,
     pub source: SourceIdentity,
     pub target_triple: String,
@@ -159,4 +181,27 @@ pub struct ReleaseManifest {
     pub root_license: PayloadIdentity,
     pub third_party_notices: NoticeIdentity,
     pub packaging: PackagingIdentity,
+}
+
+impl ReleaseManifest {
+    pub fn is_publication_neutral(&self) -> bool {
+        matches!(self.encoding, ManifestEncoding::PublicationNeutral { .. })
+    }
+
+    pub fn legacy_publication_mode(&self) -> Option<PublicationMode> {
+        match self.encoding {
+            ManifestEncoding::PublicationNeutral { .. } => None,
+            ManifestEncoding::Legacy {
+                publication_mode, ..
+            } => Some(publication_mode),
+        }
+    }
+
+    pub fn publication_provenance(&self) -> &'static str {
+        match self.legacy_publication_mode() {
+            None => "neutral/unverified-publication",
+            Some(PublicationMode::DryRun) => "declared-dry-run/unverified-publication",
+            Some(PublicationMode::Release) => "declared-release/unverified-publication",
+        }
+    }
 }

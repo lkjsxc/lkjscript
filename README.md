@@ -6,7 +6,7 @@ mutable locators; stable typed identities preserve continuity. Source text, comp
 indexes, compiler caches, artifacts, deployment descriptors, and runtime handles are projections
 or consumers rather than alternate program truths.
 
-The supported v0.1.35 executable provides offline command, signature-indexed inbound HTTP, structured
+The supported v0.1.38 executable provides offline command, signature-indexed inbound HTTP, structured
 interactive WebSocket, deployment-bound outbound HTTPS, and reviewed stateful HTTP application
 lifecycles through one copied binary. They create typed meaning graph projects, inspect and change
 accepted meaning, run graph-owned tests, build deterministic artifact bundles, and execute through
@@ -14,11 +14,14 @@ the standalone deployment boundary without Cargo, a checkout, or an application 
 stateful workflow uses a deployment-selected first-party local data root and durable queue; no
 product or public verification path provisions PostgreSQL.
 
-Immutable `v0.1.35` includes effect-polymorphic task libraries, retained callbacks, recursive
+Immutable `v0.1.38` includes effect-polymorphic task libraries, retained callbacks, recursive
 nominal payloads, native runtime installation, typed named references and finite generic callable
-admission. Its anonymous exact/latest installed lifecycles and bound public suite passed.
-The [delivery reconciliation](docs/campaigns/202609140938.md)
-and [release procedure](docs/release.md) retain its publication and original-reader evidence.
+admission, requirement-parameter libraries, structural body authoring, IEEE-754 F64 values,
+and transaction-completion reporting. Its publisher completed all four hosted jobs, including
+anonymous exact/latest installed application acceptance and attestation checks. The old publisher's
+separate later manual original-reader closure was not performed here; it is a historical evidence
+gap, distinct from release availability. See the [release procedure](docs/release.md) and
+[current delivery campaign](docs/campaigns/202609180007.md).
 
 The published product includes foreground artifact commands and task iteration.
 `run --deployment PATH` runs a pure or task Command entry once, using exact operator
@@ -28,7 +31,7 @@ codec, adapter and per-grant limits remain enforced. Project `run TARGET` remain
 differential route. See the [foreground campaign](docs/campaigns/202609121842.md) for delivery status.
 
 The supported release selects exact source commit
-`4306ef64783462a8dda48f2a855a88482d1faec8`. The release includes public exact
+`7083f9a6d56ed702017942e100c3696fc6f35308`. The release includes public exact
 built-in dependency, component, requirement, function-backed port, and command/HTTP/interactive
 target authoring. Product 0.1.21 replaces a universal HTTP target port with stable graph-owned exact
 method/path route owners and retains the exact relational `interactive` target whose graph-owned
@@ -118,9 +121,9 @@ a normal return is not a transaction publication certificate. See its
 
 The accepted v0.1.36 source also supports nested structural expression bodies, lexical bindings,
 explicit T/E/R applications and reviewed body replacement that preserves signature owners.
-Flat requests remain supported. The combined release has entered publication; its
-[delivery continuation](docs/campaigns/202609151412.md) tracks the remaining publisher and
-anonymous installed-product gates. The supported download below is v0.1.35 until those gates pass.
+Flat requests remain supported. These capabilities are published together in v0.1.38, whose
+[completed publisher](https://github.com/lkjsxc/lkjscript/actions/runs/35117655769) passed the
+anonymous installed-product gates.
 
 The [capture-safe evidence](docs/evidence/202609091625-capture-safe-generics.json) records the current
 generic factory, graph-owned function-constant, exact offline closure, negative constraints, and
@@ -145,7 +148,7 @@ x86-64 environment, or broader Linux portability.
 ## Download and install
 
 The supported runtime is Linux x86-64, statically linked for `x86_64-unknown-linux-musl`.
-Public v0.1.35 includes immutable version slots and an explicit default selection. Anonymous
+Public v0.1.38 includes immutable version slots and an explicit default selection. Anonymous
 exact/latest downloads and installed application acceptance are complete; see
 [release state](docs/release.md) for the frozen source and delivery evidence.
 The latest bootstrap is acquired completely before execution with this single compound invocation:
@@ -168,9 +171,9 @@ lkjscript runtime list
 For download/inspect/run, use the exact immutable URL and review the complete script first:
 
 ```sh
-curl -q --fail --location --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 180 --max-filesize 16384 --output install-v0.1.35.sh https://github.com/lkjsxc/lkjscript/releases/download/v0.1.35/install.sh
-cat install-v0.1.35.sh
-sh install-v0.1.35.sh --prefix "$HOME/.local"
+curl -q --fail --location --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 180 --max-filesize 16384 --output install-v0.1.38.sh https://github.com/lkjsxc/lkjscript/releases/download/v0.1.38/install.sh
+cat install-v0.1.38.sh
+sh install-v0.1.38.sh --prefix "$HOME/.local"
 ```
 
 Trust the initial script as executable code from the selected GitHub HTTPS source. Its embedded
@@ -183,15 +186,17 @@ metadata and attestations are separate from anonymous download.
 The public native offline boundary takes a local archive and its expected lowercase SHA-256:
 
 ```sh
-manager="$HOME/.local/lib/lkjscript/versions/v0.1.35/x86_64-unknown-linux-musl/lkjscript"
+manager="$HOME/.local/lib/lkjscript/versions/v0.1.38/x86_64-unknown-linux-musl/lkjscript"
 "$manager" runtime install --archive "$PWD/lkjscript-x86_64-unknown-linux-musl.tar.gz" --sha256 "$archive_sha256" --prefix "$HOME/.local"
 "$manager" runtime list --prefix "$HOME/.local"
-"$manager" runtime select v0.1.35 --prefix "$HOME/.local"
+"$manager" runtime select v0.1.38 --prefix "$HOME/.local"
 ```
 
-Set `archive_sha256` to the exact archive checksum from the chosen trusted release. Local dry-run
-archives are admitted as declared dry-run/unverified publication; they cannot overwrite a different
-archive at the same tag. Installation without `--activate` does not change the default. Inventory
+Set `archive_sha256` to the exact archive checksum from the chosen trusted release. Historical
+dry-run archives retain their declared, unverified publication status. Current source additionally
+supports publication-neutral content; the published v0.1.38 manager may reject that new encoding,
+so use its exact new bootstrap when upgrading. Different archives cannot replace one immutable
+tag slot. Installation without `--activate` does not change the default. Inventory
 reports full payload integrity as unchecked; selection and exact reinstall fully validate retained
 payloads. A corrupted slot is preserved: use a new owned prefix for recovery.
 
@@ -203,7 +208,7 @@ recover through the retained newer manager:
 ```sh
 "$manager" runtime select v0.1.32 --prefix "$HOME/.local"
 "$HOME/.local/bin/lkjscript" --version
-"$manager" runtime select v0.1.35 --prefix "$HOME/.local"
+"$manager" runtime select v0.1.38 --prefix "$HOME/.local"
 "$manager" run --deployment /absolute/application/command.deployment.json
 ```
 

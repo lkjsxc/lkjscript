@@ -631,6 +631,7 @@ mod tests {
             elapsed_nanoseconds: process.elapsed_nanoseconds,
             process: Some(process),
             outputs: Vec::new(),
+            retained_outputs: Vec::new(),
             input_fingerprint: fingerprint.clone(),
             evidence_digest,
             cache: CacheObservation {

@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-pub(crate) const CHECK_CONTRACT_VERSION: u32 = 5;
+pub(crate) const CHECK_CONTRACT_VERSION: u32 = 6;
 pub(crate) const CACHE_CONTRACT_VERSION: u32 = 2;
 pub(crate) const DEFAULT_TIMEOUT: Duration = Duration::from_secs(3_600);
 pub(crate) const DEFAULT_MAXIMUM_STREAM_BYTES: u64 = 64 * 1024 * 1024;
@@ -134,6 +134,7 @@ pub(crate) struct GateReceipt {
     pub(crate) elapsed_nanoseconds: u64,
     pub(crate) process: Option<ProcessObservation>,
     pub(crate) outputs: Vec<FileProof>,
+    pub(crate) retained_outputs: Vec<FileProof>,
     pub(crate) input_fingerprint: VerificationDigest,
     pub(crate) evidence_digest: VerificationDigest,
     pub(crate) cache: CacheObservation,

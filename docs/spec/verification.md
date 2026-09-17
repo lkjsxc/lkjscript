@@ -112,8 +112,8 @@ Cost comparisons retain an isolated source-bound predecessor and a single predec
 fold/bind/append program with exactly the same accepted code closure and artifact on both versions.
 The new standard map declaration is tested separately. Predecessor exhaustion at default limits
 is retained, and timing/RSS observations are advisory with failures and indexing/metadata trade-offs.
-Final acceptance requires a fresh full profile and separate fresh exact local musl candidate build
-and admission. Host evidence cannot replace target execution; these checks authorize no release.
+Release acceptance requires the source/candidate union below; standalone full remains complete.
+Host evidence cannot replace exact target execution; these checks authorize no release.
 
 Complete typed meaning graph reconstruction and validation is the semantic oracle. Sparse
 repository reads, witness-maintained changes, package interfaces, compiler selection, and query projection
@@ -340,16 +340,17 @@ expression authoring; declarations, signatures, types and reference preludes sta
 
 ## Command lifecycle requirements
 
-Foreground acceptance extends the existing offline-package effect child, required by current
-offline-package receipt 10 and all current target/transferred/public-pair readers. It freshly authors
+Foreground acceptance extends the existing offline-package effect child, required by the current
+offline-package owner and exact-final-candidate admission. Standalone full retains the same owner;
+transfer and public boundaries consume its accepted binding without replaying its applications. It freshly authors
 an exported task-iteration helper, a pure factory returning a bound callback, and two Command
 consumers with recursive nominal reports through the copied candidate. Both consumer and producer
 authoring paths are unavailable during execution; only the single executable, exact bundles,
 descriptors and disposable operational roots are required. Unrelated working directories and an
 environment containing only `LANG` exclude Cargo, source assets and runtime lookup. Artifact
 commands invoke the exact supplied absolute runtime, whose path and digest the reader independently
-binds. Thus the installed pair's two foreground consumers execute through one immutable installed
-slot. Authoring continues through the isolated copied candidate. Historical receipt 8 and its copied
+binds. These foreground consumers execute through the exact admitted candidate. Authoring continues
+through the isolated copied candidate. Historical receipt 8 and its copied
 foreground invocations remain with the frozen foreground release owner.
 
 Independent arithmetic requires positions 0, 1, 257 and 8193, with sums N(N-1)/2; the last is
@@ -510,12 +511,12 @@ generated source assets, or compiled dependency assets. An explicit evidence roo
 transferred no-checkout execution by the copied verifier and exact candidate.
 
 The offline owner defines one 3,600-second complete-process allowance, selected by the source
-check registry and the shared target/transferred oracle inventory. It covers startup through
+standalone full check registry and the final-candidate oracle inventory. It covers startup through
 terminal exit, including cleanup, evidence publication and child self-admission. Per-command
 deadlines and output limits remain separate. A successful-looking intermediate receipt cannot
 replace successful process completion or the parent's independent reader admission. This is
 contributor operational policy, not a language execution budget.
-Transferred and pair failure summaries retain the first failed owner's process classification,
+Candidate and boundary failure summaries retain the failed process classification,
 reason, elapsed time, allowance and evidence location. A zero exit followed by reader rejection
 remains distinct from timeout, cancellation, output exhaustion and incomplete cleanup.
 
@@ -558,7 +559,7 @@ built-in transport through the copied candidate, stages it without changing sema
 constructs one bounded request adding the dependency, component, requirements, function-backed HTTP
 ports, `serve` target, exact and pattern routes, indexed capture parameters, and BBS policy. It
 retains one application definition across contributor,
-target-admission, pre-publication, and anonymous public verification. It may use public parsing
+target-admission. It may use public parsing
 utilities but no recipe owner builder, source, fixture topology, or `http` recipe. Passing evidence
 requires direct/input normalization equality, reviewed plan/apply, idempotent reprepare,
 clean/incremental artifact equality, a complete pattern add/set/delete lifecycle, exact precedence,
@@ -571,7 +572,7 @@ accepted graph authority, and data/runner-root cleanup. Timeout, early exit, dat
 failure, or cleanup failure remains a typed non-pass. Workflow shell cannot reclassify it.
 
 The stateless distributed HTTP oracle remains an implementation-disjoint faster gate. Each HTTP
-oracle and both language/package oracles remain independently required at transferred admission.
+oracle and both language/package oracles remain independently required at exact-final-candidate admission.
 
 The maintained service owner also starts `lkjournal-live-1` against the same isolated initialized
 data root as HTTP and worker coverage. Its bounded raw TCP client computes the upgrade accept value,
@@ -614,93 +615,69 @@ release-candidate prerequisite, alternate adapter, dual reader/writer, or public
 
 ## Package and public-release evidence
 
-Main integration and public closure are distinct proof boundaries. The
-[numerical-library delivery continuation](../campaigns/202609161809.md) requires exact-source fresh
-full, complete exact static-target admission, maintained consumer/generated-asset consistency and
-affected verifier correctness checks before integration. Authenticated matching full, target and
-preparation evidence must be admitted by the original readers. Complete target admission includes
-all named behavioral owners and both pinned userlands; ELF inspection alone is insufficient.
-Once these and actual repository gates pass, later installed, publisher and anonymous-acquisition
-work need not delay integration. Known product or compatibility failures still block acceptance.
+Release acceptance is the dependency-complete union of `check release-source --fresh` and
+exact-final-candidate admission. `check full` remains a standalone complete, fresh 26-gate profile;
+release-source is a separately named 20-gate profile and cannot claim full proof by itself.
+Main integration and public closure remain distinct. Accepted source can reach main while an
+external non-publishing candidate job completes, but the missing hosted proof must remain explicit.
 
-The installed/transferred original-reader and fault/recovery obligations, immutable publication and
-anonymous exact/latest acceptance below remain required for public closure. Integration cannot
-reclassify them as passed or waive their substantive checks. Preserve the exact verified source and
-validate the integration descendant's actual changes separately; the
-[release procedure](../release.md#main-integration-and-public-closure) owns delivery ordering and
-remote-main containment.
+| Existing guarantee | Current required owner |
+| --- | --- |
+| Formatting, safe Rust/lints, workspace/all-target/all-feature unit and independent reference tests, verifier correctness | Release-source `fmt`, `clippy`, `workspace_tests`; no assertion or workload reduction |
+| Default release command lifecycle and host build configuration | Release-source `release_build`, `release_command_lifecycle`; Cargo's last host executable producer precedes host consumers |
+| Checker correctness and no-Python/product-surface policy | Release-source `checker_self_test`, `rust_only_tooling`, `product_surface_audit`, `diff_check` |
+| Maintained standard/lkjournal and built-in artifacts/transports, generated discovery | The existing ten package/artifact gates and `generated_public_guides` in release-source |
+| Distributed HTTP, outbound HTTP, offline packages, pure tail, stateful HTTP, standalone service | The six unchanged target owners run once against the immutable executable extracted from the final archive |
+| Embedded evaluator/reference/resource/cancellation probes used by offline packages and pure tail | The same source-built, identity-bound verifier executes and admits these source-only subprocesses within those target owners; they are explicitly not target-executable observations |
+| Static ELF/linkage and both pinned userlands | Exact-final-candidate target admission, with independent ELF inspection and unchanged pinned-userland lifecycles |
+| Native bounds, immutable slots, locking, I/O fault/recovery and supported legacy decoding | Workspace native installation/container tests plus once-per-candidate installation acceptance |
+| Generated bootstrap in both pinned userlands; installed authoring; two-version live-process recovery; authentic old-manager rejection/new-bootstrap recovery | `release transferred installation-run` and its original reader, once per candidate |
+| Transferred/anonymous exact and latest bytes, strict native admission, received bootstrap installation and small lifecycle | `pair-run`/`pair-verify`; `exact-run`/`exact-verify` is an explicitly exact-only result when latest is independently superseded |
 
-Release preparation requires fresh successful source-full and target-admission receipts bound to
-the same commit and candidate. Manifest and receipt schemas explicitly represent static linkage and
-must reject predecessor dynamic-only metadata. Two notice generations and two packages must be
-byte-equal. Strict verification owns archive inventory, order, mode, timestamp, link/traversal,
-canonical metadata, checksum, target/linkage, candidate, and extraction-conflict rejection.
+The source reader admits the exact maintained requested/selected closure and DAG, commands,
+dependencies, current source snapshot, toolchain/environment and original verifier, external tool
+identities, fresh successful child results, bounded original logs and preserved output bytes/modes.
+Per-gate output copies preserve an earlier host build even when the later lifecycle build replaces
+the mutable Cargo output. Missing, altered, skipped, failed, unavailable, cancelled or unclean
+required evidence cannot be converted to success by changing an enclosing counter or checksum.
+The terminal candidate owner additionally invokes every maintained target and installation original
+reader in the producing context. A producer's self-declared `passed` field is insufficient.
 
-Before publication, a read-only no-checkout job verifies exact artifact and verifier handoffs,
-re-inspects the extracted candidate, and runs `release transferred run` with boundary
-`pre-publication`. Its exact ordered behavioral inventory is distributed HTTP, outbound HTTP,
-offline packages, pure tail, and stateful HTTP. Target admission additionally requires maintained
-service acceptance. `release admission-verify` and preparation re-read the six named target receipts;
-a count or success flag cannot replace them.
-The publication job depends on both receipts, has the only release-write permission, performs no
-checkout, and executes no repository binary or script.
+Content construction precedes authoritative distributable acceptance. The archive, checksum and
+bootstrap are finalized before the final candidate is extracted and admitted. Neutral container
+content binds its intended version/tag, exact product source, target/build policy, executable,
+toolchain/lock and packaging/license facts; it contains no publication permission, tag-object or
+consumer-attempt fact. The accepted assets are promoted unchanged. Historical legacy event claims
+remain readable and unverified as publication authority. The trusted controller separately admits
+producer repository/event/workflow/run/attempt/jobs/artifacts, terminal evidence and current scoped
+publication authority; a source descendant is not the original product source.
 
-After immutable publication, exact-tag and `releases/latest` assets are downloaded anonymously and
-authenticated independently by the hosted workflow (A for each route). `release transferred
-pair-run` independently strictly admits each archive/checksum into a separate extraction (V), then
-installs and uses each exact executable in a fresh owned project (S). Pair receipt generation 4
-requires 27 ordered commands per route, including structural and F64 discovery, literal reviewed
-function creation, module/function/parameter discovery, definition inspection, reviewed body
-replacement and changed execution. Independent expected results are I64 42 before replacement,
-I64 43 after sequential shadowing, F64 1.75 then 2.75 after the shared reviewed replacement,
-negative-zero formatting as `"-0.0"`, and the retained command-recipe Text `"hello"`. Decimal and
-negative-zero JSON inputs are retained alongside both original requests and plans. The declaration
-and unchanged parameter identity/contract must survive while the body root changes. Requests and
-strict logical-plan files remain bound outside cleaned application roots. Check/build/run and joined
-cleanup remain required. It compares the complete
-archive, checksum, canonical manifest and executable bytes by bounded streaming, and binds all
-admitted member modes, payloads and execution policy (E). Identical malformed inputs never reach E.
-It freshly executes and fully rereads the existing five-owner aggregate against exact in the same
-invocation (B). Latest's complete-suite disposition is **bound within the same pair**, naming that
-actual aggregate and its equality evidence; latest's small lifecycle is independently fresh.
-Public acceptance requires A(exact), A(latest), V(exact), V(latest), S(exact), S(latest), E, B and clean
-completion of the public job. A local pair receipt proves no HTTP acquisition or GitHub authenticity.
+Small boundary checks preserve distinct exact/latest inventories, extraction, bootstrap and installed
+lifecycles. Both routes independently author and review the ordinary standard-dependent structural
+and F64 program: I64 results 42 then 43; numerical results 1.75 then 2.75; negative zero remains
+`"-0.0"`; the original command recipe yields `"hello"`. They retain literal requests and plans,
+discovered unchanged owners, changed bodies, rejection of a request using a mismatched review,
+continued prior-program usability, a build and fresh-process artifact execution after the authoring
+project is removed. The standalone expected result is 43 and has production-only execution;
+project-mode pure observations retain independent reference equality. Original readers re-admit
+all these assertions and exact files. Simulated URL acquisition is not anonymous public acquisition.
 
-Sharing is confined to this invocation's fixed candidate, verifier, target policy, environment and
-workload inventory. Both routes and the verifier are reobserved before and after every expensive
-child and at completion. The reader revalidates the actual source aggregate through every existing
-child reader; changed obligations remain failures even after outer hashes are recomputed. Missing,
-foreign, incomplete, changed, failed, cancelled or unclean evidence cannot pass. `pair-verify` only
-rereads evidence; it runs no applications. Existing single-boundary receipts retain their old format
-and meaning.
-Release pairs require release manifests and an `exact-download` child boundary. Dry-run pairs are
-explicit local rehearsals with a `pre-publication` child boundary and cannot authorize publication.
-Source-full, six-owner target admission and fresh pre-publication acceptance remain independent.
-Clean/incremental artifact equality remains required within each freshly created application.
-This trusted isolated-runner contract detects drift; it promises neither hostile-host isolation nor
-the intermittent-fault detection probability of a second full behavioral sample.
+The five-owner transferred aggregate producer is retired. Its historical diagnostic reader is
+explicitly `legacy-verify`; it cannot create new acceptance or publication permission. Normal
+transfer, publication, public recheck and resume run zero product builds and zero broad application
+owners. A publication/API failure rechecks current authority and occupancy before retry; a failed
+public boundary retries only that boundary while its candidate remains valid. A product/installer
+defect invalidates the affected acceptance. An exact-only pass cannot stand in for a selected latest
+publication acceptance, and differing latest bytes are never executed as this candidate.
 
-Version 4 of the private verifier handoff admits exactly release-verify, distributed-http, outbound-http,
-offline-packages, pure-tail, and stateful-http, in that order. Schema 3 and omitted, duplicate,
-foreign, or extra roles reject. The exact two-file inventory, canonical identity, externally expected
-verifier byte length/hash, source/tag, and safe executable mode are checked before transferred code
-runs. The aggregate rechecks frozen inputs before and after each child and delegates complete
-behavioral receipt validation to that child's owner. It retains the manifest, source/publication/
-boundary, actual capabilities, target/policy, candidate/verifier, child receipt byte length/SHA-256/
-verification digest, process results, and cleanup. Each child has a create-new absolute evidence
-root and disposable state. Incomplete state is durably recorded before execution; failed or cancelled
-attempts cannot advance publication. Supervised descendants, including separate process groups,
-are terminated through bounded Linux process identity tracking; abrupt external termination can
-leave an incomplete receipt requiring cleanup, never a passing receipt.
-
-Independent inventory tests must use literal expected roles. Source-bound live-receipt falsification
-recomputes aggregate hashes after corrupting a child obligation, so an omitted constrained factory
-cannot hide behind current schema agreement. It requires an actual complete no-checkout rehearsal;
-it is separately executed proof, not a substitute for candidate-bound public observations. The
-existing language owners retain fixed configure results [8,11,17] and [2,0,-4], Text/nested-list
-constants, every ordered 8,192-element mapped value and sum 100,691,968, unchanged-HEAD bound and
-unsafe-empty-container rejections, graph projections, storage/accounting, transactional visibility,
-and healthy recovery. Internal evaluator probes remain source/verifier-bound observations.
+CI owns the authenticated terminal outcome: candidate accepted, promotion authorized/rejected,
+immutable publication and public verification have distinct results. Successful uploaded assets or
+skipped mandatory jobs are not public closure. Essential assets, verifier and acceptance handoff
+request 14-day retention with actual service expiry recorded. Missing trusted originals yield an
+unavailable result and an explicit new-candidate or trusted-recovery action. Public read-only
+rechecking of immutable published bytes does not manufacture historical acceptance. Routine release
+completion requires no later manual reconstruction campaign. Older failures and evidence gaps keep
+their original meaning; they are not retroactively certified under this contract.
 
 ## Verification profiles and receipts
 
@@ -716,7 +693,10 @@ meaning graph consumers, generated docs, and built-in/generated assets. `service
 standalone artifact bundle HTTP/interactive/worker service acceptance. The data cutover additionally requires the
 contributor PostgreSQL differential/resource receipt. `full` owns formatting, lints, workspace
 targets, all tests, release/product/service classification, and diff checks; final full evidence
-must be fresh.
+must be fresh. `release-source` is the separately identified fresh 20-gate source tier above;
+it excludes only the six external application owners moved to final candidate admission. The
+ordinary focused default tests remain available, while release-source retains the existing default
+release lifecycle and all-feature workspace proof without adding duplicate source test suites.
 
 The harness owns gate dependencies, exact fingerprints, bounded child logs, required outputs,
 timeouts, and fresh/reused/skipped/unavailable/failed classification. Reuse is valid only when the
@@ -863,28 +843,33 @@ does not establish a speedup, and an ignored test that has not actually run supp
 
 ## Native installation and release bootstrap
 
-Production installation tests use independently assembled canonical declared-dry-run containers and
+Production installation tests use independently assembled canonical legacy and neutral containers and
 the ordinary public admission boundary. They must not call release preparation or require completed
 source/target receipts. Native parser, immutable-slot, prefix ownership, OS lock, symlink selection,
 I/O fault and process-termination tests belong to the workspace test gate. Shared archive parsing
-and production dependencies require the full dependency-closed profile and exact static target proof.
+and production dependencies require the dependency-complete source/candidate union and exact static target proof.
 
-After those prerequisites, genuine frozen packages exercise deterministic third-asset generation,
-the unchanged bootstrap in both pinned userlands with explicitly simulated exact-URL acquisition,
-and installed public lifecycles through the existing transferred pair owner. That pair adds one
-small predecessor-manager/process-continuity witness and retains one five-owner aggregate. Public
-acceptance independently downloads exact/latest triples anonymously, admits all three asset identities
-and attestations separately, executes the original scripts with real network acquisition, and binds
-the one fresh aggregate within the pair. Simulated acquisition is never anonymous-download evidence.
+Genuine finalized packages exercise deterministic third-asset generation, the unchanged bootstrap
+in both pinned userlands with explicitly simulated exact-URL acquisition, and installed public
+lifecycles through the candidate installation tier. That tier retains the predecessor-manager/process
+continuity witness and adds authentic legacy-manager rejection of neutral content, followed by
+recovery through the exact new bootstrap with the legacy slot unchanged. Public acceptance
+independently downloads exact/latest triples anonymously, admits all three identities and supported
+attestations, and executes the original scripts and small installed lifecycle. It runs no broad
+application aggregate. Simulated acquisition is never anonymous-download evidence.
 
-Changed asset, installation, recovery and nested receipt readers require live omitted/substituted and
-consistently rehashed fault fixtures from the first complete matching acceptance; an ignored test
-without that execution remains unrun. Preserve predecessor readers for historical receipts. No
-installation proof licenses graph/artifact/data migration, effect replay or implicit runtime fallback.
+Changed asset, installation, recovery and nested receipt readers require independent omission,
+substitution and consistently rehashed falsification fixtures, with genuine restored inputs admitted
+again. Owning CI additionally runs the maintained original readers against actual required source,
+candidate and installation observations before its terminal decision. These obligations replace the
+recurring reconstruction of the first complete run into a later manual fault-matrix campaign.
+An ignored fixture without execution remains unrun; historical gaps remain historical. Preserve
+predecessor readers for historical receipts. No installation proof licenses graph/artifact/data
+migration, effect replay or implicit runtime fallback.
 
 ## Requirement-parametric library obligations
 
-The offline-package aggregate's current receipt generation is 13. It includes the literal
+The offline-package owner's current receipt generation is 14. It includes the literal
 `requirement-parameters` workload in its existing owner, covering producer-owned typed-cell
 operations/transactions, T/E/R applications and pure factories, distinct caller requirements,
 transported execution, completed lexical transaction results, independent typed-byte/store observations,
@@ -1065,9 +1050,11 @@ completed write survives later numeric JSON-output failure and restart; it execu
 automatic retry. Existing effect/cleanup evidence owners independently observe visibility and
 transaction completion. Live effects are never replayed for differential verification.
 
-Fresh source and separate exact-target acceptance include these existing behavioral owners. The
-anonymous exact/latest installed pair must discover F64 and author/use the numerical witness, with
-complete literal requests, plans, supplied samples, checkpoints and actual results retained in the
-existing evidence inventory. Matching original readers reject missing or consistently rehashed
-false material. Retrospective regenerated requests do not replace originals, and a successful upload
-or subjob does not establish public acceptance. This introduces no aggregate child or proof framework.
+The source/candidate coverage union requires these existing behavioral owners once against the
+final candidate, preserving their independent source/reference probes. Standalone full also retains
+them. Anonymous exact/latest installation requires the small F64 discovery and reviewed authoring
+witness, with literal requests, plans and actual results retained; the larger samples and checkpoint
+workloads remain bound to candidate acceptance. Matching original readers reject missing or
+consistently rehashed false material. Retrospective regenerated requests do not replace originals,
+and a successful upload or subjob does not establish public acceptance. This introduces no aggregate
+child or proof framework.

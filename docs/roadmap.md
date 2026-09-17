@@ -78,14 +78,18 @@ The [requirement-parameter campaign](campaigns/202609140938.md) and accepted
 The [delivery continuation](campaigns/202609151412.md) retains the failed, unproduced v0.1.37
 source and tag. The [binary64 mandate](campaigns/202609152217.md) selects F64 as the final companion
 to accepted transaction completion and one combined successor with the launch/retention repairs.
-That delivery trigger is consumed: F64 is implemented and the combined successor is due. The
-[full-lifecycle continuation](campaigns/202609161630.md) corrected the inconsistent verification
-allowance. The [numerical-library milestone closure](campaigns/202609162154.md) consumes the completed
-corrective rehearsal at its existing exact source, with main integration and public closure kept
-separate. Final-source fault/recovery admission is complete. The already-due immutable publication
-and its original-evidence admission remain the finite delivery obligations; pending delivery permits
-no new feature deferral.
-The [current summary](status.md#combined-release-delivery) owns the observed release disposition.
+That delivery trigger is complete: v0.1.38 is immutable and its publisher passed all hosted
+jobs, including anonymous acquisition. The [full-lifecycle continuation](campaigns/202609161630.md)
+corrected the verification allowance; the [milestone ending](campaigns/202609162154.md) retains
+source/fault/recovery history. Its separate later manual-reader gap is recorded honestly and does
+not impose another release-reconstruction campaign. The [current summary](status.md#release-delivery-cutover)
+owns publication disposition.
+
+The [release cutover](campaigns/202609180007.md) addresses observed repeated delivery work:
+accept final neutral content once, promote unchanged assets and resume the failed boundary.
+No new public release is selected for infrastructure alone. First public use follows the next useful
+selected capability, important fix or explicit release request. After the cutover's selected proof,
+ordinary numerical/data-processing authoring can resume without another routine reconciliation.
 Independent callback effects still require an application policy for replay and idempotency.
 
 Numerical algorithms and failure policy belong in ordinary graph libraries. After delivery,

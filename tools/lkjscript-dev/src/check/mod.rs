@@ -2,6 +2,7 @@ mod cache;
 mod executor;
 mod model;
 mod policy;
+mod reader;
 mod registry;
 mod self_test;
 mod snapshot;
@@ -15,7 +16,6 @@ use model::{
     FailureSummary, GateStatus, InputManifest, MAXIMUM_WORKERS,
 };
 use serde::Serialize;
-use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
@@ -25,6 +25,9 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const MAXIMUM_RETAINED_RUNS: usize = 8;
 static RUN_ORDINAL: AtomicU64 = AtomicU64::new(0);
+
+pub(crate) use reader::read_release_source_receipt;
+pub(crate) const RELEASE_SOURCE_GATE_COUNT: usize = 20;
 
 #[derive(Clone, Debug)]
 struct Options {
@@ -158,29 +161,18 @@ fn run_profile(
             snapshot: initial.clone(),
         },
     )?;
-    let command_names = selected
-        .iter()
-        .filter_map(|name| registry.gate(name).ok())
-        .filter_map(|gate| {
-            gate.command.first().cloned().map(|command| {
-                let identity = gate
-                    .identity_command()
-                    .first()
-                    .cloned()
-                    .unwrap_or_else(|| command.clone());
-                (command, identity)
-            })
-        })
-        .collect::<BTreeSet<_>>();
+    let command_names = registry.input_commands(&selected)?;
     let runtime = snapshot::runtime_identity(repository, command_names)?;
     let dag_path = run_directory.join("dag.json");
     evidence::publish_json(
         &dag_path,
         &registry.manifest(&requested, &selected, options.jobs)?,
     )?;
-    let fresh_required = options.profile == "full" || options.fresh;
+    let fresh_required = requires_fresh(&options.profile) || options.fresh;
     let fresh_reason = if options.profile == "full" {
         "full_profile_requires_fresh"
+    } else if options.profile == "release-source" {
+        "release_source_profile_requires_fresh"
     } else if options.fresh {
         "explicit_fresh"
     } else {
@@ -251,7 +243,7 @@ fn run_profile(
         .map(|gate| gate.name.clone())
         .collect::<Vec<_>>();
     let all_passed = passed_gates == gates.len();
-    let full_is_fresh = options.profile != "full" || reused_passed_gates == 0;
+    let full_is_fresh = !requires_fresh(&options.profile) || reused_passed_gates == 0;
     let status = if all_passed && input_stable && full_is_fresh && final_error.is_none() {
         AggregateStatus::Passed
     } else {
@@ -282,7 +274,7 @@ fn run_profile(
         Some(FailureSummary {
             owner: "fresh_policy".to_owned(),
             status: "failed".to_owned(),
-            reason: "full_profile_reused_evidence".to_owned(),
+            reason: "fresh_profile_reused_evidence".to_owned(),
         })
     } else {
         None
@@ -343,7 +335,7 @@ fn failure_receipt(
         reused_passed_gates: 0,
         unrun_gates: Vec::new(),
         maximum_workers: options.jobs,
-        fresh_required: options.fresh || options.profile == "full",
+        fresh_required: options.fresh || requires_fresh(&options.profile),
         gates: Vec::new(),
         failure: Some(FailureSummary {
             owner: "harness".to_owned(),
@@ -473,6 +465,10 @@ fn parse(mut arguments: impl Iterator<Item = OsString>) -> Result<Options, DevEr
         fresh,
         jobs,
     })
+}
+
+fn requires_fresh(profile: &str) -> bool {
+    matches!(profile, "full" | "release-source")
 }
 
 fn repository_root() -> Result<PathBuf, DevError> {

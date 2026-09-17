@@ -14,12 +14,9 @@ not replace exact semantic revisions, content digests, package revisions, target
 SHAs, dependency versions, or external tool versions. Those values retain accurately labeled
 identity domains.
 
-The last verified immutable public release is product 0.1.32, from source
-`67baaf0b081842e0e2e3745e8d5503e22cc791e4`; exact/latest public-pair acceptance is recorded in
-the [iteration predecessor reconciliation](../campaigns/202609121214.md). The current
-[foreground campaign](../campaigns/202609121842.md) selects a combined iteration/foreground release.
-A source package version alone does not imply a tag or public release. Older tags, releases, assets,
-and metadata continue to identify their original snapshots.
+A source package version alone does not imply a tag or public release. The current availability
+and verification findings belong to [status](../status.md). Older tags, releases, assets, and
+metadata continue to identify their original snapshots.
 
 ## Public projection
 
@@ -112,14 +109,34 @@ One production release-container owner admits bounded gzip (128 MiB), tar (256 M
 manifest (1 MiB), exact five-member inventory, metadata, digests and actual static ELF. It rejects
 extensions, links, devices, traversal, duplicates, truncation, invalid checksums and trailing data.
 Historical producer identities are admitted independently of the current release owner's stricter
-pinned toolchain/notice/provenance policy. A local dry-run archive is explicitly declared dry-run
-with unverified publication; even a release-labelled manifest does not establish publication or
-authenticity. Differing dry-run/final archive identities intentionally conflict in the same prefix.
+pinned toolchain/notice/provenance policy. Current content uses the explicit
+`format: "lkjscript-release-content-1"` encoding identity. It binds the intended product version/tag,
+actual source commit, target/build policy and command, toolchain and lock inputs, executable,
+licenses/notices and deterministic packaging facts. It contains no publication mode or annotated
+tag object. The intended tag is a content constraint, not a claim that a remote tag exists. Candidate
+acceptance, transfer, publication authorization and later controller attempts do not change these
+bytes. Native installation reports `neutral/unverified-publication`.
+
+The strictly decoded historical encoding remains readable, including its original field order and
+canonical nullable annotated tag object. Its `dry-run` and `release` labels remain declarations with
+unverified publication, never evidence of publication or authenticity. Neither reader accepts a
+mixed encoding, unknown fields, a missing neutral discriminator or a reinterpreted legacy label.
+Installed historical manifests and receipts remain unchanged. Different archive identities at one
+tag conflict, including legacy and neutral archives that happen to contain the same executable.
+
+Older managers reject the neutral encoding. The exact generated bootstrap extracts and runs the
+new manager, which admits both supported encodings; retain that manager's pinned installed path
+when selecting a predecessor. Installation is idempotent for unchanged archive bytes and never
+replaces a conflicting immutable slot. Rejected admission leaves the existing selection available.
+This format transition changes neither application data nor graph, compiler or program-artifact
+generations.
 
 Current public release metadata contains product name/version plus exact source, target, toolchain,
-candidate, linkage, notice, archive, checksum, and integrity evidence. Private first-party handoffs
-and receipts may retain independently owned compatibility state, but new public metadata cannot
-copy it or select a historical writer.
+candidate, linkage, notice, archive, checksum, and integrity evidence. The release content discriminator
+selects a container reader; it is not another public language/runtime version. It is the limited
+distribution compatibility exception to otherwise private compatibility identities. Private
+first-party handoffs and receipts may retain independently owned compatibility state, but new public
+metadata cannot copy unrelated internal identities or select a historical production writer.
 
 ## Internal and historical boundary
 

@@ -1,0 +1,1168 @@
+use super::model::{Authority, LatestState};
+use super::*;
+use std::collections::VecDeque;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+
+const SOURCE: &str = "1111111111111111111111111111111111111111";
+const CONTROLLER: &str = "2222222222222222222222222222222222222222";
+const TAG_OBJECT: &str = "3333333333333333333333333333333333333333";
+
+/// This adapter observes actual controller operations and refuses execution. There is
+/// deliberately no orchestrator-supplied build/heavy-owner counter used as its oracle.
+struct FakeApi {
+    release: Option<Value>,
+    requests: Vec<(String, String)>,
+    uploads: Vec<String>,
+    fail_upload: Option<String>,
+    fail_public: bool,
+    corrupt_latest: bool,
+    corrupt_latest_metadata: bool,
+    latest: String,
+    tag_source: String,
+    tag_type: String,
+    relation: String,
+    artifacts: Vec<Value>,
+    run: Value,
+    job: Value,
+    public_bytes: BTreeMap<String, Vec<u8>>,
+}
+impl FakeApi {
+    fn new() -> Self {
+        Self {release:None,requests:Vec::new(),uploads:Vec::new(),fail_upload:None,fail_public:false,corrupt_latest:false,corrupt_latest_metadata:false,latest:"v9.8.7".to_owned(),tag_source:SOURCE.to_owned(),tag_type:"tag".to_owned(),relation:"ahead".to_owned(),artifacts:["assets","verifier","acceptance"].iter().enumerate().map(|(i,role)|json!({"id":i+10,"name":format!("candidate-{role}-17-2"),"expired":false,"digest":format!("sha256:{}","a".repeat(64)),"size_in_bytes":3,"expires_at":"2026-10-01T00:00:00Z","workflow_run":{"id":17,"head_sha":SOURCE}})).collect(),run:json!({"id":17,"run_attempt":2,"head_sha":SOURCE,"event":"workflow_dispatch","head_branch":"main","path":WORKFLOW,"repository":{"full_name":REPOSITORY},"head_repository":{"full_name":REPOSITORY},"status":"completed","conclusion":"success","workflow_id":41}),job:json!({"id":51,"run_id":17,"head_sha":SOURCE,"name":ACCEPTANCE_JOB,"status":"completed","conclusion":"success","steps":[{"name":"Admit the final candidate and original evidence","status":"completed","conclusion":"success"},{"name":"Upload immutable candidate assets","status":"completed","conclusion":"success"},{"name":"Upload original candidate verifier","status":"completed","conclusion":"success"},{"name":"Upload essential acceptance handoff","status":"completed","conclusion":"success"}]}),public_bytes:BTreeMap::new()}
+    }
+}
+impl Operations for FakeApi {
+    fn api(&mut self, method: &str, path: &str, body: Option<&Value>) -> Result<Value, DevError> {
+        self.requests.push((method.to_owned(), path.to_owned()));
+        if path.ends_with("/git/ref/heads/main") {
+            return Ok(json!({"object":{"type":"commit","sha":CONTROLLER}}));
+        }
+        if let Some(comparison) = path.split("/compare/").nth(1) {
+            let source = comparison.split("...").next().expect("source");
+            return Ok(
+                json!({"status":self.relation,"behind_by":if self.relation=="diverged"{1}else{0},"merge_base_commit":{"sha":source}}),
+            );
+        }
+        if path.ends_with("/git/ref/tags/v9.8.8") {
+            return Ok(
+                json!({"object":{"type":"tag","sha":"4444444444444444444444444444444444444444"}}),
+            );
+        }
+        if path.ends_with("/git/tags/4444444444444444444444444444444444444444") {
+            return Ok(
+                json!({"sha":"4444444444444444444444444444444444444444","tag":"v9.8.8","object":{"type":"commit","sha":CONTROLLER},"message":"Later public release"}),
+            );
+        }
+        if path.ends_with("/git/ref/tags/v9.8.7") {
+            return Ok(json!({"object":{"type":self.tag_type,"sha":TAG_OBJECT}}));
+        }
+        if path.ends_with(&format!("/git/tags/{TAG_OBJECT}")) {
+            return Ok(
+                json!({"sha":TAG_OBJECT,"tag":"v9.8.7","object":{"type":"commit","sha":self.tag_source},"message":"Useful capability"}),
+            );
+        }
+        if path.ends_with("/actions/workflows/release.yml") {
+            return Ok(json!({"id":41,"path":WORKFLOW}));
+        }
+        if path.ends_with("/attempts/2") {
+            return Ok(self.run.clone());
+        }
+        if path.ends_with("/attempts/2/jobs?per_page=100") {
+            return Ok(json!({"total_count":1,"jobs":[self.job.clone()]}));
+        }
+        if path.ends_with("/artifacts?per_page=100") {
+            return Ok(json!({"total_count":self.artifacts.len(),"artifacts":self.artifacts}));
+        }
+        if let Some(id) = path.split("/actions/artifacts/").nth(1) {
+            let id: u64 = id.parse().expect("artifact id");
+            return self
+                .artifacts
+                .iter()
+                .find(|a| a["id"] == id)
+                .cloned()
+                .ok_or_else(|| DevError::unavailable("fixture missing artifact"));
+        }
+        if path.contains("/releases?per_page=") {
+            return Ok(Value::Array(self.release.clone().into_iter().collect()));
+        }
+        if path.ends_with("/releases/latest") {
+            let mut latest = self.release.clone().expect("fixture release");
+            latest["tag_name"] = json!(self.latest);
+            if self.latest != "v9.8.7" {
+                latest["id"] = json!(92);
+            }
+            if self.corrupt_latest_metadata {
+                latest["assets"][0]["digest"] = json!(format!("sha256:{}", "0".repeat(64)));
+            }
+            return Ok(latest);
+        }
+        if path.ends_with("/releases/tags/v9.8.7") {
+            return self
+                .release
+                .clone()
+                .ok_or_else(|| DevError::unavailable("no fixture release"));
+        }
+        if method == "POST" && path.ends_with("/releases") {
+            assert!(self.release.is_none());
+            let mut release = body.expect("create body").clone();
+            release["id"] = json!(91);
+            release["assets"] = json!([]);
+            release["author"] = json!({"login":"github-actions[bot]"});
+            release["html_url"] = json!("https://github.com/lkjsxc/lkjscript/releases/tag/v9.8.7");
+            self.release = Some(release.clone());
+            return Ok(release);
+        }
+        if method == "PATCH" && path.ends_with("/releases/91") {
+            let release = self.release.as_mut().expect("fixture release");
+            assert_eq!(
+                body.expect("publish body"),
+                &json!({"draft":false,"prerelease":false,"make_latest":"true"})
+            );
+            release["draft"] = json!(false);
+            release["immutable"] = json!(true);
+            return Ok(release.clone());
+        }
+        Err(DevError::corrupt(format!(
+            "independent API fixture refused unexpected {method} {path}"
+        )))
+    }
+    fn download(&mut self, path: &str, output: &Path, authenticated: bool) -> Result<(), DevError> {
+        assert!(
+            !authenticated,
+            "this public fixture does not accept arbitrary artifact transport"
+        );
+        if self.fail_public {
+            self.fail_public = false;
+            return Err(DevError::unavailable("injected public acquisition failure"));
+        }
+        let name = path.rsplit('/').next().expect("asset URL");
+        let bytes = self
+            .public_bytes
+            .get(name)
+            .ok_or_else(|| DevError::corrupt("unconfigured download"))?;
+        let mut received = serve_owned_asset(bytes)?;
+        if self.corrupt_latest && path.contains("/latest/") {
+            received.push(b'!');
+        }
+        super::super::archive::write_new(output, &received, 0o600)
+    }
+    fn upload(&mut self, id: u64, name: &str, path: &Path) -> Result<Value, DevError> {
+        assert_eq!(id, 91);
+        if self.fail_upload.as_deref() == Some(name) {
+            self.fail_upload = None;
+            return Err(DevError::unavailable("injected publication API failure"));
+        }
+        self.uploads.push(name.to_owned());
+        let (sha, size) = super::super::archive::sha256_file(path)?;
+        let asset = json!({"id":100+self.uploads.len(),"name":name,"size":size,"digest":format!("sha256:{}",sha.as_str()),"state":"uploaded"});
+        self.release.as_mut().expect("created release")["assets"]
+            .as_array_mut()
+            .expect("assets")
+            .push(asset.clone());
+        Ok(asset)
+    }
+    fn zip_member(&mut self, _: &Path, _: Option<&str>, _: &Path) -> Result<(), DevError> {
+        Err(DevError::corrupt("fixture refuses unconfigured extraction"))
+    }
+    fn attestation(&mut self, path: &Path, tag: &str, output: &Path) -> Result<(), DevError> {
+        assert_eq!(tag, "v9.8.7");
+        assert!(path.is_file());
+        write_json(output, &json!({"fixture":"authenticated subject and tag"}))
+    }
+    fn release_attestation(&mut self, tag: &str, output: &Path) -> Result<(), DevError> {
+        assert_eq!(tag, "v9.8.7");
+        write_json(output, &json!({"fixture":"authenticated release"}))
+    }
+}
+
+fn serve_owned_asset(bytes: &[u8]) -> Result<Vec<u8>, DevError> {
+    let listener = TcpListener::bind(("127.0.0.1", 0))?;
+    let address = listener.local_addr()?;
+    listener.set_nonblocking(true)?;
+    let body = bytes.to_vec();
+    let server = std::thread::spawn(move || -> Result<(), std::io::Error> {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        loop {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    stream.set_read_timeout(Some(std::time::Duration::from_secs(3)))?;
+                    let mut request = [0u8; 4096];
+                    let count = stream.read(&mut request)?;
+                    if !request[..count].starts_with(b"GET /frozen HTTP/1.1\r\n") {
+                        return Err(std::io::Error::other("unexpected fixture request"));
+                    }
+                    write!(
+                        stream,
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        body.len()
+                    )?;
+                    stream.write_all(&body)?;
+                    return Ok(());
+                }
+                Err(error)
+                    if error.kind() == std::io::ErrorKind::WouldBlock
+                        && std::time::Instant::now() < deadline =>
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(1))
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    });
+    let received = (|| -> Result<Vec<u8>, DevError> {
+        let mut stream = TcpStream::connect_timeout(&address, std::time::Duration::from_secs(3))?;
+        stream.set_read_timeout(Some(std::time::Duration::from_secs(3)))?;
+        stream.write_all(
+            b"GET /frozen HTTP/1.1\r\nHost: fixture.invalid\r\nConnection: close\r\n\r\n",
+        )?;
+        let mut response = Vec::new();
+        stream.take(MAX_ARTIFACT + 1).read_to_end(&mut response)?;
+        let boundary = response
+            .windows(4)
+            .position(|window| window == b"\r\n\r\n")
+            .ok_or_else(|| DevError::corrupt("fixture HTTP header missing"))?;
+        if !response.starts_with(b"HTTP/1.1 200 OK\r\n") {
+            return Err(DevError::unavailable("fixture public acquisition failed"));
+        }
+        Ok(response[boundary + 4..].to_vec())
+    })();
+    server
+        .join()
+        .map_err(|_| DevError::infrastructure("owned HTTP fixture thread panicked"))??;
+    received
+}
+fn content(root: &Path) -> CandidateContent {
+    fs::create_dir(root.join("assets")).expect("assets root");
+    let mut assets = Vec::new();
+    for (name, bytes) in [
+        (
+            super::super::archive::ARCHIVE_NAME,
+            b"unexecutable archive\n".as_slice(),
+        ),
+        ("SHA256SUMS", b"fixed checksum\n"),
+        ("install.sh", b"#!/bin/sh\ntouch forbidden-canary\n"),
+    ] {
+        let path = root.join("assets").join(name);
+        fs::write(&path, bytes).expect("asset fixture");
+        let (sha, byte_length) = super::super::archive::sha256_file(&path).expect("asset identity");
+        assets.push(FileIdentity {
+            name: name.to_owned(),
+            sha256: sha.as_str().to_owned(),
+            byte_length,
+        });
+    }
+    CandidateContent {
+        source_commit: SOURCE.to_owned(),
+        tag: "v9.8.7".to_owned(),
+        verifier: FileIdentity {
+            name: "lkjscript-dev".to_owned(),
+            sha256: "f".repeat(64),
+            byte_length: 42,
+        },
+        assets,
+        acceptance_contract: "fixture".to_owned(),
+        target_policy_sha256: "b".repeat(64),
+    }
+}
+fn selection(root: &Path) -> Selection {
+    Selection {
+        format: SELECTION_FORMAT.to_owned(),
+        controller_source: CONTROLLER.to_owned(),
+        consumer_run_id: 18,
+        consumer_run_attempt: 1,
+        producer: Producer {
+            repository: REPOSITORY.to_owned(),
+            run_id: 17,
+            run_attempt: 2,
+            source_commit: SOURCE.to_owned(),
+            workflow_id: 41,
+            workflow_path: WORKFLOW.to_owned(),
+            acceptance_job_id: 51,
+            artifacts: Vec::new(),
+        },
+        content: content(root),
+    }
+}
+fn context() -> Context {
+    Context {
+        source: CONTROLLER.to_owned(),
+        run_id: 18,
+        run_attempt: 1,
+    }
+}
+fn authority(api: &mut FakeApi, selection: &Selection) -> Authority {
+    publication::authorize(api, selection, &context(), TAG_OBJECT).expect("authorized fixture")
+}
+
+#[test]
+fn controller_authenticates_exact_producer_and_rejects_self_asserted_success() {
+    let original = FakeApi::new();
+    type Mutation = Box<dyn Fn(&mut FakeApi)>;
+    let cases: Vec<Mutation> = vec![
+        Box::new(|a| a.run["repository"]["full_name"] = json!("foreign/lkjscript")),
+        Box::new(|a| a.run["head_repository"]["full_name"] = json!("fork/lkjscript")),
+        Box::new(|a| a.run["event"] = json!("pull_request")),
+        Box::new(|a| a.run["path"] = json!(".github/workflows/foreign.yml")),
+        Box::new(|a| a.run["id"] = json!(99)),
+        Box::new(|a| a.run["run_attempt"] = json!(1)),
+        Box::new(|a| a.run["workflow_id"] = json!(99)),
+        Box::new(|a| a.run["conclusion"] = json!("failure")),
+        Box::new(|a| a.job["conclusion"] = json!("skipped")),
+        Box::new(|a| a.job["conclusion"] = json!("cancelled")),
+        Box::new(|a| a.job["steps"][0]["conclusion"] = json!("skipped")),
+        Box::new(|a| a.artifacts[0]["expired"] = json!(true)),
+        Box::new(|a| a.artifacts[0]["workflow_run"]["head_sha"] = json!(CONTROLLER)),
+        Box::new(|a| a.artifacts.clear()),
+    ];
+    let mut positive = original;
+    let accepted =
+        authenticate_producer(&mut positive, 17, 2, CONTROLLER).expect("genuine producer");
+    assert_eq!(accepted.run_attempt, 2);
+    assert_eq!(accepted.artifacts.len(), 3);
+    for mutate in cases {
+        let mut api = FakeApi::new();
+        mutate(&mut api);
+        assert!(authenticate_producer(&mut api, 17, 2, CONTROLLER).is_err());
+        assert!(api.requests.iter().all(|(method, _)| method == "GET"));
+    }
+}
+
+#[test]
+fn publication_authority_is_independent_of_candidate_bytes_and_controller_revision() {
+    let temporary = tempfile::tempdir().expect("owned fixtures");
+    let selection = selection(temporary.path());
+    let before = selection.content.clone();
+    let mut api = FakeApi::new();
+    let accepted = authority(&mut api, &selection);
+    assert_eq!(accepted.product_source, SOURCE);
+    assert_eq!(accepted.controller_source, CONTROLLER);
+    for authorization in ["", "0000000000000000000000000000000000000000"] {
+        assert!(publication::authorize(&mut api, &selection, &context(), authorization).is_err());
+    }
+    api.tag_type = "commit".to_owned();
+    assert!(publication::authorize(&mut api, &selection, &context(), TAG_OBJECT).is_err());
+    api.tag_type = "tag".to_owned();
+    api.tag_source = CONTROLLER.to_owned();
+    assert!(publication::authorize(&mut api, &selection, &context(), TAG_OBJECT).is_err());
+    api.tag_source = SOURCE.to_owned();
+    api.relation = "diverged".to_owned();
+    assert!(publication::authorize(&mut api, &selection, &context(), TAG_OBJECT).is_err());
+    assert_eq!(selection.content, before);
+    assert!(api.requests.iter().all(|(method, _)| method == "GET"));
+}
+
+#[test]
+fn publication_failure_resumes_only_missing_uploads_and_never_executes_handoff_canary() {
+    let temporary = tempfile::tempdir().expect("owned fixture");
+    let selection = selection(temporary.path());
+    let mut api = FakeApi::new();
+    let authority = authority(&mut api, &selection);
+    api.fail_upload = Some("SHA256SUMS".to_owned());
+    assert!(publication::publish(&mut api, &selection, temporary.path(), &authority).is_err());
+    assert_eq!(api.uploads, [super::super::archive::ARCHIVE_NAME]);
+    let published = publication::publish(&mut api, &selection, temporary.path(), &authority)
+        .expect("resume exact draft");
+    assert!(published.immutable);
+    assert_eq!(api.uploads.len(), 3);
+    let writes = api
+        .requests
+        .iter()
+        .filter(|(method, _)| method != "GET")
+        .count();
+    publication::publish(&mut api, &selection, temporary.path(), &authority)
+        .expect("immutable idempotent resume");
+    assert_eq!(
+        api.requests
+            .iter()
+            .filter(|(method, _)| method != "GET")
+            .count(),
+        writes
+    );
+    assert_eq!(api.uploads.len(), 3);
+    assert!(!temporary.path().join("forbidden-canary").exists());
+    verify_files(&temporary.path().join("assets"), &selection.content.assets)
+        .expect("all promoted assets unchanged");
+}
+
+#[test]
+fn conflicting_draft_or_published_asset_rejects_without_mutation() {
+    for published in [false, true] {
+        let temporary = tempfile::tempdir().expect("owned fixture");
+        let selection = selection(temporary.path());
+        let mut api = FakeApi::new();
+        let authority = authority(&mut api, &selection);
+        publication::publish(&mut api, &selection, temporary.path(), &authority)
+            .expect("prepare fixture release");
+        let release = api.release.as_mut().expect("fixture release");
+        release["draft"] = json!(!published);
+        release["assets"][0]["digest"] = json!(format!("sha256:{}", "0".repeat(64)));
+        let before = api.release.clone();
+        let writes = api
+            .requests
+            .iter()
+            .filter(|(method, _)| method != "GET")
+            .count();
+        assert!(publication::publish(&mut api, &selection, temporary.path(), &authority).is_err());
+        assert_eq!(api.release, before);
+        assert_eq!(
+            api.requests
+                .iter()
+                .filter(|(method, _)| method != "GET")
+                .count(),
+            writes
+        );
+    }
+}
+
+#[test]
+fn public_failure_retries_only_public_boundary_and_latest_never_certifies_other_bytes() {
+    let temporary = tempfile::tempdir().expect("owned fixture");
+    let selection = selection(temporary.path());
+    let mut api = FakeApi::new();
+    let authority = authority(&mut api, &selection);
+    publication::publish(&mut api, &selection, temporary.path(), &authority)
+        .expect("published fixture");
+    for asset in &selection.content.assets {
+        api.public_bytes.insert(
+            asset.name.clone(),
+            fs::read(temporary.path().join("assets").join(&asset.name)).expect("frozen asset"),
+        );
+    }
+    let failed = temporary.path().join("public-failed");
+    fs::create_dir(&failed).expect("failed boundary");
+    api.fail_public = true;
+    assert!(publication::public_download(&mut api, &selection, &failed, true).is_err());
+    let resumed = temporary.path().join("public-resumed");
+    fs::create_dir(&resumed).expect("resume boundary");
+    let published = publication::public_download(&mut api, &selection, &resumed, true)
+        .expect("resume public only");
+    assert_eq!(published.latest, LatestState::Selected);
+    assert_eq!(api.uploads.len(), 3);
+    for route in ["exact", "latest"] {
+        verify_files(&resumed.join(route), &selection.content.assets)
+            .expect("exact accepted asset bytes");
+    }
+    api.latest = "v9.8.8".to_owned();
+    let superseded = temporary.path().join("superseded");
+    fs::create_dir(&superseded).expect("superseded boundary");
+    assert!(publication::public_download(&mut api, &selection, &superseded, true).is_err());
+    let observed = publication::public_download(&mut api, &selection, &superseded, false)
+        .expect("explicit exact-only recheck");
+    assert_eq!(observed.latest, LatestState::Superseded);
+    assert!(!superseded.join("latest").exists());
+}
+
+#[test]
+fn changed_local_asset_rejects_before_first_remote_write() {
+    let temporary = tempfile::tempdir().expect("owned fixture");
+    let selection = selection(temporary.path());
+    let mut api = FakeApi::new();
+    let authority = authority(&mut api, &selection);
+    fs::write(
+        temporary.path().join("assets/install.sh"),
+        b"one-byte-change",
+    )
+    .expect("tamper");
+    assert!(publication::publish(&mut api, &selection, temporary.path(), &authority).is_err());
+    assert!(api.requests.iter().all(|(method, _)| method == "GET"));
+    assert!(api.uploads.is_empty());
+}
+
+#[test]
+fn controller_process_adapter_refuses_every_product_or_verifier_command() {
+    // The production subprocess adapter's allowlist is an independent barrier;
+    // the API fixture cannot quietly add an execution fallback during retries.
+    let temporary = tempfile::tempdir().expect("owned fixture");
+    let mut operations =
+        HostedOperations::new(temporary.path().to_path_buf()).expect("host adapter");
+    for program in [
+        "cargo",
+        "lkjscript",
+        "lkjscript-dev",
+        "install.sh",
+        "sh",
+        "bash",
+    ] {
+        assert!(operations.reject_forbidden_fixture(program).is_err());
+    }
+}
+
+#[test]
+fn compare_errors_are_not_false_ancestry_and_known_git_relations_remain_distinct() {
+    struct Comparison {
+        results: VecDeque<Result<Value, DevError>>,
+    }
+    impl Operations for Comparison {
+        fn api(&mut self, _: &str, _: &str, _: Option<&Value>) -> Result<Value, DevError> {
+            self.results.pop_front().expect("single comparison")
+        }
+        fn download(&mut self, _: &str, _: &Path, _: bool) -> Result<(), DevError> {
+            panic!("no download")
+        }
+        fn upload(&mut self, _: u64, _: &str, _: &Path) -> Result<Value, DevError> {
+            panic!("no write")
+        }
+        fn zip_member(&mut self, _: &Path, _: Option<&str>, _: &Path) -> Result<(), DevError> {
+            panic!("no extraction")
+        }
+        fn attestation(&mut self, _: &Path, _: &str, _: &Path) -> Result<(), DevError> {
+            panic!("no attestation")
+        }
+        fn release_attestation(&mut self, _: &str, _: &Path) -> Result<(), DevError> {
+            panic!("no release attestation")
+        }
+    }
+    for (relation, behind, admitted) in [
+        ("identical", 0, true),
+        ("ahead", 0, true),
+        ("behind", 1, false),
+        ("diverged", 1, false),
+    ] {
+        let mut api = Comparison {
+            results: VecDeque::from([Ok(
+                json!({"status":relation,"behind_by":behind,"merge_base_commit":{"sha":SOURCE}}),
+            )]),
+        };
+        assert_eq!(
+            require_ancestor(&mut api, SOURCE, CONTROLLER).is_ok(),
+            admitted
+        );
+    }
+    let mut failed = Comparison {
+        results: VecDeque::from([Err(DevError::unavailable("API failure"))]),
+    };
+    assert_eq!(
+        require_ancestor(&mut failed, SOURCE, CONTROLLER)
+            .expect_err("transport failure")
+            .kind(),
+        "unavailable"
+    );
+}
+
+fn portable_terminal(content: &CandidateContent) -> Value {
+    let observation = json!({"status":"passed","exit_code":0,"signal":null,"reason":null,"elapsed_nanoseconds":1,"cpu_nanoseconds":null,"peak_rss_kib":null,"stdout_limit_bytes":16777216,"stderr_limit_bytes":16777216,"stdout_limit_exhausted":false,"stderr_limit_exhausted":false,"stdout":{"path":"retained.log","kind":"file","mode":420,"bytes":0,"digest":"blake3:af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","link_target":null},"stderr":{"path":"retained.log","kind":"file","mode":420,"bytes":0,"digest":"blake3:af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","link_target":null}});
+    let proof = json!({"name":"receipt.json","sha256":"2".repeat(64),"byte_length":8});
+    json!({"schema":{"identity":"lkjscript-candidate-terminal","version":1},"status":"candidate_accepted","phase":"complete","source_commit":SOURCE,"controller_source_commit":SOURCE,"tag":content.tag,"acceptance_contract":"lkjscript-final-candidate-acceptance-1","workload":"release-source+six-target-owners+two-pinned-userlands+installed-recovery-1","target_triple":"x86_64-unknown-linux-musl","target_policy_sha256":super::super::target::policy_sha256().expect("policy"),"producer":{"github_actions":"true","repository":REPOSITORY,"workflow":"Release","job":"candidate","run_id":"17","run_attempt":"2","run_url":"https://github.com/lkjsxc/lkjscript/actions/runs/17","runner_os":"Linux","runner_architecture":"X64","runner_image_os":"ubuntu24","runner_image_version":"fixture-image"},"verifier":content.verifier,"assets":content.assets,"manifest_sha256":"3".repeat(64),"executable":{"name":"lkjscript","sha256":"4".repeat(64),"byte_length":8},"source_gates":20,"target_owners":6,"userlands":2,"proofs":[{"name":"release-source","receipt":proof},{"name":"final-target","receipt":proof},{"name":"installation","receipt":proof}],"stages":[{"name":"target-admission","process":observation},{"name":"installation","process":observation},{"name":"installation-reader","process":observation}],"started_unix_nanoseconds":1,"completed_unix_nanoseconds":2,"elapsed_nanoseconds":1,"cleanup_complete":true,"failure":null})
+}
+
+// Independent uncompressed ZIP fixture writer: production uses the platform unzip
+// reader and service digest, never this encoder. Exact names and bytes are explicit.
+fn zip_fixture(files: &[(String, Vec<u8>)]) -> Vec<u8> {
+    let mut local = Vec::new();
+    let mut central = Vec::new();
+    let put16 = |out: &mut Vec<u8>, value: u16| out.extend(value.to_le_bytes());
+    let put32 = |out: &mut Vec<u8>, value: u32| out.extend(value.to_le_bytes());
+    for (name, bytes) in files {
+        let offset = local.len() as u32;
+        let mut crc = 0xffff_ffffu32;
+        for byte in bytes {
+            crc ^= *byte as u32;
+            for _ in 0..8 {
+                crc = (crc >> 1) ^ if crc & 1 == 1 { 0xedb8_8320 } else { 0 };
+            }
+        }
+        crc = !crc;
+        put32(&mut local, 0x04034b50);
+        put16(&mut local, 20);
+        put16(&mut local, 0);
+        put16(&mut local, 0);
+        put16(&mut local, 0);
+        put16(&mut local, 0);
+        put32(&mut local, crc);
+        put32(&mut local, bytes.len() as u32);
+        put32(&mut local, bytes.len() as u32);
+        put16(&mut local, name.len() as u16);
+        put16(&mut local, 0);
+        local.extend(name.as_bytes());
+        local.extend(bytes);
+        put32(&mut central, 0x02014b50);
+        put16(&mut central, 20);
+        put16(&mut central, 20);
+        put16(&mut central, 0);
+        put16(&mut central, 0);
+        put16(&mut central, 0);
+        put16(&mut central, 0);
+        put32(&mut central, crc);
+        put32(&mut central, bytes.len() as u32);
+        put32(&mut central, bytes.len() as u32);
+        put16(&mut central, name.len() as u16);
+        for _ in 0..4 {
+            put16(&mut central, 0);
+        }
+        put32(&mut central, 0);
+        put32(&mut central, offset);
+        central.extend(name.as_bytes());
+    }
+    let offset = local.len() as u32;
+    let size = central.len() as u32;
+    local.extend(central);
+    put32(&mut local, 0x06054b50);
+    put16(&mut local, 0);
+    put16(&mut local, 0);
+    put16(&mut local, files.len() as u16);
+    put16(&mut local, files.len() as u16);
+    put32(&mut local, size);
+    put32(&mut local, offset);
+    put16(&mut local, 0);
+    local
+}
+
+struct HandoffApi {
+    service: FakeApi,
+    zips: BTreeMap<String, Vec<u8>>,
+    zip_reader: HostedOperations,
+}
+impl Operations for HandoffApi {
+    fn api(&mut self, method: &str, path: &str, body: Option<&Value>) -> Result<Value, DevError> {
+        if path.ends_with("/actions/runs/18/attempts/1") {
+            let mut value = self.service.run.clone();
+            value["id"] = json!(18);
+            value["run_attempt"] = json!(1);
+            value["head_sha"] = json!(CONTROLLER);
+            value["status"] = json!("in_progress");
+            value["conclusion"] = Value::Null;
+            return Ok(value);
+        }
+        self.service.api(method, path, body)
+    }
+    fn download(&mut self, path: &str, output: &Path, authenticated: bool) -> Result<(), DevError> {
+        if authenticated {
+            let bytes = self
+                .zips
+                .get(path)
+                .ok_or_else(|| DevError::unavailable("missing exact ZIP fixture"))?;
+            return super::super::archive::write_new(output, bytes, 0o600);
+        }
+        self.service.download(path, output, false)
+    }
+    fn upload(&mut self, id: u64, name: &str, path: &Path) -> Result<Value, DevError> {
+        self.service.upload(id, name, path)
+    }
+    fn zip_member(
+        &mut self,
+        path: &Path,
+        name: Option<&str>,
+        output: &Path,
+    ) -> Result<(), DevError> {
+        self.zip_reader.zip_member(path, name, output)
+    }
+    fn attestation(&mut self, path: &Path, tag: &str, output: &Path) -> Result<(), DevError> {
+        self.service.attestation(path, tag, output)
+    }
+    fn release_attestation(&mut self, tag: &str, output: &Path) -> Result<(), DevError> {
+        self.service.release_attestation(tag, output)
+    }
+}
+
+#[test]
+fn actual_selection_dispatch_uses_authenticated_zip_bytes_and_portable_reader_before_authority() {
+    let temporary = tempfile::tempdir().expect("owned dispatch fixture");
+    let root = temporary.path();
+    let mut content = content(root);
+    let canary = root.join("candidate-verifier-canary");
+    fs::write(
+        &canary,
+        b"#!/bin/sh\ntouch forbidden-verifier-execution\nexit 73\n",
+    )
+    .expect("canary");
+    fs::set_permissions(&canary, fs::Permissions::from_mode(0o755)).expect("canary mode");
+    let verifier = root.join("verifier-original");
+    super::super::verifier::command(
+        [
+            "prepare".to_owned(),
+            "--executable".to_owned(),
+            canary.to_string_lossy().into_owned(),
+            "--output".to_owned(),
+            verifier.to_string_lossy().into_owned(),
+            "--tag".to_owned(),
+            content.tag.clone(),
+            "--commit".to_owned(),
+            SOURCE.to_owned(),
+        ]
+        .into_iter()
+        .map(OsString::from),
+    )
+    .expect("canonical verifier identity fixture");
+    let (sha, byte_length) = super::super::archive::sha256_file(&canary).expect("canary identity");
+    content.verifier = FileIdentity {
+        name: "lkjscript-dev".to_owned(),
+        sha256: sha.as_str().to_owned(),
+        byte_length,
+    };
+    let terminal = portable_terminal(&content);
+    let mut api = HandoffApi {
+        service: FakeApi::new(),
+        zips: BTreeMap::new(),
+        zip_reader: HostedOperations::new(root.join("zip-reader"))
+            .expect("real bounded ZIP reader"),
+    };
+    for (index, role) in ["assets", "verifier", "acceptance"].into_iter().enumerate() {
+        let files = match role {
+            "assets" => content
+                .assets
+                .iter()
+                .map(|asset| {
+                    (
+                        asset.name.clone(),
+                        fs::read(root.join("assets").join(&asset.name)).expect("asset"),
+                    )
+                })
+                .collect(),
+            "verifier" => ["lkjscript-dev", "verifier-identity.json"]
+                .into_iter()
+                .map(|name| {
+                    (
+                        name.to_owned(),
+                        fs::read(verifier.join(name)).expect("verifier"),
+                    )
+                })
+                .collect(),
+            _ => vec![(
+                "release-receipt.json".to_owned(),
+                super::super::candidate::canonical_terminal_fixture(terminal.clone())
+                    .expect("canonical terminal fixture"),
+            )],
+        };
+        let zip = zip_fixture(&files);
+        let file = root.join(format!("{role}.zip"));
+        fs::write(&file, &zip).expect("ZIP fixture");
+        let (sha, bytes) = super::super::archive::sha256_file(&file).expect("service identity");
+        api.service.artifacts[index]["digest"] = json!(format!("sha256:{}", sha.as_str()));
+        api.service.artifacts[index]["size_in_bytes"] = json!(bytes);
+        api.zips.insert(
+            format!("repos/{REPOSITORY}/actions/artifacts/{}/zip", index + 10),
+            zip,
+        );
+    }
+    let selected = root.join("selected");
+    fs::create_dir(&selected).expect("selection root");
+    let options = BTreeMap::from([
+        ("producer-run".to_owned(), "17".to_owned()),
+        ("producer-attempt".to_owned(), "2".to_owned()),
+        ("output".to_owned(), selected.to_string_lossy().into_owned()),
+    ]);
+    let result = execute("select", &options, &selected, &context(), &mut api)
+        .expect("actual controller selection dispatcher");
+    assert_eq!(result["status"], "candidate_accepted");
+    let selection: Selection =
+        read_json(&selected.join("selection.json")).expect("selected producer");
+    assert_eq!(selection.producer.run_attempt, 2);
+    assert_eq!(selection.content.verifier.sha256, content.verifier.sha256);
+    let original =
+        fs::read(selected.join("acceptance/release-receipt.json")).expect("original terminal");
+    let mut tampered: Value = serde_json::from_slice(&original).expect("terminal");
+    tampered["target_owners"] = json!(5);
+    fs::write(
+        selected.join("acceptance/release-receipt.json"),
+        super::super::candidate::canonical_terminal_fixture(tampered)
+            .expect("tampered canonical receipt"),
+    )
+    .expect("tamper");
+    assert!(validate_selection(&mut api, &selection, &selected, CONTROLLER).is_err());
+    fs::write(selected.join("acceptance/release-receipt.json"), &original)
+        .expect("restore original");
+    validate_selection(&mut api, &selection, &selected, CONTROLLER)
+        .expect("restored original recovers");
+    let original_installer = fs::read(selected.join("assets/install.sh")).expect("original asset");
+    let mut forged = selection.clone();
+    fs::write(
+        selected.join("assets/install.sh"),
+        b"plausible different bootstrap",
+    )
+    .expect("alter asset");
+    let (sha, byte_length) =
+        super::super::archive::sha256_file(&selected.join("assets/install.sh"))
+            .expect("rehashed forgery");
+    forged.content.assets[2].sha256 = sha.as_str().to_owned();
+    forged.content.assets[2].byte_length = byte_length;
+    let mut forged_terminal: Value = serde_json::from_slice(&original).expect("terminal");
+    forged_terminal["assets"][2] =
+        serde_json::to_value(&forged.content.assets[2]).expect("plausible identity");
+    fs::write(
+        selected.join("acceptance/release-receipt.json"),
+        super::super::candidate::canonical_terminal_fixture(forged_terminal)
+            .expect("plausible rehashed terminal"),
+    )
+    .expect("forge local terminal");
+    assert!(
+        validate_selection(&mut api, &forged, &selected, CONTROLLER).is_err(),
+        "rehashing local claims cannot replace service-authenticated ZIP originals"
+    );
+    fs::write(selected.join("assets/install.sh"), original_installer).expect("restore asset");
+    fs::write(selected.join("acceptance/release-receipt.json"), &original)
+        .expect("restore terminal");
+    let authority = publication::authorize(&mut api, &selection, &context(), TAG_OBJECT)
+        .expect("independent scoped authority");
+    publication::publish(&mut api, &selection, &selected, &authority)
+        .expect("actual privileged operation consumes only data");
+    assert!(!root.join("forbidden-verifier-execution").exists());
+    assert!(!selected.join("forbidden-canary").exists());
+    assert!(
+        api.zip_reader
+            .reject_forbidden_fixture(canary.to_str().expect("canary path"))
+            .is_err()
+    );
+}
+
+#[test]
+fn exact_and_latest_wrong_source_metadata_and_bytes_are_independent_rejections() {
+    for fault in [
+        "exact-source",
+        "exact-bytes",
+        "latest-metadata",
+        "latest-bytes",
+    ] {
+        let temporary = tempfile::tempdir().expect("owned public identity fixture");
+        let selection = selection(temporary.path());
+        let mut api = FakeApi::new();
+        let authority = authority(&mut api, &selection);
+        publication::publish(&mut api, &selection, temporary.path(), &authority)
+            .expect("frozen release");
+        for asset in &selection.content.assets {
+            api.public_bytes.insert(
+                asset.name.clone(),
+                fs::read(temporary.path().join("assets").join(&asset.name)).expect("frozen bytes"),
+            );
+        }
+        match fault {
+            "exact-source" => api.tag_source = CONTROLLER.to_owned(),
+            "exact-bytes" => {
+                api.public_bytes
+                    .get_mut("install.sh")
+                    .expect("bootstrap")
+                    .push(b'!');
+            }
+            "latest-metadata" => api.corrupt_latest_metadata = true,
+            "latest-bytes" => api.corrupt_latest = true,
+            _ => unreachable!(),
+        }
+        let output = temporary.path().join("public");
+        fs::create_dir(&output).expect("public evidence");
+        assert!(
+            publication::public_download(&mut api, &selection, &output, true).is_err(),
+            "{fault}"
+        );
+        assert!(!temporary.path().join("forbidden-canary").exists());
+        assert_eq!(api.uploads.len(), 3);
+    }
+}
+
+fn workflow_script(step: &str) -> String {
+    let workflow = include_str!("../../../../../.github/workflows/release.yml");
+    let block = workflow
+        .split_once(&format!("      - name: {step}\n"))
+        .expect("actual workflow step")
+        .1
+        .split_once("        run: |\n")
+        .expect("actual Bash owner")
+        .1;
+    let mut script = String::new();
+    for line in block.lines() {
+        if line.is_empty() {
+            script.push('\n');
+        } else if let Some(line) = line.strip_prefix("          ") {
+            script.push_str(line);
+            script.push('\n');
+        } else {
+            break;
+        }
+    }
+    assert!(script.starts_with("set -euo pipefail\n"));
+    script
+}
+
+fn workflow_process(
+    script: &str,
+    root: &Path,
+    environment: &[(&str, &str)],
+) -> std::process::Output {
+    let mut command = std::process::Command::new("/bin/bash");
+    command
+        .args(["--noprofile", "--norc", "-c", script])
+        .current_dir(root)
+        .env_clear()
+        .envs(crate::process::environment())
+        .env("RUNNER_TEMP", root)
+        .env("GITHUB_ACTIONS", "true")
+        .env("GITHUB_REPOSITORY", REPOSITORY)
+        .env("GITHUB_WORKFLOW", "Release")
+        .env("GITHUB_JOB", "public")
+        .env("GITHUB_RUN_ID", "18")
+        .env("GITHUB_RUN_ATTEMPT", "1");
+    for (name, value) in environment {
+        command.env(name, value);
+    }
+    command
+        .output()
+        .expect("execute actual trusted workflow boundary in owned fixture")
+}
+
+#[test]
+fn actual_workflow_terminal_owner_cannot_pass_missing_skipped_failed_or_cancelled_required_jobs() {
+    let script = workflow_script("Require every stage selected by this invocation");
+    for (operation, candidate, controller, publication, public, authority, passes) in [
+        (
+            "candidate",
+            "success",
+            "skipped",
+            "skipped",
+            "skipped",
+            "",
+            true,
+        ),
+        (
+            "candidate",
+            "skipped",
+            "skipped",
+            "skipped",
+            "skipped",
+            "",
+            false,
+        ),
+        (
+            "candidate",
+            "failure",
+            "skipped",
+            "skipped",
+            "skipped",
+            "",
+            false,
+        ),
+        (
+            "candidate",
+            "cancelled",
+            "skipped",
+            "skipped",
+            "skipped",
+            "",
+            false,
+        ),
+        (
+            "consume", "skipped", "success", "skipped", "skipped", "rejected", true,
+        ),
+        (
+            "consume", "skipped", "failure", "skipped", "skipped", "rejected", false,
+        ),
+        (
+            "promote",
+            "skipped",
+            "success",
+            "success",
+            "success",
+            "authorized",
+            true,
+        ),
+        (
+            "promote",
+            "skipped",
+            "success",
+            "success",
+            "skipped",
+            "authorized",
+            false,
+        ),
+        (
+            "promote",
+            "skipped",
+            "success",
+            "skipped",
+            "success",
+            "authorized",
+            false,
+        ),
+        (
+            "promote",
+            "skipped",
+            "success",
+            "success",
+            "failure",
+            "authorized",
+            false,
+        ),
+        (
+            "promote",
+            "skipped",
+            "success",
+            "success",
+            "cancelled",
+            "authorized",
+            false,
+        ),
+        (
+            "promote", "skipped", "success", "success", "success", "rejected", false,
+        ),
+        (
+            "resume-publication",
+            "skipped",
+            "success",
+            "success",
+            "success",
+            "authorized",
+            true,
+        ),
+        (
+            "resume-publication",
+            "skipped",
+            "success",
+            "failure",
+            "skipped",
+            "authorized",
+            false,
+        ),
+        (
+            "resume-public",
+            "skipped",
+            "success",
+            "skipped",
+            "success",
+            "",
+            true,
+        ),
+        (
+            "resume-public",
+            "skipped",
+            "success",
+            "skipped",
+            "unavailable",
+            "",
+            false,
+        ),
+        (
+            "resume-public",
+            "skipped",
+            "skipped",
+            "skipped",
+            "success",
+            "",
+            false,
+        ),
+    ] {
+        let temporary = tempfile::tempdir().expect("owned terminal fixture");
+        let result = workflow_process(
+            &script,
+            temporary.path(),
+            &[
+                ("OPERATION", operation),
+                ("CANDIDATE", candidate),
+                ("CONTROLLER", controller),
+                ("PUBLISH", publication),
+                ("PUBLIC", public),
+                ("AUTHORITY", authority),
+                ("LATEST_STATE", "superseded"),
+                ("LATEST_TAG", "v9.8.8"),
+                ("LATEST_SOURCE", CONTROLLER),
+            ],
+        );
+        assert_eq!(
+            result.status.success(),
+            passes,
+            "{operation}/{candidate}/{controller}/{publication}/{public}/{authority}: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        let terminal: Value = serde_json::from_slice(
+            &fs::read(temporary.path().join("release-terminal.json"))
+                .expect("failed and successful terminal retained"),
+        )
+        .expect("actual terminal JSON");
+        assert_eq!(terminal["public_verification"], public);
+        assert_eq!(terminal["latest"], "superseded");
+        if !passes {
+            assert_eq!(terminal["status"], "incomplete");
+        }
+    }
+}
+
+#[test]
+fn actual_public_smoke_script_resumes_failed_smoke_without_build_or_broad_owner_invocations() {
+    let script = workflow_script("Verify the actual public installed lifecycle");
+    for exact_only in [false, true] {
+        let temporary = tempfile::tempdir().expect("owned smoke boundary fixture");
+        let root = temporary.path();
+        fs::create_dir_all(root.join("selection/verifier")).expect("fixture verifier handoff");
+        fs::create_dir_all(root.join("public-acquisition/exact")).expect("exact acquisition");
+        if !exact_only {
+            fs::create_dir(root.join("public-acquisition/latest")).expect("latest acquisition");
+        }
+        let verifier = root.join("selection/verifier/lkjscript-dev");
+        fs::write(&verifier,br##"#!/bin/sh
+set -eu
+fixture_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+test "$#" -gt 3
+test "$1" = release && test "$2" = transferred
+case "$3" in pair-run|exact-run) ;; *) exit 93 ;; esac
+for argument in "$@"; do
+  case "$argument" in build|admit|installation-run|distributed-http|outbound-http|offline-packages|pure-tail|stateful-http) exit 94 ;; esac
+done
+printf '%s\n' "$*" >> "$fixture_root/invocations"
+if test -f "$fixture_root/fail-next-smoke"; then
+  rm "$fixture_root/fail-next-smoke"
+  exit 42
+fi
+printf '{"status":"passed","fixture":"boundary process adapter only"}\n'
+"##).expect("independent process adapter");
+        fs::set_permissions(&verifier, fs::Permissions::from_mode(0o755)).expect("adapter mode");
+        let (sha, bytes) =
+            super::super::archive::sha256_file(&verifier).expect("adapter expected identity");
+        write_json(&root.join("selection/selection.json"),&json!({"content":{"tag":"v9.8.7","source_commit":SOURCE,"verifier":{"sha256":sha.as_str(),"byte_length":bytes}},"producer":{"run_id":17,"run_attempt":2}})).expect("bound original producer fixture");
+        fs::write(
+            root.join("selection/verifier/verifier-identity.json"),
+            b"fixture identity",
+        )
+        .expect("identity");
+        fs::write(root.join("fail-next-smoke"), b"one real process failure").expect("inject once");
+        let guards = root.join("forbidden-tools");
+        fs::create_dir(&guards).expect("independent tool guards");
+        for program in [
+            "cargo",
+            "rustc",
+            "lkjscript",
+            "distributed-http",
+            "outbound-http",
+            "offline-packages",
+            "pure-tail",
+            "stateful-http",
+        ] {
+            let guard = guards.join(program);
+            fs::write(&guard, b"#!/bin/sh\nprintf '%s\\n' \"$0\" >> \"$(dirname -- \"$0\")/forbidden.log\"\nexit 94\n").expect("forbidden tool adapter");
+            fs::set_permissions(guard, fs::Permissions::from_mode(0o755)).expect("guard mode");
+        }
+        let path = format!(
+            "{}:{}",
+            guards.display(),
+            std::env::var("PATH").expect("fixture PATH")
+        );
+        let before = fs::read(root.join("selection/selection.json")).expect("original selection");
+        let failure = workflow_process(&script, root, &[("PATH", &path)]);
+        assert_eq!(
+            failure.status.code(),
+            Some(42),
+            "{}",
+            String::from_utf8_lossy(&failure.stderr)
+        );
+        let recovery = workflow_process(&script, root, &[("PATH", &path), ("GITHUB_RUN_ID", "19")]);
+        assert!(
+            recovery.status.success(),
+            "{}",
+            String::from_utf8_lossy(&recovery.stderr)
+        );
+        assert_eq!(
+            fs::read(root.join("selection/selection.json")).expect("retained selection"),
+            before
+        );
+        assert!(!guards.join("forbidden.log").exists());
+        let invocations =
+            fs::read_to_string(root.join("invocations")).expect("independent process trace");
+        let lines: Vec<_> = invocations.lines().collect();
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0], lines[1]);
+        assert!(lines[0].starts_with(if exact_only {
+            "release transferred exact-run "
+        } else {
+            "release transferred pair-run "
+        }));
+        assert!(lines[0].contains(SOURCE));
+        assert!(lines[0].contains("--acquisition anonymous"));
+        assert_eq!(lines[0].contains("--latest-assets"), !exact_only);
+    }
+}

@@ -1,5 +1,5 @@
 use super::*;
-use crate::release_container::tests::{fixture, gzip};
+use crate::release_container::tests::{fixture, gzip, neutral_fixture};
 use std::fs;
 use std::os::unix::fs::{PermissionsExt, symlink};
 fn archive(root: &Path, tag: &str) -> (PathBuf, String) {
@@ -68,6 +68,73 @@ fn native_install_select_inventory_and_immutable_conflicts() {
     assert!(select(&prefix, "v0.1.32").is_err());
     assert_eq!(fs::read(&payload).unwrap(), b"corrupted");
     install(&temp.path().join("recovery"), &a, digest.as_str(), true).unwrap();
+}
+
+#[test]
+fn native_neutral_install_preserves_legacy_receipts_and_recovery_selection() {
+    let temp = tempfile::tempdir().unwrap();
+    let prefix = temp.path().join("mixed installation");
+    let (legacy_archive, legacy_digest) = archive(temp.path(), "v0.1.32");
+    let legacy = install(&prefix, &legacy_archive, &legacy_digest, true).unwrap();
+    assert_eq!(
+        legacy.version.publication,
+        "declared-dry-run/unverified-publication"
+    );
+    let old_slot = legacy.version.path.parent().unwrap();
+    let old_receipt = fs::read(old_slot.join(RECEIPT)).unwrap();
+    let old_manifest = fs::read(old_slot.join("RELEASE-MANIFEST.json")).unwrap();
+
+    let neutral_bytes = gzip(&neutral_fixture("v0.1.39", None));
+    let neutral_archive = temp.path().join("neutral.tar.gz");
+    fs::write(&neutral_archive, &neutral_bytes).unwrap();
+    let neutral_digest = container::sha256_bytes(&neutral_bytes).unwrap();
+    let installed = install(&prefix, &neutral_archive, neutral_digest.as_str(), true).unwrap();
+    assert_eq!(installed.selected.as_deref(), Some("v0.1.39"));
+    assert_eq!(
+        installed.version.publication,
+        "neutral/unverified-publication"
+    );
+    assert_eq!(
+        install(&prefix, &neutral_archive, neutral_digest.as_str(), true)
+            .unwrap()
+            .outcome,
+        "already-installed"
+    );
+    assert_eq!(fs::read(old_slot.join(RECEIPT)).unwrap(), old_receipt);
+    assert_eq!(
+        fs::read(old_slot.join("RELEASE-MANIFEST.json")).unwrap(),
+        old_manifest
+    );
+
+    let selected = fs::read_link(prefix.join("bin/lkjscript")).unwrap();
+    let conflicting = gzip(&neutral_fixture("v0.1.32", None));
+    fs::write(&neutral_archive, &conflicting).unwrap();
+    let digest = container::sha256_bytes(&conflicting).unwrap();
+    assert_eq!(
+        install(&prefix, &neutral_archive, digest.as_str(), true)
+            .unwrap_err()
+            .code,
+        "runtime_version_conflict"
+    );
+    assert_eq!(
+        fs::read_link(prefix.join("bin/lkjscript")).unwrap(),
+        selected
+    );
+    assert_eq!(fs::read(old_slot.join(RECEIPT)).unwrap(), old_receipt);
+
+    assert_eq!(
+        select(&prefix, "v0.1.32").unwrap().selected.as_deref(),
+        Some("v0.1.32")
+    );
+    assert_eq!(
+        select(&prefix, "v0.1.39").unwrap().selected.as_deref(),
+        Some("v0.1.39")
+    );
+    assert_eq!(list(&prefix).unwrap().versions.len(), 2);
+    assert_eq!(
+        fs::read(old_slot.join("RELEASE-MANIFEST.json")).unwrap(),
+        old_manifest
+    );
 }
 struct Fail(&'static str);
 impl Checkpoints for Fail {

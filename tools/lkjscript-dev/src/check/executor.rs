@@ -26,6 +26,19 @@ pub(crate) struct ExecutionOptions<'a> {
     pub(crate) cache: &'a VerificationCache,
 }
 
+// An early scheduler error must not detach still-running gate owners. Normal completion removes
+// and fallibly joins each worker before its receipt can count; this fallback joins only error exits.
+#[derive(Default)]
+struct RemainingWorkers(BTreeMap<String, thread::JoinHandle<()>>);
+
+impl Drop for RemainingWorkers {
+    fn drop(&mut self) {
+        for (_, worker) in std::mem::take(&mut self.0) {
+            let _ = worker.join();
+        }
+    }
+}
+
 pub(crate) fn execute_dag(
     registry: &GateRegistry,
     names: &[String],
@@ -46,6 +59,7 @@ pub(crate) fn execute_dag(
     let mut completed: BTreeMap<String, GateReceipt> = BTreeMap::new();
     let (sender, receiver) = mpsc::channel();
     let mut running = 0_usize;
+    let mut workers = RemainingWorkers::default();
 
     while !pending.is_empty() || running > 0 {
         let mut progressed = false;
@@ -120,7 +134,10 @@ pub(crate) fn execute_dag(
                     let _ = sender.send((worker_gate, result));
                 });
             match worker {
-                Ok(_) => running += 1,
+                Ok(worker) => {
+                    workers.0.insert(gate.name.clone(), worker);
+                    running += 1;
+                }
                 Err(error) => {
                     let receipt = infrastructure_receipt(
                         &gate,
@@ -135,10 +152,19 @@ pub(crate) fn execute_dag(
         }
 
         if running > 0 {
-            let (gate, result) = receiver.recv().map_err(|error| {
+            let (gate, mut result) = receiver.recv().map_err(|error| {
                 DevError::infrastructure(format!("verification worker channel closed: {error}"))
             })?;
             running -= 1;
+            let worker = workers
+                .0
+                .remove(&gate.name)
+                .ok_or_else(|| DevError::infrastructure("verification worker handle is absent"))?;
+            if worker.join().is_err() {
+                result = Err(DevError::infrastructure(
+                    "verification worker failed during joined cleanup",
+                ));
+            }
             let receipt = result.unwrap_or_else(|error| infrastructure_receipt(&gate, error));
             completed.insert(gate.name.clone(), receipt);
             progressed = true;
@@ -181,6 +207,8 @@ fn execute_gate(
     if allow_reuse && gate.cacheable {
         let load = verification_cache.load(gate, &fingerprint, &stdout_path, &stderr_path);
         if let Some(cached) = load.cached {
+            let retained_outputs =
+                retain_outputs(repository, run_directory, gate, &cached.outputs)?;
             return Ok(GateReceipt {
                 name: gate.name.clone(),
                 status: GateStatus::Passed,
@@ -193,6 +221,7 @@ fn execute_gate(
                 elapsed_nanoseconds: duration_nanoseconds(started.elapsed()),
                 process: Some(cached.process),
                 outputs: cached.outputs,
+                retained_outputs,
                 input_fingerprint: fingerprint,
                 evidence_digest: cached.evidence_digest,
                 cache: CacheObservation {
@@ -275,6 +304,10 @@ fn execute_fresh(
         repository,
     );
     let outputs = cache::output_proofs(repository, &gate.required_outputs)?;
+    let run_directory = stdout_path
+        .parent()
+        .ok_or_else(|| DevError::infrastructure("gate stdout has no parent"))?;
+    let retained_outputs = retain_outputs(repository, run_directory, gate, &outputs)?;
     let mut status = map_status(process.status);
     let mut reason = process.reason.clone();
     if status == GateStatus::Passed && outputs.iter().any(|proof| proof.kind != FileKind::File) {
@@ -303,6 +336,7 @@ fn execute_fresh(
         elapsed_nanoseconds: duration_nanoseconds(started.elapsed()),
         process: Some(process),
         outputs,
+        retained_outputs,
         input_fingerprint: fingerprint,
         evidence_digest,
         cache: cache_observation,
@@ -350,6 +384,7 @@ fn skipped_receipt(
         elapsed_nanoseconds: 0,
         process: None,
         outputs: Vec::new(),
+        retained_outputs: Vec::new(),
         input_fingerprint: fingerprint,
         evidence_digest: VerificationDigest::of(&evidence_bytes),
         cache: CacheObservation {
@@ -380,6 +415,7 @@ fn infrastructure_receipt(gate: &Gate, error: DevError) -> GateReceipt {
         elapsed_nanoseconds: 0,
         process: None,
         outputs: Vec::new(),
+        retained_outputs: Vec::new(),
         input_fingerprint: fingerprint.clone(),
         evidence_digest: VerificationDigest::of(
             format!("{}:{fingerprint}", error.kind()).as_bytes(),
@@ -397,7 +433,43 @@ fn infrastructure_receipt(gate: &Gate, error: DevError) -> GateReceipt {
     }
 }
 
-fn gate_fingerprint(
+fn retain_outputs(
+    repository: &Path,
+    run_directory: &Path,
+    gate: &Gate,
+    outputs: &[FileProof],
+) -> Result<Vec<FileProof>, DevError> {
+    let mut retained = Vec::with_capacity(outputs.len());
+    for (index, original) in outputs.iter().enumerate() {
+        if original.kind != FileKind::File {
+            continue;
+        }
+        let source = repository.join(&original.path);
+        let directory = run_directory.join("retained").join(&gate.name);
+        std::fs::create_dir_all(&directory)?;
+        let path = directory.join(index.to_string());
+        let mut input = std::fs::File::open(&source)?;
+        let mut output = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)?;
+        std::io::copy(&mut input, &mut output)?;
+        output.set_permissions(input.metadata()?.permissions())?;
+        output.sync_all()?;
+        let proof = evidence::proof(&path, evidence::relative(repository, &path))?;
+        let mut comparison = proof.clone();
+        comparison.path.clone_from(&original.path);
+        if comparison != *original {
+            return Err(DevError::infrastructure(
+                "gate output changed while preserving its original evidence",
+            ));
+        }
+        retained.push(proof);
+    }
+    Ok(retained)
+}
+
+pub(super) fn gate_fingerprint(
     repository: &Path,
     gate: &Gate,
     snapshot: &InputSnapshot,
@@ -490,4 +562,33 @@ fn unix_nanoseconds() -> Result<u128, DevError> {
 
 fn duration_nanoseconds(duration: std::time::Duration) -> u64 {
     u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX)
+}
+
+#[cfg(test)]
+mod worker_cleanup_tests {
+    use super::*;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[test]
+    fn early_scheduler_error_joins_remaining_worker_before_return() {
+        let completed = Arc::new(AtomicBool::new(false));
+        let observation = completed.clone();
+        let result: Result<(), DevError> = {
+            let mut workers = RemainingWorkers::default();
+            workers.0.insert(
+                "owned".to_owned(),
+                thread::spawn(move || {
+                    thread::sleep(std::time::Duration::from_millis(20));
+                    observation.store(true, Ordering::SeqCst);
+                }),
+            );
+            Err(DevError::infrastructure("injected scheduler failure"))
+        };
+        assert!(result.is_err());
+        assert!(
+            completed.load(Ordering::SeqCst),
+            "worker escaped failed scheduler"
+        );
+    }
 }

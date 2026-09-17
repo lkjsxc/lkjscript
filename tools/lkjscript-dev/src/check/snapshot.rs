@@ -121,6 +121,21 @@ pub(crate) fn runtime_identity(
             "unsupported".to_owned()
         },
     };
+    let mut identity = RuntimeIdentity {
+        digest: VerificationDigest::of(&[]),
+        rustc,
+        cargo,
+        platform,
+        environment_digest,
+        environment_names,
+        harness,
+        command_executables,
+    };
+    identity.digest = runtime_digest(&identity)?;
+    Ok(identity)
+}
+
+pub(super) fn runtime_digest(identity: &RuntimeIdentity) -> Result<VerificationDigest, DevError> {
     #[derive(Serialize)]
     struct RuntimeMaterial<'a> {
         rustc: &'a str,
@@ -131,24 +146,42 @@ pub(crate) fn runtime_identity(
         command_executables: &'a BTreeMap<String, evidence::FileProof>,
     }
     let material = serde_json::to_vec(&RuntimeMaterial {
-        rustc: &rustc,
-        cargo: &cargo,
-        platform: &platform,
-        environment_digest: &environment_digest,
-        harness: &harness,
-        command_executables: &command_executables,
+        rustc: &identity.rustc,
+        cargo: &identity.cargo,
+        platform: &identity.platform,
+        environment_digest: &identity.environment_digest,
+        harness: &identity.harness,
+        command_executables: &identity.command_executables,
     })
     .map_err(|error| DevError::infrastructure(format!("encode runtime identity: {error}")))?;
-    Ok(RuntimeIdentity {
-        digest: VerificationDigest::of(&material),
-        rustc,
-        cargo,
-        platform,
-        environment_digest,
-        environment_names,
-        harness,
-        command_executables,
-    })
+    Ok(VerificationDigest::of(&material))
+}
+
+pub(super) fn validate_runtime(
+    repository: &Path,
+    retained: &RuntimeIdentity,
+    harness_copy: &Path,
+    commands: impl IntoIterator<Item = (String, String)>,
+) -> Result<(), DevError> {
+    let current = runtime_identity(repository, commands)?;
+    let copy = evidence::proof(harness_copy, retained.harness.path.clone())?;
+    let mut verifier = current.harness;
+    verifier.path.clone_from(&retained.harness.path);
+    if retained.digest != runtime_digest(retained)?
+        || retained.rustc != current.rustc
+        || retained.cargo != current.cargo
+        || serde_json::to_vec(&retained.platform)? != serde_json::to_vec(&current.platform)?
+        || retained.environment_digest != current.environment_digest
+        || retained.environment_names != current.environment_names
+        || retained.command_executables != current.command_executables
+        || retained.harness != copy
+        || retained.harness != verifier
+    {
+        return Err(DevError::corrupt(
+            "source environment, toolchain or original verifier binding changed",
+        ));
+    }
+    Ok(())
 }
 
 pub(crate) fn changed_profile(repository: &Path) -> Result<Vec<String>, DevError> {

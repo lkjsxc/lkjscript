@@ -10,7 +10,6 @@ use std::process::Command;
 
 pub(super) const ARCHIVE_NAME: &str = super::target::ARCHIVE_NAME;
 pub(super) const CHECKSUM_NAME: &str = "SHA256SUMS";
-pub(super) const RECEIPT_NAME: &str = "release-receipt.json";
 pub(super) use lkjscript::release_container::{
     EXECUTABLE_MEMBER, LICENSE_MEMBER, MANIFEST_MEMBER, NOTICE_MEMBER, TOP_DIRECTORY,
     VerifiedArchive, manifest_members, normalized_gzip_invocation, normalized_tar_invocation,

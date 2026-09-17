@@ -1,46 +1,28 @@
 # Current status
 
-Status date: 2026-09-16 UTC. This file describes implemented checkout reality. Executable-derived
+Status date: 2026-09-17 UTC. This file describes implemented checkout reality. Executable-derived
 public guides live under [generated](generated), including the
 [operation guide](generated/operations.md); this file does not duplicate them.
 
-## Combined release delivery
+## Release delivery cutover
 
-The [numerical-library milestone closure](campaigns/202609162154.md) consumes the completed corrective
-rehearsal at exact source `7083f9a6d56ed702017942e100c3696fc6f35308` (T), tree
-`e12b89965176dcb166f69c9e32441f71588b7b9f`, selected v0.1.38. The existing numerical,
-requirement-library, structural-authoring and transaction-completion lineage is already on main.
-T adds only the tested preservation of original file permissions in the target fault helper.
+Immutable v0.1.38 is available at source `7083f9a6d56ed702017942e100c3696fc6f35308`.
+Release `390160031` was published at 2026-09-16T18:11:58Z; publisher `35117655769/1`
+completed all four jobs successfully at 18:49:29Z, including anonymous exact/latest installed
+application acceptance and attestations. Numerical values, requirement-parameter libraries,
+structural authoring and transaction-completion reporting are already integrated and published.
+This supersedes earlier current-status statements that publication remains due.
 
-Rehearsal `35083514716/1` completed successfully. All five actual ZIPs match authenticated metadata
-and are retained locally. T's original full proof contains 26 fresh gates, zero reuse and stable
-inputs; its genuine preparation read that matching full receipt. Fresh matching verifier, strict
-package and target rereads pass, including six maintained owners and both pinned userlands.
-The original workspace proof includes the helper regression and all 119 contributor tests.
-The matching hosted installed `pair-verify` also passes without replaying applications, with both
-routes, all five owners, all eight literal request/plan originals and terminal cleanup.
+The old publisher's separate later manual original-reader admission remains historically unverified
+in this execution. Genuine v0.1.36/v0.1.37 failures remain in their existing campaign records; no old
+failure or missing manual observation has been relabelled. The successful rehearsal and local
+fault/recovery proof are recorded in the [predecessor ending](campaigns/202609162154.md).
 
-Remote main reached reporting descendant `924a819a6f0cc4013e25fa80a15f3757c38be89d` by ordinary
-fast-forward, retaining exact T ancestry. The supplied guidance, mandate and bounded selector-owner
-clarification passed the local changed-path closure and independent review separately from T.
-The final-T target matrix passes all 130 faults, including the independent F64 scale rejection,
-healthy baseline/recovery and unchanged original bytes/modes. All twelve interruptions and one
-subsequent fresh healthy local pair have passed, including both installed routes and the single
-five-owner suite. The pair reader matrix passes 156 rejection entries with original recovery;
-its initial debug default-stack failure is retained, and only the copied test process uses the
-documented 8 MiB stack context. The standalone transferred matrix passes all 268 rejection entries,
-followed by original production `pair-verify`, preserved bytes/modes/links and joined cleanup.
-The selected immutable publication and its original public evidence remain pending. The
-[release procedure](release.md#main-integration-and-public-closure) keeps these boundaries explicit.
-
-Immutable v0.1.36 remains the latest download; its failed public original-reader closure and the
-failed v0.1.37 publisher/tag remain preserved. v0.1.35 remains the last fully closed public milestone.
-Annotated v0.1.38 object `d711b4cb7385243283e4cdc53999c8b65fc2bbf6` selects exact T. Its one normal
-tag push started [publisher `35117655769/1`](https://github.com/lkjsxc/lkjscript/actions/runs/35117655769),
-which is in progress; its own fresh gates, anonymous installed acceptance and original-reader
-closure are pending. No numerical semantics, workload, compatibility generation or timeout changes
-in this continuation. Detailed source/run/evidence and resumption identities belong to the
-[active campaign](campaigns/202609162154.md).
+The [current campaign](campaigns/202609180007.md) implements publication-neutral content,
+once-per-candidate acceptance, exact-artifact promotion and boundary resumption. It requests no
+new version, tag, public release or release-control change. Implementation and fresh non-publishing
+hosted proof are in progress; no new-format live publication has been exercised. The first public
+use is triggered by a useful selected public capability, important fix or explicit user request.
 
 ## Binary64 increment
 
@@ -56,7 +38,7 @@ samples, a reviewed calibration edit, merging, process restart from typed checkp
 nonfinite JSON output fails. The strengthened focused original reader also passes. The exact frozen
 source now passes fresh full and complete static-target acceptance and the one fresh local
 post-interruption pair recovery. Both final source-bound reader matrices and original recovery
-now pass; selected publication and public original-reader closure remain due.
+now pass. v0.1.38 publication and hosted public checks subsequently succeeded; the separate historical manual-reader gap is described above.
 The shared integration-test helper now
 retries only a busy failed spawn and never replays a child that started. Existing standard and
 `lkjournal` assets were rebuilt through public operations; operational data was not migrated.
@@ -79,7 +61,7 @@ Normal main integration is `3fdddef3e98f120c7f58bc3719b3d22595847a20`, with the 
 That accepted source retains authentic Graph 14/15 and Artifact 18/19 readers; its Graph 16/Artifact 20
 meaning requires a supporting runtime. Application-data formats are unchanged. Neither v0.1.36 nor
 the frozen v0.1.37 recovery includes this capability. The [binary64 mandate](campaigns/202609152217.md)
-selects its final companion and combined delivery; no further deferral remains. Detailed identities,
+selected its final companion and combined delivery, now published in v0.1.38. Detailed identities,
 failures, cleanup and limitations stay in the campaign.
 
 ## Current authority and maintained consumers
@@ -330,9 +312,10 @@ revalidation is reported out of band; earlier results are not relabelled as fres
 ## Public binary release
 
 The current supported immutable release is
-[`v0.1.35`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.35), release `388511109`,
-from source `4306ef64783462a8dda48f2a855a88482d1faec8`. Its publication and anonymous installed
-acceptance are closed. The [combined release summary](#combined-release-delivery) tracks v0.1.36.
+[`v0.1.38`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.38), release `390160031`,
+from source `7083f9a6d56ed702017942e100c3696fc6f35308`. Publication and all hosted anonymous
+installed checks succeeded. The [current summary](#release-delivery-cutover) distinguishes those
+observations from the old publisher's unperformed later manual-reader closure.
 
 ### Earlier effect-library publication
 

@@ -195,6 +195,19 @@ pub(super) fn build(arguments: impl Iterator<Item = OsString>) -> Result<u8, Dev
     require_create_new_absolute(&options.receipt, "target build receipt")?;
     let repository = super::repository_root()?;
     super::ensure_clean_checkout(&repository)?;
+    validate_build_overrides(std::env::vars_os())?;
+    let cargo_home = std::env::var_os("CARGO_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cargo")))
+        .ok_or_else(|| {
+            DevError::usage("fixed target build requires an explicit config-free CARGO_HOME")
+        })?;
+    let cargo_home = if cargo_home.is_absolute() {
+        cargo_home
+    } else {
+        repository.join(cargo_home)
+    };
+    validate_unbound_cargo_configs(&repository, &cargo_home)?;
     let source_commit = super::command_text("git", &["rev-parse", "HEAD"], &repository, 1024)?;
     super::validate_git_sha(&source_commit, "target build source commit")?;
     let started = Instant::now();
@@ -314,6 +327,97 @@ pub(super) fn build(arguments: impl Iterator<Item = OsString>) -> Result<u8, Dev
     Ok(0)
 }
 
+/// The content contract binds one fixed build invocation. Inherited code-generation, compiler,
+/// and target overrides cannot silently create another configuration with the same policy digest.
+fn validate_build_overrides(
+    environment: impl IntoIterator<Item = (OsString, OsString)>,
+) -> Result<(), DevError> {
+    for (name, value) in environment {
+        let Some(name) = name.to_str() else { continue };
+        if [
+            "CC_x86_64_unknown_linux_musl",
+            "CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER",
+        ]
+        .contains(&name)
+        {
+            if value != "musl-gcc" {
+                return Err(DevError::usage(format!(
+                    "fixed target build rejects overridden {name}; the policy selects musl-gcc"
+                )));
+            }
+            continue;
+        }
+        let global = [
+            "RUSTFLAGS",
+            "CARGO_ENCODED_RUSTFLAGS",
+            "RUSTC",
+            "RUSTC_WRAPPER",
+            "RUSTC_WORKSPACE_WRAPPER",
+            "CARGO_BUILD_TARGET",
+            "CARGO_TARGET_DIR",
+            "CC",
+            "CFLAGS",
+            "CXX",
+            "CXXFLAGS",
+            "AR",
+            "RANLIB",
+            "HOST_CC",
+            "HOST_CFLAGS",
+            "HOST_CXX",
+            "HOST_CXXFLAGS",
+            "HOST_AR",
+            "HOST_RANLIB",
+            "TARGET_CC",
+            "TARGET_CFLAGS",
+            "TARGET_CXX",
+            "TARGET_CXXFLAGS",
+            "TARGET_AR",
+            "TARGET_RANLIB",
+        ]
+        .contains(&name);
+        let codegen = name.starts_with("CARGO_PROFILE_")
+            || (name.starts_with("CARGO_BUILD_") && name != "CARGO_BUILD_JOBS")
+            || name.starts_with("CARGO_TARGET_")
+            || ["CC_", "CFLAGS_", "CXX_", "CXXFLAGS_", "AR_", "RANLIB_"]
+                .iter()
+                .any(|prefix| name.starts_with(prefix));
+        if global || codegen {
+            return Err(DevError::usage(format!(
+                "fixed target build rejects unbound environment override {name}; remove it before building"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_unbound_cargo_configs(repository: &Path, cargo_home: &Path) -> Result<(), DevError> {
+    for directory in repository
+        .ancestors()
+        .map(|path| path.join(".cargo"))
+        .chain(std::iter::once(cargo_home.to_owned()))
+    {
+        for name in ["config", "config.toml"] {
+            let path = directory.join(name);
+            match fs::symlink_metadata(&path) {
+                Ok(_) => {
+                    return Err(DevError::usage(format!(
+                        "fixed target build rejects unbound Cargo configuration '{}'; use a config-free checkout ancestry and CARGO_HOME",
+                        path.display()
+                    )));
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    return Err(DevError::infrastructure(format!(
+                        "inspect fixed target Cargo configuration '{}': {error}",
+                        path.display()
+                    )));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn inspect_static_elf(path: &Path) -> Result<ElfIdentity, DevError> {
     let metadata = archive::ensure_regular(path, "static ELF candidate")?;
     if metadata.len() == 0 || metadata.len() > MAXIMUM_CANDIDATE_BYTES {
@@ -351,11 +455,8 @@ pub(super) fn read_build_receipt(
     path: &Path,
     candidate: &Path,
 ) -> Result<TargetBuildReceipt, DevError> {
-    let bytes = fs::read(path)
-        .map_err(|error| DevError::infrastructure(format!("read target build receipt: {error}")))?;
-    if bytes.len() > 4 * 1024 * 1024 {
-        return Err(DevError::corrupt("target build receipt exceeds 4 MiB"));
-    }
+    archive::ensure_regular(path, "target build receipt")?;
+    let bytes = process::read_bounded(path, 4 * 1024 * 1024)?;
     let receipt: TargetBuildReceipt = serde_json::from_slice(&bytes)
         .map_err(|error| DevError::corrupt(format!("decode target build receipt: {error}")))?;
     if archive::canonical_json(&receipt)? != bytes {
@@ -387,10 +488,12 @@ fn validate_build_receipt(
                 "--target",
                 TARGET_TRIPLE,
             ]
-        || receipt.build_process.status != ProcessStatus::Passed
-        || receipt.build_process.exit_code != Some(0)
-        || receipt.build_process.stdout_limit_exhausted
-        || receipt.build_process.stderr_limit_exhausted
+        || !admitted_build_process(&receipt.build_process)
+        || !admitted_toolchain_inputs(
+            &receipt.rustc,
+            &receipt.cargo,
+            &receipt.installed_musl_packages,
+        )
         || receipt.musl_gcc_dumpmachine != "x86_64-linux-gnu"
         || receipt.completed_unix_nanoseconds < receipt.started_unix_nanoseconds
         || receipt.candidate.byte_length != observed.byte_length
@@ -412,6 +515,40 @@ fn validate_build_receipt(
     )?;
     super::validate_git_sha(&receipt.source_commit, "target build receipt source commit")?;
     Ok(())
+}
+
+fn admitted_build_process(process: &crate::process::ProcessObservation) -> bool {
+    process.status == ProcessStatus::Passed
+        && process.exit_code == Some(0)
+        && process.signal.is_none()
+        && process.reason.is_none()
+        && !process.stdout_limit_exhausted
+        && !process.stderr_limit_exhausted
+        && process.stdout_limit_bytes == 8 * 1024 * 1024
+        && process.stderr_limit_bytes == 32 * 1024 * 1024
+        && u128::from(process.elapsed_nanoseconds) <= BUILD_TIMEOUT.as_nanos()
+}
+
+fn admitted_toolchain_inputs(rustc: &str, cargo: &str, installed: &[String]) -> bool {
+    [(rustc, "rustc"), (cargo, "cargo")]
+        .into_iter()
+        .all(|(output, tool)| {
+            let mut words = output.split_ascii_whitespace();
+            words.next() == Some(tool) && words.next() == Some(super::TOOLCHAIN_CHANNEL)
+        })
+        && installed == expected_musl_packages()
+}
+
+fn expected_musl_packages() -> Vec<String> {
+    musl_packages()
+        .into_iter()
+        .map(|package| {
+            format!(
+                "{}={}:{}",
+                package.name, package.version, package.architecture
+            )
+        })
+        .collect()
 }
 
 fn validate_process_log(
@@ -455,11 +592,7 @@ fn installed_musl_packages(repository: &Path) -> Result<Vec<String>, DevError> {
         16 * 1024,
     )?;
     let observed = packages.lines().map(str::to_owned).collect::<Vec<_>>();
-    let expected = vec![
-        format!("musl={MUSL_PACKAGE_VERSION}:amd64"),
-        format!("musl-dev={MUSL_PACKAGE_VERSION}:amd64"),
-        format!("musl-tools={MUSL_PACKAGE_VERSION}:amd64"),
-    ];
+    let expected = expected_musl_packages();
     if observed != expected {
         return Err(DevError::corrupt(format!(
             "installed musl packages disagree with target policy: observed {observed:?}"
@@ -598,6 +731,169 @@ pub(super) mod tests {
         let bytes = archive::canonical_json(&policy).expect("canonical target policy");
         let expected = archive::sha256_bytes(&bytes).expect("target policy digest");
         assert_eq!(policy_sha256().expect("policy SHA-256"), expected.as_str());
+    }
+
+    #[test]
+    fn target_build_reader_rejects_plausible_success_with_failed_cleanup_or_changed_bounds() {
+        let proof = crate::evidence::FileProof {
+            path: "fixture.log".to_owned(),
+            kind: crate::evidence::FileKind::File,
+            mode: Some(0o644),
+            bytes: Some(0),
+            digest: Some(crate::evidence::VerificationDigest::of(b"")),
+            link_target: None,
+        };
+        let complete = crate::process::ProcessObservation {
+            status: ProcessStatus::Passed,
+            exit_code: Some(0),
+            signal: None,
+            reason: None,
+            elapsed_nanoseconds: 1,
+            cpu_nanoseconds: None,
+            peak_rss_kib: None,
+            stdout_limit_bytes: 8 * 1024 * 1024,
+            stderr_limit_bytes: 32 * 1024 * 1024,
+            stdout_limit_exhausted: false,
+            stderr_limit_exhausted: false,
+            stdout: proof.clone(),
+            stderr: proof,
+        };
+        assert!(admitted_build_process(&complete));
+        for fault in 0..7 {
+            let mut changed = complete.clone();
+            match fault {
+                0 => changed.signal = Some(9),
+                1 => changed.reason = Some("descendant cleanup failed".to_owned()),
+                2 => changed.stdout_limit_bytes /= 2,
+                3 => changed.stderr_limit_bytes *= 2,
+                4 => changed.stdout_limit_exhausted = true,
+                5 => changed.elapsed_nanoseconds = 30 * 60 * 1_000_000_000 + 1,
+                _ => changed.status = ProcessStatus::Timeout,
+            }
+            assert!(
+                !admitted_build_process(&changed),
+                "admitted forged build outcome {fault}"
+            );
+        }
+        assert!(admitted_build_process(&complete));
+    }
+
+    #[test]
+    fn target_build_reader_independently_binds_pinned_toolchain_and_all_three_musl_packages() {
+        let expected = [
+            "musl=1.2.4-2:amd64",
+            "musl-dev=1.2.4-2:amd64",
+            "musl-tools=1.2.4-2:amd64",
+        ]
+        .map(str::to_owned);
+        assert_eq!(expected_musl_packages(), expected);
+        assert!(admitted_toolchain_inputs(
+            "rustc 1.98.0 (fixture)\nrelease: 1.98.0",
+            "cargo 1.98.0 (fixture)",
+            &expected
+        ));
+        for (rustc, cargo) in [
+            ("rustc 1.97.0", "cargo 1.98.0"),
+            ("rustc 1.98.0", "cargo 1.97.0"),
+            ("rustc 1.98.01", "cargo 1.98.0"),
+            ("rustc 1.98.0-nightly", "cargo 1.98.0"),
+        ] {
+            assert!(!admitted_toolchain_inputs(rustc, cargo, &expected));
+        }
+        let mut changed = expected.to_vec();
+        changed[1] = "musl-dev=1.2.5:amd64".to_owned();
+        assert!(!admitted_toolchain_inputs(
+            "rustc 1.98.0",
+            "cargo 1.98.0",
+            &changed
+        ));
+        assert!(!admitted_toolchain_inputs(
+            "rustc 1.98.0",
+            "cargo 1.98.0",
+            &expected[..2]
+        ));
+        assert!(admitted_toolchain_inputs(
+            "rustc 1.98.0",
+            "cargo 1.98.0",
+            &expected
+        ));
+    }
+
+    #[test]
+    fn fixed_target_build_rejects_unbound_overrides_without_disclosing_values() {
+        let inputs = |pairs: &[(&str, &str)]| {
+            pairs
+                .iter()
+                .map(|(name, value)| (OsString::from(name), OsString::from(value)))
+                .collect::<Vec<_>>()
+        };
+        assert!(
+            validate_build_overrides(inputs(&[
+                ("CARGO_BUILD_JOBS", "4"),
+                ("CARGO_HOME", "/owned/config-free-cargo"),
+                ("CC_x86_64_unknown_linux_musl", "musl-gcc"),
+                ("CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER", "musl-gcc"),
+            ]))
+            .is_ok()
+        );
+        for name in [
+            "RUSTFLAGS",
+            "CARGO_ENCODED_RUSTFLAGS",
+            "RUSTC",
+            "RUSTC_WRAPPER",
+            "RUSTC_WORKSPACE_WRAPPER",
+            "CARGO_BUILD_TARGET",
+            "CARGO_TARGET_DIR",
+            "CC",
+            "CFLAGS",
+            "CXX",
+            "CXXFLAGS",
+            "AR",
+            "RANLIB",
+            "CARGO_PROFILE_RELEASE_LTO",
+            "CARGO_BUILD_RUSTFLAGS",
+            "CARGO_BUILD_INCREMENTAL",
+            "CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS",
+            "CFLAGS_x86_64-unknown-linux-musl",
+            "HOST_CC",
+            "TARGET_AR",
+            "CC_x86_64_unknown_linux_musl",
+            "CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER",
+        ] {
+            let error = validate_build_overrides(inputs(&[(name, "private-sentinel-value")]))
+                .expect_err("unbound compiler configuration must reject");
+            assert!(error.to_string().contains(name));
+            assert!(!error.to_string().contains("private-sentinel-value"));
+        }
+        assert!(validate_build_overrides(inputs(&[("RUSTFLAGS", "")])).is_err());
+        assert!(validate_build_overrides(inputs(&[])).is_ok());
+    }
+
+    #[test]
+    fn fixed_target_build_requires_config_free_ancestry_and_cargo_home() {
+        let temporary = tempfile::tempdir().expect("configuration fixture");
+        let ancestor = temporary.path().join("workspace");
+        let repository = ancestor.join("repository");
+        let cargo_home = temporary.path().join("cargo-home");
+        fs::create_dir_all(&repository).expect("repository");
+        fs::create_dir(&cargo_home).expect("cargo home");
+        assert!(validate_unbound_cargo_configs(&repository, &cargo_home).is_ok());
+        for directory in [
+            repository.join(".cargo"),
+            ancestor.join(".cargo"),
+            cargo_home.clone(),
+        ] {
+            fs::create_dir_all(&directory).expect("configuration directory");
+            for name in ["config", "config.toml"] {
+                let path = directory.join(name);
+                fs::write(&path, b"private-configuration-sentinel").expect("configuration");
+                let error = validate_unbound_cargo_configs(&repository, &cargo_home)
+                    .expect_err("unbound configuration must reject");
+                assert!(!error.to_string().contains("private-configuration-sentinel"));
+                fs::remove_file(path).expect("remove owned fixture configuration");
+                assert!(validate_unbound_cargo_configs(&repository, &cargo_home).is_ok());
+            }
+        }
     }
 
     #[test]

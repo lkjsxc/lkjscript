@@ -625,14 +625,7 @@ impl Root {
                 archive_bytes: receipt.archive.archive_byte_length,
                 manifest_sha256: receipt.archive.manifest_sha256.as_str().to_owned(),
                 executable_sha256: manifest.executable.sha256.as_str().to_owned(),
-                publication: match manifest.publication_mode {
-                    container::model::PublicationMode::DryRun => {
-                        "declared-dry-run/unverified-publication"
-                    }
-                    container::model::PublicationMode::Release => {
-                        "declared-release/unverified-publication"
-                    }
-                },
+                publication: manifest.publication_provenance(),
                 integrity: if full { "verified" } else { "unchecked" },
             },
             receipt,
