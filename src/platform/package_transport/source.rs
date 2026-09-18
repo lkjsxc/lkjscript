@@ -1952,11 +1952,12 @@ mod tests {
             let hostile = rehash_owner(&original, OwnerRecord::Declaration(declaration));
             assert_not_ready(&hostile.encode().unwrap(), hostile.root.transport);
             assert_eq!(hostile.admit().unwrap_err().code, code);
+            let oracle_error =
+                crate::platform::package_transport::oracle::reconstruct(&hostile).unwrap_err();
+            assert_eq!(oracle_error.code, "package_closure_oracle");
             assert_eq!(
-                crate::platform::package_transport::oracle::reconstruct(&hostile)
-                    .unwrap_err()
-                    .code,
-                code
+                oracle_error.message,
+                format!("canonical type validation rejected independent inventory: {code}")
             );
         }
     }

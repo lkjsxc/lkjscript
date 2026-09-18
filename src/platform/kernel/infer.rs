@@ -312,7 +312,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     continue;
                 }
             };
-            if let Err(diagnostic) = self.validate_owner_nominals(&owner) {
+            if let Err(mut diagnostic) = self.validate_owner_nominals(&owner) {
+                diagnostic
+                    .notes
+                    .push(format!("semantic owner: {}", owner.owner()));
                 self.push_diagnostic(diagnostic);
                 continue;
             }
@@ -354,6 +357,25 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             &context,
                             "function",
                         );
+                    }
+                    DeclarationPayload::External(external) => {
+                        if let Err(mut diagnostic) =
+                            crate::platform::intrinsic_contract::validate_kernel_intrinsic(
+                                self.read,
+                                &external,
+                                self.work,
+                                self.limits.maximum_steps,
+                            )
+                        {
+                            if diagnostic.code == "kernel_full_work" {
+                                self.exhaustion = Some(ExpressionValidationExhaustion::Steps);
+                            } else {
+                                diagnostic
+                                    .notes
+                                    .push(format!("semantic owner: {}", declaration.header.owner));
+                                self.push_diagnostic(diagnostic);
+                            }
+                        }
                     }
                     DeclarationPayload::Constant { ty, value } => {
                         self.compare_root_type(value, ty, &pure_context(None), "constant");
@@ -2486,7 +2508,11 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             _ => None,
         };
         let context = pure_context(declaration);
-        let mut roots = owner.type_roots();
+        let mut roots = owner
+            .type_roots()
+            .into_iter()
+            .map(|ty| (ty, owner.owner()))
+            .collect::<Vec<_>>();
         if let OwnerRecord::Declaration(record) = owner {
             if let DeclarationPayload::Function(function) = &record.payload {
                 for parameter in &function.requirement_parameters {
@@ -2509,7 +2535,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 if let Some(OwnerRecord::Parameter(record)) =
                     self.read.owner(OwnerKey::Parameter(*parameter))?
                 {
-                    roots.push(record.ty);
+                    roots.push((record.ty, record.header.owner));
                 }
             }
             if matches!(
@@ -2522,12 +2548,20 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         type_error("kernel_type_nominal_kind", "missing nominal identity")
                     })?,
                 };
-                roots.extend(self.nominal_member_types(reference)?);
+                roots.extend(
+                    self.nominal_member_types(reference)?
+                        .into_iter()
+                        .map(|ty| (ty, owner.owner())),
+                );
                 self.validate_nominal_schema(reference)?;
             }
         }
-        for ty in roots {
-            self.validate_nominal_type(ty, &context, 0)?;
+        for (ty, source) in roots {
+            self.validate_nominal_type(ty, &context, 0)
+                .map_err(|mut diagnostic| {
+                    diagnostic.notes.push(format!("semantic owner: {source}"));
+                    diagnostic
+                })?;
         }
         Ok(())
     }

@@ -1,0 +1,34 @@
+reference.package as=$std source=builtin
+reference.owner as=$fold package=$std class=declaration name=list-fold-left
+reference.owner as=$fadd package=$std class=declaration name=f64-add
+reference.owner as=$fmul package=$std class=declaration name=f64-multiply
+reference.owner as=$module package=local class=module name=measure
+reference.owner as=$step package=local class=declaration parent=$module name=step
+reference.owner as=$energy package=local class=declaration parent=$module name=energy
+reference.owner as=$component package=local class=declaration parent=$module name=compute
+reference.owner as=$port package=local class=port parent=$component name=energy
+reference.owner as=$sample package=local class=parameter parent=$step name=sample
+reference.owner as=$acc package=local class=parameter parent=$step name=acc
+reference.owner as=$items package=local class=parameter parent=$energy name=items
+create.record as=$Reading module=$module name=Reading visibility=public
+add.field as=$value record=$Reading name=value type=f64
+add.field as=$enabled record=$Reading name=enabled type=bool
+type.named as=@Reading declaration=$Reading
+type.list as=@Readings item=@Reading
+set.parameter-type parameter=$sample type=@Reading
+set.parameter-type parameter=$items type=@Readings
+expression.block as=$new-step
+  (if (field (local $sample) $enabled)
+    (call $fadd (local $acc)
+      (call $fmul (field (local $sample) $value)
+                 (field (local $sample) $value)))
+    (local $acc))
+expression.end
+replace.body function=$step body=$new-step
+expression.block as=$new-energy
+  (call $fold (types @Reading f64) (local $items) (f64 0.0) (function-value $step))
+expression.end
+replace.body function=$energy body=$new-energy
+type.function as=@Energy result=f64
+type.argument parent=@Energy index=0 type=@Readings
+set.port-contract port=$port type=@Energy

@@ -6136,6 +6136,30 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ],
                 )?);
             }
+            records.push(compact_record(
+                "change.operation-rule",
+                &[
+                    ("operation", "set.parameter-type".to_owned()),
+                    (
+                        "selector",
+                        "local-parameter-owner-or-typed-alias".to_owned(),
+                    ),
+                    (
+                        "type-context",
+                        "defining-lexical-and-generic-scope".to_owned(),
+                    ),
+                    (
+                        "preserves",
+                        "identity-parent-name-order-use-requirement".to_owned(),
+                    ),
+                    ("validation", "complete-final-candidate".to_owned()),
+                    (
+                        "repair",
+                        "explicit-calls-bodies-and-port-contracts-in-same-request".to_owned(),
+                    ),
+                    ("result-and-effect", "set.function-contract".to_owned()),
+                ],
+            )?);
             for (name, value, unit) in [
                 (
                     "maximum-extraction-moved-owners",

@@ -531,6 +531,23 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
     witness: &W,
     request: &AuthoredChangeSet,
 ) -> Result<AuthoredLowering, Diagnostic> {
+    lower_authored_changes_with_source_owners(base, witness, request, None)
+}
+
+/// Retains only descriptive identities already admitted and resolved by this lowering pass.
+/// Failed preparation must never rerun reference resolution merely to locate a diagnostic.
+pub(crate) fn lower_authored_changes_with_source_owners<
+    B: CanonicalBaseRead + ?Sized,
+    W: WitnessBaseRead + ?Sized,
+>(
+    base: &B,
+    witness: &W,
+    request: &AuthoredChangeSet,
+    mut source_owners: Option<&mut BTreeMap<String, OwnerKey>>,
+) -> Result<AuthoredLowering, Diagnostic> {
+    if let Some(owners) = source_owners.as_deref_mut() {
+        owners.clear();
+    }
     if base.exact_revision() != Some(request.base) {
         return Err(request_error(
             DiagnosticClass::Semantic,
@@ -572,6 +589,9 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
     let definition_count = definitions.len();
     let allocated = allocate_symbols(&seed, &definitions)?;
     let allocations = logical_allocations(&definitions, &allocated)?;
+    if let Some(owners) = source_owners.as_deref_mut() {
+        owners.clone_from(&allocated);
+    }
     let mut lowerer = AuthoredLowerer::new(
         base,
         witness,
@@ -589,6 +609,14 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
     if let Some(bindings) = bindings {
         lowerer.lower_dependency_changes(&request.changes, true)?;
         lowerer.resolve_bindings(bindings)?;
+        if let Some(owners) = source_owners {
+            for origin in &bindings.origins {
+                if let Some(reference) = origin.owner {
+                    let selected = lowerer.selected(reference, None, false)?;
+                    owners.insert(origin.alias.clone(), selected.owner);
+                }
+            }
+        }
     }
     precondition::evaluate(&mut lowerer, &request.preconditions)?;
     lowerer.check_budget("authored preconditions")?;
@@ -1247,18 +1275,22 @@ pub(crate) fn canonical_authored_budget_bytes(budget: ChangeBudget) -> Result<Ve
     codec::encode_budget(budget)
 }
 
-/// Descriptive source-map support. This uses the same allocation owner as lowering and grants
-/// neither admission nor publication authority; callers use it only to locate failed proposals.
+/// Preserves historical allocation goldens without admitting their predecessor graph as current.
+#[cfg(test)]
 pub(crate) fn authored_source_owners<B: CanonicalBaseRead + ?Sized>(
     base: &B,
     request: &AuthoredChangeSet,
 ) -> Result<BTreeMap<String, OwnerKey>, Diagnostic> {
-    let (definitions, _) = collect_symbol_definitions(
-        request,
-        request.budget.authored.maximum_allocated_identities,
-    )?;
+    let operation_count = references::admitted_operations(request)?;
+    let budget = request
+        .budget
+        .validate_request_counts(operation_count, request.preconditions.len())?;
+    let (definitions, total_identity_count) =
+        collect_symbol_definitions(request, budget.authored.maximum_allocated_identities)?;
+    budget.check_allocated_identities(total_identity_count)?;
     let bytes = codec::encode_authored_intent(request, &definitions)?;
-    allocate_symbols(&allocation_seed(base, &bytes)?, &definitions)
+    let seed = allocation_seed(base, &bytes)?;
+    allocate_symbols(&seed, &definitions)
 }
 
 fn allocation_seed<B: CanonicalBaseRead + ?Sized>(
@@ -1827,11 +1859,13 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
     fn require_owner(&mut self, owner: OwnerKey) -> Result<(), Diagnostic> {
         if let Some(working) = self.owners.get(&owner) {
             return if working.deleted {
-                Err(request_error(
+                let mut diagnostic = request_error(
                     DiagnosticClass::Semantic,
                     "change_authored_owner_deleted",
                     format!("owner {owner:?} was already selected for deletion in this request"),
-                ))
+                );
+                diagnostic.notes.push(format!("semantic owner: {owner}"));
+                Err(diagnostic)
             } else {
                 Ok(())
             };
@@ -1839,11 +1873,13 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         let read = self.base.read_owner(owner)?;
         self.work.canonical.add(read.work);
         let record = read.value.ok_or_else(|| {
-            request_error(
+            let mut diagnostic = request_error(
                 DiagnosticClass::Semantic,
                 "change_authored_owner_missing",
                 format!("selector names missing owner {owner:?}"),
-            )
+            );
+            diagnostic.notes.push(format!("semantic owner: {owner}"));
+            diagnostic
         })?;
         let (before, _) = encode_owner(&record)?;
         self.owners.insert(

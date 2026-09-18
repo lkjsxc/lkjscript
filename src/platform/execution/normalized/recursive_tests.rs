@@ -441,34 +441,54 @@ fn recursive_decoder_operational_failures_cannot_select_fallback_in_either_tier(
     let bytes = intern(TypeForm::Bytes);
     let text = intern(TypeForm::Text);
     let boolean = intern(TypeForm::Bool);
-    let json_result = intern(TypeForm::StructuralRecord {
-        fields: vec![
-            StructuralTypeField {
-                name: Name::new("error").unwrap(),
-                ty: text,
-            },
-            StructuralTypeField {
-                name: Name::new("valid").unwrap(),
-                ty: boolean,
-            },
-            StructuralTypeField {
-                name: Name::new("value").unwrap(),
-                ty: roots[0],
-            },
-        ],
-    });
     let mut functions = Vec::new();
-    for (index, (implementation, result)) in [
-        ("core.data.decode-or", roots[0]),
-        ("core.json.decode-or", json_result),
-    ]
-    .into_iter()
-    .enumerate()
+    for (index, implementation) in ["core.data.decode-or", "core.json.decode-or"]
+        .into_iter()
+        .enumerate()
     {
         let declaration =
             DeclarationId::migrate(b"recursive-codec-failure-boundaries", index as u64);
+        // The closed registry admits the ordinary generic decoder. Instantiate its T with
+        // Tree<I64> at invocation; a directly specialized Applied external is not registered.
+        let type_parameter =
+            TypeParameterId::migrate(b"recursive-codec-failure-boundaries", index as u64);
+        let generic = intern(TypeForm::TypeParameter {
+            parameter: type_parameter,
+        });
+        let result = if index == 0 {
+            generic
+        } else {
+            intern(TypeForm::StructuralRecord {
+                fields: vec![
+                    StructuralTypeField {
+                        name: Name::new("error").unwrap(),
+                        ty: text,
+                    },
+                    StructuralTypeField {
+                        name: Name::new("valid").unwrap(),
+                        ty: boolean,
+                    },
+                    StructuralTypeField {
+                        name: Name::new("value").unwrap(),
+                        ty: generic,
+                    },
+                ],
+            })
+        };
+        snapshot.owners.insert(
+            OwnerKey::TypeParameter(type_parameter),
+            OwnerRecord::TypeParameter(TypeParameterRecord {
+                header: OwnerHeader::new(
+                    OwnerKey::TypeParameter(type_parameter),
+                    OwnerKind::TypeParameter,
+                ),
+                declaration,
+                name: Name::new("T").unwrap(),
+                constraints: TypeParameterConstraints::None,
+            }),
+        );
         let mut parameters = Vec::new();
-        for (position, (name, ty)) in [("bytes", bytes), ("fallback", roots[0])]
+        for (position, (name, ty)) in [("bytes", bytes), ("fallback", generic)]
             .into_iter()
             .enumerate()
         {
@@ -497,7 +517,7 @@ fn recursive_decoder_operational_failures_cannot_select_fallback_in_either_tier(
                 name: Name::new(format!("decode-{index}")).unwrap(),
                 visibility: DeclarationVisibility::Private,
                 payload: DeclarationPayload::External(ExternalDeclaration {
-                    type_parameters: vec![],
+                    type_parameters: vec![type_parameter],
                     parameters,
                     result,
                     implementation: ImplementationName::new(implementation).unwrap(),
@@ -558,8 +578,11 @@ fn recursive_decoder_operational_failures_cannot_select_fallback_in_either_tier(
                     evaluator.observing_checked(&observed)
                 };
                 let error = evaluator
-                    .invoke(
-                        function,
+                    .invoke_entry(
+                        super::super::prepare::NormalizedEntryPoint::InstantiatedFunction(
+                            program.function(function).unwrap(),
+                            Arc::from([roots[0]]),
+                        ),
                         vec![NormalizedValue::bytes(bytes.clone()), fallback.clone()],
                         None,
                         &control,
@@ -591,10 +614,10 @@ fn recursive_decoder_operational_failures_cannot_select_fallback_in_either_tier(
                     evaluator.observing_checked(&observed)
                 };
                 let error = evaluator
-                    .invoke(
+                    .invoke_instantiated(
                         function,
+                        &[roots[0]],
                         vec![NormalizedValue::bytes(bytes), fallback.clone()],
-                        None,
                         &control,
                     )
                     .unwrap_err();

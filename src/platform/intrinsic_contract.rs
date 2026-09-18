@@ -20,9 +20,43 @@ pub fn validate_intrinsic(
             effectful: !signature.task_capabilities.is_empty(),
         },
     )
+    .map_err(|failure| failure.diagnostic)
 }
 
-fn validate_shape(implementation: &str, signature: &IntrinsicSignature) -> Result<(), Diagnostic> {
+struct SignatureFailure {
+    diagnostic: Diagnostic,
+    // Fixed and unary contracts can identify an input independently. Relationships between
+    // generic inputs may not have one uniquely invalid parameter and retain declaration context.
+    parameter: Option<usize>,
+}
+
+fn validate_shape(
+    implementation: &str,
+    signature: &IntrinsicSignature,
+) -> Result<(), SignatureFailure> {
+    let parameter = std::cell::Cell::new(None);
+    let exact =
+        |actual: &IntrinsicSignature, parameters: &[IntrinsicType], result: &IntrinsicType| {
+            if actual.parameters.len() != parameters.len() {
+                return false;
+            }
+            parameter.set(
+                actual
+                    .parameters
+                    .iter()
+                    .zip(parameters)
+                    .position(|(actual, expected)| actual != expected),
+            );
+            parameter.get().is_none() && actual.result == *result
+        };
+    let unary = |accept: fn(&IntrinsicType) -> bool| match signature.parameters.as_slice() {
+        [value] if accept(value) => true,
+        [_] => {
+            parameter.set(Some(0));
+            false
+        }
+        _ => false,
+    };
     let valid = match implementation {
         "core.f64.add" | "core.f64.subtract" | "core.f64.multiply" | "core.f64.divide" => exact(
             signature,
@@ -101,8 +135,7 @@ fn validate_shape(implementation: &str, signature: &IntrinsicSignature) -> Resul
             exact(signature, &[IntrinsicType::Text], &IntrinsicType::Text)
         }
         "core.json.encode" => {
-            matches!(signature.parameters.as_slice(), [value] if value.is_durable())
-                && signature.result == IntrinsicType::Bytes
+            unary(IntrinsicType::is_durable) && signature.result == IntrinsicType::Bytes
         }
         "core.json.decode-or" => match signature.parameters.as_slice() {
             [IntrinsicType::Bytes, fallback] => {
@@ -126,8 +159,7 @@ fn validate_shape(implementation: &str, signature: &IntrinsicSignature) -> Resul
             _ => false,
         },
         "core.data.encode" => {
-            matches!(signature.parameters.as_slice(), [value] if value.is_durable())
-                && signature.result == IntrinsicType::Bytes
+            unary(IntrinsicType::is_durable) && signature.result == IntrinsicType::Bytes
         }
         "core.data.decode-or" => match signature.parameters.as_slice() {
             [IntrinsicType::Bytes, fallback] => {
@@ -163,7 +195,7 @@ fn validate_shape(implementation: &str, signature: &IntrinsicSignature) -> Resul
                 && signature.parameters[0].is_durable()
         }
         "core.list.length" => {
-            matches!(signature.parameters.as_slice(), [IntrinsicType::List(_)])
+            unary(|value| matches!(value, IntrinsicType::List(_)))
                 && signature.result == IntrinsicType::I64
         }
         "core.list.get" => match signature.parameters.as_slice() {
@@ -190,11 +222,11 @@ fn validate_shape(implementation: &str, signature: &IntrinsicSignature) -> Resul
             _ => false,
         },
         "core.option.present" => {
-            matches!(signature.parameters.as_slice(), [IntrinsicType::Option(_)])
+            unary(|value| matches!(value, IntrinsicType::Option(_)))
                 && signature.result == IntrinsicType::Bool
         }
         "core.map.length" => {
-            matches!(signature.parameters.as_slice(), [IntrinsicType::Map(_, _)])
+            unary(|value| matches!(value, IntrinsicType::Map(_, _)))
                 && signature.result == IntrinsicType::I64
         }
         "core.map.get" => match signature.parameters.as_slice() {
@@ -247,29 +279,27 @@ fn validate_shape(implementation: &str, signature: &IntrinsicSignature) -> Resul
             _ => false,
         },
         _ => {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Semantic,
-                "intrinsic_unknown",
-                format!("external implementation '{implementation}' is not registered"),
-            ));
+            return Err(SignatureFailure {
+                diagnostic: Diagnostic::new(
+                    DiagnosticClass::Semantic,
+                    "intrinsic_unknown",
+                    format!("external implementation '{implementation}' is not registered"),
+                ),
+                parameter: None,
+            });
         }
     };
     if signature.effectful || !valid {
-        return Err(Diagnostic::new(
-            DiagnosticClass::Semantic,
-            "intrinsic_signature",
-            format!("external implementation '{implementation}' has a foreign signature"),
-        ));
+        return Err(SignatureFailure {
+            diagnostic: Diagnostic::new(
+                DiagnosticClass::Semantic,
+                "intrinsic_signature",
+                format!("external implementation '{implementation}' has a foreign signature"),
+            ),
+            parameter: parameter.get(),
+        });
     }
     Ok(())
-}
-
-fn exact(
-    signature: &IntrinsicSignature,
-    parameters: &[IntrinsicType],
-    result: &IntrinsicType,
-) -> bool {
-    signature.parameters == parameters && signature.result == *result
 }
 
 fn http_headers_type() -> IntrinsicType {
@@ -411,24 +441,15 @@ fn legacy_type(ty: &ResolvedType) -> IntrinsicType {
 
 /// The same closed host signature registry admits canonical external declarations. No package
 /// identity is privileged. Charge expanded type visits to the caller's aggregate validation work.
-pub(crate) fn validate_kernel_intrinsic(
-    snapshot: &KernelSnapshot,
+pub(crate) fn validate_kernel_intrinsic<R: ExpressionRead + ?Sized>(
+    read: &R,
     external: &ExternalDeclaration,
     work: &mut usize,
     maximum: usize,
 ) -> Result<(), Diagnostic> {
     for id in &external.type_parameters {
-        *work = work
-            .checked_add(1)
-            .filter(|n| *n <= maximum)
-            .ok_or_else(|| {
-                Diagnostic::new(
-                    DiagnosticClass::Resource,
-                    "kernel_full_work",
-                    "external constraint validation exhausted its work budget",
-                )
-            })?;
-        if !matches!(snapshot.owners.get(&OwnerKey::TypeParameter(*id)), Some(OwnerRecord::TypeParameter(parameter)) if parameter.constraints == TypeParameterConstraints::None)
+        intrinsic_visit(read, work, maximum)?;
+        if !matches!(read.owner(OwnerKey::TypeParameter(*id))?, Some(OwnerRecord::TypeParameter(parameter)) if parameter.constraints == TypeParameterConstraints::None)
         {
             return Err(signature_error(
                 "closed external type parameters require the intrinsic inventory's empty constraint set",
@@ -437,19 +458,24 @@ pub(crate) fn validate_kernel_intrinsic(
     }
     let mut parameters = Vec::new();
     for id in &external.parameters {
-        let Some(OwnerRecord::Parameter(parameter)) =
-            snapshot.owners.get(&OwnerKey::Parameter(*id))
-        else {
+        intrinsic_visit(read, work, maximum)?;
+        let Some(OwnerRecord::Parameter(parameter)) = read.owner(OwnerKey::Parameter(*id))? else {
             return Err(signature_error("external parameter is missing"));
         };
         if parameter.use_mode != ParameterUse::Unrestricted
             || parameter.resource_requirement.is_some()
         {
-            return Err(signature_error("external cannot use or bind resources"));
+            return Err(parameter_diagnostic(
+                signature_error("external cannot use or bind resources"),
+                *id,
+            ));
         }
-        parameters.push(kernel_type(snapshot, parameter.ty, 0, work, maximum)?);
+        parameters.push(
+            kernel_type(read, parameter.ty, 0, work, maximum)
+                .map_err(|diagnostic| parameter_diagnostic(diagnostic, *id))?,
+        );
     }
-    let result = kernel_type(snapshot, external.result, 0, work, maximum)?;
+    let result = kernel_type(read, external.result, 0, work, maximum)?;
     validate_shape(
         external.implementation.as_str(),
         &IntrinsicSignature {
@@ -458,31 +484,63 @@ pub(crate) fn validate_kernel_intrinsic(
             effectful: false,
         },
     )
+    .map_err(|failure| match failure.parameter {
+        Some(index) => parameter_diagnostic(failure.diagnostic, external.parameters[index]),
+        None => failure.diagnostic,
+    })
+}
+
+fn parameter_diagnostic(
+    mut diagnostic: Diagnostic,
+    parameter: super::semantic_id::ParameterId,
+) -> Diagnostic {
+    diagnostic.notes.push(format!(
+        "semantic owner: {}",
+        OwnerKey::Parameter(parameter)
+    ));
+    diagnostic
 }
 fn signature_error(message: &str) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Semantic, "intrinsic_signature", message)
 }
-fn kernel_type(
-    snapshot: &KernelSnapshot,
+fn intrinsic_visit<R: ExpressionRead + ?Sized>(
+    read: &R,
+    work: &mut usize,
+    maximum: usize,
+) -> Result<(), Diagnostic> {
+    read.validation_checkpoint()?;
+    *work = work
+        .checked_add(1)
+        .filter(|next| *next <= maximum)
+        .ok_or_else(|| {
+            Diagnostic::new(
+                DiagnosticClass::Resource,
+                "kernel_full_work",
+                "intrinsic signature exhausted canonical validation visits",
+            )
+        })?;
+    Ok(())
+}
+
+fn kernel_type<R: ExpressionRead + ?Sized>(
+    read: &R,
     digest: TypeObjectDigest,
     depth: usize,
     work: &mut usize,
     maximum: usize,
 ) -> Result<IntrinsicType, Diagnostic> {
-    *work = work.saturating_add(1);
-    if *work > maximum || depth > super::kernel::contract::MAXIMUM_TYPE_DEPTH {
+    intrinsic_visit(read, work, maximum)?;
+    if depth > super::kernel::contract::MAXIMUM_TYPE_DEPTH {
         return Err(Diagnostic::new(
             DiagnosticClass::Resource,
             "kernel_full_work",
             "intrinsic signature exhausted canonical validation visits or type depth",
         ));
     }
-    let object = snapshot
-        .types
-        .get(&digest)
-        .or_else(|| snapshot.dependency_types.get(&digest))
+    let object = read
+        .type_object(digest)?
         .ok_or_else(|| signature_error("external type is missing"))?;
-    let mut child = |digest| kernel_type(snapshot, digest, depth + 1, work, maximum);
+    let mut child = |digest| kernel_type(read, digest, depth + 1, work, maximum);
     Ok(match &object.form {
         TypeForm::Unit => IntrinsicType::Unit,
         TypeForm::Bool => IntrinsicType::Bool,

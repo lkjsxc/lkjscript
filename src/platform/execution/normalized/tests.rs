@@ -2853,7 +2853,8 @@ fn strict_graph9_artifact_prepares_only_dense_runtime_bindings() {
     assert_eq!(program.work.packages, 1);
     assert_eq!(program.work.compiler_units, 11);
     assert_eq!(program.work.runtime_owners, 12);
-    assert_eq!(program.work.type_objects, 4);
+    // The real zero-argument external returns Option<Unit>, adding one admitted type.
+    assert_eq!(program.work.type_objects, 5);
     assert_eq!(program.work.functions, 5);
     assert_eq!(program.work.record_layouts, 1);
     assert_eq!(program.work.variant_layouts, 1);
@@ -4200,7 +4201,7 @@ fn dense_vm_executes_pure_external_test_and_capability_paths() {
             &control,
         )
         .expect("direct external dense invocation");
-    assert_eq!(external, NormalizedValue::Unit);
+    assert_eq!(external, NormalizedValue::Option(None));
     assert_eq!(external_observation.external_calls, 1);
 
     let (actual, expected) = vm

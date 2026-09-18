@@ -57,6 +57,8 @@ pub use prepare::{
     PreparedChangeAnalysis, prepare_change_analysis, prepare_change_analysis_with_budget,
 };
 pub(crate) use repair::prepare_repair_analysis;
+#[cfg(test)]
+pub(crate) use request::authored_source_owners;
 pub use request::{
     AuthoredAnnotationValue, AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference,
     AuthoredChange, AuthoredChangeSet, AuthoredDeclarationReference, AuthoredDeletePolicy,
@@ -77,7 +79,8 @@ pub use request::{
     ResolvedReferencePackage, lower_authored_changes,
 };
 pub(crate) use request::{
-    authored_source_owners, canonical_authored_budget_bytes, canonical_authored_intent_bytes,
+    canonical_authored_budget_bytes, canonical_authored_intent_bytes,
+    lower_authored_changes_with_source_owners,
 };
 pub use summary_delta::{
     OwnerSummaryEdit, SummaryDelta, derive_summary_delta, derive_summary_delta_for,

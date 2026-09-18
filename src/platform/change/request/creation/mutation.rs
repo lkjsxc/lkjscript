@@ -750,11 +750,13 @@ fn lower_limits(limits: &[AuthoredResourceLimit]) -> Vec<ResourceLimit> {
 }
 
 fn mutation_kind(expected: &str, owner: OwnerKey) -> Diagnostic {
-    request_error(
+    let mut diagnostic = request_error(
         DiagnosticClass::Semantic,
         "change_mutation_owner_kind",
         format!("selected owner {owner:?} is not a {expected}"),
-    )
+    );
+    diagnostic.notes.push(format!("semantic owner: {owner}"));
+    diagnostic
 }
 
 fn mutation_corrupt(code: &'static str, message: &'static str) -> Diagnostic {

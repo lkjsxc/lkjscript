@@ -3131,8 +3131,8 @@ mod tests {
     use crate::platform::kernel::{
         DeclarationPayload, DeclarationRecord, DeclarationReference, DeclarationVisibility,
         ExternalDeclaration, FieldRecord, ImplementationName, KernelSnapshot, ModuleRecord,
-        OwnerHeader, OwnerRecord, StructuralTypeField, TypeForm, TypeObjectInterner, encode_owner,
-        extract_relations,
+        OwnerHeader, OwnerRecord, StructuralTypeField, TypeForm, TypeObject, TypeObjectInterner,
+        encode_owner, extract_relations,
     };
     use crate::platform::semantic_id::{DeclarationId, FieldId, ModuleId};
     use crate::platform::storage::object::{ObjectDomain, ObjectKey};
@@ -3519,6 +3519,9 @@ mod tests {
             let result = interner
                 .intern(TypeForm::StructuralRecord { fields })
                 .expect("maximum context structural result");
+            let result = interner
+                .intern(TypeForm::Option { item: result })
+                .expect("maximum context registered intrinsic result");
             let declaration_id =
                 DeclarationId::migrate(b"maximum-context-source", source_ordinal as u64);
             let declaration = OwnerKey::Declaration(declaration_id);
@@ -3534,7 +3537,7 @@ mod tests {
                         type_parameters: Vec::new(),
                         parameters: Vec::new(),
                         result,
-                        implementation: ImplementationName::new("maximum_context_source")
+                        implementation: ImplementationName::new("core.option.none")
                             .expect("maximum context implementation"),
                     }),
                 }),
@@ -3572,6 +3575,9 @@ mod tests {
         let unit = interner
             .intern(TypeForm::Unit)
             .expect("owner-limit unit type");
+        let result = interner
+            .intern(TypeForm::Option { item: unit })
+            .expect("owner-limit registered intrinsic result");
         for ordinal in 0..neighbor_count {
             let declaration_id = DeclarationId::migrate(b"owner-limit-context", ordinal as u64 + 1);
             let declaration = OwnerKey::Declaration(declaration_id);
@@ -3586,8 +3592,8 @@ mod tests {
                     payload: DeclarationPayload::External(ExternalDeclaration {
                         type_parameters: Vec::new(),
                         parameters: Vec::new(),
-                        result: unit,
-                        implementation: ImplementationName::new("owner_limit_context")
+                        result,
+                        implementation: ImplementationName::new("core.option.none")
                             .expect("owner-limit implementation name"),
                     }),
                 }),
@@ -5394,6 +5400,12 @@ mod tests {
         snapshot
             .types
             .retain(|digest, _object| *digest == unit_type);
+        let result_object = TypeObject::new(TypeForm::Option { item: unit_type })
+            .expect("scale registered intrinsic result");
+        let result = crate::platform::kernel::encode_type_object(&result_object)
+            .expect("scale registered intrinsic encoding")
+            .0;
+        snapshot.types.insert(result, result_object);
         snapshot.owners.insert(
             module,
             OwnerRecord::Module(ModuleRecord {
@@ -5415,8 +5427,8 @@ mod tests {
                     payload: DeclarationPayload::External(ExternalDeclaration {
                         type_parameters: Vec::new(),
                         parameters: Vec::new(),
-                        result: unit_type,
-                        implementation: ImplementationName::new("scale_host")
+                        result,
+                        implementation: ImplementationName::new("core.option.none")
                             .expect("scale external implementation"),
                     }),
                 }),

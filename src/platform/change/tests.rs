@@ -250,6 +250,60 @@ fn interface_change_uses_reverse_relations_for_validation_and_compiler_impact() 
 }
 
 #[test]
+fn signature_impact_checks_the_dependent_port_against_the_full_validation_oracle() {
+    let base = crate::platform::kernel::tests::witness_snapshot();
+    let base_witness = rebuild_full_witness(&base).unwrap();
+    let caller = declaration_named(&base, "caller");
+    let (port, component) = base
+        .owners
+        .iter()
+        .find_map(|(owner, record)| match record {
+            OwnerRecord::Port(record) => Some((*owner, OwnerKey::Declaration(record.declaration))),
+            _ => None,
+        })
+        .unwrap();
+    let callable = base
+        .types
+        .iter()
+        .find_map(|(digest, object)| {
+            matches!(
+                object.form,
+                crate::platform::kernel::TypeForm::TaskFunction { .. }
+            )
+            .then_some(*digest)
+        })
+        .unwrap();
+    let mut changed = base.owners[&caller].clone();
+    let OwnerRecord::Declaration(record) = &mut changed else {
+        panic!("caller declaration")
+    };
+    let DeclarationPayload::Function(function) = &mut record.payload else {
+        panic!("caller function")
+    };
+    function.result = callable;
+    let delta = replace_owner_delta(&base, caller, changed);
+    let overlay = KernelOverlay::new(&base, &delta);
+    let full_errors = validate_full(&overlay.materialize_logical_oracle()).unwrap_err();
+    assert!(
+        full_errors
+            .iter()
+            .any(|error| error.code == "kernel_type_port_function")
+    );
+    let derived = derive_local_delta(&overlay, &delta, &base_witness).unwrap();
+    let plan = plan_impact_and_summaries(&overlay, &delta, &derived, &base_witness).unwrap();
+    assert!(plan.plan.semantically_checked.contains(&port));
+    assert!(plan.plan.semantically_checked.contains(&component));
+    assert!(plan.plan.compiler_units.contains(&component));
+    assert!(!plan.plan.compiler_units.contains(&port));
+    let incremental_errors = prepare_change_analysis(&base, &base_witness, delta).unwrap_err();
+    assert!(
+        incremental_errors
+            .iter()
+            .any(|error| error.code == "kernel_type_port_function")
+    );
+}
+
+#[test]
 fn private_implementation_change_walks_behavior_edges_to_dependent_tests() {
     let base = crate::platform::kernel::tests::witness_snapshot();
     let base_witness = rebuild_full_witness(&base).expect("base witness");

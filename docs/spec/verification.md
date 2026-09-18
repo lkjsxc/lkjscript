@@ -4,6 +4,16 @@ Status: normative.
 
 ## Independent correctness mechanisms
 
+Callable input evolution extends the existing offline-package owner with an ordinary numerical
+producer and separately authored exact consumer. Public edits retain function, parameter, port
+and target identities while changing F64 samples to enabled nominal readings. Omitted body/port
+repairs and dependency-only replacement must reject with accepted HEAD unchanged; complete
+repairs publish atomically. The witness requires independent arithmetic, canonical-reference /
+production equality, old-pin and old-bundle behavior, and artifact execution after owned authoring
+repositories are unavailable. Focused public tests cover review/retry, defining generic scope,
+task/operation parameters and located failures; the compiler owner compares clean and incremental
+results after a signature edit. This adds no numerical performance or operational-data claim.
+
 Explicit effects extend the existing offline-package owner, without another public aggregate child.
 Receipt 7 requires the separately authored transported task library, a pure effect-parametric bound
 factory, parametric/recursive payloads, complete paginated definitions and interfaces, distinct
@@ -869,7 +879,8 @@ migration, effect replay or implicit runtime fallback.
 
 ## Requirement-parametric library obligations
 
-The offline-package owner's current receipt generation is 14. It includes the literal
+The offline-package owner's current receipt generation is 15. It includes the input-evolution
+witness above and the literal
 `requirement-parameters` workload in its existing owner, covering producer-owned typed-cell
 operations/transactions, T/E/R applications and pure factories, distinct caller requirements,
 transported execution, completed lexical transaction results, independent typed-byte/store observations,

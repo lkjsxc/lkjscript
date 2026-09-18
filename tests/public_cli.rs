@@ -6,6 +6,9 @@
 
 mod support;
 
+#[path = "public_cli/parameter_type.rs"]
+mod parameter_type;
+
 use lkjscript::platform::contract::MAXIMUM_CLI_RESPONSE_BYTES;
 use lkjscript::platform::control::{CompactRecord, decode_logical_change_plan, parse_records};
 use serde_json::Value;
@@ -1070,6 +1073,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "set.type-parameter-constraint",
             "set.field-type",
             "set.case-payload",
+            "set.parameter-type",
             "add.parameter",
             "add.requirement",
             "add.port",
@@ -1091,7 +1095,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .iter()
         .filter(|record| record.operation == "change.operation-field")
         .collect::<Vec<_>>();
-    assert_eq!(operation_fields.len(), 146);
+    assert_eq!(operation_fields.len(), 148);
     assert!(change_section.iter().any(|record| {
         record.operation == "change.edge-field"
             && compact_field(record, "edge") == Some("requirement-parameter.operation")

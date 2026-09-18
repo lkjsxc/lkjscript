@@ -150,6 +150,31 @@ fn change_grammar_markdown(snapshot: &CapabilitiesSnapshot) -> Result<String, St
     output.push_str(
         "The second initializer reads the earlier `value`; the body reads the new binding. Each occurrence and binder has distinct ownership. Only the root is exported, and it must be consumed exactly once. Nested nodes cannot be addressed by outer flat edges. All 22 structural forms, explicit application clauses, lexical rules and flat fields are advertised below. The [change input specification](../spec/semantic-cli.md#structural-expression-bodies) explains framing, review and compatibility.\n\n",
     );
+    output.push_str(
+        "## Evolve an existing input\n\nUse `set.parameter-type parameter=OWNER type=TYPE` to preserve an existing parameter's identity, parent, name, position, use mode and requirement binding. `set.function-contract` changes a function's result and effect. Both validate the complete final candidate; repair affected calls, bodies and ports explicitly in that same request. Foreign package owners remain immutable.\n\nFor a command that currently accepts one F64 sample, bind `$module`, `$function`, `$input` and `$port` with `reference.owner` in the current project, and prepend `request base=REVISION` with its actual status revision. This changes the sample to an enabled reading and repairs the body and port together:\n\n",
+    );
+    output.push_str(
+        r#"```text
+create.record as=$Reading module=$module name=Reading visibility=public
+add.field as=$value record=$Reading name=value type=f64
+add.field as=$enabled record=$Reading name=enabled type=bool
+type.named as=@Reading declaration=$Reading
+set.parameter-type parameter=$input type=@Reading
+expression.block as=$body
+  (if (field (local $input) $enabled)
+    (field (local $input) $value)
+    (f64 0.0))
+expression.end
+replace.body function=$function body=$body
+type.function as=@Input result=f64
+type.argument parent=@Input index=0 type=@Reading
+set.port-contract port=$port type=@Input
+```
+
+Review the complete input with `change plan --input-file PATH`, then submit the identical input with `change apply --input-file PATH --plan TOKEN`. Inspection shows the retained parameter with its new type. Omitted repairs, stale reviews and changed inputs reject before publication. Identity continuity does not imply caller or wire compatibility; retain older exact packages and matching bundles/descriptors for recovery. See the [input evolution contract](../spec/semantic-cli.md#evolving-callable-inputs).
+
+"#,
+    );
     append_registry_sections(
         &mut output,
         snapshot,

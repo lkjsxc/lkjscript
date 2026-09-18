@@ -500,11 +500,14 @@ fn named_reference_preconditions_resolve_only_existing_local_base_owners() {
 fn named_reference_resolution_propagates_cancellation_without_publication() {
     use crate::platform::change::{
         CanonicalBaseRead, CanonicalRead, WitnessBaseRead, lower_authored_changes,
+        lower_authored_changes_with_source_owners,
     };
     use crate::platform::execution::ExecutionControl;
+    use std::cell::Cell;
     struct CancelledBase<'a> {
         view: &'a crate::platform::publication::RepositoryView,
         control: ExecutionControl,
+        owner_reads: Cell<u64>,
     }
     impl CanonicalBaseRead for CancelledBase<'_> {
         fn semantic_root(&self) -> &SemanticRoot {
@@ -532,6 +535,7 @@ fn named_reference_resolution_propagates_cancellation_without_publication() {
             &self,
             owner: OwnerKey,
         ) -> Result<CanonicalRead<Option<OwnerRecord>>, Diagnostic> {
+            self.owner_reads.set(self.owner_reads.get() + 1);
             self.control.check().map_err(|_| {
                 Diagnostic::new(
                     DiagnosticClass::Cancelled,
@@ -578,19 +582,162 @@ fn named_reference_resolution_propagates_cancellation_without_publication() {
     let request = decode_compact_change("cancel.lkjc", format!("request base={before}\nreference.owner as=$m package=local class=module name=first\nreference.owner as=$f package=local class=declaration name=callee parent=$m\nrename.owner owner=$f name=renamed\n").as_bytes()).unwrap();
     let view = created.repository.view_current().unwrap();
     assert!(view.witness_contract_is_current());
-    let base = CancelledBase {
-        view: &view,
-        control: ExecutionControl::cancel_after_checks(1),
-    };
-    let error = lower_authored_changes(&base, &view, &request.semantic).unwrap_err();
-    assert_eq!(error.class, DiagnosticClass::Cancelled);
-    assert!(base.control.is_cancelled());
+    let mut baseline_reads = None;
+    for retain_sources in [false, true] {
+        let base = CancelledBase {
+            view: &view,
+            control: ExecutionControl::cancel_after_checks(1),
+            owner_reads: Cell::new(0),
+        };
+        let mut owners = BTreeMap::new();
+        let error = if retain_sources {
+            lower_authored_changes_with_source_owners(
+                &base,
+                &view,
+                &request.semantic,
+                Some(&mut owners),
+            )
+        } else {
+            lower_authored_changes(&base, &view, &request.semantic)
+        }
+        .unwrap_err();
+        assert_eq!(error.class, DiagnosticClass::Cancelled);
+        assert!(base.control.is_cancelled());
+        assert!(owners.is_empty());
+        assert!(base.owner_reads.get() > 0);
+        assert_eq!(
+            base.owner_reads.get(),
+            *baseline_reads.get_or_insert(base.owner_reads.get()),
+            "retaining diagnostic sources cannot repeat a cancelled resolution",
+        );
+    }
     assert_eq!(created.repository.current().unwrap().head.revision, before);
     let prepared = created
         .repository
         .prepare_authored_change(&request.semantic, request.options)
         .unwrap();
     created.repository.publish(&prepared.publication).unwrap();
+}
+
+#[test]
+fn parameter_type_diagnostic_sources_reuse_bounded_import_resolution() {
+    use crate::platform::change::{
+        BudgetedCanonicalBase, BudgetedWitnessBase, lower_authored_changes,
+        lower_authored_changes_with_source_owners,
+    };
+
+    let temporary = tempfile::tempdir().unwrap();
+    let producer = GraphRepository::create(
+        &temporary.path().join("producer"),
+        &empty(b"diagnostic-source-producer"),
+        None,
+    )
+    .unwrap();
+    let (_, produced) = prepare(
+        &producer.repository,
+        "",
+        "create.module as=$m name=library\nexpression.unit as=$body\ncreate.function as=$f module=$m name=value visibility=public result=unit effect=pure body=$body\n",
+    )
+    .unwrap();
+    let function = produced.allocated["$f"];
+    producer.repository.publish(&produced.publication).unwrap();
+    let exported = producer.repository.export_package_transport().unwrap();
+    let consumer = GraphRepository::create(
+        &temporary.path().join("consumer"),
+        &crate::platform::kernel::tests::witness_snapshot(),
+        None,
+    )
+    .unwrap();
+    consumer
+        .repository
+        .stage_package_transport(exported.transport_digest, &exported.container)
+        .unwrap();
+    let package = exported.revision.package;
+    let (_, dependency) = prepare(
+        &consumer.repository,
+        "",
+        &format!(
+            "add.dependency package={package} semantic-revision={} package-revision={}\n",
+            exported.revision.revision.revision_id().unwrap(),
+            exported.revision_digest,
+        ),
+    )
+    .unwrap();
+    consumer
+        .repository
+        .publish(&dependency.publication)
+        .unwrap();
+    let before = consumer.repository.current().unwrap().head.revision;
+    let input = format!(
+        "request base={before}\n\
+         reference.package as=$p package={package} package-revision={}\n\
+         reference.owner as=$imported package=$p class=declaration name=value\n\
+         reference.owner as=$m package=local class=module name=first\n\
+         set.parameter-type parameter=$m type=f64\n",
+        exported.revision_digest,
+    );
+    let request = decode_compact_change("bounded-source.lkjc", input.as_bytes()).unwrap();
+    let view = consumer.repository.view_current().unwrap();
+    let mut baseline = None;
+    for retain_sources in [false, true] {
+        let canonical = BudgetedCanonicalBase::new(
+            &view,
+            request.semantic.budget.canonical_reads,
+            Default::default(),
+        )
+        .unwrap();
+        let witness = BudgetedWitnessBase::new(
+            &view,
+            request.semantic.budget.witness_reads,
+            Default::default(),
+        )
+        .unwrap();
+        let mut owners = BTreeMap::new();
+        let mut error = if retain_sources {
+            lower_authored_changes_with_source_owners(
+                &canonical,
+                &witness,
+                &request.semantic,
+                Some(&mut owners),
+            )
+        } else {
+            lower_authored_changes(&canonical, &witness, &request.semantic)
+        }
+        .unwrap_err();
+        assert_eq!(error.code, "change_mutation_owner_kind");
+        let work = (canonical.work(), witness.work());
+        assert!(work.0.point_reads > 0 && work.0.objects_read > 0);
+        assert_eq!(work, *baseline.get_or_insert(work));
+        if retain_sources {
+            assert_eq!(owners["$imported"], function);
+            request.origins.locate(&mut error, &owners);
+            assert_eq!(error.location.as_ref().unwrap().line, 5);
+            assert_eq!(work, (canonical.work(), witness.work()));
+        }
+    }
+
+    // Exhaustion during the same imported prelude must stop before another point read. Keeping
+    // source locations cannot grant a fresh quota or return partially resolved alias authority.
+    let mut exhausted = request.semantic.clone();
+    exhausted.budget.canonical_reads.maximum_point_reads = 0;
+    let canonical =
+        BudgetedCanonicalBase::new(&view, exhausted.budget.canonical_reads, Default::default())
+            .unwrap();
+    let witness =
+        BudgetedWitnessBase::new(&view, exhausted.budget.witness_reads, Default::default())
+            .unwrap();
+    let mut owners = BTreeMap::new();
+    let error = lower_authored_changes_with_source_owners(
+        &canonical,
+        &witness,
+        &exhausted,
+        Some(&mut owners),
+    )
+    .unwrap_err();
+    assert_eq!(error.class, DiagnosticClass::Resource);
+    assert_eq!(canonical.work().point_reads, 0);
+    assert!(owners.is_empty());
+    assert_eq!(consumer.repository.current().unwrap().head.revision, before);
 }
 
 #[test]

@@ -1,0 +1,17 @@
+reference.owner as=$library-energy package=$library class=declaration name=energy
+reference.owner as=$Reading package=$library class=declaration name=Reading
+reference.owner as=$module package=local class=module name=reading-command
+reference.owner as=$command package=local class=declaration parent=$module name=calculate
+reference.owner as=$items package=local class=parameter parent=$command name=items
+reference.owner as=$component package=local class=declaration parent=$module name=command
+reference.owner as=$port package=local class=port parent=$component name=energy
+type.named as=@Reading declaration=$Reading
+type.list as=@Readings item=@Reading
+set.parameter-type parameter=$items type=@Readings
+expression.block as=$body
+  (call $library-energy (local $items))
+expression.end
+replace.body function=$command body=$body
+type.function as=@Energy result=f64
+type.argument parent=@Energy index=0 type=@Readings
+set.port-contract port=$port type=@Energy

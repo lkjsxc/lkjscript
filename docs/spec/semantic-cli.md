@@ -301,6 +301,70 @@ transactions. Nested shapes may use ordered flat fragment records with explicit 
 edges, or structural expression bodies. Request-local labels are notation only; normalized authored
 intent owns stable allocation and request commitment.
 
+### Evolving callable inputs
+
+`set.parameter-type parameter=OWNER type=TYPE` changes one existing callable input through the
+ordinary reviewed typed change. `parameter` accepts an exact local `param_...` owner or a typed
+request alias, including `reference.owner ... class=parameter`; `type` accepts the existing type
+reference forms, including declared `@` types. Same-request symbols follow ordinary ordered
+authored-change rules. Only the type changes: parameter identity, parent, name, positional
+membership/order, use mode and exact requirement binding are preserved. `set.function-contract`
+instead changes a function's result and effect. Neither operation grants execution authority.
+
+The common parameter owner covers local functions, task functions, external functions and
+interface operations. Existing intrinsic signatures, interface admission, resource use, lexical
+scope and generic substitutions remain authoritative. A type parameter must belong to the
+parameter's defining context, regardless of other declarations in the input. Imported immutable
+parameters cannot be mutated. Complete final-candidate validation includes unused arguments and
+unreachable syntax; a retained identity does not make old direct calls, bound callable types,
+tests or ports compatible. Repair them explicitly in the same request, then review and publish
+the complete candidate once. Unknown, duplicate or missing fields reject with located diagnostics.
+
+For example, after binding an existing module, F64 function input and function-backed port as
+`$module`, `$function`, `$input` and `$port` through `reference.owner`, this body changes the input
+to a public structured reading. Prepend the actual `request base=REVISION` and the bindings:
+
+```text
+create.record as=$Reading module=$module name=Reading visibility=public
+add.field as=$value record=$Reading name=value type=f64
+add.field as=$enabled record=$Reading name=enabled type=bool
+type.named as=@Reading declaration=$Reading
+set.parameter-type parameter=$input type=@Reading
+expression.block as=$body
+  (if (field (local $input) $enabled)
+    (field (local $input) $value)
+    (f64 0.0))
+expression.end
+replace.body function=$function body=$body
+type.function as=@Input result=f64
+type.argument parent=@Input index=0 type=@Reading
+set.port-contract port=$port type=@Input
+```
+
+Use `change plan --input-file PATH`, inspect the changed owner/type and affected contracts, then
+apply the identical request with its plan token. Existing request commitments, exact owner
+bindings, stale-review rejection, under-lock validation and immutable idempotent retry results
+apply. Invalid, cancelled or exhausted edits cannot partially publish the new signature.
+
+A library must evolve in its own repository and export a new exact package revision. An old
+consumer pin retains the old contract. Replacing that dependency may require a single coordinated
+edit to the consumer's input, body and port. No implicit coercions, wrappers or call-site repair
+are introduced. Old artifacts, running processes, deployments and application data retain their
+own identities and contracts; preserve matching older bundles and descriptors for recovery.
+Restoring an old contract requires a new accepted successor, not rewriting history.
+
+The compact compatibility identity changes when this record is exposed. The existing typed
+`SetParameterType` encoding (authored codec tag 25) and graph/compiler/artifact/data formats do not
+change. Older adapters reject the unknown spelling. Changed capabilities invalidate old review
+tokens under the existing re-plan rules below, including accepted retries; they do not silently
+reinterpret a reviewed request or allocate another accepted result.
+
+Input evolution also relies on current validation of the exact affected ports and closed external
+signatures. The validator contract detects corrections to those checks independently of storage
+formats. Historical acceptance remains immutable: current validation may reject an old invalid
+signature, and a complete reviewed successor can repair it without changing the parameter identity.
+Old acceptance evidence cannot authorize present execution of invalid meaning.
+
 ### Structural expression bodies
 
 A change request may define an expression root with one block:

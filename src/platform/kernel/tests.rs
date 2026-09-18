@@ -69,7 +69,7 @@ fn expression(
     id
 }
 
-fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
+fn historical_prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
     let package = PackageId::migrate(TEST_SEED, 0);
     let first_module = ModuleId::migrate(TEST_SEED, 0);
     let second_module = ModuleId::migrate(TEST_SEED, 1);
@@ -617,8 +617,34 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
     )
 }
 
+fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
+    let (mut snapshot, ids) = historical_prototype_snapshot();
+    for owner in snapshot.owners.values_mut() {
+        if let OwnerRecord::Declaration(DeclarationRecord {
+            payload: DeclarationPayload::External(external),
+            ..
+        }) = owner
+        {
+            let ty = TypeObject::new(TypeForm::Option {
+                item: external.result,
+            })
+            .unwrap();
+            let digest = encode_type_object(&ty).unwrap().0;
+            snapshot.types.insert(digest, ty);
+            external.result = digest;
+            external.implementation = ImplementationName::new("core.option.none").unwrap();
+        }
+    }
+    (snapshot, ids)
+}
+
 pub(crate) fn witness_snapshot() -> KernelSnapshot {
     prototype_snapshot().0
+}
+
+/// Frozen predecessor bytes for encoding/allocation goldens, not a currently valid program.
+pub(crate) fn historical_witness_snapshot() -> KernelSnapshot {
+    historical_prototype_snapshot().0
 }
 
 /// Keep a fixture's exact task port signature in step with an intentionally changed target row.
@@ -671,27 +697,9 @@ pub(crate) fn update_fixture_task_port_row(snapshot: &mut KernelSnapshot, functi
     }
 }
 
-/// Package-admission fixture: the frozen kernel/host-dispatch fixture above deliberately has a
-/// test-only host name. A transported source must use the real closed intrinsic registry.
+/// Local acceptance and package transport share the same closed intrinsic contract.
 pub(crate) fn transport_snapshot() -> KernelSnapshot {
-    let mut snapshot = witness_snapshot();
-    for owner in snapshot.owners.values_mut() {
-        if let OwnerRecord::Declaration(DeclarationRecord {
-            payload: DeclarationPayload::External(external),
-            ..
-        }) = owner
-        {
-            let ty = TypeObject::new(TypeForm::Option {
-                item: external.result,
-            })
-            .unwrap();
-            let digest = encode_type_object(&ty).unwrap().0;
-            snapshot.types.insert(digest, ty);
-            external.result = digest;
-            external.implementation = ImplementationName::new("core.option.none").unwrap();
-        }
-    }
-    snapshot
+    witness_snapshot()
 }
 
 fn encoded_owner(snapshot: &KernelSnapshot, owner: OwnerKey) -> (OwnerObjectDigest, Vec<u8>) {
@@ -708,11 +716,22 @@ fn owner_digests(snapshot: &KernelSnapshot) -> BTreeMap<OwnerKey, OwnerObjectDig
 }
 
 #[test]
+fn current_validation_rejects_the_historical_unregistered_external_fixture() {
+    let (snapshot, _) = historical_prototype_snapshot();
+    let diagnostics = validate_full(&snapshot).expect_err("unregistered historical external");
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "intrinsic_unknown")
+    );
+}
+
+#[test]
 fn normalized_prototype_passes_full_oracle() {
     let (snapshot, _) = prototype_snapshot();
     let report = validate_full(&snapshot).expect("prototype must pass the full oracle");
     assert_eq!(report.owners_checked, 43);
-    assert_eq!(report.type_objects_checked, 2);
+    assert_eq!(report.type_objects_checked, 3);
     assert_eq!(report.expression_records_checked, 20);
     assert_eq!(report.relation_edges, 64);
     assert!(report.work_consumed < 1_000);
@@ -1762,7 +1781,7 @@ fn canonical_kernel_codec_manifest_is_frozen() {
         crate::platform::semantic_id::encode_hex(hasher.finalize().as_bytes())
     }
 
-    let (mut snapshot, _) = prototype_snapshot();
+    let (mut snapshot, _) = historical_prototype_snapshot();
     assert_eq!(
         manifest(&snapshot, contract::GRAPH_CONTRACT_IDENTITY),
         "6469f29fb9d33af7e62d491602de53106aaa2b57f18045c1001923c5ce815211"

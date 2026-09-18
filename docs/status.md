@@ -1,8 +1,34 @@
 # Current status
 
-Status date: 2026-09-17 UTC. This file describes implemented checkout reality. Executable-derived
+Status date: 2026-09-18 UTC. This file describes implemented checkout reality. Executable-derived
 public guides live under [generated](generated), including the
 [operation guide](generated/operations.md); this file does not duplicate them.
+
+## Callable input evolution
+
+The [input-evolution increment](campaigns/202609180608.md#execution-additions) exposes reviewed
+`set.parameter-type parameter=OWNER type=TYPE`. Exact selectors and typed aliases retain the
+parameter's identity, parent, name, position, use mode and requirement binding. Ordinary body,
+caller, port and exact dependency repairs can publish together in one complete candidate.
+The copied-product witness transports a sum-of-squares library from `List<F64>` to enabled
+`Reading` records, preserves its helper/library/consumer input identities, rejects incomplete
+repairs, and executes both retained bundles after removing the disposable authoring projects.
+Independent integer results, reference/production comparison and clean/incremental artifact equality
+pass. An independent fresh agent completed the same public task without implementation assistance;
+its discovery failures and scope are retained in the campaign.
+
+Compact contract 23 adds the public spelling; authored codec 17/tag 25 and graph/compiler/artifact/
+application-data formats stay unchanged. Two demonstrated admission gaps required semantic
+validator 17: affected ports must be checked themselves, and local fixed externals must satisfy
+the existing closed intrinsic registry. Historical acceptance stays intact, current validity is
+rechecked, and an invalid predecessor contract can be repaired through a new reviewed request.
+Authenticated P executes the new witness artifact for the tested small workload.
+
+This is an unpublished mainline increment; immutable v0.1.38 does not acquire the operation.
+No version bump, release dispatch or operational-data migration is selected. Publication is due
+when a concrete consumer needs this path installed, an explicit release is requested, or a usable
+authoring milestone containing it is selected. Final source-bound integration evidence is recorded
+at the campaign ending.
 
 ## Release delivery cutover
 
@@ -29,10 +55,17 @@ available, with earliest observed expiry 2026-10-01T17:30:28Z. The
 [consume correction](campaigns/202609180528.md) makes unavailable/cancelled authority and inconsistent
 process/state results fail at the workflow wrapper and terminal. Verified implementation
 `3f5281d84cb01f6c13f69278e0d7a4a5c6015e79` is integrated into remote main. Its
-[consumer 35272533706/1](https://github.com/lkjsxc/lkjscript/actions/runs/35272533706) selects the
-original P producer and is running from that corrected controller source; hosted cutover closure
-remains incomplete. No new-format live publication has been exercised. The first public
-use is triggered by a useful selected public capability, important fix or explicit user request.
+[consumer 35272533706/1](https://github.com/lkjsxc/lkjscript/actions/runs/35272533706) selected the
+original P producer from that corrected controller source and completed successfully on
+2026-09-17 at 20:50:09Z. Its terminal reports
+`candidate_consumed_read_only`, determinate rejected promotion authority, and skipped candidate,
+publication and public-verification jobs. The rejection identifies the occupied annotated tag's
+different source; the small installed lifecycle passed with joined cleanup and zero product builds
+or heavy-owner invocations. The [dated predecessor ending](campaigns/202609180528.md#completed-consumer-reconciliation--2026-09-17)
+retains the earlier pending observation and final evidence. New-format live publication and anonymous
+public acquisition remain unexercised. Public delivery of the input-evolution increment is selected
+only by a concrete consumer requiring its installation, an explicit release request, or a deliberately
+selected usable authoring milestone containing it.
 
 ## Binary64 increment
 

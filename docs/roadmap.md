@@ -85,11 +85,14 @@ source/fault/recovery history. Its separate later manual-reader gap is recorded 
 not impose another release-reconstruction campaign. The [current summary](status.md#release-delivery-cutover)
 owns publication disposition.
 
-The [release cutover](campaigns/202609180007.md) addresses observed repeated delivery work:
-accept final neutral content once, promote unchanged assets and resume the failed boundary.
-No new public release is selected for infrastructure alone. First public use follows the next useful
-selected capability, important fix or explicit release request. After the cutover's selected proof,
-ordinary numerical/data-processing authoring can resume without another routine reconciliation.
+The [release cutover](campaigns/202609180007.md) and its
+[consume correction](campaigns/202609180528.md#completed-consumer-reconciliation--2026-09-17)
+completed the selected read-only proof: accept final neutral content once and consume the original
+assets through authenticated selection and the small installed lifecycle. Consumer `35272533706/1`
+succeeded with determinate rejected promotion authority; new-format live publication remains untested.
+The [input-evolution increment](campaigns/202609180608.md) selects mainline delivery only. Its public
+delivery trigger is a concrete consumer requiring installation, an explicit release request, or a
+deliberately selected usable authoring milestone containing it. No further feature is a prerequisite.
 Independent callback effects still require an application policy for replay and idempotency.
 
 Numerical algorithms and failure policy belong in ordinary graph libraries. After delivery,

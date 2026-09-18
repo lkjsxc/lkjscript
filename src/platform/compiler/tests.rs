@@ -1167,6 +1167,134 @@ fn structurally_empty_package_builds_one_valid_empty_manifest() {
 }
 
 #[test]
+fn parameter_type_edit_incremental_manifest_and_artifact_equal_a_clean_rebuild() {
+    let temporary = tempfile::tempdir().unwrap();
+    let created = GraphRepository::create(
+        &temporary.path().join("repository"),
+        &structurally_empty_snapshot(b"parameter-type-incremental"),
+        None,
+    )
+    .unwrap();
+    let initial = format!(
+        r#"request base={}
+create.module as=$module name=inputs
+add.parameter as=$sample function=$pick name=sample type=f64
+expression.block as=$body
+  (local $sample)
+expression.end
+create.function as=$pick module=$module name=pick visibility=public result=f64 effect=pure body=$body
+expression.block as=$caller-body
+  (call $pick (f64 3))
+expression.end
+create.function as=$caller module=$module name=caller visibility=public result=f64 effect=pure body=$caller-body
+expression.unit as=$unrelated-body
+create.function as=$unrelated module=$module name=unrelated visibility=private result=unit effect=pure body=$unrelated-body
+"#,
+        created.current.head.revision
+    );
+    let request =
+        crate::platform::control::decode_compact_change("initial.lkjc", initial.as_bytes())
+            .unwrap();
+    let prepared = created
+        .repository
+        .prepare_authored_change(&request.semantic, request.options)
+        .unwrap();
+    created.repository.publish(&prepared.publication).unwrap();
+    let module = prepared.allocated["$module"];
+    let pick = prepared.allocated["$pick"];
+    let caller = prepared.allocated["$caller"];
+    let sample = prepared.allocated["$sample"];
+    let before = created
+        .repository
+        .view_current()
+        .unwrap()
+        .owner(sample)
+        .unwrap()
+        .value
+        .unwrap();
+    let base = build_clean(
+        &created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .unwrap();
+    let evolved = format!(
+        r#"request base={}
+reference.owner as=$module package=local class=module name=inputs
+reference.owner as=$pick package=local class=declaration parent=$module name=pick
+reference.owner as=$sample package=local class=parameter parent=$pick name=sample
+create.record as=$Reading module={module} name=Reading visibility=public
+add.field as=$value record=$Reading name=value type=f64
+type.named as=@Reading declaration=$Reading
+set.parameter-type parameter={sample} type=@Reading
+expression.block as=$body
+  (field (local $sample) $value)
+expression.end
+replace.body function={pick} body=$body
+expression.block as=$caller
+  (call $pick (record $Reading (field $value (f64 3))))
+expression.end
+replace.body function={caller} body=$caller
+"#,
+        created.repository.current().unwrap().head.revision
+    );
+    let request =
+        crate::platform::control::decode_compact_change("evolved.lkjc", evolved.as_bytes())
+            .unwrap();
+    let prepared = created
+        .repository
+        .prepare_authored_change(&request.semantic, request.options)
+        .unwrap();
+    assert!(prepared.publication.compiler_units.contains(&pick));
+    assert!(prepared.publication.compiler_units.contains(&caller));
+    created.repository.publish(&prepared.publication).unwrap();
+    let OwnerRecord::Parameter(mut after) = created
+        .repository
+        .view_current()
+        .unwrap()
+        .owner(sample)
+        .unwrap()
+        .value
+        .unwrap()
+    else {
+        panic!("evolved parameter");
+    };
+    let OwnerRecord::Parameter(before) = before else {
+        panic!("original parameter")
+    };
+    assert_ne!(after.ty, before.ty);
+    after.ty = before.ty;
+    assert_eq!(after, before);
+    let incremental = build_incremental(
+        &created.repository,
+        base.manifest_digest,
+        &prepared.publication,
+    )
+    .unwrap();
+    assert_eq!(incremental.profile, CompilationBuildProfile::Incremental);
+    assert!(incremental.units_compiled >= 2);
+    assert!(incremental.units_reused >= 1);
+    let incremental_artifact =
+        link_artifact(&created.repository, incremental.manifest_digest, &[]).unwrap();
+    let clean = build_clean(
+        &created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .unwrap();
+    assert_eq!(incremental.manifest_digest, clean.manifest_digest);
+    assert_eq!(incremental.manifest_bytes, clean.manifest_bytes);
+    assert_eq!(incremental.manifest, clean.manifest);
+    let clean_artifact = link_artifact(&created.repository, clean.manifest_digest, &[]).unwrap();
+    assert_eq!(
+        incremental_artifact.artifact.bytes,
+        clean_artifact.artifact.bytes
+    );
+    assert_eq!(
+        incremental_artifact.artifact.bundle_digest,
+        clean_artifact.artifact.bundle_digest
+    );
+}
+
+#[test]
 fn body_edit_incremental_manifest_equals_a_clean_rebuild() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let caller = declaration_named(&snapshot, "caller");

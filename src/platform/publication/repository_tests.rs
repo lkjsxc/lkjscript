@@ -6013,12 +6013,14 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                     use_mode: crate::platform::kernel::ParameterUse::Unrestricted,
                     resource_requirement: None,
                 }],
-                result: AuthoredType::TypeParameter {
-                    parameter: AuthoredTypeParameterReference::Symbol {
-                        symbol: "$external_type".to_owned(),
-                    },
+                result: AuthoredType::Option {
+                    item: Box::new(AuthoredType::TypeParameter {
+                        parameter: AuthoredTypeParameterReference::Symbol {
+                            symbol: "$external_type".to_owned(),
+                        },
+                    }),
                 },
-                implementation: ImplementationName::new("identity_host").unwrap(),
+                implementation: ImplementationName::new("core.option.some").unwrap(),
             },
             AuthoredChange::CreateInterface {
                 symbol: "$interface".to_owned(),
@@ -6129,8 +6131,8 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
         .expect("all foundational owners must lower and validate through one request");
     assert_eq!(prepared.allocated.len(), 24);
     assert_eq!(prepared.publication.receipt.counts.owners_created, 26);
-    // Unit is reused; pure `() -> unit` is distinct from the fixture's task port type.
-    assert_eq!(prepared.publication.receipt.counts.type_objects_added, 3);
+    // Unit is reused. The new named record, T, Option<T> and pure `() -> unit` are distinct.
+    assert_eq!(prepared.publication.receipt.counts.type_objects_added, 4);
     assert_eq!(
         prepared.publication.receipt.validation.profile,
         ValidationProfile::IncrementalOwnerFrontier
@@ -6139,9 +6141,8 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
         prepared.publication.receipt.validation.full_oracle,
         FullOracleStatus::NotRun
     );
-    // Reusing accepted type objects performs exact point reads without adding duplicate type
-    // objects to the candidate authority.
-    assert_eq!(prepared.lowering_work.canonical.point_reads, 4);
+    // Each of those four types plus reused Unit requires one exact cached base read.
+    assert_eq!(prepared.lowering_work.canonical.point_reads, 5);
     assert!(matches!(
         created
             .repository
@@ -6368,12 +6369,14 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
                 external: DeclarationSelector::Id {
                     declaration: declaration_id(external),
                 },
-                result: AuthoredType::TypeParameter {
-                    parameter: AuthoredTypeParameterReference::Symbol {
-                        symbol: "$external_u".to_owned(),
-                    },
+                result: AuthoredType::Option {
+                    item: Box::new(AuthoredType::TypeParameter {
+                        parameter: AuthoredTypeParameterReference::Symbol {
+                            symbol: "$external_u".to_owned(),
+                        },
+                    }),
                 },
-                implementation: ImplementationName::new("identity_host_v2").unwrap(),
+                implementation: ImplementationName::new("core.option.some").unwrap(),
             },
             AuthoredChange::SetFunctionContract {
                 function: DeclarationSelector::Id {
@@ -6630,7 +6633,7 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
     let DeclarationPayload::External(external_payload) = external_record.payload else {
         panic!("mutated declaration must remain external")
     };
-    assert_eq!(external_payload.implementation.as_str(), "identity_host_v2");
+    assert_eq!(external_payload.implementation.as_str(), "core.option.some");
     assert!(
         external_payload
             .parameters
@@ -6652,9 +6655,18 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
     else {
         panic!("external parameter must remain readable")
     };
-    assert_eq!(external_parameter_record.ty, external_payload.result);
-    assert!(matches!(
+    assert_eq!(
         view.type_object(external_payload.result)
+            .unwrap()
+            .value
+            .unwrap()
+            .form,
+        TypeForm::Option {
+            item: external_parameter_record.ty,
+        }
+    );
+    assert!(matches!(
+        view.type_object(external_parameter_record.ty)
             .unwrap()
             .value
             .unwrap()

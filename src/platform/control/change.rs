@@ -2,6 +2,8 @@
 
 mod input;
 mod origins;
+#[cfg(test)]
+mod parameter_tests;
 mod preflight;
 mod references;
 mod structural;
@@ -39,8 +41,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-22";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 22;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-23";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 23;
 pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-17";
 pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 17;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
@@ -133,6 +135,7 @@ pub(crate) enum CompactChangeOperation {
     SetTypeParameterConstraint,
     SetFieldType,
     SetCasePayload,
+    SetParameterType,
     AddParameter,
     AddRequirement,
     AddPort,
@@ -151,7 +154,7 @@ pub(crate) enum CompactChangeOperation {
 }
 
 impl CompactChangeOperation {
-    pub(crate) const ALL: [Self; 37] = [
+    pub(crate) const ALL: [Self; 38] = [
         Self::ReferencePackage,
         Self::ReferenceOwner,
         Self::CreateModule,
@@ -174,6 +177,7 @@ impl CompactChangeOperation {
         Self::SetTypeParameterConstraint,
         Self::SetFieldType,
         Self::SetCasePayload,
+        Self::SetParameterType,
         Self::AddParameter,
         Self::AddRequirement,
         Self::AddPort,
@@ -988,6 +992,23 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
             CompactChangeOperationField {
                 name: "payload",
                 required: false,
+                form: FieldForm::TypeReference,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::SetParameterType,
+        name: "set.parameter-type",
+        fields: &[
+            CompactChangeOperationField {
+                name: "parameter",
+                required: true,
+                form: FieldForm::OwnerSelector,
+            },
+            CompactChangeOperationField {
+                name: "type",
+                required: true,
                 form: FieldForm::TypeReference,
             },
         ],
@@ -2636,6 +2657,13 @@ pub(crate) fn decode_compact_change(
     let parsed = input::parse(path, input)?;
     let mut origins = origins::InputOrigins::default();
     for record in &parsed.records {
+        if record.operation == "set.parameter-type"
+            && let Some(parameter) = field(record, "parameter")
+        {
+            origins
+                .mutations
+                .push((parameter.value.clone(), parameter.location.clone()));
+        }
         for field in &record.fields {
             origins
                 .tokens
@@ -3345,6 +3373,10 @@ impl Decoder {
                 payload: optional(record, "payload")
                     .map(|value| self.decode_type(value))
                     .transpose()?,
+            }),
+            CompactChangeOperation::SetParameterType => Ok(AuthoredChange::SetParameterType {
+                parameter: self.parse_owner_selector(record, "parameter")?,
+                ty: self.decode_type(required(record, "type")?)?,
             }),
             CompactChangeOperation::AddParameter => {
                 let parent = match (optional(record, "function"), optional(record, "operation")) {
@@ -5174,17 +5206,16 @@ mod tests {
             semantic.budget.impact.maximum_ownership_steps = 1_000_000;
             normalize_change_request(semantic, decoded.options).unwrap()
         }
-        let temporary = tempfile::tempdir().unwrap();
-        let mut logical = crate::platform::kernel::tests::witness_snapshot();
+        let mut logical = crate::platform::kernel::tests::historical_witness_snapshot();
         // This golden binds authentic predecessor request/base bytes, not a successor root.
         logical.root.graph_contract_version = 14;
         for owner in logical.owners.values_mut() {
             owner.set_encoding_for_edit(14);
         }
-        let created = crate::platform::publication::GraphRepository::create(
-            &temporary.path().join("meaning"),
-            &logical,
-            None,
+        // The old external fixture is no longer semantically valid. Preserve its original
+        // accepted base and codec/allocation bytes without presenting it as a fresh acceptance.
+        let historical_base = RevisionId::from_str(
+            "rev_57e6ec8691b2e78b6e6f5bbf721e1c637601ec2bd67bd88b0cf74c4044b1a5b2",
         )
         .unwrap();
         let module = logical
@@ -5218,35 +5249,28 @@ mod tests {
         {
             let input = format!(
                 "request base={} idempotency=legacy-reference-baseline\nexpression.i64 as=$body value=42\ncreate.function as=$new module={selector} name=legacy_reference_golden visibility=private result=i64 effect=pure body=$body\n",
-                created.current.head.revision,
+                historical_base,
             );
             let request = original_budget_request("legacy.lkjc", input.as_bytes());
             let bytes = crate::platform::change::canonical_authored_intent_bytes(&request.semantic)
                 .unwrap();
-            let prepared = created
-                .repository
-                .prepare_authored_change(&request.semantic, request.options.clone())
-                .unwrap();
-            assert_eq!(
-                created.current.head.revision.to_string(),
-                "rev_57e6ec8691b2e78b6e6f5bbf721e1c637601ec2bd67bd88b0cf74c4044b1a5b2"
-            );
+            let allocated =
+                crate::platform::change::authored_source_owners(&logical, &request.semantic)
+                    .unwrap();
             assert_eq!(blake3::hash(&bytes).to_hex().as_str(), expected.0);
             assert_eq!(request.request_commitment.to_string(), expected.1);
-            assert_eq!(prepared.allocated["$body"].to_string(), expected.2);
-            assert_eq!(prepared.allocated["$new"].to_string(), expected.3);
+            assert_eq!(allocated["$body"].to_string(), expected.2);
+            assert_eq!(allocated["$new"].to_string(), expected.3);
         }
         let input = format!(
             "request base={} idempotency=legacy-qualified-baseline\nexpression.unit as=$body\nreplace.body function=first/callee body=$body\n",
-            created.current.head.revision
+            historical_base
         );
         let request = original_budget_request("qualified.lkjc", input.as_bytes());
         let bytes =
             crate::platform::change::canonical_authored_intent_bytes(&request.semantic).unwrap();
-        let prepared = created
-            .repository
-            .prepare_authored_change(&request.semantic, request.options.clone())
-            .unwrap();
+        let allocated =
+            crate::platform::change::authored_source_owners(&logical, &request.semantic).unwrap();
         assert_eq!(
             blake3::hash(&bytes).to_hex().as_str(),
             "b481f04b0bb63a68f42b5b06f97ff773f411a8dc8479f611e7137fef24596b3c"
@@ -5256,7 +5280,7 @@ mod tests {
             "request_82b03a0b580889d3b5a92372b903ced62853e7ef5e7d8008bcaa99d2f848a74a"
         );
         assert_eq!(
-            prepared.allocated["$body"].to_string(),
+            allocated["$body"].to_string(),
             "expr_d1bf12cf47316157f6bf4a4fa6b3707a"
         );
     }

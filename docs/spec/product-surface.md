@@ -26,6 +26,12 @@ authority effects, project requirements, and security nonclaims. The digest bind
 complete capability projection, is deterministic, and is cache evidence rather than program
 meaning.
 
+Exposing an existing typed change can update the compact authoring contract and this digest
+without changing graph, compiler, artifact or application-data formats. `set.parameter-type` is
+such an extension: older compact adapters reject its spelling, while runtime compatibility is
+determined independently by the ordinary meaning and artifact contracts. Review tokens still
+bind the complete current authoring context.
+
 Focused inspection discovery includes one revision-pinned local-function definition contract. Its
 grammar, exact record fields and forms, logical and physical admissions, `icont_` binding,
 diagnostics, authority effect, and containment nonclaims are executable-owned capability records

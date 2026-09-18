@@ -300,6 +300,10 @@ pub(crate) fn plan_impact_and_summaries_with_admission<
                 admission.maximum_affected_owners,
                 admission.maximum_ownership_steps,
             )?;
+            // A relation's source can have its own semantic contract. In particular, a port
+            // checks its exact callable type; checking only its component cannot substitute
+            // for admitting that port. add_summary_paths already admitted this owner.
+            plan.semantically_checked.insert(source);
             add_owning_units(
                 source,
                 overlay,
@@ -364,6 +368,7 @@ pub(crate) fn plan_impact_and_summaries_with_admission<
                 admission.maximum_affected_owners,
                 admission.maximum_ownership_steps,
             )?;
+            plan.semantically_checked.insert(source);
             for declaration in owning_units(
                 source,
                 overlay,

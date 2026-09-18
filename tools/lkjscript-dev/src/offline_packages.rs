@@ -16,6 +16,7 @@ mod foreground_program;
 mod named;
 mod nominal;
 mod nominal_session;
+mod parameter_type;
 mod recursive;
 mod recursive_data;
 mod recursive_data_program;
@@ -127,10 +128,14 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
                     .ok_or_else(|| DevError::usage("missing --case name"))?;
                 if !matches!(
                     selected.as_str(),
-                    "finite-callable" | "validator-upgrade" | "requirement-parameters" | "f64"
+                    "finite-callable"
+                        | "validator-upgrade"
+                        | "requirement-parameters"
+                        | "f64"
+                        | "parameter-type"
                 ) {
                     return Err(DevError::usage(
-                        "offline-packages --case accepts finite-callable, validator-upgrade, requirement-parameters, or f64",
+                        "offline-packages --case accepts finite-callable, validator-upgrade, requirement-parameters, f64, or parameter-type",
                     ));
                 }
                 selected_case = Some(selected);
@@ -177,7 +182,8 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
                 Some("validator-upgrade") => "lkjscript-offline-validator-upgrade-1",
                 Some("requirement-parameters") => "lkjscript-offline-requirement-parameters-2",
                 Some("f64") => "lkjscript-offline-f64-1",
-                _ => "lkjscript-offline-packages-acceptance-14",
+                Some("parameter-type") => "lkjscript-offline-parameter-type-1",
+                _ => "lkjscript-offline-packages-acceptance-15",
             }
             .to_owned(),
             status: "failed".to_owned(),
@@ -208,6 +214,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         Some("validator-upgrade") => finite::upgrade(&mut context),
         Some("requirement-parameters") => requirements::focused(&mut context),
         Some("f64") => f64::focused(&mut context),
+        Some("parameter-type") => parameter_type::focused(&mut context),
         _ => workflow(&mut context),
     })
     .and_then(|()| {
@@ -1551,6 +1558,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     finite::workflow(context, &standard)?;
     requirements::workflow(context, &standard)?;
     f64::workflow(context, &standard)?;
+    parameter_type::workflow(context, &standard)?;
     Ok(())
 }
 
@@ -1857,7 +1865,7 @@ pub(crate) fn read_transferred_receipt(
         "offline receipt encoding or path is noncanonical",
     )?;
     require(
-        receipt.schema == "lkjscript-offline-packages-acceptance-14"
+        receipt.schema == "lkjscript-offline-packages-acceptance-15"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -1997,9 +2005,9 @@ pub(crate) fn read_transferred_receipt(
     }
     verify_file_inventory(&receipt, &root)?;
     require(
-        receipt.inventories.len() == 36
-            && receipt.transport_digests.len() == 36
-            && receipt.producer_inventories.len() == 36,
+        receipt.inventories.len() == 40
+            && receipt.transport_digests.len() == 40
+            && receipt.producer_inventories.len() == 40,
         "complete producer, replacement, HTTP, foreground, requirement and numerical source inventories missing",
     )?;
     for (index, inventory) in receipt.inventories.iter().enumerate() {
@@ -2039,6 +2047,7 @@ pub(crate) fn read_transferred_receipt(
     let finite_installed_commands = finite::validate(&receipt, &root)?;
     requirements::validate(&receipt, &root)?;
     f64::validate(&receipt, &root)?;
+    let parameter_type_commands = parameter_type::validate(&receipt, &root)?;
     let named_cwd = Path::new(&receipt.isolated_root)
         .join("named-unrelated")
         .display()
@@ -2056,6 +2065,7 @@ pub(crate) fn read_transferred_receipt(
                 && command.command.first().is_some_and(|binary| {
                     if finite_installed_commands.contains(&index)
                         || (!named
+                            && !parameter_type_commands.contains(&index)
                             && command.command.get(1).is_some_and(|v| v == "run")
                             && command.command.get(2).is_some_and(|v| v == "--deployment"))
                     {

@@ -9,8 +9,9 @@ use crate::platform::change::{
     LogicalChangePlanEvidence, LogicalDependencyValues, LogicalRetirementValues,
     PreparedChangeAnalysis, PrimitiveEdit, SummaryDelta, TestDependencyDelta, WitnessBaseRead,
     WitnessMapAdmission, WitnessMapBase, WitnessMapUpdate, WitnessRead, WitnessReadAdmission,
-    WitnessReadWork, WitnessRelationRead, WitnessTestDependencyRead, lower_authored_changes,
-    prepare_change_analysis_with_budget, update_witness_maps_from,
+    WitnessReadWork, WitnessRelationRead, WitnessTestDependencyRead,
+    lower_authored_changes_with_source_owners, prepare_change_analysis_with_budget,
+    update_witness_maps_from,
 };
 use crate::platform::contract::{
     MAXIMUM_FUNCTION_DEFINITION_CANONICAL_RECORD_READS, MAXIMUM_FUNCTION_DEFINITION_FACT_READS,
@@ -999,6 +1000,17 @@ impl RepositoryView {
         request: &AuthoredChangeSet,
         options: PublicationOptions,
     ) -> Result<PreparedAuthoredPublication, Vec<Diagnostic>> {
+        self.prepare_authored_change_with_source_owners(request, options, None)
+    }
+
+    /// Retains source identities from the original bounded lowering, including when subsequent
+    /// validation rejects the candidate. This output carries no admission authority.
+    pub(crate) fn prepare_authored_change_with_source_owners(
+        &self,
+        request: &AuthoredChangeSet,
+        options: PublicationOptions,
+        source_owners: Option<&mut BTreeMap<String, OwnerKey>>,
+    ) -> Result<PreparedAuthoredPublication, Vec<Diagnostic>> {
         let canonical = BudgetedCanonicalBase::new(
             self,
             request.budget.canonical_reads,
@@ -1011,8 +1023,9 @@ impl RepositoryView {
             WitnessReadWork::default(),
         )
         .map_err(|diagnostic| vec![diagnostic])?;
-        let lowering = lower_authored_changes(&canonical, &witness, request)
-            .map_err(|diagnostic| vec![diagnostic])?;
+        let lowering =
+            lower_authored_changes_with_source_owners(&canonical, &witness, request, source_owners)
+                .map_err(|diagnostic| vec![diagnostic])?;
         let crate::platform::change::AuthoredLowering {
             resolutions,
             edits,

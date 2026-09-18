@@ -2239,11 +2239,18 @@ fn execute_normalized_change(
         Some(view) => view,
         None => repository.view_current().map_err(single_diagnostic)?,
     };
+    let mut source_owners = std::collections::BTreeMap::new();
     let mut prepared = base_view
-        .prepare_authored_change(&normalized.semantic, normalized.options)
+        .prepare_authored_change_with_source_owners(
+            &normalized.semantic,
+            normalized.options,
+            Some(&mut source_owners),
+        )
         .map_err(|mut errors| {
-            if let Ok(owners) = crate::platform::change::authored_source_owners(&base_view, &normalized.semantic) {
-                for error in &mut errors { normalized.origins.locate(error, &owners); }
+            for error in &mut errors {
+                if !matches!(error.class, DiagnosticClass::Resource | DiagnosticClass::Cancelled) {
+                    normalized.origins.locate(error, &source_owners);
+                }
             }
             if let Some(result) = base_view.idempotent_result()
                 && errors.iter().any(|error| error.class == DiagnosticClass::Semantic)

@@ -1,0 +1,13 @@
+reference.owner as=$library-energy package=$library class=declaration name=energy
+create.module as=$module name=reading-command
+type.list as=@Samples item=f64
+add.parameter as=$items function=$command name=items type=@Samples
+expression.block as=$body
+  (call $library-energy (local $items))
+expression.end
+create.function as=$command module=$module name=calculate visibility=private result=f64 effect=pure body=$body
+type.function as=@Energy result=f64
+type.argument parent=@Energy index=0 type=@Samples
+create.component as=$component module=$module name=command visibility=public
+add.port as=$port component=$component name=energy type=@Energy function=$command
+create.target as=$target name=energy component=$component port=$port runner=command

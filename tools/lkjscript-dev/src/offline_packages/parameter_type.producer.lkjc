@@ -1,0 +1,22 @@
+reference.package as=$std source=builtin
+reference.owner as=$fold package=$std class=declaration name=list-fold-left
+reference.owner as=$fadd package=$std class=declaration name=f64-add
+reference.owner as=$fmul package=$std class=declaration name=f64-multiply
+create.module as=$module name=measure
+add.parameter as=$acc function=$step name=acc type=f64
+add.parameter as=$sample function=$step name=sample type=f64
+expression.block as=$step-body
+  (call $fadd (local $acc) (call $fmul (local $sample) (local $sample)))
+expression.end
+create.function as=$step module=$module name=step visibility=private result=f64 effect=pure body=$step-body
+type.list as=@Samples item=f64
+add.parameter as=$items function=$energy name=items type=@Samples
+expression.block as=$energy-body
+  (call $fold (types f64 f64) (local $items) (f64 0.0) (function-value $step))
+expression.end
+create.function as=$energy module=$module name=energy visibility=public result=f64 effect=pure body=$energy-body
+type.function as=@Energy result=f64
+type.argument parent=@Energy index=0 type=@Samples
+create.component as=$component module=$module name=compute visibility=public
+add.port as=$port component=$component name=energy type=@Energy function=$energy
+create.target as=$target name=energy component=$component port=$port runner=command
