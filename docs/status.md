@@ -17,6 +17,10 @@ Independent integer results, reference/production comparison and clean/increment
 pass. An independent fresh agent completed the same public task without implementation assistance;
 its discovery failures and scope are retained in the campaign.
 
+Verified source `527341022d53c5abce69b9591e61ea5a4896a529` passed all 26 full gates freshly with
+stable inputs and zero reuse, including the 853-command offline owner and its strict receipt reader.
+It reached remote main by normal fast-forward push. Later reporting does not replace that tested source.
+
 Compact contract 23 adds the public spelling; authored codec 17/tag 25 and graph/compiler/artifact/
 application-data formats stay unchanged. Two demonstrated admission gaps required semantic
 validator 17: affected ports must be checked themselves, and local fixed externals must satisfy
@@ -27,8 +31,8 @@ Authenticated P executes the new witness artifact for the tested small workload.
 This is an unpublished mainline increment; immutable v0.1.38 does not acquire the operation.
 No version bump, release dispatch or operational-data migration is selected. Publication is due
 when a concrete consumer needs this path installed, an explicit release is requested, or a usable
-authoring milestone containing it is selected. Final source-bound integration evidence is recorded
-at the campaign ending.
+authoring milestone containing it is selected. Exact evidence and the retained first full-profile
+failure are recorded at the campaign ending.
 
 ## Release delivery cutover
 
