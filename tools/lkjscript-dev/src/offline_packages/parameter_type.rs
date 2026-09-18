@@ -890,7 +890,11 @@ fn validate_authoring(
     Ok(())
 }
 
-pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, DevError> {
+pub(super) fn validate(
+    receipt: &Receipt,
+    root: &Path,
+    inventory_span: std::ops::Range<usize>,
+) -> Result<Vec<usize>, DevError> {
     let evolution: Evolution = serde_json::from_str(
         receipt
             .observations
@@ -900,6 +904,16 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
     require(
         evolution.sources.len() == 4 && evolution.repositories_removed,
         "parameter-type closure/source evidence incomplete",
+    )?;
+    require(
+        inventory_span.len() == 4
+            && inventory_span.end == receipt.inventories.len()
+            && inventory_span_matches(
+                evolution.sources.iter().map(|source| source.inventory),
+                inventory_span,
+                receipt.inventories.len(),
+            ),
+        "parameter-type exact final source inventories omitted, reordered or overlapping",
     )?;
     for source in &evolution.sources {
         let producer = receipt

@@ -2046,8 +2046,8 @@ pub(crate) fn read_transferred_receipt(
     let named_commands = named::validate(&receipt, &root)?;
     let finite_installed_commands = finite::validate(&receipt, &root)?;
     requirements::validate(&receipt, &root)?;
-    f64::validate(&receipt, &root)?;
-    let parameter_type_commands = parameter_type::validate(&receipt, &root)?;
+    f64::validate(&receipt, &root, 36)?;
+    let parameter_type_commands = parameter_type::validate(&receipt, &root, 36..40)?;
     let named_cwd = Path::new(&receipt.isolated_root)
         .join("named-unrelated")
         .display()
@@ -2236,6 +2236,16 @@ pub(crate) fn read_transferred_receipt(
     Ok(receipt)
 }
 
+fn inventory_span_matches(
+    observed: impl IntoIterator<Item = usize>,
+    expected: std::ops::Range<usize>,
+    inventory_count: usize,
+) -> bool {
+    expected.start <= expected.end
+        && expected.end <= inventory_count
+        && observed.into_iter().eq(expected)
+}
+
 fn verify_producer_inventory(
     producer: &OfflineProducerInventory,
     inventory: &OfflinePackageInventory,
@@ -2329,6 +2339,22 @@ pub(crate) fn encode_transferred_test_fixture(
 #[allow(clippy::unwrap_used, reason = "bounded hostile path fixtures")]
 mod tests {
     use super::*;
+
+    #[test]
+    fn numerical_inventory_spans_compose_without_omission_reordering_or_overlap() {
+        assert!(inventory_span_matches([33, 34, 35], 33..36, 40));
+        assert!(inventory_span_matches([36, 37, 38, 39], 36..40, 40));
+        assert!(inventory_span_matches([0, 1, 2], 0..3, 3));
+        assert!(inventory_span_matches([0, 1, 2, 3], 0..4, 4));
+        assert!(!inventory_span_matches([33, 35], 33..36, 40));
+        assert!(!inventory_span_matches([33, 35, 34], 33..36, 40));
+        assert!(!inventory_span_matches([37, 38, 39], 33..36, 40));
+        assert!(!inventory_span_matches([36, 37, 39], 36..40, 40));
+        assert!(!inventory_span_matches([36, 38, 37, 39], 36..40, 40));
+        assert!(!inventory_span_matches([35, 36, 37, 38], 36..40, 40));
+        assert!(!inventory_span_matches([36, 37, 37, 39], 36..40, 40));
+        assert!(!inventory_span_matches([36, 37, 38, 39], 36..40, 39));
+    }
 
     #[test]
     #[ignore = "requires an authentic retained offline receipt and its exact candidate/verifier"]

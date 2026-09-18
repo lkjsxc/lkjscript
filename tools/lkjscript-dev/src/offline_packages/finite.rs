@@ -772,13 +772,13 @@ pub(super) fn read_focused(path: &Path, candidate: &Path, verifier: &Path) -> Re
             receipt.inventories.len() == 3,
             "F64 focused source inventories incomplete",
         )?;
-        super::f64::validate(&receipt, root)?
+        super::f64::validate(&receipt, root, 3)?
     } else if receipt.schema == "lkjscript-offline-parameter-type-1" {
         require(
             receipt.inventories.len() == 4,
             "parameter-type focused source inventories incomplete",
         )?;
-        super::parameter_type::validate(&receipt, root)?;
+        super::parameter_type::validate(&receipt, root, 0..4)?;
         Vec::new()
     } else {
         validate(&receipt, root)?

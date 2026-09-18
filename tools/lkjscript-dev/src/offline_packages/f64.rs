@@ -1288,7 +1288,11 @@ fn expected_value(
     })
 }
 
-pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, DevError> {
+pub(super) fn validate(
+    receipt: &Receipt,
+    root: &Path,
+    inventory_end: usize,
+) -> Result<Vec<usize>, DevError> {
     let numerical: NumericalEvidence = serde_json::from_str(
         receipt
             .observations
@@ -1305,10 +1309,19 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
             && numerical.standard.inventory == usize::MAX,
         "F64 independent library, edited consumer or producer removal missing",
     )?;
+    let inventory_start = inventory_end
+        .checked_sub(3)
+        .ok_or_else(|| DevError::corrupt("F64 source inventory boundary is too small"))?;
     require(
-        numerical.producer.inventory.checked_add(1) == Some(numerical.before.inventory)
-            && numerical.before.inventory.checked_add(1) == Some(numerical.after.inventory)
-            && numerical.after.inventory.checked_add(1) == Some(receipt.inventories.len()),
+        inventory_span_matches(
+            [
+                numerical.producer.inventory,
+                numerical.before.inventory,
+                numerical.after.inventory,
+            ],
+            inventory_start..inventory_end,
+            receipt.inventories.len(),
+        ),
         "F64 exact source inventories omitted or reordered",
     )?;
     for identity in [&numerical.producer, &numerical.before, &numerical.after] {
