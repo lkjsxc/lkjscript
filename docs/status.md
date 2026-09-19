@@ -18,8 +18,12 @@ retains and branches maps, replaces an exact dependency after a reviewed library
 executes both retained bundles after their authoring sources are removed. The appendix's
 4,096-key project command returns 4096 differentially under unchanged defaults, with 53,236
 cumulative collection items per evaluator. The newly built predecessor fails that same
-command at its collection budget. Full acceptance and main integration are recorded at the
-campaign ending; focused evidence alone is not integration acceptance.
+command at its collection budget. Source `0e7d2af38532d48495f20ef18613f35b0bb276fb` passed
+all 26 full gates freshly with stable inputs and zero reuse, including 903 offline-package
+commands, maintained standard/lkjournal checks and HTTP/session lifecycles. Normal fast-forward
+delivery reached remote main at that exact source, independently confirmed on 2026-09-19.
+The [campaign ending](campaigns/202609191922.md#fresh-full-acceptance-and-mainline-delivery)
+binds original receipts, binaries, the genuine earlier failure and subsequent reporting-only edits.
 
 Primitive key order, StaticText treatment, map operations, JSON and typed-data bytes, graph,
 package, compiler, artifact and application-data identities remain unchanged. No migration

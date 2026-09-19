@@ -9,8 +9,9 @@ binds clean predecessor source `d77fb8ba`, its separately retained executable `a
 candidate source `fe1b5f5c` / executable `adedb5e5…`. The timed predecessor is `36e541f6` /
 `2fffedb6…`: its only difference from the clean predecessor exposes the same result-encoding
 timer as the candidate. Both timed executables use the pinned Rust 1.98.0 product-only release
-build, locked dependencies, LTO and one codegen unit. Full source acceptance uses the separately
-identified workspace configuration; these executable identities are not interchangeable.
+build, locked dependencies, LTO and one codegen unit. Full source acceptance separately binds its
+verifier and the executable from the maintained release-lifecycle build; these identities are
+not interchangeable with the timed product-only binaries.
 The host is x86-64 Linux 7.2.3-arch1-2 on an AMD Ryzen 9 9955HX, with twelve online logical CPUs.
 Only this host target and the recorded workload are measured.
 
