@@ -39,6 +39,7 @@ pub(crate) struct ValueWork {
     pub internal_guard_descendant_visits: u64,
     pub classification_decisions: u64,
     pub lists: super::list::Work,
+    pub maps: super::map::Work,
 }
 
 impl ValueOrigin {
@@ -104,7 +105,7 @@ pub enum NormalizedValue {
         value: Box<NormalizedValue>,
     },
     List(super::list::List),
-    Map(Arc<BTreeMap<NormalizedMapKey, NormalizedValue>>),
+    Map(super::map::Map),
     Function {
         function: FunctionIndex,
         type_arguments: Arc<[TypeObjectDigest]>,
@@ -116,6 +117,38 @@ pub enum NormalizedValue {
 }
 
 impl NormalizedValue {
+    /// Bounded raw ingress only. The carrier conveys no type or origin certificate;
+    /// each evaluator admits every logical child independently before using it.
+    pub fn map(
+        entries: BTreeMap<NormalizedMapKey, Self>,
+    ) -> Result<Self, crate::platform::execution::ExecutionError> {
+        Self::map_controlled(
+            entries,
+            &crate::platform::execution::ExecutionControl::default(),
+        )
+    }
+
+    pub(crate) fn map_controlled(
+        entries: BTreeMap<NormalizedMapKey, Self>,
+        control: &crate::platform::execution::ExecutionControl,
+    ) -> Result<Self, crate::platform::execution::ExecutionError> {
+        let mut bytes = 0_u64;
+        super::map::Map::from_items(entries, MAXIMUM_ADMISSION_ITEMS, &mut |charge| {
+            control.check()?;
+            bytes = bytes
+                .checked_add(charge.bytes)
+                .filter(|bytes| *bytes <= MAXIMUM_VALUE_ALLOCATION_BYTES)
+                .ok_or_else(|| {
+                    crate::platform::execution::ExecutionError::resource(
+                        "normalized_map_storage",
+                        "raw map construction exceeds its owned storage bound",
+                    )
+                })?;
+            Ok(())
+        })
+        .map(Self::Map)
+    }
+
     /// Bounded raw boundary construction. Evaluators separately admit all logical
     /// occurrences and metadata; this constructor confers no semantic eligibility.
     pub fn list(items: Vec<Self>) -> Result<Self, crate::platform::execution::ExecutionError> {
@@ -186,24 +219,42 @@ pub enum NormalizedMapKey {
 }
 
 impl NormalizedMapKey {
+    pub(super) fn value_storage_bytes(
+        &self,
+    ) -> Result<u64, crate::platform::execution::ExecutionError> {
+        let length = match self {
+            Self::Bytes(value) => value.len() as u64,
+            Self::Text(value) => value.len() as u64,
+            Self::Bool(_) | Self::I64(_) => return Ok(0),
+        };
+        length
+            .checked_add((2 * std::mem::size_of::<usize>()) as u64)
+            .ok_or_else(|| {
+                crate::platform::execution::ExecutionError::resource(
+                    "normalized_map_storage",
+                    "projected key storage overflows",
+                )
+            })
+    }
+
     pub fn from_value(value: NormalizedValue) -> Option<Self> {
         match value {
             NormalizedValue::Bool(value) => Some(Self::Bool(value)),
             NormalizedValue::I64(value) => Some(Self::I64(value)),
-            NormalizedValue::Bytes(value) => Some(Self::Bytes(value.to_vec())),
-            NormalizedValue::Text(value) | NormalizedValue::StaticText(value) => {
-                Some(Self::Text(value.to_string()))
+            NormalizedValue::Bytes(value) => {
+                let key = Self::Bytes(value.to_vec());
+                super::map::key_copied(value.len() as u64);
+                Some(key)
             }
-            NormalizedValue::Unit
-            | NormalizedValue::F64(_)
-            | NormalizedValue::Record(_)
-            | NormalizedValue::Variant { .. }
-            | NormalizedValue::Option(_)
-            | NormalizedValue::Result { .. }
-            | NormalizedValue::List(_)
-            | NormalizedValue::Map(_)
-            | NormalizedValue::Function { .. }
-            | NormalizedValue::Resource(_) => None,
+            NormalizedValue::Text(value) | NormalizedValue::StaticText(value) => {
+                let key = Self::Text(value.to_string());
+                super::map::key_copied(value.len() as u64);
+                Some(key)
+            }
+            value => {
+                release_raw_values(vec![value]);
+                None
+            }
         }
     }
 
@@ -211,14 +262,102 @@ impl NormalizedMapKey {
         match self {
             Self::Bool(value) => NormalizedValue::Bool(*value),
             Self::I64(value) => NormalizedValue::I64(*value),
-            Self::Bytes(value) => NormalizedValue::bytes(value.clone()),
-            Self::Text(value) => NormalizedValue::text(value.clone()),
+            Self::Bytes(value) => NormalizedValue::Bytes(Arc::from(value.as_slice())),
+            Self::Text(value) => NormalizedValue::Text(Arc::from(value.as_str())),
         }
+    }
+}
+
+/// Cloning a projected payload shares Arc-backed aggregates. Only consecutive
+/// owned option/result/variant boxes allocate; their descendants stop at an Arc.
+pub(super) fn projected_value_bytes(
+    value: &NormalizedValue,
+) -> Result<u64, crate::platform::execution::ExecutionError> {
+    let mut value = value;
+    let mut bytes = 0_u64;
+    let mut depth = 0_u16;
+    loop {
+        value = match value {
+            NormalizedValue::Option(Some(child))
+            | NormalizedValue::Result { value: child, .. }
+            | NormalizedValue::Variant {
+                payload: Some(child),
+                ..
+            } => child,
+            _ => return Ok(bytes),
+        };
+        depth += 1;
+        if depth > 256 {
+            return Err(crate::platform::execution::ExecutionError::resource(
+                "normalized_value_depth",
+                "map projection exceeds finite value depth 256",
+            ));
+        }
+        bytes = bytes
+            .checked_add(std::mem::size_of::<NormalizedValue>() as u64)
+            .ok_or_else(|| {
+                crate::platform::execution::ExecutionError::resource(
+                    "normalized_map_storage",
+                    "projected value allocation overflows",
+                )
+            })?;
+    }
+}
+
+/// The one owned key buffer created by `from_value`, before it is allocated.
+pub(super) fn map_key_buffer_bytes(value: &NormalizedValue) -> u64 {
+    match value {
+        NormalizedValue::Bytes(value) => value.len() as u64,
+        NormalizedValue::Text(value) | NormalizedValue::StaticText(value) => value.len() as u64,
+        _ => 0,
+    }
+}
+
+/// Bounded raw-host construction is separate from either evaluator's cumulative
+/// ledger. Raw results still cross that evaluator's complete admission boundary.
+pub(super) fn raw_map_reservation(
+    control: &crate::platform::execution::ExecutionControl,
+) -> impl FnMut(super::map::Charge) -> Result<(), crate::platform::execution::ExecutionError> + '_ {
+    let mut bytes = 0_u64;
+    move |charge| {
+        control.check()?;
+        bytes = bytes
+            .checked_add(charge.bytes)
+            .filter(|bytes| *bytes <= MAXIMUM_VALUE_ALLOCATION_BYTES)
+            .ok_or_else(|| {
+                crate::platform::execution::ExecutionError::resource(
+                    "normalized_map_storage",
+                    "raw map operation exceeds finite storage",
+                )
+            })?;
+        Ok(())
     }
 }
 
 /// Own unadmitted arguments until each value crosses its evaluator's boundary. Rejection
 /// destroys even excessively deep raw data iteratively instead of recursing in Rust drop.
+pub(super) struct RawValue(NormalizedValue);
+
+impl RawValue {
+    pub(super) fn new(value: NormalizedValue) -> Self {
+        Self(value)
+    }
+    pub(super) fn raw(&self) -> &NormalizedValue {
+        &self.0
+    }
+    pub(super) fn into_raw(mut self) -> NormalizedValue {
+        std::mem::replace(&mut self.0, NormalizedValue::Unit)
+    }
+}
+
+impl Drop for RawValue {
+    fn drop(&mut self) {
+        if !matches!(self.0, NormalizedValue::Unit) {
+            release_raw_values(vec![std::mem::replace(&mut self.0, NormalizedValue::Unit)]);
+        }
+    }
+}
+
 pub(super) struct RawArguments(Vec<NormalizedValue>);
 
 impl RawArguments {
@@ -283,11 +422,7 @@ pub(super) fn release_raw_values(mut values: Vec<NormalizedValue>) {
                     values.extend(fields.into_iter().map(|(_, value)| value));
                 }
             }
-            NormalizedValue::Map(entries) => {
-                if let Some(entries) = Arc::into_inner(entries) {
-                    values.extend(entries.into_values());
-                }
-            }
+            NormalizedValue::Map(mut entries) => entries.drain_unique(&mut values),
             _ => {}
         }
     }

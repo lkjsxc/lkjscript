@@ -1,0 +1,21 @@
+reference.package as=$std source=builtin
+reference.owner as=$add package=$std class=declaration name=add
+reference.owner as=$get-or package=$std class=declaration name=map-get-or
+reference.owner as=$insert package=$std class=declaration name=map-insert
+reference.owner as=$module package=local class=module name=aggregation
+reference.owner as=$step package=local class=declaration parent=$module name=step
+reference.owner as=$step-key package=local class=parameter parent=$step name=key
+reference.owner as=$step-amount package=local class=parameter parent=$step name=amount
+reference.owner as=$step-state package=local class=parameter parent=$step name=state
+reference.owner as=$step-item package=local class=parameter parent=$step name=item
+expression.block as=$new-step-body
+  (let
+    (binding key (type text) (invoke (local $step-key) (local $step-item)))
+    (binding amount (type i64) (invoke (local $step-amount) (local $step-item)))
+    (in
+      (call $insert (types text i64) (local $step-state) (local key)
+        (call $add
+          (call $get-or (types text i64) (local $step-state) (local key) (i64 0))
+          (call $add (local amount) (i64 1))))))
+expression.end
+replace.body function=$step body=$new-step-body

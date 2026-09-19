@@ -342,21 +342,46 @@ impl Value {
         })
     }
 
-    pub(super) fn map(
-        program: &NormalizedProgram,
-        entries: BTreeMap<NormalizedMapKey, Self>,
-        work: &mut ValueWork,
-    ) -> Result<Self, ExecutionError> {
-        for child in entries.values() {
-            Self::free_children(program, std::slice::from_ref(child), work)?;
+    pub(super) fn empty_map(program: &NormalizedProgram) -> Self {
+        Self {
+            raw: NormalizedValue::Map(super::super::map::Map::default()),
+            origin: program.value_origin,
+            class: Class::Free,
         }
+    }
+
+    pub(super) fn map_entry(
+        program: &NormalizedProgram,
+        key: Self,
+        value: Self,
+        work: &mut ValueWork,
+        reserve: &mut impl FnMut(super::super::map::Charge) -> Result<(), ExecutionError>,
+    ) -> Result<Self, ExecutionError> {
+        Self::free_children(program, std::slice::from_ref(&key), work)?;
+        Self::free_children(program, std::slice::from_ref(&value), work)?;
+        reserve(super::super::map::Charge {
+            slots: 2,
+            bytes: (2 * std::mem::size_of::<(Name, NormalizedValue)>()
+                + std::mem::size_of::<Vec<(Name, NormalizedValue)>>()
+                + 2 * std::mem::size_of::<usize>()
+                + 8) as u64,
+        })?;
+        let fields = vec![
+            (
+                Name::new("key".to_owned()).map_err(|_| type_error("invalid map entry field"))?,
+                key.raw,
+            ),
+            (
+                Name::new("value".to_owned()).map_err(|_| type_error("invalid map entry field"))?,
+                value.raw,
+            ),
+        ];
+        let raw = NormalizedValue::Record(NormalizedRecord::Structural {
+            fields: Arc::new(fields),
+        });
+        reserve(super::super::map::Charge::default())?;
         Ok(Self {
-            raw: NormalizedValue::Map(Arc::new(
-                entries
-                    .into_iter()
-                    .map(|(key, value)| (key, value.raw))
-                    .collect(),
-            )),
+            raw,
             origin: program.value_origin,
             class: Class::Free,
         })
@@ -430,6 +455,7 @@ impl Value {
         key: NormalizedMapKey,
         child: Option<Self>,
         work: &mut ValueWork,
+        reserve: &mut impl FnMut(super::super::map::Charge) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
         Self::free_children(program, std::slice::from_ref(&self), work)?;
         if let Some(child) = &child {
@@ -438,13 +464,17 @@ impl Value {
         let NormalizedValue::Map(values) = &mut self.raw else {
             return Err(type_error("map update received a foreign value"));
         };
-        let mut output = values.as_ref().clone();
-        if let Some(child) = child {
-            output.insert(key, child.raw);
+        let output = if let Some(child) = child {
+            values.insert(
+                key,
+                child.raw,
+                super::super::value::MAXIMUM_ADMISSION_ITEMS,
+                reserve,
+            )?
         } else {
-            output.remove(&key);
-        }
-        *values = Arc::new(output);
+            values.remove(&key, reserve)?
+        };
+        *values = output;
         Ok(self)
     }
 
@@ -473,12 +503,25 @@ impl Value {
         }))
     }
 
-    pub(super) fn map_get(&self, key: &NormalizedMapKey) -> Result<Option<Self>, ExecutionError> {
+    pub(super) fn map_get(
+        &self,
+        key: &NormalizedMapKey,
+        reserve: &mut impl FnMut(super::super::map::Charge) -> Result<(), ExecutionError>,
+    ) -> Result<Option<Self>, ExecutionError> {
         let NormalizedValue::Map(values) = &self.raw else {
             return Err(type_error("map lookup received a foreign value"));
         };
-        Ok(values.get(key).map(|value| Self {
-            raw: value.clone(),
+        let Some(value) = values.get(key) else {
+            return Ok(None);
+        };
+        reserve(super::super::map::Charge {
+            slots: 0,
+            bytes: super::super::value::projected_value_bytes(value)?,
+        })?;
+        let raw = value.clone();
+        reserve(super::super::map::Charge::default())?;
+        Ok(Some(Self {
+            raw,
             origin: self.origin,
             class: Class::Free,
         }))
@@ -991,6 +1034,12 @@ impl Admission<'_> {
                 }
                 (NormalizedValue::Map(values), TypeForm::Map { key, value: item }) => {
                     self.collection(values.len())?;
+                    self.allocate(super::super::value::collection_storage_bytes(
+                        values.len() as u64,
+                        std::mem::size_of::<NormalizedMapKey>() as u64,
+                        "normalized_allocation",
+                    )?)?;
+                    self.allocate(values.metadata_bytes()?)?;
                     let key_type = self
                         .program
                         .types

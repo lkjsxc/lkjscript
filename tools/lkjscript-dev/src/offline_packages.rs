@@ -13,6 +13,7 @@ mod f64;
 mod finite;
 mod foreground;
 mod foreground_program;
+mod maps;
 mod named;
 mod nominal;
 mod nominal_session;
@@ -133,9 +134,10 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
                         | "requirement-parameters"
                         | "f64"
                         | "parameter-type"
+                        | "persistent-maps"
                 ) {
                     return Err(DevError::usage(
-                        "offline-packages --case accepts finite-callable, validator-upgrade, requirement-parameters, f64, or parameter-type",
+                        "offline-packages --case accepts finite-callable, validator-upgrade, requirement-parameters, f64, parameter-type, or persistent-maps",
                     ));
                 }
                 selected_case = Some(selected);
@@ -183,7 +185,8 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
                 Some("requirement-parameters") => "lkjscript-offline-requirement-parameters-2",
                 Some("f64") => "lkjscript-offline-f64-1",
                 Some("parameter-type") => "lkjscript-offline-parameter-type-1",
-                _ => "lkjscript-offline-packages-acceptance-15",
+                Some("persistent-maps") => "lkjscript-offline-persistent-maps-1",
+                _ => "lkjscript-offline-packages-acceptance-16",
             }
             .to_owned(),
             status: "failed".to_owned(),
@@ -215,6 +218,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         Some("requirement-parameters") => requirements::focused(&mut context),
         Some("f64") => f64::focused(&mut context),
         Some("parameter-type") => parameter_type::focused(&mut context),
+        Some("persistent-maps") => maps::focused(&mut context),
         _ => workflow(&mut context),
     })
     .and_then(|()| {
@@ -1559,6 +1563,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     requirements::workflow(context, &standard)?;
     f64::workflow(context, &standard)?;
     parameter_type::workflow(context, &standard)?;
+    maps::workflow(context, &standard)?;
     Ok(())
 }
 
@@ -1865,7 +1870,7 @@ pub(crate) fn read_transferred_receipt(
         "offline receipt encoding or path is noncanonical",
     )?;
     require(
-        receipt.schema == "lkjscript-offline-packages-acceptance-15"
+        receipt.schema == "lkjscript-offline-packages-acceptance-16"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -2005,10 +2010,10 @@ pub(crate) fn read_transferred_receipt(
     }
     verify_file_inventory(&receipt, &root)?;
     require(
-        receipt.inventories.len() == 40
-            && receipt.transport_digests.len() == 40
-            && receipt.producer_inventories.len() == 40,
-        "complete producer, replacement, HTTP, foreground, requirement and numerical source inventories missing",
+        receipt.inventories.len() == 44
+            && receipt.transport_digests.len() == 44
+            && receipt.producer_inventories.len() == 44,
+        "complete producer, replacement, HTTP, foreground, requirement, numerical and map source inventories missing",
     )?;
     for (index, inventory) in receipt.inventories.iter().enumerate() {
         verify_producer_inventory(&receipt.producer_inventories[index], inventory)?;
@@ -2048,6 +2053,7 @@ pub(crate) fn read_transferred_receipt(
     requirements::validate(&receipt, &root)?;
     f64::validate(&receipt, &root, 36)?;
     let parameter_type_commands = parameter_type::validate(&receipt, &root, 36..40)?;
+    let map_commands = maps::validate(&receipt, &root, 40..44)?;
     let named_cwd = Path::new(&receipt.isolated_root)
         .join("named-unrelated")
         .display()
@@ -2066,6 +2072,7 @@ pub(crate) fn read_transferred_receipt(
                     if finite_installed_commands.contains(&index)
                         || (!named
                             && !parameter_type_commands.contains(&index)
+                            && !map_commands.contains(&index)
                             && command.command.get(1).is_some_and(|v| v == "run")
                             && command.command.get(2).is_some_and(|v| v == "--deployment"))
                     {

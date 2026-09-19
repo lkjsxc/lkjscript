@@ -1,0 +1,108 @@
+reference.package as=$std source=builtin
+reference.owner as=$insert package=$std class=declaration name=map-insert
+reference.owner as=$remove package=$std class=declaration name=map-remove
+reference.owner as=$get-or package=$std class=declaration name=map-get-or
+reference.owner as=$entries package=$std class=declaration name=map-entries
+reference.owner as=$length package=$std class=declaration name=map-length
+reference.owner as=$totals-by package=$library class=declaration name=totals-by
+create.module as=$module name=event-command
+create.component as=$component module=$module name=events visibility=public
+type.map as=@Totals key=text value=i64
+type.list as=@Snapshots item=@Totals
+create.record as=$Event module=$module name=Event visibility=public
+add.field as=$event-key record=$Event name=key type=text
+add.field as=$event-amount record=$Event name=amount type=i64
+type.named as=@Event declaration=$Event
+type.list as=@Events item=@Event
+add.parameter as=$key-item function=$key name=item type=@Event
+expression.block as=$key-body
+  (field (local $key-item) $event-key)
+expression.end
+create.function as=$key module=$module name=event-key visibility=private result=text effect=pure body=$key-body
+add.parameter as=$amount-item function=$amount name=item type=@Event
+expression.block as=$amount-body
+  (field (local $amount-item) $event-amount)
+expression.end
+create.function as=$amount module=$module name=event-amount visibility=private result=i64 effect=pure body=$amount-body
+add.parameter as=$main-items function=$main name=items type=@Events
+expression.block as=$main-body
+  (call $totals-by (types @Event) (local $main-items) (function-value $key) (function-value $amount))
+expression.end
+create.function as=$main module=$module name=aggregate visibility=private result=@Totals effect=pure body=$main-body
+type.function as=@MainPort result=@Totals
+type.argument parent=@MainPort index=0 type=@Events
+add.port as=$main-port component=$component name=aggregate type=@MainPort function=$main
+create.target as=$main-target name=aggregate component=$component port=$main-port runner=command
+
+add.parameter as=$snapshot-items function=$snapshots name=items type=@Events
+expression.block as=$snapshots-body
+  (let
+    (binding original (type @Totals) (call $main (local $snapshot-items)))
+    (binding intermediate (type @Totals) (call $insert (types text i64) (local original) (text "a") (i64 10)))
+    (binding final (type @Totals) (call $remove (types text i64) (local intermediate) (text "b")))
+    (binding repeated (type @Totals) (call $insert (types text i64) (local intermediate) (text "a") (i64 10)))
+    (binding absent (type @Totals) (call $remove (types text i64) (local final) (text "missing")))
+    (binding sibling (type @Totals) (call $remove (types text i64) (local original) (text "a")))
+    (in (list @Totals (local original) (local intermediate) (local final) (local repeated) (local absent) (local sibling))))
+expression.end
+create.function as=$snapshots module=$module name=snapshots visibility=private result=@Snapshots effect=pure body=$snapshots-body
+type.function as=@SnapshotsPort result=@Snapshots
+type.argument parent=@SnapshotsPort index=0 type=@Events
+add.port as=$snapshots-port component=$component name=snapshots type=@SnapshotsPort function=$snapshots
+create.target as=$snapshots-target name=snapshots component=$component port=$snapshots-port runner=command
+
+type.structural-record as=@Entry
+type.field parent=@Entry index=0 name=key type=text
+type.field parent=@Entry index=1 name=value type=i64
+type.list as=@Entries item=@Entry
+add.parameter as=$ordered-items function=$ordered name=items type=@Events
+expression.block as=$ordered-body
+  (call $entries (types text i64) (call $main (local $ordered-items)))
+expression.end
+create.function as=$ordered module=$module name=ordered visibility=private result=@Entries effect=pure body=$ordered-body
+type.function as=@OrderedPort result=@Entries
+type.argument parent=@OrderedPort index=0 type=@Events
+add.port as=$ordered-port component=$component name=ordered type=@OrderedPort function=$ordered
+create.target as=$ordered-target name=ordered component=$component port=$ordered-port runner=command
+
+add.parameter as=$get-map function=$get name=map type=@Totals
+add.parameter as=$get-key function=$get name=key type=text
+create.external as=$get module=$module name=lookup visibility=private result=i64 implementation=core.map.get
+add.parameter as=$contains-map function=$contains name=map type=@Totals
+add.parameter as=$contains-key function=$contains name=key type=text
+create.external as=$contains module=$module name=contains visibility=private result=bool implementation=core.map.contains
+type.structural-record as=@Operations
+type.field parent=@Operations index=0 name=length type=i64
+type.field parent=@Operations index=1 name=lookup type=i64
+type.field parent=@Operations index=2 name=present type=bool
+type.field parent=@Operations index=3 name=missing type=bool
+type.field parent=@Operations index=4 name=existing-fallback type=i64
+type.field parent=@Operations index=5 name=missing-fallback type=i64
+add.parameter as=$operations-items function=$operations name=items type=@Events
+expression.block as=$operations-body
+  (let
+    (binding totals (type @Totals) (call $main (local $operations-items)))
+    (in
+      (record structural
+        (field length (call $length (types text i64) (local totals)))
+        (field lookup (call $get (local totals) (text "b")))
+        (field present (call $contains (local totals) (text "a")))
+        (field missing (call $contains (local totals) (text "missing")))
+        (field existing-fallback (call $get-or (types text i64) (local totals) (text "a") (i64 -99)))
+        (field missing-fallback (call $get-or (types text i64) (local totals) (text "missing") (i64 -99))))))
+expression.end
+create.function as=$operations module=$module name=operations visibility=private result=@Operations effect=pure body=$operations-body
+type.function as=@OperationsPort result=@Operations
+type.argument parent=@OperationsPort index=0 type=@Events
+add.port as=$operations-port component=$component name=operations type=@OperationsPort function=$operations
+create.target as=$operations-target name=operations component=$component port=$operations-port runner=command
+
+add.parameter as=$missing-items function=$missing name=items type=@Events
+expression.block as=$missing-body
+  (call $get (call $main (local $missing-items)) (text "missing"))
+expression.end
+create.function as=$missing module=$module name=missing-lookup visibility=private result=i64 effect=pure body=$missing-body
+type.function as=@MissingPort result=i64
+type.argument parent=@MissingPort index=0 type=@Events
+add.port as=$missing-port component=$component name=missing-lookup type=@MissingPort function=$missing
+create.target as=$missing-target name=missing-lookup component=$component port=$missing-port runner=command

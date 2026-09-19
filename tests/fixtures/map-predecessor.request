@@ -1,0 +1,24 @@
+request base=rev_0dd6450223c007ebf2c424a41f0e497683cdfdebe61170f89ac8c68505839e95
+reference.package as=$std source=builtin
+reference.owner as=$encode package=$std class=declaration name=data-encode
+create.module as=$module name=map-codec
+type.map as=@Map key=text value=i64
+add.parameter as=$map-input function=$map-values name=input type=@Map
+expression.block as=$map-body
+  (local $map-input)
+expression.end
+create.function as=$map-values module=$module name=map-values visibility=public result=@Map effect=pure body=$map-body
+add.parameter as=$data-input function=$map-data name=input type=@Map
+expression.block as=$data-body
+  (call $encode (types @Map) (local $data-input))
+expression.end
+create.function as=$map-data module=$module name=map-data visibility=public result=bytes effect=pure body=$data-body
+type.function as=@MapEntry result=@Map
+type.argument parent=@MapEntry index=0 type=@Map
+type.function as=@DataEntry result=bytes
+type.argument parent=@DataEntry index=0 type=@Map
+create.component as=$component module=$module name=MapCodec visibility=package
+add.port as=$map-port component=$component name=map-values type=@MapEntry function=$map-values
+add.port as=$data-port component=$component name=map-data type=@DataEntry function=$map-data
+create.target as=$map-target name=map-values component=$component port=$map-port runner=command
+create.target as=$data-target name=map-data component=$component port=$data-port runner=command

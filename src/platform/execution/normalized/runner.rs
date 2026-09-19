@@ -177,6 +177,7 @@ pub(crate) struct NormalizedForegroundReceipt {
     pub result_json: Vec<u8>,
     pub production: NormalizedRunObservation,
     pub invocation_nanoseconds: u64,
+    pub result_encoding_nanoseconds: u64,
     pub shutdown: crate::platform::runtime::ShutdownReceipt,
 }
 
@@ -232,6 +233,7 @@ pub(crate) async fn run_foreground_command(
         }
     };
     let encoded = outcome.and_then(|receipt| {
+        let started = std::time::Instant::now();
         let bytes = encode_typed_with_control(
             resident.program(),
             &receipt.value,
@@ -239,14 +241,19 @@ pub(crate) async fn run_foreground_command(
             JsonLimits::default(),
             &ExecutionControl::uncancelled(),
         )?;
-        Ok((bytes, receipt))
+        let result_encoding_nanoseconds =
+            started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64;
+        Ok((bytes, receipt, result_encoding_nanoseconds))
     });
     let shutdown = resident.shutdown().await;
-    let mut result = encoded.map(|(result_json, receipt)| NormalizedForegroundReceipt {
-        result_json,
-        production: receipt.execution,
-        invocation_nanoseconds: receipt.execution_nanoseconds,
-        shutdown: shutdown.clone(),
+    let mut result = encoded.map(|(result_json, receipt, result_encoding_nanoseconds)| {
+        NormalizedForegroundReceipt {
+            result_json,
+            production: receipt.execution,
+            invocation_nanoseconds: receipt.execution_nanoseconds,
+            result_encoding_nanoseconds,
+            shutdown: shutdown.clone(),
+        }
     });
     if (shutdown.remaining_tasks != 0 || !shutdown.cleanup_failures.is_empty()) && result.is_ok() {
         result = Err(runner_error(

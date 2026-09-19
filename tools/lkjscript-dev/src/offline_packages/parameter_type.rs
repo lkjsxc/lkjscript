@@ -907,13 +907,12 @@ pub(super) fn validate(
     )?;
     require(
         inventory_span.len() == 4
-            && inventory_span.end == receipt.inventories.len()
             && inventory_span_matches(
                 evolution.sources.iter().map(|source| source.inventory),
                 inventory_span,
                 receipt.inventories.len(),
             ),
-        "parameter-type exact final source inventories omitted, reordered or overlapping",
+        "parameter-type exact source inventories omitted, reordered or overlapping",
     )?;
     for source in &evolution.sources {
         let producer = receipt

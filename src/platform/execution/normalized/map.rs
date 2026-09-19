@@ -1,17 +1,25 @@
 //! Neutral persistent ordered maps. Storage sharing conveys no type or affine authority.
 //!
-//! AVL path copying retains immutable entry handles, including keys and payloads. An
-//! edit allocates only its search/rotation paths. Traversal and codecs see key order,
-//! never tree shape. Raw ingress is admitted independently by each evaluator.
+//! AVL path copying retains immutable entry handles, including keys and payloads.
+//! Each new node reserves one collection slot and its node plus two Arc counters;
+//! each new entry reserves its key/value header plus two Arc counters. Owned key
+//! buffers and payloads move from their already reserved construction owner. The
+//! borrowed-key helper reserves its copied key buffer before cloning it. Existing
+//! entry handles and subtrees are shared, never charged as fresh deep payloads.
+//! Temporary rotation nodes are charged even when the resulting tree omits them.
+//! Zero reservations check cancellation on entry and before successful exposure.
+//! Traversal and codecs see key order, never tree shape. Raw ingress is admitted
+//! independently by each evaluator; this carrier has no semantic certificate.
 
 use super::value::{NormalizedMapKey, NormalizedValue, release_raw_values};
 use crate::platform::execution::{ExecutionError, ExecutionFailureClass};
+use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-pub(super) const MAXIMUM_LENGTH: usize = 1_000_000;
-// An AVL tree with at most one million entries has height below 32.
-const MAXIMUM_HEIGHT: usize = 32;
+// An AVL tree of representable length has height below twice the address width.
+// This is a representation bound, not an independent finite value-admission rule.
+const MAXIMUM_HEIGHT: usize = 2 * usize::BITS as usize;
 type Link = Option<Arc<Node>>;
 
 struct Entry {
@@ -26,12 +34,75 @@ struct Node {
     height: usize,
 }
 
+/// New storage requests only; every evaluator owns its own cumulative ledger.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(super) struct Charge {
     pub slots: u64,
     pub bytes: u64,
 }
 
+/// Storage observations, not global allocator measurements or execution permission.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize)]
+pub(crate) struct Work {
+    pub node_visits: u64,
+    pub nodes_allocated: u64,
+    pub entry_handles_allocated: u64,
+    pub entry_handle_copies: u64,
+    pub key_bytes_copied: u64,
+}
+
+thread_local! {
+    static WORK: Cell<Work> = const { Cell::new(Work {
+        node_visits: 0,
+        nodes_allocated: 0,
+        entry_handles_allocated: 0,
+        entry_handle_copies: 0,
+        key_bytes_copied: 0,
+    }) };
+}
+
+impl Work {
+    pub(super) fn current() -> Self {
+        WORK.get()
+    }
+
+    pub(super) fn since(self) -> Self {
+        let end = Self::current();
+        Self {
+            node_visits: end.node_visits.saturating_sub(self.node_visits),
+            nodes_allocated: end.nodes_allocated.saturating_sub(self.nodes_allocated),
+            entry_handles_allocated: end
+                .entry_handles_allocated
+                .saturating_sub(self.entry_handles_allocated),
+            entry_handle_copies: end
+                .entry_handle_copies
+                .saturating_sub(self.entry_handle_copies),
+            key_bytes_copied: end.key_bytes_copied.saturating_sub(self.key_bytes_copied),
+        }
+    }
+}
+
+fn observe(update: impl FnOnce(&mut Work)) {
+    let mut work = WORK.get();
+    update(&mut work);
+    WORK.set(work);
+}
+
+fn visit() {
+    observe(|work| work.node_visits = work.node_visits.saturating_add(1));
+}
+
+/// The evaluator calls this after its reserved owned-key conversion completes.
+pub(super) fn key_copied(bytes: u64) {
+    observe(|work| work.key_bytes_copied = work.key_bytes_copied.saturating_add(bytes));
+}
+
+fn share(entry: &Arc<Entry>) -> Arc<Entry> {
+    observe(|work| work.entry_handle_copies = work.entry_handle_copies.saturating_add(1));
+    Arc::clone(entry)
+}
+
+/// Empty maps have no heap storage. The inline header belongs to the value slot.
 #[derive(Clone, Default)]
 pub struct Map {
     length: usize,
@@ -66,22 +137,16 @@ fn entry_bytes() -> u64 {
     (std::mem::size_of::<Entry>() + 2 * std::mem::size_of::<usize>()) as u64
 }
 
-fn key_bytes(key: &NormalizedMapKey) -> usize {
-    match key {
-        NormalizedMapKey::Bytes(value) => value.len(),
-        NormalizedMapKey::Text(value) => value.len(),
-        NormalizedMapKey::Bool(_) | NormalizedMapKey::I64(_) => 0,
-    }
-}
-
 fn entry(
     value: Entry,
     reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
 ) -> Result<Arc<Entry>, ExecutionError> {
-    let bytes = entry_bytes()
-        .checked_add(key_bytes(&value.key) as u64)
-        .ok_or_else(storage_error)?;
-    reserve(Charge { slots: 0, bytes })?;
+    // Entry already owns the raw payload, including on refused reservation.
+    reserve(Charge {
+        slots: 0,
+        bytes: entry_bytes(),
+    })?;
+    observe(|work| work.entry_handles_allocated = work.entry_handles_allocated.saturating_add(1));
     Ok(Arc::new(value))
 }
 
@@ -100,6 +165,7 @@ fn node(
         slots: 1,
         bytes: node_bytes(),
     })?;
+    observe(|work| work.nodes_allocated = work.nodes_allocated.saturating_add(1));
     Ok(Arc::new(Node {
         entry,
         left,
@@ -118,33 +184,43 @@ fn balance(
         let pivot = left.as_ref().ok_or_else(shape_error)?;
         if height(&pivot.left) >= height(&pivot.right) {
             let right = node(entry, pivot.right.clone(), right, reserve)?;
-            return node(pivot.entry.clone(), pivot.left.clone(), Some(right), reserve);
+            return node(
+                share(&pivot.entry),
+                pivot.left.clone(),
+                Some(right),
+                reserve,
+            );
         }
         let middle = pivot.right.as_ref().ok_or_else(shape_error)?;
         let left = node(
-            pivot.entry.clone(),
+            share(&pivot.entry),
             pivot.left.clone(),
             middle.left.clone(),
             reserve,
         )?;
         let right = node(entry, middle.right.clone(), right, reserve)?;
-        return node(middle.entry.clone(), Some(left), Some(right), reserve);
+        return node(share(&middle.entry), Some(left), Some(right), reserve);
     }
     if height(&right) > height(&left).saturating_add(1) {
         let pivot = right.as_ref().ok_or_else(shape_error)?;
         if height(&pivot.right) >= height(&pivot.left) {
             let left = node(entry, left, pivot.left.clone(), reserve)?;
-            return node(pivot.entry.clone(), Some(left), pivot.right.clone(), reserve);
+            return node(
+                share(&pivot.entry),
+                Some(left),
+                pivot.right.clone(),
+                reserve,
+            );
         }
         let middle = pivot.left.as_ref().ok_or_else(shape_error)?;
         let left = node(entry, left, middle.left.clone(), reserve)?;
         let right = node(
-            pivot.entry.clone(),
+            share(&pivot.entry),
             middle.right.clone(),
             pivot.right.clone(),
             reserve,
         )?;
-        return node(middle.entry.clone(), Some(left), Some(right), reserve);
+        return node(share(&middle.entry), Some(left), Some(right), reserve);
     }
     node(entry, left, right, reserve)
 }
@@ -157,14 +233,15 @@ fn insert(
     let Some(root) = root else {
         return node(added, None, None, reserve);
     };
+    visit();
     match added.key.cmp(&root.entry.key) {
         std::cmp::Ordering::Less => {
             let left = insert(&root.left, added, reserve)?;
-            balance(root.entry.clone(), Some(left), root.right.clone(), reserve)
+            balance(share(&root.entry), Some(left), root.right.clone(), reserve)
         }
         std::cmp::Ordering::Greater => {
             let right = insert(&root.right, added, reserve)?;
-            balance(root.entry.clone(), root.left.clone(), Some(right), reserve)
+            balance(share(&root.entry), root.left.clone(), Some(right), reserve)
         }
         std::cmp::Ordering::Equal => node(added, root.left.clone(), root.right.clone(), reserve),
     }
@@ -174,11 +251,12 @@ fn remove_first(
     root: &Arc<Node>,
     reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
 ) -> Result<(Arc<Entry>, Link), ExecutionError> {
+    visit();
     let Some(left) = &root.left else {
-        return Ok((root.entry.clone(), root.right.clone()));
+        return Ok((share(&root.entry), root.right.clone()));
     };
     let (entry, left) = remove_first(left, reserve)?;
-    let root = balance(root.entry.clone(), left, root.right.clone(), reserve)?;
+    let root = balance(share(&root.entry), left, root.right.clone(), reserve)?;
     Ok((entry, Some(root)))
 }
 
@@ -188,14 +266,15 @@ fn remove(
     reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
 ) -> Result<Link, ExecutionError> {
     let root = root.as_ref().ok_or_else(shape_error)?;
+    visit();
     match key.cmp(&root.entry.key) {
         std::cmp::Ordering::Less => {
             let left = remove(&root.left, key, reserve)?;
-            balance(root.entry.clone(), left, root.right.clone(), reserve).map(Some)
+            balance(share(&root.entry), left, root.right.clone(), reserve).map(Some)
         }
         std::cmp::Ordering::Greater => {
             let right = remove(&root.right, key, reserve)?;
-            balance(root.entry.clone(), root.left.clone(), right, reserve).map(Some)
+            balance(share(&root.entry), root.left.clone(), right, reserve).map(Some)
         }
         std::cmp::Ordering::Equal => match (&root.left, &root.right) {
             (None, _) => Ok(root.right.clone()),
@@ -208,12 +287,15 @@ fn remove(
     }
 }
 
-// Own all unadmitted payloads while a bounded bulk construction can still fail.
+// Own all unadmitted payloads while bulk construction can still fail. Drain each
+// remaining payload iteratively without allocating another whole-entry buffer.
 struct RawEntries(std::collections::btree_map::IntoIter<NormalizedMapKey, NormalizedValue>);
 
 impl Drop for RawEntries {
     fn drop(&mut self) {
-        release_raw_values(self.0.by_ref().map(|(_, value)| value).collect());
+        for (_, value) in self.0.by_ref() {
+            release_raw_values(vec![value]);
+        }
     }
 }
 
@@ -236,15 +318,17 @@ fn sorted(
 impl Map {
     pub(super) fn from_items(
         entries: BTreeMap<NormalizedMapKey, NormalizedValue>,
+        maximum_length: u64,
         reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
         let length = entries.len();
         let mut entries = RawEntries(entries.into_iter());
-        if length > MAXIMUM_LENGTH {
+        if length as u64 > maximum_length {
             return Err(storage_error());
         }
         reserve(Charge::default())?;
         let root = sorted(&mut entries, length, reserve)?;
+        reserve(Charge::default())?;
         Ok(Self { length, root })
     }
 
@@ -252,24 +336,44 @@ impl Map {
         self.length
     }
 
+    #[cfg(test)]
     pub(super) fn is_empty(&self) -> bool {
         self.length == 0
     }
 
-    pub(super) fn get(&self, key: &NormalizedMapKey) -> Option<&NormalizedValue> {
+    pub(super) fn get_key_value(
+        &self,
+        key: &NormalizedMapKey,
+    ) -> Option<(&NormalizedMapKey, &NormalizedValue)> {
         let mut current = self.root.as_deref();
         while let Some(node) = current {
+            visit();
             current = match key.cmp(&node.entry.key) {
                 std::cmp::Ordering::Less => node.left.as_deref(),
                 std::cmp::Ordering::Greater => node.right.as_deref(),
-                std::cmp::Ordering::Equal => return Some(&node.entry.value),
+                std::cmp::Ordering::Equal => return Some((&node.entry.key, &node.entry.value)),
             };
         }
         None
     }
 
+    pub(super) fn get(&self, key: &NormalizedMapKey) -> Option<&NormalizedValue> {
+        self.get_key_value(key).map(|(_, value)| value)
+    }
+
     pub(super) fn contains_key(&self, key: &NormalizedMapKey) -> bool {
         self.get(key).is_some()
+    }
+
+    fn inserted_length(
+        &self,
+        key: &NormalizedMapKey,
+        maximum_length: u64,
+    ) -> Result<usize, ExecutionError> {
+        self.length
+            .checked_add(usize::from(!self.contains_key(key)))
+            .filter(|length| *length as u64 <= maximum_length)
+            .ok_or_else(storage_error)
     }
 
     pub(super) fn insert(
@@ -281,13 +385,50 @@ impl Map {
     ) -> Result<Self, ExecutionError> {
         let added = Entry { key, value };
         reserve(Charge::default())?;
-        let length = self
-            .length
-            .checked_add(usize::from(!self.contains_key(&added.key)))
-            .filter(|length| *length <= MAXIMUM_LENGTH && *length as u64 <= maximum_length)
-            .ok_or_else(storage_error)?;
+        let length = self.inserted_length(&added.key, maximum_length)?;
         let added = entry(added, reserve)?;
         let root = insert(&self.root, added, reserve)?;
+        reserve(Charge::default())?;
+        Ok(Self {
+            length,
+            root: Some(root),
+        })
+    }
+
+    // A bounded borrowed-key owner used to challenge reservation ordering. Normal
+    // evaluator producers reserve conversion at their own key allocation boundary.
+    #[cfg(test)]
+    fn insert_borrowed(
+        &self,
+        key: &NormalizedMapKey,
+        value: NormalizedValue,
+        maximum_length: u64,
+        reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
+    ) -> Result<Self, ExecutionError> {
+        let mut added = Entry {
+            key: NormalizedMapKey::Bool(false),
+            value,
+        };
+        reserve(Charge::default())?;
+        let length = self.inserted_length(key, maximum_length)?;
+        let key_bytes = match key {
+            NormalizedMapKey::Bytes(value) => value.len(),
+            NormalizedMapKey::Text(value) => value.len(),
+            NormalizedMapKey::Bool(_) | NormalizedMapKey::I64(_) => 0,
+        } as u64;
+        reserve(Charge {
+            slots: 0,
+            bytes: entry_bytes()
+                .checked_add(key_bytes)
+                .ok_or_else(storage_error)?,
+        })?;
+        added.key = key.clone();
+        key_copied(key_bytes);
+        observe(|work| {
+            work.entry_handles_allocated = work.entry_handles_allocated.saturating_add(1);
+        });
+        let root = insert(&self.root, Arc::new(added), reserve)?;
+        reserve(Charge::default())?;
         Ok(Self {
             length,
             root: Some(root),
@@ -300,12 +441,15 @@ impl Map {
         reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
         reserve(Charge::default())?;
-        if !self.contains_key(key) {
-            return Ok(self.clone());
-        }
-        let length = self.length.checked_sub(1).ok_or_else(shape_error)?;
-        let root = remove(&self.root, key, reserve)?;
-        Ok(Self { length, root })
+        let result = if self.contains_key(key) {
+            let length = self.length.checked_sub(1).ok_or_else(shape_error)?;
+            let root = remove(&self.root, key, reserve)?;
+            Self { length, root }
+        } else {
+            self.clone()
+        };
+        reserve(Charge::default())?;
+        Ok(result)
     }
 
     pub(super) fn iter(&self) -> Iter<'_> {
@@ -322,17 +466,24 @@ impl Map {
         self.iter().map(|(key, _)| key)
     }
 
+    #[cfg(test)]
     pub(super) fn values(
         &self,
     ) -> impl DoubleEndedIterator<Item = &NormalizedValue> + ExactSizeIterator {
         self.iter().map(|(_, value)| value)
     }
 
-    // Admission already charges each logical (key, value) occurrence. These bytes
-    // account for the additional neutral node and entry reference-count storage.
+    // Admission separately charges every logical value slot and key. Add neutral
+    // AVL nodes, entry reference counts and any header alignment padding here.
     pub(super) fn metadata_bytes(&self) -> Result<u64, ExecutionError> {
+        let entry_overhead = entry_bytes()
+            .checked_sub(
+                (std::mem::size_of::<NormalizedMapKey>() + std::mem::size_of::<NormalizedValue>())
+                    as u64,
+            )
+            .ok_or_else(storage_error)?;
         let overhead = node_bytes()
-            .checked_add((2 * std::mem::size_of::<usize>()) as u64)
+            .checked_add(entry_overhead)
             .ok_or_else(storage_error)?;
         (self.length as u64)
             .checked_mul(overhead)
@@ -358,7 +509,10 @@ impl Map {
 impl Drop for Entry {
     fn drop(&mut self) {
         if !matches!(self.value, NormalizedValue::Unit) {
-            release_raw_values(vec![std::mem::replace(&mut self.value, NormalizedValue::Unit)]);
+            release_raw_values(vec![std::mem::replace(
+                &mut self.value,
+                NormalizedValue::Unit,
+            )]);
         }
     }
 }
@@ -403,6 +557,7 @@ impl<'a> Cursor<'a> {
 
     fn next(&mut self) -> Option<(&'a NormalizedMapKey, &'a NormalizedValue)> {
         while let Some(node) = self.next.take() {
+            visit();
             *self.stack.get_mut(self.depth)? = Some(node);
             self.depth += 1;
             self.next = if self.reverse {

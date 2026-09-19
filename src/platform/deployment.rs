@@ -1577,6 +1577,7 @@ pub(crate) struct ForegroundCommandReceipt {
     pub policy: NormalizedRunPolicy,
     pub deadline_milliseconds: Option<u64>,
     pub invocation_nanoseconds: u64,
+    pub result_encoding_nanoseconds: u64,
     pub shutdown: ShutdownReceipt,
 }
 
@@ -1825,6 +1826,7 @@ impl PreparedDeployment {
             policy,
             deadline_milliseconds,
             invocation_nanoseconds: receipt.invocation_nanoseconds,
+            result_encoding_nanoseconds: receipt.result_encoding_nanoseconds,
             shutdown: receipt.shutdown,
         })
     }

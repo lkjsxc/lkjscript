@@ -406,7 +406,8 @@ fn from_json(
                     return Err(type_error(path, "map contains a duplicate key"));
                 }
             }
-            Ok(NormalizedValue::Map(Arc::new(output)))
+            NormalizedValue::map_controlled(output, control)
+                .map_err(super::runner::execution_diagnostic)
         }
         TypeForm::Secret
         | TypeForm::CapabilityResource { .. }
@@ -550,38 +551,10 @@ fn to_json(
                     )
                 })
         }
-        (NormalizedValue::Bytes(value), TypeForm::Bytes) => {
-            state.charge(1, path)?;
-            let encoded_length = value
-                .len()
-                .checked_add(2)
-                .and_then(|length| length.checked_div(3))
-                .and_then(|groups| groups.checked_mul(4))
-                .ok_or_else(|| {
-                    json_error(
-                        DiagnosticClass::Resource,
-                        "normalized_json_base64_length",
-                        "base64 output length overflowed its platform domain",
-                    )
-                })?;
-            if encoded_length > state.limits.maximum_string_bytes
-                || encoded_length > state.limits.maximum_bytes
-            {
-                return Err(type_error(
-                    path,
-                    "base64 bytes exceed the JSON string or output-byte limit",
-                ));
-            }
-            Ok(serde_json::json!({
-                "$bytes": base64::engine::general_purpose::STANDARD.encode(value),
-            }))
-        }
+        (NormalizedValue::Bytes(value), TypeForm::Bytes) => bytes_to_json(value, state, path),
         (NormalizedValue::Text(value), TypeForm::Text)
         | (NormalizedValue::StaticText(value), TypeForm::StaticText) => {
-            if value.len() > state.limits.maximum_string_bytes {
-                return Err(type_error(path, "text exceeds the JSON string-byte limit"));
-            }
-            Ok(JsonValue::String(value.to_string()))
+            text_to_json(value, state, path)
         }
         (value, TypeForm::Named { .. } | TypeForm::Applied { .. }) => {
             encode_named(program, value, ty, state, path, depth)
@@ -638,11 +611,10 @@ fn to_json(
                 .iter()
                 .enumerate()
                 .map(|(index, (map_key, value))| {
-                    let key_value = map_key_value(map_key);
                     Ok(JsonValue::Array(vec![
-                        to_json(
+                        map_key_to_json(
                             program,
-                            &key_value,
+                            map_key,
                             *key,
                             state,
                             &format!("{path}[{index}][0]"),
@@ -839,13 +811,63 @@ fn decode_bytes(value: &JsonValue, path: &str) -> Result<NormalizedValue, Diagno
     Ok(NormalizedValue::Bytes(Arc::from(bytes)))
 }
 
-fn map_key_value(key: &NormalizedMapKey) -> NormalizedValue {
-    match key {
-        NormalizedMapKey::Bool(value) => NormalizedValue::Bool(*value),
-        NormalizedMapKey::I64(value) => NormalizedValue::I64(*value),
-        NormalizedMapKey::Bytes(value) => NormalizedValue::Bytes(Arc::from(value.clone())),
-        NormalizedMapKey::Text(value) => NormalizedValue::Text(Arc::from(value.as_str())),
+fn map_key_to_json(
+    program: &dyn NormalizedValueSchema,
+    key: &NormalizedMapKey,
+    ty: TypeObjectDigest,
+    state: &mut EncodeState,
+    path: &str,
+    depth: usize,
+) -> Result<JsonValue, Diagnostic> {
+    state.require_depth(path, depth)?;
+    match (key, json_form(program, ty, false, path)?) {
+        (NormalizedMapKey::Bool(value), TypeForm::Bool) => Ok(JsonValue::Bool(*value)),
+        (NormalizedMapKey::I64(value), TypeForm::I64) => Ok(JsonValue::from(*value)),
+        (NormalizedMapKey::Bytes(value), TypeForm::Bytes) => bytes_to_json(value, state, path),
+        (NormalizedMapKey::Text(value), TypeForm::Text) => text_to_json(value, state, path),
+        _ => Err(type_error(
+            path,
+            "runtime value does not match the exact boundary type",
+        )),
     }
+}
+
+fn bytes_to_json(
+    value: &[u8],
+    state: &mut EncodeState,
+    path: &str,
+) -> Result<JsonValue, Diagnostic> {
+    state.charge(1, path)?;
+    let encoded_length = value
+        .len()
+        .checked_add(2)
+        .and_then(|length| length.checked_div(3))
+        .and_then(|groups| groups.checked_mul(4))
+        .ok_or_else(|| {
+            json_error(
+                DiagnosticClass::Resource,
+                "normalized_json_base64_length",
+                "base64 output length overflowed its platform domain",
+            )
+        })?;
+    if encoded_length > state.limits.maximum_string_bytes
+        || encoded_length > state.limits.maximum_bytes
+    {
+        return Err(type_error(
+            path,
+            "base64 bytes exceed the JSON string or output-byte limit",
+        ));
+    }
+    Ok(serde_json::json!({
+        "$bytes": base64::engine::general_purpose::STANDARD.encode(value),
+    }))
+}
+
+fn text_to_json(value: &str, state: &EncodeState, path: &str) -> Result<JsonValue, Diagnostic> {
+    if value.len() > state.limits.maximum_string_bytes {
+        return Err(type_error(path, "text exceeds the JSON string-byte limit"));
+    }
+    Ok(JsonValue::String(value.to_owned()))
 }
 
 #[derive(Clone, Copy)]

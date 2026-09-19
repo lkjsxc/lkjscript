@@ -891,10 +891,7 @@ fn request_value(
         ("method", NormalizedValue::text(request.method)),
         ("path", NormalizedValue::text(request.path)),
         ("query", NormalizedValue::text(request.query)),
-        (
-            "query_parameters",
-            NormalizedValue::Map(Arc::new(query_parameters)),
-        ),
+        ("query_parameters", NormalizedValue::map(query_parameters)?),
     ])
 }
 
@@ -1084,6 +1081,69 @@ fn http_io(code: &'static str, message: String) -> Diagnostic {
 mod tests {
     use super::*;
     use crate::platform::execution::normalized::value::FunctionIndex;
+
+    #[test]
+    fn query_map_ingress_preserves_sorted_keys_and_repeated_value_order() {
+        let query = "b=first+one&a=%E6%97%A5&b=second&empty";
+        let request = request_value(
+            HttpRequest {
+                method: "GET".to_owned(),
+                path: "/map".to_owned(),
+                query: query.to_owned(),
+                headers: vec![],
+                body: vec![],
+            },
+            decode_query_parameters(query).unwrap(),
+            NormalizedValue::Unit,
+        )
+        .unwrap();
+        let fields = exact_structural(
+            &request,
+            &[
+                "body",
+                "headers",
+                "method",
+                "path",
+                "query",
+                "query_parameters",
+            ],
+            "request",
+        )
+        .unwrap();
+        assert_eq!(fields[4].1, NormalizedValue::text(query));
+        let NormalizedValue::Map(entries) = &fields[5].1 else {
+            panic!("query parameters must use the runtime map carrier")
+        };
+        let observed = entries
+            .iter()
+            .map(|(key, value)| {
+                let NormalizedMapKey::Text(key) = key else {
+                    panic!("query key must be Text")
+                };
+                let NormalizedValue::List(values) = value else {
+                    panic!("query values must be a List")
+                };
+                let values = values
+                    .iter()
+                    .map(|value| {
+                        let NormalizedValue::Text(value) = value else {
+                            panic!("query value must be Text")
+                        };
+                        value.as_ref()
+                    })
+                    .collect::<Vec<_>>();
+                (key.as_str(), values)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            observed,
+            vec![
+                ("a", vec!["日"]),
+                ("b", vec!["first one", "second"]),
+                ("empty", vec![""]),
+            ]
+        );
+    }
 
     #[test]
     fn prepared_matcher_uses_exact_then_comparable_pattern_specificity() {

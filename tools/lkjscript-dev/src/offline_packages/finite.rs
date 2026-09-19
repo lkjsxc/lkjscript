@@ -740,6 +740,7 @@ pub(super) fn read_focused(path: &Path, candidate: &Path, verifier: &Path) -> Re
                 | "lkjscript-offline-requirement-parameters-2"
                 | "lkjscript-offline-f64-1"
                 | "lkjscript-offline-parameter-type-1"
+                | "lkjscript-offline-persistent-maps-1"
         ) && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -762,7 +763,10 @@ pub(super) fn read_focused(path: &Path, candidate: &Path, verifier: &Path) -> Re
             && Path::new(&receipt.evidence_root) == root.canonicalize()?,
         "finite execution paths or environment binding differ",
     )?;
-    let parameter_type = receipt.schema == "lkjscript-offline-parameter-type-1";
+    let copied_foreground = matches!(
+        receipt.schema.as_str(),
+        "lkjscript-offline-parameter-type-1" | "lkjscript-offline-persistent-maps-1"
+    );
     let pinned = if receipt.schema == "lkjscript-offline-validator-upgrade-1" {
         predecessor::validate(&receipt, root)?
     } else if receipt.schema == "lkjscript-offline-requirement-parameters-2" {
@@ -780,6 +784,13 @@ pub(super) fn read_focused(path: &Path, candidate: &Path, verifier: &Path) -> Re
         )?;
         super::parameter_type::validate(&receipt, root, 0..4)?;
         Vec::new()
+    } else if receipt.schema == "lkjscript-offline-persistent-maps-1" {
+        require(
+            receipt.inventories.len() == 4,
+            "map focused source inventories incomplete",
+        )?;
+        super::maps::validate(&receipt, root, 0..4)?;
+        Vec::new()
     } else {
         validate(&receipt, root)?
     };
@@ -794,7 +805,7 @@ pub(super) fn read_focused(path: &Path, candidate: &Path, verifier: &Path) -> Re
             "finite child command status or environment differs",
         )?;
         let installed = pinned.contains(&index)
-            || (!parameter_type && command.command.get(1).is_some_and(|c| c == "run"));
+            || (!copied_foreground && command.command.get(1).is_some_and(|c| c == "run"));
         require(
             command.command.first()
                 == Some(&if installed {

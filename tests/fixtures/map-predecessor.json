@@ -1,0 +1,19 @@
+{
+  "source_commit": "d77fb8bafab8a5a92b4d5251e62a9c44a41aea82",
+  "executable_sha256": "a30ace674685bbef5d2b15dc5b6566640b77b041f5c540a66e6a896c62a54b74",
+  "provenance": "Fresh ordinary plan/apply, check, differential project runs and build through the frozen clean predecessor executable outside the language checkout on 2026-09-19. These are observed predecessor outputs, not regenerated candidate expectations.",
+  "request": "map-predecessor.request",
+  "request_sha256": "039ad932691fdea98bfdba2d3d33da2e51f0892caa9493020aa4df37289afbe6",
+  "repository": "repo_5dbff00b5843191e266c9fc6a1612f24",
+  "package": "pkg_1a042c5ed001b25c8da5a6be6fe620a7",
+  "revision": "rev_c22137c83c4e0c26798ff05918df52edb04b05e48fcedc344b996037b1bc1de1",
+  "artifact_sha256": "227ed89512392cda6c022683a5c562f617dc7aa5c3385e5bcf8a7d0a51c8da0d",
+  "artifact_bundle": "artifact_bundle_10fa3dc86b5738e64a2c22cad25107818d9f91545d8bf782e5109390bc977297",
+  "arguments": [[["b", 7], ["a", 2]]],
+  "json_value": "[[\"a\",2],[\"b\",7]]",
+  "typed_value_base64": "TEtKRFZBTDEAAUcoBUYh1z3tSU9oCno1sofCZBvMORe6KTN8iOih0n7WAAAAAgAAAAFhAAAAAAAAAAIAAAABYgAAAAAAAAAHYSUxo963Gc+oc2ukhoyQLUtfrp8wai77Q6jh/pXWW3E=",
+  "json_stdout_sha256": "92acda92dd066c187ba1601baa47efcf39be9e8afd9e304ff9e90cbe2b6f7836",
+  "data_stdout_sha256": "05d1106732924f0d18a014cceddbde1dd293f1a0811a65f3604db34a876151bc",
+  "duplicate_input": [[["a", 2], ["a", 7]]],
+  "duplicate_diagnostic": "normalized_json_type"
+}

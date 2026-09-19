@@ -200,8 +200,7 @@ fn write_value(
         (TypeForm::Map { key, value: item }, NormalizedValue::Map(entries)) => {
             write_length(output, entries.len())?;
             for (map_key, item_value) in entries.iter() {
-                let key_value = key_as_value(map_key);
-                write_value(program, *key, &key_value, output, budget, depth + 1)?;
+                write_key(program, *key, map_key, output, budget, depth + 1)?;
                 write_value(program, *item, item_value, output, budget, depth + 1)?;
             }
         }
@@ -354,8 +353,7 @@ fn read_value(
         TypeForm::Map { key, value } => {
             let count = input.read_count("normalized_data_map_count")?;
             budget.charge(count.saturating_mul(2))?;
-            let mut entries = BTreeMap::new();
-            let mut previous: Option<NormalizedMapKey> = None;
+            let mut entries = BTreeMap::<NormalizedMapKey, NormalizedValue>::new();
             for _ in 0..count {
                 let key_value = read_value(program, *key, input, budget, depth + 1)?;
                 let map_key = NormalizedMapKey::from_value(key_value).ok_or_else(|| {
@@ -364,17 +362,20 @@ fn read_value(
                         "typed data map key is not a supported ordered primitive",
                     )
                 })?;
-                if previous.as_ref().is_some_and(|prior| prior >= &map_key) {
+                if entries
+                    .last_key_value()
+                    .is_some_and(|(prior, _)| prior >= &map_key)
+                {
                     return Err(corrupt_error(
                         "normalized_data_map_order",
                         "typed data map keys are duplicate or not in canonical order",
                     ));
                 }
-                previous = Some(map_key.clone());
                 let item = read_value(program, *value, input, budget, depth + 1)?;
                 entries.insert(map_key, item);
             }
-            Ok(NormalizedValue::Map(Arc::new(entries)))
+            NormalizedValue::map_controlled(entries, budget.control)
+                .map_err(super::runner::execution_diagnostic)
         }
         TypeForm::StaticText => Err(unsupported("StaticText")),
         TypeForm::Secret => Err(unsupported("Secret")),
@@ -638,13 +639,27 @@ fn find_variant(
         })
 }
 
-fn key_as_value(key: &NormalizedMapKey) -> NormalizedValue {
-    match key {
-        NormalizedMapKey::Bool(value) => NormalizedValue::Bool(*value),
-        NormalizedMapKey::I64(value) => NormalizedValue::I64(*value),
-        NormalizedMapKey::Bytes(value) => NormalizedValue::bytes(value.clone()),
-        NormalizedMapKey::Text(value) => NormalizedValue::text(value.clone()),
+fn write_key(
+    program: &dyn NormalizedValueSchema,
+    ty: TypeObjectDigest,
+    key: &NormalizedMapKey,
+    output: &mut Vec<u8>,
+    budget: &mut ReferenceBudget,
+    depth: usize,
+) -> Result<(), Diagnostic> {
+    budget.visit(depth)?;
+    match (form(program, ty)?, key) {
+        (TypeForm::Bool, NormalizedMapKey::Bool(value)) => {
+            write_bytes(output, &[u8::from(*value)])?;
+        }
+        (TypeForm::I64, NormalizedMapKey::I64(value)) => {
+            write_bytes(output, &value.to_be_bytes())?;
+        }
+        (TypeForm::Bytes, NormalizedMapKey::Bytes(value)) => write_blob(output, value)?,
+        (TypeForm::Text, NormalizedMapKey::Text(value)) => write_blob(output, value.as_bytes())?,
+        _ => return Err(layout_error("value")),
     }
+    ensure_payload_size(output.len())
 }
 
 fn write_bytes(output: &mut Vec<u8>, bytes: &[u8]) -> Result<(), Diagnostic> {

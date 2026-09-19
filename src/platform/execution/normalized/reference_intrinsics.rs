@@ -267,32 +267,26 @@ impl ReferenceState<'_> {
             if arguments.next().is_some() {
                 return Err(reference_type_error("map entries has foreign arity"));
             }
-            self.charge_items(entries.len(), std::mem::size_of::<NormalizedValue>())?;
+            self.charge_items(entries.len(), std::mem::size_of::<CheckedValue>())?;
             let mut output = Vec::with_capacity(entries.len());
             for key in entries.keys() {
                 self.control.check()?;
+                self.reserve_map(super::super::map::Charge {
+                    slots: 0,
+                    bytes: key.value_storage_bytes()?,
+                })?;
                 let value = map
-                    .lookup(key)?
+                    .lookup(key, &mut |charge| self.reserve_map(charge))?
                     .ok_or_else(|| reference_type_error("map entry disappeared"))?;
-                output.push(self.result_record([
-                    (
-                        "key",
-                        CheckedValue::primitive(&self.schema, key.to_value())?,
-                    ),
-                    ("value", value),
-                ])?);
+                let key = CheckedValue::primitive(&self.schema, key.to_value())?;
+                output.push(self.map_entry_value(key, value)?);
             }
             return self.list_value(output);
         }
         let key = arguments
             .next()
-            .and_then(|key| NormalizedMapKey::from_value(key.release()))
-            .ok_or_else(|| {
-                reference_trap(
-                    "reference_map_key",
-                    "map operation requires an ordered primitive key",
-                )
-            })?;
+            .ok_or_else(|| reference_type_error("map operation omits its key"))?;
+        let key = self.map_key_value(key)?;
         let value = arguments.next();
         if arguments.next().is_some() {
             return Err(reference_type_error("map operation has foreign arity"));
@@ -302,31 +296,19 @@ impl ReferenceState<'_> {
                 &self.schema,
                 NormalizedValue::Bool(entries.contains_key(&key)),
             ),
-            ("core.map.get", None) => map.lookup(&key)?.ok_or_else(|| {
-                reference_trap("reference_map_key_absent", "map lookup key is absent")
-            }),
-            ("core.map.get-or", Some(fallback)) => match map.lookup(&key)? {
-                Some(value) => Ok(value),
-                None => Ok(fallback),
-            },
-            ("core.map.insert", Some(value)) => {
-                self.charge_items(
-                    entries
-                        .len()
-                        .saturating_add(usize::from(!entries.contains_key(&key))),
-                    std::mem::size_of::<(NormalizedMapKey, NormalizedValue)>(),
-                )?;
-                self.update_map_value(map, key, Some(value))
+            ("core.map.get", None) => map
+                .lookup(&key, &mut |charge| self.reserve_map(charge))?
+                .ok_or_else(|| {
+                    reference_trap("reference_map_key_absent", "map lookup key is absent")
+                }),
+            ("core.map.get-or", Some(fallback)) => {
+                match map.lookup(&key, &mut |charge| self.reserve_map(charge))? {
+                    Some(value) => Ok(value),
+                    None => Ok(fallback),
+                }
             }
-            ("core.map.remove", None) => {
-                self.charge_items(
-                    entries
-                        .len()
-                        .saturating_sub(usize::from(entries.contains_key(&key))),
-                    std::mem::size_of::<(NormalizedMapKey, NormalizedValue)>(),
-                )?;
-                self.update_map_value(map, key, None)
-            }
+            ("core.map.insert", Some(value)) => self.update_map_value(map, key, Some(value)),
+            ("core.map.remove", None) => self.update_map_value(map, key, None),
             _ => Err(reference_type_error("map operation has foreign arity")),
         }
     }

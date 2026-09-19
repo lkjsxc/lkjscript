@@ -861,6 +861,10 @@ pub async fn execute_foreground_run(
                     receipt.invocation_nanoseconds.to_string(),
                 ),
                 ("production-observation", observation),
+                (
+                    "result-encoding-nanoseconds",
+                    receipt.result_encoding_nanoseconds.to_string(),
+                ),
                 ("cleanup", cleanup),
                 ("value", result),
             ],
@@ -1057,6 +1061,34 @@ pub fn execute_run(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
                 run.production.allocated_bytes.to_string(),
             ),
             (
+                "production-map-node-visits",
+                run.production.value_work.maps.node_visits.to_string(),
+            ),
+            (
+                "production-map-nodes-allocated",
+                run.production.value_work.maps.nodes_allocated.to_string(),
+            ),
+            (
+                "production-map-entry-handles-allocated",
+                run.production
+                    .value_work
+                    .maps
+                    .entry_handles_allocated
+                    .to_string(),
+            ),
+            (
+                "production-map-entry-handle-copies",
+                run.production
+                    .value_work
+                    .maps
+                    .entry_handle_copies
+                    .to_string(),
+            ),
+            (
+                "production-map-key-bytes-copied",
+                run.production.value_work.maps.key_bytes_copied.to_string(),
+            ),
+            (
                 "production-type-derivation-steps",
                 run.production.type_derivation_steps.to_string(),
             ),
@@ -1183,6 +1215,34 @@ pub fn execute_run(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
             (
                 "reference-allocated-bytes",
                 run.reference.allocated_bytes.to_string(),
+            ),
+            (
+                "reference-map-node-visits",
+                run.reference.value_work.maps.node_visits.to_string(),
+            ),
+            (
+                "reference-map-nodes-allocated",
+                run.reference.value_work.maps.nodes_allocated.to_string(),
+            ),
+            (
+                "reference-map-entry-handles-allocated",
+                run.reference
+                    .value_work
+                    .maps
+                    .entry_handles_allocated
+                    .to_string(),
+            ),
+            (
+                "reference-map-entry-handle-copies",
+                run.reference
+                    .value_work
+                    .maps
+                    .entry_handle_copies
+                    .to_string(),
+            ),
+            (
+                "reference-map-key-bytes-copied",
+                run.reference.value_work.maps.key_bytes_copied.to_string(),
             ),
             (
                 "reference-allocation-charges",

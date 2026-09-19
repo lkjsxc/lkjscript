@@ -487,7 +487,7 @@ fn f64_cannot_be_a_json_or_data_map_key_even_in_an_empty_map() {
         canonical: Arc::new(schema),
         value_origin: fixture.program.value_origin,
     };
-    let value = NormalizedValue::Map(Arc::new(BTreeMap::new()));
+    let value = NormalizedValue::map(BTreeMap::new()).unwrap();
     assert!(NormalizedMapKey::from_value(scalar(0)).is_none());
     for schema in [
         &fixture.program as &dyn super::super::value_schema::NormalizedValueSchema,

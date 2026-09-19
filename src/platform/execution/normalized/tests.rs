@@ -6,6 +6,9 @@ mod recursive_tests;
 #[path = "f64_codec_tests.rs"]
 mod f64_codec_tests;
 
+#[path = "map_codec_tests.rs"]
+mod map_codec_tests;
+
 #[path = "iteration_tests.rs"]
 mod iteration_tests;
 

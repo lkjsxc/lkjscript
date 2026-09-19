@@ -195,7 +195,9 @@ impl NormalizedReferenceHost for CoreNormalizedReferenceHost {
         arguments: Vec<NormalizedValue>,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
+        let arguments = super::value::RawArguments::new(arguments);
         control.check()?;
+        let arguments = arguments.into_vec();
         if implementation.as_str() == "core.list.append" {
             let mut raw = arguments.into_iter();
             let list = raw
@@ -539,6 +541,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         let source_admission_steps = schema.source_admission_steps;
         let type_metadata_bytes = schema.type_metadata_bytes;
         let list_work = super::list::Work::current();
+        let map_work = super::map::Work::current();
         let mut state = ReferenceState {
             authority: self.authority,
             binding,
@@ -637,6 +640,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         state.observation.live_allowances_after = state.allowances.len();
         state.observation.live_transactions_after = state.transactions.len();
         state.observation.value_work.lists = list_work.since();
+        state.observation.value_work.maps = map_work.since();
         if let Some(observer) = self.observer {
             let mut observed = observer.lock().map_err(|_| {
                 reference_error(
@@ -1965,31 +1969,24 @@ impl ReferenceState<'_> {
                 self.list_value(values)
             }
             ExpressionOperation::Map { entries, .. } => {
-                let mut values = BTreeMap::new();
-                let mut key_bytes = 0_u64;
+                let mut values = self.empty_map_value();
                 for entry in entries {
-                    let key =
-                        NormalizedMapKey::from_value(self.evaluate(entry.key, locals)?.release())
-                            .ok_or_else(|| {
-                            reference_type_error(
-                                "map key is not a deterministically ordered primitive",
-                            )
-                        })?;
+                    let key = self.evaluate(entry.key, locals)?;
+                    let key = self.map_key_value(key)?;
                     let value = self.evaluate(entry.value, locals)?;
-                    key_bytes = key_bytes.saturating_add(reference_map_key_bytes(&key));
-                    if values.insert(key, value).is_some() {
+                    let NormalizedValue::Map(current) = values.raw() else {
+                        return Err(reference_type_error("map construction lost its carrier"));
+                    };
+                    if current.contains_key(&key) {
                         return Err(reference_trap(
                             "normalized_reference_map_duplicate_key",
                             "map expression contains a duplicate key",
                         ));
                     }
+                    values = self.update_map_value(values, key, Some(value))?;
                 }
-                self.charge_items(
-                    values.len(),
-                    std::mem::size_of::<(NormalizedMapKey, NormalizedValue)>(),
-                )?;
-                self.charge_allocation(key_bytes)?;
-                self.map_value(values)
+                self.control.check()?;
+                Ok(values)
             }
             ExpressionOperation::Match { value, arms } => {
                 let (layout, case, payload) = self
@@ -3582,7 +3579,7 @@ fn reference_intrinsic(
         },
         "core.map.get" | "core.map.contains" | "core.map.get-or" | "core.map.insert"
         | "core.map.remove" | "core.map.entries" => {
-            reference_map_intrinsic(implementation, arguments)
+            reference_map_intrinsic(implementation, arguments, control)
         }
         _ => Err(reference_error(
             "normalized_reference_intrinsic_missing",
@@ -3802,63 +3799,121 @@ fn reference_http_token(byte: u8) -> bool {
 fn reference_map_intrinsic(
     implementation: &str,
     arguments: Vec<NormalizedValue>,
+    control: &ExecutionControl,
 ) -> Result<NormalizedValue, ExecutionError> {
-    let Some(NormalizedValue::Map(entries)) = arguments.first() else {
-        return Err(reference_type_error("map intrinsic received a foreign map"));
+    let mut arguments = super::value::RawArguments::new(arguments);
+    let entries = match arguments.next() {
+        Some(NormalizedValue::Map(entries)) => entries,
+        Some(value) => {
+            super::value::release_raw_values(vec![value]);
+            return Err(reference_type_error("map intrinsic received a foreign map"));
+        }
+        None => return Err(reference_type_error("map intrinsic received a foreign map")),
     };
+    let mut reserve = super::value::raw_map_reservation(control);
     if implementation == "core.map.entries" {
-        if arguments.len() != 1 {
+        if !arguments.is_empty() {
             return Err(reference_type_error("map entries received a foreign arity"));
         }
+        reserve(super::map::Charge {
+            slots: 0,
+            bytes: super::value::collection_storage_bytes(
+                entries.len() as u64,
+                std::mem::size_of::<NormalizedValue>() as u64,
+                "normalized_map_storage",
+            )?,
+        })?;
         let mut output = Vec::with_capacity(entries.len());
         for (key, value) in entries.iter() {
+            reserve(super::map::Charge {
+                slots: 2,
+                bytes: (2 * std::mem::size_of::<(Name, NormalizedValue)>()
+                    + 2 * std::mem::size_of::<(&str, NormalizedValue)>()
+                    + std::mem::size_of::<Vec<(Name, NormalizedValue)>>()
+                    + 2 * std::mem::size_of::<usize>()
+                    + 8) as u64,
+            })?;
+            reserve(super::map::Charge {
+                slots: 0,
+                bytes: key
+                    .value_storage_bytes()?
+                    .checked_add(super::value::projected_value_bytes(value)?)
+                    .ok_or_else(|| {
+                        reference_resource(
+                            "normalized_map_storage",
+                            "map projection size overflows",
+                        )
+                    })?,
+            })?;
             output.push(reference_structural_record(vec![
                 ("key", key.to_value()),
                 ("value", value.clone()),
             ])?);
         }
-        return NormalizedValue::list(output);
+        return super::list::List::from_items(
+            output,
+            super::value::MAXIMUM_ADMISSION_ITEMS,
+            &mut |charge| {
+                reserve(super::map::Charge {
+                    slots: charge.slots,
+                    bytes: charge.bytes,
+                })
+            },
+        )
+        .map(NormalizedValue::List);
     }
-    let Some(key_value) = arguments.get(1) else {
+    let Some(key_value) = arguments.next() else {
         return Err(reference_type_error("map intrinsic omitted its key"));
     };
-    let Some(key) = NormalizedMapKey::from_value(key_value.clone()) else {
+    let key_value = super::value::RawValue::new(key_value);
+    reserve(super::map::Charge {
+        slots: 0,
+        bytes: super::value::map_key_buffer_bytes(key_value.raw()),
+    })?;
+    let Some(key) = NormalizedMapKey::from_value(key_value.into_raw()) else {
         return Err(reference_trap(
             "reference_map_key",
             "map key is not a deterministically ordered primitive",
         ));
     };
-    match (implementation, arguments.len()) {
-        ("core.map.get", 2) => entries
-            .get(&key)
-            .cloned()
-            .ok_or_else(|| reference_trap("reference_map_key_absent", "map lookup key is absent")),
-        ("core.map.contains", 2) => Ok(NormalizedValue::Bool(entries.get(&key).is_some())),
-        ("core.map.get-or", 3) => match entries.get(&key) {
-            Some(value) => Ok(value.clone()),
-            None => Ok(arguments[2].clone()),
+    let value = arguments.next().map(super::value::RawValue::new);
+    if !arguments.is_empty() {
+        return Err(reference_type_error(
+            "map intrinsic received a foreign arity",
+        ));
+    }
+    let mut project = |value: &NormalizedValue| {
+        reserve(super::map::Charge {
+            slots: 0,
+            bytes: super::value::projected_value_bytes(value)?,
+        })?;
+        Ok(value.clone())
+    };
+    let result = match (implementation, value) {
+        ("core.map.get", None) => project(entries.get(&key).ok_or_else(|| {
+            reference_trap("reference_map_key_absent", "map lookup key is absent")
+        })?),
+        ("core.map.contains", None) => Ok(NormalizedValue::Bool(entries.get(&key).is_some())),
+        ("core.map.get-or", Some(fallback)) => match entries.get(&key) {
+            Some(value) => project(value),
+            None => Ok(fallback.into_raw()),
         },
-        ("core.map.insert", 3) => {
-            let mut updated = BTreeMap::new();
-            for (existing_key, existing_value) in entries.iter() {
-                updated.insert(existing_key.clone(), existing_value.clone());
-            }
-            updated.insert(key, arguments[2].clone());
-            Ok(NormalizedValue::Map(Arc::new(updated)))
-        }
-        ("core.map.remove", 2) => {
-            let mut updated = BTreeMap::new();
-            for (existing_key, existing_value) in entries.iter() {
-                if existing_key != &key {
-                    updated.insert(existing_key.clone(), existing_value.clone());
-                }
-            }
-            Ok(NormalizedValue::Map(Arc::new(updated)))
-        }
+        ("core.map.insert", Some(value)) => entries
+            .insert(
+                key,
+                value.into_raw(),
+                super::value::MAXIMUM_ADMISSION_ITEMS,
+                &mut reserve,
+            )
+            .map(NormalizedValue::Map),
+        ("core.map.remove", None) => entries.remove(&key, &mut reserve).map(NormalizedValue::Map),
         _ => Err(reference_type_error(
             "map intrinsic received a foreign arity",
         )),
-    }
+    };
+    let result = super::value::RawValue::new(result?);
+    control.check()?;
+    Ok(result.into_raw())
 }
 
 fn reference_json_error(error: crate::platform::diagnostic::Diagnostic) -> ExecutionError {

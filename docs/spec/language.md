@@ -38,6 +38,37 @@ carrier directly. Physical work observations distinguish node visits, reserved a
 element handles, nodes, and full external-buffer materializations. Counters grant no fuel or
 admission and are separate from logical validation visits.
 
+Ordered maps use one neutral persistent AVL carrier with immutable shared entry handles.
+Insertion, replacement and removal copy only their search and rotation paths. Retained roots
+keep their entries and untouched subtrees; existing keys and payloads are never copied by an
+edit. Ordered traversal, equality and external bytes depend on contents rather than tree shape.
+The existing Bool/I64/Bytes/Text key order and StaticText treatment are unchanged. Literals
+evaluate in authored order before their existing duplicate-key failure boundary; intrinsic
+arguments, including a get-or fallback for a present key, remain strict.
+
+Each evaluator independently reserves map storage before growth. One newly allocated node
+charges one collection item and `size_of(Node) + 2*sizeof(usize)` bytes, including its Arc
+reference counts; Node contains one entry handle, two child links and its height. A new entry
+charges `size_of(Entry) + 2*sizeof(usize)` bytes, including the inline key and value, with no
+second item charge. A key converted from Text/Bytes additionally reserves its owned buffer
+before copying. Existing payloads move into new entries; shared payloads, keys and subtrees
+incur no fresh deep-copy charge. Even transient rotation nodes remain cumulatively charged.
+Absent removal allocates no tree storage. Neither finite value admission (depth 256 and
+1,000,000 aggregate items), single-allocation bounds nor project defaults are raised.
+Trusted foreground execution continues to omit cumulative quotas unless explicitly selected.
+
+Map projection reserves owned option/result/variant boxes before cloning their spine and
+stops at shared aggregate handles. Ordered entries reserve their result buffer, each key's
+new Arc buffer, each two-field record's vector, reference counts and field-name buffers,
+then the ordinary persistent-list construction. Bulk raw ingress moves a bounded temporary
+ordered builder into the carrier. It supplies no type, origin, effect or affinity certificate;
+both evaluators independently admit all children and map metadata, including retained captures.
+Cancellation is checked before reservations and successful result installation. Refused
+reservations install no partial root and do not alter their ledger; earlier reserved work is
+not refunded. Iterative disposal covers rejected raw payloads, partially built trees and aliases.
+Physical map observations saturate independently of quota accounting and are not allocator/RSS
+measurements. No persisted encoding or migration follows from this runtime representation.
+
 The standard pure graph function
 `list-map<Input,Output>(items: List<Input>, mapper: Function(Input)->Output) -> List<Output>`
 uses `list-fold-left`, an empty output, and a private generic step bound to the mapper. The step

@@ -3,6 +3,69 @@
 use super::*;
 
 impl Machine<'_> {
+    pub(super) fn charge_map(
+        &mut self,
+        charge: super::super::map::Charge,
+    ) -> Result<(), ExecutionError> {
+        self.control.check()?;
+        if charge.bytes > super::super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
+            return Err(resource_error(
+                "normalized_allocation",
+                "one map allocation exceeds finite value storage",
+            ));
+        }
+        let items = crate::platform::execution::cumulative_charge(
+            self.observation.collection_items,
+            charge.slots,
+            self.policy.maximum_collection_items,
+            "normalized_collection_items",
+            "persistent map storage exceeds collection items",
+        )?;
+        let bytes = crate::platform::execution::cumulative_charge(
+            self.observation.allocated_bytes,
+            charge.bytes,
+            self.policy.maximum_allocated_bytes,
+            "normalized_allocation",
+            "persistent map storage exceeds allocated bytes",
+        )?;
+        // A refused reservation changes neither ledger. Earlier successful work is
+        // cumulative even when a later path node or final cancellation check fails.
+        self.observation.collection_items = items;
+        self.observation.allocated_bytes = bytes;
+        if charge.bytes != 0 {
+            self.observation.allocation_charges =
+                self.observation.allocation_charges.saturating_add(1);
+        }
+        Ok(())
+    }
+
+    pub(super) fn checked_map_key(
+        &mut self,
+        key: CheckedValue,
+    ) -> Result<NormalizedMapKey, ExecutionError> {
+        let bytes = super::super::value::map_key_buffer_bytes(key.raw());
+        self.charge_map(super::super::map::Charge { slots: 0, bytes })?;
+        let key = NormalizedMapKey::from_value(key.into_raw()).ok_or_else(|| {
+            trap_error("normalized_map_key", "map key is not an ordered primitive")
+        })?;
+        Ok(key)
+    }
+
+    pub(super) fn edit_checked_map(
+        &mut self,
+        map: CheckedValue,
+        key: NormalizedMapKey,
+        child: Option<CheckedValue>,
+    ) -> Result<CheckedValue, ExecutionError> {
+        let mut work = std::mem::take(&mut self.observation.value_work);
+        let program = self.program;
+        let result = map.edit_map(program, key, child, &mut work, &mut |charge| {
+            self.charge_map(charge)
+        });
+        self.observation.value_work = work;
+        result
+    }
+
     fn charge_list(&mut self, charge: super::super::list::Charge) -> Result<(), ExecutionError> {
         self.control.check()?;
         let next = crate::platform::execution::cumulative_charge(
@@ -476,62 +539,50 @@ impl Machine<'_> {
             if arguments.next().is_some() {
                 return Err(type_error("map entries has foreign arity"));
             }
-            self.charge_collection(entries.len(), std::mem::size_of::<NormalizedValue>())?;
+            self.charge_collection(entries.len(), std::mem::size_of::<CheckedValue>())?;
             let mut children = Vec::with_capacity(entries.len());
             for key in entries.keys() {
                 self.control.check()?;
+                self.charge_map(super::super::map::Charge {
+                    slots: 0,
+                    bytes: key.value_storage_bytes()?,
+                })?;
                 let value = map
-                    .map_get(key)?
+                    .map_get(key, &mut |charge| self.charge_map(charge))?
                     .ok_or_else(|| type_error("map key disappeared"))?;
-                children.push(self.intrinsic_record([
-                    ("key", CheckedValue::scalar(self.program, key.to_value())?),
-                    ("value", value),
-                ])?);
+                let key = CheckedValue::scalar(self.program, key.to_value())?;
+                let mut work = std::mem::take(&mut self.observation.value_work);
+                let program = self.program;
+                let entry =
+                    CheckedValue::map_entry(program, key, value, &mut work, &mut |charge| {
+                        self.charge_map(charge)
+                    });
+                self.observation.value_work = work;
+                children.push(entry?);
             }
             return self.construct_list(children);
         }
         let key = arguments
             .next()
-            .and_then(|value| NormalizedMapKey::from_value(value.into_raw()))
-            .ok_or_else(|| {
-                trap_error("normalized_map_key", "map key is not an ordered primitive")
-            })?;
+            .ok_or_else(|| type_error("map intrinsic omits its key"))?;
+        let key = self.checked_map_key(key)?;
         let third = arguments.next();
         if arguments.next().is_some() {
             return Err(type_error("map intrinsic has foreign arity"));
         }
         match (implementation, third) {
             ("core.map.get", None) => map
-                .map_get(&key)?
+                .map_get(&key, &mut |charge| self.charge_map(charge))?
                 .ok_or_else(|| trap_error("normalized_map_key_absent", "map lookup key is absent")),
-            ("core.map.get-or", Some(fallback)) => Ok(map.map_get(&key)?.unwrap_or(fallback)),
+            ("core.map.get-or", Some(fallback)) => Ok(map
+                .map_get(&key, &mut |charge| self.charge_map(charge))?
+                .unwrap_or(fallback)),
             ("core.map.contains", None) => CheckedValue::scalar(
                 self.program,
                 NormalizedValue::Bool(entries.contains_key(&key)),
             ),
-            ("core.map.insert", Some(value)) => {
-                self.charge_collection(
-                    entries
-                        .len()
-                        .saturating_add(usize::from(!entries.contains_key(&key))),
-                    std::mem::size_of::<(NormalizedMapKey, NormalizedValue)>(),
-                )?;
-                map.edit_map(
-                    self.program,
-                    key,
-                    Some(value),
-                    &mut self.observation.value_work,
-                )
-            }
-            ("core.map.remove", None) => {
-                self.charge_collection(
-                    entries
-                        .len()
-                        .saturating_sub(usize::from(entries.contains_key(&key))),
-                    std::mem::size_of::<(NormalizedMapKey, NormalizedValue)>(),
-                )?;
-                map.edit_map(self.program, key, None, &mut self.observation.value_work)
-            }
+            ("core.map.insert", Some(value)) => self.edit_checked_map(map, key, Some(value)),
+            ("core.map.remove", None) => self.edit_checked_map(map, key, None),
             _ => Err(type_error("map intrinsic has foreign arity")),
         }
     }

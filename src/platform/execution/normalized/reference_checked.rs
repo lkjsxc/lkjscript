@@ -209,12 +209,25 @@ impl Value {
         }))
     }
 
-    pub(super) fn lookup(&self, key: &NormalizedMapKey) -> Result<Option<Self>, ExecutionError> {
+    pub(super) fn lookup(
+        &self,
+        key: &NormalizedMapKey,
+        reserve: &mut impl FnMut(super::super::map::Charge) -> Result<(), ExecutionError>,
+    ) -> Result<Option<Self>, ExecutionError> {
         let NormalizedValue::Map(entries) = self.raw() else {
             return Err(reference_type_error("map projection has a foreign value"));
         };
-        Ok(entries.get(key).map(|item| Self {
-            datum: item.clone(),
+        let Some(item) = entries.get(key) else {
+            return Ok(None);
+        };
+        reserve(super::super::map::Charge {
+            slots: 0,
+            bytes: super::super::value::projected_value_bytes(item)?,
+        })?;
+        let datum = item.clone();
+        reserve(super::super::map::Charge::default())?;
+        Ok(Some(Self {
+            datum,
             preparation: self.preparation,
             ownership: Ownership::Ordinary,
         }))
@@ -255,6 +268,52 @@ impl Value {
 }
 
 impl ReferenceState<'_> {
+    pub(super) fn reserve_map(
+        &mut self,
+        charge: super::super::map::Charge,
+    ) -> Result<(), ExecutionError> {
+        self.control.check()?;
+        if charge.bytes > super::super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
+            return Err(reference_resource(
+                "normalized_reference_allocation",
+                "one map allocation exceeds finite value storage",
+            ));
+        }
+        let items = crate::platform::execution::cumulative_charge(
+            self.observation.collection_items,
+            charge.slots,
+            self.policy.maximum_collection_items,
+            "normalized_reference_collection_items",
+            "map storage exceeds collection items",
+        )?;
+        let bytes = crate::platform::execution::cumulative_charge(
+            self.observation.allocated_bytes,
+            charge.bytes,
+            self.policy.maximum_allocated_bytes,
+            "normalized_reference_allocation",
+            "map storage exceeds allocated bytes",
+        )?;
+        self.observation.collection_items = items;
+        self.observation.allocated_bytes = bytes;
+        if charge.bytes != 0 {
+            self.observation.allocation_charges =
+                self.observation.allocation_charges.saturating_add(1);
+        }
+        Ok(())
+    }
+
+    pub(super) fn map_key_value(&mut self, key: Value) -> Result<NormalizedMapKey, ExecutionError> {
+        let bytes = super::super::value::map_key_buffer_bytes(key.raw());
+        self.reserve_map(super::super::map::Charge { slots: 0, bytes })?;
+        let key = NormalizedMapKey::from_value(key.release()).ok_or_else(|| {
+            super::reference_trap(
+                "reference_map_key",
+                "map operation requires an ordered primitive key",
+            )
+        })?;
+        Ok(key)
+    }
+
     pub(super) fn ordinary_children<'v>(
         &mut self,
         children: impl IntoIterator<Item = &'v Value>,
@@ -435,18 +494,45 @@ impl ReferenceState<'_> {
         })
     }
 
-    pub(super) fn map_value(
+    pub(super) fn empty_map_value(&self) -> Value {
+        Value {
+            datum: NormalizedValue::Map(super::super::map::Map::default()),
+            preparation: self.schema.value_origin,
+            ownership: Ownership::Ordinary,
+        }
+    }
+
+    pub(super) fn map_entry_value(
         &mut self,
-        entries: BTreeMap<NormalizedMapKey, Value>,
+        key: Value,
+        value: Value,
     ) -> Result<Value, ExecutionError> {
-        self.ordinary_children(entries.values())?;
+        self.ordinary_children([&key, &value])?;
+        self.reserve_map(super::super::map::Charge {
+            slots: 2,
+            bytes: (2 * std::mem::size_of::<(Name, NormalizedValue)>()
+                + std::mem::size_of::<Vec<(Name, NormalizedValue)>>()
+                + 2 * std::mem::size_of::<usize>()
+                + 8) as u64,
+        })?;
+        let fields = vec![
+            (
+                Name::new("key".to_owned())
+                    .map_err(|_| reference_type_error("invalid map entry field"))?,
+                key.release(),
+            ),
+            (
+                Name::new("value".to_owned())
+                    .map_err(|_| reference_type_error("invalid map entry field"))?,
+                value.release(),
+            ),
+        ];
+        let datum = NormalizedValue::Record(NormalizedRecord::Structural {
+            fields: Arc::new(fields),
+        });
+        self.control.check()?;
         Ok(Value {
-            datum: NormalizedValue::Map(Arc::new(
-                entries
-                    .into_iter()
-                    .map(|(key, value)| (key, value.release()))
-                    .collect(),
-            )),
+            datum,
             preparation: self.schema.value_origin,
             ownership: Ownership::Ordinary,
         })
@@ -485,17 +571,17 @@ impl ReferenceState<'_> {
         let NormalizedValue::Map(entries) = map.datum else {
             return Err(reference_type_error("map update received a foreign value"));
         };
-        let mut output = entries.as_ref().clone();
-        match child {
-            Some(child) => {
-                output.insert(key, child.release());
-            }
-            None => {
-                output.remove(&key);
-            }
-        }
+        let output = match child {
+            Some(child) => entries.insert(
+                key,
+                child.release(),
+                super::super::value::MAXIMUM_ADMISSION_ITEMS,
+                &mut |charge| self.reserve_map(charge),
+            )?,
+            None => entries.remove(&key, &mut |charge| self.reserve_map(charge))?,
+        };
         Ok(Value {
-            datum: NormalizedValue::Map(Arc::new(output)),
+            datum: NormalizedValue::Map(output),
             preparation: map.preparation,
             ownership: Ownership::Ordinary,
         })
@@ -845,6 +931,7 @@ impl ReferenceState<'_> {
                         entries.len(),
                         std::mem::size_of::<(NormalizedMapKey, NormalizedValue)>(),
                     )?;
+                    self.charge_admission_bytes(&mut admission_bytes, entries.metadata_bytes()?)?;
                     let key_type = match schema.types.get(key_type).map(|ty| &ty.form) {
                         Some(TypeForm::TypeParameter { parameter }) => bindings
                             .get(parameter)

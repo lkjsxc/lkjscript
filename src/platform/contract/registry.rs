@@ -6909,6 +6909,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ("counter-semantics", "saturated-u64-is-lower-bound"),
                 ("preparation-nanoseconds", "nonnegative-integer"),
                 ("invocation-nanoseconds", "nonnegative-integer"),
+                ("result-encoding-nanoseconds", "nonnegative-integer"),
                 ("production-observation", "json-object"),
                 ("cleanup", "json-object"),
                 ("value", "typed-json"),
@@ -7267,6 +7268,17 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                         "preparation-type-layout-property-byte",
                     ),
                     ("collection-items", "cumulative-item"),
+                    ("map-node-visits", "physical-map-node-visits"),
+                    ("map-nodes-allocated", "physical-map-nodes-allocated"),
+                    (
+                        "map-entry-handles-allocated",
+                        "physical-map-entry-handles-allocated",
+                    ),
+                    (
+                        "map-entry-handle-copies",
+                        "physical-map-entry-handle-copies",
+                    ),
+                    ("map-key-bytes-copied", "physical-owned-key-bytes-copied"),
                     ("list-node-visits", "physical-node-visits"),
                     (
                         "list-element-handle-copies",

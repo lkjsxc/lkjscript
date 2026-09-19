@@ -4,6 +4,32 @@ Status: normative.
 
 ## Independent correctness mechanisms
 
+Persistent ordered-map acceptance extends the existing runtime, public/offline-package and
+consumer owners. The independent BTreeMap oracle checks all primitive keys, mixed ordered
+storage, randomized branching histories, retained versions and AVL invariants. Pointer-based
+node/entry inventories bound newly reachable allocations and require untouched composite values
+to retain their handles; a correct-content whole-copy negative control must fail that oracle.
+Independent node/entry layout arithmetic admits exact-fit storage and rejects the next byte or
+slot, including every bulk/edit reservation, transient rotations and cancellation. Joined small
+stack tests dispose deeply rejected aggregates through unique/shared trees and pending values.
+
+The two evaluator boundaries independently reject wrong keys, late invalid children, foreign
+layout/callable origins and concealed affine authority before controlled callbacks. Retained
+captures and adapter results cannot reuse the carrier as a certificate. Evaluator ledger deltas,
+text-key allocation, boxed projection, strict literal/fallback order and recovery are checked
+separately from the shared carrier's observations. Fixed JSON/typed-data bytes and genuine
+predecessor fixtures preserve sorted encoding, JSON unordered-unique acceptance and typed-data
+strict ordering. Existing standard, lkjournal HTTP/session, generated-asset and full gates remain.
+
+Offline-package receipt schema 16 adds the ordinary transported `totals-by<Item>` library and
+caller-owned nominal event consumer, six retained snapshots, checked overflow/missing lookup,
+reviewed body evolution, exact dependency replacement and old/new bundles after source removal.
+Default project count-keys at 4,096 must return exactly 4,096 differentially, with bounded physical
+storage and unchanged policy; scalar length is complemented by complete ordered-content oracles.
+Matched predecessor/candidate composite workloads separately report preparation, invocation,
+result encoding, whole-process time and peak RSS, retaining small-map overhead and all samples.
+These measurements and runtime observations establish no token, billing or universal speed claim.
+
 Callable input evolution extends the existing offline-package owner with an ordinary numerical
 producer and separately authored exact consumer. Public edits retain function, parameter, port
 and target identities while changing F64 samples to enabled nominal readings. Omitted body/port

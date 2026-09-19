@@ -201,8 +201,7 @@ fn encode_value(
         (NormalizedValue::Map(values), TypeForm::Map { key, value: item }) => {
             push_count(output, values.len())?;
             for (map_key, value) in values.iter() {
-                let key_value = map_key_value(map_key);
-                encode_value(program, &key_value, *key, output, state, depth + 1)?;
+                encode_map_key(program, map_key, *key, output, state, depth + 1)?;
                 encode_value(program, value, *item, output, state, depth + 1)?;
             }
         }
@@ -373,8 +372,7 @@ fn decode_value(
         TypeForm::Map { key, value } => {
             let count = cursor.count("normalized_data_map_count")?;
             charge_count(state, count.saturating_mul(2))?;
-            let mut output = BTreeMap::new();
-            let mut previous = None;
+            let mut output = BTreeMap::<NormalizedMapKey, NormalizedValue>::new();
             for _ in 0..count {
                 let decoded_key = decode_value(program, *key, cursor, state, depth + 1)?;
                 let map_key = NormalizedMapKey::from_value(decoded_key).ok_or_else(|| {
@@ -384,18 +382,21 @@ fn decode_value(
                         "typed data map key is not a supported ordered primitive",
                     )
                 })?;
-                if previous.as_ref().is_some_and(|prior| prior >= &map_key) {
+                if output
+                    .last_key_value()
+                    .is_some_and(|(prior, _)| prior >= &map_key)
+                {
                     return Err(codec_error(
                         DiagnosticClass::Corrupt,
                         "normalized_data_map_order",
                         "typed data map keys are duplicate or not in canonical order",
                     ));
                 }
-                previous = Some(map_key.clone());
                 let decoded_value = decode_value(program, *value, cursor, state, depth + 1)?;
                 output.insert(map_key, decoded_value);
             }
-            Ok(NormalizedValue::Map(Arc::new(output)))
+            NormalizedValue::map_controlled(output, state.control)
+                .map_err(super::runner::execution_diagnostic)
         }
         TypeForm::StaticText => Err(unsupported("StaticText")),
         TypeForm::Secret => Err(unsupported("Secret")),
@@ -624,13 +625,33 @@ fn type_form(program: &NormalizedProgram, ty: TypeObjectDigest) -> Result<&TypeF
         })
 }
 
-fn map_key_value(key: &NormalizedMapKey) -> NormalizedValue {
-    match key {
-        NormalizedMapKey::Bool(value) => NormalizedValue::Bool(*value),
-        NormalizedMapKey::I64(value) => NormalizedValue::I64(*value),
-        NormalizedMapKey::Bytes(value) => NormalizedValue::bytes(value.clone()),
-        NormalizedMapKey::Text(value) => NormalizedValue::text(value.clone()),
+fn encode_map_key(
+    program: &NormalizedProgram,
+    key: &NormalizedMapKey,
+    ty: TypeObjectDigest,
+    output: &mut Vec<u8>,
+    state: &mut CodecState,
+    depth: usize,
+) -> Result<(), Diagnostic> {
+    state.enter(depth)?;
+    // Check the exact declared primitive without allocating a temporary runtime value.
+    match (key, type_form(program, ty)?) {
+        (NormalizedMapKey::Bool(value), TypeForm::Bool) => {
+            append_bytes(output, &[u8::from(*value)])
+        }
+        (NormalizedMapKey::I64(value), TypeForm::I64) => append_bytes(output, &value.to_be_bytes()),
+        (NormalizedMapKey::Bytes(value), TypeForm::Bytes) => push_blob(output, value),
+        (NormalizedMapKey::Text(value), TypeForm::Text) => push_blob(output, value.as_bytes()),
+        _ => Err(runtime_layout_error("value")),
+    }?;
+    if output.len() > MAXIMUM_VALUE_BYTES.saturating_sub(32) {
+        return Err(codec_error(
+            DiagnosticClass::Resource,
+            "normalized_data_value_bytes",
+            "typed data value exceeds the canonical byte limit",
+        ));
     }
+    Ok(())
 }
 
 fn append_bytes(output: &mut Vec<u8>, bytes: &[u8]) -> Result<(), Diagnostic> {

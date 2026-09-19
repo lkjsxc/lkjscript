@@ -27,6 +27,20 @@ struct ValueWork {
     internal_guard_descendant_visits: u64,
     classification_decisions: u64,
     lists: ListWork,
+    // Historical list receipts predate the map storage observation. Map acceptance
+    // has its own required evidence in offline-packages; absence proves no map work.
+    #[serde(default)]
+    maps: MapWork,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MapWork {
+    node_visits: u64,
+    nodes_allocated: u64,
+    entry_handles_allocated: u64,
+    entry_handle_copies: u64,
+    key_bytes_copied: u64,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -109,6 +123,19 @@ fn preparation_work(records: &[CompactRecord]) -> Result<PreparationWork, DevErr
 
 fn value_work(records: &[CompactRecord], tier: &str) -> Result<ValueWork, DevError> {
     Ok(ValueWork {
+        maps: MapWork {
+            node_visits: integer_field(records, &format!("{tier}-map-node-visits"))?,
+            nodes_allocated: integer_field(records, &format!("{tier}-map-nodes-allocated"))?,
+            entry_handles_allocated: integer_field(
+                records,
+                &format!("{tier}-map-entry-handles-allocated"),
+            )?,
+            entry_handle_copies: integer_field(
+                records,
+                &format!("{tier}-map-entry-handle-copies"),
+            )?,
+            key_bytes_copied: integer_field(records, &format!("{tier}-map-key-bytes-copied"))?,
+        },
         lists: ListWork {
             node_visits: integer_field(records, &format!("{tier}-list-node-visits"))?,
             element_handle_copies: integer_field(
@@ -2641,6 +2668,7 @@ mod checked_value_tests {
                     internal_guard_descendant_visits: 0,
                     classification_decisions: 10 * k as u64,
                     lists: ListWork::default(),
+                    maps: MapWork::default(),
                 };
                 matrix.push(MatrixCell {
                     n,

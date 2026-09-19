@@ -1,0 +1,30 @@
+reference.package as=$std source=builtin
+reference.owner as=$add package=$std class=declaration name=add
+reference.owner as=$less package=$std class=declaration name=less
+reference.owner as=$insert package=$std class=declaration name=map-insert
+reference.owner as=$length package=$std class=declaration name=map-length
+create.module as=$module name=map-probe
+type.map as=@Map key=i64 value=i64
+add.parameter as=$index function=$grow name=index type=i64
+add.parameter as=$limit function=$grow name=limit type=i64
+add.parameter as=$state function=$grow name=state type=@Map
+expression.block as=$grow-body
+  (if (call $less (local $index) (local $limit))
+    (call $grow
+      (call $add (local $index) (i64 1))
+      (local $limit)
+      (call $insert (types i64 i64) (local $state) (local $index) (local $index)))
+    (local $state))
+expression.end
+create.function as=$grow module=$module name=grow visibility=private result=@Map effect=pure body=$grow-body
+add.parameter as=$count function=$count-keys name=count type=i64
+expression.block as=$count-body
+  (call $length (types i64 i64)
+    (call $grow (i64 0) (local $count) (map i64 i64)))
+expression.end
+create.function as=$count-keys module=$module name=count-keys visibility=public result=i64 effect=pure body=$count-body
+type.function as=@Entry result=i64
+type.argument parent=@Entry index=0 type=i64
+create.component as=$component module=$module name=MapProbe visibility=package
+add.port as=$port component=$component name=count-keys type=@Entry function=$count-keys
+create.target as=$target name=count-keys component=$component port=$port runner=command

@@ -546,11 +546,12 @@ fn aggregate_equality_cannot_skip_a_callable_after_an_unequal_prefix_or_shape() 
             NormalizedValue::Option(None),
         ),
         (
-            NormalizedValue::Map(Arc::new(BTreeMap::from([(
+            NormalizedValue::map(BTreeMap::from([(
                 NormalizedMapKey::I64(1),
                 callable.clone(),
-            )]))),
-            NormalizedValue::Map(Arc::new(BTreeMap::new())),
+            )]))
+            .expect("raw map"),
+            NormalizedValue::map(BTreeMap::new()).expect("empty raw map"),
         ),
         (list(vec![callable]), NormalizedValue::I64(0)),
     ];
@@ -643,12 +644,15 @@ fn checked_construction_and_slow_canonical_oracle_discriminate_affine_empty_case
     let list =
         Value::list(&program, items, &mut work, 1_000_000, &mut |_| Ok(())).expect("checked list");
     let option = Value::option(&program, Some(list), &mut work).expect("checked option");
-    let map = Value::map(
-        &program,
-        BTreeMap::from([(NormalizedMapKey::I64(0), option)]),
-        &mut work,
-    )
-    .expect("checked map");
+    let map = Value::empty_map(&program)
+        .edit_map(
+            &program,
+            NormalizedMapKey::I64(0),
+            Some(option),
+            &mut work,
+            &mut |_| Ok(()),
+        )
+        .expect("checked map");
     let record = Value::record(
         &program,
         None,
@@ -682,7 +686,7 @@ fn checked_construction_and_slow_canonical_oracle_discriminate_affine_empty_case
     let child = record
         .field(&selector, &program)
         .expect("field proof")
-        .map_get(&NormalizedMapKey::I64(0))
+        .map_get(&NormalizedMapKey::I64(0), &mut |_| Ok(()))
         .expect("map proof")
         .expect("entry")
         .option_get()
@@ -1645,3 +1649,6 @@ fn constrained_raw_factory_checks_types_and_real_environments_before_body() {
     assert_eq!(sink.into_inner().unwrap().unwrap().calls, 0);
     println!("constraint-reference-production-metadata-erasure rejected-before-body=true");
 }
+
+#[path = "vm_map_tests.rs"]
+mod map_tests;

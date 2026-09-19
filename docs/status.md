@@ -622,8 +622,9 @@ deployment input and uses first-party data. Immutable `v0.1.10` remains unchange
 PostgreSQL-backed predecessor generation. The current higher-order slice includes the exact
 `add.type-parameter`, `expression.function-value`, `expression.bind`, and `expression.invoke`
 vocabulary. Function values carry exact pure named targets, resolved explicit type arguments, and
-immutable bound prefixes. Generic task functions, anonymous bodies, automatic free-variable capture,
-generic inference, and map authoring remain unavailable. The current public compact
+immutable bound prefixes. Anonymous bodies, automatic free-variable capture, and generic inference
+remain unavailable. Explicit generic task signatures and typed ordered-map authoring are available
+through the maintained structural authoring surface. The current public compact
 surface additionally exposes exact `add.dependency`, `create.component`, function-backed
 `add.port`, conditionally portless `create.target`, `add.http-route`, and `set.http-route` records
 alongside interface/external creation, operation parameters,

@@ -126,7 +126,9 @@ impl NormalizedHost for CoreNormalizedHost {
         arguments: Vec<NormalizedValue>,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
+        let arguments = super::value::RawArguments::new(arguments);
         control.check()?;
+        let arguments = arguments.into_vec();
         if implementation.as_str() == "core.list.append" {
             let [NormalizedValue::List(list), item]: [NormalizedValue; 2] = arguments
                 .try_into()
@@ -360,6 +362,7 @@ impl<'a> NormalizedVm<'a> {
         validate_policy(self.policy)?;
         control.check()?;
         let list_work = super::list::Work::current();
+        let map_work = super::map::Work::current();
         let mut machine = Machine {
             program: self.program,
             root_allowance: None,
@@ -470,6 +473,7 @@ impl<'a> NormalizedVm<'a> {
         machine.observation.live_transactions_after = machine.transactions.len();
         machine.observation.live_handles_after = resources.live_resources();
         machine.observation.value_work.lists = list_work.since();
+        machine.observation.value_work.maps = map_work.since();
         if let Some(observer) = self.observer {
             let mut observed = observer.lock().map_err(|_| {
                 runtime_error(
@@ -970,48 +974,29 @@ impl Machine<'_> {
                         )
                     })?;
                     let values = self.pop_many(count)?;
-                    self.charge_collection(
-                        entries as usize,
-                        std::mem::size_of::<(NormalizedMapKey, NormalizedValue)>(),
-                    )?;
-                    let mut map = BTreeMap::new();
-                    let mut key_bytes = 0_u64;
+                    let mut map = CheckedValue::empty_map(self.program);
                     let mut values = values.into_iter();
                     while let Some(key) = values.next() {
-                        let key =
-                            NormalizedMapKey::from_value(key.into_raw()).ok_or_else(|| {
-                                type_error("map key is not a deterministically ordered primitive")
-                            })?;
+                        let key = self.checked_map_key(key)?;
                         let value = values.next().ok_or_else(|| {
                             runtime_error(
                                 "normalized_map_pairs",
                                 "verified map has an incomplete pair",
                             )
                         })?;
-                        key_bytes =
-                            key_bytes.checked_add(map_key_bytes(&key)).ok_or_else(|| {
-                                resource_error(
-                                    "normalized_allocation",
-                                    "map key storage size overflowed",
-                                )
-                            })?;
-                        if key_bytes > super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
-                            return Err(resource_error(
-                                "normalized_allocation",
-                                "map key storage exceeds finite value admission",
-                            ));
-                        }
-                        if map.insert(key, value).is_some() {
+                        let NormalizedValue::Map(current) = map.raw() else {
+                            return Err(type_error("map construction lost its carrier"));
+                        };
+                        if current.contains_key(&key) {
                             return Err(trap_error(
                                 "normalized_map_duplicate_key",
                                 "map expression contains a duplicate key",
                             ));
                         }
+                        map = self.edit_checked_map(map, key, Some(value))?;
                     }
-                    self.charge_allocation(key_bytes)?;
-                    let value =
-                        CheckedValue::map(self.program, map, &mut self.observation.value_work)?;
-                    self.push(value)?;
+                    self.control.check()?;
+                    self.push(map)?;
                 }
                 NormalizedInstruction::SwitchVariant(jumps) => {
                     let (layout, case, payload) = self.pop()?.split_variant(self.program)?;
@@ -2902,7 +2887,7 @@ fn call_core_intrinsic(
         }
         "core.map.get" | "core.map.contains" | "core.map.get-or" | "core.map.insert"
         | "core.map.remove" | "core.map.entries" => {
-            normalized_map_intrinsic(implementation, arguments)
+            normalized_map_intrinsic(implementation, arguments, control)
         }
         _ => Err(runtime_error(
             "normalized_intrinsic_missing",
@@ -3020,57 +3005,126 @@ fn normalized_bearer_token(
 fn normalized_map_intrinsic(
     implementation: &str,
     arguments: Vec<NormalizedValue>,
+    control: &ExecutionControl,
 ) -> Result<NormalizedValue, ExecutionError> {
-    let values = match arguments.first() {
+    let mut arguments = super::value::RawArguments::new(arguments);
+    let values = match arguments.next() {
         Some(NormalizedValue::Map(values)) => values,
-        _ => return Err(type_error("map intrinsic received a foreign map")),
+        Some(value) => {
+            super::value::release_raw_values(vec![value]);
+            return Err(type_error("map intrinsic received a foreign map"));
+        }
+        None => return Err(type_error("map intrinsic received a foreign map")),
     };
+    let mut reserve = super::value::raw_map_reservation(control);
     if implementation == "core.map.entries" {
-        if arguments.len() != 1 {
+        if !arguments.is_empty() {
             return Err(type_error("map entries received a foreign arity"));
         }
-        let entries = values
-            .iter()
-            .map(|(key, value)| {
-                normalized_structural_record([("key", key.to_value()), ("value", value.clone())])
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        return NormalizedValue::list(entries);
-    }
-    let key = arguments
-        .get(1)
-        .cloned()
-        .and_then(NormalizedMapKey::from_value)
-        .ok_or_else(|| {
-            trap_error(
-                "normalized_map_key",
-                "map key is not a deterministically ordered primitive",
-            )
+        reserve(super::map::Charge {
+            slots: 0,
+            bytes: super::value::collection_storage_bytes(
+                values.len() as u64,
+                std::mem::size_of::<NormalizedValue>() as u64,
+                "normalized_map_storage",
+            )?,
         })?;
-    match implementation {
-        "core.map.get" if arguments.len() == 2 => values
-            .get(&key)
-            .cloned()
-            .ok_or_else(|| trap_error("normalized_map_key_absent", "map lookup key is absent")),
-        "core.map.contains" if arguments.len() == 2 => {
-            Ok(NormalizedValue::Bool(values.contains_key(&key)))
+        let mut entries = Vec::with_capacity(values.len());
+        for (key, value) in values.iter() {
+            reserve(super::map::Charge {
+                slots: 2,
+                bytes: (2 * std::mem::size_of::<(Name, NormalizedValue)>()
+                    + std::mem::size_of::<Vec<(Name, NormalizedValue)>>()
+                    + 2 * std::mem::size_of::<usize>()
+                    + 8) as u64,
+            })?;
+            reserve(super::map::Charge {
+                slots: 0,
+                bytes: key
+                    .value_storage_bytes()?
+                    .checked_add(super::value::projected_value_bytes(value)?)
+                    .ok_or_else(|| {
+                        resource_error("normalized_map_storage", "map projection size overflows")
+                    })?,
+            })?;
+            entries.push(NormalizedValue::Record(NormalizedRecord::Structural {
+                fields: Arc::new(vec![
+                    (
+                        Name::new("key".to_owned())
+                            .map_err(|_| type_error("invalid map entry field"))?,
+                        key.to_value(),
+                    ),
+                    (
+                        Name::new("value".to_owned())
+                            .map_err(|_| type_error("invalid map entry field"))?,
+                        value.clone(),
+                    ),
+                ]),
+            }));
         }
-        "core.map.get-or" if arguments.len() == 3 => Ok(values
-            .get(&key)
-            .cloned()
-            .unwrap_or_else(|| arguments[2].clone())),
-        "core.map.insert" if arguments.len() == 3 => {
-            let mut output = values.as_ref().clone();
-            output.insert(key, arguments[2].clone());
-            Ok(NormalizedValue::Map(Arc::new(output)))
-        }
-        "core.map.remove" if arguments.len() == 2 => {
-            let mut output = values.as_ref().clone();
-            output.remove(&key);
-            Ok(NormalizedValue::Map(Arc::new(output)))
-        }
-        _ => Err(type_error("map intrinsic received a foreign arity")),
+        return super::list::List::from_items(
+            entries,
+            super::value::MAXIMUM_ADMISSION_ITEMS,
+            &mut |charge| {
+                reserve(super::map::Charge {
+                    slots: charge.slots,
+                    bytes: charge.bytes,
+                })
+            },
+        )
+        .map(NormalizedValue::List);
     }
+    let key_value = super::value::RawValue::new(
+        arguments
+            .next()
+            .ok_or_else(|| type_error("map intrinsic omits its key"))?,
+    );
+    reserve(super::map::Charge {
+        slots: 0,
+        bytes: super::value::map_key_buffer_bytes(key_value.raw()),
+    })?;
+    let key = NormalizedMapKey::from_value(key_value.into_raw()).ok_or_else(|| {
+        trap_error(
+            "normalized_map_key",
+            "map key is not a deterministically ordered primitive",
+        )
+    })?;
+    let third = arguments.next().map(super::value::RawValue::new);
+    if !arguments.is_empty() {
+        return Err(type_error("map intrinsic received a foreign arity"));
+    }
+    let mut project = |value: &NormalizedValue| {
+        reserve(super::map::Charge {
+            slots: 0,
+            bytes: super::value::projected_value_bytes(value)?,
+        })?;
+        Ok(value.clone())
+    };
+    let result = match (implementation, third) {
+        ("core.map.get", None) => {
+            project(values.get(&key).ok_or_else(|| {
+                trap_error("normalized_map_key_absent", "map lookup key is absent")
+            })?)
+        }
+        ("core.map.contains", None) => Ok(NormalizedValue::Bool(values.contains_key(&key))),
+        ("core.map.get-or", Some(fallback)) => match values.get(&key) {
+            Some(value) => project(value),
+            None => Ok(fallback.into_raw()),
+        },
+        ("core.map.insert", Some(value)) => values
+            .insert(
+                key,
+                value.into_raw(),
+                super::value::MAXIMUM_ADMISSION_ITEMS,
+                &mut reserve,
+            )
+            .map(NormalizedValue::Map),
+        ("core.map.remove", None) => values.remove(&key, &mut reserve).map(NormalizedValue::Map),
+        _ => Err(type_error("map intrinsic received a foreign arity")),
+    };
+    let result = super::value::RawValue::new(result?);
+    control.check()?;
+    Ok(result.into_raw())
 }
 
 fn normalized_json_error(error: crate::platform::diagnostic::Diagnostic) -> ExecutionError {

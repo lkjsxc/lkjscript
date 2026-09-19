@@ -1,0 +1,43 @@
+reference.package as=$std source=builtin
+reference.owner as=$fold package=$std class=declaration name=list-fold-left
+reference.owner as=$add package=$std class=declaration name=add
+reference.owner as=$get-or package=$std class=declaration name=map-get-or
+reference.owner as=$insert package=$std class=declaration name=map-insert
+create.module as=$module name=aggregation
+type.map as=@Totals key=text value=i64
+add.type-parameter as=$step-Item declaration=$step name=Item
+type.parameter as=@StepItem parameter=$step-Item
+type.function as=@StepKey result=text
+type.argument parent=@StepKey index=0 type=@StepItem
+type.function as=@StepAmount result=i64
+type.argument parent=@StepAmount index=0 type=@StepItem
+add.parameter as=$step-key function=$step name=key type=@StepKey
+add.parameter as=$step-amount function=$step name=amount type=@StepAmount
+add.parameter as=$step-state function=$step name=state type=@Totals
+add.parameter as=$step-item function=$step name=item type=@StepItem
+expression.block as=$step-body
+  (let
+    (binding key (type text) (invoke (local $step-key) (local $step-item)))
+    (binding amount (type i64) (invoke (local $step-amount) (local $step-item)))
+    (in
+      (call $insert (types text i64) (local $step-state) (local key)
+        (call $add
+          (call $get-or (types text i64) (local $step-state) (local key) (i64 0))
+          (local amount)))))
+expression.end
+create.function as=$step module=$module name=step visibility=private result=@Totals effect=pure body=$step-body
+add.type-parameter as=$totals-Item declaration=$totals-by name=Item
+type.parameter as=@Item parameter=$totals-Item
+type.list as=@Items item=@Item
+type.function as=@Key result=text
+type.argument parent=@Key index=0 type=@Item
+type.function as=@Amount result=i64
+type.argument parent=@Amount index=0 type=@Item
+add.parameter as=$items function=$totals-by name=items type=@Items
+add.parameter as=$key function=$totals-by name=key type=@Key
+add.parameter as=$amount function=$totals-by name=amount type=@Amount
+expression.block as=$totals-body
+  (call $fold (types @Item @Totals) (local $items) (map text i64)
+    (bind (function-value $step (types @Item)) (local $key) (local $amount)))
+expression.end
+create.function as=$totals-by module=$module name=totals-by visibility=public result=@Totals effect=pure body=$totals-body
