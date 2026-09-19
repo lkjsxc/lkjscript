@@ -1,0 +1,62 @@
+reference.package as=$std source=builtin
+reference.owner as=$DataStore package=$std class=declaration name=DataStore
+reference.owner as=$DataKeyPart package=$std class=declaration name=DataKeyPart
+reference.owner as=$DataExpectation package=$std class=declaration name=DataExpectation
+reference.owner as=$DataScanDirection package=$std class=declaration name=DataScanDirection
+reference.owner as=$DataScanPage package=$std class=declaration name=DataScanPage
+reference.owner as=$put package=$std class=operation parent=$DataStore name=put
+reference.owner as=$scan package=$std class=operation parent=$DataStore name=scan
+reference.owner as=$transaction package=$std class=operation parent=$DataStore name=transaction
+reference.owner as=$Missing package=$std class=case parent=$DataExpectation name=Missing
+create.module as=$module name=scan-consumer
+create.component as=$component module=$module name=application visibility=public
+add.requirement as=$store component=$component name=data interface=$DataStore
+requirement.operation parent=$store index=0 operation=$put
+requirement.operation parent=$store index=1 operation=$scan
+requirement.operation parent=$store index=2 operation=$transaction
+requirement.limit parent=$store index=0 name=maximum_calls maximum=100 unit=calls
+
+type.named as=@KeyPart declaration=$DataKeyPart
+type.list as=@Key item=@KeyPart
+type.named as=@Page declaration=$DataScanPage
+type.named as=@Direction declaration=$DataScanDirection
+effect.row as=@Data
+effect.requirement parent=@Data index=0 requirement=$store
+
+add.parameter as=$write-key function=$write name=key type=@Key
+add.parameter as=$write-value function=$write name=value type=bytes
+expression.block as=$write-body
+  (transaction $store (binding write)
+    (capability-call $store $put
+      (static-text "facts") (local $write-key) (local $write-value) (variant $Missing)))
+expression.end
+create.function as=$write module=$module name=write visibility=private result=bool effect=task body=$write-body
+effect.requirement parent=$write index=0 requirement=$store
+type.task-function as=@WritePort result=bool effect=@Data
+type.argument parent=@WritePort index=0 type=@Key
+type.argument parent=@WritePort index=1 type=bytes
+add.port as=$write-port component=$component name=write type=@WritePort function=$write
+create.target as=$write-target name=write component=$component port=$write-port runner=command
+
+add.parameter as=$page-prefix function=$page name=prefix type=@Key
+add.parameter as=$page-direction function=$page name=direction type=@Direction
+add.parameter as=$page-items function=$page name=items type=i64
+add.parameter as=$page-bytes function=$page name=bytes type=i64
+add.parameter as=$page-work function=$page name=work type=i64
+add.parameter as=$page-cursor function=$page name=cursor type=bytes
+expression.block as=$page-body
+  (capability-call $store $scan
+    (static-text "facts") (local $page-prefix) (local $page-direction)
+    (local $page-items) (local $page-bytes) (local $page-work) (local $page-cursor))
+expression.end
+create.function as=$page module=$module name=page visibility=private result=@Page effect=task body=$page-body
+effect.requirement parent=$page index=0 requirement=$store
+type.task-function as=@PagePort result=@Page effect=@Data
+type.argument parent=@PagePort index=0 type=@Key
+type.argument parent=@PagePort index=1 type=@Direction
+type.argument parent=@PagePort index=2 type=i64
+type.argument parent=@PagePort index=3 type=i64
+type.argument parent=@PagePort index=4 type=i64
+type.argument parent=@PagePort index=5 type=bytes
+add.port as=$page-port component=$component name=page type=@PagePort function=$page
+create.target as=$page-target name=page component=$component port=$page-port runner=command
