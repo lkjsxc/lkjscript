@@ -123,6 +123,15 @@ continuation contains no mutable cursor and binds store, revision, namespace, sp
 direction, all selected limits, and an exclusive resume key. A foreign, stale, corrupt, or
 selector-mismatched continuation rejects.
 
+A prefix is an exact sequence of typed parts, not a byte or text prefix inside a part.
+The ordered-tree engine seeks the namespace, space, part-prefix and exclusive resume bounds;
+a page does not enumerate preceding pages or unrelated prefixes. After the tree seek it visits
+at most the returned records and one lookahead record. The existing work accounting is retained:
+item/byte-bound lookahead is charged when within the work budget, while a peek after the work
+budget can establish continuation without increasing `work`. Index comparisons and snapshot
+preparation are not represented by that counter. This is a bounded row-selection guarantee,
+not a constant-time or constant-memory guarantee for opening the current complete-snapshot store.
+
 Secondary indexes are ordinary application spaces updated in the same transaction as their
 primary. The interface has no joins, arbitrary predicates, dynamic schema language, optimizer,
 network access, ambient filesystem access, or SQL compatibility.

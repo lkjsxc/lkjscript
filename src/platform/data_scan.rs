@@ -231,7 +231,8 @@ mod tests {
             );
         }
         write.commit().expect("commit facts");
-        let other = DataStore::open(&root, "other", DataLimits::default()).expect("other namespace");
+        let other =
+            DataStore::open(&root, "other", DataLimits::default()).expect("other namespace");
         let mut write = other.begin().expect("other write");
         write
             .put(
@@ -262,10 +263,7 @@ mod tests {
         let mut keys = Vec::new();
         for group in 0..64 {
             for index in 0..32 {
-                keys.push(key(vec![
-                    DataKeyPart::I64(group),
-                    DataKeyPart::I64(index),
-                ]));
+                keys.push(key(vec![DataKeyPart::I64(group), DataKeyPart::I64(index)]));
             }
         }
         let (_temporary, transaction) = populated(&keys);
@@ -420,14 +418,8 @@ mod tests {
                     };
                     let token = encode_continuation(&selector, resume).expect("rehashed token");
                     let oracle = expected(&transaction, "facts", &prefix, direction, Some(resume));
-                    let (page, _) = scan_page(
-                        &transaction,
-                        &prefix,
-                        direction,
-                        100,
-                        100,
-                        Some(&token),
-                    );
+                    let (page, _) =
+                        scan_page(&transaction, &prefix, direction, 100, 100, Some(&token));
                     assert_eq!(page.items, oracle);
                     assert!(page.continuation.is_none());
                 }
@@ -440,23 +432,198 @@ mod tests {
         let mut parts = vec![DataKeyPart::Bool(true); 15];
         parts.push(DataKeyPart::Text("edge".to_owned()));
         let deepest = key(parts);
-        let longest = key(vec![DataKeyPart::Bytes(vec![255; 4088])]);
+        // Four count bytes, one type tag, eight length bytes, then the payload.
+        let longest = key(vec![DataKeyPart::Bytes(vec![255; 4083])]);
+        assert_eq!(
+            super::super::encode_key(&longest)
+                .expect("encode exact boundary")
+                .len(),
+            4096
+        );
+        assert!(
+            DataKey::new(
+                vec![DataKeyPart::Bytes(vec![255; 4084])],
+                &DataLimits::default()
+            )
+            .is_err()
+        );
         let (_temporary, transaction) = populated(&[deepest.clone(), longest.clone()]);
         for selected in [deepest, longest] {
             for direction in [DataScanDirection::Forward, DataScanDirection::Reverse] {
-                let (page, visits) = scan_page(
-                    &transaction,
-                    selected.parts(),
-                    direction,
-                    1,
-                    1,
-                    None,
-                );
+                let (page, visits) =
+                    scan_page(&transaction, selected.parts(), direction, 1, 1, None);
                 assert_eq!(page.items.len(), 1);
                 assert_eq!(page.items[0].key, selected);
                 assert_eq!(visits, 1);
                 assert!(page.continuation.is_none());
             }
         }
+    }
+
+    #[test]
+    fn byte_caps_and_lookahead_accounting_are_preserved_after_seeking() {
+        let keys = (0..3)
+            .map(|value| key(vec![DataKeyPart::I64(value)]))
+            .collect::<Vec<_>>();
+        let (_temporary, transaction) = populated(&keys);
+        // One part count (4), integer tag/payload (1+8), "value-N" (7), revision (32).
+        const ITEM_BYTES: usize = 52;
+        for direction in [DataScanDirection::Forward, DataScanDirection::Reverse] {
+            VISITS.with(|visits| visits.set(0));
+            let error = transaction
+                .scan("facts", &[], direction, 10, ITEM_BYTES - 1, 10, None)
+                .expect_err("the first selected row cannot be silently skipped");
+            assert_eq!(error.code, "data_scan_item_bytes");
+            assert_eq!(VISITS.with(std::cell::Cell::get), 1);
+            let mut cursor = None;
+            let mut actual = Vec::new();
+            for page_index in 0..3 {
+                VISITS.with(|visits| visits.set(0));
+                let page = transaction
+                    .scan(
+                        "facts",
+                        &[],
+                        direction,
+                        10,
+                        ITEM_BYTES,
+                        10,
+                        cursor.as_deref(),
+                    )
+                    .expect("one exact-size record");
+                assert_eq!(page.bytes, ITEM_BYTES);
+                assert_eq!(page.items.len(), 1);
+                let examined = if page_index < 2 { 2 } else { 1 };
+                assert_eq!(page.work, examined, "byte-bound lookahead is charged");
+                assert_eq!(VISITS.with(std::cell::Cell::get), examined);
+                actual.extend(page.items);
+                cursor = page.continuation;
+                assert_eq!(cursor.is_some(), page_index < 2);
+            }
+            assert_eq!(
+                actual,
+                expected(&transaction, "facts", &[], direction, None)
+            );
+            let (page, visits) = scan_page(&transaction, &[], direction, 1, 1, None);
+            assert_eq!(page.bytes, ITEM_BYTES);
+            assert_eq!(page.work, 1, "work-limit lookahead is not charged");
+            assert_eq!(visits, 2);
+            let page = transaction
+                .scan("facts", &[], direction, 10, 2 * ITEM_BYTES, 10, None)
+                .expect("two exact-size records");
+            assert_eq!(page.items.len(), 2);
+            assert_eq!(page.bytes, 2 * ITEM_BYTES);
+            assert_eq!(page.work, 3);
+            assert!(page.continuation.is_some());
+        }
+    }
+
+    #[test]
+    fn deleted_cursors_staged_mutations_and_pinned_snapshots_keep_keyset_semantics() {
+        let keys = [0, 2, 4, 6].map(|value| key(vec![DataKeyPart::I64(value)]));
+        let (temporary, mut transaction) = populated(&keys);
+        let store = DataStore::open(&temporary.path().join("data"), "app", DataLimits::default())
+            .expect("second store handle");
+        let pinned = store.begin().expect("pin committed predecessor");
+        let (first, _) = scan_page(&transaction, &[], DataScanDirection::Forward, 1, 1, None);
+        let cursor = first.continuation.expect("first key continuation");
+        assert_eq!(first.items[0].key, keys[0]);
+        for selected in [&keys[0], &keys[2]] {
+            let entry = transaction
+                .get("facts", selected)
+                .expect("get")
+                .expect("existing");
+            assert!(
+                transaction
+                    .delete("facts", selected, DataExpectation::Exact(entry.revision))
+                    .expect("stage deletion, including cursor key")
+            );
+        }
+        for value in [-1, 1] {
+            assert!(
+                transaction
+                    .put(
+                        "facts",
+                        &key(vec![DataKeyPart::I64(value)]),
+                        b"inserted".to_vec(),
+                        DataExpectation::Missing
+                    )
+                    .expect("stage before and after cursor")
+            );
+        }
+        let entry = transaction
+            .get("facts", &keys[1])
+            .expect("get")
+            .expect("existing");
+        assert!(
+            transaction
+                .put(
+                    "facts",
+                    &keys[1],
+                    b"updated".to_vec(),
+                    DataExpectation::Exact(entry.revision)
+                )
+                .expect("stage update after cursor")
+        );
+        let mut actual = Vec::new();
+        let mut next = Some(cursor.clone());
+        while let Some(token) = next {
+            let (page, _) = scan_page(
+                &transaction,
+                &[],
+                DataScanDirection::Forward,
+                1,
+                1,
+                Some(&token),
+            );
+            actual.extend(page.items);
+            next = page.continuation;
+            assert!(actual.len() <= 3, "no duplicate or backwards progress");
+        }
+        assert_eq!(
+            actual
+                .iter()
+                .map(|item| item.key.clone())
+                .collect::<Vec<_>>(),
+            [1, 2, 6].map(|value| key(vec![DataKeyPart::I64(value)]))
+        );
+        assert_eq!(actual[0].value, b"inserted");
+        assert_eq!(actual[1].value, b"updated");
+        transaction.commit().expect("publish staged snapshot");
+        let (old_page, _) = scan_page(
+            &pinned,
+            &[],
+            DataScanDirection::Forward,
+            1,
+            1,
+            Some(&cursor),
+        );
+        assert_eq!(old_page.items[0].key, keys[1]);
+        assert_eq!(old_page.items[0].value, b"value-1");
+        assert_ne!(old_page.items[0].revision, actual[1].revision);
+        let fresh = store.begin().expect("new committed snapshot");
+        assert_eq!(
+            fresh
+                .scan(
+                    "facts",
+                    &[],
+                    DataScanDirection::Forward,
+                    1,
+                    1_048_576,
+                    1,
+                    Some(&cursor)
+                )
+                .expect_err("old cursor cannot authorize a new snapshot")
+                .code,
+            "data_continuation_selector"
+        );
+        let (page, _) = scan_page(&fresh, &[], DataScanDirection::Forward, 10, 10, None);
+        assert_eq!(
+            page.items
+                .iter()
+                .map(|item| item.key.clone())
+                .collect::<Vec<_>>(),
+            [-1, 1, 2, 6].map(|value| key(vec![DataKeyPart::I64(value)]))
+        );
+        assert!(page.continuation.is_none());
     }
 }

@@ -3,6 +3,9 @@
 //! This physical authority is deliberately separate from the accepted program-meaning graph.
 //! Accepted revisions are immutable complete snapshots and `HEAD` is the only visibility point.
 
+#[path = "data_scan.rs"]
+mod scan;
+
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use fs2::FileExt;
 use rustix::fs::{CWD, RenameFlags, renameat_with};
@@ -794,17 +797,14 @@ impl DataTransaction {
                 )
             })
             .transpose()?;
-        let lower = RecordKey {
-            namespace: self.store.namespace.clone(),
-            space: space.to_owned(),
-            key: DataKey::empty_prefix(),
-        };
-        let upper = RecordKey {
-            namespace: self.store.namespace.clone(),
-            space: format!("{space}\0"),
-            key: DataKey::empty_prefix(),
-        };
-        let range = self.snapshot.records.range(lower..upper);
+        let range = scan::records(
+            &self.snapshot.records,
+            &self.store.namespace,
+            space,
+            &prefix,
+            direction,
+            resume.as_ref(),
+        );
         let selector = ScanSelector {
             store_id: self.store.store_id,
             revision: self.base,
@@ -1002,6 +1002,8 @@ where
     let mut work = 0_usize;
     let mut has_more = false;
     for (key, entry) in iterator {
+        #[cfg(test)]
+        scan::observe_visit();
         if !key.key.starts_with(selector.prefix) {
             continue;
         }
