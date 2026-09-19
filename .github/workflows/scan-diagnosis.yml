@@ -61,7 +61,7 @@ jobs:
             "$out/build.jsonl" > "$out/executable.txt"
           test "$(wc -l < "$out/executable.txt")" = 1
           sha256sum "$(cat "$out/executable.txt")" > "$out/executable.sha256"
-      - name: Reproduce and locate the stack failure without increasing its limit
+      - name: Validate repaired bounded-stack Map comparison under the original profile
         shell: bash
         run: |
           set -euo pipefail

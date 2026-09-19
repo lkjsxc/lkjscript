@@ -593,6 +593,20 @@ pub(super) struct Iter<'a> {
     remaining: usize,
 }
 
+impl<'a> Iter<'a> {
+    /// Reuse the bounded traversal buffers rather than moving a second complete
+    /// iterator into a recursive value walker's frame. Resetting the active depths
+    /// makes old, non-owning path slots unreachable; subsequent pushes overwrite
+    /// them before they can be read. No nodes, entries or buffers are allocated.
+    pub(super) fn restart(&mut self, map: &'a Map) {
+        self.forward.depth = 0;
+        self.forward.next = map.root.as_deref();
+        self.backward.depth = 0;
+        self.backward.next = map.root.as_deref();
+        self.remaining = map.length;
+    }
+}
+
 impl<'a> Iterator for Iter<'a> {
     type Item = (&'a NormalizedMapKey, &'a NormalizedValue);
     fn next(&mut self) -> Option<Self::Item> {

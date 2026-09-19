@@ -3281,7 +3281,9 @@ fn normalized_map_compare(
     for (key, value) in &mut cursor {
         equal &= equal_optional(Some(value), right.get(key), observation)?;
     }
-    cursor = right.iter();
+    // Assignment from right.iter() reserves another full inline buffer in debug
+    // frames, even though the first walk has ended. Restart the existing storage.
+    cursor.restart(right);
     for (key, value) in &mut cursor {
         if !left.contains_key(key) {
             normalized_compare(value, value, observation)?;
