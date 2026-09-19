@@ -1,8 +1,37 @@
 # Current status
 
-Status date: 2026-09-18 UTC. This file describes implemented checkout reality. Executable-derived
+Status date: 2026-09-19 UTC. This file describes implemented checkout reality. Executable-derived
 public guides live under [generated](generated), including the
 [operation guide](generated/operations.md); this file does not duplicate them.
+
+## Persistent ordered maps
+
+The [ordered-map continuation](campaigns/202609191922.md#execution-additions--2026-09-19)
+replaces whole-map immutable updates with a persistent AVL carrier in both independent
+evaluators and their actual raw-host/adapter callers. Updates share untouched subtrees and
+entry handles, preserving retained nested payloads and callable provenance. New storage is
+reserved before growth; failed reservations and cancellation expose no partial map.
+
+At implementation source `a8d8877c`, the copied-product focused witness passes 52 commands:
+an ordinary transported `totals-by<Item>` library aggregates caller-owned `Event` records,
+retains and branches maps, replaces an exact dependency after a reviewed library edit, and
+executes both retained bundles after their authoring sources are removed. The appendix's
+4,096-key project command returns 4096 differentially under unchanged defaults, with 53,236
+cumulative collection items per evaluator. The newly built predecessor fails that same
+command at its collection budget. Full acceptance and main integration are recorded at the
+campaign ending; focused evidence alone is not integration acceptance.
+
+Primitive key order, StaticText treatment, map operations, JSON and typed-data bytes, graph,
+package, compiler, artifact and application-data identities remain unchanged. No migration
+is selected. Allocation accounting and additive execution observations change; programs may
+now fit existing optional quotas. Foreground execution retains absent cumulative quotas and
+deadline. [Performance evidence](performance.md) separates retained composite workloads,
+physical sharing, cumulative accounting, process RSS and preparation/encoding costs.
+
+This campaign selects mainline delivery only. Maps, callable-input evolution and the HTTP
+response correction remain source-only relative to immutable v0.1.38; a main push does not
+update installed executables. Publication becomes due when an installed consumer needs the
+improvement or the human requests a release, without another language-feature prerequisite.
 
 ## Callable input evolution
 
@@ -29,10 +58,9 @@ rechecked, and an invalid predecessor contract can be repaired through a new rev
 Authenticated P executes the new witness artifact for the tested small workload.
 
 This is an unpublished mainline increment; immutable v0.1.38 does not acquire the operation.
-No version bump, release dispatch or operational-data migration is selected. Publication is due
-when a concrete consumer needs this path installed, an explicit release is requested, or a usable
-authoring milestone containing it is selected. Exact evidence and the retained first full-profile
-failure are recorded at the campaign ending.
+No version bump, release dispatch or operational-data migration is selected. The current
+publication disposition above requires an installed consumer or an explicit release request.
+Exact evidence and the retained first full-profile failure are recorded at the campaign ending.
 
 ## Release delivery cutover
 
@@ -67,9 +95,9 @@ publication and public-verification jobs. The rejection identifies the occupied 
 different source; the small installed lifecycle passed with joined cleanup and zero product builds
 or heavy-owner invocations. The [dated predecessor ending](campaigns/202609180528.md#completed-consumer-reconciliation--2026-09-17)
 retains the earlier pending observation and final evidence. New-format live publication and anonymous
-public acquisition remain unexercised. Public delivery of the input-evolution increment is selected
-only by a concrete consumer requiring its installation, an explicit release request, or a deliberately
-selected usable authoring milestone containing it.
+public acquisition remain unexercised. Public delivery of the input-evolution increment follows
+the current mainline-only disposition above: an installed consumer needing it or an explicit
+release request selects publication.
 
 ## Binary64 increment
 

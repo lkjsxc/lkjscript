@@ -2,6 +2,83 @@
 
 Measurements are observations, not promises.
 
+## Persistent ordered maps, 2026-09-19
+
+The [map campaign](campaigns/202609191922.md#frozen-implementation-and-copied-product-closure)
+binds clean predecessor source `d77fb8ba`, its separately retained executable `a30ace67…`, and
+candidate source `a8d8877c` / executable `97ca340b…`. The timed predecessor is `36e541f6` /
+`2fffedb6…`: its only difference from the clean predecessor exposes the same result-encoding
+timer as the candidate. Both timed executables use the pinned Rust 1.98.0 product-only release
+build, locked dependencies, LTO and one codegen unit. Full source acceptance uses the separately
+identified workspace configuration; these executable identities are not interchangeable.
+The host is x86-64 Linux 7.2.3-arch1-2 on an AMD Ryzen 9 9955HX, with twelve online logical CPUs.
+Only this host target and the recorded workload are measured.
+
+Both executables run the identical predecessor-authored artifact `75504e5e…93490dbd` through
+ordinary foreground commands. An I64 key selects a record containing another record and an
+eight-item I64 list. `growth` checks every inserted key and nested child. `retained` keeps the
+original map, replaces every value twice while retaining both versions, removes even keys and
+an absent key, then checks every retained value, remaining value, removed key and length.
+The host driver only launches commands and compares independently specified results.
+
+Each of eleven cells has one retained warmup and three measured samples per executable, with
+alternating pair order: 88 completed invocations, including 22 excluded warmups. No owned build
+or test ran during timing. Descriptors, artifact, input and policies match; cumulative quotas
+and deadline are absent, and the environment contains only `LANG=C.UTF-8` and empty `PATH`.
+Every output, artifact binding, policy and joined cleanup passed. Medians are milliseconds:
+
+| Workload | Keys | Predecessor invocation | Candidate invocation | Predecessor process | Candidate process |
+|---|---:|---:|---:|---:|---:|
+| growth | 8 | 0.292 | 0.307 | 39.598 | 41.991 |
+| growth | 128 | 3.530 | 3.485 | 42.777 | 43.157 |
+| growth | 1,024 | 39.312 | 27.586 | 78.787 | 66.997 |
+| growth | 4,096 | 298.505 | 117.379 | 340.699 | 157.215 |
+| retained | 8 | 0.859 | 0.849 | 40.920 | 40.398 |
+| retained | 128 | 12.435 | 11.716 | 51.822 | 50.536 |
+| retained | 1,024 | 156.795 | 97.881 | 197.393 | 137.226 |
+| retained | 4,096 | 1,424.203 | 416.690 | 1,466.079 | 458.021 |
+
+The 4,096-key retained cell executes the same 2,695,291 instructions on both versions. Cumulative
+collection units change from 48,778,282 to 705,942 and charged allocation bytes from 5,904,599,529
+to 125,693,481. The candidate creates 165,228 map nodes and 12,288 entry handles, copies 152,940
+entry handles and no key buffers. Independent tests inspect actual node/entry/payload pointers,
+bound newly reachable nodes by tree height and reject a whole-map-copy negative control.
+Carrier observations supplement that proof; the predecessor has no map-specific counters.
+Accounting units follow each storage representation and are not global allocation measurements.
+
+Median process maximum RSS at that cell is 53,140 / 49,676 KiB (predecessor / candidate), including
+preparation and output. This modest observed difference does not establish proportional live-heap
+savings from the much larger cumulative accounting reduction. Small-map costs remain: growth at
+8 keys is slower, growth at 128 keys has a slower whole-process median, and several small cells
+have higher candidate RSS. All samples, ranges and unfavorable results remain in the originals.
+
+`encode` returns every composite entry, with independent expected output, to separate actual
+serialization from invocation. Its sizes stay below the existing compact-output bound:
+
+| Keys | Preparation, predecessor / candidate | Encoding, predecessor / candidate | Process, predecessor / candidate |
+|---|---:|---:|---:|
+| 8 | 37.233 / 36.905 | 0.038 / 0.041 | 39.157 / 39.123 |
+| 128 | 37.025 / 37.183 | 0.279 / 0.274 | 41.055 / 40.900 |
+| 256 | 37.177 / 37.206 | 0.535 / 0.532 | 43.057 / 42.605 |
+
+Preparation dominates these output cells; storage timing is not application throughput. At 8
+keys the candidate's encoding and invocation medians are both slower. The process span includes
+startup, preparation, result/observation encoding, output, cleanup and the profiler wrapper;
+the candidate also emits new map counters. Three samples on one host do not establish a universal
+speed ratio, capacity limit, service latency, token saving or billing reduction. The checked
+`map-entries` projection remains unchanged in complexity; these workloads supply no reason to
+delay mainline delivery for the conditional projection extension.
+
+Literal requests, exact expected outputs, both authentic predecessor artifacts, all stdout/stderr,
+timings, process RSS observations and source/executable/tool digests remain under
+`/home/coder/workspace/lkjscript-map-evidence-20260919/performance/`, in `INPUTS.md`,
+`measurement-manifest.json`, `summary.json` and `samples/`. GNU time was obtained from the configured
+Ubuntu package metadata and extracted locally without system installation. The candidate rebuilds
+both predecessor artifacts byte-identically. The separate default project witness is a usability
+result: predecessor count4096 exhausts its unchanged collection budget, while the candidate returns
+4096 differentially with 53,236 units per evaluator. That failed predecessor run is not a timed
+completed-work baseline.
+
 ## Foreground commands, 2026-09-12
 
 The [foreground evidence](evidence/202609121842-foreground-commands.json) binds accepted source
