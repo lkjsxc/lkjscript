@@ -61,7 +61,7 @@ jobs:
             "$out/build.jsonl" > "$out/executable.txt"
           test "$(wc -l < "$out/executable.txt")" = 1
           sha256sum "$(cat "$out/executable.txt")" > "$out/executable.sha256"
-      - name: Validate repaired bounded-stack Map comparison under the original profile
+      - name: Validate comparison and retained-state stack repair under the original profile
         shell: bash
         run: |
           set -euo pipefail
@@ -80,8 +80,12 @@ jobs:
               --test-threads=1 --nocapture > "$out/backtrace.txt" 2>&1 || debug_status=$?
             printf '%s\n' "$debug_status" > "$out/gdb.exit"
           fi
-          exit "$status"
-      - name: Retain exact diagnostic evidence even after the expected failure
+          test "$status" -eq 0
+          grep -q '9 passed; 0 failed' "$out/tests.stdout"
+          timeout 30 "$exe" cursor_restart_preserves_exact_mixed_traversal_without_storage_work \
+            --test-threads=1 --nocapture > "$out/cursor.stdout" 2> "$out/cursor.stderr"
+          grep -q '1 passed; 0 failed' "$out/cursor.stdout"
+      - name: Retain exact diagnostic evidence after success or failure
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:

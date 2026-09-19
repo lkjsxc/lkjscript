@@ -1629,6 +1629,25 @@ impl ValueMeter {
             })
     }
 
+    // Keep inline list cursors out of every recursive state-validation frame,
+    // including frames that validate only maps or scalar/nominal wrappers. Borrow
+    // the cursor so debug builds do not retain a second by-value loop temporary.
+    #[inline(never)]
+    fn validate_list(
+        &mut self,
+        program: &NormalizedProgram,
+        values: &super::list::List,
+        item_type: TypeObjectDigest,
+        depth: usize,
+    ) -> Result<(), ExecutionError> {
+        self.charge(0)?;
+        let mut cursor = values.iter();
+        for value in &mut cursor {
+            self.validate(program, value, item_type, depth + 1)?;
+        }
+        Ok(())
+    }
+
     // Retained-state validation uses its own exact types and logical meter. The
     // cursor belongs only to actual map frames; keys need no temporary Arc value.
     #[inline(never)]
@@ -1684,11 +1703,7 @@ impl ValueMeter {
                 Ok(())
             }
             (NormalizedValue::List(values), TypeForm::List { item }) => {
-                self.charge(0)?;
-                for value in values.iter() {
-                    self.validate(program, value, *item, depth + 1)?;
-                }
-                Ok(())
+                self.validate_list(program, values, *item, depth)
             }
             (NormalizedValue::Map(values), TypeForm::Map { key, value: item }) => {
                 self.validate_map(program, values, *key, *item, depth)

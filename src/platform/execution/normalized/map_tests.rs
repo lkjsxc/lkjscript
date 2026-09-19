@@ -964,3 +964,52 @@ fn persistent_map_branching_raw_cleanup_bounds_scratch_by_released_children() {
         .join()
         .unwrap();
 }
+
+#[test]
+fn cursor_restart_preserves_exact_mixed_traversal_without_storage_work() {
+    let fixtures = [
+        BTreeMap::new(),
+        BTreeMap::from([(key(3), value(7))]),
+        (-17..29)
+            .map(|index| (key(index), value(index * 3)))
+            .collect(),
+    ]
+    .map(|expected| {
+        let map = Map::from_items(expected.clone(), TEST_LIMIT, &mut free).unwrap();
+        (map, expected)
+    });
+    for (before, _) in &fixtures {
+        for consumed in 0..=before.len() {
+            for (after, expected) in &fixtures {
+                let mut actual = before.iter();
+                for index in 0..consumed {
+                    assert!(if index % 2 == 0 {
+                        actual.next().is_some()
+                    } else {
+                        actual.next_back().is_some()
+                    });
+                }
+                let work = Work::current();
+                actual.restart(after);
+                assert_eq!(work.since(), Work::default());
+                let mut oracle = expected.iter();
+                let mut forward = consumed % 2 == 0;
+                while oracle.len() != 0 {
+                    assert_eq!(actual.len(), oracle.len());
+                    assert_eq!(actual.size_hint(), oracle.size_hint());
+                    if forward {
+                        assert_eq!(actual.next(), oracle.next());
+                    } else {
+                        assert_eq!(actual.next_back(), oracle.next_back());
+                    }
+                    forward = !forward;
+                }
+                assert_eq!(actual.len(), 0);
+                assert_eq!(actual.next(), None);
+                assert_eq!(actual.next_back(), None);
+                actual.restart(after);
+                assert!((&mut actual).eq(expected.iter()));
+            }
+        }
+    }
+}
