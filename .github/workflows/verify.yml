@@ -1,117 +1,54 @@
-name: Verify
-# Contract and recovery: docs/development-verification.md.
-run-name: Verify ${{ github.sha }}
+name: Development environment transfer
+run-name: Development transfer ${{ github.sha }}
 
-# Opt in only after a coherent candidate is ready. Ordinary main/topic pushes
-# and PR updates do not repeat this expensive acceptance automatically.
+# Temporary campaign-owned bootstrap only. This is NOT source acceptance.
+# Restore the maintained Verify workflow before selecting an integration candidate.
 on:
   push:
     branches:
-      - 'verify/**'
-  workflow_dispatch:
+      - 'verify/202609191648-sustained'
 
 permissions:
   contents: read
 
-concurrency:
-  group: verify-${{ github.ref }}
-  cancel-in-progress: false
-
-env:
-  CARGO_TERM_COLOR: never
-  CARGO_BUILD_JOBS: '2'
-  RUST_BACKTRACE: '0'
-
 jobs:
-  full:
-    name: Fresh full source acceptance
-    if: github.event_name != 'push' || github.event.deleted == false
+  transfer:
+    name: Transfer public source and pinned offline development inputs
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 30
     steps:
-      - name: Check out the exact event source without retained credentials
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Check out the exact source without retained credentials
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           ref: ${{ github.sha }}
           fetch-depth: 2
           persist-credentials: false
-
-      - name: Record immutable source and execution context
+      - name: Collect only public source, vendored crates and the pinned toolchain
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -m 0700 "$RUNNER_TEMP/verify-evidence" "$RUNNER_TEMP/verify-tools"
+          transfer="$RUNNER_TEMP/development-transfer"
+          mkdir -m 0700 "$transfer"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$GITHUB_WORKFLOW_SHA" = "$GITHUB_SHA"
           test -z "$(git status --porcelain=v1 --untracked-files=all)"
-          git diff --check HEAD^ HEAD
-          jq -n --arg repository "$GITHUB_REPOSITORY" --arg source "$GITHUB_SHA" \
-            --arg tree "$(git rev-parse 'HEAD^{tree}')" --arg workflow "$GITHUB_WORKFLOW_SHA" \
-            --arg event "$GITHUB_EVENT_NAME" --arg ref "$GITHUB_REF" \
-            --arg run "$GITHUB_RUN_ID" --arg attempt "$GITHUB_RUN_ATTEMPT" \
-            '{repository:$repository, source:$source, tree:$tree, workflow:$workflow,
-              event:$event, ref:$ref, run:$run, attempt:$attempt, profile:"full"}' \
-            > "$RUNNER_TEMP/verify-evidence/context.json"
-          { uname -a; cat /etc/os-release; git --version; free -h; df -h .; } \
-            > "$RUNNER_TEMP/verify-evidence/environment.txt"
-
-      - name: Provision the repository-pinned toolchain and immutable verifier
-        shell: bash
-        run: |
-          set -euo pipefail
-          # rustup reads rust-toolchain.toml, including components and targets.
+          git archive --format=tar HEAD > "$transfer/source.tar"
+          git cat-file commit HEAD > "$transfer/commit.txt"
+          git rev-parse HEAD 'HEAD^{tree}' > "$transfer/source-identity.txt"
           rustup show
-          { rustc --version --verbose; cargo --version; } \
-            >> "$RUNNER_TEMP/verify-evidence/environment.txt"
-          cargo fetch --locked
-          cargo build --release --locked -p lkjscript-dev --bin lkjscript-dev
-          cp target/release/lkjscript-dev "$RUNNER_TEMP/verify-tools/lkjscript-dev"
-          chmod 0555 "$RUNNER_TEMP/verify-tools/lkjscript-dev"
-          sha256sum "$RUNNER_TEMP/verify-tools/lkjscript-dev" \
-            > "$RUNNER_TEMP/verify-evidence/verifier.sha256"
-
-      - name: Execute the maintained full profile once with fresh evidence
-        shell: bash
-        run: |
-          set -euo pipefail
-          "$RUNNER_TEMP/verify-tools/lkjscript-dev" check full --fresh --jobs 2 --machine \
-            | tee "$RUNNER_TEMP/verify-evidence/summary.json"
-
-      - name: Require complete fresh acceptance of this exact source
-        shell: bash
-        run: |
-          set -euo pipefail
-          summary="$RUNNER_TEMP/verify-evidence/summary.json"
-          jq -e '.status == "passed" and .profile == "full" and .selected > 0
-            and .passed == .selected and .fresh == .selected and .reused == 0
-            and .failure == null' "$summary" > /dev/null
-          receipt=$(jq -er '.receipt' "$summary")
-          [[ "$receipt" =~ ^\.artifacts/lkjscript-dev/check/[0-9]+-[0-9]+-[0-9]+/receipt\.json$ ]]
-          jq -e --arg source "$GITHUB_SHA" '.status == "passed" and .profile == "full"
-            and .git_head == $source and .input_stable == true and .fresh_required == true
-            and (.selected_gates | length) > 0 and (.unrun_gates | length) == 0
-            and .passed_gates == (.selected_gates | length)
-            and .fresh_passed_gates == .passed_gates and .reused_passed_gates == 0
-            and (.gates | length) == (.selected_gates | length)
-            and all(.gates[]; .status == "passed" and .execution == "fresh")
-            and .failure == null' "$receipt" > /dev/null
-          cp "$receipt" "$RUNNER_TEMP/verify-evidence/receipt.json"
-          sha256sum "$receipt" > "$RUNNER_TEMP/verify-evidence/receipt.sha256"
-          {
-            printf '## Fresh full source acceptance\n\nSource: `%s`\n\n' "$GITHUB_SHA"
-            jq -r '"Passed: \(.passed)/\(.selected); fresh: \(.fresh); reused: \(.reused)."' "$summary"
-            printf '\nNo release, deployment, ref update, or automatic merge was performed.\n'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Retain original evidence and failure diagnostics
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+          { rustc --version --verbose; cargo --version; uname -a; } > "$transfer/environment.txt"
+          cargo vendor --locked --versioned-dirs "$transfer/vendor" > "$transfer/vendor-config.toml"
+          toolchain="$(rustc --print sysroot)"
+          tar --exclude='./share/doc' -C "$toolchain" -czf "$transfer/toolchain.tar.gz" .
+          tar -C "$transfer" -czf "$RUNNER_TEMP/development-transfer.tar.gz" .
+          sha256sum "$RUNNER_TEMP/development-transfer.tar.gz" > "$RUNNER_TEMP/development-transfer.sha256"
+          printf 'Development inputs only. No tests, acceptance, release, deployment or ref update.\n' >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain development inputs without credentials or checkout configuration
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: verify-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: development-transfer-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            ${{ runner.temp }}/verify-evidence
-            ${{ github.workspace }}/.artifacts/lkjscript-dev/check
-          include-hidden-files: true
+            ${{ runner.temp }}/development-transfer.tar.gz
+            ${{ runner.temp }}/development-transfer.sha256
           if-no-files-found: error
-          retention-days: 14
-          compression-level: 6
+          retention-days: 7
+          compression-level: 0
