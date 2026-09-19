@@ -12,6 +12,9 @@ to retain their handles; a correct-content whole-copy negative control must fail
 Independent node/entry layout arithmetic admits exact-fit storage and rejects the next byte or
 slot, including every bulk/edit reservation, transient rotations and cancellation. Joined small
 stack tests dispose deeply rejected aggregates through unique/shared trees and pending values.
+The same 2 MiB stack also exercises valid nested maps at the admission and codec boundaries,
+including semantic/observation comparison, retained-state metering and shared children. Cursor
+storage must not inflate unrelated recursive value frames or require raised depth/stack limits.
 
 The two evaluator boundaries independently reject wrong keys, late invalid children, foreign
 layout/callable origins and concealed affine authority before controlled callbacks. Retained

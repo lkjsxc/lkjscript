@@ -6,7 +6,9 @@ use super::prepare::{
 };
 use super::resident::NormalizedResidentDeployment;
 use super::resource::NormalizedResourceScope;
-use super::value::{NormalizedRecord, NormalizedValue, RecordLayoutIndex, VariantLayoutIndex};
+use super::value::{
+    NormalizedMapKey, NormalizedRecord, NormalizedValue, RecordLayoutIndex, VariantLayoutIndex,
+};
 use crate::platform::builtin_standard::BuiltinStandard;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionError, ExecutionFailureClass};
@@ -1604,20 +1606,18 @@ impl ValueMeter {
         Ok(())
     }
 
-    fn validate(
-        &mut self,
+    fn form(
         program: &NormalizedProgram,
-        value: &NormalizedValue,
         ty: TypeObjectDigest,
         depth: usize,
-    ) -> Result<(), ExecutionError> {
+    ) -> Result<&TypeForm, ExecutionError> {
         if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
             return Err(ExecutionError::resource(
                 "session_state_depth",
                 "session state exceeds the exact type-depth bound",
             ));
         }
-        let form = program
+        program
             .types
             .get(&ty)
             .map(|value| &value.form)
@@ -1626,7 +1626,49 @@ impl ValueMeter {
                     "session_state_type_missing",
                     "session state references a type absent from the prepared artifact",
                 )
-            })?;
+            })
+    }
+
+    // Retained-state validation uses its own exact types and logical meter. The
+    // cursor belongs only to actual map frames; keys need no temporary Arc value.
+    #[inline(never)]
+    fn validate_map(
+        &mut self,
+        program: &NormalizedProgram,
+        values: &super::map::Map,
+        key_type: TypeObjectDigest,
+        value_type: TypeObjectDigest,
+        depth: usize,
+    ) -> Result<(), ExecutionError> {
+        self.charge(0)?;
+        let mut cursor = values.iter();
+        for (key, value) in &mut cursor {
+            let bytes = match (key, Self::form(program, key_type, depth + 1)?) {
+                (NormalizedMapKey::Bool(_), TypeForm::Bool) => 1,
+                (NormalizedMapKey::I64(_), TypeForm::I64) => 8,
+                (NormalizedMapKey::Bytes(value), TypeForm::Bytes) => value.len(),
+                (NormalizedMapKey::Text(value), TypeForm::Text) => value.len(),
+                _ => {
+                    return Err(session_protocol(
+                        "session_state_shape",
+                        "session state runtime value disagrees with its exact ordinary type",
+                    ));
+                }
+            };
+            self.charge(bytes)?;
+            self.validate(program, value, value_type, depth + 1)?;
+        }
+        Ok(())
+    }
+
+    fn validate(
+        &mut self,
+        program: &NormalizedProgram,
+        value: &NormalizedValue,
+        ty: TypeObjectDigest,
+        depth: usize,
+    ) -> Result<(), ExecutionError> {
+        let form = Self::form(program, ty, depth)?;
         match (value, form) {
             (NormalizedValue::Unit, TypeForm::Unit) => self.charge(0),
             (NormalizedValue::Bool(_), TypeForm::Bool) => self.charge(1),
@@ -1649,12 +1691,7 @@ impl ValueMeter {
                 Ok(())
             }
             (NormalizedValue::Map(values), TypeForm::Map { key, value: item }) => {
-                self.charge(0)?;
-                for (map_key, value) in values.iter() {
-                    self.validate(program, &map_key.to_value(), *key, depth + 1)?;
-                    self.validate(program, value, *item, depth + 1)?;
-                }
-                Ok(())
+                self.validate_map(program, values, *key, *item, depth)
             }
             (
                 NormalizedValue::Record(NormalizedRecord::Structural { fields: values }),
@@ -1749,6 +1786,21 @@ impl ValueMeter {
             )),
         }
     }
+}
+
+// Read-only test observation of the existing retained-state owner. This does not
+// construct accepted values or confer evaluator eligibility.
+#[cfg(test)]
+pub(super) fn retained_map_meter_probe(
+    program: &NormalizedProgram,
+    value: &NormalizedValue,
+    ty: TypeObjectDigest,
+    maximum_nodes: usize,
+    maximum_bytes: usize,
+) -> Result<(usize, usize), ExecutionError> {
+    let mut meter = ValueMeter::new(maximum_nodes, maximum_bytes);
+    meter.validate(program, value, ty, 0)?;
+    Ok((meter.nodes, meter.bytes))
 }
 
 struct SessionAdmission {

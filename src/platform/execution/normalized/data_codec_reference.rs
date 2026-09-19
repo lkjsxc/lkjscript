@@ -12,7 +12,7 @@ use super::value_schema::NormalizedValueSchema;
 use crate::platform::binary64::Binary64;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::ExecutionControl;
-use crate::platform::kernel::{TypeForm, TypeObjectDigest};
+use crate::platform::kernel::{DeclarationReference, TypeForm, TypeObjectDigest};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -198,11 +198,7 @@ fn write_value(
             }
         }
         (TypeForm::Map { key, value: item }, NormalizedValue::Map(entries)) => {
-            write_length(output, entries.len())?;
-            for (map_key, item_value) in entries.iter() {
-                write_key(program, *key, map_key, output, budget, depth + 1)?;
-                write_value(program, *item, item_value, output, budget, depth + 1)?;
-            }
+            write_map(program, (*key, *item), entries, output, budget, depth)?;
         }
         (TypeForm::StaticText, _) => return Err(unsupported("StaticText")),
         (TypeForm::Secret, _) => return Err(unsupported("Secret")),
@@ -219,6 +215,26 @@ fn write_value(
         _ => return Err(layout_error("value")),
     }
     ensure_payload_size(output.len())
+}
+
+// Keep the independent map walk out of all other recursive value frames. Borrowing
+// this cursor avoids by-value copies of its fixed AVL traversal storage.
+#[inline(never)]
+fn write_map(
+    program: &dyn NormalizedValueSchema,
+    (key_type, item_type): (TypeObjectDigest, TypeObjectDigest),
+    entries: &super::map::Map,
+    output: &mut Vec<u8>,
+    budget: &mut ReferenceBudget,
+    depth: usize,
+) -> Result<(), Diagnostic> {
+    write_length(output, entries.len())?;
+    let mut cursor = entries.iter();
+    for (map_key, item_value) in &mut cursor {
+        write_key(program, key_type, map_key, output, budget, depth + 1)?;
+        write_value(program, item_type, item_value, output, budget, depth + 1)?;
+    }
+    Ok(())
 }
 
 fn write_nominal(
@@ -468,71 +484,15 @@ fn describe_type(
         TypeForm::Bytes => write_bytes(description, &[3])?,
         TypeForm::Text => write_bytes(description, &[4])?,
         TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
-            match form(program, ty)? {
-                TypeForm::Applied { arguments, .. } => {
-                    write_bytes(description, &[9])?;
-                    write_length(description, arguments.len())?;
-                    for argument in arguments {
-                        describe_type(
-                            program,
-                            *argument,
-                            ancestors,
-                            description,
-                            depth + 1,
-                            control,
-                        )?;
-                    }
-                }
-                _ => write_bytes(description, &[5])?,
-            }
-            write_blob(description, declaration.package.to_string().as_bytes())?;
-            write_blob(description, declaration.declaration.to_string().as_bytes())?;
-            if !ancestors.insert(ty) {
-                write_bytes(description, &[0])?;
-                return Ok(());
-            }
-            write_bytes(description, &[1])?;
-            if let Some((_, record)) = find_record(program, ty) {
-                write_bytes(description, &[0])?;
-                write_length(description, record.fields.len())?;
-                for field in record.fields.iter() {
-                    write_blob(description, field.reference.package.to_string().as_bytes())?;
-                    write_blob(description, field.reference.field.to_string().as_bytes())?;
-                    write_blob(description, field.name.as_str().as_bytes())?;
-                    describe_type(
-                        program,
-                        field.ty,
-                        ancestors,
-                        description,
-                        depth + 1,
-                        control,
-                    )?;
-                }
-            } else if let Some((_, variant)) = find_variant(program, ty) {
-                write_bytes(description, &[1])?;
-                write_length(description, variant.cases.len())?;
-                for case in variant.cases.iter() {
-                    write_blob(description, case.reference.package.to_string().as_bytes())?;
-                    write_blob(description, case.reference.case.to_string().as_bytes())?;
-                    write_blob(description, case.name.as_str().as_bytes())?;
-                    if let Some(payload) = case.payload {
-                        write_bytes(description, &[1])?;
-                        describe_type(
-                            program,
-                            payload,
-                            ancestors,
-                            description,
-                            depth + 1,
-                            control,
-                        )?;
-                    } else {
-                        write_bytes(description, &[0])?;
-                    }
-                }
-            } else {
-                return Err(missing_named_layout());
-            }
-            ancestors.remove(&ty);
+            describe_nominal_type(
+                program,
+                ty,
+                declaration,
+                ancestors,
+                description,
+                depth,
+                control,
+            )?;
         }
         TypeForm::StructuralRecord { fields } => {
             write_bytes(description, &[6])?;
@@ -580,6 +540,79 @@ fn describe_type(
             return Err(unsupported("unrepresented Option or Result"));
         }
     }
+    Ok(())
+}
+
+// Keep this independent nominal descriptor's formatting work outside recursive
+// primitive/List/Map layout frames, without changing its bytes or cancellation order.
+#[inline(never)]
+fn describe_nominal_type(
+    program: &dyn NormalizedValueSchema,
+    ty: TypeObjectDigest,
+    declaration: &DeclarationReference,
+    ancestors: &mut BTreeSet<TypeObjectDigest>,
+    description: &mut Vec<u8>,
+    depth: usize,
+    control: &ExecutionControl,
+) -> Result<(), Diagnostic> {
+    match form(program, ty)? {
+        TypeForm::Applied { arguments, .. } => {
+            write_bytes(description, &[9])?;
+            write_length(description, arguments.len())?;
+            for argument in arguments {
+                describe_type(
+                    program,
+                    *argument,
+                    ancestors,
+                    description,
+                    depth + 1,
+                    control,
+                )?;
+            }
+        }
+        _ => write_bytes(description, &[5])?,
+    }
+    write_blob(description, declaration.package.to_string().as_bytes())?;
+    write_blob(description, declaration.declaration.to_string().as_bytes())?;
+    if !ancestors.insert(ty) {
+        write_bytes(description, &[0])?;
+        return Ok(());
+    }
+    write_bytes(description, &[1])?;
+    if let Some((_, record)) = find_record(program, ty) {
+        write_bytes(description, &[0])?;
+        write_length(description, record.fields.len())?;
+        for field in record.fields.iter() {
+            write_blob(description, field.reference.package.to_string().as_bytes())?;
+            write_blob(description, field.reference.field.to_string().as_bytes())?;
+            write_blob(description, field.name.as_str().as_bytes())?;
+            describe_type(
+                program,
+                field.ty,
+                ancestors,
+                description,
+                depth + 1,
+                control,
+            )?;
+        }
+    } else if let Some((_, variant)) = find_variant(program, ty) {
+        write_bytes(description, &[1])?;
+        write_length(description, variant.cases.len())?;
+        for case in variant.cases.iter() {
+            write_blob(description, case.reference.package.to_string().as_bytes())?;
+            write_blob(description, case.reference.case.to_string().as_bytes())?;
+            write_blob(description, case.name.as_str().as_bytes())?;
+            if let Some(payload) = case.payload {
+                write_bytes(description, &[1])?;
+                describe_type(program, payload, ancestors, description, depth + 1, control)?;
+            } else {
+                write_bytes(description, &[0])?;
+            }
+        }
+    } else {
+        return Err(missing_named_layout());
+    }
+    ancestors.remove(&ty);
     Ok(())
 }
 

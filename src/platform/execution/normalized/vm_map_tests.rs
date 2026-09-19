@@ -805,6 +805,296 @@ fn map_admission_keeps_depth_and_aggregate_item_bounds_in_foreground() {
         .unwrap();
 }
 
+#[test]
+fn admitted_deep_maps_keep_semantic_and_observation_comparison_on_a_bounded_stack() {
+    std::thread::Builder::new()
+        .stack_size(2 * 1024 * 1024)
+        .spawn(|| {
+            let (mut program, mut snapshot) = fixture();
+            let mut schema = NormalizedReferenceSchema::reconstruct([&snapshot]).unwrap();
+            let integer = internal_type(&mut program, &mut schema, TypeForm::I64);
+            let mut cases = Vec::new();
+            for shape in 0..3 {
+                let mut item = integer;
+                let mut left = NormalizedValue::I64(7);
+                let mut different = NormalizedValue::I64(8);
+                for _ in 0..255 {
+                    let form = match shape {
+                        0 => TypeForm::Option { item },
+                        1 => TypeForm::List { item },
+                        _ => TypeForm::Map {
+                            key: integer,
+                            value: item,
+                        },
+                    };
+                    item = internal_type(&mut program, &mut schema, form);
+                    let wrap = |value| match shape {
+                        0 => NormalizedValue::Option(Some(Box::new(value))),
+                        1 => NormalizedValue::list(vec![value]).unwrap(),
+                        _ => map([(NormalizedMapKey::I64(0), value)]),
+                    };
+                    left = wrap(left);
+                    different = wrap(different);
+                }
+                let root = internal_type(
+                    &mut program,
+                    &mut schema,
+                    TypeForm::Map {
+                        key: integer,
+                        value: item,
+                    },
+                );
+                cases.push((
+                    item,
+                    root,
+                    map([(NormalizedMapKey::I64(0), left)]),
+                    map([(NormalizedMapKey::I64(0), different)]),
+                ));
+            }
+            snapshot.types = schema.types.clone();
+            let reader = boundary_reader(&snapshot, &schema);
+            let comparisons = [
+                normalized::vm::normalized_equal,
+                normalized::vm::normalized_observation_equal,
+                normalized::reference::reference_equal,
+                normalized::reference::reference_observation_equal,
+            ];
+            for (item, root, left, different) in cases {
+                let retained = left.clone();
+                for reference in [false, true] {
+                    for value in [&left, &different] {
+                        let admitted = invoke(
+                            &program,
+                            &reader,
+                            reference,
+                            "core.map.length",
+                            &[integer, item],
+                            vec![value.clone()],
+                            NormalizedRunPolicy::foreground(),
+                            &ExecutionControl::uncancelled(),
+                            None,
+                        );
+                        assert_eq!(admitted.value.unwrap(), NormalizedValue::I64(1));
+                    }
+                    let excessive = invoke(
+                        &program,
+                        &reader,
+                        reference,
+                        "core.map.length",
+                        &[integer, root],
+                        vec![map([(NormalizedMapKey::I64(0), left.clone())])],
+                        NormalizedRunPolicy::foreground(),
+                        &ExecutionControl::uncancelled(),
+                        None,
+                    );
+                    assert_eq!(
+                        excessive.value.unwrap_err().code,
+                        if reference {
+                            "normalized_reference_value_depth"
+                        } else {
+                            "normalized_value_depth"
+                        }
+                    );
+                }
+                // These exact shapes passed both independent depth-256 admissions.
+                // Retained aliases and a differing deepest leaf exercise complete
+                // recursive comparison without codec or formatting recursion.
+                for compare in comparisons {
+                    assert!(compare(&left, &retained).unwrap());
+                    assert!(!compare(&left, &different).unwrap());
+                    assert!(!compare(&different, &left).unwrap());
+                    assert!(compare(&retained, &left).unwrap());
+                }
+            }
+
+            let mut late_callable = NormalizedValue::Function {
+                function: external(&program, "core.i64.add", 0, 2).0,
+                type_arguments: Arc::from([]),
+                effect_arguments: Arc::from([]),
+                requirement_arguments: Arc::from([]),
+                bound_arguments: None,
+            };
+            for _ in 0..255 {
+                late_callable = NormalizedValue::Option(Some(Box::new(late_callable)));
+            }
+            let left = map([
+                (NormalizedMapKey::I64(0), NormalizedValue::I64(1)),
+                (NormalizedMapKey::I64(1), late_callable),
+            ]);
+            let right = map([(NormalizedMapKey::I64(0), NormalizedValue::I64(2))]);
+            for compare in comparisons {
+                for (left, right) in [(&left, &right), (&right, &left)] {
+                    assert!(
+                        compare(left, right)
+                            .unwrap_err()
+                            .code
+                            .ends_with("value_not_comparable"),
+                        "an unequal first key cannot hide a late callable"
+                    );
+                }
+            }
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+#[test]
+fn retained_map_state_preserves_exact_logical_storage_and_depth_boundaries() {
+    std::thread::Builder::new()
+        .stack_size(2 * 1024 * 1024)
+        .spawn(|| {
+            let (mut program, snapshot) = fixture();
+            let mut schema = NormalizedReferenceSchema::reconstruct([&snapshot]).unwrap();
+            let integer = internal_type(&mut program, &mut schema, TypeForm::I64);
+            let probe = normalized::session::retained_map_meter_probe;
+            // Counts follow the retained-state format: a map node, each primitive
+            // key, each Option node, and the final I64 are logical occurrences.
+            for (shape, nodes, bytes) in [(0, 258, 16), (1, 513, 2056), (2, 385, 1032)] {
+                let mut item = integer;
+                let mut value = NormalizedValue::I64(7);
+                for depth in 0..255 {
+                    if shape == 0 || (shape == 2 && depth % 2 == 0) {
+                        item = internal_type(&mut program, &mut schema, TypeForm::Option { item });
+                        value = NormalizedValue::Option(Some(Box::new(value)));
+                    } else {
+                        item = internal_type(
+                            &mut program,
+                            &mut schema,
+                            TypeForm::Map {
+                                key: integer,
+                                value: item,
+                            },
+                        );
+                        value = map([(NormalizedMapKey::I64(0), value)]);
+                    }
+                }
+                let ty = internal_type(
+                    &mut program,
+                    &mut schema,
+                    TypeForm::Map {
+                        key: integer,
+                        value: item,
+                    },
+                );
+                let shared = map([
+                    (NormalizedMapKey::I64(0), value.clone()),
+                    (NormalizedMapKey::I64(1), value.clone()),
+                ]);
+                let value = map([(NormalizedMapKey::I64(0), value)]);
+                let retained = value.clone();
+                assert_eq!(
+                    probe(&program, &value, ty, nodes, bytes).unwrap(),
+                    (nodes, bytes)
+                );
+                for (maximum_nodes, maximum_bytes) in [(nodes - 1, bytes), (nodes, bytes - 1)] {
+                    assert_eq!(
+                        probe(&program, &value, ty, maximum_nodes, maximum_bytes)
+                            .unwrap_err()
+                            .code,
+                        "session_state_limit"
+                    );
+                }
+                // Only the outer map node is counted once; both aliases contribute
+                // their complete logical subtree, including their distinct root key.
+                assert_eq!(
+                    probe(&program, &shared, ty, nodes * 2 - 1, bytes * 2).unwrap(),
+                    (nodes * 2 - 1, bytes * 2)
+                );
+                let excessive_type =
+                    internal_type(&mut program, &mut schema, TypeForm::Option { item: ty });
+                let excessive = NormalizedValue::Option(Some(Box::new(value)));
+                assert_eq!(
+                    probe(&program, &excessive, excessive_type, usize::MAX, usize::MAX)
+                        .unwrap_err()
+                        .code,
+                    "session_state_depth"
+                );
+                assert_eq!(
+                    probe(&program, &retained, ty, nodes, bytes).unwrap(),
+                    (nodes, bytes),
+                    "a refused state does not change its retained predecessor"
+                );
+            }
+
+            let text = internal_type(&mut program, &mut schema, TypeForm::Text);
+            let bytes = internal_type(&mut program, &mut schema, TypeForm::Bytes);
+            let boolean = internal_type(&mut program, &mut schema, TypeForm::Bool);
+            let static_text = internal_type(&mut program, &mut schema, TypeForm::StaticText);
+            for (key, key_type, stored_bytes) in [
+                (NormalizedMapKey::Bool(true), boolean, 9),
+                (NormalizedMapKey::Bytes(vec![0, 1, 255]), bytes, 11),
+            ] {
+                let ty = internal_type(
+                    &mut program,
+                    &mut schema,
+                    TypeForm::Map {
+                        key: key_type,
+                        value: integer,
+                    },
+                );
+                assert_eq!(
+                    probe(
+                        &program,
+                        &map([(key, NormalizedValue::I64(7))]),
+                        ty,
+                        3,
+                        stored_bytes
+                    )
+                    .unwrap(),
+                    (3, stored_bytes)
+                );
+            }
+            let text_map = internal_type(
+                &mut program,
+                &mut schema,
+                TypeForm::Map {
+                    key: text,
+                    value: integer,
+                },
+            );
+            let value = map([(
+                NormalizedMapKey::Text("λ".repeat(32_768)),
+                NormalizedValue::I64(7),
+            )]);
+            // Text counts UTF-8 bytes, plus the eight-byte integer payload. No
+            // temporary converted key is part of the retained-state format.
+            assert_eq!(
+                probe(&program, &value, text_map, 3, 65_544).unwrap(),
+                (3, 65_544)
+            );
+            assert_eq!(
+                probe(&program, &value, text_map, 3, 65_543)
+                    .unwrap_err()
+                    .code,
+                "session_state_limit"
+            );
+            for wrong_key in [integer, bytes, static_text] {
+                let wrong = internal_type(
+                    &mut program,
+                    &mut schema,
+                    TypeForm::Map {
+                        key: wrong_key,
+                        value: integer,
+                    },
+                );
+                assert_eq!(
+                    probe(&program, &value, wrong, usize::MAX, usize::MAX)
+                        .unwrap_err()
+                        .code,
+                    "session_state_shape"
+                );
+            }
+            assert_eq!(
+                probe(&program, &value, text_map, 3, 65_544).unwrap(),
+                (3, 65_544)
+            );
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
 struct RawOwnershipProbe {
     case: u8,
     payload: Arc<[u8]>,

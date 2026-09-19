@@ -606,32 +606,7 @@ fn to_json(
             ))
         }
         (NormalizedValue::Map(values), TypeForm::Map { key, value: item }) => {
-            state.charge(values.len().saturating_mul(2), path)?;
-            let entries = values
-                .iter()
-                .enumerate()
-                .map(|(index, (map_key, value))| {
-                    Ok(JsonValue::Array(vec![
-                        map_key_to_json(
-                            program,
-                            map_key,
-                            *key,
-                            state,
-                            &format!("{path}[{index}][0]"),
-                            depth + 1,
-                        )?,
-                        to_json(
-                            program,
-                            value,
-                            *item,
-                            state,
-                            &format!("{path}[{index}][1]"),
-                            depth + 1,
-                        )?,
-                    ]))
-                })
-                .collect::<Result<Vec<_>, Diagnostic>>()?;
-            Ok(JsonValue::Array(entries))
+            map_to_json(program, values, (*key, *item), state, path, depth)
         }
         (
             _,
@@ -657,6 +632,42 @@ fn to_json(
             "runtime value does not match the exact boundary type",
         )),
     }
+}
+
+// Keep the fixed AVL cursor outside every non-map recursive value frame. Borrowing
+// the named cursor also avoids copying its storage through iterator adapters.
+#[inline(never)]
+fn map_to_json(
+    program: &dyn NormalizedValueSchema,
+    values: &super::map::Map,
+    (key_type, item_type): (TypeObjectDigest, TypeObjectDigest),
+    state: &mut EncodeState,
+    path: &str,
+    depth: usize,
+) -> Result<JsonValue, Diagnostic> {
+    state.charge(values.len().saturating_mul(2), path)?;
+    let mut entries = Vec::new();
+    let mut cursor = values.iter();
+    for (index, (map_key, value)) in cursor.by_ref().enumerate() {
+        let key = map_key_to_json(
+            program,
+            map_key,
+            key_type,
+            state,
+            &format!("{path}[{index}][0]"),
+            depth + 1,
+        )?;
+        let value = to_json(
+            program,
+            value,
+            item_type,
+            state,
+            &format!("{path}[{index}][1]"),
+            depth + 1,
+        )?;
+        entries.push(JsonValue::Array(vec![key, value]));
+    }
+    Ok(JsonValue::Array(entries))
 }
 
 fn encode_named(

@@ -18,9 +18,14 @@ struct Fixture {
     maps: [TypeObjectDigest; 4],
     list: TypeObjectDigest,
     nested: TypeObjectDigest,
+    map_chain: Vec<TypeObjectDigest>,
 }
 
 fn fixture() -> Fixture {
+    fixture_with_map_depth(0)
+}
+
+fn fixture_with_map_depth(depth: usize) -> Fixture {
     let seed = b"persistent-map-byte-contract";
     let mut snapshot = empty_normalized_snapshot(seed);
     let module = ModuleId::migrate(seed, 0);
@@ -48,6 +53,17 @@ fn fixture() -> Fixture {
             value: list,
         },
     );
+    let mut map_chain = vec![integer];
+    for index in 0..depth {
+        let ty = admit_snapshot_type(
+            &mut snapshot,
+            TypeForm::Map {
+                key: integer,
+                value: map_chain[index],
+            },
+        );
+        map_chain.push(ty);
+    }
     snapshot.owners.insert(
         OwnerKey::Module(module),
         OwnerRecord::Module(ModuleRecord {
@@ -62,6 +78,7 @@ fn fixture() -> Fixture {
     let parameters = maps
         .into_iter()
         .chain([nested])
+        .chain(map_chain.last().copied().filter(|_| depth > 0))
         .enumerate()
         .map(|(index, ty)| {
             let parameter = ParameterId::migrate(seed, index as u64);
@@ -119,6 +136,7 @@ fn fixture() -> Fixture {
         maps,
         list,
         nested,
+        map_chain,
     }
 }
 
@@ -640,4 +658,161 @@ fn map_codec_cancellation_including_bulk_construction_leaves_healthy_subsequent_
         assert_eq!(decode(&ExecutionControl::uncancelled()).unwrap(), retained);
         assert_bytes(&fixture, &retained, ty, json, &data);
     }
+}
+
+fn singleton_map_chain(mut value: NormalizedValue, depth: usize) -> NormalizedValue {
+    for _ in 0..depth {
+        value = NormalizedValue::map(BTreeMap::from([(NormalizedMapKey::I64(0), value)])).unwrap();
+    }
+    value
+}
+
+fn shared_map_chain(depth: usize) -> NormalizedValue {
+    let child = singleton_map_chain(NormalizedValue::I64(7), depth - 1);
+    NormalizedValue::map(BTreeMap::from([
+        (NormalizedMapKey::I64(0), child.clone()),
+        (NormalizedMapKey::I64(1), child),
+    ]))
+    .unwrap()
+}
+
+// Do not use recursive runtime equality as the oracle for the codec's stack boundary.
+fn assert_map_chain(value: &NormalizedValue, depth: usize) {
+    let NormalizedValue::Map(root) = value else {
+        panic!("expected outer map");
+    };
+    assert_eq!(root.len(), 2);
+    for key in [0, 1] {
+        let mut value = root.get(&NormalizedMapKey::I64(key)).unwrap();
+        for _ in 1..depth {
+            let NormalizedValue::Map(entries) = value else {
+                panic!("expected nested map");
+            };
+            assert_eq!(entries.len(), 1);
+            value = entries.get(&NormalizedMapKey::I64(0)).unwrap();
+        }
+        assert!(matches!(value, NormalizedValue::I64(7)));
+    }
+}
+
+fn assert_json_map_chain(value: &serde_json::Value, depth: usize) {
+    let root = value.as_array().unwrap();
+    assert_eq!(root.len(), 2);
+    for (key, pair) in root.iter().enumerate() {
+        let pair = pair.as_array().unwrap();
+        assert_eq!(pair.len(), 2);
+        assert_eq!(pair[0].as_i64(), Some(key as i64));
+        let mut value = &pair[1];
+        for _ in 1..depth {
+            let entries = value.as_array().unwrap();
+            assert_eq!(entries.len(), 1);
+            let pair = entries[0].as_array().unwrap();
+            assert_eq!(pair.len(), 2);
+            assert_eq!(pair[0].as_i64(), Some(0));
+            value = &pair[1];
+        }
+        assert_eq!(value.as_i64(), Some(7));
+    }
+}
+
+fn nested_map_envelope(fixture: &Fixture, depth: usize) -> Vec<u8> {
+    let mut layout = Vec::new();
+    for index in (1..=depth).rev() {
+        layout.extend_from_slice(&fixture.map_chain[index].bytes());
+        layout.push(8); // Map.
+        layout.extend_from_slice(&fixture.integer.bytes());
+        layout.push(2); // I64 key.
+    }
+    layout.extend_from_slice(&fixture.integer.bytes());
+    layout.push(2); // I64 leaf.
+    let mut body = b"LKJDVAL1\x00\x01".to_vec();
+    body.extend_from_slice(&digest("lkjscript.data.typed-layout.v1", &layout));
+    body.extend_from_slice(&2u32.to_be_bytes());
+    for key in [0i64, 1] {
+        body.extend_from_slice(&key.to_be_bytes());
+        for _ in 1..depth {
+            body.extend_from_slice(&1u32.to_be_bytes());
+            body.extend_from_slice(&0i64.to_be_bytes());
+        }
+        body.extend_from_slice(&7i64.to_be_bytes());
+    }
+    checksum(body)
+}
+
+#[test]
+fn map_codec_nested_boundaries_fit_the_existing_stack_and_preserve_shared_values() {
+    // Preparation has its separate depth owner. Keep it outside the bounded codec worker.
+    let fixture = fixture_with_map_depth(129);
+    std::thread::Builder::new()
+        .name("nested-map-codec-boundaries".to_owned())
+        .stack_size(2 * 1024 * 1024)
+        .spawn(move || {
+            let value = shared_map_chain(128);
+            let retained = value.clone();
+            let ty = fixture.map_chain[128];
+            let expected = nested_map_envelope(&fixture, 128);
+            assert_eq!(
+                data_codec::encode_typed(&fixture.program, &value, ty).unwrap(),
+                expected
+            );
+            assert_eq!(
+                data_codec_reference::encode_typed(&fixture.reference, &value, ty).unwrap(),
+                expected
+            );
+            let decoded = data_codec::decode_typed(&fixture.program, &expected, ty).unwrap();
+            assert_map_chain(&decoded, 128);
+            let decoded =
+                data_codec_reference::decode_typed(&fixture.reference, &expected, ty).unwrap();
+            assert_map_chain(&decoded, 128);
+            for schema in [
+                &fixture.program as &dyn super::super::value_schema::NormalizedValueSchema,
+                &fixture.reference,
+            ] {
+                let json = codec::encode_value(schema, &value, ty, JsonLimits::default()).unwrap();
+                assert_json_map_chain(&json, 128);
+                let decoded =
+                    codec::decode_value(schema, &json, ty, JsonLimits::default()).unwrap();
+                assert_map_chain(&decoded, 128);
+                // Pair arrays contribute two JSON container levels per map at the byte
+                // parser. Exercise that separate, unchanged limit with a shallower chain.
+                let shallow = shared_map_chain(63);
+                let shallow_ty = fixture.map_chain[63];
+                let bytes =
+                    codec::encode_typed(schema, &shallow, shallow_ty, JsonLimits::default())
+                        .unwrap();
+                let decoded =
+                    codec::decode_typed(schema, &bytes, shallow_ty, JsonLimits::default()).unwrap();
+                assert_map_chain(&decoded, 63);
+            }
+            let excessive = shared_map_chain(129);
+            let excessive_ty = fixture.map_chain[129];
+            for error in [
+                data_codec::encode_typed(&fixture.program, &excessive, excessive_ty).unwrap_err(),
+                data_codec_reference::encode_typed(&fixture.reference, &excessive, excessive_ty)
+                    .unwrap_err(),
+            ] {
+                assert_eq!(error.class, DiagnosticClass::Resource);
+                assert_eq!(error.code, "normalized_data_layout_depth");
+            }
+            // JSON's maintained depth owner reports a source type error, while typed
+            // data's independent layout owners report finite resource exhaustion.
+            for schema in [
+                &fixture.program as &dyn super::super::value_schema::NormalizedValueSchema,
+                &fixture.reference,
+            ] {
+                let error =
+                    codec::encode_value(schema, &excessive, excessive_ty, JsonLimits::default())
+                        .unwrap_err();
+                assert_eq!(error.class, DiagnosticClass::Source);
+                assert_eq!(error.code, "normalized_json_type");
+            }
+            assert_map_chain(&retained, 128);
+            assert_eq!(
+                data_codec::encode_typed(&fixture.program, &retained, ty).unwrap(),
+                expected
+            );
+        })
+        .unwrap()
+        .join()
+        .unwrap();
 }

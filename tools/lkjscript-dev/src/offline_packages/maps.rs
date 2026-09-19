@@ -660,6 +660,20 @@ fn verify_command(
     )
 }
 
+pub(super) fn validate_project_source(
+    records: &[CompactRecord],
+    package: &str,
+    revision: &str,
+    bundle: &str,
+) -> Result<(), DevError> {
+    require(
+        field(records, "authority", "package")? == package
+            && field(records, "authority", "revision")? == revision
+            && field(records, "artifact", "bundle")? == bundle,
+        "map project output does not bind its exact accepted source and bundle",
+    )
+}
+
 fn validate_authoring(receipt: &Receipt, root: &Path, witness: &Witness) -> Result<(), DevError> {
     let [old_library, new_library, old_consumer, new_consumer] = witness.sources.as_slice() else {
         return Err(DevError::corrupt("map authoring source sequence missing"));
@@ -943,7 +957,7 @@ pub(super) fn validate(
                 && field(&built, "authority", "revision")? == source.revision,
             "map retained bundle does not bind its accepted source",
         )?;
-        bundles.insert(phase, bundle);
+        bundles.insert(phase, bundle.clone());
         verify_command(
             receipt,
             &witness,
@@ -967,6 +981,7 @@ pub(super) fn validate(
                 && field(&checked, "tests", "differential")? == "equal",
             "map consumer check did not pass both evaluators",
         )?;
+        validate_project_source(&checked, &source.package, &source.revision, &bundle)?;
     }
     let mut copied = Vec::new();
     for case in cases()? {
@@ -1012,6 +1027,18 @@ pub(super) fn validate(
                 "map execution selected a foreign bundle",
             )?;
             copied.push(witness.commands[case.name]);
+        } else if case.expected.is_ok() {
+            // Staging the new library preserves the old accepted consumer until
+            // its reviewed replacement. Equal output alone cannot bind that source.
+            let (source, phase) = if case.phase == "after" {
+                (new_consumer, "after")
+            } else {
+                (old_consumer, "before")
+            };
+            let bundle = bundles
+                .get(phase)
+                .ok_or_else(|| DevError::corrupt("map project bundle binding absent"))?;
+            validate_project_source(&records, &source.package, &source.revision, bundle)?;
         }
     }
     Ok(copied)

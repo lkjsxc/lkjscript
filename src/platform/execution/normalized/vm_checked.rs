@@ -845,7 +845,7 @@ impl Admission<'_> {
                 class,
             }),
             Err(mut error) => {
-                super::super::value::release_raw_values(vec![raw]);
+                super::super::value::release_raw_value(raw);
                 error.message = format!(
                     "{} value admission: {}",
                     if input {

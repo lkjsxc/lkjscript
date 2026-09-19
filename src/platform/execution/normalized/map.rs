@@ -11,7 +11,7 @@
 //! Traversal and codecs see key order, never tree shape. Raw ingress is admitted
 //! independently by each evaluator; this carrier has no semantic certificate.
 
-use super::value::{NormalizedMapKey, NormalizedValue, release_raw_values};
+use super::value::{NormalizedMapKey, NormalizedValue, RawValueWork, release_raw_value};
 use crate::platform::execution::{ExecutionError, ExecutionFailureClass};
 use std::cell::Cell;
 use std::collections::BTreeMap;
@@ -294,7 +294,7 @@ struct RawEntries(std::collections::btree_map::IntoIter<NormalizedMapKey, Normal
 impl Drop for RawEntries {
     fn drop(&mut self) {
         for (_, value) in self.0.by_ref() {
-            release_raw_values(vec![value]);
+            release_raw_value(value);
         }
     }
 }
@@ -490,14 +490,20 @@ impl Map {
             .ok_or_else(storage_error)
     }
 
-    pub(super) fn drain_unique(&mut self, values: &mut Vec<NormalizedValue>) {
-        let mut pending = Vec::new();
-        pending.extend(self.root.take());
+    pub(super) fn drain_unique(&mut self, values: &mut RawValueWork) {
+        // A depth-first binary walk holds at most one sibling per AVL level.
+        // Retiring an update path must not allocate a temporary node Vec.
+        let mut pending: [Link; MAXIMUM_HEIGHT] = std::array::from_fn(|_| None);
+        pending[0] = self.root.take();
         self.length = 0;
-        while let Some(node) = pending.pop() {
-            if let Some(node) = Arc::into_inner(node) {
-                pending.extend(node.left);
-                pending.extend(node.right);
+        let mut depth = usize::from(pending[0].is_some());
+        while depth != 0 {
+            depth -= 1;
+            if let Some(node) = pending[depth].take().and_then(Arc::into_inner) {
+                for child in [node.left, node.right].into_iter().flatten() {
+                    pending[depth] = Some(child);
+                    depth += 1;
+                }
                 if let Some(mut entry) = Arc::into_inner(node.entry) {
                     values.push(std::mem::replace(&mut entry.value, NormalizedValue::Unit));
                 }
@@ -509,19 +515,16 @@ impl Map {
 impl Drop for Entry {
     fn drop(&mut self) {
         if !matches!(self.value, NormalizedValue::Unit) {
-            release_raw_values(vec![std::mem::replace(
-                &mut self.value,
-                NormalizedValue::Unit,
-            )]);
+            release_raw_value(std::mem::replace(&mut self.value, NormalizedValue::Unit));
         }
     }
 }
 
 impl Drop for Map {
     fn drop(&mut self) {
-        let mut values = Vec::new();
+        let mut values = RawValueWork::default();
         self.drain_unique(&mut values);
-        release_raw_values(values);
+        values.release();
     }
 }
 
@@ -533,7 +536,14 @@ impl std::fmt::Debug for Map {
 
 impl PartialEq for Map {
     fn eq(&self, other: &Self) -> bool {
-        self.length == other.length && self.iter().eq(other.iter())
+        if self.length != other.length {
+            return false;
+        }
+        // Borrow the bounded cursor buffers across recursive payload comparison.
+        // Moving them through Iterator::eq duplicates both buffers in debug frames.
+        let mut left = self.iter();
+        let mut right = other.iter();
+        (&mut left).eq(&mut right)
     }
 }
 impl Eq for Map {}

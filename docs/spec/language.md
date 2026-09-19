@@ -66,6 +66,11 @@ both evaluators independently admit all children and map metadata, including ret
 Cancellation is checked before reservations and successful result installation. Refused
 reservations install no partial root and do not alter their ledger; earlier reserved work is
 not refunded. Iterative disposal covers rejected raw payloads, partially built trees and aliases.
+Map-node disposal uses bounded inline traversal storage. Terminal payloads, a single shared
+payload and unary raw-value chains need no cleanup heap growth; branching aggregates reuse owned
+vectors or the existing raw-disposal worklist. That non-fallible cleanup bookkeeping remains
+separate from evaluator construction reservations: it cannot publish values, grant execution
+or stop releasing ownership because a construction quota was exhausted.
 Physical map observations saturate independently of quota accounting and are not allocator/RSS
 measurements. No persisted encoding or migration follows from this runtime representation.
 

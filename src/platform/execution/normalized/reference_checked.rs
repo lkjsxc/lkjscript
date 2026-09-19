@@ -614,7 +614,7 @@ impl ReferenceState<'_> {
                 ownership,
             }),
             Err(mut error) => {
-                super::super::value::release_raw_values(vec![datum]);
+                super::super::value::release_raw_value(datum);
                 error.message = format!(
                     "{} reference value admission: {}",
                     if input {

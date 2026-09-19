@@ -6,7 +6,7 @@ use super::value_schema::NormalizedValueSchema;
 use crate::platform::binary64::Binary64;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::ExecutionControl;
-use crate::platform::kernel::{TypeForm, TypeObjectDigest};
+use crate::platform::kernel::{DeclarationReference, TypeForm, TypeObjectDigest};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -199,11 +199,7 @@ fn encode_value(
             }
         }
         (NormalizedValue::Map(values), TypeForm::Map { key, value: item }) => {
-            push_count(output, values.len())?;
-            for (map_key, value) in values.iter() {
-                encode_map_key(program, map_key, *key, output, state, depth + 1)?;
-                encode_value(program, value, *item, output, state, depth + 1)?;
-            }
+            encode_map(program, values, (*key, *item), output, state, depth)?;
         }
         (_, TypeForm::StaticText) => return Err(unsupported("StaticText")),
         (_, TypeForm::Secret) => return Err(unsupported("Secret")),
@@ -225,6 +221,26 @@ fn encode_value(
             "normalized_data_value_bytes",
             "typed data value exceeds the canonical byte limit",
         ));
+    }
+    Ok(())
+}
+
+// A non-map value must not reserve AVL traversal storage at every recursive level.
+// Iterate the named cursor by reference so debug builds do not copy its fixed stack.
+#[inline(never)]
+fn encode_map(
+    program: &NormalizedProgram,
+    values: &super::map::Map,
+    (key_type, item_type): (TypeObjectDigest, TypeObjectDigest),
+    output: &mut Vec<u8>,
+    state: &mut CodecState,
+    depth: usize,
+) -> Result<(), Diagnostic> {
+    push_count(output, values.len())?;
+    let mut cursor = values.iter();
+    for (map_key, value) in &mut cursor {
+        encode_map_key(program, map_key, key_type, output, state, depth + 1)?;
+        encode_value(program, value, item_type, output, state, depth + 1)?;
     }
     Ok(())
 }
@@ -492,54 +508,7 @@ fn describe_layout(
         TypeForm::Bytes => append_bytes(output, &[3])?,
         TypeForm::Text => append_bytes(output, &[4])?,
         TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
-            if let TypeForm::Applied { arguments, .. } = type_form(program, ty)? {
-                append_bytes(output, &[9])?;
-                push_count(output, arguments.len())?;
-                for argument in arguments {
-                    describe_layout(program, *argument, active, output, depth + 1, control)?;
-                }
-            } else {
-                append_bytes(output, &[5])?;
-            }
-            push_blob(output, declaration.package.to_string().as_bytes())?;
-            push_blob(output, declaration.declaration.to_string().as_bytes())?;
-            if !active.insert(ty) {
-                append_bytes(output, &[0])?;
-                return Ok(());
-            }
-            append_bytes(output, &[1])?;
-            if let Some((_, layout)) = record_layout(program, ty) {
-                append_bytes(output, &[0])?;
-                push_count(output, layout.fields.len())?;
-                for field in layout.fields.iter() {
-                    push_blob(output, field.reference.package.to_string().as_bytes())?;
-                    push_blob(output, field.reference.field.to_string().as_bytes())?;
-                    push_blob(output, field.name.as_str().as_bytes())?;
-                    describe_layout(program, field.ty, active, output, depth + 1, control)?;
-                }
-            } else if let Some((_, layout)) = variant_layout(program, ty) {
-                append_bytes(output, &[1])?;
-                push_count(output, layout.cases.len())?;
-                for case in layout.cases.iter() {
-                    push_blob(output, case.reference.package.to_string().as_bytes())?;
-                    push_blob(output, case.reference.case.to_string().as_bytes())?;
-                    push_blob(output, case.name.as_str().as_bytes())?;
-                    match case.payload {
-                        Some(payload) => {
-                            append_bytes(output, &[1])?;
-                            describe_layout(program, payload, active, output, depth + 1, control)?;
-                        }
-                        None => append_bytes(output, &[0])?,
-                    }
-                }
-            } else {
-                return Err(codec_error(
-                    DiagnosticClass::Corrupt,
-                    "normalized_data_named_layout",
-                    "named typed data layout has no prepared declaration",
-                ));
-            }
-            active.remove(&ty);
+            describe_nominal_layout(program, ty, declaration, active, output, depth, control)?;
         }
         TypeForm::StructuralRecord { fields } => {
             append_bytes(output, &[6])?;
@@ -578,6 +547,69 @@ fn describe_layout(
             return Err(unsupported("unrepresented Option or Result"));
         }
     }
+    Ok(())
+}
+
+// Nominal identity/field formatting must not enlarge each simple collection frame
+// in a deep layout. Preserve the exact prefix, active-type markers and child order.
+#[inline(never)]
+fn describe_nominal_layout(
+    program: &NormalizedProgram,
+    ty: TypeObjectDigest,
+    declaration: &DeclarationReference,
+    active: &mut BTreeSet<TypeObjectDigest>,
+    output: &mut Vec<u8>,
+    depth: usize,
+    control: &ExecutionControl,
+) -> Result<(), Diagnostic> {
+    if let TypeForm::Applied { arguments, .. } = type_form(program, ty)? {
+        append_bytes(output, &[9])?;
+        push_count(output, arguments.len())?;
+        for argument in arguments {
+            describe_layout(program, *argument, active, output, depth + 1, control)?;
+        }
+    } else {
+        append_bytes(output, &[5])?;
+    }
+    push_blob(output, declaration.package.to_string().as_bytes())?;
+    push_blob(output, declaration.declaration.to_string().as_bytes())?;
+    if !active.insert(ty) {
+        append_bytes(output, &[0])?;
+        return Ok(());
+    }
+    append_bytes(output, &[1])?;
+    if let Some((_, layout)) = record_layout(program, ty) {
+        append_bytes(output, &[0])?;
+        push_count(output, layout.fields.len())?;
+        for field in layout.fields.iter() {
+            push_blob(output, field.reference.package.to_string().as_bytes())?;
+            push_blob(output, field.reference.field.to_string().as_bytes())?;
+            push_blob(output, field.name.as_str().as_bytes())?;
+            describe_layout(program, field.ty, active, output, depth + 1, control)?;
+        }
+    } else if let Some((_, layout)) = variant_layout(program, ty) {
+        append_bytes(output, &[1])?;
+        push_count(output, layout.cases.len())?;
+        for case in layout.cases.iter() {
+            push_blob(output, case.reference.package.to_string().as_bytes())?;
+            push_blob(output, case.reference.case.to_string().as_bytes())?;
+            push_blob(output, case.name.as_str().as_bytes())?;
+            match case.payload {
+                Some(payload) => {
+                    append_bytes(output, &[1])?;
+                    describe_layout(program, payload, active, output, depth + 1, control)?;
+                }
+                None => append_bytes(output, &[0])?,
+            }
+        }
+    } else {
+        return Err(codec_error(
+            DiagnosticClass::Corrupt,
+            "normalized_data_named_layout",
+            "named typed data layout has no prepared declaration",
+        ));
+    }
+    active.remove(&ty);
     Ok(())
 }
 

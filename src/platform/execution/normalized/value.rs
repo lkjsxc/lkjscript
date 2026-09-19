@@ -252,7 +252,7 @@ impl NormalizedMapKey {
                 Some(key)
             }
             value => {
-                release_raw_values(vec![value]);
+                release_raw_value(value);
                 None
             }
         }
@@ -353,7 +353,7 @@ impl RawValue {
 impl Drop for RawValue {
     fn drop(&mut self) {
         if !matches!(self.0, NormalizedValue::Unit) {
-            release_raw_values(vec![std::mem::replace(&mut self.0, NormalizedValue::Unit)]);
+            release_raw_value(std::mem::replace(&mut self.0, NormalizedValue::Unit));
         }
     }
 }
@@ -392,38 +392,124 @@ impl Drop for RawArguments {
     }
 }
 
-pub(super) fn release_raw_values(mut values: Vec<NormalizedValue>) {
-    while let Some(value) = values.pop() {
-        match value {
-            NormalizedValue::Option(Some(value))
-            | NormalizedValue::Result { value, .. }
-            | NormalizedValue::Variant {
-                payload: Some(value),
-                ..
-            } => values.push(*value),
-            NormalizedValue::Function {
-                bound_arguments: Some(children),
-                ..
-            }
-            | NormalizedValue::Record(NormalizedRecord::Nominal {
-                fields: children, ..
-            }) => {
-                if let Some(mut children) = Arc::into_inner(children) {
-                    if values.is_empty() {
-                        values = children;
-                    } else {
-                        values.append(&mut children);
+/// Nonfallible raw teardown owns this scratch, separately from execution fuel.
+/// The first pending value is inline. Terminal values and single-child wrappers
+/// need no heap storage; retained Arc owners are released without visiting their
+/// shared contents. Owned argument/capture/record buffers are reused where possible.
+/// Additional scratch holds children emitted by uniquely released containers;
+/// several shared composite child handles can still occupy that frontier, without
+/// traversing or cloning their shared contents. This established cleanup owner is
+/// not a cumulative allocation ledger and cannot publish values after refusal.
+#[derive(Default)]
+pub(super) struct RawValueWork {
+    current: Option<NormalizedValue>,
+    values: Vec<NormalizedValue>,
+}
+
+impl RawValueWork {
+    pub(super) fn push(&mut self, mut value: NormalizedValue) {
+        loop {
+            value = match value {
+                NormalizedValue::Option(Some(value))
+                | NormalizedValue::Result { value, .. }
+                | NormalizedValue::Variant {
+                    payload: Some(value),
+                    ..
+                } => *value,
+                NormalizedValue::Unit
+                | NormalizedValue::Bool(_)
+                | NormalizedValue::I64(_)
+                | NormalizedValue::F64(_)
+                | NormalizedValue::Bytes(_)
+                | NormalizedValue::Text(_)
+                | NormalizedValue::StaticText(_)
+                | NormalizedValue::Option(None)
+                | NormalizedValue::Variant { payload: None, .. }
+                | NormalizedValue::Function {
+                    bound_arguments: None,
+                    ..
+                }
+                | NormalizedValue::Resource(_) => return,
+                value => {
+                    if let Some(previous) = self.current.replace(value) {
+                        self.values.push(previous);
                     }
+                    return;
                 }
-            }
-            NormalizedValue::List(mut list) => list.drain_unique(&mut values),
-            NormalizedValue::Record(NormalizedRecord::Structural { fields }) => {
-                if let Some(fields) = Arc::into_inner(fields) {
-                    values.extend(fields.into_iter().map(|(_, value)| value));
-                }
-            }
-            NormalizedValue::Map(mut entries) => entries.drain_unique(&mut values),
-            _ => {}
+            };
         }
     }
+
+    fn extend_owned(&mut self, mut children: Vec<NormalizedValue>) {
+        if self.values.capacity().saturating_sub(self.values.len()) >= children.len() {
+            self.values.append(&mut children);
+        } else if children.capacity().saturating_sub(children.len()) >= self.values.len() {
+            // Reuse the larger already-owned buffer while preserving release order.
+            let previous = self.values.len();
+            children.append(&mut self.values);
+            children.rotate_right(previous);
+            self.values = children;
+        } else {
+            self.values.append(&mut children);
+        }
+    }
+
+    pub(super) fn release(&mut self) {
+        while let Some(value) = self.current.take().or_else(|| self.values.pop()) {
+            match value {
+                NormalizedValue::Option(Some(value))
+                | NormalizedValue::Result { value, .. }
+                | NormalizedValue::Variant {
+                    payload: Some(value),
+                    ..
+                } => self.push(*value),
+                NormalizedValue::Function {
+                    bound_arguments: Some(children),
+                    ..
+                }
+                | NormalizedValue::Record(NormalizedRecord::Nominal {
+                    fields: children, ..
+                }) => {
+                    if let Some(children) = Arc::into_inner(children) {
+                        self.extend_owned(children);
+                    }
+                }
+                NormalizedValue::List(mut list) => list.drain_unique(self),
+                NormalizedValue::Record(NormalizedRecord::Structural { fields }) => {
+                    if let Some(fields) = Arc::into_inner(fields) {
+                        for (_, value) in fields {
+                            self.push(value);
+                        }
+                    }
+                }
+                NormalizedValue::Map(mut entries) => entries.drain_unique(self),
+                _ => {}
+            }
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) fn scratch_storage(&self) -> (*const NormalizedValue, usize) {
+        (self.values.as_ptr(), self.values.capacity())
+    }
+}
+
+impl Drop for RawValueWork {
+    fn drop(&mut self) {
+        self.release();
+    }
+}
+
+pub(super) fn release_raw_value(value: NormalizedValue) {
+    let mut work = RawValueWork::default();
+    work.push(value);
+    work.release();
+}
+
+pub(super) fn release_raw_values(values: Vec<NormalizedValue>) {
+    let mut work = RawValueWork {
+        current: None,
+        values,
+    };
+    work.release();
 }

@@ -3011,7 +3011,7 @@ fn normalized_map_intrinsic(
     let values = match arguments.next() {
         Some(NormalizedValue::Map(values)) => values,
         Some(value) => {
-            super::value::release_raw_values(vec![value]);
+            super::value::release_raw_value(value);
             return Err(type_error("map intrinsic received a foreign map"));
         }
         None => return Err(type_error("map intrinsic received a foreign map")),
@@ -3247,17 +3247,7 @@ fn normalized_compare(
             Ok(equal)
         }
         (NormalizedValue::Map(left), NormalizedValue::Map(right)) => {
-            let mut equal = left.len() == right.len();
-            for (key, left) in left.iter() {
-                equal &= equal_optional(Some(left), right.get(key), observation)?;
-            }
-            for (key, right) in right.iter() {
-                if !left.contains_key(key) {
-                    normalized_compare(right, right, observation)?;
-                    equal = false;
-                }
-            }
-            Ok(equal)
+            normalized_map_compare(left, right, observation)
         }
         (NormalizedValue::Function { .. }, _) | (_, NormalizedValue::Function { .. }) => {
             Err(trap_error(
@@ -3275,6 +3265,30 @@ fn normalized_compare(
             Ok(false)
         }
     }
+}
+
+// The neutral cursor has bounded inline traversal storage. Keep that storage out
+// of every recursive scalar/list/variant frame, and borrow it instead of moving
+// another complete cursor into the loop. Unequal maps still admit every child.
+#[inline(never)]
+fn normalized_map_compare(
+    left: &super::map::Map,
+    right: &super::map::Map,
+    observation: bool,
+) -> Result<bool, ExecutionError> {
+    let mut equal = left.len() == right.len();
+    let mut cursor = left.iter();
+    for (key, value) in &mut cursor {
+        equal &= equal_optional(Some(value), right.get(key), observation)?;
+    }
+    cursor = right.iter();
+    for (key, value) in &mut cursor {
+        if !left.contains_key(key) {
+            normalized_compare(value, value, observation)?;
+            equal = false;
+        }
+    }
+    Ok(equal)
 }
 
 fn equal_optional(

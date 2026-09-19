@@ -3805,7 +3805,7 @@ fn reference_map_intrinsic(
     let entries = match arguments.next() {
         Some(NormalizedValue::Map(entries)) => entries,
         Some(value) => {
-            super::value::release_raw_values(vec![value]);
+            super::value::release_raw_value(value);
             return Err(reference_type_error("map intrinsic received a foreign map"));
         }
         None => return Err(reference_type_error("map intrinsic received a foreign map")),
@@ -4029,38 +4029,10 @@ fn reference_compare(
             Ok(left_case == right_case && contents)
         }
         (NormalizedValue::List(left), NormalizedValue::List(right)) => {
-            let mut equal = left.len() == right.len();
-            for (left, right) in left.iter().zip(right.iter()) {
-                equal &= reference_compare(left, right, observation)?;
-            }
-            for value in left
-                .iter()
-                .skip(right.len())
-                .chain(right.iter().skip(left.len()))
-            {
-                reference_compare(value, value, observation)?;
-            }
-            Ok(equal)
+            reference_list_compare(left, right, observation)
         }
         (NormalizedValue::Map(left), NormalizedValue::Map(right)) => {
-            let mut equal = left.len() == right.len();
-            for (key, left) in left.iter() {
-                let values = match right.get(key) {
-                    Some(right) => reference_compare(left, right, observation)?,
-                    None => {
-                        reference_compare(left, left, observation)?;
-                        false
-                    }
-                };
-                equal &= values;
-            }
-            for (key, value) in right.iter() {
-                if !left.contains_key(key) {
-                    reference_compare(value, value, observation)?;
-                    equal = false;
-                }
-            }
-            Ok(equal)
+            reference_map_compare(left, right, observation)
         }
         (NormalizedValue::Function { .. }, _) | (_, NormalizedValue::Function { .. }) => {
             Err(reference_trap(
@@ -4080,6 +4052,58 @@ fn reference_compare(
             Ok(false)
         }
     }
+}
+
+// List adapters also carry traversal storage. Keep it outside nested map frames,
+// while checking every unmatched tail value for comparability as before.
+#[inline(never)]
+fn reference_list_compare(
+    left: &super::list::List,
+    right: &super::list::List,
+    observation: bool,
+) -> Result<bool, ExecutionError> {
+    let mut equal = left.len() == right.len();
+    for (left, right) in left.iter().zip(right.iter()) {
+        equal &= reference_compare(left, right, observation)?;
+    }
+    for value in left
+        .iter()
+        .skip(right.len())
+        .chain(right.iter().skip(left.len()))
+    {
+        reference_compare(value, value, observation)?;
+    }
+    Ok(equal)
+}
+
+// This evaluator independently preserves complete comparability checks even
+// after an unequal prefix. Outline only the cursor storage, not its validator.
+#[inline(never)]
+fn reference_map_compare(
+    left: &super::map::Map,
+    right: &super::map::Map,
+    observation: bool,
+) -> Result<bool, ExecutionError> {
+    let mut equal = left.len() == right.len();
+    let mut cursor = left.iter();
+    for (key, value) in &mut cursor {
+        let values = match right.get(key) {
+            Some(other) => reference_compare(value, other, observation)?,
+            None => {
+                reference_compare(value, value, observation)?;
+                false
+            }
+        };
+        equal &= values;
+    }
+    cursor = right.iter();
+    for (key, value) in &mut cursor {
+        if !left.contains_key(key) {
+            reference_compare(value, value, observation)?;
+            equal = false;
+        }
+    }
+    Ok(equal)
 }
 
 fn reference_optional_equality(

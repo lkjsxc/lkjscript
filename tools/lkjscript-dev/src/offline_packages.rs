@@ -2420,6 +2420,49 @@ mod tests {
     }
 
     #[test]
+    fn map_project_reader_rejects_equal_results_from_substituted_sources() {
+        // Source fields from the genuine copied-product count witness; the value
+        // and differential claim deliberately stay unchanged in every negative case.
+        let package = "pkg_99449ce93ce5e3d40de4f9a95b4889fa";
+        let revision = "rev_677307ddcb888f47c8101360f08da824bae091b7b8d809f36a9696f556a507e4";
+        let bundle =
+            "artifact_bundle_7a053c0d859fc7ef5c30e4f4564a82387d8e9eb2f62c49fce614e2aac29c9227";
+        let original = format!(
+            "authority package={package} revision={revision}\nartifact bundle={bundle}\nexecution target=count-keys value=4096 differential=equal\n"
+        );
+        let records = parse_records("map-reader-source", original.as_bytes()).unwrap();
+        maps::validate_project_source(&records, package, revision, bundle).unwrap();
+        for (field, replacement) in [
+            (package, "pkg_17619b166a1c3fc432628900d5dcdac3"),
+            (
+                revision,
+                "rev_dbe7e81c1a93e5859e99195b4f6a4c126b8a53642e1f2cc445c4f601a38f6fd7",
+            ),
+            (
+                bundle,
+                "artifact_bundle_5d056e700c76ad871d95c5e5c992a35f38fe16efbb5bff51ad25b74cf7a77ade",
+            ),
+        ] {
+            let fault = original.replace(field, replacement);
+            let fault = parse_records("map-reader-substitution", fault.as_bytes()).unwrap();
+            assert_eq!(super::field(&fault, "execution", "value").unwrap(), "4096");
+            assert_eq!(
+                super::field(&fault, "execution", "differential").unwrap(),
+                "equal"
+            );
+            assert!(maps::validate_project_source(&fault, package, revision, bundle).is_err());
+        }
+        for omitted in ["authority", "artifact"] {
+            let fault = records
+                .iter()
+                .filter(|record| record.operation != omitted)
+                .cloned()
+                .collect::<Vec<_>>();
+            assert!(maps::validate_project_source(&fault, package, revision, bundle).is_err());
+        }
+    }
+
+    #[test]
     fn offline_evidence_paths_reject_existing_symlink_and_parent_escape() {
         let temporary = tempfile::tempdir().unwrap();
         let parent = temporary.path().canonicalize().unwrap();

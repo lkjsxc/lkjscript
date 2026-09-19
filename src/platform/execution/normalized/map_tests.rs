@@ -767,3 +767,200 @@ fn persistent_map_observation_saturation_neither_authorizes_nor_exhausts_storage
     assert_eq!(retained, map);
     assert_eq!(Work::current(), saturated);
 }
+
+#[test]
+fn persistent_map_equality_keeps_admitted_nested_payloads_on_a_bounded_stack() {
+    std::thread::Builder::new()
+        .stack_size(2 * 1024 * 1024)
+        .spawn(|| {
+            let nested = |leaf| {
+                let mut payload = value(leaf);
+                for _ in 0..255 {
+                    payload = NormalizedValue::Map(
+                        Map::default()
+                            .insert(key(0), payload, TEST_LIMIT, &mut free)
+                            .unwrap(),
+                    );
+                }
+                payload
+            };
+            let original_child = nested(7);
+            let original = Map::default()
+                .insert(key(-1), original_child.clone(), TEST_LIMIT, &mut free)
+                .unwrap()
+                .insert(key(1), original_child, TEST_LIMIT, &mut free)
+                .unwrap();
+            let alias = original.clone();
+            let independent_child = nested(7);
+            let independently_built = Map::default()
+                .insert(key(1), independent_child.clone(), TEST_LIMIT, &mut free)
+                .unwrap()
+                .insert(key(-1), independent_child, TEST_LIMIT, &mut free)
+                .unwrap();
+            // Equal logical depth-256 values have different root shapes and separately
+            // constructed descendants. Each root retains two aliases of its child.
+            assert!(original == independently_built);
+            let changed = original
+                .insert(key(1), nested(8), TEST_LIMIT, &mut free)
+                .unwrap();
+            assert!(original != changed);
+            assert!(changed != independently_built);
+            assert!(alias == independently_built);
+            assert!(alias == original);
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+#[test]
+fn persistent_map_retirement_uses_inline_or_preexisting_owned_storage() {
+    std::thread::Builder::new()
+        .stack_size(2 * 1024 * 1024)
+        .spawn(|| {
+            let mut scalars = Map::from_items(
+                (0..4096).map(|n| (key(n), value(n))).collect(),
+                TEST_LIMIT,
+                &mut free,
+            )
+            .unwrap();
+            let mut work = RawValueWork::default();
+            scalars.drain_unique(&mut work);
+            assert_eq!(work.scratch_storage().1, 0);
+            work.release();
+            assert_eq!(work.scratch_storage().1, 0);
+
+            // This crosses the list's maximum branch height, independently checking
+            // its fixed traversal stack when a map owns a large terminal payload.
+            let list = NormalizedValue::list((0..65_536).map(value).collect()).unwrap();
+            let mut owner = Map::default()
+                .insert(key(0), list, TEST_LIMIT, &mut free)
+                .unwrap();
+            owner.drain_unique(&mut work);
+            work.release();
+            assert_eq!(work.scratch_storage().1, 0);
+
+            let payload: Arc<[u8]> = Arc::from([19_u8; 17]);
+            let mut unary = NormalizedValue::Bytes(Arc::clone(&payload));
+            for _ in 0..20_000 {
+                unary = NormalizedValue::Option(Some(Box::new(unary)));
+            }
+            let mut owner = Map::default()
+                .insert(key(0), unary, TEST_LIMIT, &mut free)
+                .unwrap();
+            owner.drain_unique(&mut work);
+            work.release();
+            assert_eq!(work.scratch_storage().1, 0);
+            assert_eq!(Arc::strong_count(&payload), 1);
+
+            let origin = ValueOrigin::default();
+            for shared in [
+                NormalizedValue::list(vec![value(7)]).unwrap(),
+                NormalizedValue::map(BTreeMap::from([(key(0), value(7))])).unwrap(),
+                NormalizedValue::Record(NormalizedRecord::Nominal {
+                    layout: RecordLayoutIndex(0, origin),
+                    fields: Arc::new(vec![value(7)]),
+                }),
+                NormalizedValue::Function {
+                    function: FunctionIndex(0, origin),
+                    type_arguments: Arc::from([]),
+                    effect_arguments: Arc::from([]),
+                    requirement_arguments: Arc::from([]),
+                    bound_arguments: Some(Arc::new(vec![value(7)])),
+                },
+            ] {
+                let retained = shared.clone();
+                let mut owner = Map::default()
+                    .insert(key(0), shared, TEST_LIMIT, &mut free)
+                    .unwrap();
+                owner.drain_unique(&mut work);
+                assert_eq!(work.scratch_storage().1, 0);
+                work.release();
+                assert_eq!(work.scratch_storage().1, 0);
+                let retained_child = match &retained {
+                    NormalizedValue::List(values) => values.get(0),
+                    NormalizedValue::Map(values) => values.get(&key(0)),
+                    NormalizedValue::Record(NormalizedRecord::Nominal { fields, .. }) => {
+                        fields.first()
+                    }
+                    NormalizedValue::Function {
+                        bound_arguments: Some(values),
+                        ..
+                    } => values.first(),
+                    _ => unreachable!(),
+                };
+                assert_eq!(retained_child, Some(&value(7)));
+            }
+
+            // A unique nominal record supplies its own already allocated child Vec.
+            // The disposal owner adopts that exact buffer, including its capacity.
+            let fields = (0..1024).map(value).collect::<Vec<_>>();
+            let original_storage = (fields.as_ptr(), fields.capacity());
+            let mut owner = Map::default()
+                .insert(
+                    key(0),
+                    NormalizedValue::Record(NormalizedRecord::Nominal {
+                        layout: RecordLayoutIndex(0, origin),
+                        fields: Arc::new(fields),
+                    }),
+                    TEST_LIMIT,
+                    &mut free,
+                )
+                .unwrap();
+            owner.drain_unique(&mut work);
+            work.release();
+            assert_eq!(work.scratch_storage(), original_storage);
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+#[test]
+fn persistent_map_branching_raw_cleanup_bounds_scratch_by_released_children() {
+    std::thread::Builder::new()
+        .stack_size(2 * 1024 * 1024)
+        .spawn(|| {
+            let payload: Arc<[u8]> = Arc::from([31_u8; 17]);
+            let build = || {
+                let mut raw = NormalizedValue::Bytes(Arc::clone(&payload));
+                for _ in 0..2048 {
+                    let sibling =
+                        NormalizedValue::list(vec![NormalizedValue::Bytes(Arc::clone(&payload))])
+                            .unwrap();
+                    raw = NormalizedValue::Map(
+                        Map::from_items(
+                            BTreeMap::from([(key(0), raw), (key(1), sibling)]),
+                            TEST_LIMIT,
+                            &mut free,
+                        )
+                        .unwrap(),
+                    );
+                }
+                raw
+            };
+            let mut work = RawValueWork::default();
+            work.push(build());
+            work.release();
+            // One still-unreleased sibling per level forms the frontier. Inspect
+            // the actual Vec capacity, independently of all carrier observations.
+            let capacity = work.scratch_storage().1;
+            assert!(capacity >= 2048);
+            assert!(capacity < 2 * 2048 + 4);
+            assert_eq!(Arc::strong_count(&payload), 1);
+
+            let base = Map::from_items(BTreeMap::from([(key(0), value(7))]), TEST_LIMIT, &mut free)
+                .unwrap();
+            let retained = base.clone();
+            assert!(
+                base.insert(key(1), build(), TEST_LIMIT, &mut |_| Err(storage_error()))
+                    .is_err()
+            );
+            assert_eq!(Arc::strong_count(&payload), 1);
+            assert_eq!(retained.get(&key(0)), Some(&value(7)));
+            assert!(retained == base);
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}

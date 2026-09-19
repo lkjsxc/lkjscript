@@ -4,7 +4,7 @@
 //! only when that tail is full, at most height + 1 branch nodes. Existing payloads
 //! are behind immutable element handles: neither append nor tree rotation clones them.
 
-use super::value::{NormalizedValue, release_raw_values};
+use super::value::{NormalizedValue, RawValueWork, release_raw_value};
 use crate::platform::execution::{ExecutionError, ExecutionFailureClass};
 use std::cell::Cell;
 use std::sync::Arc;
@@ -433,15 +433,28 @@ impl List {
             .ok_or_else(failure)
     }
 
-    pub(super) fn drain_unique(&mut self, values: &mut Vec<NormalizedValue>) {
-        let mut pending = Vec::new();
-        pending.extend(self.root.take());
-        pending.extend(self.tail.take());
-        while let Some(node) = pending.pop() {
-            if let Some(node) = Arc::into_inner(node) {
+    pub(super) fn drain_unique(&mut self, values: &mut RawValueWork) {
+        // Each branch level adds at most FANOUT-1 pending siblings, in addition
+        // to the two roots. Shared or scalar retired list payloads need no heap.
+        let mut pending: [Option<Arc<Node>>; (FANOUT - 1) * MAXIMUM_HEIGHT + 2] =
+            std::array::from_fn(|_| None);
+        let mut depth = 0;
+        for root in [self.root.take(), self.tail.take()].into_iter().flatten() {
+            pending[depth] = Some(root);
+            depth += 1;
+        }
+        self.length = 0;
+        while depth != 0 {
+            depth -= 1;
+            if let Some(node) = pending[depth].take().and_then(Arc::into_inner) {
                 visit();
                 match node {
-                    Node::Branch(children) => pending.extend(children.into_iter().flatten()),
+                    Node::Branch(children) => {
+                        for child in children.into_iter().flatten() {
+                            pending[depth] = Some(child);
+                            depth += 1;
+                        }
+                    }
                     Node::Leaf(items) => {
                         for item in items.into_iter().flatten() {
                             if let Some(mut item) = Arc::into_inner(item) {
@@ -458,16 +471,16 @@ impl List {
 impl Drop for Element {
     fn drop(&mut self) {
         if !matches!(self.0, NormalizedValue::Unit) {
-            release_raw_values(vec![std::mem::replace(&mut self.0, NormalizedValue::Unit)]);
+            release_raw_value(std::mem::replace(&mut self.0, NormalizedValue::Unit));
         }
     }
 }
 
 impl Drop for List {
     fn drop(&mut self) {
-        let mut values = Vec::new();
+        let mut values = RawValueWork::default();
         self.drain_unique(&mut values);
-        release_raw_values(values);
+        values.release();
     }
 }
 
