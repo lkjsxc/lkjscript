@@ -1129,18 +1129,20 @@ async fn read_response(
         ));
     }
     let mut headers = Vec::with_capacity(parsed.headers.len());
-    let mut content_length = None;
+    let mut content_length_header = None;
     let mut transfer_encoding = None;
     for header in parsed.headers.iter() {
         let name = header.name.to_ascii_lowercase();
         if name == "content-length" {
-            if content_length.is_some() {
+            if content_length_header.is_some() {
                 return Err(capability_error(
                     "http_client_protocol",
                     "HTTP client response repeats Content-Length",
                 ));
             }
-            content_length = Some(parse_content_length(header.value)?);
+            validate_content_length(header.value)?;
+            // A 304 length describes a representation, not an allocation or a read.
+            content_length_header = Some(headers.len());
         } else if name == "transfer-encoding" {
             if transfer_encoding.is_some() {
                 return Err(capability_error(
@@ -1155,24 +1157,29 @@ async fn read_response(
             value: header.value.to_vec(),
         });
     }
-    if content_length.is_some() && transfer_encoding.is_some() {
+    if content_length_header.is_some() && transfer_encoding.is_some() {
         return Err(capability_error(
             "http_client_protocol",
             "HTTP client response has ambiguous body framing",
         ));
     }
+    if status == 204 && (content_length_header.is_some() || transfer_encoding.is_some()) {
+        return Err(capability_error(
+            "http_client_protocol",
+            "HTTP client 204 response contains a prohibited framing header",
+        ));
+    }
+    if let Some(encoding) = &transfer_encoding
+        && !encoding.eq_ignore_ascii_case(b"chunked")
+    {
+        return Err(capability_error(
+            "http_client_protocol",
+            "HTTP client response uses unsupported transfer coding",
+        ));
+    }
     let initial = bytes.split_off(header_end);
-    let body = if let Some(encoding) = transfer_encoding {
-        if !encoding.eq_ignore_ascii_case(b"chunked") {
-            return Err(capability_error(
-                "http_client_protocol",
-                "HTTP client response uses unsupported transfer coding",
-            ));
-        }
-        read_chunked_body(stream, initial, limits.maximum_response_body_bytes).await?
-    } else if let Some(length) = content_length {
-        read_sized_body(stream, initial, length, limits.maximum_response_body_bytes).await?
-    } else if matches!(status, 204 | 304) {
+    // Status-defined absence takes precedence over representation metadata (RFC 9112, 6.3).
+    let body = if matches!(status, 204 | 304) {
         if !initial.is_empty() {
             return Err(capability_error(
                 "http_client_protocol",
@@ -1180,6 +1187,11 @@ async fn read_response(
             ));
         }
         Vec::new()
+    } else if transfer_encoding.is_some() {
+        read_chunked_body(stream, initial, limits.maximum_response_body_bytes).await?
+    } else if let Some(index) = content_length_header {
+        let length = parse_content_length(&headers[index].value)?;
+        read_sized_body(stream, initial, length, limits.maximum_response_body_bytes).await?
     } else {
         read_close_body(stream, initial, limits.maximum_response_body_bytes).await?
     };
@@ -1190,7 +1202,7 @@ async fn read_response(
     })
 }
 
-fn parse_content_length(value: &[u8]) -> Result<usize, ExecutionError> {
+fn validate_content_length(value: &[u8]) -> Result<(), ExecutionError> {
     if value.is_empty()
         || !value.iter().all(u8::is_ascii_digit)
         || (value.len() > 1 && value.starts_with(b"0"))
@@ -1200,6 +1212,11 @@ fn parse_content_length(value: &[u8]) -> Result<usize, ExecutionError> {
             "HTTP client response Content-Length is noncanonical",
         ));
     }
+    Ok(())
+}
+
+fn parse_content_length(value: &[u8]) -> Result<usize, ExecutionError> {
+    validate_content_length(value)?;
     std::str::from_utf8(value)
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
@@ -1342,6 +1359,12 @@ async fn read_line(
 ) -> Result<Vec<u8>, ExecutionError> {
     loop {
         if let Some(index) = find_bytes(buffered, b"\r\n") {
+            if index.saturating_add(2) > MAXIMUM_CHUNK_LINE_BYTES {
+                return Err(resource_error(
+                    "http_client_response_header_limit",
+                    "HTTP client chunk line exceeds its fixed byte limit",
+                ));
+            }
             let remainder = buffered.split_off(index.saturating_add(2));
             let mut line = std::mem::replace(buffered, remainder);
             line.truncate(index);
@@ -1638,6 +1661,9 @@ fn resource_error(code: &'static str, message: &'static str) -> ExecutionError {
 fn possible_visibility(code: &'static str, message: &'static str) -> ExecutionError {
     ExecutionError::new(ExecutionFailureClass::PossibleVisibility, code, message)
 }
+
+#[cfg(test)]
+mod response_tests;
 
 #[cfg(test)]
 mod tests {

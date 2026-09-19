@@ -86,7 +86,27 @@ proxy, inject credentials, negotiate WebSocket, or reuse the response as a strea
 including non-2xx, is a transport result after strict HTTP/1.1 status/header/framing validation.
 Content-length, chunked, and connection-close framing are bounded and mutually unambiguous;
 informational responses, malformed framing, prohibited transfer encodings, conflicting lengths,
-trailing bytes, and partial EOF fail without returning a partial success.
+buffered trailing bytes, and partial EOF fail without returning a partial success.
+
+Status-defined body absence precedes body framing, as specified by
+[RFC 9112 section 6.3](https://www.rfc-editor.org/rfc/rfc9112.html#section-6.3).
+A 304 returns an empty body at the end of its header block, preserving ordered headers.
+Its Content-Length is representation metadata, not an instruction to read or allocate bytes;
+canonical decimal metadata is bounded by header limits, not by `usize` or the body-byte limit.
+An admitted `Transfer-Encoding: chunked` on 304 is likewise metadata, not a chunk stream.
+A 204 also ends at headers but rejects any Content-Length (including zero) or Transfer-Encoding,
+which senders are prohibited from supplying by
+[RFC 9110 section 8.6](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.6) and
+[RFC 9112 section 6.1](https://www.rfc-editor.org/rfc/rfc9112.html#section-6.1).
+Bodyless status does not excuse duplicate or ambiguous framing, a noncanonical length, or an
+unsupported transfer coding. Already buffered payload after a bodyless response rejects. The
+client does not wait for EOF or future packets after completing a framed/bodyless response;
+its non-reused connection closes, so later unobserved bytes are not claimed to be validated.
+
+Each chunk size line, including ignored extension bytes and its final CRLF, is at most 8,192
+wire bytes. The same exact-fit/one-over boundary applies to fragmented and coalesced reads,
+including a delimiter already present in the buffer. This bound is separate from decoded
+body-byte admission; no partial body is returned when either bound fails.
 
 Request header count/bytes, response header count/bytes, response body bytes, DNS results,
 concurrent requests, connection time, total time, and cleanup time are separate positive
