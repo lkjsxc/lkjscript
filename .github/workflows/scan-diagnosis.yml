@@ -56,7 +56,7 @@ jobs:
           { rustc --version --verbose; cargo --version; } >> "$out/environment.txt"
           cargo test --locked --all-features --lib --no-run --message-format=json \
             > "$out/build.jsonl" 2> "$out/build.stderr"
-          jq -r 'select(.reason == "compiler-artifact" and .target.name == "lkjscript" \
+          jq -r 'select(.reason == "compiler-artifact" and .target.name == "lkjscript"
             and .profile.test == true and .executable != null) | .executable' \
             "$out/build.jsonl" > "$out/executable.txt"
           test "$(wc -l < "$out/executable.txt")" = 1
