@@ -37,7 +37,16 @@ jobs:
             --arg attempt "$GITHUB_RUN_ATTEMPT" \
             '{source:$source,tree:$tree,repository:$repository,run:$run,attempt:$attempt}' \
             > "$out/context.json"
-          { uname -a; free -h; command -v gdb; } > "$out/environment.txt"
+          { uname -a; free -h; } > "$out/environment.txt"
+      - name: Provision the diagnostic debugger explicitly
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v gdb; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends gdb
+          fi
+          gdb --version >> "$RUNNER_TEMP/scan-diagnosis/environment.txt"
       - name: Build the exact default-profile library tests
         shell: bash
         run: |
@@ -55,20 +64,21 @@ jobs:
       - name: Reproduce and locate the stack failure without increasing its limit
         shell: bash
         run: |
-          set -uo pipefail
+          set -euo pipefail
           ulimit -c 0
           out="$RUNNER_TEMP/scan-diagnosis"
           exe="$(cat "$out/executable.txt")"
           filter='platform::execution::normalized::vm::checked::tests::map_tests'
+          status=0
           timeout 180 "$exe" "$filter" --test-threads=1 --nocapture \
-            > "$out/tests.stdout" 2> "$out/tests.stderr"
-          status=$?
+            > "$out/tests.stdout" 2> "$out/tests.stderr" || status=$?
           printf '%s\n' "$status" > "$out/tests.exit"
           if test "$status" -ne 0; then
+            debug_status=0
             timeout 180 gdb --batch -ex 'set pagination off' -ex 'set confirm off' \
               -ex run -ex 'thread apply all bt 36' --args "$exe" "$filter" \
-              --test-threads=1 --nocapture > "$out/backtrace.txt" 2>&1
-            printf '%s\n' "$?" > "$out/gdb.exit"
+              --test-threads=1 --nocapture > "$out/backtrace.txt" 2>&1 || debug_status=$?
+            printf '%s\n' "$debug_status" > "$out/gdb.exit"
           fi
           exit "$status"
       - name: Retain exact diagnostic evidence even after the expected failure
