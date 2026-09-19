@@ -123,7 +123,10 @@ fn bodyless_status_does_not_launder_invalid_framing() {
         (304, "Content-Length: 01\r\n"),
         (304, "Content-Length: 1, 1\r\n"),
         (304, "Content-Length: 1\r\nContent-Length: 1\r\n"),
-        (304, "Transfer-Encoding: chunked\r\nTransfer-Encoding: chunked\r\n"),
+        (
+            304,
+            "Transfer-Encoding: chunked\r\nTransfer-Encoding: chunked\r\n",
+        ),
         (304, "Content-Length: 1\r\nTransfer-Encoding: chunked\r\n"),
         (304, "Transfer-Encoding: gzip\r\n"),
     ] {
@@ -201,9 +204,14 @@ fn ordinary_framing_limits_truncation_and_subsequent_success_are_preserved() {
             );
         }
         assert_eq!(
-            response(b"HTTP/1.1 200 OK\r\nContent-Length: 1\r\n\r\nx", fragment, 1, true)
-                .unwrap()
-                .body,
+            response(
+                b"HTTP/1.1 200 OK\r\nContent-Length: 1\r\n\r\nx",
+                fragment,
+                1,
+                true
+            )
+            .unwrap()
+            .body,
             b"x"
         );
     }
@@ -214,7 +222,9 @@ fn prepared_adapter_completes_bodyless_requests_and_recovers_without_replay() {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let endpoint = format!("http://{}/resource", listener.local_addr().unwrap());
-    let runtime = tokio::runtime::Builder::new_current_thread()
+    // HttpClient uses Handle::block_on; keep an independent I/O driver running.
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
         .enable_all()
         .build()
         .unwrap();
@@ -248,8 +258,12 @@ fn prepared_adapter_completes_bodyless_requests_and_recovers_without_replay() {
                         Err(error) => panic!("accept loopback request: {error}"),
                     }
                 };
-                stream.set_read_timeout(Some(Duration::from_secs(15))).unwrap();
-                stream.set_write_timeout(Some(Duration::from_secs(15))).unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(15)))
+                    .unwrap();
+                stream
+                    .set_write_timeout(Some(Duration::from_secs(15)))
+                    .unwrap();
                 let mut request = Vec::new();
                 while !request.ends_with(b"\r\n\r\n") {
                     let mut byte = [0];
