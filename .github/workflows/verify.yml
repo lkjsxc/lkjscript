@@ -1,54 +1,48 @@
-name: Development environment transfer
-run-name: Development transfer ${{ github.sha }}
+name: Isolated map engineering
+run-name: Map engineering ${{ github.sha }}
 
-# Temporary campaign-owned bootstrap only. This is NOT source acceptance.
-# Restore the maintained Verify workflow before selecting an integration candidate.
+# Temporary campaign experiment, not source acceptance. Restore the maintained
+# Verify workflow unchanged before selecting the complete integration candidate.
 on:
   push:
     branches:
       - 'verify/202609191648-sustained'
-
 permissions:
   contents: read
-
+env:
+  CARGO_BUILD_JOBS: '2'
+  CARGO_TERM_COLOR: never
 jobs:
-  transfer:
-    name: Transfer public source and pinned offline development inputs
+  experiment:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
-      - name: Check out the exact source without retained credentials
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           ref: ${{ github.sha }}
           fetch-depth: 2
           persist-credentials: false
-      - name: Collect only public source, vendored crates and the pinned toolchain
+      - name: Record source and pinned environment
         shell: bash
         run: |
           set -euo pipefail
-          transfer="$RUNNER_TEMP/development-transfer"
-          mkdir -m 0700 "$transfer"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test -z "$(git status --porcelain=v1 --untracked-files=all)"
-          git archive --format=tar HEAD > "$transfer/source.tar"
-          git cat-file commit HEAD > "$transfer/commit.txt"
-          git rev-parse HEAD 'HEAD^{tree}' > "$transfer/source-identity.txt"
+          git diff --check HEAD^ HEAD
+          git rev-parse HEAD 'HEAD^{tree}'
           rustup show
-          { rustc --version --verbose; cargo --version; uname -a; } > "$transfer/environment.txt"
-          cargo vendor --locked --versioned-dirs "$transfer/vendor" > "$transfer/vendor-config.toml"
-          toolchain="$(rustc --print sysroot)"
-          tar --exclude='./share/doc' -C "$toolchain" -czf "$transfer/toolchain.tar.gz" .
-          tar -C "$transfer" -czf "$RUNNER_TEMP/development-transfer.tar.gz" .
-          sha256sum "$RUNNER_TEMP/development-transfer.tar.gz" > "$RUNNER_TEMP/development-transfer.sha256"
-          printf 'Development inputs only. No tests, acceptance, release, deployment or ref update.\n' >> "$GITHUB_STEP_SUMMARY"
-      - name: Retain development inputs without credentials or checkout configuration
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: development-transfer-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/development-transfer.tar.gz
-            ${{ runner.temp }}/development-transfer.sha256
-          if-no-files-found: error
-          retention-days: 7
-          compression-level: 0
+          rustc --version --verbose
+          uname -a
+          free -h
+          df -h .
+      - name: Exercise independent storage oracle and failure cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --release --locked --lib platform::execution::normalized::map::tests -- --nocapture
+      - name: Report formatting delta without changing the candidate
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
