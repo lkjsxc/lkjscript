@@ -12,7 +12,7 @@ evaluators and their actual raw-host/adapter callers. Updates share untouched su
 entry handles, preserving retained nested payloads and callable provenance. New storage is
 reserved before growth; failed reservations and cancellation expose no partial map.
 
-At implementation source `a8d8877c`, the copied-product focused witness passes 52 commands:
+At corrected implementation source `fe1b5f5c`, the copied-product focused witness passes 52 commands:
 an ordinary transported `totals-by<Item>` library aggregates caller-owned `Event` records,
 retains and branches maps, replaces an exact dependency after a reviewed library edit, and
 executes both retained bundles after their authoring sources are removed. The appendix's
