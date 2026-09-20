@@ -1,0 +1,57 @@
+name: Inspect v0.1.39 failure
+run-name: Inspect release failure 35504414463 attempt 1
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/release-039-diagnosis.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Authenticate and display only original diagnostic text
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = lkjsxc/lkjscript
+          out="$RUNNER_TEMP/release-diagnosis"
+          mkdir -m 0700 "$out"
+          api="repos/$GITHUB_REPOSITORY"
+          gh api "$api/actions/runs/35504414463/attempts/1" > "$out/run.json"
+          jq -e '.id == 35504414463 and .run_attempt == 1
+            and .repository.full_name == "lkjsxc/lkjscript"
+            and .head_repository.full_name == "lkjsxc/lkjscript"
+            and .head_sha == "2bb72e4864485b73dc6aa152fb16ac34d4552285"
+            and .path == ".github/workflows/release.yml"
+            and .event == "workflow_dispatch" and .status == "completed"
+            and .conclusion == "failure"' "$out/run.json" > /dev/null
+          gh api "$api/actions/artifacts/10603825475" > "$out/artifact.json"
+          jq -e '.id == 10603825475 and .expired == false
+            and .name == "candidate-diagnostics-35504414463-1"
+            and .workflow_run.id == 35504414463
+            and .workflow_run.head_sha == "2bb72e4864485b73dc6aa152fb16ac34d4552285"
+            and .digest == "sha256:5aed778e6c4704c652c0eadc1b589b4de39988f17eb991972451e16cf8a2b9c9"' "$out/artifact.json" > /dev/null
+          timeout 120 gh api "$api/actions/artifacts/10603825475/zip" > "$out/original.zip"
+          printf '%s  %s\n' 5aed778e6c4704c652c0eadc1b589b4de39988f17eb991972451e16cf8a2b9c9 "$out/original.zip" | sha256sum --check --strict
+          unzip -Z1 "$out/original.zip" > "$out/members.txt"
+          for suffix in receipt.json workspace_tests.stdout.log workspace_tests.stderr.log; do
+            mapfile -t members < <(grep -E "(^|/)$suffix$" "$out/members.txt")
+            test "${#members[@]}" -eq 1
+            member="${members[0]}"
+            [[ "$member" == lkjscript/lkjscript/.artifacts/lkjscript-dev/check/1789899541488498295-6227-0/* ]]
+            printf '\n--- %s ---\n' "$member"
+            if test "$suffix" = receipt.json; then
+              unzip -p "$out/original.zip" "$member" | jq '{status,profile,git_head,input_stable,passed_gates,unrun_gates,failed:[.gates[] | select(.status != "passed")]}'
+            else
+              marker=$(openssl rand -hex 16)
+              printf '::stop-commands::%s\n' "$marker"
+              unzip -p "$out/original.zip" "$member" | tail -n 140
+              printf '::%s::\n' "$marker"
+            fi
+          done
+          printf 'Read-only inspection of original failed source acceptance; no candidate executed, gate rerun, tag, variable or release changed.\n' >> "$GITHUB_STEP_SUMMARY"
