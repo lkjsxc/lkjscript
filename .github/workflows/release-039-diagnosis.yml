@@ -39,11 +39,10 @@ jobs:
           timeout 120 gh api "$api/actions/artifacts/10603825475/zip" > "$out/original.zip"
           printf '%s  %s\n' 5aed778e6c4704c652c0eadc1b589b4de39988f17eb991972451e16cf8a2b9c9 "$out/original.zip" | sha256sum --check --strict
           unzip -Z1 "$out/original.zip" > "$out/members.txt"
+          grep -E '(^|/)(receipt\.json|workspace_tests\.(stdout|stderr)\.log)$' "$out/members.txt"
           for suffix in receipt.json workspace_tests.stdout.log workspace_tests.stderr.log; do
-            mapfile -t members < <(grep -E "(^|/)$suffix$" "$out/members.txt")
-            test "${#members[@]}" -eq 1
-            member="${members[0]}"
-            [[ "$member" == lkjscript/lkjscript/.artifacts/lkjscript-dev/check/1789899541488498295-6227-0/* ]]
+            member="lkjscript/lkjscript/.artifacts/lkjscript-dev/check/1789899541488498295-6227-0/$suffix"
+            test "$(grep -Fxc "$member" "$out/members.txt")" -eq 1
             printf '\n--- %s ---\n' "$member"
             if test "$suffix" = receipt.json; then
               unzip -p "$out/original.zip" "$member" | jq '{status,profile,git_head,input_stable,passed_gates,unrun_gates,failed:[.gates[] | select(.status != "passed")]}'
