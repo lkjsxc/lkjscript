@@ -39,6 +39,13 @@ verify. `catalog/CURRENT` is a bounded sorted acceleration only: read-only verif
 objects without it, and a later write rebuilds it after missing, stale, or corrupt catalog bytes.
 Catalog damage cannot hide or redefine canonical authority.
 
+Readers distinguish an empty scan-selector prefix from a stored record or exclusive resume
+key, both of which must be nonempty. Encoded schema and record facts must already be in
+strict semantic key order; insertion into a sorted container is not validation of input order.
+A logical backup contains no physical parent link. Invalid input rejects before restore
+creates a destination or staging root, and no existing bytes are normalized or repaired.
+Canonical format-1 data, signed-key ordering and unchanged continuation bytes remain valid.
+
 ### Lexical completion
 
 Both lexical transaction forms use this one physical completion decision. `transaction` retains

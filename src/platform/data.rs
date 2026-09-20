@@ -1530,16 +1530,9 @@ fn decode_revision(bytes: &[u8], store_id: [u8; 32]) -> Result<Snapshot, Diagnos
             digest: cursor.blob("data_schema_digest", 128)?,
         };
         validate_schema(&schema)?;
-        if schemas
-            .insert(SchemaKey { namespace, space }, schema)
-            .is_some()
-        {
-            return Err(data_error(
-                DiagnosticClass::Corrupt,
-                "data_schema_duplicate",
-                "immutable data revision contains a duplicate schema key",
-            ));
-        }
+        let key = SchemaKey { namespace, space };
+        admit_fact_order(&schemas, &key, "data_schema_duplicate", "data_schema_order")?;
+        schemas.insert(key, schema);
     }
     let record_count = cursor.count("data_record_count", MAXIMUM_DATA_STORE_OBJECTS)?;
     let mut records = BTreeMap::new();
@@ -1554,23 +1547,13 @@ fn decode_revision(bytes: &[u8], store_id: [u8; 32]) -> Result<Snapshot, Diagnos
             value: cursor.blob("data_value", MAXIMUM_DATA_VALUE_BYTES)?,
             revision: DataEntryRevision(cursor.array_32("data_entry_revision")?),
         };
-        if records
-            .insert(
-                RecordKey {
-                    namespace,
-                    space,
-                    key,
-                },
-                entry,
-            )
-            .is_some()
-        {
-            return Err(data_error(
-                DiagnosticClass::Corrupt,
-                "data_record_duplicate",
-                "immutable data revision contains a duplicate record key",
-            ));
-        }
+        let key = RecordKey {
+            namespace,
+            space,
+            key,
+        };
+        admit_fact_order(&records, &key, "data_record_duplicate", "data_record_order")?;
+        records.insert(key, entry);
     }
     cursor.finish("data_revision_trailing")?;
     Ok(Snapshot {
@@ -1578,6 +1561,33 @@ fn decode_revision(bytes: &[u8], store_id: [u8; 32]) -> Result<Snapshot, Diagnos
         schemas,
         records,
     })
+}
+
+// Inserting into a BTreeMap sorts input; it cannot prove that the input was
+// canonical. Check the previous admitted key before insertion instead. The
+// second lookup is only on rejected input, to retain duplicate diagnostics.
+fn admit_fact_order<K: Ord, V>(
+    facts: &BTreeMap<K, V>,
+    key: &K,
+    duplicate_code: &'static str,
+    order_code: &'static str,
+) -> Result<(), Diagnostic> {
+    if facts
+        .last_key_value()
+        .is_some_and(|(previous, _)| previous >= key)
+    {
+        let code = if facts.contains_key(key) {
+            duplicate_code
+        } else {
+            order_code
+        };
+        return Err(data_error(
+            DiagnosticClass::Corrupt,
+            code,
+            "immutable data revision facts are duplicate or not in canonical key order",
+        ));
+    }
+    Ok(())
 }
 
 fn encode_backup(source_revision: [u8; 32], snapshot: &Snapshot) -> Result<Vec<u8>, Diagnostic> {
@@ -1625,7 +1635,15 @@ fn encode_logical_snapshot(snapshot: &Snapshot) -> Result<Vec<u8>, Diagnostic> {
 }
 
 fn decode_logical_snapshot(bytes: &[u8]) -> Result<Snapshot, Diagnostic> {
-    decode_revision(bytes, [0_u8; 32])
+    let snapshot = decode_revision(bytes, [0_u8; 32])?;
+    if snapshot.parent.is_some() {
+        return Err(data_error(
+            DiagnosticClass::Corrupt,
+            "data_backup_parent",
+            "logical data backup must not carry physical revision ancestry",
+        ));
+    }
+    Ok(snapshot)
 }
 
 fn encode_continuation(
@@ -1693,7 +1711,7 @@ fn decode_continuation(
     let found_namespace =
         cursor.text("data_continuation_namespace", MAXIMUM_DATA_NAMESPACE_BYTES)?;
     let found_space = cursor.text("data_continuation_space", MAXIMUM_DATA_SPACE_NAME_BYTES)?;
-    let found_prefix = cursor.key(&DataLimits::default())?;
+    let found_prefix = cursor.prefix(&DataLimits::default())?;
     let found_direction = match cursor.u8("data_continuation_direction")? {
         0 => DataScanDirection::Forward,
         1 => DataScanDirection::Reverse,
@@ -1897,6 +1915,18 @@ impl<'a> Cursor<'a> {
     }
 
     fn key(&mut self, limits: &DataLimits) -> Result<DataKey, Diagnostic> {
+        let key = self.prefix(limits)?;
+        if key.parts().is_empty() {
+            return Err(data_error(
+                DiagnosticClass::Corrupt,
+                "data_key_empty",
+                "a stored record or exclusive resume key must contain at least one part",
+            ));
+        }
+        Ok(key)
+    }
+
+    fn prefix(&mut self, limits: &DataLimits) -> Result<DataKey, Diagnostic> {
         let count = self.count("data_key_parts", limits.maximum_key_parts)?;
         let mut parts = Vec::with_capacity(count);
         for _ in 0..count {
