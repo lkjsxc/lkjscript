@@ -1,45 +1,189 @@
-name: Inspect v0.1.39 guide preflight
-run-name: Read original guide preflight 35508041506
+name: Regenerate v0.1.39 guides
+run-name: Repair version-bound guides before v0.1.39 acceptance
 on:
   push:
     branches: [main]
     paths: [.github/workflows/release-039-guides.yml]
 permissions:
   contents: read
-  actions: read
+concurrency:
+  group: release-039-guide-preparation
+  cancel-in-progress: false
+env:
+  PRODUCT_SOURCE: 2bb72e4864485b73dc6aa152fb16ac34d4552285
+  CARGO_BUILD_JOBS: '2'
+  CARGO_TERM_COLOR: never
 jobs:
-  inspect:
+  generate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 30
+    outputs:
+      artifact: ${{ steps.upload.outputs.artifact-id }}
+      digest: ${{ steps.upload.outputs.artifact-digest }}
     steps:
-      - name: Authenticate original evidence and display bounded text only
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: 2bb72e4864485b73dc6aa152fb16ac34d4552285
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Build the pinned product without writing credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$PRODUCT_SOURCE"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          out="$RUNNER_TEMP/guides"
+          mkdir -m 0700 "$out"
+          rustup show
+          { rustc --version --verbose; cargo --version; } > "$out/toolchain.txt"
+          cargo build --locked -p lkjscript --bin lkjscript > "$out/build.stdout" 2> "$out/build.stderr"
+          cp target/debug/lkjscript "$RUNNER_TEMP/guide-generator"
+          chmod 0555 "$RUNNER_TEMP/guide-generator"
+          sha256sum "$RUNNER_TEMP/guide-generator" > "$out/generator.sha256"
+      - name: Require the exact drift diagnostic, regenerate, and constrain the diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/guides"
+          bin="$RUNNER_TEMP/guide-generator"
+          status=0
+          "$bin" capabilities --verify-generated docs/generated > "$out/before.stdout" 2> "$out/before.stderr" || status=$?
+          printf '%s\n' "$status" > "$out/before.exit"
+          cat "$out/before.stdout" "$out/before.stderr"
+          test "$status" -eq 2
+          grep -Fq 'code=capabilities_generated_drift' "$out/before.stdout"
+          "$bin" capabilities --generate-docs "$out/docs" | tee "$out/generate.stdout"
+          "$bin" capabilities --verify-generated "$out/docs" | tee "$out/verify.stdout"
+          names=(builtin-standard.md change-grammar.md deployment.md diagnostics.md function-definition.md nostr-relay-info-authoring.md operations.md stateful-http-authoring.md)
+          printf '%s\n' "${names[@]}" > "$out/names.txt"
+          find "$out/docs" -mindepth 1 -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort > "$out/actual-names.txt"
+          cmp "$out/names.txt" "$out/actual-names.txt"
+          for name in "${names[@]}"; do
+            test -f "docs/generated/$name" && test ! -L "$out/docs/$name"
+            head -n 1 "$out/docs/$name" | grep -Fq 'lkjscript 0.1.39 capabilities'
+            cmp <(tail -n +2 "docs/generated/$name") <(tail -n +2 "$out/docs/$name")
+            cp "$out/docs/$name" "docs/generated/$name"
+          done
+          git diff --check
+          git diff --numstat -- docs/generated | awk 'BEGIN {n=0} {if ($1 != 1 || $2 != 1) exit 1; n++} END {if(n != 8) exit 1}'
+          git diff -- docs/generated > "$out/guides.patch"
+          "$bin" capabilities --verify-generated docs/generated | tee "$out/installed-verify.stdout"
+          cat "$out/guides.patch"
+      - name: Run the actual failing public CLI regression after generation
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/guides"
+          cargo test --locked --all-features -p lkjscript --test public_cli \
+            generated_public_guides_match_executable -- --exact \
+            > "$out/regression.stdout" 2> "$out/regression.stderr" || {
+              cat "$out/regression.stdout" "$out/regression.stderr"; exit 1;
+            }
+          cat "$out/regression.stdout"
+          grep -Fq '1 passed; 0 failed;' "$out/regression.stdout"
+          git diff --check
+          test "$(git status --porcelain=v1 --untracked-files=all | wc -l)" -eq 8
+          jq -n --arg source "$PRODUCT_SOURCE" --arg tree "$(git rev-parse 'HEAD^{tree}')" \
+            --arg workflow "$GITHUB_WORKFLOW_SHA" --arg run "$GITHUB_RUN_ID" --arg attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg docs_tree "$(git rev-parse HEAD:docs/generated)" \
+            '{source:$source,tree:$tree,workflow:$workflow,run:$run,attempt:$attempt,docs_tree:$docs_tree,status:"generated_and_verified",regression:"generated_public_guides_match_executable passed",scope:"eight version-bound headers only; not release acceptance"}' > "$out/context.json"
+          (cd "$out" && sha256sum docs/*.md > documents.sha256)
+      - name: Retain generated bytes and original diagnostics
+        id: upload
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: release-039-guides-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/guides
+          if-no-files-found: error
+          retention-days: 14
+  integrate:
+    needs: generate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    outputs:
+      source: ${{ steps.write.outputs.source }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Integrate only checked generated text without executing the product
+        id: write
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.generate.outputs.artifact }}
+          ARCHIVE_SHA256: ${{ needs.generate.outputs.digest }}
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = lkjsxc/lkjscript
-          out="$RUNNER_TEMP/guide-preflight"
-          mkdir -m 0700 "$out"
+          [[ "$ARTIFACT_ID" =~ ^[0-9]+$ && "$ARCHIVE_SHA256" =~ ^[0-9a-f]{64}$ ]]
           api="repos/$GITHUB_REPOSITORY"
-          gh api "$api/actions/runs/35508041506/attempts/1" > "$out/run.json"
-          jq -e '.head_sha == "acd03dde962c082711c0453930cd1abd87c2aedd"
-            and .path == ".github/workflows/release-039-guides.yml"
-            and .event == "push" and .status == "completed" and .conclusion == "failure"' "$out/run.json" > /dev/null
-          gh api "$api/actions/artifacts/10604253456" > "$out/artifact.json"
-          jq -e '.workflow_run.id == 35508041506 and .expired == false
-            and .name == "release-039-guides-35508041506-1"
-            and .digest == "sha256:1f64ce628458f6e935f2815435abe9fd9ad540c830afdbf2a5390348c2609841"' "$out/artifact.json" > /dev/null
-          timeout 60 gh api "$api/actions/artifacts/10604253456/zip" > "$out/original.zip"
-          printf '%s  %s\n' 1f64ce628458f6e935f2815435abe9fd9ad540c830afdbf2a5390348c2609841 "$out/original.zip" | sha256sum --check --strict
+          out="$RUNNER_TEMP/generated-text"
+          mkdir -m 0700 "$out"
+          gh api "$api/actions/artifacts/$ARTIFACT_ID" > "$out/artifact.json"
+          jq -e --argjson run "$GITHUB_RUN_ID" --arg digest "sha256:$ARCHIVE_SHA256" \
+            '.workflow_run.id == $run and .expired == false and .digest == $digest' "$out/artifact.json" > /dev/null
+          timeout 120 gh api "$api/actions/artifacts/$ARTIFACT_ID/zip" > "$out/original.zip"
+          printf '%s  %s\n' "$ARCHIVE_SHA256" "$out/original.zip" | sha256sum --check --strict
+          unzip -p "$out/original.zip" context.json > "$out/context.json"
+          jq -e --arg source "$PRODUCT_SOURCE" --arg run "$GITHUB_RUN_ID" --arg attempt "$GITHUB_RUN_ATTEMPT" \
+            '.source == $source and .run == $run and .attempt == $attempt and .status == "generated_and_verified"
+             and .regression == "generated_public_guides_match_executable passed"' "$out/context.json" > /dev/null
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          git diff --exit-code "$PRODUCT_SOURCE" HEAD -- Cargo.toml Cargo.lock src tools tests packages applications rust-toolchain.toml .github/workflows/release.yml docs/generated
+          test "$(git rev-parse HEAD:docs/generated)" = "$(jq -er .docs_tree "$out/context.json")"
+          names=(builtin-standard.md change-grammar.md deployment.md diagnostics.md function-definition.md nostr-relay-info-authoring.md operations.md stateful-http-authoring.md)
           unzip -Z1 "$out/original.zip" > "$out/members.txt"
-          marker=$(openssl rand -hex 16)
-          printf '::stop-commands::%s\n' "$marker"
-          cat "$out/members.txt"
-          for name in before.exit before.stdout before.stderr generator.sha256 toolchain.txt build.stderr; do
-            test "$(grep -Fxc "$name" "$out/members.txt")" -eq 1
-            printf '\n--- %s ---\n' "$name"
-            unzip -p "$out/original.zip" "$name" | tail -n 45
+          printf '[]\n' > "$out/elements.json"
+          for name in "${names[@]}"; do
+            test "$(grep -Fxc "docs/$name" "$out/members.txt")" -eq 1
+            unzip -p "$out/original.zip" "docs/$name" > "$out/$name"
+            head -n 1 "$out/$name" | grep -Fq 'lkjscript 0.1.39 capabilities'
+            cmp <(tail -n +2 "docs/generated/$name") <(tail -n +2 "$out/$name")
+            jq --arg path "docs/generated/$name" --rawfile content "$out/$name" \
+              '. + [{path:$path,mode:"100644",type:"blob",content:$content}]' "$out/elements.json" > "$out/next.json"
+            mv "$out/next.json" "$out/elements.json"
           done
-          printf '::%s::\n' "$marker"
-          printf 'Original preflight inspection only. No executable run, source or test change, tag, variable, release, or acceptance replay.\n' >> "$GITHUB_STEP_SUMMARY"
+          test "$(gh api "$api/git/ref/heads/main" --jq .object.sha)" = "$GITHUB_SHA"
+          jq -n --arg base_tree "$(git rev-parse 'HEAD^{tree}')" --slurpfile tree "$out/elements.json" \
+            '{base_tree:$base_tree,tree:$tree[0]}' > "$out/tree.json"
+          tree=$(gh api --method POST "$api/git/trees" --input "$out/tree.json" --jq .sha)
+          jq -n --arg tree "$tree" --arg parent "$GITHUB_SHA" \
+            '{message:"docs(release): regenerate all public guides for v0.1.39 with the product",tree:$tree,parents:[$parent]}' > "$out/commit.json"
+          commit=$(gh api --method POST "$api/git/commits" --input "$out/commit.json" --jq .sha)
+          [[ "$commit" =~ ^[0-9a-f]{40}$ ]]
+          gh api --method PATCH "$api/git/refs/heads/main" -f sha="$commit" -F force=false > "$out/ref.json"
+          test "$(gh api "$api/git/ref/heads/main" --jq .object.sha)" = "$commit"
+          printf 'source=%s\n' "$commit" >> "$GITHUB_OUTPUT"
+          printf 'Generated guide headers integrated at `%s`; no implementation, grant, tag, variable or release changed.\n' "$commit" >> "$GITHUB_STEP_SUMMARY"
+  candidate:
+    needs: integrate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Dispatch full maintained acceptance of the corrected candidate, not reuse failed proof
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SOURCE: ${{ needs.integrate.outputs.source }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = lkjsxc/lkjscript
+          api="repos/$GITHUB_REPOSITORY"
+          [[ "$EXPECTED_SOURCE" =~ ^[0-9a-f]{40}$ ]]
+          test "$(gh api "$api/git/ref/heads/main" --jq .object.sha)" = "$EXPECTED_SOURCE"
+          gh api --method GET "$api/actions/runs" -f head_sha="$EXPECTED_SOURCE" -f event=workflow_dispatch -f per_page=100 > "$RUNNER_TEMP/existing.json"
+          test "$(jq '[.workflow_runs[] | select(.path == ".github/workflows/release.yml")] | length' "$RUNNER_TEMP/existing.json")" -eq 0
+          printf '%s\n' '{"ref":"main","inputs":{"operation":"candidate","latest":"required"}}' > "$RUNNER_TEMP/dispatch.json"
+          gh api --method POST "$api/actions/workflows/release.yml/dispatches" --input "$RUNNER_TEMP/dispatch.json"
+          printf 'Fresh candidate dispatched for source `%s`. Original failed and incomplete diagnostics are not accepted evidence. No promotion or control-variable update.\n' "$EXPECTED_SOURCE" >> "$GITHUB_STEP_SUMMARY"
