@@ -1,68 +1,86 @@
 name: Inspect v0.1.39 failure
-run-name: Reconcile release source and original failure 35504414463
+run-name: Exact-source public CLI reproduction 2bb72e48
 on:
   push:
     branches: [main]
     paths: [.github/workflows/release-039-diagnosis.yml]
 permissions:
   contents: read
-  actions: read
+concurrency:
+  group: release-039-focused-diagnosis
+  cancel-in-progress: false
+env:
+  CARGO_BUILD_JOBS: '2'
+  CARGO_TERM_COLOR: never
+  RUST_BACKTRACE: '0'
 jobs:
-  inspect:
+  reproduce:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 45
     steps:
-      - name: Check out only the failed candidate source
+      - name: Check out only the failed candidate source without retained credentials
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           ref: 2bb72e4864485b73dc6aa152fb16ac34d4552285
           fetch-depth: 2
           persist-credentials: false
-      - name: Reconcile original logs and exact source without executing the candidate
+      - name: Bind actual source and isolated compilation directory
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          test "$GITHUB_REPOSITORY" = lkjsxc/lkjscript
-          test "$(git rev-parse HEAD)" = 2bb72e4864485b73dc6aa152fb16ac34d4552285
-          test -z "$(git status --porcelain=v1)"
-          out="$RUNNER_TEMP/release-diagnosis"
+          out="$RUNNER_TEMP/release-reproduction"
           mkdir -m 0700 "$out"
-          api="repos/$GITHUB_REPOSITORY"
-          gh api "$api/actions/runs/35504414463/attempts/1" > "$out/run.json"
-          jq -e '.id == 35504414463 and .run_attempt == 1
-            and .repository.full_name == "lkjsxc/lkjscript"
-            and .head_repository.full_name == "lkjsxc/lkjscript"
-            and .head_sha == "2bb72e4864485b73dc6aa152fb16ac34d4552285"
-            and .path == ".github/workflows/release.yml"
-            and .event == "workflow_dispatch" and .status == "completed"
-            and .conclusion == "failure"' "$out/run.json" > /dev/null
-          gh api "$api/actions/artifacts/10603825475" > "$out/artifact.json"
-          jq -e '.id == 10603825475 and .expired == false
-            and .name == "candidate-diagnostics-35504414463-1"
-            and .workflow_run.id == 35504414463
-            and .workflow_run.head_sha == "2bb72e4864485b73dc6aa152fb16ac34d4552285"
-            and .digest == "sha256:5aed778e6c4704c652c0eadc1b589b4de39988f17eb991972451e16cf8a2b9c9"' "$out/artifact.json" > /dev/null
-          timeout 120 gh api "$api/actions/artifacts/10603825475/zip" > "$out/original.zip"
-          printf '%s  %s\n' 5aed778e6c4704c652c0eadc1b589b4de39988f17eb991972451e16cf8a2b9c9 "$out/original.zip" | sha256sum --check --strict
-          prefix=lkjscript/lkjscript/.artifacts/lkjscript-dev/check/1789899541488498295-6227-0
+          test "$(git rev-parse HEAD)" = 2bb72e4864485b73dc6aa152fb16ac34d4552285
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          git rev-parse HEAD:tests/public_cli.rs > "$out/public-cli.blob"
+          git ls-files -s > "$out/source-files.txt"
+          sha256sum tests/public_cli.rs Cargo.toml Cargo.lock > "$out/source.sha256"
+          jq -n --arg source "$(git rev-parse HEAD)" --arg tree "$(git rev-parse 'HEAD^{tree}')" \
+            --arg workflow "$GITHUB_WORKFLOW_SHA" --arg run "$GITHUB_RUN_ID" \
+            --arg attempt "$GITHUB_RUN_ATTEMPT" \
+            '{source:$source,tree:$tree,workflow:$workflow,run:$run,attempt:$attempt,claim:"focused reproduction, not candidate acceptance"}' > "$out/context.json"
+          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/reproduction-target" >> "$GITHUB_ENV"
+          echo "CARGO_HOME=$RUNNER_TEMP/reproduction-cargo" >> "$GITHUB_ENV"
+          { uname -a; free -h; df -h .; } > "$out/environment.txt"
+      - name: Build actual public CLI test with the pinned default profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/release-reproduction"
+          rustup show
+          { rustc --version --verbose; cargo --version; } >> "$out/environment.txt"
+          cargo test --locked --all-features -p lkjscript --test public_cli --no-run --message-format=json \
+            > "$out/build.jsonl" 2> "$out/build.stderr"
+          jq -r 'select(.reason == "compiler-artifact" and .target.name == "public_cli"
+            and .profile.test == true and .executable != null) | .executable' \
+            "$out/build.jsonl" > "$out/executable.txt"
+          test "$(wc -l < "$out/executable.txt")" -eq 1
+          sha256sum "$(cat "$out/executable.txt")" > "$out/executable.sha256"
+      - name: Enumerate and execute the actual test binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          ulimit -c 0
+          out="$RUNNER_TEMP/release-reproduction"
+          exe="$(cat "$out/executable.txt")"
+          "$exe" --list > "$out/tests.list"
+          cat "$out/tests.list"
+          status=0
+          timeout 900 "$exe" > "$out/tests.stdout" 2> "$out/tests.stderr" || status=$?
+          printf '%s\n' "$status" > "$out/tests.exit"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
           marker=$(openssl rand -hex 16)
           printf '::stop-commands::%s\n' "$marker"
-          printf '\nSOURCE IDENTITY\n'
-          git rev-parse HEAD HEAD:tests/public_cli.rs
-          sha256sum tests/public_cli.rs
-          wc -l tests/public_cli.rs
-          git ls-tree HEAD tests/map_predecessor.rs
-          printf '\nEXACT REPORTED LOCATION\n'
-          nl -ba tests/public_cli.rs | sed -n '1060,1120p'
-          printf '\nREPORTED SYMBOLS IN SOURCE\n'
-          git grep -n -e pure_preparation_capacity_fails_before_reference_recursion -e type_instantiation_storage -- tests src tools || test "$?" -eq 1
-          printf '\nCAPTURED INPUT ENTRY\n'
-          unzip -p "$out/original.zip" "$prefix/inputs.json" | jq '{top_keys:keys, matches:[..|objects|select(.path? == "tests/public_cli.rs" or .path? == "tests/map_predecessor.rs" or .path? == "Cargo.toml")]}'
-          printf '\nORIGINAL FAILED SUMMARY\n'
-          unzip -p "$out/original.zip" "$prefix/receipt.json" | jq '{status,profile,git_head,input_stable,passed_gates,unrun_gates,failed:[.gates[]|select(.status != "passed")|{id,status,command,reason}]}'
-          printf '\nORIGINAL TEST FAILURE\n'
-          unzip -p "$out/original.zip" "$prefix/workspace_tests.stdout.log" | tail -n 35
+          tail -n 100 "$out/tests.stdout"
+          tail -n 60 "$out/tests.stderr"
           printf '::%s::\n' "$marker"
-          printf 'Reconciled only original text and exact source. No candidate execution, gate replay, tag, variable or release write.\n' >> "$GITHUB_STEP_SUMMARY"
+          test "$status" -eq 0
+          grep -Eq 'test result: ok\. [1-9][0-9]* passed; 0 failed;' "$out/tests.stdout"
+      - name: Preserve fresh exact-source diagnostics on every outcome
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: release-039-reproduction-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-reproduction
+          if-no-files-found: error
+          retention-days: 14
