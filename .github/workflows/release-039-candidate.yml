@@ -1,0 +1,111 @@
+name: Prepare requested v0.1.39 candidate
+run-name: Prepare v0.1.39 from ${{ github.sha }}
+# Temporary bridge for docs/campaigns/202609201910.md. No publication path.
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/release-039-candidate.yml]
+permissions:
+  contents: read
+concurrency:
+  group: release-039-preparation
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: github.repository == 'lkjsxc/lkjscript' && github.event.deleted == false && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      source: ${{ steps.version.outputs.source }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Make only the inspected package and lock version changes
+        id: version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD^)" = 9d2e262afdced3d52b8f24a2e4e40c4c1ebf723b
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          test "$(git hash-object Cargo.toml)" = 02a45147861fe213017ba921ef3c77841462cb76
+          test "$(git hash-object Cargo.lock)" = 7360cc2d9d728df9624940cf78c68a2ca702ce00
+          test "$(git hash-object .github/workflows/release.yml)" = 6da04615d9dbc595ebf812db4807d5d3d7f32d04
+          gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v0.1.39" > "$RUNNER_TEMP/tag-occupancy.json"
+          jq -e 'length == 0' "$RUNNER_TEMP/tag-occupancy.json" > /dev/null
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$GITHUB_SHA"
+          export BASE_TREE="$(git rev-parse 'HEAD^{tree}')"
+          node <<'NODE'
+          const fs = require('node:fs');
+          const old = 'name = "lkjscript"\nversion = "0.1.38"\n';
+          const next = 'name = "lkjscript"\nversion = "0.1.39"\n';
+          const tree = ['Cargo.toml', 'Cargo.lock'].map(path => {
+            const before = fs.readFileSync(path, 'utf8');
+            if (before.split(old).length !== 2 || before.includes(next)) {
+              throw new Error(`unexpected version input: ${path}`);
+            }
+            const content = before.replace(old, next);
+            if (content.replace(next, old) !== before) throw new Error('non-version change');
+            fs.writeFileSync(path, content);
+            return {path, mode: '100644', type: 'blob', content};
+          });
+          fs.writeFileSync(process.env.RUNNER_TEMP + '/version-tree.json',
+            JSON.stringify({base_tree: process.env.BASE_TREE, tree}));
+          NODE
+          git diff --check
+          test "$(git diff --numstat | wc -l)" -eq 2
+          test "$(git diff --numstat | awk '$1 != 1 || $2 != 1 {print}' | wc -l)" -eq 0
+          git diff -- Cargo.toml Cargo.lock > "$RUNNER_TEMP/version.patch"
+          cat "$RUNNER_TEMP/version.patch"
+          tree=$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/trees" --input "$RUNNER_TEMP/version-tree.json" --jq .sha)
+          jq -n --arg tree "$tree" --arg parent "$GITHUB_SHA" \
+            '{message:"chore(release): select v0.1.39 without changing dependencies",tree:$tree,parents:[$parent]}' \
+            > "$RUNNER_TEMP/version-commit.json"
+          source=$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/commits" --input "$RUNNER_TEMP/version-commit.json" --jq .sha)
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$GITHUB_SHA"
+          jq -n --arg sha "$source" '{sha:$sha,force:false}' > "$RUNNER_TEMP/version-ref.json"
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/main" --input "$RUNNER_TEMP/version-ref.json"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$source"
+          echo "source=$source" >> "$GITHUB_OUTPUT"
+          printf 'Version-only source: `%s`. No tag or release created.\n' "$source" >> "$GITHUB_STEP_SUMMARY"
+  dispatch:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Dispatch only the existing non-publishing candidate operation
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SOURCE: ${{ needs.prepare.outputs.source }}
+          PRIOR_TAG_CONTROL: ${{ vars.LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SOURCE" =~ ^[0-9a-f]{40}$ ]]
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$EXPECTED_SOURCE"
+          gh api --method GET "repos/$GITHUB_REPOSITORY/actions/runs" \
+            -f head_sha="$EXPECTED_SOURCE" -f event=workflow_dispatch -f per_page=100 \
+            > "$RUNNER_TEMP/existing-runs.json"
+          count=$(jq '[.workflow_runs[] | select(.path == ".github/workflows/release.yml")] | length' "$RUNNER_TEMP/existing-runs.json")
+          test "$count" -eq 0
+          if [[ "$PRIOR_TAG_CONTROL" =~ ^[0-9a-f]{40}$ ]]; then
+            printf 'Prior scoped tag control (unchanged): `%s`.\n' "$PRIOR_TAG_CONTROL" >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf 'Prior scoped tag control absent or malformed; it was not changed.\n' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          printf '%s\n' '{"ref":"main","inputs":{"operation":"candidate","latest":"required"}}' \
+            > "$RUNNER_TEMP/dispatch.json"
+          gh api --method POST "repos/$GITHUB_REPOSITORY/actions/workflows/release.yml/dispatches" \
+            --input "$RUNNER_TEMP/dispatch.json"
+          printf 'Dispatched candidate for main observed at `%s`. Confirm the resulting immutable run SHA and attempt.\nNo promotion or unattended monitoring was requested.\n' "$EXPECTED_SOURCE" >> "$GITHUB_STEP_SUMMARY"
