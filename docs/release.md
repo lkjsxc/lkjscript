@@ -15,11 +15,13 @@ v0.1.36/v0.1.37 failures remain in the [delivery history](campaigns/202609151412
 [former procedure](https://github.com/lkjsxc/lkjscript/blob/108ca2777fc202b543f48816a99b7db519542f97/docs/release.md)
 describes those frozen producers; the procedure below governs new candidates only.
 
-The [cutover campaign](campaigns/202609180007.md) selects non-publishing candidate and read-only
-consumer proof. It authorizes no new version, tag, release or release-control write. First public use
-of the new encoding follows the next selected useful public capability, important product fix or
-explicit release request. Choose that future version/source before candidate creation. A private
-candidate built with occupied version 0.1.38 is never the public v0.1.38 release.
+The [cutover campaign](campaigns/202609180007.md) selected non-publishing candidate and read-only
+consumer proof. The explicit release requests in the [v0.1.39 lineage](campaigns/202609201910.md)
+have fired its public-delivery trigger. The [delivery continuation](campaigns/202609210911.md)
+selects accepted producer `35508727722/1` at `b05e9e12133ef625b33462123468b9b896885dd4`
+and authorizes its annotated tag and existing scoped selection control. No further feature or
+candidate rebuild is a prerequisite. A private candidate built with occupied version 0.1.38
+is never the public v0.1.38 release.
 
 ## Content and compatibility
 
@@ -124,7 +126,8 @@ acceptance or later permission.
 
 ## Select, promote and resume
 
-Select an exact producer, including its original attempt, with a separate read-only invocation:
+Select an exact producer, including its original attempt. `promote` includes selection and transfer
+admission; a separate read-only `consume` invocation is optional diagnosis, not a required rehearsal:
 
 ```sh
 gh workflow run release.yml --repo lkjsxc/lkjscript --ref main \
@@ -148,7 +151,7 @@ remain retained where CI permits; cancellation does not guarantee that a termina
 An accepted rejection grants no publication permission. `promote` and `resume-publication` still
 require authorization; `resume-public` retains its separate read-only public check.
 
-For a future release with separate publication authorization, first prepare meaningful notes and an
+For a selected release with separate publication authorization, first prepare meaningful notes and an
 ordinary annotated tag selecting the accepted product commit. Refresh remote main, exact tag/release
 occupancy, relevant jobs and enabled immutability. The existing repository control
 `LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA` must bind that exact annotated object. Only an explicitly
@@ -157,6 +160,15 @@ and terminal release state, compare the prior value immediately before any autho
 read it back. That read/check/write is not atomic compare-and-swap. Preserve prior immutable objects
 and genuine failures; never change immutability, credentials, access or protections to make admission
 pass. A tag push alone starts no build or publication.
+
+The publisher requires that annotated tag to exist before release creation. The create request
+omits `target_commitish`, which GitHub documents as unused for an existing tag. Supplying a frozen
+source whose workflow files differ from current main can unnecessarily require workflow-write
+permission, which the publication job's token does not have. Release draft target metadata is not
+the source authority: admission binds the actual annotation and commit, exact producer ownership
+marker, bot author, notes and asset inventory. These checks continue before uploads and publication;
+omitting tag-creation metadata neither selects main as the product nor authorizes a missing tag.
+See the [GitHub create-release contract](https://docs.github.com/en/rest/releases/releases#create-a-release).
 
 With those prerequisites established, explicitly dispatch:
 

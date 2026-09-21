@@ -1,8 +1,22 @@
 # Current status
 
-Status date: 2026-09-19 UTC. This file describes implemented checkout reality. Executable-derived
+Status date: 2026-09-21 UTC. This file describes implemented checkout reality. Executable-derived
 public guides live under [generated](generated), including the
 [operation guide](generated/operations.md); this file does not duplicate them.
+
+## v0.1.39 delivery
+
+The explicit publication requests selected the already accepted v0.1.39 product at
+`b05e9e12133ef625b33462123468b9b896885dd4`, producer `35508727722/1`. The
+[delivery continuation](campaigns/202609210911.md) authenticates its original handoffs and
+selects unchanged assets. Consumer `35667263704/1`, controller source
+`0bf919f8718dcaaa265e84f73fc93f9d52f88f94`, passed source/content selection, independent
+publication authority and both transferred installed lifecycles. Draft creation then failed
+with HTTP 403 because the request supplied the old source as an unnecessary tag-creation target;
+the exact annotated tag already exists. The maintained controller correction and resumption
+are recorded in the continuation. No v0.1.39 release or anonymous public verification is yet
+claimed; public v0.1.38 remains the last completed release. No product rebuild, schema migration
+or production deployment is selected.
 
 ## Persistent ordered maps
 
@@ -32,10 +46,10 @@ now fit existing optional quotas. Foreground execution retains absent cumulative
 deadline. [Performance evidence](performance.md) separates retained composite workloads,
 physical sharing, cumulative accounting, process RSS and preparation/encoding costs.
 
-This campaign selects mainline delivery only. Maps, callable-input evolution and the HTTP
-response correction remain source-only relative to immutable v0.1.38; a main push does not
-update installed executables. Publication becomes due when an installed consumer needs the
-improvement or the human requests a release, without another language-feature prerequisite.
+The original map campaign selected mainline delivery. The explicit release requests subsequently
+selected maps, callable-input evolution and the HTTP response correction for v0.1.39. The
+[current delivery summary](#v0139-delivery) owns public state; a main push alone does not
+update installed executables.
 
 ## Callable input evolution
 
@@ -61,9 +75,8 @@ the existing closed intrinsic registry. Historical acceptance stays intact, curr
 rechecked, and an invalid predecessor contract can be repaired through a new reviewed request.
 Authenticated P executes the new witness artifact for the tested small workload.
 
-This is an unpublished mainline increment; immutable v0.1.38 does not acquire the operation.
-No version bump, release dispatch or operational-data migration is selected. The current
-publication disposition above requires an installed consumer or an explicit release request.
+Immutable v0.1.38 does not acquire the operation. Subsequent explicit requests selected it for
+[v0.1.39 delivery](#v0139-delivery), without an operational-data migration.
 Exact evidence and the retained first full-profile failure are recorded at the campaign ending.
 
 ## Release delivery cutover
@@ -98,10 +111,9 @@ original P producer from that corrected controller source and completed successf
 publication and public-verification jobs. The rejection identifies the occupied annotated tag's
 different source; the small installed lifecycle passed with joined cleanup and zero product builds
 or heavy-owner invocations. The [dated predecessor ending](campaigns/202609180528.md#completed-consumer-reconciliation--2026-09-17)
-retains the earlier pending observation and final evidence. New-format live publication and anonymous
-public acquisition remain unexercised. Public delivery of the input-evolution increment follows
-the current mainline-only disposition above: an installed consumer needing it or an explicit
-release request selects publication.
+retains the earlier pending observation and final evidence. That read-only proof did not exercise
+new-format public delivery. The subsequent explicit requests selected its first live publication
+with [v0.1.39](#v0139-delivery); its current result is recorded there.
 
 ## Binary64 increment
 
@@ -503,10 +515,9 @@ release, or assets. Its structured evidence remains in
 
 ## Current application lifecycle
 
-The supported immutable public release is `0.1.35`, from frozen source `4306ef64`.
-It includes task iteration, foreground commands, installation, named references and finite callable
-admission. Accepted requirement-parameter and structural-authoring source `0.1.36` is now in the
-combined publication lane described above.
+The [current public release summary](#public-binary-release) owns the supported distribution.
+Task iteration, foreground commands, installation, named references, finite callable admission,
+requirement-parameter libraries and structural authoring are already published capabilities.
 The product retains the exact-requirement-bound affine
 handoff, identity-preserving extraction, incremental catalog, graph-owned structured sessions, and
 adds signature-indexed inbound HTTP path captures, code-complete offline package composition,

@@ -8,19 +8,33 @@ const SOURCE: &str = "1111111111111111111111111111111111111111";
 const CONTROLLER: &str = "2222222222222222222222222222222222222222";
 const TAG_OBJECT: &str = "3333333333333333333333333333333333333333";
 
+#[derive(Clone, Copy, Debug)]
+enum TagChange {
+    Missing,
+    Lightweight,
+    WrongSource,
+    DifferentAnnotation,
+}
+
 /// This adapter observes actual controller operations and refuses execution. There is
 /// deliberately no orchestrator-supplied build/heavy-owner counter used as its oracle.
 struct FakeApi {
     release: Option<Value>,
     requests: Vec<(String, String)>,
+    release_create_requests: Vec<Value>,
+    deny_historical_workflow_target: bool,
     uploads: Vec<String>,
     fail_upload: Option<String>,
     fail_public: bool,
     corrupt_latest: bool,
     corrupt_latest_metadata: bool,
     latest: String,
+    tag_present: bool,
+    tag_object: String,
     tag_source: String,
     tag_type: String,
+    tag_change_after_create: Option<TagChange>,
+    tag_change_after_upload: Option<(usize, TagChange)>,
     relation: String,
     artifacts: Vec<Value>,
     run: Value,
@@ -29,7 +43,16 @@ struct FakeApi {
 }
 impl FakeApi {
     fn new() -> Self {
-        Self {release:None,requests:Vec::new(),uploads:Vec::new(),fail_upload:None,fail_public:false,corrupt_latest:false,corrupt_latest_metadata:false,latest:"v9.8.7".to_owned(),tag_source:SOURCE.to_owned(),tag_type:"tag".to_owned(),relation:"ahead".to_owned(),artifacts:["assets","verifier","acceptance"].iter().enumerate().map(|(i,role)|json!({"id":i+10,"name":format!("candidate-{role}-17-2"),"expired":false,"digest":format!("sha256:{}","a".repeat(64)),"size_in_bytes":3,"expires_at":"2026-10-01T00:00:00Z","workflow_run":{"id":17,"head_sha":SOURCE}})).collect(),run:json!({"id":17,"run_attempt":2,"head_sha":SOURCE,"event":"workflow_dispatch","head_branch":"main","path":WORKFLOW,"repository":{"full_name":REPOSITORY},"head_repository":{"full_name":REPOSITORY},"status":"completed","conclusion":"success","workflow_id":41}),job:json!({"id":51,"run_id":17,"head_sha":SOURCE,"name":ACCEPTANCE_JOB,"status":"completed","conclusion":"success","steps":[{"name":"Admit the final candidate and original evidence","status":"completed","conclusion":"success"},{"name":"Upload immutable candidate assets","status":"completed","conclusion":"success"},{"name":"Upload original candidate verifier","status":"completed","conclusion":"success"},{"name":"Upload essential acceptance handoff","status":"completed","conclusion":"success"}]}),public_bytes:BTreeMap::new()}
+        Self {release:None,requests:Vec::new(),release_create_requests:Vec::new(),deny_historical_workflow_target:false,uploads:Vec::new(),fail_upload:None,fail_public:false,corrupt_latest:false,corrupt_latest_metadata:false,latest:"v9.8.7".to_owned(),tag_present:true,tag_object:TAG_OBJECT.to_owned(),tag_source:SOURCE.to_owned(),tag_type:"tag".to_owned(),tag_change_after_create:None,tag_change_after_upload:None,relation:"ahead".to_owned(),artifacts:["assets","verifier","acceptance"].iter().enumerate().map(|(i,role)|json!({"id":i+10,"name":format!("candidate-{role}-17-2"),"expired":false,"digest":format!("sha256:{}","a".repeat(64)),"size_in_bytes":3,"expires_at":"2026-10-01T00:00:00Z","workflow_run":{"id":17,"head_sha":SOURCE}})).collect(),run:json!({"id":17,"run_attempt":2,"head_sha":SOURCE,"event":"workflow_dispatch","head_branch":"main","path":WORKFLOW,"repository":{"full_name":REPOSITORY},"head_repository":{"full_name":REPOSITORY},"status":"completed","conclusion":"success","workflow_id":41}),job:json!({"id":51,"run_id":17,"head_sha":SOURCE,"name":ACCEPTANCE_JOB,"status":"completed","conclusion":"success","steps":[{"name":"Admit the final candidate and original evidence","status":"completed","conclusion":"success"},{"name":"Upload immutable candidate assets","status":"completed","conclusion":"success"},{"name":"Upload original candidate verifier","status":"completed","conclusion":"success"},{"name":"Upload essential acceptance handoff","status":"completed","conclusion":"success"}]}),public_bytes:BTreeMap::new()}
+    }
+
+    fn change_tag(&mut self, change: TagChange) {
+        match change {
+            TagChange::Missing => self.tag_present = false,
+            TagChange::Lightweight => self.tag_type = "commit".to_owned(),
+            TagChange::WrongSource => self.tag_source = CONTROLLER.to_owned(),
+            TagChange::DifferentAnnotation => self.tag_object = "5".repeat(40),
+        }
     }
 }
 impl Operations for FakeApi {
@@ -55,11 +78,14 @@ impl Operations for FakeApi {
             );
         }
         if path.ends_with("/git/ref/tags/v9.8.7") {
-            return Ok(json!({"object":{"type":self.tag_type,"sha":TAG_OBJECT}}));
+            if !self.tag_present {
+                return Err(DevError::unavailable("fixture annotated tag is absent"));
+            }
+            return Ok(json!({"object":{"type":self.tag_type,"sha":self.tag_object}}));
         }
-        if path.ends_with(&format!("/git/tags/{TAG_OBJECT}")) {
+        if path.ends_with(&format!("/git/tags/{}", self.tag_object)) {
             return Ok(
-                json!({"sha":TAG_OBJECT,"tag":"v9.8.7","object":{"type":"commit","sha":self.tag_source},"message":"Useful capability"}),
+                json!({"sha":self.tag_object,"tag":"v9.8.7","object":{"type":"commit","sha":self.tag_source},"message":"Useful capability"}),
             );
         }
         if path.ends_with("/actions/workflows/release.yml") {
@@ -106,11 +132,31 @@ impl Operations for FakeApi {
         if method == "POST" && path.ends_with("/releases") {
             assert!(self.release.is_none());
             let mut release = body.expect("create body").clone();
+            self.release_create_requests.push(release.clone());
+            // GitHub's create-release contract resolves an omitted target to the
+            // default branch. An explicitly selected historical workflow tree
+            // needs Workflows write even though an existing tag makes this field
+            // irrelevant to the release's source. GITHUB_TOKEN lacks that grant.
+            let target = release
+                .get("target_commitish")
+                .and_then(Value::as_str)
+                .unwrap_or("main");
+            if self.deny_historical_workflow_target && target == SOURCE {
+                return Err(DevError::unavailable(
+                    "create-release fixture: Resource not accessible by integration (HTTP 403); historical target changes workflows",
+                ));
+            }
+            if release.get("target_commitish").is_none() {
+                release["target_commitish"] = json!("main");
+            }
             release["id"] = json!(91);
             release["assets"] = json!([]);
             release["author"] = json!({"login":"github-actions[bot]"});
             release["html_url"] = json!("https://github.com/lkjsxc/lkjscript/releases/tag/v9.8.7");
             self.release = Some(release.clone());
+            if let Some(change) = self.tag_change_after_create.take() {
+                self.change_tag(change);
+            }
             return Ok(release);
         }
         if method == "PATCH" && path.ends_with("/releases/91") {
@@ -160,6 +206,12 @@ impl Operations for FakeApi {
             .as_array_mut()
             .expect("assets")
             .push(asset.clone());
+        if let Some((ordinal, change)) = self.tag_change_after_upload
+            && self.uploads.len() == ordinal
+        {
+            self.tag_change_after_upload = None;
+            self.change_tag(change);
+        }
         Ok(asset)
     }
     fn zip_member(&mut self, _: &Path, _: Option<&str>, _: &Path) -> Result<(), DevError> {
@@ -337,7 +389,7 @@ fn publication_authority_is_independent_of_candidate_bytes_and_controller_revisi
     let accepted = authority(&mut api, &selection);
     assert_eq!(accepted.product_source, SOURCE);
     assert_eq!(accepted.controller_source, CONTROLLER);
-    for authorization in ["", "0000000000000000000000000000000000000000"] {
+    for authorization in ["", SOURCE, "0000000000000000000000000000000000000000"] {
         assert!(publication::authorize(&mut api, &selection, &context(), authorization).is_err());
     }
     api.tag_type = "commit".to_owned();
@@ -350,6 +402,135 @@ fn publication_authority_is_independent_of_candidate_bytes_and_controller_revisi
     assert!(publication::authorize(&mut api, &selection, &context(), TAG_OBJECT).is_err());
     assert_eq!(selection.content, before);
     assert!(api.requests.iter().all(|(method, _)| method == "GET"));
+}
+
+#[test]
+fn existing_annotated_tag_publication_needs_no_historical_workflow_target() {
+    let temporary = tempfile::tempdir().expect("owned existing-tag fixture");
+    let selection = selection(temporary.path());
+    let mut api = FakeApi::new();
+    api.deny_historical_workflow_target = true;
+    let authority = authority(&mut api, &selection);
+
+    let published = publication::publish(&mut api, &selection, temporary.path(), &authority)
+        .expect("publish exact existing tag without requesting workflow modification");
+
+    assert!(published.immutable);
+    assert_eq!(published.latest, LatestState::Selected);
+    assert_eq!(published.latest_source_commit, SOURCE);
+    assert_eq!(authority.product_source, SOURCE);
+    assert_eq!(authority.controller_source, CONTROLLER);
+    assert_eq!(authority.annotated_tag_object, TAG_OBJECT);
+    assert_eq!(api.tag_source, SOURCE);
+    assert_eq!(api.tag_object, TAG_OBJECT);
+    assert_eq!(api.release_create_requests.len(), 1);
+    let request = &api.release_create_requests[0];
+    assert_eq!(request["tag_name"], "v9.8.7");
+    assert!(request.get("target_commitish").is_none());
+    assert_eq!(request["draft"], true);
+    let release = api.release.as_ref().expect("published release");
+    assert_eq!(release["target_commitish"], "main");
+    assert_eq!(release["tag_name"], "v9.8.7");
+    assert_eq!(api.uploads.len(), 3);
+    verify_files(&temporary.path().join("assets"), &selection.content.assets)
+        .expect("publication retains exact accepted bytes");
+}
+
+#[test]
+fn publication_rechecks_annotated_tag_before_create_upload_and_publication() {
+    for boundary in ["before-create", "after-create", "after-final-upload"] {
+        for change in [
+            TagChange::Missing,
+            TagChange::Lightweight,
+            TagChange::WrongSource,
+            TagChange::DifferentAnnotation,
+        ] {
+            let temporary = tempfile::tempdir().expect("owned tag-race fixture");
+            let selection = selection(temporary.path());
+            let mut api = FakeApi::new();
+            let authority = authority(&mut api, &selection);
+            match boundary {
+                "before-create" => api.change_tag(change),
+                "after-create" => api.tag_change_after_create = Some(change),
+                "after-final-upload" => api.tag_change_after_upload = Some((3, change)),
+                _ => unreachable!(),
+            }
+            let error = publication::publish(&mut api, &selection, temporary.path(), &authority)
+                .expect_err("changed tag cannot authorize publication");
+            let expected_reason = match change {
+                TagChange::Missing => "fixture annotated tag is absent",
+                TagChange::Lightweight => "requires an annotated tag",
+                TagChange::WrongSource => "annotated tag name/object/source differs",
+                TagChange::DifferentAnnotation => "scoped immutable-release authorization",
+            };
+            assert!(
+                error.message().contains(expected_reason),
+                "{boundary}/{change:?}: {error}"
+            );
+            assert!(api.requests.iter().all(|(method, _)| method != "PATCH"));
+            if boundary == "before-create" {
+                assert!(api.requests.iter().all(|(method, _)| method == "GET"));
+                assert!(api.release.is_none());
+                assert!(api.uploads.is_empty());
+            } else {
+                let draft = api.release.as_ref().expect("preserved owned draft");
+                assert_eq!(draft["draft"], true);
+                assert_eq!(draft["target_commitish"], "main");
+                assert_eq!(api.release_create_requests.len(), 1);
+                assert_eq!(
+                    api.uploads.len(),
+                    if boundary == "after-create" { 0 } else { 3 }
+                );
+            }
+            verify_files(&temporary.path().join("assets"), &selection.content.assets)
+                .expect("tag races do not modify accepted assets");
+        }
+    }
+}
+
+#[test]
+fn default_target_draft_still_requires_exact_producer_source_object_and_author() {
+    for changed in ["producer", "source", "tag-object", "notes", "author"] {
+        let temporary = tempfile::tempdir().expect("owned foreign-draft fixture");
+        let selection = selection(temporary.path());
+        let mut api = FakeApi::new();
+        let authority = authority(&mut api, &selection);
+        api.fail_upload = Some(super::super::archive::ARCHIVE_NAME.to_owned());
+        let error = publication::publish(&mut api, &selection, temporary.path(), &authority)
+            .expect_err("retain draft before first asset upload");
+        assert!(error.message().contains("injected publication API failure"));
+        let release = api.release.as_mut().expect("owned draft");
+        assert_eq!(release["target_commitish"], "main");
+        let body = release["body"].as_str().expect("exact ownership notes");
+        let replacement = match changed {
+            "producer" => Some(body.replace("17/2", "17/1")),
+            "source" => Some(body.replace(SOURCE, CONTROLLER)),
+            "tag-object" => Some(body.replace(TAG_OBJECT, &"5".repeat(40))),
+            "notes" => Some(format!("Foreign annotation\n{body}")),
+            "author" => None,
+            _ => unreachable!(),
+        };
+        if let Some(body) = replacement {
+            release["body"] = json!(body);
+        } else {
+            release["author"]["login"] = json!("foreign-operator");
+        }
+        let before = api.release.clone();
+        let requests = api.requests.len();
+        let error = publication::publish(&mut api, &selection, temporary.path(), &authority)
+            .expect_err("foreign draft cannot be resumed");
+        assert!(
+            error.message().contains("partial draft is foreign"),
+            "{changed}: {error}"
+        );
+        assert_eq!(api.release, before);
+        assert!(
+            api.requests[requests..]
+                .iter()
+                .all(|(method, _)| method == "GET")
+        );
+        assert!(api.uploads.is_empty());
+    }
 }
 
 #[test]

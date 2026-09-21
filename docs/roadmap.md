@@ -89,10 +89,11 @@ The [release cutover](campaigns/202609180007.md) and its
 [consume correction](campaigns/202609180528.md#completed-consumer-reconciliation--2026-09-17)
 completed the selected read-only proof: accept final neutral content once and consume the original
 assets through authenticated selection and the small installed lifecycle. Consumer `35272533706/1`
-succeeded with determinate rejected promotion authority; new-format live publication remains untested.
-The [input-evolution increment](campaigns/202609180608.md) selects mainline delivery only. Its public
-delivery trigger is a concrete consumer requiring installation, an explicit release request, or a
-deliberately selected usable authoring milestone containing it. No further feature is a prerequisite.
+succeeded with determinate rejected promotion authority. The subsequent explicit requests selected
+v0.1.39, including [input evolution](campaigns/202609180608.md), maps, HTTP and data corrections.
+The [delivery continuation](campaigns/202609210911.md) promotes accepted producer `35508727722/1`
+through the maintained controller. Its current public outcome belongs to the
+[status summary](status.md#v0139-delivery); no further feature or healthy-candidate rebuild is a prerequisite.
 Independent callback effects still require an application policy for replay and idempotency.
 
 Numerical algorithms and failure policy belong in ordinary graph libraries. After delivery,

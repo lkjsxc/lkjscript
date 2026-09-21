@@ -183,8 +183,10 @@ fn admit_remote(
         .and_then(Value::as_bool)
         .ok_or_else(|| DevError::corrupt("release draft state unavailable"))?;
     if draft {
+        // GitHub's target_commitish is tag-creation metadata and may name the
+        // default branch even for this existing annotated tag. The actual tag
+        // object/source is independently admitted; exact notes bind draft ownership.
         if string(release, "body")? != notes(authority)
-            || string(release, "target_commitish")? != authority.product_source
             || release.pointer("/author/login").and_then(Value::as_str)
                 != Some("github-actions[bot]")
         {
@@ -236,9 +238,11 @@ pub(super) fn publish(
                 &context,
                 &authority.annotated_tag_object,
             )?;
+            // The authorized annotated tag already exists. Do not send the unused
+            // tag-creation target: an old workflow tree there would unnecessarily
+            // require Workflows write permission from the publication token.
             let request = json!({
                 "tag_name": authority.tag,
-                "target_commitish": authority.product_source,
                 "name": authority.tag,
                 "body": notes(authority),
                 "draft": true,
