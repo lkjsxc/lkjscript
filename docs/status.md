@@ -13,8 +13,9 @@ selects unchanged assets. Consumer `35667263704/1`, controller source
 `0bf919f8718dcaaa265e84f73fc93f9d52f88f94`, passed source/content selection, independent
 publication authority and both transferred installed lifecycles. Draft creation then failed
 with HTTP 403 because the request supplied the old source as an unnecessary tag-creation target;
-the exact annotated tag already exists. The maintained controller correction and resumption
-are recorded in the continuation. No v0.1.39 release or anonymous public verification is yet
+the exact annotated tag already exists. The tested controller correction is integrated at
+`220bd11b093e1d4e290e42516fa2ecc3f18ab874`; resumption `35668854407/1` uses that controller
+with the original producer. No v0.1.39 release or anonymous public verification is yet
 claimed; public v0.1.38 remains the last completed release. No product rebuild, schema migration
 or production deployment is selected.
 
