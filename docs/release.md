@@ -24,6 +24,12 @@ selection, publication, anonymous acquisition/installed smoke and terminal jobs.
 job was intentionally skipped; the original producer remains authoritative. A private candidate built with occupied version 0.1.38
 is never the public v0.1.38 release.
 
+The [native-authoring milestone](campaigns/202609220955.md) selects the unused successor v0.1.40.
+Source `1cdaf72888a1f46359a6d38956050747335f8e32` passed the local source tier and reached main.
+Producer [35685667968/1](https://github.com/lkjsxc/lkjscript/actions/runs/35685667968) is pending
+hosted acceptance; no successor tag, selection-control update or public release exists yet.
+Resume from that producer's actual outcome under the procedure below, without rebuilding healthy stages.
+
 ## Content and compatibility
 
 The canonical manifest discriminator is `format: "lkjscript-release-content-1"`. It binds the product

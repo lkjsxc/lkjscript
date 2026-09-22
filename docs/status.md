@@ -17,19 +17,21 @@ skipped, retaining the original producer's accepted product. The earlier HTTP 40
 controller repair remain in the campaign history. This closure refreshes hosted metadata; it
 does not rerun acceptance, rebuild the product, migrate application data or deploy to production.
 
-## Native declaration authoring — implementation in progress
+## Native declaration authoring — mainline integrated, candidate acceptance pending
 
-The [selected continuation](campaigns/202609220955.md) adds complete create/edit declaration units
-and canonical `change draft` through the existing reviewed change boundary. Development copies
-have completed fresh generic library/consumer creation, discarded-input re-entry, explicit input
-addition and exact dependency repair. Old/new detached artifacts return `(2, 2)` / `(3, 102)`;
-checked overflow and dependency-only arity rejection remain visible. The pinned disposable
-Orbloam experiment passed its original 72 tests, then 75 tests with a new native inventory helper;
-authenticated HTTP, unauthorized rejection and retained-store restart were observed. These are
-development observations, not final source/candidate acceptance or remote Orbloam adoption.
-An independent consumer completed creation, discarded-input drafting and behavior/test editing
-from the copied executable and generated guides alone. Maintained acceptance, integration and
-successor publication remain open. The campaign owns literal inputs, deviations and evidence.
+The [selected continuation](campaigns/202609220955.md) implements complete create/edit declaration
+units and canonical `change draft` through the existing reviewed boundary. Source
+`1cdaf72888a1f46359a6d38956050747335f8e32` passed all 20 release-source gates freshly with stable
+inputs and zero reuse, then reached remote main unchanged. The maintained resource-library author
+uses native units with an independent flat review oracle. Fresh generic construction/evolution,
+detached old/new results, lkjournal re-entry, the disposable Orbloam continuation and independent
+consumer use have separate retained evidence; the external experiment is not remote adoption.
+
+Candidate producer [35685667968/1](https://github.com/lkjsxc/lkjscript/actions/runs/35685667968)
+selects that exact source for v0.1.40. Hosted source/finalized-candidate acceptance, publication and
+public verification remain open. No v0.1.40 tag or selection-control update has been made.
+Graph, artifact and application-data formats are unchanged. Rust remains the parser/kernel/adapter
+and contributor-tool implementation boundary; this is native user authoring, not compiler self-hosting.
 
 ## Persistent ordered maps
 

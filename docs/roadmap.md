@@ -104,10 +104,12 @@ numerical-throughput claim.
 
 The [structural campaign](campaigns/202609150900.md) retains the original literal size observations;
 they establish assembly friction, not authoring time, model tokens or billing. The selected
-[native-declaration continuation](campaigns/202609220955.md) is now implementing complete units
-and canonical re-entry to remove declaration, type, child-index and repeated reference assembly.
-Its development fresh and external workflows have run; maintained acceptance, integration and
-publication remain open. Explicit semantic contracts and exact dependency selection remain.
+[native-declaration continuation](campaigns/202609220955.md) implements complete units and canonical
+re-entry to remove declaration, type, child-index and repeated reference assembly. Its source passed
+the fresh 20-gate release-source tier and reached main; candidate `35685667968/1` must still complete
+hosted acceptance before the selected v0.1.40 publication. Fresh, maintained, external experimental
+and independent-consumer use are distinguished in the campaign. Explicit semantic contracts and
+exact dependency selection remain.
 The completion API lets the
 library own finalization across a caller-supplied requirement; fresh source and static-target
 acceptance establish the result through transport, callback failures and independent store observations.
@@ -163,8 +165,9 @@ count is a prerequisite. These possibilities are contingent, not an authorized w
    build matrix.
 7. **External package distribution and removed project workflows.** Offline code-complete export,
    staging, exact binding, and staged-interface inspection use the common immutable package path.
-   Select publication/network resolution, history, drafts, project backup/restore, and repository
-   health only from a named consumer with explicit authority and recovery. Do not reinstate Graph 4
+   Canonical declaration drafts now use `change draft`. Select publication/network resolution,
+   history, project backup/restore, and repository health only from a named consumer with explicit
+   authority and recovery. Do not reinstate Graph 4
    readers, compatibility commands, a mutable remote registry, or storage bytes as authoring input.
 8. **Broader incremental compilation and validation.** Generalize beyond the currently selected
    compiler impacts and semantic edit classes only after clean/incremental artifact equality and

@@ -1,4 +1,4 @@
-# Development observations, not release acceptance
+# Native-authoring evidence and its boundaries
 
 These are literal public inputs from the 202609220955 campaign. The original mandate and final
 disposition belong to [the campaign](../../campaigns/202609220955.md). The executable used for the
@@ -100,3 +100,15 @@ Small original outputs are retained here byte-for-byte for durable review: the
 its relative transcript paths refer to the original external `independent-consumer/` directory,
 not this evidence directory. None of these development originals certifies a later source SHA
 or finalized release executable.
+
+## Final local source acceptance
+
+The [unaltered maintained summary](source-acceptance-summary.json) records fresh success for all
+20 release-source gates at `1cdaf72888a1f46359a6d38956050747335f8e32`, stable inputs and zero reuse.
+Its original receipt, input/DAG manifests, verifier, logs and retained outputs remain at
+`.artifacts/lkjscript-dev/check/1790049279445190456-2331539-0`. Because that checker rotates after
+eight managed runs, complete compared archives are additionally retained outside its rotation:
+`.artifacts/native-20260922/accepted-source-originals.tar.gz` and
+`.artifacts/native-20260922/failed-source-originals.tar.gz`. No date-based expiry was observed for
+those archives or the external owned evidence. They do not substitute for hosted producer proof.
+The campaign records mainline delivery and the still-pending final-candidate/publication boundary.
