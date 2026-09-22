@@ -6242,7 +6242,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             }
             for (condition, port) in [
                 ("runner=http", "forbidden"),
-                ("runner=command|interactive", "required"),
+                ("runner=command|interactive|batch|worker|test", "required"),
             ] {
                 records.push(compact_record(
                     "change.operation-rule",

@@ -941,7 +941,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         ("call", "(call FUNCTION APPLICATIONS EXPR...)"),
         (
             "let",
-            "(let (binding NAME [(type TYPE)] INITIALIZER)... (in BODY))",
+            "(let (binding NAME [(as $BINDING)] [(type TYPE)] INITIALIZER)... (in BODY))",
         ),
         (
             "map",
@@ -1097,7 +1097,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .iter()
         .filter(|record| record.operation == "change.operation-field")
         .collect::<Vec<_>>();
-    assert_eq!(operation_fields.len(), 148);
+    assert_eq!(operation_fields.len(), 149);
     assert!(change_section.iter().any(|record| {
         record.operation == "change.edge-field"
             && compact_field(record, "edge") == Some("requirement-parameter.operation")
@@ -1130,6 +1130,8 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             ("add.parameter", "operation"),
             ("add.parameter", "use"),
             ("add.parameter", "requirement"),
+            ("add.port", "function"),
+            ("add.port", "value"),
             ("add.http-route", "path"),
             ("add.http-route", "pattern"),
             ("set.http-route", "path"),
@@ -1151,7 +1153,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         ("http_pattern", "/LITERAL/{capture}/..._1_TO_64_SEGMENTS"),
         ("port_reference", "$NAME|pkg_HEX/port_HEX"),
         ("requirement_reference", "$NAME|pkg_HEX/req_HEX"),
-        ("runner_kind", "command|http|interactive"),
+        ("runner_kind", "command|http|interactive|batch|worker|test"),
     ] {
         assert!(change_section.iter().any(|record| {
             record.operation == "change.field-form"
@@ -6868,7 +6870,7 @@ fn copied_binary_authors_builds_and_serves_interactive_topology_from_minimal() {
     assert!(grammar.iter().any(|record| {
         record.operation == "change.field-form"
             && compact_field(record, "name") == Some("runner_kind")
-            && compact_field(record, "syntax") == Some("command|http|interactive")
+            && compact_field(record, "syntax") == Some("command|http|interactive|batch|worker|test")
     }));
 
     let builtin = compact_success_at(
@@ -7187,7 +7189,7 @@ fn copied_binary_reviews_changes_inspects_and_deletes_http_routes() {
     }
     for (condition, port) in [
         ("runner=http", "forbidden"),
-        ("runner=command|interactive", "required"),
+        ("runner=command|interactive|batch|worker|test", "required"),
     ] {
         assert!(grammar.iter().any(|record| {
             record.operation == "change.operation-rule"

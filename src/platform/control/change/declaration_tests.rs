@@ -95,6 +95,87 @@ declarations.end
 }
 
 #[test]
+fn native_target_runners_match_flat_intent_and_canonical_drafts() {
+    // These runner kinds already exist in canonical meaning. Input contract 24 makes them
+    // authorable and recoverable; accepting them must not change their typed representation.
+    for (spelling, expected) in [
+        ("command", RunnerKind::Command),
+        ("batch", RunnerKind::Batch),
+        ("worker", RunnerKind::Worker),
+        ("test", RunnerKind::Test),
+    ] {
+        let temporary = tempfile::tempdir().unwrap();
+        let initial = crate::platform::kernel::tests::witness_snapshot();
+        let created =
+            GraphRepository::create(&temporary.path().join("meaning"), &initial, None).unwrap();
+        let header = format!("request base={}\n", created.current.head.revision);
+        let flat = format!(
+            r#"
+create.module as=$m name=runner_example
+expression.unit as=$body
+create.function as=$f module=$m name=entry visibility=private result=unit effect=pure body=$body
+create.component as=$c module=$m name=app visibility=private
+type.function as=@entry result=unit
+add.port as=$p component=$c name=main type=@entry function=$f
+create.target as=$t name=example component=$c port=$p runner={spelling}
+"#
+        );
+        let native = format!(
+            r#"
+declarations.begin
+(units
+  (module create runner_example (as $m)
+    (function create entry (as $f) (visibility private)
+      (returns Unit) (effect pure) (body (unit)))
+    (component create app (as $c) (visibility private)
+      (port create main (as $p) (type (function () Unit)) (function entry))))
+  (target create example (as $t) (component runner_example::app)
+    (port runner_example::app::main) (runner {spelling})))
+declarations.end
+"#
+        );
+        let decode = |body: &str| {
+            decode_compact_change("runner.lkjc", format!("{header}{body}").as_bytes())
+                .unwrap_or_else(|errors| panic!("{spelling}: {errors:#?}"))
+        };
+        let flat = decode(&flat);
+        let native = decode(&native);
+        assert_eq!(
+            canonical_authored_intent_bytes(&flat.semantic).unwrap(),
+            canonical_authored_intent_bytes(&native.semantic).unwrap()
+        );
+        assert!(native.semantic.changes.iter().any(|change| matches!(
+            change,
+            AuthoredChange::CreateTarget { runner, .. } if *runner == expected
+        )));
+        let prepared = created
+            .repository
+            .prepare_authored_change(&native.semantic, native.options)
+            .unwrap();
+        created.repository.publish(&prepared.publication).unwrap();
+        let view = created.repository.view_current().unwrap();
+        let draft = render_native_draft(
+            &view,
+            &[prepared.allocated["$t"]],
+            4 * 1_048_576,
+            crate::platform::execution::ExecutionControl::uncancelled(),
+        )
+        .unwrap();
+        let decoded =
+            decode_compact_change_in_repository("draft.lkjc", &draft, &created.repository).unwrap();
+        let errors = created
+            .repository
+            .prepare_authored_change(&decoded.semantic, decoded.options)
+            .unwrap_err();
+        assert_eq!(errors.len(), 1, "{spelling}: {errors:#?}");
+        assert_eq!(
+            errors[0].code, "publication_semantic_no_change",
+            "{spelling}"
+        );
+    }
+}
+
+#[test]
 fn native_rejects_duplicate_names_and_unbound_lexical_locals() {
     let base = crate::platform::semantic_id::RevisionId::from_digest([1; 32]);
     for (source, code) in [

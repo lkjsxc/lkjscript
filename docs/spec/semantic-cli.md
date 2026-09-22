@@ -677,7 +677,8 @@ The public exact-dependency and topology slice is:
 add.dependency package=PKG semantic-revision=REV package-revision=PACKAGE_REVISION
 create.component as=$COMPONENT module=MODULE name=NAME visibility=private|package|public
 add.port as=$PORT component=COMPONENT name=NAME type=TYPE function=DECLARATION
-create.target as=$TARGET name=NAME component=DECLARATION [port=PORT] runner=command|http|interactive
+add.port as=$PORT component=COMPONENT name=NAME type=TYPE value=EXPRESSION
+create.target as=$TARGET name=NAME component=DECLARATION [port=PORT] runner=command|http|interactive|batch|worker|test
 add.http-route as=$ROUTE target=TARGET method=METHOD path=EXACT_PATH port=PORT
 add.http-route as=$ROUTE target=TARGET method=METHOD pattern=PATH_PATTERN port=PORT
 set.http-route route=HTTP_ROUTE method=METHOD path=EXACT_PATH port=PORT
@@ -688,10 +689,11 @@ set.http-route route=HTTP_ROUTE method=METHOD pattern=PATH_PATTERN port=PORT
 source closure has been validated and staged. It performs no network, registry, ambient-directory,
 or unchecked-file lookup; unavailable, duplicate, stale, foreign, conflicting, and mismatched
 bindings reject before publication.
-`create.component` creates an empty component. Requirements and function-backed ports are separate
-independently budgeted operations. An `add.port` explicit function type must exactly agree with its
-function implementation. `create.target` binds an exact component and requires one exact port for
-`command` and `interactive`, but forbids that field for `http`; an HTTP target instead owns its
+`create.component` creates an empty component. Requirements and ports are separate independently
+budgeted operations. `add.port` requires exactly one function reference or expression implementation;
+its explicit function type must exactly agree with that implementation. `create.target` binds an
+exact component and requires one exact port for every non-HTTP runner, but forbids that field for
+`http`; an HTTP target instead owns its
 nonempty finite `add.http-route` set. Each route binds an exact method and exactly one typed exact
 path or whole-segment capture pattern to a component-owned function-backed HTTP port;
 `set.http-route` changes that binding without replacing route identity. Pattern captures index the

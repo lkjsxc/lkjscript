@@ -5499,7 +5499,7 @@ mod tests {
         assert!(decode_compact_change("dependency.lkjc", unsupported.as_bytes()).is_ok());
 
         let bad_runner = format!(
-            "request base={}\ncreate.target as=$target name=serve component=$component port=$port runner=worker\n",
+            "request base={}\ncreate.target as=$target name=serve component=$component port=$port runner=unknown\n",
             revision()
         );
         assert_eq!(

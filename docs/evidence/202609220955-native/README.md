@@ -66,6 +66,17 @@ The supplied development binary SHA-256 was
 Detailed evidence is retained in the owned `independent-consumer/` directory below. This is a
 bounded independent usability exercise, not compiler self-hosting or a claim about final bytes.
 
+The literal [wide declaration](wide-declaration.units.lkjc) was authored and drafted with a frozen
+release-profile executable from `7d507e1ae9a6e00a7a9db9b24b6835956ee61fd5`. Independent canonical
+inspection confirmed all 64 parameter names and positions; the 8,042-byte draft interns the three
+compound types and plans unchanged. All product commands succeeded. The first host assertion
+incorrectly expected four aliases by counting primitive I64; the corrected assertion reads the
+original outputs without replaying product operations. That source's aggregate release-source
+check failed a separate legacy runner-vocabulary expectation, so this is a bounded capacity
+observation, not source or release acceptance. Originals are `wide-workflow.original.sh`,
+`wide-workflow.original.status`, `wide-definition.out`, `wide-draft.lkjc`, `wide-noop.out` and
+`wide-assertions.sh` in the owned directory below.
+
 Detailed outputs, copied development/official executables and owned HTTP data remain under
 `/home/coder/workspace/lkjscript-native-20260922`. Initial inputs and evolved authoring repositories
 are under `/home/coder/workspace/lkjscript-native-evidence-20260922`, outside the consumer mounts.
