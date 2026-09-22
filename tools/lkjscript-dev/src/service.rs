@@ -49,7 +49,7 @@ const WORKER_HELPER_FUNCTION: &str = "decl_7f443401f4946c55fa239c5430e8ad93";
 const WORKER_QUEUE_REQUIREMENT: &str = "req_0cebded5cb056cda5484e39aa40594ad";
 const SERVICE_ARTIFACT_RELATIVE: &str = "generated/lkjournal.lkja";
 const SERVICE_ARTIFACT_SHA256: &str =
-    "5b5452b01d67e5d3b09308f5ba9ecd53945b7f2926f20cda92eca9d036e7be8d";
+    "25eb168d432c79b604433a7395faef62c798fd22ed018266ad88472a7706bf89";
 const HTTP_REQUEST_TYPE: &str =
     "type_object_b84486b5e78230fd2b9c4bdcedc6f4ee1fb08838bc3b178aab0d3fb5967a6a44";
 const HTTP_RESPONSE_TYPE: &str =
@@ -6821,6 +6821,37 @@ fn print_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn maintained_service_artifact_matches_its_reviewed_pin() {
+        let repository = repository_root().expect("repository");
+        let artifact = repository
+            .join("applications/lkjournal")
+            .join(SERVICE_ARTIFACT_RELATIVE);
+        proof_required_file_with_sha256(
+            &repository,
+            &artifact,
+            MAXIMUM_ARTIFACT_BYTES,
+            "maintained service artifact bundle",
+            SERVICE_ARTIFACT_SHA256,
+        )
+        .expect("review the service pin when regenerating the maintained application artifact");
+
+        let temporary = tempfile::tempdir().expect("owned corruption fixture");
+        let changed = temporary.path().join("changed.lkja");
+        let mut bytes = fs::read(&artifact).expect("maintained artifact");
+        bytes[0] ^= 1;
+        fs::write(&changed, bytes).expect("changed fixture");
+        let failure = proof_required_file_with_sha256(
+            temporary.path(),
+            &changed,
+            MAXIMUM_ARTIFACT_BYTES,
+            "changed fixture",
+            SERVICE_ARTIFACT_SHA256,
+        )
+        .expect_err("an unreviewed artifact must still reject");
+        assert_eq!(failure.code, "service_artifact_sha256");
+    }
 
     #[test]
     fn data_contract_is_exact_and_versioned() {

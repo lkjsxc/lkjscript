@@ -88,9 +88,9 @@ empty 404 and invokes none of them.
 
 ## Current service, interactive, and worker boundary
 
-All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,344,008-byte
+All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,372,537-byte
 artifact bundle above (SHA-256
-`5b5452b01d67e5d3b09308f5ba9ecd53945b7f2926f20cda92eca9d036e7be8d`). The service descriptor
+`25eb168d432c79b604433a7395faef62c798fd22ed018266ad88472a7706bf89`). The service descriptor
 resolves `serve`, the worker descriptor resolves `work`, and `live.deployment.json` resolves
 `lkjournal-live-1`. Preparation strictly loads the standalone bundle,
 validates the runner, route-indexed handler and component requirement closure, grants, secrets, and adapters, and emits

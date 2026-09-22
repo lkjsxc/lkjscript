@@ -177,3 +177,50 @@ unchanged HEAD. The final anonymous installed observation has not run. It will s
 maintained public smoke, which currently exercises structural/numeric authoring, without replaying
 broad semantic acceptance. Draft annotated release notes are retained at
 `.artifacts/composable-20260922/release-notes-v0.1.41.md`; they have not created a tag or permission.
+
+## Hosted candidate failure and service-verifier repair
+
+The autonomous continuation read exact producer `35725872480/1` after its terminal
+failure at 2026-09-22T13:51:55Z. Authenticated run/job/artifact metadata, job-log ZIP
+and downloaded diagnostic originals are retained under
+`.artifacts/composable-20260922/hosted-failure-35725872480-1`. Diagnostic artifact
+`10697836925` remains available until 2026-10-06T13:51:37Z. These local copies are
+diagnostic material, not relocatable original-reader acceptance.
+
+Its hosted release-source tier passed all 20 gates. Target execution reached service
+after the five other owner summaries passed; offline packages reports 1,009 commands.
+The failed service summary at
+`diagnostics/_temp/candidate-evidence/target/0047-service-oracle.stdout.log` reports
+`service_artifact_sha256`: the checked-in bundle is
+`25eb168d432c79b604433a7395faef62c798fd22ed018266ad88472a7706bf89`, but the verifier
+still expected the pre-composition application bundle. Neither candidate acceptance
+nor installation/recovery completed. Accepted asset/verifier/terminal handoffs were
+skipped. There is no promotable candidate from this producer.
+
+Local unchanged-verifier reproduction is preserved in
+`service-pin-before.stdout.json` and `service-pin-before.stderr.log` under the same
+campaign artifact directory. Its original service receipt is
+`.artifacts/lkjscript-dev/service/1790119941047952108-2588861-0/receipt.json`:
+failed, zero product commands/runners, cleanup attempted and completed. No live
+application effect was replayed. The hosted service original receipt was absent
+from the old workflow's diagnostic upload; only its summary and enclosing failed
+terminal remain. The correction adds that existing service evidence directory to
+diagnostic retention without inventing the missing hosted original.
+
+The repair keeps the independently reviewed artifact pin and updates it to the
+already accepted maintained bundle. A source-tier regression checks the maintained
+artifact against that pin and rejects a changed disposable copy. This catches
+future pin drift before final-target execution. No product, graph, artifact,
+application-data or verification-workload contract changes.
+
+The corrected immutable verifier at
+`.artifacts/composable-20260922/verifier-service-pin/lkjscript-dev` passes focused
+service acceptance against retained Product 02: 69 commands, eight runners and
+26 HTTP requests, with cleanup attempted/completed and no failure. Original receipt:
+`.artifacts/lkjscript-dev/service/1790120241273775362-2590504-0/receipt.json`,
+digest `verification_3db4c17257f4c0d15e4071e1813ef63ba017bc9340dd0c9155793177b6abc7d1`.
+The new artifact-pin regression passes from a copied Cargo-reported library test
+executable; log `service-pin-regression-lib.log`. The initial test build selected
+the binary wrapper and ran zero tests (`service-pin-regression.log`); that invocation
+is not regression proof. The corrected library selection ran exactly one test.
+These focused results do not replace source-tier or finalized-candidate acceptance.

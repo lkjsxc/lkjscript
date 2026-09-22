@@ -210,6 +210,7 @@ jobs:
             ${{ runner.temp }}/candidate-context
             ${{ runner.temp }}/source-summary.json
             ${{ github.workspace }}/.artifacts/lkjscript-dev/check
+            ${{ github.workspace }}/.artifacts/lkjscript-dev/service
             ${{ runner.temp }}/candidate-build/build-receipt*
             ${{ runner.temp }}/candidate-evidence
             ${{ runner.temp }}/candidate-acceptance

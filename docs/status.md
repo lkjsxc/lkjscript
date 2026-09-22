@@ -4,7 +4,7 @@ Status date: 2026-09-22 UTC. This file describes implemented checkout reality. E
 public guides live under [generated](generated), including the
 [operation guide](generated/operations.md); this file does not duplicate them.
 
-## Composable typed-cell updates — integrated, candidate acceptance running
+## Composable typed-cell updates — integrated, candidate verification repair
 
 The [selected campaign](campaigns/202609221952.md) adds exact
 `DataStore.require-transaction` and native-authored ordinary standard tasks
@@ -23,9 +23,13 @@ creation/drafting regression pass. The [evidence owner](evidence/202609221952-ce
 separates these observations from final acceptance. Corrected source
 `b52f51bd334dc71462e46c298dea12454f59ed6f` passed all 20 release-source gates freshly with stable
 inputs and zero reuse, then reached remote main unchanged. Candidate
-[35725872480/1](https://github.com/lkjsxc/lkjscript/actions/runs/35725872480) is running at that exact
-source for selected v0.1.41. Final-target/candidate acceptance and immutable publication, including
-anonymous public verification, remain pending. No v0.1.41 tag or publication selection has been made.
+[35725872480/1](https://github.com/lkjsxc/lkjscript/actions/runs/35725872480) failed at that exact
+source: service verification still pinned the predecessor lkjournal artifact. The fresh hosted
+source tier and preceding five target owners passed, including 1,009 offline-package commands;
+the candidate is not accepted. The [autonomous continuation](campaigns/202609222330.md) repairs
+the reviewed pin, adds an early source regression and retains service diagnostics in CI.
+Fresh corrected acceptance and immutable publication, including anonymous public verification,
+remain pending. No v0.1.41 tag or publication selection has been made.
 
 ## v0.1.39 delivery
 
@@ -359,25 +363,13 @@ incomplete for the current closure is rebuilt once under the exclusive publicati
 immutable-footer oracle. Pack contract 1, object-store contract 1, immutable objects, and `HEAD`
 remain canonical and unchanged.
 
-| Consumer | Exact current identity |
-|---|---|
-| standard package | repository `repo_c1358d64c351873b51c954b69d1ac988`; package `pkg_10000000000000000000000000000001`; revision `rev_19be6fa1bf22b7b139c3c0773c792c00518fa2e17fd6468da77076a0dc01eeb4`; state `semantic_state_d736ee4dfbda8465fa3ec0a87d968c06efdb2c622ed236d6a5b4bada7b9fb9b7` |
-| `lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; package `pkg_20000000000000000000000000000001`; revision `rev_29c95cfe92810bf3669a3943a9b3582f69047017bb43bd3e93942c5ea94f28ff`; state `semantic_state_3484e33ab9a2691e962e2a80077aa26628d58876cef7bce5f541baa830c8e801` |
-| built-in standard dependency | package revision `package_revision_1377b907ba6d62ef959900436e171c9939b2d4049476eb24703facbbd296cd53`; transport `package_transport_5bd92b9f67d08bf91b75fd31be1399ed8fcfc9eac179f2539e9858afc752d2ce`; artifact manifest `artifact_manifest_4080b0e6142643a3a900c2fd1ea1059cf23fa97ad7ac873e56ad6aafeab38f43` |
-
-The standard package owns 949 live semantic owners, 163 compiler units, and 37 graph tests. Its
-current artifact has 584,470 bytes. `lkjournal` owns 2,040 live semantic owners and one exact standard
-dependency; its two-package artifact has 253 compiler units and 1,344,008 bytes. Its complete
-dependency closure has 44 graph tests. Current successor production/reference acceptance is pending
-the fresh full profile.
-
-Maintained derived assets are:
-
-| Path | Role | SHA-256 |
-|---|---|---|
-| `packages/standard/generated/standard.lkjp` | code-complete standard source container, 414,559 bytes | `f817744dad407ec97a8e86fe3a3293e05e6b5793338c4901d7983e3870724735` |
-| `packages/standard/generated/standard.lkja` | current standard artifact bundle, 584,470 bytes | `24be2f4fe7d5479e5a960089b4dee8d1a6fe321000087ab4e1f6155b29a3cfff` |
-| `applications/lkjournal/generated/lkjournal.lkja` | current application artifact bundle, 1,344,008 bytes | `5b5452b01d67e5d3b09308f5ba9ecd53945b7f2926f20cda92eca9d036e7be8d` |
+Current exact package/dependency identities and generated assets are recorded at the
+[standard owner](../packages/standard/README.md) and
+[lkjournal owner](../applications/lkjournal/README.md), rather than duplicated here.
+The standard owns 1,012 live semantic owners and 37 graph tests; lkjournal retains
+2,040 application owners and passes its 44-test dependency closure. The current
+[composable-cell evidence](evidence/202609221952-cells/README.md) records source
+acceptance and the separate unfinished candidate boundary.
 
 The built-in transport and artifact are compiled into the executable and strictly cross-checked.
 Product verification regenerates maintained owners and compares exact bytes. Service verification
