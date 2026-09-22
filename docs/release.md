@@ -51,9 +51,13 @@ remote main unchanged. Candidate [35725872480/1](https://github.com/lkjsxc/lkjsc
 was dispatched from that exact source on 2026-09-22T12:13:06Z and failed at service admission:
 its verifier still pinned the predecessor application artifact. No accepted candidate handoffs
 were uploaded. The continuation repairs that pin and preserves service originals alongside
-the existing candidate diagnostics. Corrected candidate/final-target acceptance, the annotated
-v0.1.41 tag/scoped selection, unchanged-asset promotion and anonymous public verification are
-still pending. v0.1.40 remains complete and unchanged.
+the existing candidate diagnostics. Corrected source
+`c78840a74ce19ad5145e1e23ca5ff2b2a7198c0f` passed all 20 fresh source gates with
+stable inputs and zero reuse, then reached remote main unchanged. Replacement
+candidate [35798767360/1](https://github.com/lkjsxc/lkjscript/actions/runs/35798767360)
+is running at that exact product/controller source. Its final-target/installation
+acceptance, annotated v0.1.41 tag/scoped selection, unchanged-asset promotion and
+anonymous public verification are still pending. v0.1.40 remains complete and unchanged.
 
 ## Content and compatibility
 

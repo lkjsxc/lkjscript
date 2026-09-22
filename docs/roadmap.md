@@ -1,139 +1,34 @@
 # Evidence-gated roadmap
 
-Implemented work is intentionally absent. Typed meaning authority, the public CLI, offline minimal, command, and
-HTTP recipes lowered through public-representable authored operations, code-complete exact offline dependency and
-component/requirement/function-backed-port/target creation, bounded staged-interface/deployment discovery, compact task/capability and explicit
-named higher-order generic authoring, graph-owned `list-fold-left`,
-normalized check/build/pure-run, artifact bundle, maintained standard/`lkjournal` artifacts, reviewed
-authored change, normalized query, standalone artifact bundle service/worker deployment,
-deployment-bound exact-endpoint outbound HTTP and the closed Nostr relay-information recipe,
-first-party ordered application data and durable queue, operational backup/restore, complete
-SQL/PostgreSQL production deletion, bounded revision-pinned context traversal, and both stateless
-and first-party-data copied-binary HTTP acceptance, the current semantic-scale harness, and its
-100,100-owner full-lifecycle admission, exact-interface affine capability resources, and the
-resource-owned maintained durable-queue worker cutover, plus complete revision-pinned local-function
-definition projection with stateless paging and disjoint maintained proof, and one exact-requirement-
-bound consume-only private task-function handoff with the maintained worker split, plus one bounded
-identity-preserving graph-native function extraction and the maintained `update-resource` split,
-plus bounded graph-owned exact/pattern HTTP selectors whose captures index handler parameters, are
-current architecture. Ambiguous overlap, signature drift, and query-selected maintained resource
-dispatch are absent. Graph-owned structured sessions now admit one relational `interactive`
-target over a byte-bounded RFC 6455 server: ordinary state crosses finite callbacks while one
-resident parent owns the connection and all joined resources. Maintained `lkjournal-live-1` proves
-authenticated multi-subscription push with an implementation-disjoint raw client. One crash-safe
-rebuildable incremental object-location catalog now keeps
-healthy repository open and accepted sealing off the complete pack-footer/catalog rewrite path,
-and its copied-binary capacity lifecycle admits exactly one million independent modules.
-PostgreSQL 16.15 is retained only as contributor differential evidence. Finite recursive nominal
-data is implemented and publicly accepted in immutable `0.1.31` for
-`x86_64-unknown-linux-musl`. Exact and
-latest downloads independently passed static inspection and five behavioral owners covering
-distributed HTTP, outbound HTTPS/TLS/DNS, offline package closures, pure-tail execution, and stateful
-HTTP. Parameterized records/variants, capture-safe generic factories, retained runtime configuration,
-typed persistence, concrete sessions and ordered persistent-list mapping compose through the public
-copied binary. Target admission additionally proved the
-maintained service/worker and both pinned userlands. The
-[recursive delivery reconciliation](campaigns/202609110659.md#delivery-reconciliation--2026-09-11) binds their
-exact source, candidate, publication, and independent download boundaries.
-The bound-public-pair tooling change supplies two independent small route lifecycles plus one
-within-pair full suite. Its first hosted observation passed in effect-library release `v0.1.32`,
-run `34671245722/1`: both route lifecycles and the single aggregate were fresh, with latest's
-aggregate observation bound within the pair. EFF-7 is complete at frozen source `67baaf0b`.
-Task iteration separately passed engineering, source/target acceptance and main integration at
-`3f25c3a7`. The [foreground campaign](campaigns/202609121842.md) now selects that named composition
-milestone and one combined release: ordinary command bundles execute once through an installed
-runtime with exact grants and joined cleanup. Foreground source `0b5e9827` has passed fresh
-source/target acceptance and normal main integration. Dry run `34693887632/1` exhausted its
-offline-package deadline. Corrected source `c34114fc` passed fresh full, six-owner target and package
-acceptance and is normally integrated. Matching dry run `34700198909/1` and its original handoff
-readers passed. Immutable v0.1.33 and publisher `34705135744/1` have now passed independent
-anonymous exact/latest acquisition, attestations and the public pair. FG-7 closes the selected
-combined task-iteration/foreground milestone. The installation source `037a1348` is accepted and
-integrated; dry run `34706128684/1` passed. Its isolated annotated v0.1.34 publisher `34760117554/1`
-published immutable release `387929218`; its final anonymous installed application pair passed,
-including joined cleanup. Final artifact `10320391118` passed its original reader with the archived
-context. INS-7 is closed independently of newer main.
+[Current status](status.md) describes implemented capabilities and public delivery.
+[Specifications](spec/) own their contracts; [campaigns](campaigns/) retain completed
+work, failures and exact evidence. This page contains contingent future directions.
 
-The [named-reference increment](campaigns/202609131008.md) removes the exercised foreground
-consumer's host member-ID inventories through typed, reviewed exact-name addressing. Accepted source
-`5f49c68d55bdf1f620f1a3ae2fdd462cb02c2847` passed all 26 full gates freshly and is integrated on main;
-v0.1.34 contains only the frozen installer milestone.
-The [finite callable campaign](campaigns/202609140057-collision-1.md) consumes the increment's
-expressly limited one-campaign deferral and selects their combined publication. It implements
-finite parameter-flow admission and current-executable repair across validator changes. Focused
-proof passes at `0735cc78`, including current-binary repair and original accepted retry evidence.
-Reconciliation confirms that remote main `6b0c19be` already contains that source. Earlier rehearsal
-`34777722470/1` at `9cf26ecd` succeeded on 2026-09-13 at 21:09:55 UTC, but predates the retry
-correction. Corrected rehearsal `34779065098/1` failed at 21:10:08 UTC during workflow identity
-preflight; all semantic/target/package proof was skipped. It is no longer pending. The
-[stable-candidate campaign](campaigns/202609140703-collision-1.md) repaired dispatch-source selection
-and completed that combined publication at frozen `4306ef64`. Rehearsal `34786835189/1` and its
-original readers passed, including the final-source 76-omission test. Publisher `34847832173/1`
-completed on 2026-09-14T16:13:06Z. Immutable v0.1.35 release `388511109`, anonymous exact/latest
-installed acceptance and original package/six-target/pair readers passed. That independent delivery
-is closed; its frozen inputs and failed history stay intact.
+## Selected delivery
 
-The [requirement-parameter campaign](campaigns/202609140938.md) and accepted
-[structural-authoring campaign](campaigns/202609150900.md) have consumed the single delivery deferral.
-The [delivery continuation](campaigns/202609151412.md) retains the failed, unproduced v0.1.37
-source and tag. The [binary64 mandate](campaigns/202609152217.md) selects F64 as the final companion
-to accepted transaction completion and one combined successor with the launch/retention repairs.
-That delivery trigger is complete: v0.1.38 is immutable and its publisher passed all hosted
-jobs, including anonymous acquisition. The [full-lifecycle continuation](campaigns/202609161630.md)
-corrected the verification allowance; the [milestone ending](campaigns/202609162154.md) retains
-source/fault/recovery history. Its separate later manual-reader gap is recorded honestly and does
-not impose another release-reconstruction campaign. The [current summary](status.md#release-delivery-cutover)
-owns publication disposition.
+The [composable-cell milestone](campaigns/202609221952.md) remains selected for
+v0.1.41. Its implementation and fresh local source acceptance are integrated;
+replacement candidate `35798767360/1` at `c78840a7` is running after repair of the
+previous service-verifier pin failure. Final-candidate acceptance, immutable
+publication and anonymous public verification remain due. The existing
+[release owner](release.md) governs that continuation. v0.1.39 and v0.1.40 are
+complete; their historical release work is not an implementation backlog.
 
-The [release cutover](campaigns/202609180007.md) and its
-[consume correction](campaigns/202609180528.md#completed-consumer-reconciliation--2026-09-17)
-completed the selected read-only proof: accept final neutral content once and consume the original
-assets through authenticated selection and the small installed lifecycle. Consumer `35272533706/1`
-succeeded with determinate rejected promotion authority. The subsequent explicit requests selected
-v0.1.39, including [input evolution](campaigns/202609180608.md), maps, HTTP and data corrections.
-The [delivery continuation](campaigns/202609210911.md) published accepted producer `35508727722/1`
-unchanged. Resumption `35668854407/1` completed publication and anonymous public verification;
-the [status summary](status.md#v0139-delivery) records closure. No rebuild is due for this milestone.
-Independent callback effects still require an application policy for replay and idempotency.
+## Next workload and decision criteria
 
-Numerical algorithms and failure policy belong in ordinary graph libraries. After delivery,
-measured ordinary numerical/data-processing authoring should identify whether repeated preparation
-and checking, data representation or further transaction composition is the limiting dependency.
-Representative measurements can revise that direction; it selects no additional campaign or
-numerical-throughput claim.
+Native declaration creation/canonical re-entry, callable-input evolution, persistent
+maps and ordinary composable transaction participants are available. Further
+numerical/data-processing work should measure an actual public program to determine
+whether authoring, repeated preparation/checking, representation or execution is
+its limiting dependency. Independent callback effects still require an application
+policy for replay/idempotency. Historical-repository revalidation cost remains
+unmeasured. No throughput, model-token or monetary-saving claim follows from input
+size or elapsed time alone.
 
-The [structural campaign](campaigns/202609150900.md) retains the original literal size observations;
-they establish assembly friction, not authoring time, model tokens or billing. The selected
-[native-declaration continuation](campaigns/202609220955.md) implements complete units and canonical
-re-entry to remove declaration, type, child-index and repeated reference assembly. Its source passed
-the fresh 20-gate release-source tier and reached main; candidate `35685667968/1` then passed hosted
-acceptance. The [delivery continuation](campaigns/202609221813.md) published those unchanged assets
-as immutable v0.1.40 through successful `35711837606/1`, including anonymous exact/latest installed
-verification. The [bounded final-public-binary observation](evidence/202609220955-native/public-v0.1.40/README.md)
-also passed native creation, canonical re-entry, reviewed identity-preserving edit and detached
-old/new execution. This completes the selected delivery; fresh, maintained, external experimental
-and independent-consumer use retain their separate evidence. Native tool implementation and compiler
-self-hosting remain separate future work; explicit semantic contracts and exact dependency selection
-remain.
-The completion API lets the
-library own finalization across a caller-supplied requirement; fresh source and static-target
-acceptance establish the result through transport, callback failures and independent store observations.
-
-The [composable-cell campaign](campaigns/202609221952.md) selects that concrete ownership boundary:
-ordinary standard participant and standalone functions distinguish tentative staging from completed
-publication. Raw helper participation already existed; the explicit guard rejects missing canonical
-scope before a helper's read/callback. Same-canonical nested owners remain rejected. Standard-library
-and maintained-wrapper adoption are distinct from the designed credit/stock witness, while lkjournal
-only maintains compatibility. Focused public/authority proof and the fresh 20-gate source tier pass;
-source `b52f51bd` is integrated. Candidate `35725872480/1` failed because service verification
-still expected the predecessor application artifact. Corrected verification, fresh candidate
-acceptance, immutable v0.1.41 delivery and anonymous public verification remain pending.
-Conflict describes one store's non-publication; independent callback effects can survive and retries
-still need workload-specific idempotency and effect analysis. Further ordinary libraries, numerical
-computation, affine transfer or native tooling need a concrete next workload. Historical-repository
-revalidation cost remains unmeasured. This outlook authorizes no unrelated follow-on feature work.
-
-Immutable v0.1.8 remains the unchanged historical recovery point; its workflow defect was recovered additively.
+Prefer ordinary libraries and direct native authoring. Native contributor-tool
+implementation needs a concrete supported workload with equivalent correctness,
+recovery and maintainability; compiler self-hosting is a separate decision. There
+is no percentage-of-lkjscript target and no automatic wholesale rewrite mandate.
 
 Each future item requires demonstrated usefulness and composition through a representative public
 workload, an exact contract, independent proof, reversal conditions, and a complete cutover/deletion
@@ -195,18 +90,12 @@ count is a prerequisite. These possibilities are contingent, not an authorized w
    explicit pure prefix binding and graph-owned function composition; its bounded acceptance is
    recorded in that campaign's evidence owner. Persistent lists and explicit capture-safe generic
    constraints are also implemented, with graph-owned list-map and function-constant families.
-   Finite-instantiation recursive nominal data completed public library, persistence, session,
-   target and immutable-delivery proof in the
-   [recursive delivery reconciliation](campaigns/202609110659.md#delivery-reconciliation--2026-09-11)
-   at `v0.1.31`. Explicit effects and reusable task libraries completed
-   [public delivery](campaigns/202609111843.md#public-delivery-completion--2026-09-12) at `v0.1.32`.
-   Constant-space task calls and graph-owned task iteration are accepted on main in
-   [campaign 202609121214](campaigns/202609121214.md), with publication deferred under the trigger
-   above. Fresh public composition witnesses remain distinct from maintained application adoption.
-   Expanding nominal schemes and expanding
-   ordinary-type function recursion remain outside that milestone.
-   Explicit parametric nominal data is implemented in source through the
-   [completed nominal campaign](campaigns/202609100459.md), with source and local target admission recorded there.
+   Finite recursive nominal data, explicit effects and reusable task libraries,
+   constant-space task calls and iteration have completed their selected public
+   delivery; [current status](status.md) links the responsible history. Fresh public
+   composition witnesses remain distinct from maintained application adoption.
+   Expanding nominal schemes and expanding ordinary-type function recursion remain
+   outside those milestones.
    Richer state/resource composition, automatic lexical capture, component
    composition, specialization, AOT, JIT, SIMD, and allocation redesign require their own public
    witness, independent semantic/reference behavior, measurements where relevant, and reversal

@@ -1,154 +1,48 @@
 # lkjscript
 
-`lkjscript` is a meaning-oriented programming language and application platform. One accepted
-revision of a typed meaning graph repository is the sole editable authority for a program. Names are
-mutable locators; stable typed identities preserve continuity. Source text, compact requests,
-indexes, compiler caches, artifacts, deployment descriptors, and runtime handles are projections
-or consumers rather than alternate program truths.
+`lkjscript` is a meaning-oriented programming language and application platform.
+The accepted typed meaning graph is the sole editable authority for a program.
+Native declaration units and canonical drafts let people and agents propose changes;
+reviewed plan/apply validates and publishes their meaning. Stable typed identities
+preserve continuity through edits, while names remain mutable locators.
 
-The supported v0.1.38 executable provides offline command, signature-indexed inbound HTTP, structured
-interactive WebSocket, deployment-bound outbound HTTPS, and reviewed stateful HTTP application
-lifecycles through one copied binary. They create typed meaning graph projects, inspect and change
-accepted meaning, run graph-owned tests, build deterministic artifact bundles, and execute through
-the standalone deployment boundary without Cargo, a checkout, or an application helper. Its
-stateful workflow uses a deployment-selected first-party local data root and durable queue; no
-product or public verification path provisions PostgreSQL.
+The current public release is [v0.1.40](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.40),
+source `1cdaf72888a1f46359a6d38956050747335f8e32`. It provides complete native
+declaration authoring, canonical `change draft`, exact offline libraries, graph-owned
+tests, deterministic artifact bundles, and pure/task command execution through one
+copied binary. HTTP applications, interactive WebSocket sessions, deployment-bound
+outbound HTTPS, first-party local data and durable workers use the same typed
+contracts and explicit deployment grants. Application development needs no Cargo,
+compiler checkout or external semantic generator.
 
-Immutable `v0.1.38` includes effect-polymorphic task libraries, retained callbacks, recursive
-nominal payloads, native runtime installation, typed named references and finite generic callable
-admission, requirement-parameter libraries, structural body authoring, IEEE-754 F64 values,
-and transaction-completion reporting. Its publisher completed all four hosted jobs, including
-anonymous exact/latest installed application acceptance and attestation checks. The old publisher's
-separate later manual original-reader closure was not performed here; it is a historical evidence
-gap, distinct from release availability. See the [release procedure](docs/release.md) and
-[current delivery campaign](docs/campaigns/202609180007.md).
+Libraries compose explicit type/effect/requirement parameters, finite recursive
+nominal data, named callables and retained callbacks. Ordinary standard functions
+provide folds, maps, binary64 operations, typed persistence and transaction-completion
+reporting. Native user authoring is distinct from native contributor tooling or a
+self-hosted compiler; Rust remains the supported kernel and platform boundary.
 
-The published product includes foreground artifact commands and task iteration.
-`run --deployment PATH` runs a pure or task Command entry once, using exact operator
-grants, and closes its owned work before success. Omitted command policies mean no cumulative
-instruction/allocation/collection/capability-call quota and no implicit deadline. Structural,
-codec, adapter and per-grant limits remain enforced. Project `run TARGET` remains a bounded pure
-differential route. See the [foreground campaign](docs/campaigns/202609121842.md) for delivery status.
+Current main also implements composable typed-cell participants selected for
+v0.1.41; candidate acceptance and public delivery are still pending. See
+[current status](docs/status.md) for that boundary and [release procedure](docs/release.md)
+for verified distributed bytes, retained failures and recovery. Historical campaign
+records do not redefine the behavior of the current public binary.
 
-The supported release selects exact source commit
-`7083f9a6d56ed702017942e100c3696fc6f35308`. The release includes public exact
-built-in dependency, component, requirement, function-backed port, and command/HTTP/interactive
-target authoring. Product 0.1.21 replaces a universal HTTP target port with stable graph-owned exact
-method/path route owners and retains the exact relational `interactive` target whose graph-owned
-ordinary state crosses finite callbacks while a structured resident parent owns the connection,
-bounded mailboxes, timers, cancellation, and joined children. All four built-in recipes lower
-through the same typed authored-operation engine and preserve their application behavior and atomic
-project-creation boundary. The release also includes one
-deployment-bound outbound `HttpClient.get` capability and
-a closed `nostr-relay-info` recipe proved against deterministic loopback raw HTTP/TLS/DNS fixtures.
-Release 0.1.30 includes the 0.1.22 extension of each graph-owned HTTP route with an exact-path or bounded
-whole-segment-pattern selector. Capture names index the handler's ordered unrestricted `Text`
-parameter suffix; ambiguous overlap and signature drift reject before publication. The maintained
-resource routes now use `/resource/{id}` patterns rather than query-selected identifiers while
-preserving route identity and domain behavior. The maintained `lkjournal-live-1` consumer proves authenticated multi-subscription server push over
-plaintext RFC 6455 with an implementation-disjoint raw client. It is not Nostr, outbound WebSocket,
-TLS, a deployment, or a live-relay observation.
+The supported binary target is `x86_64-unknown-linux-musl`, with exact static-binary
+admission in pinned Alpine and Debian userlands. Native installation retains
+immutable version slots and explicit local selection. Runtime-dependent `.lkja`
+bundles need a compatible executable and grants; runtime selection performs no
+application-data migration. The plaintext inbound listener and trusted local data
+root are not a hostile-code sandbox or encrypted transport/storage boundary.
 
-Product 0.1.19 replaced the disposable monolithic object locator with one atomic
-manifest over bounded immutable sorted segments. Healthy repository open and accepted sealing no
-longer scan every old pack footer or rebuild and rewrite the complete catalog; exact pack entries
-and accepted `HEAD` remain canonical, and missing, predecessor, or inconsistent catalog state is
-reconstructed under the publication lock. This adds no public operation or authoring path and does
-not change graph meaning, pack/object bytes, maintained semantic revisions, or deployment.
-
-Product 0.1.16 adds deterministic bounded `inspect owner ... --detail definition` pages for one
-live local function. They expose its complete accepted contract, structural body, exact reference
-cutoff, and revision-bound validation facts without exposing storage or creating a second authoring
-format. Immutable v0.1.16 publishes this projection through the same copied-binary workflow.
-
-Product 0.1.17 introduced one canonical exact-requirement binding for a final consume-only
-resource parameter on a private same-package acyclic task helper. Direct named calls move one live
-resource after ordinary arguments finish; compiler, Artifact 12, preparation, VM, and the
-independent reference path recheck the exact requirement/interface and prevent restoration after
-failure. Public compact `add.parameter requirement=...`, plan/apply, and definition inspection
-expose the complete workflow. The maintained `lkjournal` worker now keeps claim/dispatch in its
-stable entry and transfers a live lease once into a graph-authored lifecycle helper. This slice is
-published by immutable `v0.1.21` and changes no deployment or durable queue data.
-
-Product 0.1.18 added the sole compact operation `extract.function`. It derives one
-private same-module helper from an exact proper expression subtree, preserves every movable owner
-identity, infers ordered captures and the least task-requirement closure, and replaces the selected
-occurrence with one direct call through ordinary reviewed plan/apply. The maintained `lkjournal`
-`update-resource` definition retains its identity while its data-only commit subtree is now owned by
-private helper `commit-resource-update`; both resulting definitions are independently inspectable.
-The extraction changes no Graph 7, compiler, Artifact 12, runtime, deployment, or operational-data
-contract and is published by immutable `v0.1.21`.
-
-Product 0.1.15 introduced exact-interface affine capability resources. Public compact records expose
-`type.capability-resource` and operation-parameter `use=borrow|consume`; validation rejects
-fabrication, aliases, foreign authority, branch disagreement, escape, and use after consume before
-publication. The maintained standard queue now returns an absent/live resource variant, exposes
-metadata only through `lease-info` borrow, and consumes leases through renewal, completion, or
-failure. Raw attempt/worker transition tokens are no longer graph or adapter inputs. The queue data
-and backup formats remain unchanged. Immutable `v0.1.15` publishes these semantics through the
-same copied-binary authoring, build, service, and worker boundaries.
-
-The public binary includes explicit type-parameter,
-named-function-value, and invocation records plus a graph-owned generic `list-fold-left`; the
-maintained BBS uses that fold for header admission. Bounded revision-pinned `query context` and the
-complete first-party ordered-data cutover are also public. The executable exposes data
-initialize/verify/backup/restore, canonical typed application values, and
-`data`/`durable_queue_data` deployment adapters while keeping semantic and operational authority
-separate. Public product surfaces expose the root product version and opaque capabilities digest
-without separate subsystem generation numbers.
-
-The public binary also includes explicit `bind` expressions with immutable runtime prefixes and graph-owned
-`function-compose<A,B,C>`. Factories can return pure functions over runtime configuration and other
-pure callables after their own frame ends. Capture-safe type-parameter constraints permit generic
-runtime environments; unconstrained parameters, secrets, streams, and resources remain outside the
-capture-safe subset. The capture-safe cutover used Graph 12 while preserving monomorphic TypeObject
-10 bytes and persisted typed-data layouts; the nominal cutover advances graph admission to Graph 13
-and retains the maintained application's semantic owners.
-The v0.1.32 release extended that foundation with explicit effect parameters, authority-free task
-function values and graph-owned `task-fold-left` / `task-map`. A pure factory can return a bound task
-callback; an offline generic library invokes it under the consumer's exact allowance and checked
-grants. Graph 14 adds a distinct task-callable envelope while preserving unchanged pure/type/data
-bytes. The [effect campaign](docs/campaigns/202609111843.md) tracks its independent public workload,
-maintained cutover and completed v0.1.32 publication.
-
-Source version 0.1.36 adds explicit requirement parameters: an ordinary transported library can
-perform constrained operations and own a transaction through caller-supplied exact requirements.
-Minimum operation sets preserve the supplied whole requirement and confer no deployment grant.
-The typed-cell witness returns an `UpdateAttempt<T>` describing its candidate and primary condition;
-a normal return is not a transaction publication certificate. See its
-[campaign and proof](docs/campaigns/202609140938.md) and
-[language contract](docs/spec/language.md#explicit-requirement-parameters).
-
-The accepted v0.1.36 source also supports nested structural expression bodies, lexical bindings,
-explicit T/E/R applications and reviewed body replacement that preserves signature owners.
-Flat requests remain supported. These capabilities are published together in v0.1.38, whose
-[completed publisher](https://github.com/lkjsxc/lkjscript/actions/runs/35117655769) passed the
-anonymous installed-product gates.
-
-The [capture-safe evidence](docs/evidence/202609091625-capture-safe-generics.json) records the current
-generic factory, graph-owned function-constant, exact offline closure, negative constraints, and
-maintained-consumer cutover. The [public milestone evidence](docs/evidence/202609092050-capture-safe-public-milestone.json)
-records fresh five-owner acceptance before publication and independently on exact and latest downloads.
-
-Product 0.1.27 introduced graph-owned `list-map<Input,Output>` and a persistent immutable list carrier,
-now published in v0.1.30.
-Aliased append copies a bounded tail or branch spine; it does not rebuild the complete old prefix.
-Configured mapping of 8,192 items runs under the unchanged default execution limits. Indexed access
-and metadata costs differ from contiguous vectors. The normative contract and independent storage
-proof are described in the [list decision](docs/decisions/20260909-persistent-lists.md).
-
-The sole current public target is `x86_64-unknown-linux-musl`. Direct ELF inspection found no
-runtime interpreter, `DT_NEEDED` library, or GLIBC symbol-version requirement. The exact binary
-completed its command lifecycle in pinned Alpine 3.22.5/musl 1.2 and Debian 11/glibc 2.31
-userlands. Distributed HTTP, outbound HTTPS, offline packages, pure-tail execution, and stateful HTTP
-passed independently from both exact-tag and latest downloads; target admission additionally passed
-the maintained `lkjournal` service oracle. These observations do not claim a minimum kernel, every
-x86-64 environment, or broader Linux portability.
+Start with the binary-only examples below. [Generated guides](docs/generated/operations.md)
+and `lkjscript capabilities` expose the complete public surface;
+[specifications](docs/spec/) own semantics and [performance evidence](docs/performance.md)
+records measured workloads and their limits.
 
 ## Download and install
 
 The supported runtime is Linux x86-64, statically linked for `x86_64-unknown-linux-musl`.
-Public v0.1.38 includes immutable version slots and an explicit default selection. Anonymous
+Public v0.1.40 includes immutable version slots and an explicit default selection. Anonymous
 exact/latest downloads and installed application acceptance are complete; see
 [release state](docs/release.md) for the frozen source and delivery evidence.
 The latest bootstrap is acquired completely before execution with this single compound invocation:
@@ -171,9 +65,9 @@ lkjscript runtime list
 For download/inspect/run, use the exact immutable URL and review the complete script first:
 
 ```sh
-curl -q --fail --location --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 180 --max-filesize 16384 --output install-v0.1.38.sh https://github.com/lkjsxc/lkjscript/releases/download/v0.1.38/install.sh
-cat install-v0.1.38.sh
-sh install-v0.1.38.sh --prefix "$HOME/.local"
+curl -q --fail --location --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 180 --max-filesize 16384 --output install-v0.1.40.sh https://github.com/lkjsxc/lkjscript/releases/download/v0.1.40/install.sh
+cat install-v0.1.40.sh
+sh install-v0.1.40.sh --prefix "$HOME/.local"
 ```
 
 Trust the initial script as executable code from the selected GitHub HTTPS source. Its embedded
@@ -186,16 +80,16 @@ metadata and attestations are separate from anonymous download.
 The public native offline boundary takes a local archive and its expected lowercase SHA-256:
 
 ```sh
-manager="$HOME/.local/lib/lkjscript/versions/v0.1.38/x86_64-unknown-linux-musl/lkjscript"
+manager="$HOME/.local/lib/lkjscript/versions/v0.1.40/x86_64-unknown-linux-musl/lkjscript"
 "$manager" runtime install --archive "$PWD/lkjscript-x86_64-unknown-linux-musl.tar.gz" --sha256 "$archive_sha256" --prefix "$HOME/.local"
 "$manager" runtime list --prefix "$HOME/.local"
-"$manager" runtime select v0.1.38 --prefix "$HOME/.local"
+"$manager" runtime select v0.1.40 --prefix "$HOME/.local"
 ```
 
 Set `archive_sha256` to the exact archive checksum from the chosen trusted release. Historical
-dry-run archives retain their declared, unverified publication status. Current source additionally
-supports publication-neutral content; the published v0.1.38 manager may reject that new encoding,
-so use its exact new bootstrap when upgrading. Different archives cannot replace one immutable
+dry-run archives retain their declared, unverified publication status. v0.1.40 supports
+publication-neutral content; older managers such as v0.1.38 may reject that encoding,
+so use the exact new bootstrap when upgrading. Different archives cannot replace one immutable
 tag slot. Installation without `--activate` does not change the default. Inventory
 reports full payload integrity as unchecked; selection and exact reinstall fully validate retained
 payloads. A corrupted slot is preserved: use a new owned prefix for recovery.
@@ -208,7 +102,7 @@ recover through the retained newer manager:
 ```sh
 "$manager" runtime select v0.1.32 --prefix "$HOME/.local"
 "$HOME/.local/bin/lkjscript" --version
-"$manager" runtime select v0.1.38 --prefix "$HOME/.local"
+"$manager" runtime select v0.1.40 --prefix "$HOME/.local"
 "$manager" run --deployment /absolute/application/command.deployment.json
 ```
 
@@ -521,7 +415,57 @@ by `status` and `query`:
   --base rev_... --owner mod_... --name application-renamed --plan plan_...
 ```
 
-Larger changes use strict compact records:
+Complete native declarations keep a function's signature, body and children together.
+For the `hello` project above, copy its current `revision id` from `status` into
+`request base=rev_...`, then author an ordinary library function, test and command:
+
+```sh
+cat >squares.lkjc <<'EOF'
+request base=rev_...
+declarations.begin
+(units
+  (use std builtin)
+  (module create math (as $math)
+    (function create square (visibility public)
+      (parameter create value (type I64))
+      (returns I64) (effect pure)
+      (body (call std::multiply (local value) (local value))))
+    (function create answer (visibility private)
+      (returns I64) (effect pure)
+      (body (call square (i64 12))))
+    (test create twelve-squared (visibility private)
+      (actual (call square (i64 12))) (expected (i64 144)))
+    (component create console (visibility private)
+      (port create main (type (function () I64)) (function answer))))
+  (target create squares (component math::console) (runner command) (port math::console::main)))
+declarations.end
+EOF
+./lkjscript --project ./hello change plan --input-file squares.lkjc \
+  --output squares.logical-plan
+./lkjscript --project ./hello change apply --input-file squares.lkjc --plan plan_...
+./lkjscript --project ./hello check
+./lkjscript --project ./hello build --output squares.lkja
+./lkjscript --project ./hello run squares
+```
+
+Review the plan and replace `plan_...` with its exact token before applying. The
+command returns `144`; `check` includes the independent expected-value test. To
+re-enter the accepted module later, take its `mod_...` identity from the `$math`
+identity row returned by plan/apply and request a canonical editable proposal:
+
+```sh
+./lkjscript --project ./hello change draft --owner mod_... --output math-draft.lkjc
+./lkjscript --project ./hello change plan --input-file math-draft.lkjc
+```
+
+The untouched draft reports `outcome=unchanged`; it requires neither the original
+input nor a stored source-text copy. Edit the proposal, review a fresh plan and
+apply its exact token to change the accepted program. The
+[native authoring grammar](docs/generated/change-grammar.md) covers generic types,
+effects, requirements and other declaration kinds.
+
+Flat compact records remain supported for targeted changes. Refresh the base revision
+after any accepted edit:
 
 ```sh
 cat >change.lkjc <<'EOF'
@@ -659,11 +603,16 @@ It reports the product version and an opaque capabilities digest. See the genera
 [operation table](docs/generated/operations.md) and focused capability guides.
 Finite outcomes use deterministic bounded compact records and keep stderr empty.
 
-Predecessor graph repositories are rejected before mutation or cache work. Removed project
-operations such as `draft`, `history`, general package staging, `review`, `backup`, `restore`, and
-`doctor` are absent and receive ordinary `cli_usage`; top-level `data backup|restore` are distinct
-operational-data commands. There is no compatibility
-flag, legacy mode, migration command, graph edition, fallback reader, or dual write.
+Compatibility is explicit: supported predecessor encodings retain their independent
+admission, while unsupported content rejects before mutation or execution. Historical
+acceptance does not bypass current validation or grant execution authority. Preserve
+old bundles and runtime slots for recovery; installation does not migrate application data.
+
+`change draft` reconstructs editable native declarations, and `package stage` admits
+exact code-complete offline closures. Removed top-level `draft`, `history`, `review`,
+`backup`, `restore` and `doctor` commands remain absent; `data backup|restore` are
+separate operational-data commands. Current spellings and compatibility boundaries
+are discoverable from the selected executable.
 
 ## Build and verify the repository
 
