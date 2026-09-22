@@ -1,0 +1,13 @@
+id=decl_0ae010ffdf1bbc89ecbe419739195db8 kind=test named=true name=chilled-parcel class=declaration parent=mod_c21c9f135464f7c2bd6ee6b6e0e21c19
+id=decl_2a8b5fa2c8bc533fbfe4006696cc9075 kind=test named=true name=fragile-parcel class=declaration parent=mod_c21c9f135464f7c2bd6ee6b6e0e21c19
+id=decl_37f2292c663884a3c01f23d346f5d398 kind=pure_function named=true name=recommend class=declaration parent=mod_c21c9f135464f7c2bd6ee6b6e0e21c19
+id=decl_4f785dd0746e5cceccb69928bd6ce8a9 kind=component named=true name=PackingTools class=declaration parent=mod_c21c9f135464f7c2bd6ee6b6e0e21c19
+id=decl_59b605f5ec7eebc8eda29e9c50587fe5 kind=record named=true name=Parcel class=declaration parent=mod_c21c9f135464f7c2bd6ee6b6e0e21c19
+id=decl_a80a2928242e0d1e6dada35ec916244a kind=test named=true name=ordinary-parcel class=declaration parent=mod_c21c9f135464f7c2bd6ee6b6e0e21c19
+id=decl_d28ff64c66486a418768a3d317e95aff kind=test named=true name=fragile-chilled-parcel class=declaration parent=mod_c21c9f135464f7c2bd6ee6b6e0e21c19
+id=field_395b85fb1221be3010aa5b313ed7814e kind=field named=true name=fragile class=field parent=decl_59b605f5ec7eebc8eda29e9c50587fe5
+id=field_a44af3737846c6f6984680db6b12b29c kind=field named=true name=chilled class=field parent=decl_59b605f5ec7eebc8eda29e9c50587fe5
+id=mod_c21c9f135464f7c2bd6ee6b6e0e21c19 kind=module named=true name=packing class=module parent=package
+id=param_6dae81f70ec0110ba5805e03ca4fbccf kind=parameter named=true name=parcel class=parameter parent=decl_37f2292c663884a3c01f23d346f5d398
+id=port_ad7e17771b14d24b5db0e05ed2850460 kind=port named=true name=advice class=port parent=decl_4f785dd0746e5cceccb69928bd6ce8a9
+id=target_1f3fc32bfa03b95d0d1e11f692e7bb92 kind=target named=true name=packing-advice class=target parent=package

@@ -24,11 +24,23 @@ selection, publication, anonymous acquisition/installed smoke and terminal jobs.
 job was intentionally skipped; the original producer remains authoritative. A private candidate built with occupied version 0.1.38
 is never the public v0.1.38 release.
 
-The [native-authoring milestone](campaigns/202609220955.md) selects the unused successor v0.1.40.
+The [native-authoring milestone](campaigns/202609220955.md) selects successor v0.1.40.
 Source `1cdaf72888a1f46359a6d38956050747335f8e32` passed the local source tier and reached main.
-Producer [35685667968/1](https://github.com/lkjsxc/lkjscript/actions/runs/35685667968) is pending
-hosted acceptance; no successor tag, selection-control update or public release exists yet.
-Resume from that producer's actual outcome under the procedure below, without rebuilding healthy stages.
+Producer [35685667968/1](https://github.com/lkjsxc/lkjscript/actions/runs/35685667968) passed hosted
+source/finalized-candidate acceptance and its terminal. The [delivery continuation](campaigns/202609221813.md)
+created the matching annotated tag and scoped selection, then dispatched promotion
+[35711837606/1](https://github.com/lkjsxc/lkjscript/actions/runs/35711837606) from controller
+`dd160c0e93fa15f895cbb9c3f65538b238a1f742`. It completed authenticated selection, immutable
+publication, anonymous exact/latest acquisition and installed lifecycles, and its terminal.
+[v0.1.40](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.40), release `393611808`, was published
+at 2026-09-22T09:49:23Z with the original three assets unchanged. Both public routes selected this
+product. The consumer's candidate job was intentionally skipped; no product or controller repair
+or candidate rebuild was needed. The supplementary
+[native-authoring observation](evidence/202609220955-native/public-v0.1.40/README.md) passed through
+the anonymously acquired installed exact executable: complete declaration creation, canonical
+drafting without the original input, tamper rejection, reviewed identity-preserving edit and detached
+old/new bundle execution. This bounded observation supplements the maintained installed pair;
+development evidence retains its original identities and limits.
 
 ## Content and compatibility
 

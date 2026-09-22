@@ -1,0 +1,6 @@
+Command: env -i PATH=/usr/bin:/bin docker run --rm --label lkjscript.native-public=20260922 --network none --read-only --cap-drop ALL --security-opt no-new-privileges --user 1001:1001 --tmpfs /tmp:rw\,nosuid\,nodev -v /home/coder/workspace/lkjscript-native-public-20260922/installation:/installation:ro -v /home/coder/workspace/lkjscript-native-public-20260922/work:/work:rw -w /work debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba env -i PATH=/usr/bin:/bin HOME=/tmp LC_ALL=C /installation/bin/lkjscript --project packing query find declaration recommend
+
+result status=failure command=query
+diagnostic class=source code=query_parent_required message="namespace class 'declaration' requires one exact --parent OWNER"
+
+Exit status: 2

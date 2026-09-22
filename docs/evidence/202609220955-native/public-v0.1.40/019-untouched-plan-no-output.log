@@ -1,0 +1,6 @@
+Command: env -i PATH=/usr/bin:/bin docker run --rm --label lkjscript.native-public=20260922 --network none --read-only --cap-drop ALL --security-opt no-new-privileges --user 1001:1001 --tmpfs /tmp:rw\,nosuid\,nodev -v /home/coder/workspace/lkjscript-native-public-20260922/installation:/installation:ro -v /home/coder/workspace/lkjscript-native-public-20260922/work:/work:rw -w /work debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba env -i PATH=/usr/bin:/bin HOME=/tmp LC_ALL=C /installation/bin/lkjscript --project packing change plan --input-file draft-untouched.lkjc
+
+result status=success command=change.plan outcome=unchanged
+change base=rev_c551e2952ab75367fa651ed3b7ed9ad5a5be5e0b000be7a60b53688ec86b1ea9 semantic-change=false owner-recreation=false publication=none
+
+Exit status: 0

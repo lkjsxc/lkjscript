@@ -1,0 +1,9 @@
+Command: env -i PATH=/usr/bin:/bin docker run --rm --label lkjscript.native-public=20260922 --network none --read-only --cap-drop ALL --security-opt no-new-privileges --user 1001:1001 --tmpfs /tmp:rw\,nosuid\,nodev -v /home/coder/workspace/lkjscript-native-public-20260922/installation:/installation:ro -v /home/coder/workspace/lkjscript-native-public-20260922/work:/work:rw -w /work debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba env -i PATH=/usr/bin:/bin HOME=/tmp LC_ALL=C /installation/bin/lkjscript --project packing check
+
+result status=success command=check
+authority repository=repo_49e641a8c5874b90a8bae6aef418f4fb package=pkg_b1ab935bfe4038237bb65f43dafe9f79 revision=rev_23127fe5bf62deddd42bc97349990b878f34350a317d13e9d7534212c61a086f state=semantic_state_88701aa1d524e53214781907cefcc530dc70222874822fe76fe2b0ff072912cd
+compilation cache=exact-current manifest=compilation_manifest_a1ea9889e1a0485d2a8f3758a8bbcfa77abb9a791fbaf60258f0635bd2f6d7c8 compiled=0 reused=8 removed=0
+artifact manifest=artifact_manifest_b2e2c15ee60fc6f0850bf741da4a0d22a01a92df8ee71f49cfc70cb5db2435a7 bundle=artifact_bundle_f06e5d544317a8ad03631163583e802d1af838b5b72dd00bcd2fa4d657a6a110 bytes=21960 packages=1 closure-objects=69 compiler-units=8 manifest-objects=69 manifest-object-bytes=14731 segments=1 load-objects=69 load-object-bytes=14731
+tests passed=4 failed=0 differential=equal production-instructions=64 reference-expressions=48
+
+Exit status: 0

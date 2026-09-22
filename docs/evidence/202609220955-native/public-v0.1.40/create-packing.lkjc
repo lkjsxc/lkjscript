@@ -1,0 +1,49 @@
+request base=rev_e9f376d2d5d1a2b7fd2c7ae231703ffcf80cefb44887ea65bc412733e45e8688
+declarations.begin
+(units
+  (module create packing
+    (record create Parcel (visibility public)
+      (field create fragile (type Bool))
+      (field create chilled (type Bool)))
+    (function create recommend (visibility public)
+      (parameter create parcel (type Parcel))
+      (returns Text) (effect pure)
+      (body
+        (if (field (local parcel) Parcel::chilled)
+          (text "Use an insulated carton.")
+          (if (field (local parcel) Parcel::fragile)
+            (text "Use a padded carton.")
+            (text "Use a standard carton.")))))
+    (test create ordinary-parcel (visibility private)
+      (actual (call recommend
+        (record Parcel
+          (field Parcel::fragile (bool false))
+          (field Parcel::chilled (bool false)))))
+      (expected (text "Use a standard carton.")))
+    (test create fragile-parcel (visibility private)
+      (actual (call recommend
+        (record Parcel
+          (field Parcel::fragile (bool true))
+          (field Parcel::chilled (bool false)))))
+      (expected (text "Use a padded carton.")))
+    (test create chilled-parcel (visibility private)
+      (actual (call recommend
+        (record Parcel
+          (field Parcel::fragile (bool false))
+          (field Parcel::chilled (bool true)))))
+      (expected (text "Use an insulated carton.")))
+    (test create fragile-chilled-parcel (visibility private)
+      (actual (call recommend
+        (record Parcel
+          (field Parcel::fragile (bool true))
+          (field Parcel::chilled (bool true)))))
+      (expected (text "Use an insulated carton.")))
+    (component create PackingTools (visibility public)
+      (port create advice
+        (type (function (Parcel) Text))
+        (function recommend))))
+  (target create packing-advice
+    (component packing::PackingTools)
+    (runner command)
+    (port packing::PackingTools::advice)))
+declarations.end

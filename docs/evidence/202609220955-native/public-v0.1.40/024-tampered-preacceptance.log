@@ -1,0 +1,6 @@
+Command: env -i PATH=/usr/bin:/bin docker run --rm --label lkjscript.native-public=20260922 --network none --read-only --cap-drop ALL --security-opt no-new-privileges --user 1001:1001 --tmpfs /tmp:rw\,nosuid\,nodev -v /home/coder/workspace/lkjscript-native-public-20260922/installation:/installation:ro -v /home/coder/workspace/lkjscript-native-public-20260922/work:/work:rw -w /work debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba env -i PATH=/usr/bin:/bin HOME=/tmp LC_ALL=C /installation/bin/lkjscript --project packing change apply --input-file tampered-packing.lkjc --plan plan_fa31c0e4d5ad7922cc4812686bfb6dbef17b76f8d15d1ac72c523383ec5306209f84f07d65d2577e4fb5a97614f296df9d3e8a61026a85dfe115166ea220f4c1
+
+result status=failure command=change
+diagnostic class=semantic code=change_request_commitment_mismatch message="reviewed request commitment request_fa31c0e4d5ad7922cc4812686bfb6dbef17b76f8d15d1ac72c523383ec530620 does not match normalized input request_8976ecc93f93ef1fdb6de9f11103f37de11e4462310f660f7dc63c27e02c603e; no change was applied. A source=builtin binding expands to this executable's immutable supplier. Use the original matching supplier executable to retry, or explicitly select an exact package and re-plan with a new request"
+
+Exit status: 2

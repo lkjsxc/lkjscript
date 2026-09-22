@@ -111,4 +111,41 @@ eight managed runs, complete compared archives are additionally retained outside
 `.artifacts/native-20260922/accepted-source-originals.tar.gz` and
 `.artifacts/native-20260922/failed-source-originals.tar.gz`. No date-based expiry was observed for
 those archives or the external owned evidence. They do not substitute for hosted producer proof.
-The campaign records mainline delivery and the still-pending final-candidate/publication boundary.
+The campaign records mainline delivery; the separate hosted continuation below updates its earlier
+pending final-candidate/publication observation without relabelling the development evidence.
+
+## Hosted candidate and delivery continuation
+
+Producer [35685667968/1](https://github.com/lkjsxc/lkjscript/actions/runs/35685667968) at
+`1cdaf72888a1f46359a6d38956050747335f8e32` completed hosted source/finalized-candidate acceptance
+and its candidate terminal on 2026-09-22. Its selection, publication and public-acquisition jobs
+were intentionally skipped in that candidate-only invocation.
+
+The [delivery continuation](../../campaigns/202609221813.md) selects the original accepted assets
+unchanged as v0.1.40. Promotion [35711837606/1](https://github.com/lkjsxc/lkjscript/actions/runs/35711837606)
+used controller `dd160c0e93fa15f895cbb9c3f65538b238a1f742` and completed selection, publication,
+anonymous exact/latest acquisition and installed lifecycles, and its terminal. Its candidate job
+was intentionally skipped, reusing the admitted original source/finalized-target/installation
+acceptance. Immutable release `393611808` was published at 2026-09-22T09:49:23Z; both public routes
+selected the accepted product. No product or controller repair or candidate rebuild was needed.
+
+The [bounded final-public-binary observation](public-v0.1.40/README.md) used the anonymously
+acquired installed exact executable, whose bytes match the admitted original terminal, outside
+the compiler checkout without Python, Node or Rust/Cargo. Literal Parcel declaration units passed
+all four independently specified cases and four graph tests. After the original input became
+unavailable to that environment, a fresh canonical draft planned unchanged.
+
+A meaning-altered request presenting the original review token rejected with
+`commitment_mismatch`, preserving accepted HEAD and original behavior; the unchanged reviewed edit
+then succeeded. All 13 observed named identities and the parameter contract remained stable.
+Seven named review rows were affected, but only the function and matching test had changed stored
+objects; five dependents had identical objects. Edited cases and graph tests passed. With the
+authoring project unavailable, old/new bundles retained their independently expected distinguishing
+results through public deployment; both exited with zero remaining tasks and cleanup failures.
+
+The witness retains new harness failures for a missing query parent, an unsupported no-op plan
+output request and a transcript guard. None establishes a product or controller defect. Owned
+containers were removed after joined exits. Literal inputs, drafts, edits and concise observations
+live at the linked owner. This is a bounded final-public-binary observation, not a new independent-agent
+experiment, maintained adoption, native tool implementation or compiler self-hosting. These new
+boundaries do not retest or relabel the original development consumers.

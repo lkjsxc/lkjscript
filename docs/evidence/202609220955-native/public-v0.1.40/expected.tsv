@@ -1,0 +1,4 @@
+false	false	Use a standard carton.	Use a standard carton.
+true	false	Use a padded carton.	Use a padded carton.
+false	true	Use an insulated carton.	Use an insulated carton.
+true	true	Use an insulated carton.	Use a padded insulated carton.

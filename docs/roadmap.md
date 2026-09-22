@@ -106,10 +106,15 @@ The [structural campaign](campaigns/202609150900.md) retains the original litera
 they establish assembly friction, not authoring time, model tokens or billing. The selected
 [native-declaration continuation](campaigns/202609220955.md) implements complete units and canonical
 re-entry to remove declaration, type, child-index and repeated reference assembly. Its source passed
-the fresh 20-gate release-source tier and reached main; candidate `35685667968/1` must still complete
-hosted acceptance before the selected v0.1.40 publication. Fresh, maintained, external experimental
-and independent-consumer use are distinguished in the campaign. Explicit semantic contracts and
-exact dependency selection remain.
+the fresh 20-gate release-source tier and reached main; candidate `35685667968/1` then passed hosted
+acceptance. The [delivery continuation](campaigns/202609221813.md) published those unchanged assets
+as immutable v0.1.40 through successful `35711837606/1`, including anonymous exact/latest installed
+verification. The [bounded final-public-binary observation](evidence/202609220955-native/public-v0.1.40/README.md)
+also passed native creation, canonical re-entry, reviewed identity-preserving edit and detached
+old/new execution. This completes the selected delivery; fresh, maintained, external experimental
+and independent-consumer use retain their separate evidence. Native tool implementation and compiler
+self-hosting remain separate future work; explicit semantic contracts and exact dependency selection
+remain.
 The completion API lets the
 library own finalization across a caller-supplied requirement; fresh source and static-target
 acceptance establish the result through transport, callback failures and independent store observations.

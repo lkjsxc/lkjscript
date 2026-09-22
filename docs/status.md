@@ -17,7 +17,7 @@ skipped, retaining the original producer's accepted product. The earlier HTTP 40
 controller repair remain in the campaign history. This closure refreshes hosted metadata; it
 does not rerun acceptance, rebuild the product, migrate application data or deploy to production.
 
-## Native declaration authoring — mainline integrated, candidate acceptance pending
+## Native declaration authoring — v0.1.40 published and publicly verified
 
 The [selected continuation](campaigns/202609220955.md) implements complete create/edit declaration
 units and canonical `change draft` through the existing reviewed boundary. Source
@@ -28,10 +28,24 @@ detached old/new results, lkjournal re-entry, the disposable Orbloam continuatio
 consumer use have separate retained evidence; the external experiment is not remote adoption.
 
 Candidate producer [35685667968/1](https://github.com/lkjsxc/lkjscript/actions/runs/35685667968)
-selects that exact source for v0.1.40. Hosted source/finalized-candidate acceptance, publication and
-public verification remain open. No v0.1.40 tag or selection-control update has been made.
+passed hosted source/finalized-candidate acceptance and its terminal on 2026-09-22. The
+[delivery continuation](campaigns/202609221813.md) selected its unchanged assets with the annotated
+v0.1.40 tag at that exact product source and the matching scoped control. Promotion
+[35711837606/1](https://github.com/lkjsxc/lkjscript/actions/runs/35711837606), from controller
+`dd160c0e93fa15f895cbb9c3f65538b238a1f742`, completed selection, publication, anonymous exact/latest
+acquisition and installed lifecycles, and its terminal. Immutable
+[v0.1.40](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.40), release `393611808`, was published
+at 2026-09-22T09:49:23Z; both public routes selected this product. No product or controller repair
+was needed. The [bounded public-binary observation](evidence/202609220955-native/public-v0.1.40/README.md)
+created native declarations without a compiler checkout or Python/Node/Rust toolchain, reconstructed
+an unchanged draft after removing the original input, rejected tampered reviewed meaning, and
+accepted the intended edit while preserving declaration/parameter identities. Four cases and graph
+tests passed before and after; detached old/new bundles retained their distinct behavior with
+joined cleanup. This is a final-public-binary observation, not a new independent-agent experiment
+or maintained adoption.
 Graph, artifact and application-data formats are unchanged. Rust remains the parser/kernel/adapter
-and contributor-tool implementation boundary; this is native user authoring, not compiler self-hosting.
+and contributor-tool implementation boundary; this is native user authoring, not native tool
+implementation or compiler self-hosting.
 
 ## Persistent ordered maps
 

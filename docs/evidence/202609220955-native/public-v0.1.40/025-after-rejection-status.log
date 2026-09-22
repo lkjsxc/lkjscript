@@ -1,0 +1,17 @@
+Command: env -i PATH=/usr/bin:/bin docker run --rm --label lkjscript.native-public=20260922 --network none --read-only --cap-drop ALL --security-opt no-new-privileges --user 1001:1001 --tmpfs /tmp:rw\,nosuid\,nodev -v /home/coder/workspace/lkjscript-native-public-20260922/installation:/installation:ro -v /home/coder/workspace/lkjscript-native-public-20260922/work:/work:rw -w /work debian@sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba env -i PATH=/usr/bin:/bin HOME=/tmp LC_ALL=C /installation/bin/lkjscript --project packing status
+
+result status=success command=status
+project path=/work/packing name=native-public-packing
+repository id=repo_49e641a8c5874b90a8bae6aef418f4fb
+package id=pkg_b1ab935bfe4038237bb65f43dafe9f79
+revision id=rev_c551e2952ab75367fa651ed3b7ed9ad5a5be5e0b000be7a60b53688ec86b1ea9 record=revision_object_cac30d9047c77984c62e9786466ae11b62c586f17fffbb46648c76b2befb71b1
+state digest=semantic_state_61dca806a9a5d0514782596073f1ac09688a998ad79e88f9b5637c8245d77f99
+root digest=semantic_root_6146578f9b0e9d674b4b57916f5b11c22a7566bb56fb2ce64e3257ed2ed5aecc
+evidence witness=validation_witness_db95c8a96ab5a59f5b4fe53fd3cefe292f6241d318d34f55e6f7db55aded257e certificate=validation_certificate_1888638e70f84327fd6e7b0ad8efde0c238be7522894294dcb79723a64c4403d validator=validator_contract_6cb3c5a5e32045f5c03c3bf1ca8e86da864a0db04a783c7312b87c8b66960357
+current-validation status=valid proof=accepted-current canonical-bytes-read=0 semantic-work=0 validator=validator_contract_6cb3c5a5e32045f5c03c3bf1ca8e86da864a0db04a783c7312b87c8b66960357 code=none
+receipt digest=receipt_object_0dab14994ae0f4c6e660d8401842095c86d3c11f865936b853b58e3fed95df1c
+summary owners=42 dependencies=0 retirements=0
+schema capabilities=38a65237a10587799c2e2b8006597829be9af6ef34503f0300ccecde63ef5b24
+next kind=discovery command="lkjscript capabilities status"
+
+Exit status: 0

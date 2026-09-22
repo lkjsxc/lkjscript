@@ -1,0 +1,9 @@
++ set -euo pipefail
++ witness_root=/home/coder/workspace/lkjscript-native-public-20260922
++ cd /home/coder/workspace/lkjscript-native-public-20260922
++ env -i PATH=/usr/bin:/bin HOME=/home/coder/workspace/lkjscript-native-public-20260922/home curl -q --fail --location --silent --show-error --proto =https --proto-redir =https --connect-timeout 15 --max-time 180 --dump-header acquisition/install.headers --output acquisition/install.sh https://github.com/lkjsxc/lkjscript/releases/download/v0.1.40/install.sh
++ env -i PATH=/usr/bin:/bin HOME=/home/coder/workspace/lkjscript-native-public-20260922/home TMPDIR=/home/coder/workspace/lkjscript-native-public-20260922/tmp sh acquisition/install.sh --prefix /home/coder/workspace/lkjscript-native-public-20260922/installation
+result status=success command=runtime.install outcome=installed
+runtime tag=v0.1.40 target=x86_64-unknown-linux-musl path=/home/coder/workspace/lkjscript-native-public-20260922/installation/lib/lkjscript/versions/v0.1.40/x86_64-unknown-linux-musl/lkjscript sha256=bfe2f8bf643930db1d3d37d73093391d332d2fdce0d8814d3fa0ca463e53bdd7 archive-sha256=87b340a1eca452309a930d332379ba69ce49ea5922264371044a2abb712dfa06 archive-bytes=11327586 manifest-sha256=d16f6d1eb6301480d02a43be86f558f26a9b4ec9883030f313c69f50fdc27408 publication=neutral/unverified-publication payload-integrity=verified
+selection tag=v0.1.40 previous=none default-path=/home/coder/workspace/lkjscript-native-public-20260922/installation/bin/lkjscript path-search=unchanged
+recovery manager-path=/home/coder/workspace/lkjscript-native-public-20260922/installation/lib/lkjscript/versions/v0.1.40/x86_64-unknown-linux-musl/lkjscript retained-manager=true ownership=installed
