@@ -1,5 +1,5 @@
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::path::Path;
 use std::process::{Child, ChildStdout, Command, Output, Stdio};
 use std::thread;
@@ -20,13 +20,48 @@ pub fn copy_executable(source: &Path, destination: &Path) {
         .write(true)
         .open(&stage)
         .expect("create private executable stage");
-    io::copy(&mut input, &mut output).expect("copy executable into private stage");
+    // File-to-file copy offload has produced zeroed executable ranges in the host
+    // filesystem. Read the actual bytes and verify the closed stage before execution;
+    // a started child is never retried to conceal a damaged copy.
+    let mut expected = blake3::Hasher::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let count = match input.read(&mut buffer) {
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            result => result.expect("read executable bytes"),
+        };
+        if count == 0 {
+            break;
+        }
+        expected.update(&buffer[..count]);
+        output
+            .write_all(&buffer[..count])
+            .expect("write executable bytes into private stage");
+    }
     output
         .set_permissions(permissions)
         .expect("preserve executable permissions");
     output.sync_all().expect("synchronize executable stage");
     drop(output);
     drop(input);
+    let mut copied = File::open(&stage).expect("open closed executable stage");
+    let mut observed = blake3::Hasher::new();
+    loop {
+        let count = match copied.read(&mut buffer) {
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            result => result.expect("read staged executable bytes"),
+        };
+        if count == 0 {
+            break;
+        }
+        observed.update(&buffer[..count]);
+    }
+    assert_eq!(
+        observed.finalize(),
+        expected.finalize(),
+        "copied executable must retain every source byte"
+    );
+    drop(copied);
     std::fs::rename(stage, destination).expect("publish closed executable copy");
     File::open(destination.parent().expect("copied executable parent"))
         .and_then(|directory| directory.sync_all())
@@ -158,7 +193,38 @@ fn read_pipe(mut pipe: Option<impl Read>) -> io::Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{BufRead, BufReader, Write};
+    use std::io::{BufRead, BufReader, Seek, SeekFrom, Write};
+
+    #[test]
+    fn executable_copy_preserves_sparse_bytes_and_permissions() {
+        let temporary = tempfile::tempdir().unwrap();
+        let source = temporary.path().join("source");
+        let destination = temporary.path().join("copy");
+        let mut file = File::create(&source).unwrap();
+        let mut expected = vec![0_u8; 2 * 1024 * 1024];
+        for (offset, value, length) in [(0, 17, 8192), (1_048_543, 167, 8192), (2_097_151, 255, 1)]
+        {
+            expected[offset..offset + length].fill(value);
+            file.seek(SeekFrom::Start(offset as u64)).unwrap();
+            file.write_all(&expected[offset..offset + length]).unwrap();
+        }
+        file.sync_all().unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            file.set_permissions(std::fs::Permissions::from_mode(0o751))
+                .unwrap();
+        }
+        drop(file);
+        copy_executable(&source, &destination);
+        assert_eq!(std::fs::read(&destination).unwrap(), expected);
+        assert_eq!(std::fs::read(&source).unwrap(), expected);
+        assert_eq!(
+            std::fs::metadata(&destination).unwrap().permissions(),
+            std::fs::metadata(&source).unwrap().permissions()
+        );
+        assert!(!destination.with_extension("stage").exists());
+    }
 
     const EFFECT_FILE: &str = "LKJSCRIPT_TEST_SPAWN_EFFECT_FILE";
     const FAIL_AFTER_EFFECT: &str = "LKJSCRIPT_TEST_SPAWN_FAIL_AFTER_EFFECT";

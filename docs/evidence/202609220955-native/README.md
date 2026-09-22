@@ -44,6 +44,13 @@ response's requesting-colony inventory using jq arithmetic. Unauthenticated requ
 401. After joined shutdown/restart, the world, requesting colony and summary remained equal.
 The experiment changed no real consumer pin, repository, deployment or operational save.
 
+The original Docker TERM-stop exits were 137, so those joined restarts do not prove graceful
+shutdown. A separate SIGINT stop probe with the same frozen candidate and owned store issued no
+HTTP requests and exited 0 with no remaining tasks or cleanup failures. Both the unfavorable
+original exits and the separate successful stopped receipt remain in `orbloam-http/`; the
+[campaign addition](../../campaigns/202609220955.md#source-copy-diagnosis-and-http-shutdown-distinction--2026-09-22-utc)
+keeps their claims distinct.
+
 Both consumer environments used Debian
 `sha256:70509c95d1857a3704c0a5d92ee2e0adac95f612a9386889d70760bfd7c1ebba` without Python, Node or
 Rust/Cargo toolchains, with only the copied executable, native inputs and owned data mounted.
@@ -83,3 +90,13 @@ are under `/home/coder/workspace/lkjscript-native-evidence-20260922`, outside th
 These local resources have no observed configured expiry; they are not a hosted acceptance
 artifact retention guarantee. Recovery keys and private registration responses stay local and
 are not part of this tracked evidence.
+
+Small original outputs are retained here byte-for-byte for durable review: the
+[official Orbloam baseline](orbloam-official-baseline.out),
+[edited Orbloam check](orbloam-inventory-check.out),
+[old detached run](old-detached.out), [new detached run](new-detached.out), and
+[separate SIGINT stopped receipt](orbloam-sigint-stop.out). The
+[independent consumer's original report](independent-consumer-report.md) is also unchanged;
+its relative transcript paths refer to the original external `independent-consumer/` directory,
+not this evidence directory. None of these development originals certifies a later source SHA
+or finalized release executable.
