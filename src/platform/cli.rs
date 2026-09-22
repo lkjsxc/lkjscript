@@ -2003,7 +2003,7 @@ fn execute_change_on_stack(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagno
     }
     let action = arguments.get(1).map(String::as_str).ok_or_else(|| {
         single_diagnostic(usage_error(
-            "change requires plan or apply; use 'capabilities change'",
+            "change requires draft, plan or apply; use 'capabilities change'",
         ))
     })?;
     if action == "draft" {
@@ -2014,7 +2014,7 @@ fn execute_change_on_stack(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagno
         "apply" => ChangeAction::Apply,
         other => {
             return Err(single_diagnostic(usage_error(format!(
-                "unknown change action '{other}'; use plan or apply"
+                "unknown change action '{other}'; use draft, plan or apply"
             ))));
         }
     };
