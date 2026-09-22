@@ -14,6 +14,9 @@ the producing reader checks all three complete plans, exact literals and the fla
 Public tests must exercise creation, canonical drafting after input removal, exact child retention,
 constant/test/port edits, no-op planning, stale/name/omission/review failures, accepted retry and
 absent-output/exact-fit/one-over admission. Cancellation must preserve accepted authority.
+Generated draft aliases must avoid selected declaration and generic-parameter names; collision
+fixtures must still plan unchanged. Typed lexical names that resemble owner-ID prefixes remain
+authorable and recoverable.
 
 Canonical-to-native rendering and parsing cannot be the only behavioral oracle. Fresh generic
 Batch/Marked aggregation uses fixed count/sum results, independent canonical signature inspection,

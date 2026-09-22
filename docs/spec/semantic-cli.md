@@ -146,6 +146,8 @@ files are not overwritten. No draft operation changes accepted meaning.
 
 Generated drafts bind repository, package, revision, selected identities and contract children.
 They deterministically intern repeated structural types and generate readable typed aliases.
+Generated aliases avoid every selected declaration and contract-child name, preserving lexical
+and generic resolution even when authored names resemble generated names or owner-ID prefixes.
 Original comments, formatting and alias spellings are not recoverable because they are not
 canonical meaning. Draft files are disposable proposals and introduce no synchronization owner.
 An untouched plan reports `outcome=unchanged`, no semantic change, no owner recreation and no
@@ -930,15 +932,16 @@ encrypted.
 
 ## Removed behavior and non-goals
 
-Project-scoped `draft`, `history`, general package staging, `review`, `backup`, `restore`, and
-`doctor` are absent from discovery and dispatch. The top-level `data backup` and `data restore`
+Legacy top-level `draft`, `history`, general package staging, `review`, `backup`, `restore`, and
+`doctor` are absent from discovery and dispatch. Native `change draft` is specified above.
+The top-level `data backup` and `data restore`
 operations are distinct operational-data lifecycle commands, not compatibility aliases for removed
 project behavior. Predecessor repositories and binary formats reject.
 
-The CLI does not expose storage records as authoring syntax, arbitrary predecessor migration, a general
-package manager, remote registry, source language, full owner-body projection, generic impact, an
-agent daemon, inbound TLS, arbitrary network destinations, outbound WebSocket clients, NIP-01,
-sandboxing, or multi-tenant isolation.
+The CLI does not expose arbitrary storage-record writes, automatic predecessor migration, a general
+package manager, a remote registry, source/graph synchronization, generic impact, an agent daemon,
+inbound TLS, arbitrary network destinations, outbound WebSocket clients, NIP-01, sandboxing, or
+multi-tenant isolation.
 
 The rank-one constraint authoring forms are:
 

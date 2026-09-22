@@ -544,6 +544,24 @@ impl Lowering<'_> {
         class: &str,
         at: usize,
     ) -> Result<String, Diagnostic> {
+        // Authored lexical names may themselves begin with an owner-ID prefix. Resolve
+        // the collected typed scope before considering explicit compact selectors.
+        for prefix in scopes(scope) {
+            if let Some(label) = self.names.get(&(qualify(prefix, value), class.to_owned())) {
+                return Ok(label.clone());
+            }
+            if class == "requirement"
+                && let Some(label) = self
+                    .names
+                    .get(&(qualify(prefix, value), "requirement-parameter".into()))
+            {
+                return Ok(if label.starts_with("parameter:") {
+                    label.clone()
+                } else {
+                    format!("parameter:{label}")
+                });
+            }
+        }
         if value.starts_with('$')
             || value.starts_with("pkg_")
             || value.starts_with("decl_")
@@ -561,22 +579,6 @@ impl Lowering<'_> {
             || value.starts_with("parameter:")
         {
             return Ok(value.to_owned());
-        }
-        for prefix in scopes(scope) {
-            if let Some(label) = self.names.get(&(qualify(prefix, value), class.to_owned())) {
-                return Ok(label.clone());
-            }
-            if class == "requirement"
-                && let Some(label) = self
-                    .names
-                    .get(&(qualify(prefix, value), "requirement-parameter".into()))
-            {
-                return Ok(if label.starts_with("parameter:") {
-                    label.clone()
-                } else {
-                    format!("parameter:{label}")
-                });
-            }
         }
         let segments: Vec<_> = value.split("::").collect();
         let supplier = self.imports.contains_key(segments[0]);
@@ -1381,7 +1383,7 @@ impl Lowering<'_> {
     }
 }
 
-fn contract_children(record: &crate::platform::kernel::OwnerRecord) -> Vec<OwnerKey> {
+pub(super) fn contract_children(record: &crate::platform::kernel::OwnerRecord) -> Vec<OwnerKey> {
     use crate::platform::kernel::{DeclarationPayload as D, OwnerRecord as O};
     let mut children = Vec::new();
     match record {

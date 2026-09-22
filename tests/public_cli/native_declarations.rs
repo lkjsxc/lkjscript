@@ -249,6 +249,104 @@ fn native_draft_preserves_http_routes_and_large_canonical_strings() {
 }
 
 #[test]
+fn native_draft_aliases_cannot_shadow_signature_or_declaration_names() {
+    let public = Native::new();
+    let input = public.input(
+        "alias-names.lkjc",
+        &format!(
+            r#"request base={}
+declarations.begin
+(units
+  (module create aliases (as $module)
+    (function create keep (as $keep) (visibility public)
+      (type-parameter create type_0)
+      (type-parameter create type_1)
+      (parameter create values (type (list I64)))
+      (returns (list I64)) (effect pure) (body (local values)))
+    (function create foo (visibility private)
+      (returns I64) (effect pure) (body (i64 7)))
+    (function create ref_foo_0 (as $reference) (visibility public)
+      (returns I64) (effect pure) (body (call foo)))
+    (test create expected (visibility private)
+      (actual (call ref_foo_0)) (expected (i64 7)))))
+declarations.end
+"#,
+            public.revision()
+        ),
+    );
+    let applied = public.apply(&input, &public.plan(&input, true), true);
+    let accepted = public.revision();
+    public.cli(&["check"], true);
+    for symbol in ["$keep", "$reference", "$module"] {
+        let owner = identity(&applied, symbol);
+        let draft = public.root.path().join(format!("{owner}.lkjc"));
+        public.cli(
+            &[
+                "change",
+                "draft",
+                "--owner",
+                &owner,
+                "--output",
+                path(&draft),
+            ],
+            true,
+        );
+        assert_eq!(
+            compact_field(
+                compact_record(&public.plan(&draft, true), "result"),
+                "outcome"
+            ),
+            "unchanged",
+            "{symbol}"
+        );
+    }
+    assert_eq!(public.revision(), accepted);
+}
+
+#[test]
+fn native_lexical_names_may_begin_with_exact_owner_prefixes() {
+    let public = Native::new();
+    let input = public.input(
+        "owner-prefix-names.lkjc",
+        &format!(
+            r#"request base={}
+declarations.begin
+(units
+  (module create mod_values (as $module)
+    (function create decl_keep (visibility public)
+      (parameter create param_value (type I64))
+      (returns I64) (effect pure) (body (local param_value)))
+    (test create decl_expected (visibility private)
+      (actual (call decl_keep (i64 7))) (expected (i64 7)))))
+declarations.end
+"#,
+            public.revision()
+        ),
+    );
+    let applied = public.apply(&input, &public.plan(&input, true), true);
+    public.cli(&["check"], true);
+    let draft = public.root.path().join("prefix-draft.lkjc");
+    public.cli(
+        &[
+            "change",
+            "draft",
+            "--owner",
+            &identity(&applied, "$module"),
+            "--output",
+            path(&draft),
+        ],
+        true,
+    );
+    assert_eq!(
+        compact_field(
+            compact_record(&public.plan(&draft, true), "result"),
+            "outcome"
+        ),
+        "unchanged"
+    );
+}
+
+#[test]
 fn native_input_admission_has_an_exact_boundary_without_publication() {
     let public = Native::new();
     let before = public.revision();

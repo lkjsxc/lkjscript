@@ -17,6 +17,7 @@ pub(crate) fn render(
         aliases: BTreeMap::new(),
         types: Vec::new(),
         references: BTreeMap::new(),
+        reserved_names: BTreeSet::new(),
         maximum,
         pool_bytes: 0,
     };
@@ -68,6 +69,17 @@ pub(crate) fn render(
                 ));
             }
         }
+    }
+    // Generated collection-scope aliases must not be shadowed by a selected declaration
+    // or signature child. Reserve all such names before rendering any reference or type.
+    for (module, owners) in &modules {
+        writer.reserve_names(OwnerKey::Module(*module))?;
+        for owner in owners {
+            writer.reserve_names(*owner)?;
+        }
+    }
+    for target in &targets {
+        writer.reserve_names(*target)?;
     }
     let mut body = String::new();
     for (module, owners) in modules {
@@ -210,11 +222,42 @@ struct Renderer<'a> {
     aliases: BTreeMap<String, String>,
     types: Vec<(String, String)>,
     references: BTreeMap<(String, String), String>,
+    reserved_names: BTreeSet<String>,
     maximum: usize,
     pool_bytes: usize,
 }
 
 impl Renderer<'_> {
+    fn reserve_names(&mut self, owner: OwnerKey) -> Result<(), Diagnostic> {
+        let mut pending = vec![owner];
+        while let Some(owner) = pending.pop() {
+            let record = self.reader.owner(owner)?;
+            if let Some(name) = record.name()
+                && !self.reserved_names.contains(name.as_str())
+            {
+                self.admit_pool(name.as_str().len())?;
+                self.reserved_names.insert(name.to_string());
+            }
+            pending.extend(declarations::contract_children(&record));
+        }
+        Ok(())
+    }
+
+    fn alias(&mut self, prefix: &str, mut index: usize) -> Result<String, Diagnostic> {
+        loop {
+            self.reader.check()?;
+            let name = format!("{prefix}_{index}");
+            if !self.reserved_names.contains(&name) {
+                self.admit_pool(name.len())?;
+                self.reserved_names.insert(name.clone());
+                return Ok(name);
+            }
+            index = index
+                .checked_add(1)
+                .ok_or_else(|| error("draft alias index overflow"))?;
+        }
+    }
+
     fn reference(&mut self, class: &str, exact: String) -> Result<String, Diagnostic> {
         let key = (class.to_owned(), exact);
         if let Some(alias) = self.references.get(&key) {
@@ -227,12 +270,9 @@ impl Renderer<'_> {
         let name = self
             .reader
             .reference_name(package.parse()?, owner.parse()?)?;
-        let alias = format!(
-            "ref_{}_{}",
-            &name[..name.len().min(96)],
-            self.references.len()
-        );
-        self.admit_pool(key.0.len() + key.1.len() + alias.len())?;
+        let prefix = format!("ref_{}", &name[..name.len().min(96)]);
+        let alias = self.alias(&prefix, self.references.len())?;
+        self.admit_pool(key.0.len() + key.1.len())?;
         self.references.insert(key, alias.clone());
         Ok(alias)
     }
@@ -382,8 +422,8 @@ impl Renderer<'_> {
         if let Some(alias) = self.aliases.get(&value) {
             return Ok(alias.clone());
         }
-        let alias = format!("type_{}", self.types.len());
-        self.admit_pool(alias.len() + value.len())?;
+        let alias = self.alias("type", self.types.len())?;
+        self.admit_pool(value.len())?;
         self.aliases.insert(value.clone(), alias.clone());
         self.types.push((alias.clone(), value));
         Ok(alias)
