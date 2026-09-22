@@ -45,9 +45,12 @@ development evidence retains its original identities and limits.
 The [composable-cell milestone](campaigns/202609221952.md) selects v0.1.41 after observing its tag
 and release unoccupied. Its native standard participant and standalone wrapper, strict DataStore
 guard, maintained wrapper adoption and compatibility fixtures are implemented. Focused proof is
-recorded at the [campaign evidence owner](evidence/202609221952-cells/README.md). Source/candidate
-acceptance, refreshed integration checks and publication are still pending; no v0.1.41 tag or
-candidate dispatch is implied by this selection. v0.1.40 remains complete and unchanged.
+recorded at the [campaign evidence owner](evidence/202609221952-cells/README.md). Corrected source
+`b52f51bd334dc71462e46c298dea12454f59ed6f` passed all 20 fresh release-source gates and reached
+remote main unchanged. Candidate [35725872480/1](https://github.com/lkjsxc/lkjscript/actions/runs/35725872480)
+was dispatched from that exact source on 2026-09-22T12:13:06Z. Candidate/final-target acceptance,
+the annotated v0.1.41 tag/scoped selection, unchanged-asset promotion and anonymous public
+verification are still pending. v0.1.40 remains complete and unchanged.
 
 ## Content and compatibility
 

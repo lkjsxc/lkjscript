@@ -4,7 +4,7 @@ Status date: 2026-09-22 UTC. This file describes implemented checkout reality. E
 public guides live under [generated](generated), including the
 [operation guide](generated/operations.md); this file does not duplicate them.
 
-## Composable typed-cell updates — focused proof passed, release acceptance pending
+## Composable typed-cell updates — integrated, candidate acceptance running
 
 The [selected campaign](campaigns/202609221952.md) adds exact
 `DataStore.require-transaction` and native-authored ordinary standard tasks
@@ -20,8 +20,12 @@ It rejects a new required guard before unavailable secret/store acquisition. Fre
 passes 229 public commands, 11 composition cases and the original receipt reader; the authentic
 old closure runs on the new runtime. Seven adapter/evaluator authority/cleanup tests and the native
 creation/drafting regression pass. The [evidence owner](evidence/202609221952-cells/README.md)
-separates these observations from final acceptance. Version 0.1.41 is selected but source/candidate
-acceptance, remote-main integration and publication are pending.
+separates these observations from final acceptance. Corrected source
+`b52f51bd334dc71462e46c298dea12454f59ed6f` passed all 20 release-source gates freshly with stable
+inputs and zero reuse, then reached remote main unchanged. Candidate
+[35725872480/1](https://github.com/lkjsxc/lkjscript/actions/runs/35725872480) is running at that exact
+source for selected v0.1.41. Final-target/candidate acceptance and immutable publication, including
+anonymous public verification, remain pending. No v0.1.41 tag or publication selection has been made.
 
 ## v0.1.39 delivery
 

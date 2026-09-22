@@ -124,8 +124,9 @@ ordinary standard participant and standalone functions distinguish tentative sta
 publication. Raw helper participation already existed; the explicit guard rejects missing canonical
 scope before a helper's read/callback. Same-canonical nested owners remain rejected. Standard-library
 and maintained-wrapper adoption are distinct from the designed credit/stock witness, while lkjournal
-only maintains compatibility. Focused public and authority proof passes; dependency-complete
-acceptance and selected v0.1.41 delivery are in progress.
+only maintains compatibility. Focused public/authority proof and the fresh 20-gate source tier pass;
+source `b52f51bd` is integrated. Candidate `35725872480/1` is executing the remaining acceptance
+for selected v0.1.41; immutable delivery and anonymous public verification remain pending.
 Conflict describes one store's non-publication; independent callback effects can survive and retries
 still need workload-specific idempotency and effect analysis. Further ordinary libraries, numerical
 computation, affine transfer or native tooling need a concrete next workload. Historical-repository

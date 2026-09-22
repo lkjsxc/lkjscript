@@ -137,3 +137,43 @@ Both repaired tests then passed. The compatibility observation retains 831 byte-
 unrelated standard records, all application owner-map bytes, and equal results for all 33 old
 artifact tests in both evaluators. Logs are `compatibility-inventory-01.log` and
 `compatibility-iteration-01.log` under the ignored campaign evidence directory.
+
+## Source acceptance and mainline integration
+
+Corrected commit `b52f51bd334dc71462e46c298dea12454f59ed6f` passed all **20 release-source gates
+freshly**, zero reuse, no unrun gates, stable input digest
+`verification_e6afc538be0abd62c253a1736d4a061d57f069a0d2c860ecc8849cd151c97739`.
+Original receipt: `.artifacts/lkjscript-dev/check/1790078585078032283-2462714-0/receipt.json`,
+digest `verification_63c3517fe4da31c377d173f77fe781e3a9dfbf679372495abf270274ab41f4e3`.
+The whole failed and passed run directories are additionally preserved as
+`.artifacts/composable-20260922/release-source-{01,02}-originals` outside the checker's eight-run
+rotation. These are retained copies, not relocatable original-reader admission claims.
+
+The all-feature workspace tier passes 758 root library tests (eight explicitly ignored),
+10 data-admission, seven scan, nine service, 62 public CLI (one ignored), 12 structural CLI
+(one ignored), and 148 developer tests (17 ignored). The separate required default release
+lifecycle and other source gates also pass. The two normally ignored new receipt mutation tests
+were separately executed as recorded above; pre-existing opt-in workloads were not silently run.
+No standalone full suite or duplicate broad target suite was added.
+
+Fresh fetch, branch/effective rules and ruleset readers found no intervening mainline work or
+required PR path. Normal fast-forward push moved remote main from `868e55c7` to the exact tested
+`b52f51bd` on 2026-09-22; both `git ls-remote` and the GitHub branch API independently agreed.
+Later reporting descendants must not relabel this tested source.
+
+The maintained Release owner was dispatched once as candidate
+[35725872480/1](https://github.com/lkjsxc/lkjscript/actions/runs/35725872480) at that exact product
+and controller source. API metadata independently confirms repository/head repository
+`lkjsxc/lkjscript`, workflow `.github/workflows/release.yml`, event `workflow_dispatch`, main ref,
+and creation time 2026-09-22T12:13:06Z. v0.1.41 tag/release occupancy and competing active jobs
+were empty immediately before dispatch. Acceptance and publication are not yet established;
+essential artifacts and their actual expiry are not yet available. The configured request is
+14 days, subject to the eventual service metadata.
+
+A bounded installed participation literal and launch recipe are prepared under ignored
+`.artifacts/composable-20260922/installed-smoke-preparation`. Preparation with Product 02 passed
+`Committed(60)`, separate-process read, absent-owner rejection before a trapping callback, and
+unchanged HEAD. The final anonymous installed observation has not run. It will supplement the
+maintained public smoke, which currently exercises structural/numeric authoring, without replaying
+broad semantic acceptance. Draft annotated release notes are retained at
+`.artifacts/composable-20260922/release-notes-v0.1.41.md`; they have not created a tag or permission.
