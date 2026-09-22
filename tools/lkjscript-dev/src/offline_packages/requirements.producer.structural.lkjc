@@ -6,24 +6,13 @@ reference.owner as=$Aborted package=$std class=case parent=$Outcome name=Aborted
 reference.owner as=$ConditionFailed package=$std class=case parent=$Reason name=ConditionFailed
 reference.owner as=$Conflict package=$std class=case parent=$Reason name=Conflict
 reference.owner as=$DataStore package=$std class=declaration name=DataStore
-reference.owner as=$DataEntry package=$std class=declaration name=DataEntry
-reference.owner as=$DataExpectation package=$std class=declaration name=DataExpectation
 reference.owner as=$DataKeyPart package=$std class=declaration name=DataKeyPart
 reference.owner as=$get package=$std class=operation parent=$DataStore name=get
 reference.owner as=$put package=$std class=operation parent=$DataStore name=put
 reference.owner as=$transaction package=$std class=operation parent=$DataStore name=transaction
-reference.owner as=$entry-value package=$std class=field parent=$DataEntry name=value
-reference.owner as=$entry-revision package=$std class=field parent=$DataEntry name=revision
-reference.owner as=$Missing package=$std class=case parent=$DataExpectation name=Missing
-reference.owner as=$Exact package=$std class=case parent=$DataExpectation name=Exact
-reference.owner as=$length package=$std class=declaration name=list-length
-reference.owner as=$first package=$std class=declaration name=list-get
-reference.owner as=$equal package=$std class=declaration name=i64-equal
-reference.owner as=$decode package=$std class=declaration name=data-decode-or
-reference.owner as=$encode package=$std class=declaration name=data-encode
+reference.owner as=$guard package=$std class=operation parent=$DataStore name=require-transaction
+reference.owner as=$standard-update package=$std class=declaration name=data-cell-try-update
 create.module as=$cells name=typed-cells
-type.named as=@Entry declaration=$DataEntry
-type.list as=@Entries item=@Entry
 type.named as=@KeyPart declaration=$DataKeyPart
 type.list as=@Key item=@KeyPart
 add.type-parameter as=$T declaration=$update name=T
@@ -32,6 +21,7 @@ add.requirement-parameter as=$R declaration=$update name=R interface=$DataStore
 requirement-parameter.operation parent=$R index=0 operation=$get
 requirement-parameter.operation parent=$R index=1 operation=$put
 requirement-parameter.operation parent=$R index=2 operation=$transaction
+requirement-parameter.operation parent=$R index=3 operation=$guard
 type.parameter as=@T parameter=$T
 type.application as=@Outcome declaration=$Outcome
 type.argument parent=@Outcome index=0 type=@T
@@ -44,31 +34,8 @@ add.parameter as=$default function=$update name=default type=@T
 add.parameter as=$transform function=$update name=transform type=@Transform
 add.parameter as=$key function=$update name=key type=@Key
 expression.block as=$update-body
-  (transaction-outcome parameter:$R (types @T)
-    (outcome $Outcome $Reason $Committed $Aborted $ConditionFailed $Conflict)
-    (binding cell-update)
-    (let
-      (binding entries (type @Entries)
-        (capability-call parameter:$R $get (local $space) (local $key)))
-      (binding absent (type bool)
-        (call $equal (call $length (types @Entry) (local entries)) (i64 0)))
-      (binding candidate (type @T)
-        (invoke (local $transform)
-          (if (local absent)
-            (local $default)
-            (call $decode (types @T)
-              (field (call $first (types @Entry) (local entries) (i64 0)) $entry-value)
-              (local $default)))))
-      (binding primary-condition-matched (type bool)
-        (capability-call parameter:$R $put
-          (local $space)
-          (local $key)
-          (call $encode (types @T) (local candidate))
-          (if (local absent)
-            (variant $Missing)
-            (variant $Exact
-              (field (call $first (types @Entry) (local entries) (i64 0)) $entry-revision)))))
-      (in (local candidate))))
+  (call $standard-update (types @T) (effects @E) (requirements parameter:$R)
+    (local $space) (local $default) (local $transform) (local $key))
 expression.end
 create.function as=$update module=$cells name=try-update visibility=public result=@Outcome effect=task body=$update-body
 effect.requirement parent=$update index=0 requirement=parameter:$R
@@ -79,6 +46,7 @@ add.requirement-parameter as=$factory-R declaration=$factory name=R interface=$D
 requirement-parameter.operation parent=$factory-R index=0 operation=$get
 requirement-parameter.operation parent=$factory-R index=1 operation=$put
 requirement-parameter.operation parent=$factory-R index=2 operation=$transaction
+requirement-parameter.operation parent=$factory-R index=3 operation=$guard
 type.parameter as=@FactoryT parameter=$factory-T
 type.application as=@FactoryOutcome declaration=$Outcome
 type.argument parent=@FactoryOutcome index=0 type=@FactoryT

@@ -1,0 +1,2 @@
+result status=success command=data.verify
+data root=bundle/store store=data_store_61d07c33312608269fbafe37bd2c3b264eab73723fd25f0fc4d56a41843bc5c3 revision=data_revision_b21bef4abd2de51344f42c3c3c767ea987a6bd0b21ca6b699c81962d120dcde1 revisions=2 objects=2 schemas=0 records=1 staging-leftovers=0 bytes-read=760

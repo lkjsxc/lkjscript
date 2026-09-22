@@ -5,7 +5,7 @@ fn native_fixture(name: &str) -> Option<String> {
     (name == "producer").then(|| {
         format!(
             "{}{}",
-            include_str!("requirements.producer.structural.lkjc"),
+            include_str!("requirements.producer.native.lkjc"),
             include_str!("requirements.resource-library.native.lkjc")
         )
     })
@@ -199,7 +199,7 @@ pub(super) fn validate_body_changes(
     supplier_plan: &[CompactRecord],
 ) -> Result<(), DevError> {
     let mut former_bodies = Vec::new();
-    for (index, signature, old_count, new_count) in [(0, 7, 5, 8), (1, 8, 39, 41)] {
+    for (index, signature, old_count, new_count) in [(0, 7, 5, 8), (1, 8, 5, 13)] {
         let old = body_owners(before[index])?;
         let new = body_owners(after[index])?;
         require(

@@ -1,0 +1,18 @@
+{
+  "authoring_executable_sha256": "4c822b8541d807e664f3734c73118371e783991c461fba4d1c7b59beb0630215",
+  "authoring_executable_kind": "campaign intermediate source build with native transaction repairs; not a released or final candidate executable",
+  "authoring": "Copied intermediate executable outside compiler checkout, explicit exact new standard transport, native public plan/apply/check/build.",
+  "standard_package_revision": "package_revision_3b195535785762a7dcdec5df40080cd51e1abbb592bd2edfd2c26a05bcdd0a92",
+  "artifact": "artifact_bundle_fa1f2ff01c98c9a72b423192010956d9b7770921eda4c7d73f7c605500e9fb11",
+  "rejection_executable_sha256": "bfe2f8bf643930db1d3d37d73093391d332d2fdce0d8814d3fa0ca463e53bdd7",
+  "rejection_executable": "official v0.1.40, authenticated by provenance.json",
+  "rejection": {
+    "exit_code": 3,
+    "class": "capability",
+    "code": "normalized_data_operation",
+    "operation": "require-transaction",
+    "unavailable_secret_variable_unset": "LKJSCRIPT_PARTICIPATION_UNAVAILABLE_SECRET",
+    "store_root_remained_absent": true
+  },
+  "observation_date": "2026-09-22"
+}

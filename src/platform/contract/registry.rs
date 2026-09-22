@@ -4462,6 +4462,12 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Check finiteness or return an ordinary failure variant before JSON encoding; earlier effects may already be visible, completed transactions stay completed, and automatic retry is not safe.",
         ),
         diagnostic(
+            "normalized_data_transaction_required",
+            DiagnosticClass::Capability,
+            "The DataStore operation requires a live transaction for its resolved canonical requirement; an unrelated store does not satisfy participation.",
+            "Call data-cell-update-in-transaction inside the matching caller-owned transaction, or call data-cell-try-update outside it. The guard performs no data read or callback and supplies no commit guarantee.",
+        ),
+        diagnostic(
             "normalized_data_f64",
             DiagnosticClass::Corrupt,
             "A typed binary F64 payload is truncated or contains a noncanonical NaN.",

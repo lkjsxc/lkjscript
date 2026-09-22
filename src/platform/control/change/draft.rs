@@ -1084,7 +1084,7 @@ impl Renderer<'_> {
                     append(
                         &mut text,
                         &format!(
-                            " {} (outcome {} {} {} {} {} {})",
+                            " (types {}) (outcome {} {} {} {} {} {})",
                             self.ty(type_argument)?,
                             self.declaration(&outcome.outcome)?,
                             self.declaration(&outcome.abort_reason)?,

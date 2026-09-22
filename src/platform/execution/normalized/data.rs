@@ -15,13 +15,15 @@ use crate::platform::data::{
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::kernel::{
-    DeclarationReference, Name, OperationReference, TypeForm, TypeObjectDigest,
+    DeclarationReference, ExternalVisibility, Idempotency, Name, OperationReference, TypeForm,
+    TypeObjectDigest,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 const STANDARD_PACKAGE: &str = "pkg_10000000000000000000000000000001";
 pub(crate) const DATA_INTERFACE: &str = "decl_640e96fa57dee1c09557eb4bc7b53398";
+const REQUIRE_TRANSACTION_OPERATION: &str = "op_6ca8ac3193f04e95bb6798ba1c9702c1";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DataOperation {
@@ -32,6 +34,7 @@ enum DataOperation {
     Put,
     Delete,
     Transaction,
+    RequireTransaction,
 }
 
 #[derive(Clone, Debug)]
@@ -269,6 +272,27 @@ impl NormalizedDataAdapter {
                     signature(program, operation, &[], Shape::Unit)?;
                     DataOperation::Transaction
                 }
+                "require-transaction" => {
+                    if operation.reference.package.to_string() != STANDARD_PACKAGE
+                        || operation.reference.operation.to_string()
+                            != REQUIRE_TRANSACTION_OPERATION
+                    {
+                        return Err(data_diagnostic(
+                            "normalized_data_operation",
+                            "require-transaction must name the exact maintained standard operation",
+                        ));
+                    }
+                    signature(program, operation, &[], Shape::Unit)?;
+                    if operation.idempotency != Idempotency::Idempotent
+                        || operation.external_visibility != ExternalVisibility::None
+                    {
+                        return Err(data_diagnostic(
+                            "normalized_data_signature",
+                            "exact data operation 'require-transaction' must be idempotent with no external visibility",
+                        ));
+                    }
+                    DataOperation::RequireTransaction
+                }
                 _ => {
                     return Err(data_diagnostic(
                         "normalized_data_operation",
@@ -460,6 +484,14 @@ impl NormalizedDataAdapter {
             DataOperation::Transaction => Err(data_argument(
                 "transaction entry must open a task-scoped transaction",
             )),
+            DataOperation::RequireTransaction => {
+                if !arguments.is_empty() {
+                    return Err(data_argument("require-transaction expects no arguments"));
+                }
+                // Reaching this route proves a live evaluator-selected transaction. A failed
+                // expectation does not end its scope or promise anything about completion.
+                Ok(NormalizedValue::Unit)
+            }
         }
     }
 }
@@ -486,6 +518,14 @@ impl NormalizedCapabilityAdapter for NormalizedDataAdapter {
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
         let operation = self.operation(policy)?;
+        if operation == DataOperation::RequireTransaction {
+            // In particular, do not open a read snapshot to answer a participation check.
+            return Err(ExecutionError::new(
+                ExecutionFailureClass::Capability,
+                "normalized_data_transaction_required",
+                "require-transaction requires an active transaction for this exact canonical data requirement",
+            ));
+        }
         if matches!(
             operation,
             DataOperation::Put | DataOperation::Delete | DataOperation::SchemaSet

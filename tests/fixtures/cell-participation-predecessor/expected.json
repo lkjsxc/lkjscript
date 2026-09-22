@@ -1,0 +1,13 @@
+{
+  "read_before": [],
+  "nested_owner": {
+    "exit_code": 6,
+    "class": "infrastructure",
+    "code": "normalized_transaction_nested",
+    "head_unchanged": true,
+    "read_after": []
+  },
+  "raw_owner": {"case": "Committed", "value": 60},
+  "read_after_raw": [60],
+  "data": {"revisions": 2, "objects": 2, "records": 1}
+}

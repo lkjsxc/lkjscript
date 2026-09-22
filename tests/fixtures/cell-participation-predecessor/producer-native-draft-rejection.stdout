@@ -1,0 +1,2 @@
+result status=failure command=change
+diagnostic class=source code=change_block_expression message="expected a parenthesized expression or clause" path="<native-draft>" line=69 column=42

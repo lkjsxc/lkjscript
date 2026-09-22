@@ -931,7 +931,7 @@ migration, effect replay or implicit runtime fallback.
 
 ## Requirement-parametric library obligations
 
-The offline-package owner's current receipt generation is 15. It includes the input-evolution
+The offline-package owner's current receipt generation is 18. It includes the input-evolution
 witness above and the literal
 `requirement-parameters` workload in its existing owner, covering producer-owned typed-cell
 operations/transactions, T/E/R applications and pure factories, distinct caller requirements,
@@ -970,6 +970,48 @@ matching owner must reject each fault without rerunning application effects.
 Focused execution uses `offline-packages --case requirement-parameters`; its child receipt is not
 full or target acceptance. The existing full and target readers require this material through the
 aggregate, and omit/forge probes exercise those readers without repeating application effects.
+
+### Composable typed-cell updates
+
+The maintained typed-cell wrapper delegates to the standard graph implementation. Its independent
+flat/native authoring oracle proves reviewed-meaning parity; authentic predecessor fixtures remain
+unchanged. The standard participant and standalone wrapper must be authored as native declaration
+units through public plan/apply. Native `transaction-outcome` creation and canonical drafting must
+retain inline generic body types and yield an unchanged reviewed candidate after reconstruction.
+
+Both independent evaluators and the real DataStore dispatch must accept a canonical alias and
+reject absent/other-canonical participation, missing operations, missing deployment grants, pure
+invocation and malformed complete operation contracts. A descriptor invoked after its owner exits
+must check participation again. A guard succeeds after a failed expectation while the owner is live,
+but does not permit publication. Cancellation and quota boundaries suppress staged parent changes,
+retain normal call accounting and permit a fresh healthy invocation. Controlled reference adapters
+are disjoint; live effects are never replayed for comparison.
+
+The existing requirement selector also owns a copied-executable, native-authored credit/stock
+composition with two separately transported libraries and a consumer-owned nominal Stock. Fixed
+initial values 100 and Stock(8,0), adjustment -30 and reservation 2 yield one Committed receipt,
+70 and Stock(6,2), with one physical completion. Repeated same-cell participants read staged values
+and yield 60 after -30 and -10. A forced failed condition after staging preserves both initial
+values and the exact parent HEAD. Trapping callbacks, deterministic cancellation/exhaustion and
+the existing synchronized two-writer conflict retain their classified failures. An independently
+completed other-store marker survives parent abort. Absent or unrelated transaction scope must
+fail before the callback and store mutation; standalone success and unchanged nested-owner
+rejection are distinct observations. Direct, named, prefix-bound, canonical-alias and ancestor-scope
+tail calls must retain their authority and evaluation order.
+
+The observer fixes expected results independently, reopens stores, and executes runtime-dependent
+bundles after authoring projects are unavailable. Canonical draft, reviewed library behavior edit,
+exact dependency replacement and separate old/new bundle results remain mandatory. Original
+readers require the new observations and reject omissions or forged success without replaying
+application effects. Maintained standard adoption, maintained witness adoption and designed public
+composition are separate claims; lkjournal remains a compatibility consumer.
+
+Authentic official v0.1.40 establishes the predecessor's nested-owner rejection and its already
+supported raw-helper participation. Its exact older artifact closure must run on the new runtime.
+That official old executable must reject a new required `require-transaction` operation before
+unavailable secret or store acquisition. Old requirement subsets remain valid, and unknown/forged
+contracts or incomplete reviewed dependency repairs must reject without partial meaning publication.
+This adds no graph, artifact, application-data or transaction-completion encoding change.
 
 Canonical and normalized tests retain independent affine/reference checks for formal resource
 provenance, matching/borrowing/consumption, alias rejection and cumulative concrete grant accounting.

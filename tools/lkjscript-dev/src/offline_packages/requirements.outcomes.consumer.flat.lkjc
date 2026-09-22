@@ -341,6 +341,7 @@ requirement.operation parent=$race-store index=0 operation=$get
 requirement.operation parent=$race-store index=1 operation=$put
 requirement.operation parent=$race-store index=2 operation=$transaction
 requirement.operation parent=$race-store index=3 operation=$schema-read
+requirement.operation parent=$race-store index=4 operation=$guard
 requirement.limit parent=$race-store index=0 name=maximum_calls maximum=20 unit=calls
 add.requirement as=$barrier component=$race-component name=barrier interface=$HttpClient
 requirement.operation parent=$barrier index=0 operation=$http-get

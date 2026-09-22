@@ -386,7 +386,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
         let cleanup: Value = serde_json::from_str(&field(&output, "execution", "cleanup")?)?;
         require(
             field(&output, "execution", "artifact")? == artifact
-                && work["capability_calls"] == 4
+                && work["capability_calls"] == 5
                 && cleanup["remaining_tasks"] == 0
                 && cleanup["cleanup_failures"] == json!([]),
             "public conflict result was not the selected single callback invocation or joined completion",

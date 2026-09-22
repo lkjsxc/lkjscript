@@ -182,11 +182,11 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
             schema: match selected_case.as_deref() {
                 Some("finite-callable") => "lkjscript-offline-finite-callable-1",
                 Some("validator-upgrade") => "lkjscript-offline-validator-upgrade-1",
-                Some("requirement-parameters") => "lkjscript-offline-requirement-parameters-3",
+                Some("requirement-parameters") => "lkjscript-offline-requirement-parameters-4",
                 Some("f64") => "lkjscript-offline-f64-1",
                 Some("parameter-type") => "lkjscript-offline-parameter-type-1",
                 Some("persistent-maps") => "lkjscript-offline-persistent-maps-1",
-                _ => "lkjscript-offline-packages-acceptance-17",
+                _ => "lkjscript-offline-packages-acceptance-18",
             }
             .to_owned(),
             status: "failed".to_owned(),
@@ -1870,7 +1870,7 @@ pub(crate) fn read_transferred_receipt(
         "offline receipt encoding or path is noncanonical",
     )?;
     require(
-        receipt.schema == "lkjscript-offline-packages-acceptance-17"
+        receipt.schema == "lkjscript-offline-packages-acceptance-18"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -2010,9 +2010,9 @@ pub(crate) fn read_transferred_receipt(
     }
     verify_file_inventory(&receipt, &root)?;
     require(
-        receipt.inventories.len() == 44
-            && receipt.transport_digests.len() == 44
-            && receipt.producer_inventories.len() == 44,
+        receipt.inventories.len() == 47
+            && receipt.transport_digests.len() == 47
+            && receipt.producer_inventories.len() == 47,
         "complete producer, replacement, HTTP, foreground, requirement, numerical and map source inventories missing",
     )?;
     for (index, inventory) in receipt.inventories.iter().enumerate() {
@@ -2051,9 +2051,9 @@ pub(crate) fn read_transferred_receipt(
     let named_commands = named::validate(&receipt, &root)?;
     let finite_installed_commands = finite::validate(&receipt, &root)?;
     requirements::validate(&receipt, &root)?;
-    f64::validate(&receipt, &root, 36)?;
-    let parameter_type_commands = parameter_type::validate(&receipt, &root, 36..40)?;
-    let map_commands = maps::validate(&receipt, &root, 40..44)?;
+    f64::validate(&receipt, &root, 39)?;
+    let parameter_type_commands = parameter_type::validate(&receipt, &root, 39..43)?;
+    let map_commands = maps::validate(&receipt, &root, 43..47)?;
     let named_cwd = Path::new(&receipt.isolated_root)
         .join("named-unrelated")
         .display()

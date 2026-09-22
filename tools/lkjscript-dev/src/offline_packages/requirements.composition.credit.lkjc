@@ -1,0 +1,21 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create credit (as $credit-module)
+    (function create add-delta (visibility private)
+      (parameter create delta (type I64))
+      (parameter create value (type I64))
+      (returns I64) (effect (task))
+      (body (call std::add (local value) (local delta))))
+    (function create adjust-credit (as $adjust-credit) (visibility public)
+      (requirement-parameter create R (interface std::DataStore)
+        (operations std::DataStore::get std::DataStore::put std::DataStore::require-transaction))
+      (parameter create delta (type I64))
+      (parameter create key (type (list std::DataKeyPart)))
+      (returns I64) (effect (task (requirement R)))
+      (body
+        (call std::data-cell-update-in-transaction (types I64) (effects (row)) (requirements R)
+          (static-text "credit") (i64 100)
+          (bind (function-value add-delta) (local delta))
+          (local key))))))
+declarations.end

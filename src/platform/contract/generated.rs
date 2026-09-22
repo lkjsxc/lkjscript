@@ -265,7 +265,18 @@ fn builtin_standard_markdown(snapshot: &CapabilitiesSnapshot) -> Result<String, 
         standard.package, standard.package_revision
     );
     output.push_str(
-        "The records below are implementation-free public interface projections. Exact `reference` values are accepted by compact change records.\n\n```text\n",
+        "The records below are implementation-free public interface projections. Exact `reference` values are accepted by compact change records.\n\n",
+    );
+    output.push_str(
+        "## Typed cells and transaction ownership\n\n\
+         Discover the two ordinary generic tasks with `lkjscript package builtin query owners --name data-cell-update-in-transaction` and `lkjscript package builtin query owners --name data-cell-try-update`, then inspect their exact exported owners. Both accept space, fallback, task transform and key, in that order, with explicit T/E/R applications.\n\n\
+         | Function | Required DataStore operations | Result |\n\
+         |---|---|---|\n\
+         | `data-cell-update-in-transaction` | `get`, `put`, `require-transaction` | Tentative T inside the caller's matching transaction |\n\
+         | `data-cell-try-update` | The participant operations plus `transaction` | Completed `TransactionOutcome<T>` |\n\n\
+         The participant first calls `require-transaction() -> Unit`, an idempotent task operation with no external visibility. An absent or unrelated canonical transaction fails before the helper reads data or invokes its callback. It then reads staged data, uses the explicit fallback for missing or incompatible typed encoding, calls the transform once and conditionally writes against the observed entry revision. A failed condition suppresses the owner's entire publication even if helpers return values afterward. Only the standalone wrapper owns `transaction-outcome`; invoking it inside the same canonical transaction still rejects.\n\n\
+         Unit is no transaction token, and retained descriptors are checked when invoked. Ordinary argument effects can precede entry; independent callback effects can survive a parent abort. There is no automatic retry. Fallback is caller policy, not schema migration or recovery from operational failure. The functions do not constrain T to capture-safe; binding and encoding enforce their own existing rules. See the [data capability specification](../spec/data-capabilities.md#explicit-participation-and-typed-cells).\n\n\
+         ```text\n",
     );
     for (owner, value) in &standard.interface_owners {
         if !matches!(value.record, PackageInterfaceRecord::Declaration(_)) {

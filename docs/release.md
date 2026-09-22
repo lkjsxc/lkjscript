@@ -42,6 +42,13 @@ drafting without the original input, tamper rejection, reviewed identity-preserv
 old/new bundle execution. This bounded observation supplements the maintained installed pair;
 development evidence retains its original identities and limits.
 
+The [composable-cell milestone](campaigns/202609221952.md) selects v0.1.41 after observing its tag
+and release unoccupied. Its native standard participant and standalone wrapper, strict DataStore
+guard, maintained wrapper adoption and compatibility fixtures are implemented. Focused proof is
+recorded at the [campaign evidence owner](evidence/202609221952-cells/README.md). Source/candidate
+acceptance, refreshed integration checks and publication are still pending; no v0.1.41 tag or
+candidate dispatch is implied by this selection. v0.1.40 remains complete and unchanged.
+
 ## Content and compatibility
 
 The canonical manifest discriminator is `format: "lkjscript-release-content-1"`. It binds the product

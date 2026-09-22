@@ -27,20 +27,39 @@ attempt or worker transition authority.
 the ordinary abort reason is `ConditionFailed | Conflict`. Both types are constructible data.
 The lexical `transaction-outcome` expression binds these exact declarations and cases and returns
 the store's completed decision. It adds no capture or serialization permission to `T`. Ordinary
-requirement-parametric libraries can expose completion without moving their transaction to callers;
+requirement-parametric libraries expose both caller-owned participation and standalone completion;
 the transported typed-cell witness is maintained by the
 [requirement-library observation](../../tools/lkjscript-dev/src/offline_packages/requirements.md).
+
+`data-cell-update-in-transaction<T;E;R>(space, fallback, transform, key) -> T` stages one update
+inside the caller's matching canonical transaction. It first invokes exact
+`DataStore.require-transaction() -> Unit`, then reads the transaction view, invokes the task
+transform once, encodes and conditionally writes the candidate. The required operations are
+`get`, `put` and `require-transaction`; its result is tentative even after a failed condition.
+`data-cell-try-update<T;E;R>` additionally requires `transaction`, owns `transaction-outcome`,
+calls the same participant and returns `Committed(T)` only after successful finalization or
+`Aborted(ConditionFailed|Conflict)` without T. Same-canonical nested ownership still rejects.
+
+Both bodies are ordinary native-authored graph functions. Their
+[literal reviewed request](requests/20260922-data-cells.lkjc) retains the public authoring input;
+the accepted graph remains the editable authority. Fallback on missing or incompatible typed
+encoding is explicit caller policy, not migration or conversion of operational failure into a
+value. No blanket capture-safe constraint applies to T. Binding and encoding retain their own
+admission rules. Argument effects may precede the guard, and independent callback effects can
+survive an abort. No automatic retry occurs. The
+[normative contract](../../docs/spec/data-capabilities.md#explicit-participation-and-typed-cells)
+defines the authority, accounting and completion limits.
 
 Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_19be6fa1bf22b7b139c3c0773c792c00518fa2e17fd6468da77076a0dc01eeb4`;
-- package revision: `package_revision_1377b907ba6d62ef959900436e171c9939b2d4049476eb24703facbbd296cd53`;
-- package transport: `package_transport_5bd92b9f67d08bf91b75fd31be1399ed8fcfc9eac179f2539e9858afc752d2ce`;
-- artifact manifest: `artifact_manifest_4080b0e6142643a3a900c2fd1ea1059cf23fa97ad7ac873e56ad6aafeab38f43`;
-- artifact bundle: `artifact_bundle_5b0b02915881f0f52497004de467f21f4dbabfa99585c8985e3d8932d4fc6e87`;
-- 949 live semantic owners, 163 compiler units, and 37 graph tests.
+- semantic revision: `rev_811d0d7a7f1792d6934eaa62defd6ea03c4306e01bcd7e463eb8c1cf68a0443e`;
+- package revision: `package_revision_3b195535785762a7dcdec5df40080cd51e1abbb592bd2edfd2c26a05bcdd0a92`;
+- package transport: `package_transport_2cc869f1c3049806d7481e4934d9ad575c0fbe88ae45cc412d1d13a1d0e6e676`;
+- artifact manifest: `artifact_manifest_e4df6c4e62c4cddf973e69eed3856fcbf75a856762880ce819cc64b9b2fab826`;
+- artifact bundle: `artifact_bundle_56689036f3927a117963e54ffd091bf81b71e2a828f2e5a64a287fc81afd4325`;
+- 1,012 live semantic owners, 165 compiler units, and 37 graph tests.
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose
 ordinary parametric records with pure functions. Mapping invokes the first callback then the second,

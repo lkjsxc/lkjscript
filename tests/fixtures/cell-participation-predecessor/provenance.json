@@ -1,0 +1,36 @@
+{
+  "release": "https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.40",
+  "release_id": 393611808,
+  "version": "0.1.40",
+  "source": "1cdaf72888a1f46359a6d38956050747335f8e32",
+  "target": "x86_64-unknown-linux-musl",
+  "archive_sha256": "87b340a1eca452309a930d332379ba69ce49ea5922264371044a2abb712dfa06",
+  "executable_sha256": "bfe2f8bf643930db1d3d37d73093391d332d2fdce0d8814d3fa0ca463e53bdd7",
+  "capabilities_digest": "38a65237a10587799c2e2b8006597829be9af6ef34503f0300ccecde63ef5b24",
+  "acquisition": "Anonymous official release archive; archive checked against public SHA256SUMS and GitHub release-service metadata; executable checked against RELEASE-MANIFEST.json.",
+  "authoring": "Copied official executable outside compiler checkout; literal public plan/apply/export/check/build only. No semantic generator or accepted-store writes.",
+  "package": {
+    "id": "pkg_7c6771ecd2421f731a15aae77e081a05",
+    "revision": "rev_ee3cf2ae2f8bbf35a9fc0bc8341f9a3766221983ab3b39b3d983394b4a427c5e",
+    "logical": "package_revision_e36a4694f1c83ca086d39df692f4898637f974bf150f038619a2258f42e87f95",
+    "transport": "package_transport_4c3f2f8387ee3ed16864681d951fc35317179d81d895bd60a43f1e9b603eed56"
+  },
+  "producer": {
+    "id": "pkg_49be90d3f02727d1274ba6423ba66cf0",
+    "revision": "rev_33b4f9e1ef3bea790392c71ee0a9d9332b10a39210bf4d2ab2e115dba7851b10",
+    "logical": "package_revision_6c0ee00259e70553b728b14a01d748756670b97a70fee705c28017b75c31a317",
+    "transport": "package_transport_e36cf47e30e911618ed2e2a30725f02c7a9b23d3ef8c1eb37acd8f4303d085e9"
+  },
+  "standard": {
+    "id": "pkg_10000000000000000000000000000001",
+    "revision": "rev_19be6fa1bf22b7b139c3c0773c792c00518fa2e17fd6468da77076a0dc01eeb4",
+    "logical": "package_revision_1377b907ba6d62ef959900436e171c9939b2d4049476eb24703facbbd296cd53"
+  },
+  "artifact": {
+    "bundle": "artifact_bundle_4659d83df8f33b7eacd596328fccfdf6ab1893ad399c2e82582d1aca37ed2ea2",
+    "sha256": "ededb903b72c250405fccbc93db843d6a2217f11a2e35fc09b3b24c9a24b09e4",
+    "packages": 3
+  },
+  "originals": "/home/coder/workspace/lkjscript-cell-baseline-20260922",
+  "observation_date": "2026-09-22"
+}

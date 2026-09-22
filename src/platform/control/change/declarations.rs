@@ -961,13 +961,6 @@ impl Lowering<'_> {
                         quoted: false,
                     };
                 }
-                "transaction-outcome" if args.len() == 5 => {
-                    let value = self.ty(args[1], scope, 1)?;
-                    block.syntax[args[1]].kind = SyntaxKind::Atom {
-                        value,
-                        quoted: false,
-                    };
-                }
                 "outcome" if args.len() == 6 => {
                     for (index, arg) in args.iter().enumerate() {
                         let value = self.reference(

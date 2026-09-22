@@ -1,0 +1,119 @@
+request base=rev_6bc72472144762f6104e1f0ba8cbb222e85cdcf6c92dfc4253e67683ee2fef11 idempotency=predecessor-consumer
+add.dependency package=pkg_10000000000000000000000000000001 semantic-revision=rev_19be6fa1bf22b7b139c3c0773c792c00518fa2e17fd6468da77076a0dc01eeb4 package-revision=package_revision_1377b907ba6d62ef959900436e171c9939b2d4049476eb24703facbbd296cd53
+add.dependency package=pkg_49be90d3f02727d1274ba6423ba66cf0 semantic-revision=rev_33b4f9e1ef3bea790392c71ee0a9d9332b10a39210bf4d2ab2e115dba7851b10 package-revision=package_revision_6c0ee00259e70553b728b14a01d748756670b97a70fee705c28017b75c31a317
+reference.package as=$library package=pkg_49be90d3f02727d1274ba6423ba66cf0 package-revision=package_revision_6c0ee00259e70553b728b14a01d748756670b97a70fee705c28017b75c31a317
+reference.owner as=$try-update package=$library class=declaration name=try-update
+declarations.begin
+(units
+  (use std builtin)
+  (module create baseline (as $baseline)
+    (function create subtract-thirty (as $subtract-thirty) (visibility private)
+      (parameter create value (type I64))
+      (returns I64) (effect (task))
+      (body (call std::add (local value) (i64 -30))))
+    (function create raw-adjust (as $raw-adjust) (visibility private)
+      (requirement-parameter create R (interface std::DataStore)
+        (operations std::DataStore::get std::DataStore::put))
+      (parameter create delta (type I64))
+      (returns I64) (effect (task (requirement R)))
+      (body
+        (let
+          (binding key (type (list std::DataKeyPart))
+            (list std::DataKeyPart (variant std::DataKeyPart::Text (text "credit"))))
+          (binding entries (type (list std::DataEntry))
+            (capability-call R std::DataStore::get (static-text "baseline") (local key)))
+          (binding absent (type Bool)
+            (call std::i64-equal
+              (call std::list-length (types std::DataEntry) (local entries)) (i64 0)))
+          (binding previous (type I64)
+            (if (local absent) (i64 100)
+              (call std::data-decode-or (types I64)
+                (field
+                  (call std::list-get (types std::DataEntry) (local entries) (i64 0))
+                  std::DataEntry::value)
+                (i64 100))))
+          (binding candidate (type I64) (call std::add (local previous) (local delta)))
+          (binding matched (type Bool)
+            (capability-call R std::DataStore::put (static-text "baseline") (local key)
+              (call std::data-encode (types I64) (local candidate))
+              (if (local absent)
+                (variant std::DataExpectation::Missing)
+                (variant std::DataExpectation::Exact
+                  (field
+                    (call std::list-get (types std::DataEntry) (local entries) (i64 0))
+                    std::DataEntry::revision)))))
+          (in (local candidate)))))
+    (function create read-credit (as $read-credit) (visibility private)
+      (returns (list I64)) (effect (task (requirement stores::data)))
+      (body
+        (let
+          (binding entries (type (list std::DataEntry))
+            (capability-call stores::data std::DataStore::get
+              (static-text "baseline")
+              (list std::DataKeyPart (variant std::DataKeyPart::Text (text "credit")))))
+          (in
+            (if
+              (call std::i64-equal
+                (call std::list-length (types std::DataEntry) (local entries)) (i64 0))
+              (list I64)
+              (list I64
+                (call std::data-decode-or (types I64)
+                  (field
+                    (call std::list-get (types std::DataEntry) (local entries) (i64 0))
+                    std::DataEntry::value)
+                  (i64 -999))))))))
+    (component create stores (visibility private)
+      (requirement create data (as $data) (interface std::DataStore)
+        (operations std::DataStore::get std::DataStore::put std::DataStore::transaction)
+        (limits (maximum_calls 100 calls)))
+      (port create nested-owner
+        (type (task-function () (std::TransactionOutcome I64) (row (requirement data))))
+        (function $nested-owner))
+      (port create raw-owner
+        (type (task-function () (std::TransactionOutcome I64) (row (requirement data))))
+        (function $raw-owner))
+      (port create read-credit
+        (type (task-function () (list I64) (row (requirement data))))
+        (function read-credit))))
+  (target create nested-owner (component baseline::stores)
+    (port baseline::stores::nested-owner) (runner command))
+  (target create raw-owner (component baseline::stores)
+    (port baseline::stores::raw-owner) (runner command))
+  (target create read-credit (component baseline::stores)
+    (port baseline::stores::read-credit) (runner command)))
+declarations.end
+reference.package as=$std source=builtin
+reference.owner as=$Outcome package=$std class=declaration name=TransactionOutcome
+reference.owner as=$Reason package=$std class=declaration name=TransactionAbortReason
+reference.owner as=$Committed package=$std class=case parent=$Outcome name=Committed
+reference.owner as=$Aborted package=$std class=case parent=$Outcome name=Aborted
+reference.owner as=$ConditionFailed package=$std class=case parent=$Reason name=ConditionFailed
+reference.owner as=$Conflict package=$std class=case parent=$Reason name=Conflict
+reference.owner as=$DataKeyPart package=$std class=declaration name=DataKeyPart
+reference.owner as=$Text package=$std class=case parent=$DataKeyPart name=Text
+type.named as=@KeyPart declaration=$DataKeyPart
+type.application as=@OutcomeI64 declaration=$Outcome
+type.argument parent=@OutcomeI64 index=0 type=i64
+effect.row as=@Empty
+expression.block as=$nested-body
+  (transaction-outcome $data (types i64)
+    (outcome $Outcome $Reason $Committed $Aborted $ConditionFailed $Conflict)
+    (binding parent)
+    (sequence
+      (call $try-update (types i64) (effects @Empty) (requirements $data)
+        (static-text "baseline") (i64 100) (function-value $subtract-thirty)
+        (list @KeyPart (variant $Text (text "credit"))))
+      (i64 0)))
+expression.end
+create.function as=$nested-owner module=$baseline name=nested-owner visibility=private result=@OutcomeI64 effect=task body=$nested-body
+effect.requirement parent=$nested-owner index=0 requirement=$data
+expression.block as=$raw-body
+  (transaction-outcome $data (types i64)
+    (outcome $Outcome $Reason $Committed $Aborted $ConditionFailed $Conflict)
+    (binding parent)
+    (sequence
+      (call $raw-adjust (requirements $data) (i64 -30))
+      (call $raw-adjust (requirements $data) (i64 -10))))
+expression.end
+create.function as=$raw-owner module=$baseline name=raw-owner visibility=private result=@OutcomeI64 effect=task body=$raw-body
+effect.requirement parent=$raw-owner index=0 requirement=$data

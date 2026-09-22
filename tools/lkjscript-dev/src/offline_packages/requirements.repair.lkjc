@@ -3,6 +3,7 @@ reference.owner as=$DataStore package=$std class=declaration name=DataStore
 reference.owner as=$get package=$std class=operation parent=$DataStore name=get
 reference.owner as=$put package=$std class=operation parent=$DataStore name=put
 reference.owner as=$transaction package=$std class=operation parent=$DataStore name=transaction
+reference.owner as=$guard package=$std class=operation parent=$DataStore name=require-transaction
 reference.owner as=$schema-read package=$std class=operation parent=$DataStore name=schema-read
 reference.owner as=$module package=local class=module name=cell-consumer
 reference.owner as=$component package=local class=declaration parent=$module name=cells
@@ -12,4 +13,5 @@ requirement.operation parent=%settings index=0 operation=$get
 requirement.operation parent=%settings index=1 operation=$put
 requirement.operation parent=%settings index=2 operation=$transaction
 requirement.operation parent=%settings index=3 operation=$schema-read
+requirement.operation parent=%settings index=4 operation=$guard
 requirement.limit parent=%settings index=0 name=maximum_calls maximum=100 unit=calls

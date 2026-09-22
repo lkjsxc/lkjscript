@@ -1,7 +1,11 @@
 //! Literal public requirement-parametric library with independent ordered-store observations.
 use super::*;
+#[path = "requirements_composition.rs"]
+mod composition;
 #[path = "requirements_conflict.rs"]
 mod conflict;
+#[path = "requirements_participation_predecessor.rs"]
+mod participation_predecessor;
 #[path = "requirements_structural.rs"]
 mod structural;
 #[path = "requirements_transaction_predecessor.rs"]
@@ -742,6 +746,8 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
     transaction_predecessor::workflow(context)?;
     conflict::workflow(context, &bundle)?;
     super::requirements_queue::workflow(context, &bundle)?;
+    participation_predecessor::workflow(context)?;
+    composition::workflow(context, standard)?;
     Ok(())
 }
 
@@ -955,7 +961,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
         packages["before"] != packages["after"] && packages["producer"] != packages["consumer"],
         "requirement supplier transition or independent consumer identity missing",
     )?;
-    for (name, minimum) in [("definition_before", "3"), ("definition_after", "4")] {
+    for (name, minimum) in [("definition_before", "4"), ("definition_after", "5")] {
         let index = packages[name]
             .as_u64()
             .and_then(|n| usize::try_from(n).ok())
@@ -986,7 +992,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
                 "definition.requirement-parameter",
                 "minimum-operations",
             )? == minimum,
-            "inspected minimum constraint did not change from three operations to four",
+            "inspected minimum constraint did not change from four operations to five",
         )?;
     }
     let index = packages["replacement_rejection"]
@@ -1162,19 +1168,20 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
                 serde_json::from_str(&field(&output, "execution", "production-observation")?)?;
             let cleanup: Value = serde_json::from_str(&field(&output, "execution", "cleanup")?)?;
             let expected_calls = match target {
-                "false-attempt" | "match-completion" => 5,
+                "false-attempt" | "match-completion" => 6,
                 "seed-auxiliary" | "condition-only" | "read-only-outcome" => 2,
-                "multi-key-update" => 4,
-                "staged-false-attempt" | "other-store-survives" => 6,
+                "multi-key-update" => 5,
+                "staged-false-attempt" | "other-store-survives" => 7,
                 "no-write-false" | "application-payload" | "empty-outcome" => 1,
                 name if name.starts_with("text-") => {
                     if artifact == "repaired.lkja" {
-                        5
+                        9
                     } else {
-                        4
+                        5
                     }
                 }
-                _ => 3,
+                _ if artifact == "repaired.lkja" => 7,
+                _ => 4,
             };
             require(
                 value == expected
@@ -1217,5 +1224,46 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
     commands.extend(transaction_predecessor::validate(receipt, root)?);
     commands.extend(conflict::validate(receipt, root)?);
     commands.extend(super::requirements_queue::validate(receipt, root)?);
+    commands.extend(participation_predecessor::validate(receipt, root)?);
+    commands.extend(composition::validate(receipt, root)?);
     Ok(commands)
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    reason = "adversarial copies of retained public evidence"
+)]
+mod reader_tests {
+    use super::*;
+
+    #[test]
+    #[ignore = "requires an authentic retained requirement composition receipt"]
+    fn composition_reader_requires_new_evidence_and_exact_invocations() {
+        let path = PathBuf::from(std::env::var_os("LKJSCRIPT_REQUIREMENT_READER_RECEIPT").unwrap());
+        let root = path.parent().unwrap();
+        let receipt: Receipt = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        composition::validate(&receipt, root).unwrap();
+        let mut omitted = receipt.clone();
+        omitted.observations.remove("requirement_composition");
+        assert!(composition::validate(&omitted, root).is_err());
+        let mut forged = receipt.clone();
+        let mut evidence: Value =
+            serde_json::from_str(&forged.observations["requirement_composition"]).unwrap();
+        evidence["sources_removed"] = json!(false);
+        forged
+            .observations
+            .insert("requirement_composition".into(), evidence.to_string());
+        assert!(composition::validate(&forged, root).is_err());
+        let rows: Vec<Value> = serde_json::from_slice(
+            &fs::read(root.join("requirement-composition-states.json")).unwrap(),
+        )
+        .unwrap();
+        for key in ["initialize", "invocation", "read"] {
+            let index = usize::try_from(rows[0][key].as_u64().unwrap()).unwrap();
+            let mut substituted = receipt.clone();
+            substituted.commands[index].command[0] = "/unrelated/runtime".into();
+            assert!(composition::validate(&substituted, root).is_err());
+        }
+    }
 }

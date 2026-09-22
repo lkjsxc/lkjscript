@@ -1,0 +1,26 @@
+request base=rev_f30b1ac01e6dfe2d0e20ff248ff8f331b525a35de97311fc4db5f4fac1752b7d idempotency=guard-preflight
+add.dependency package=pkg_10000000000000000000000000000001 semantic-revision=rev_811d0d7a7f1792d6934eaa62defd6ea03c4306e01bcd7e463eb8c1cf68a0443e package-revision=package_revision_3b195535785762a7dcdec5df40080cd51e1abbb592bd2edfd2c26a05bcdd0a92
+declarations.begin
+(units
+  (use std pkg_10000000000000000000000000000001 package_revision_3b195535785762a7dcdec5df40080cd51e1abbb592bd2edfd2c26a05bcdd0a92)
+  (module create guard
+    (function create trap (visibility private)
+      (parameter create value (type I64))
+      (returns I64) (effect (task))
+      (body (call std::divide (i64 1) (i64 0))))
+    (function create call-participant (visibility private)
+      (returns I64) (effect (task (requirement caller::cells)))
+      (body
+        (call std::data-cell-update-in-transaction
+          (types I64) (effects (row)) (requirements caller::cells)
+          (static-text "preflight") (i64 100) (function-value trap)
+          (list std::DataKeyPart (variant std::DataKeyPart::Text (text "credit"))))))
+    (component create caller (visibility private)
+      (requirement create cells (interface std::DataStore)
+        (operations std::DataStore::get std::DataStore::put std::DataStore::require-transaction)
+        (limits (maximum_calls 20 calls)))
+      (port create guard
+        (type (task-function () I64 (row (requirement cells))))
+        (function call-participant))))
+  (target create guard (component guard::caller) (port guard::caller::guard) (runner command)))
+declarations.end

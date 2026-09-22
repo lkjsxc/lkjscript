@@ -20,11 +20,11 @@ Current normalized identity:
 
 - repository: `repo_95f988c5423fe3eb823c329ef0832d51`;
 - package: `pkg_20000000000000000000000000000001`;
-- semantic revision: `rev_29c95cfe92810bf3669a3943a9b3582f69047017bb43bd3e93942c5ea94f28ff`;
-- semantic state: `semantic_state_3484e33ab9a2691e962e2a80077aa26628d58876cef7bce5f541baa830c8e801`;
-- package revision: `package_revision_8a73c9bd175c365e4d45dc33a77c7f6b99a9ca939b0ae24acc589f15d4091ce6`;
-- artifact manifest: `artifact_manifest_a6ac7df6e3d6983c1e1ed61e420520ea6313e79d0f5539424d574dca5505da7c`;
-- artifact bundle: `artifact_bundle_e4f1a6eb30543e43f20c061f50214354bee0e9aad7c2307028950f9d5c1a10f3`;
+- semantic revision: `rev_cd5d4b1e18db3e1fe795489d67ecc83130ea7fd19b1c69c360cd08d12b8f510f`;
+- semantic state: `semantic_state_5671def4f8c5ec31a6acdaf31643c003d17871b22ccb0e1cbf26b23973dad397`;
+- package revision: `package_revision_41c2574a5a145ec0c9cd68c52ca180d4f3234fa5ade01716372e2044f3c759a4`;
+- artifact manifest: `artifact_manifest_76096db0555a3159f31c7844e10d293546bde352d37225579100ad109e018742`;
+- artifact bundle: `artifact_bundle_5f2ecd3c84dec0f8adbb0f562855cd76c1aa2b7385ae6475b13cfc021344540f`;
 - 2,040 live root semantic owners and one exact built-in standard dependency.
 
 The original Graph 13 materialization preserved all existing application owner identities and behavior.
@@ -35,6 +35,12 @@ identities and require no operational-data migration.
 The binary64 campaign updates the exact standard supplier selection through public plan/apply and
 rebuilds the artifact under the successor compiler. All 2,040 application owners and deployment
 settings retain their meaning. The application requires no data migration.
+
+The composable-cell campaign replaces the exact standard dependency through the
+[reviewed public request](requests/20260922-standard-cells.lkjc) and regenerates the artifact.
+It preserves all application owners, deployment settings and behavior. This is compatibility
+maintenance; lkjournal does not adopt the new cell policy. Existing data and retained dependencies
+remain intact.
 
 ## Inspect and verify current authority
 
@@ -51,7 +57,7 @@ target/release/lkjscript build --project applications/lkjournal \
   --output /tmp/lkjournal-current.lkja
 ```
 
-Check compiles and links the exact two-package closure with 90 application and 253 total compiler
+Check compiles and links the exact two-package closure with 90 application and 255 total compiler
 units, then runs 7 application tests plus 37 standard tests. All 44 must agree between normalized
 bytecode and the canonical reference interpreter.
 `generated/lkjournal.lkja` is the deterministic maintained artifact bundle output. Check and build do

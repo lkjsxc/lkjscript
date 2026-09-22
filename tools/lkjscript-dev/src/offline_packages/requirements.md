@@ -1,7 +1,8 @@
 # Requirement-parametric ordinary-library witness
 
 These literal requests define a designed composition workload, not application adoption.
-`requirements.producer.{lkjc,structural.lkjc}` owns a generic typed-cell algorithm. The observer
+`requirements.producer.{lkjc,structural.lkjc,native.lkjc}` exposes a separately transported wrapper
+around ordinary standard `data-cell-try-update`. The observer
 supplies observed bases, exact package selections, executable arguments and disposable operational
 resources. It does not generate the library body or perform its cell updates.
 
@@ -21,13 +22,14 @@ invokes the resulting zero-argument task. The core imposes no capture constraint
 callback remains a task and cannot be invoked from pure execution. Selection and factory creation
 grant no execution authority.
 
-R constrains the exact standard `DataStore` interface and at least `get`, `put`, `transaction`.
+R constrains the exact standard `DataStore` interface and at least `get`, `put`, `transaction`,
+and `require-transaction`.
 The counter requirement also permits `schema-read`; a callback explicitly using that whole
 requirement may perform that operation. The formal minimum does not attenuate its argument.
 The Text callback uses a separately supplied Configuration requirement through E and its own grant.
 
-The core computes, encodes and conditionally writes inside `transaction-outcome`, then returns its
-completed result directly. The expression binds the exact ordinary standard `TransactionOutcome`
+The standard core computes, encodes and conditionally writes inside `transaction-outcome`; the
+transported wrapper returns its completed result directly. The expression binds the exact ordinary standard `TransactionOutcome`
 and `TransactionAbortReason` declarations and all four cases through public named references.
 Successful completion yields `Committed(T)`; a failed condition or commit-time conflict yields
 `Aborted(ConditionFailed|Conflict)` without a candidate payload. These are constructible nominal
@@ -70,8 +72,9 @@ prepublication wrapper-capacity cases use the existing independent controlled ad
 physical data owner's HEAD/reopen/fault tests; no live callback is replayed differentially.
 
 The supplier edit raises both minimum operation constraints and replaces the pure factory and
-substantial generic update bodies through reviewed public input. Its handwritten flat and
-structural update replacements transform twice before encoding. The repaired I64 path advances
+generic wrapper bodies through reviewed public input. Its handwritten flat and structural update
+replacements own one transaction and call the standard participant twice. Each callback runs once
+per ordinary update, and the second call reads the first staged value. The repaired I64 path advances
 16 to 22; the repaired Text path advances `a!!` to `a!!!!` with two Configuration reads. An
 insufficient dependency replacement rejects without changing consumer authority; an explicit
 requirement edit and replacement succeeds. Original and repaired artifacts run after producer
@@ -83,6 +86,34 @@ typed reference inventories, commitments, allocated identities and retirements. 
 consumes the flat plan token. Public inspection verifies retained function, parameter and T/E/R
 identities while the old body owners retire. Both notations are retained as literal proof inputs;
 the reader requires them, the exact artifacts, completed results and independent data observations.
+The native producer units are a third independent authoring oracle for this same wrapper; no
+maintained copy of the cell decoding and conditional-write algorithm remains in this witness.
+
+`requirements.composition.{credit,stock,consumer}.lkjc` adds a fresh native composition witness.
+Two separately authored and transported libraries call the standard participant through generic
+requirements. The consumer owns its nominal `Stock`, keys, initialization and transaction owner.
+Independent initial values 100 and `Stock(8,0)` produce one `Committed` receipt with 70 and
+`Stock(6,2)`; repeated credit adjustments see staged 70 before producing 60. Failed conditions,
+trapping callbacks, absent or unrelated owners, retained bound descriptors invoked after their
+owner exits, and nested standalone owners preserve the original shared-store bytes and HEAD.
+A callback after a failed condition can still complete an independently granted store marker;
+that marker survives the parent abort. Direct calls, named task values, prefix binding and a tail
+helper forward the same canonical requirement. The standard standalone wrapper succeeds alone.
+
+The observer removes all three authoring projects before running runtime-dependent bundles,
+reopens each store through a separate public process, and independently checks complete scalar
+envelopes and the two specified nominal I64 payloads under the initializer's exact layout header.
+Each successful update creates exactly one physical shared-store revision. A healthy invocation
+after a callback trap completes normally. A canonical native credit draft first reviews unchanged,
+then receives an ordinary five-unit surcharge edit. Reviewed exact dependency replacement retains
+old and new bundles: separately initialized stores yield 70 and 65, both with `Stock(6,2)`.
+These are fixed designed workload results, not application adoption or automatic migration.
+
+The official v0.1.40 predecessor fixture separately retains the actual same-store nested-owner
+rejection and already-supported raw helper participation returning `Committed(60)`. Its original
+three-package artifact runs with the new runtime against a fresh store. That fixture establishes
+the baseline distinction: this campaign adds a maintained composable library and an early guard,
+while raw capability helpers could already participate in an ancestor transaction.
 
 The former `attempt-update -> UpdateAttempt<T>` API is preserved as authentic v0.1.36 source,
 package and artifact material under `tests/fixtures/transaction-outcome-predecessor`. It keeps its

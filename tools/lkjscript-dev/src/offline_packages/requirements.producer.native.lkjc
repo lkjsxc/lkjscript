@@ -1,0 +1,45 @@
+reference.package as=$std source=builtin
+reference.owner as=$Outcome package=$std class=declaration name=TransactionOutcome
+reference.owner as=$Reason package=$std class=declaration name=TransactionAbortReason
+reference.owner as=$Committed package=$std class=case parent=$Outcome name=Committed
+reference.owner as=$Aborted package=$std class=case parent=$Outcome name=Aborted
+reference.owner as=$ConditionFailed package=$std class=case parent=$Reason name=ConditionFailed
+reference.owner as=$Conflict package=$std class=case parent=$Reason name=Conflict
+reference.owner as=$DataStore package=$std class=declaration name=DataStore
+reference.owner as=$DataKeyPart package=$std class=declaration name=DataKeyPart
+reference.owner as=$get package=$std class=operation parent=$DataStore name=get
+reference.owner as=$put package=$std class=operation parent=$DataStore name=put
+reference.owner as=$transaction package=$std class=operation parent=$DataStore name=transaction
+reference.owner as=$guard package=$std class=operation parent=$DataStore name=require-transaction
+reference.owner as=$standard-update package=$std class=declaration name=data-cell-try-update
+create.module as=$cells name=typed-cells
+declarations.begin
+(units
+  (function create try-update (as $update) (in $cells) (visibility public)
+    (type-parameter create T (as $T))
+    (effect-parameter create E (as $E))
+    (requirement-parameter create R (as $R) (interface $DataStore)
+      (operations $get $put $transaction $guard))
+    (parameter create space (as $space) (type StaticText))
+    (parameter create default (as $default) (type T))
+    (parameter create transform (as $transform) (type (task-function (T) T (row (parameter E)))))
+    (parameter create key (as $key) (type (list $DataKeyPart)))
+    (returns ($Outcome T)) (effect (task (requirement R) (parameter E)))
+    (body
+      (call $standard-update (types T) (effects (row (parameter E))) (requirements R)
+        (local space) (local default) (local transform) (local key))))
+  (function create make-cell-updater (as $factory) (in $cells) (visibility public)
+    (type-parameter create T (as $factory-T) (constraint capture-safe))
+    (effect-parameter create E (as $factory-E))
+    (requirement-parameter create R (as $factory-R) (interface $DataStore)
+      (operations $get $put $transaction $guard))
+    (parameter create space (as $factory-space) (type StaticText))
+    (parameter create default (as $factory-default) (type T))
+    (parameter create transform (as $factory-transform) (type (task-function (T) T (row (parameter E)))))
+    (returns (task-function ((list $DataKeyPart)) ($Outcome T) (row (requirement R) (parameter E))))
+    (effect pure)
+    (body
+      (bind
+        (function-value $update (types T) (effects (row (parameter E))) (requirements R))
+        (local space) (local default) (local transform)))))
+declarations.end

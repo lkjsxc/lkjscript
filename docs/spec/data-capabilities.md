@@ -70,6 +70,54 @@ including aliases and callback-mediated entry. A separately granted store may ow
 transaction; its completion and other external effects can survive the outer store's abort.
 There is no implicit retry, transaction joining, savepoint or cross-store rollback.
 
+### Explicit participation and typed cells
+
+`DataStore.require-transaction() -> Unit` is an idempotent task capability operation with no
+external visibility. It succeeds only when ordinary capability dispatch resolves its exact
+canonical grant to a live ancestor transaction. Interface names, requirement spelling, a shared
+physical path, or an independently granted store's transaction do not supply that scope.
+Without it, `normalized_data_transaction_required` is a capability failure before opening a
+snapshot or performing a data read. The operation neither owns nor finalizes a transaction and
+returns no authority-bearing value. Exact operation permission, current activation allowance,
+deployment grants, cancellation and ordinary capability-call accounting still apply.
+
+A descriptor created or retained outside the scope is valid only if its eventual invocation
+passes the same check. A failed conditional expectation does not end the owner's live scope:
+the guard still succeeds and later body operations may execute, although publication remains
+suppressed. Success promises neither eventual commit nor a snapshot of the current store HEAD.
+Both existing lexical forms retain their completion and same-canonical reentry rules.
+
+The standard package implements two ordinary requirement-parametric graph tasks:
+
+```text
+data-cell-update-in-transaction<T; E; R>(space: StaticText, fallback: T,
+    transform: TaskFn(T) -> T ! E, key: List<DataKeyPart>) -> T ! ({R} union E)
+data-cell-try-update<T; E; R>(space: StaticText, fallback: T,
+    transform: TaskFn(T) -> T ! E, key: List<DataKeyPart>)
+    -> TransactionOutcome<T> ! ({R} union E)
+```
+
+The participant requires exactly the minimum operations `get`, `put`, `require-transaction`.
+It first invokes the guard, reads the current transaction view, selects the caller's fallback for
+a missing entry or through typed `data-decode-or`, invokes the callback once, encodes the candidate,
+then conditionally puts against `Missing` or the exact observed entry revision. Its returned `T`
+is tentative. A false put leaves the parent's failed expectation in force. Subsequent participant
+calls observe earlier staged writes; only the transaction owner completes publication.
+
+The standalone wrapper additionally requires `transaction`, owns `transaction-outcome` and calls
+the same participant. Its `Committed(T)` appears only after successful finalization, while
+`Aborted(ConditionFailed | Conflict)` carries no candidate. Calling it inside an active transaction
+on the same canonical requirement still rejects. Minimum operation constraints do not attenuate
+the caller's requirement or create missing grants.
+
+The guard precedes the helper's own read, callback and write. Ordinary argument evaluation can
+perform effects before entry. A callback's independent effects can survive a parent abort and
+are never automatically replayed. Fallback on incompatible encoding is explicit caller policy,
+not migration, repair or conversion of operational failure into data. Cancellation, exhaustion
+and other operational failures propagate. Neither function adds a capture-safe constraint to `T`;
+closed typed encoding admission still applies, and prefix binding enforces capture rules on
+the values actually captured. Spaces, keys, schemas, migration and retry policy remain caller-owned.
+
 ## Logical interface
 
 The exact standard interface is `DataStore`. `DataKeyPart` has exactly `Bool`, `I64`, `Text`, and

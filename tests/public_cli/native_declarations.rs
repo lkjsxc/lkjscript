@@ -249,6 +249,63 @@ fn native_draft_preserves_http_routes_and_large_canonical_strings() {
 }
 
 #[test]
+fn native_transaction_outcome_preserves_inline_generic_type_through_drafting() {
+    let public = Native::template("command");
+    let input = public.input(
+        "transaction-outcome.lkjc",
+        &format!(
+            r#"request base={}
+declarations.begin
+(units
+  (use standard builtin)
+  (module create transactions (as $module)
+    (function create retain (as $function) (visibility public)
+      (type-parameter create T)
+      (requirement-parameter create R
+        (interface standard::DataStore) (operations standard::DataStore::transaction))
+      (parameter create value (type T))
+      (returns (standard::TransactionOutcome (list T)))
+      (effect (task (requirement R)))
+      (body
+        (transaction-outcome R (types (list T))
+          (outcome standard::TransactionOutcome standard::TransactionAbortReason
+            standard::TransactionOutcome::Committed standard::TransactionOutcome::Aborted
+            standard::TransactionAbortReason::ConditionFailed standard::TransactionAbortReason::Conflict)
+          (binding owner)
+          (list T (local value)))))))
+declarations.end
+"#,
+            public.revision()
+        ),
+    );
+    let applied = public.apply(&input, &public.plan(&input, true), true);
+    let accepted = public.revision();
+    public.cli(&["check"], true);
+    for symbol in ["$function", "$module"] {
+        let draft = public.root.path().join(format!("{symbol}.lkjc"));
+        public.cli(
+            &[
+                "change",
+                "draft",
+                "--owner",
+                &identity(&applied, symbol),
+                "--output",
+                path(&draft),
+            ],
+            true,
+        );
+        assert_eq!(
+            compact_field(
+                compact_record(&public.plan(&draft, true), "result"),
+                "outcome"
+            ),
+            "unchanged"
+        );
+    }
+    assert_eq!(public.revision(), accepted);
+}
+
+#[test]
 fn native_draft_aliases_cannot_shadow_signature_or_declaration_names() {
     let public = Native::new();
     let input = public.input(

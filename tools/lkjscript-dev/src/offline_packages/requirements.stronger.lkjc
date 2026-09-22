@@ -9,6 +9,7 @@ reference.owner as=$DataStore package=$std class=declaration name=DataStore
 reference.owner as=$get package=$std class=operation parent=$DataStore name=get
 reference.owner as=$put package=$std class=operation parent=$DataStore name=put
 reference.owner as=$transaction package=$std class=operation parent=$DataStore name=transaction
+reference.owner as=$guard package=$std class=operation parent=$DataStore name=require-transaction
 reference.owner as=$schema-read package=$std class=operation parent=$DataStore name=schema-read
 reference.owner as=$module package=local class=module name=typed-cells
 reference.owner as=$update package=local class=declaration parent=$module name=try-update
@@ -20,11 +21,13 @@ requirement-parameter.operation parent=%update-constraint index=0 operation=$get
 requirement-parameter.operation parent=%update-constraint index=1 operation=$put
 requirement-parameter.operation parent=%update-constraint index=2 operation=$transaction
 requirement-parameter.operation parent=%update-constraint index=3 operation=$schema-read
+requirement-parameter.operation parent=%update-constraint index=4 operation=$guard
 set.requirement-parameter as=%factory-constraint parameter=$factory-R interface=$DataStore
 requirement-parameter.operation parent=%factory-constraint index=0 operation=$get
 requirement-parameter.operation parent=%factory-constraint index=1 operation=$put
 requirement-parameter.operation parent=%factory-constraint index=2 operation=$transaction
 requirement-parameter.operation parent=%factory-constraint index=3 operation=$schema-read
+requirement-parameter.operation parent=%factory-constraint index=4 operation=$guard
 reference.owner as=$factory-T package=local class=type-parameter parent=$factory name=T
 reference.owner as=$factory-E package=local class=effect-parameter parent=$factory name=E
 reference.owner as=$factory-space package=local class=parameter parent=$factory name=space

@@ -1,0 +1,17 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create stock
+    (function create stage-stock (visibility public)
+      (type-parameter create T)
+      (effect-parameter create E)
+      (requirement-parameter create R (interface std::DataStore)
+        (operations std::DataStore::get std::DataStore::put std::DataStore::require-transaction))
+      (parameter create fallback (type T))
+      (parameter create transform (type (task-function (T) T (row (parameter E)))))
+      (parameter create key (type (list std::DataKeyPart)))
+      (returns T) (effect (task (requirement R) (parameter E)))
+      (body
+        (call std::data-cell-update-in-transaction (types T) (effects (row (parameter E))) (requirements R)
+          (static-text "stock") (local fallback) (local transform) (local key))))))
+declarations.end

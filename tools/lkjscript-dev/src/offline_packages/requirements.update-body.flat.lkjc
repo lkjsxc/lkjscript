@@ -1,83 +1,39 @@
-reference.owner as=$edit-DataEntry package=$std class=declaration name=DataEntry
-reference.owner as=$edit-DataExpectation package=$std class=declaration name=DataExpectation
-reference.owner as=$edit-entry-value package=$std class=field parent=$edit-DataEntry name=value
-reference.owner as=$edit-entry-revision package=$std class=field parent=$edit-DataEntry name=revision
-reference.owner as=$edit-Missing package=$std class=case parent=$edit-DataExpectation name=Missing
-reference.owner as=$edit-Exact package=$std class=case parent=$edit-DataExpectation name=Exact
-reference.owner as=$edit-length package=$std class=declaration name=list-length
-reference.owner as=$edit-first package=$std class=declaration name=list-get
-reference.owner as=$edit-equal package=$std class=declaration name=i64-equal
-reference.owner as=$edit-decode package=$std class=declaration name=data-decode-or
-reference.owner as=$edit-encode package=$std class=declaration name=data-encode
+reference.owner as=$participant package=$std class=declaration name=data-cell-update-in-transaction
 reference.owner as=$edit-update-T package=local class=type-parameter parent=$update name=T
+reference.owner as=$edit-update-E package=local class=effect-parameter parent=$update name=E
 reference.owner as=$edit-space package=local class=parameter parent=$update name=space
 reference.owner as=$edit-default package=local class=parameter parent=$update name=default
 reference.owner as=$edit-transform package=local class=parameter parent=$update name=transform
 reference.owner as=$edit-key package=local class=parameter parent=$update name=key
-type.named as=@EditEntry declaration=$edit-DataEntry
-type.list as=@EditEntries item=@EditEntry
 type.parameter as=@UpdateT parameter=$edit-update-T
-expression.local as=$edit-space-read value=$edit-space
-expression.local as=$edit-key-read value=$edit-key
-expression.capability-call as=$edit-read requirement=parameter:$R operation=$get
-expression.argument parent=$edit-read index=0 expression=$edit-space-read
-expression.argument parent=$edit-read index=1 expression=$edit-key-read
-expression.local as=$edit-entries-count value=$edit-entries
-expression.call as=$edit-count function=$edit-length
-type.argument parent=$edit-count index=0 type=@EditEntry
-expression.argument parent=$edit-count index=0 expression=$edit-entries-count
-expression.i64 as=$edit-zero value=0
-expression.call as=$edit-is-absent function=$edit-equal
-expression.argument parent=$edit-is-absent index=0 expression=$edit-count
-expression.argument parent=$edit-is-absent index=1 expression=$edit-zero
-expression.local as=$edit-absent-value value=$edit-absent
-expression.local as=$edit-default-value value=$edit-default
-expression.local as=$edit-entries-decode value=$edit-entries
-expression.i64 as=$edit-decode-index value=0
-expression.call as=$edit-first-entry function=$edit-first
-type.argument parent=$edit-first-entry index=0 type=@EditEntry
-expression.argument parent=$edit-first-entry index=0 expression=$edit-entries-decode
-expression.argument parent=$edit-first-entry index=1 expression=$edit-decode-index
-expression.field as=$edit-stored-bytes value=$edit-first-entry field=$edit-entry-value
-expression.local as=$edit-decode-default value=$edit-default
-expression.call as=$edit-decoded function=$edit-decode
-type.argument parent=$edit-decoded index=0 type=@UpdateT
-expression.argument parent=$edit-decoded index=0 expression=$edit-stored-bytes
-expression.argument parent=$edit-decoded index=1 expression=$edit-decode-default
-expression.if as=$edit-old condition=$edit-absent-value when-true=$edit-default-value when-false=$edit-decoded
-expression.local as=$edit-transform-first value=$edit-transform
-expression.invoke as=$edit-once function=$edit-transform-first
-expression.argument parent=$edit-once index=0 expression=$edit-old
-expression.local as=$edit-transform-second value=$edit-transform
-expression.invoke as=$edit-twice function=$edit-transform-second
-expression.argument parent=$edit-twice index=0 expression=$edit-once
-expression.local as=$edit-encoded-value value=$edit-candidate
-expression.call as=$edit-encoded function=$edit-encode
-type.argument parent=$edit-encoded index=0 type=@UpdateT
-expression.argument parent=$edit-encoded index=0 expression=$edit-encoded-value
-expression.variant as=$edit-missing case=$edit-Missing
-expression.local as=$edit-entries-revision value=$edit-entries
-expression.i64 as=$edit-revision-index value=0
-expression.call as=$edit-revision-entry function=$edit-first
-type.argument parent=$edit-revision-entry index=0 type=@EditEntry
-expression.argument parent=$edit-revision-entry index=0 expression=$edit-entries-revision
-expression.argument parent=$edit-revision-entry index=1 expression=$edit-revision-index
-expression.field as=$edit-revision value=$edit-revision-entry field=$edit-entry-revision
-expression.variant as=$edit-exact case=$edit-Exact payload=$edit-revision
-expression.local as=$edit-absent-condition value=$edit-absent
-expression.if as=$edit-condition condition=$edit-absent-condition when-true=$edit-missing when-false=$edit-exact
-expression.local as=$edit-space-write value=$edit-space
-expression.local as=$edit-key-write value=$edit-key
-expression.capability-call as=$edit-write requirement=parameter:$R operation=$put
-expression.argument parent=$edit-write index=0 expression=$edit-space-write
-expression.argument parent=$edit-write index=1 expression=$edit-key-write
-expression.argument parent=$edit-write index=2 expression=$edit-encoded
-expression.argument parent=$edit-write index=3 expression=$edit-condition
-expression.local as=$edit-candidate-result value=$edit-candidate
-expression.let as=$edit-algorithm body=$edit-candidate-result
-expression.binding parent=$edit-algorithm index=0 as=$edit-entries name=entries type=@EditEntries value=$edit-read
-expression.binding parent=$edit-algorithm index=1 as=$edit-absent name=absent type=bool value=$edit-is-absent
-expression.binding parent=$edit-algorithm index=2 as=$edit-candidate name=candidate type=@UpdateT value=$edit-twice
-expression.binding parent=$edit-algorithm index=3 as=$edit-matched name=primary-condition-matched type=bool value=$edit-write
-expression.transaction-outcome as=$edited-update-body requirement=parameter:$R binding=$edit-transaction name=cell-update type=@UpdateT outcome=$Outcome abort-reason=$Reason committed=$Committed aborted=$Aborted condition-failed=$ConditionFailed conflict=$Conflict body=$edit-algorithm
+effect.row as=@UpdateE
+effect.parameter parent=@UpdateE index=0 parameter=$edit-update-E
+expression.local as=$first-space value=$edit-space
+expression.local as=$first-default value=$edit-default
+expression.local as=$first-transform value=$edit-transform
+expression.local as=$first-key value=$edit-key
+expression.call as=$first-update function=$participant
+type.argument parent=$first-update index=0 type=@UpdateT
+effect.argument parent=$first-update index=0 effect=@UpdateE
+requirement.argument parent=$first-update index=0 requirement=parameter:$R
+expression.argument parent=$first-update index=0 expression=$first-space
+expression.argument parent=$first-update index=1 expression=$first-default
+expression.argument parent=$first-update index=2 expression=$first-transform
+expression.argument parent=$first-update index=3 expression=$first-key
+expression.local as=$second-space value=$edit-space
+expression.local as=$second-default value=$edit-default
+expression.local as=$second-transform value=$edit-transform
+expression.local as=$second-key value=$edit-key
+expression.call as=$second-update function=$participant
+type.argument parent=$second-update index=0 type=@UpdateT
+effect.argument parent=$second-update index=0 effect=@UpdateE
+requirement.argument parent=$second-update index=0 requirement=parameter:$R
+expression.argument parent=$second-update index=0 expression=$second-space
+expression.argument parent=$second-update index=1 expression=$second-default
+expression.argument parent=$second-update index=2 expression=$second-transform
+expression.argument parent=$second-update index=3 expression=$second-key
+expression.sequence as=$both-updates
+expression.argument parent=$both-updates index=0 expression=$first-update
+expression.argument parent=$both-updates index=1 expression=$second-update
+expression.transaction-outcome as=$edited-update-body requirement=parameter:$R binding=$edit-transaction name=cell-update type=@UpdateT outcome=$Outcome abort-reason=$Reason committed=$Committed aborted=$Aborted condition-failed=$ConditionFailed conflict=$Conflict body=$both-updates
 replace.body function=$update body=$edited-update-body

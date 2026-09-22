@@ -1,48 +1,21 @@
-reference.owner as=$edit-DataEntry package=$std class=declaration name=DataEntry
-reference.owner as=$edit-DataExpectation package=$std class=declaration name=DataExpectation
-reference.owner as=$edit-entry-value package=$std class=field parent=$edit-DataEntry name=value
-reference.owner as=$edit-entry-revision package=$std class=field parent=$edit-DataEntry name=revision
-reference.owner as=$edit-Missing package=$std class=case parent=$edit-DataExpectation name=Missing
-reference.owner as=$edit-Exact package=$std class=case parent=$edit-DataExpectation name=Exact
-reference.owner as=$edit-length package=$std class=declaration name=list-length
-reference.owner as=$edit-first package=$std class=declaration name=list-get
-reference.owner as=$edit-equal package=$std class=declaration name=i64-equal
-reference.owner as=$edit-decode package=$std class=declaration name=data-decode-or
-reference.owner as=$edit-encode package=$std class=declaration name=data-encode
+reference.owner as=$participant package=$std class=declaration name=data-cell-update-in-transaction
 reference.owner as=$edit-update-T package=local class=type-parameter parent=$update name=T
+reference.owner as=$edit-update-E package=local class=effect-parameter parent=$update name=E
 reference.owner as=$edit-space package=local class=parameter parent=$update name=space
 reference.owner as=$edit-default package=local class=parameter parent=$update name=default
 reference.owner as=$edit-transform package=local class=parameter parent=$update name=transform
 reference.owner as=$edit-key package=local class=parameter parent=$update name=key
-type.named as=@EditEntry declaration=$edit-DataEntry
-type.list as=@EditEntries item=@EditEntry
 type.parameter as=@UpdateT parameter=$edit-update-T
+effect.row as=@UpdateE
+effect.parameter parent=@UpdateE index=0 parameter=$edit-update-E
 expression.block as=$edited-update-body
   (transaction-outcome parameter:$R (types @UpdateT)
     (outcome $Outcome $Reason $Committed $Aborted $ConditionFailed $Conflict)
     (binding cell-update)
-    (let
-      (binding entries (type @EditEntries)
-        (capability-call parameter:$R $get (local $edit-space) (local $edit-key)))
-      (binding absent (type bool)
-        (call $edit-equal (call $edit-length (types @EditEntry) (local entries)) (i64 0)))
-      (binding candidate (type @UpdateT)
-        (invoke (local $edit-transform)
-          (invoke (local $edit-transform)
-            (if (local absent)
-              (local $edit-default)
-              (call $edit-decode (types @UpdateT)
-                (field (call $edit-first (types @EditEntry) (local entries) (i64 0)) $edit-entry-value)
-                (local $edit-default))))))
-      (binding primary-condition-matched (type bool)
-        (capability-call parameter:$R $put
-          (local $edit-space)
-          (local $edit-key)
-          (call $edit-encode (types @UpdateT) (local candidate))
-          (if (local absent)
-            (variant $edit-Missing)
-            (variant $edit-Exact
-              (field (call $edit-first (types @EditEntry) (local entries) (i64 0)) $edit-entry-revision)))))
-      (in (local candidate))))
+    (sequence
+      (call $participant (types @UpdateT) (effects @UpdateE) (requirements parameter:$R)
+        (local $edit-space) (local $edit-default) (local $edit-transform) (local $edit-key))
+      (call $participant (types @UpdateT) (effects @UpdateE) (requirements parameter:$R)
+        (local $edit-space) (local $edit-default) (local $edit-transform) (local $edit-key))))
 expression.end
 replace.body function=$update body=$edited-update-body

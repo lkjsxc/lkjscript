@@ -4,6 +4,25 @@ Status date: 2026-09-22 UTC. This file describes implemented checkout reality. E
 public guides live under [generated](generated), including the
 [operation guide](generated/operations.md); this file does not duplicate them.
 
+## Composable typed-cell updates — focused proof passed, release acceptance pending
+
+The [selected campaign](campaigns/202609221952.md) adds exact
+`DataStore.require-transaction` and native-authored ordinary standard tasks
+`data-cell-update-in-transaction` (tentative caller-owned staging) and `data-cell-try-update`
+(standalone completed outcome). Existing raw helpers already participated; nested transaction
+owners remain rejected. The maintained requirement-library wrapper now delegates to standard.
+Native `transaction-outcome` creation/drafting also needed a concrete syntax repair exposed by
+this workflow. Standard/lkjournal public checks pass 37/44 with evaluator agreement; lkjournal
+only replaces its exact dependency and generated artifact. No application-data format changes.
+
+Official v0.1.40 freshly demonstrates old nested-owner rejection and raw-helper `Committed(60)`.
+It rejects a new required guard before unavailable secret/store acquisition. Fresh focused proof
+passes 229 public commands, 11 composition cases and the original receipt reader; the authentic
+old closure runs on the new runtime. Seven adapter/evaluator authority/cleanup tests and the native
+creation/drafting regression pass. The [evidence owner](evidence/202609221952-cells/README.md)
+separates these observations from final acceptance. Version 0.1.41 is selected but source/candidate
+acceptance, remote-main integration and publication are pending.
+
 ## v0.1.39 delivery
 
 The explicit publication requests selected the already accepted v0.1.39 product at

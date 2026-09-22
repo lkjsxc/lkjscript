@@ -12,6 +12,7 @@ reference.owner as=$DataExpectation package=$std class=declaration name=DataExpe
 reference.owner as=$get package=$std class=operation parent=$DataStore name=get
 reference.owner as=$put package=$std class=operation parent=$DataStore name=put
 reference.owner as=$transaction package=$std class=operation parent=$DataStore name=transaction
+reference.owner as=$guard package=$std class=operation parent=$DataStore name=require-transaction
 reference.owner as=$schema-read package=$std class=operation parent=$DataStore name=schema-read
 reference.owner as=$config-text package=$std class=operation parent=$Configuration name=text
 reference.owner as=$text-key package=$std class=case parent=$DataKeyPart name=Text
@@ -29,11 +30,13 @@ requirement.operation parent=$numbers index=0 operation=$get
 requirement.operation parent=$numbers index=1 operation=$put
 requirement.operation parent=$numbers index=2 operation=$transaction
 requirement.operation parent=$numbers index=3 operation=$schema-read
+requirement.operation parent=$numbers index=4 operation=$guard
 requirement.limit parent=$numbers index=0 name=maximum_calls maximum=100 unit=calls
 add.requirement as=$texts component=$component name=settings-store interface=$DataStore
 requirement.operation parent=$texts index=0 operation=$get
 requirement.operation parent=$texts index=1 operation=$put
 requirement.operation parent=$texts index=2 operation=$transaction
+requirement.operation parent=$texts index=3 operation=$guard
 requirement.limit parent=$texts index=0 name=maximum_calls maximum=100 unit=calls
 add.requirement as=$config component=$component name=suffix-config interface=$Configuration
 requirement.operation parent=$config index=0 operation=$config-text

@@ -119,14 +119,17 @@ The completion API lets the
 library own finalization across a caller-supplied requirement; fresh source and static-target
 acceptance establish the result through transport, callback failures and independent store observations.
 
-The remaining difficult composition boundary is transaction ownership: a helper owning a
-transaction still cannot join an already active transaction on the same canonical requirement.
-Conflict describes that store's non-publication, while independent callback effects can survive.
-Retries therefore need workload-specific idempotency and effect analysis. Evaluate useful ordinary
-libraries or numerical computation from fresh workloads, and reconsider authoring preludes or affine
-transfer only where a concrete caller needs them. The typed-cell witness is designed composition,
-not adoption; standard/`lkjournal` changes maintain compatibility. Historical-repository revalidation
-cost remains unmeasured. This outlook is revisable and authorizes no subsequent feature work.
+The [composable-cell campaign](campaigns/202609221952.md) selects that concrete ownership boundary:
+ordinary standard participant and standalone functions distinguish tentative staging from completed
+publication. Raw helper participation already existed; the explicit guard rejects missing canonical
+scope before a helper's read/callback. Same-canonical nested owners remain rejected. Standard-library
+and maintained-wrapper adoption are distinct from the designed credit/stock witness, while lkjournal
+only maintains compatibility. Focused public and authority proof passes; dependency-complete
+acceptance and selected v0.1.41 delivery are in progress.
+Conflict describes one store's non-publication; independent callback effects can survive and retries
+still need workload-specific idempotency and effect analysis. Further ordinary libraries, numerical
+computation, affine transfer or native tooling need a concrete next workload. Historical-repository
+revalidation cost remains unmeasured. This outlook authorizes no unrelated follow-on feature work.
 
 Immutable v0.1.8 remains the unchanged historical recovery point; its workflow defect was recovered additively.
 

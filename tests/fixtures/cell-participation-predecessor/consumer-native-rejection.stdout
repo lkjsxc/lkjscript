@@ -1,0 +1,2 @@
+result status=failure command=change
+diagnostic class=source code=change_unit_unresolved message="unresolved declaration 'types'; qualify local module::declaration or supplier::declaration and an explicit member; ambiguous exports need an exact typed reference alias" path=evidence/consumer.lkjc line=50 column=43

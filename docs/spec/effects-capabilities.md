@@ -190,6 +190,16 @@ granted stores retain their independent transaction boundaries. Cancellation and
 effects and join cleanup.
 A second store or a Configuration/HTTP operation is not included in the first store's atomicity.
 
+The exact standard `require-transaction() -> Unit` operation checks participation through that
+same ordinary dispatch path. It remains a task operation even though it is idempotent and has
+no external visibility. It consumes the normal capability call and checks current exact
+allowance/grant authority on every invocation, including named, bound and tail calls. A retained
+descriptor holds no transaction authority. Absent or other-canonical scope rejects before the
+participating helper's read or callback. A failed expectation does not end a live owner's scope.
+The standard `data-cell-update-in-transaction` returns a tentative candidate within this scope;
+`data-cell-try-update` owns completion. Their full contracts are in
+[data capabilities](data-capabilities.md#explicit-participation-and-typed-cells).
+
 A false conditional expectation suppresses publication of the entire transaction. Later operations
 can still return their local results; normal lexical completion can mean committed or unchanged.
 Commit-time base conflicts retain their execution failure. A graph library may return an ordinary

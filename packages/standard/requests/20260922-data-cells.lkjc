@@ -1,0 +1,80 @@
+request base=rev_19be6fa1bf22b7b139c3c0773c792c00518fa2e17fd6468da77076a0dc01eeb4 idempotency=standard-composable-data-cells
+reference.owner as=$data package=local class=module name=data
+reference.owner as=$core package=local class=module name=core
+reference.owner as=$DataStore package=local class=declaration parent=$data name=DataStore
+reference.owner as=$DataEntry package=local class=declaration parent=$data name=DataEntry
+reference.owner as=$DataExpectation package=local class=declaration parent=$data name=DataExpectation
+reference.owner as=$DataKeyPart package=local class=declaration parent=$data name=DataKeyPart
+reference.owner as=$Outcome package=local class=declaration parent=$data name=TransactionOutcome
+reference.owner as=$Reason package=local class=declaration parent=$data name=TransactionAbortReason
+reference.owner as=$Committed package=local class=case parent=$Outcome name=Committed
+reference.owner as=$Aborted package=local class=case parent=$Outcome name=Aborted
+reference.owner as=$ConditionFailed package=local class=case parent=$Reason name=ConditionFailed
+reference.owner as=$Conflict package=local class=case parent=$Reason name=Conflict
+reference.owner as=$get package=local class=operation parent=$DataStore name=get
+reference.owner as=$put package=local class=operation parent=$DataStore name=put
+reference.owner as=$transaction package=local class=operation parent=$DataStore name=transaction
+reference.owner as=$entry-value package=local class=field parent=$DataEntry name=value
+reference.owner as=$entry-revision package=local class=field parent=$DataEntry name=revision
+reference.owner as=$Missing package=local class=case parent=$DataExpectation name=Missing
+reference.owner as=$Exact package=local class=case parent=$DataExpectation name=Exact
+reference.owner as=$length package=local class=declaration parent=$core name=list-length
+reference.owner as=$first package=local class=declaration parent=$core name=list-get
+reference.owner as=$equal package=local class=declaration parent=$core name=i64-equal
+reference.owner as=$decode package=local class=declaration parent=$data name=data-decode-or
+reference.owner as=$encode package=local class=declaration parent=$data name=data-encode
+add.operation as=$require-transaction interface=$DataStore name=require-transaction result=unit idempotency=idempotent external-visibility=none
+declarations.begin
+(units
+  (function create data-cell-update-in-transaction (as $participant) (in $data) (visibility public)
+    (type-parameter create T)
+    (effect-parameter create E)
+    (requirement-parameter create R
+      (interface $DataStore) (operations $get $put $require-transaction))
+    (parameter create space (type StaticText))
+    (parameter create fallback (type T))
+    (parameter create transform (type (task-function (T) T (row (parameter E)))))
+    (parameter create key (type (list $DataKeyPart)))
+    (returns T) (effect (task (requirement R) (parameter E)))
+    (body
+      (sequence
+        (capability-call R $require-transaction)
+        (let
+          (binding entries (type (list $DataEntry))
+            (capability-call R $get (local space) (local key)))
+          (binding absent (type Bool)
+            (call $equal (call $length (types $DataEntry) (local entries)) (i64 0)))
+          (binding candidate (type T)
+            (invoke (local transform)
+              (if (local absent)
+                (local fallback)
+                (call $decode (types T)
+                  (field (call $first (types $DataEntry) (local entries) (i64 0)) $entry-value)
+                  (local fallback)))))
+          (binding condition-matched (type Bool)
+            (capability-call R $put
+              (local space) (local key)
+              (call $encode (types T) (local candidate))
+              (if (local absent)
+                (variant $Missing)
+                (variant $Exact
+                  (field (call $first (types $DataEntry) (local entries) (i64 0)) $entry-revision)))))
+          (in (local candidate))))))
+  (function create data-cell-try-update (as $standalone) (in $data) (visibility public)
+    (type-parameter create T)
+    (effect-parameter create E)
+    (requirement-parameter create R
+      (interface $DataStore) (operations $get $put $require-transaction $transaction))
+    (parameter create space (type StaticText))
+    (parameter create fallback (type T))
+    (parameter create transform (type (task-function (T) T (row (parameter E)))))
+    (parameter create key (type (list $DataKeyPart)))
+    (returns ($Outcome T)) (effect (task (requirement R) (parameter E)))
+    (body
+      (transaction-outcome R (types T)
+        (outcome $Outcome $Reason $Committed $Aborted $ConditionFailed $Conflict)
+        (binding cell-update)
+        (call data-cell-update-in-transaction
+          (types T) (effects (row (parameter E))) (requirements R)
+          (local space) (local fallback) (local transform) (local key))))))
+declarations.end

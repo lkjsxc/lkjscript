@@ -1,0 +1,2 @@
+result status=failure command=run
+diagnostic class=capability code=normalized_data_operation message="first-party data adapter does not implement exact operation 'require-transaction'"

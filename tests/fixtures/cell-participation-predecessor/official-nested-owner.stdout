@@ -1,0 +1,2 @@
+result status=failure command=run
+diagnostic class=infrastructure code=normalized_transaction_nested message="one exact requirement cannot begin a nested transaction" notes="[\"foreground cleanup: admission-stopped=true remaining-owned-tasks=0 failures=0\",\"earlier application effects may already be visible; automatic retry is not safe\"]"
