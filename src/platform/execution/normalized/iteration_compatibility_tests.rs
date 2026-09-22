@@ -3,6 +3,7 @@ use super::{NormalizedReferenceInterpreter, NormalizedVm};
 use crate::platform::kernel::*;
 use crate::platform::package_transport::source::PackageContainer;
 use crate::platform::publication::GraphRepository;
+use crate::platform::{DeclarationId, OperationId};
 use std::collections::BTreeSet;
 use std::path::Path;
 use std::str::FromStr;
@@ -71,6 +72,26 @@ fn task_iteration_cutover_preserves_unrelated_owners_public_contracts_and_old_su
             .unwrap()
             .value;
     assert_eq!(old.root.package_id, current.root.package_id);
+    // A later reviewed public addition extends this exact interface by one operation.
+    // Admit only that change; every old operation record remains covered below.
+    let store = OwnerKey::Declaration(
+        DeclarationId::from_str("decl_640e96fa57dee1c09557eb4bc7b53398").unwrap(),
+    );
+    let guard = OperationId::from_str("op_6ca8ac3193f04e95bb6798ba1c9702c1").unwrap();
+    let mut expected_store = old.owners[&store].clone();
+    let OwnerRecord::Declaration(declaration) = &mut expected_store else {
+        panic!("DataStore declaration")
+    };
+    assert_eq!(declaration.header.contract_version, 14);
+    declaration.header.contract_version = 17;
+    let DeclarationPayload::Interface { operations } = &mut declaration.payload else {
+        panic!("DataStore interface")
+    };
+    assert_eq!(operations.len(), 7);
+    assert!(!operations.contains(&guard));
+    operations.push(guard);
+    operations.sort();
+    assert_eq!(current.owners.get(&store), Some(&expected_store));
     let (fold, old_fold) = function(old, "task-fold-left");
     let (range, old_range) = function(old, "task-fold-left-range");
     let (_, mut new_fold) = function(&current, "task-fold-left");
@@ -112,7 +133,7 @@ fn task_iteration_cutover_preserves_unrelated_owners_public_contracts_and_old_su
     }
     let mut preserved = 0;
     for (id, owner) in &old.owners {
-        if *id != fold && !obsolete.contains(id) {
+        if *id != fold && *id != store && !obsolete.contains(id) {
             assert_eq!(
                 current.owners.get(id),
                 Some(owner),

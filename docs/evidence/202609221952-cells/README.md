@@ -108,3 +108,32 @@ bytes, hidden callback effects and extra completion. Original log:
 Fresh source-tier and finalized-candidate acceptance, remote-main integration and immutable
 publication remain separate obligations at this writing. Installed runtime selection will not
 migrate data or reverse publication; old bundles and exact older standard closures remain valid.
+
+## Source acceptance attempt 01
+
+At implementation commit `81ceecf9fcec97832388aa52264a6a69180f8a0a`, fresh release-source
+acceptance passed 19 of 20 gates with stable inputs and zero reuse. `workspace_tests` failed:
+the read-only standard inventory test still expected 949 owners, and the Graph 14 iteration
+compatibility test still assumed the DataStore interface itself was unchanged. The root library
+reported 756 passed, two failed and eight ignored; Cargo stopped before the remaining workspace
+test executables. The other 19 gates, including lint, generated guides and all maintained artifact
+comparisons, passed. This run is not source acceptance.
+
+Original receipt: `.artifacts/lkjscript-dev/check/1790078133829779139-2456873-0/receipt.json`,
+digest `verification_62653942c9fbff910bf1e4bb50d0123aad1bf0e3b14531d828278c7fa1568e5b`.
+The repair changes the inventory's explicit count to 1,012 and independently spells the only
+allowed DataStore record change: the seven predecessor operations plus the exact new guard,
+sealed by the already supported Graph 17 writer. Every old operation, other unrelated owner,
+retained type and application owner map still receives its original identity/byte checks. The
+authentic Graph 14 transport/artifact is unchanged and still executes its 33 tests in both
+evaluators. No production behavior or format contract changes to satisfy these tests.
+
+The first focused repair build missed explicit `DeclarationId`/`OperationId` imports and failed
+before execution; `compatibility-tests-build-01.jsonl` retains the diagnostics. The imports were
+added and the second reported build produced the immutable focused test executable. No failed
+build is counted as a test pass.
+
+Both repaired tests then passed. The compatibility observation retains 831 byte-identical
+unrelated standard records, all application owner-map bytes, and equal results for all 33 old
+artifact tests in both evaluators. Logs are `compatibility-inventory-01.log` and
+`compatibility-iteration-01.log` under the ignored campaign evidence directory.
