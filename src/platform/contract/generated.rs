@@ -142,8 +142,42 @@ fn change_grammar_markdown(snapshot: &CapabilitiesSnapshot) -> Result<String, St
     let mut output = generated_header(snapshot);
     output.push_str("# Change request grammar\n\n");
     output.push_str(
-        "Flat records and structural expression blocks lower into the same reviewed typed intent. A saved request is a proposal; the accepted meaning graph remains the program authority. Declarations, parameters, types, effects, requirements, dependencies and typed reference preludes keep their explicit records.\n\n",
+        "Native declaration units, compact records and structural expression bodies lower into the same reviewed typed intent. A saved request is a proposal; accepted meaning remains the program authority. Units collect declarations before resolving names, provide lexical parameters and inline types, and allocate private expression/type labels and child indexes. Exact dependency changes and deliberate rename, move or deletion remain explicit compact operations.\n\n",
     );
+    output.push_str(r#"## Create and resume a declaration
+
+Create an empty project with `lkjscript new author --template minimal --name demo`, then read its exact revision with `lkjscript --project author status`. Save this literal request as `hello.lkjc`, replacing only `REVISION` with that observed revision:
+
+```text
+request base=REVISION
+declarations.begin
+(units
+  (module create app
+    (record create Greeting (visibility public)
+      (field create message (type Text)))
+    (function create hello (visibility public)
+      (parameter create name (type Text))
+      (returns Greeting) (effect pure)
+      (body (record Greeting (field Greeting::message (local name)))))
+    (test create example (visibility private)
+      (actual (call hello (text "hello")))
+      (expected (record Greeting (field Greeting::message (text "hello")))))))
+declarations.end
+```
+
+Run `lkjscript --project author change plan --input-file hello.lkjc`, review the complete plan, then run `change apply --input-file hello.lkjc --plan TOKEN` against the same project with its returned token. Run `check` to execute graph tests differentially. No standard dependency is needed for this example.
+
+Find the module with `lkjscript --project author query find module app`. Use its exact `mod_...` identity in `lkjscript --project author change draft --owner MODULE --output edit.lkjc`. The destination must be absent and outside accepted project storage. A module expands its own declarations; separate repeatable selections may name connected declarations or targets. Referenced outside declarations are exact references, not copied definitions.
+
+The draft includes its repository, package and base revision, complete edit units and exact contract-child bindings. Without an edit, `change plan --input-file edit.lkjc` reports `outcome=unchanged`, with no publication token. After changing a body or adding an explicit `parameter create ...`, plan and apply the complete repair with the returned token. Existing parameter entries stay `edit EXACT_ID NAME`; omissions are errors, and changing a displayed name does not authorize a rename. Unselected owners survive. Deleting the original authoring inputs does not prevent another draft from accepted meaning.
+
+Generated structural aliases are interned notation. Original aliases, comments and formatting are not stored. Positional parameters and generic/effect/requirement contracts retain canonical order; keyed fields, cases and match arms use canonical identity order. Expression evaluation order remains explicit. Drafts preserve the accepted body when untouched; a real body replacement follows the existing expression/binding retirement contract.
+
+For the standard library, discover `package builtin inspect`, export its exact transport, and stage it with `package dependency stage --transport DIGEST --input-file PATH`. Add its observed package, semantic revision and package revision with `add.dependency`. Then `(use std builtin)` supplies typed names such as `std::add`, `std::list-fold-left`, and `std::DataStore::get`. An ordinary supplier uses `(use lib PACKAGE PACKAGE_REVISION)` and its public exported names, for example `lib::Summary`. Private dependency members reject. No ambient lookup, wildcard import, implicit upgrade, effect inference or grant is introduced.
+
+An edited request has one atomic semantic publication boundary. Output capacity, cancellation and an existing draft destination cannot publish a partial draft. A later failed build does not undo an accepted change. Artifacts built through `build --output FILE` require a compatible runtime; they are not self-contained executables.
+
+"#);
     output.push_str(
         "With an ordinary reference/declaration prelude for `$add`, this block exports one expression root for `create.function ... body=$body` or `replace.body function=FUNCTION body=$body`:\n\n```text\nexpression.block as=$body\n  (let\n    (binding value (type i64) (i64 2))\n    (binding value (type i64) (call $add (local value) (i64 3)))\n    (in (local value)))\nexpression.end\n```\n\n",
     );

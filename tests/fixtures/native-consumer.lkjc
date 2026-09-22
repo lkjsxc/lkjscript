@@ -1,0 +1,53 @@
+declarations.begin
+(units
+  (module create readings (as $readings)
+    (record create Reading (visibility public)
+      (field create enabled (type Bool))
+      (field create amount (type I64)))
+    (function create project (visibility public)
+      (parameter create reading (type Reading))
+      (returns (lib::Marked I64)) (effect pure)
+      (body
+        (if (field (local reading) Reading::enabled)
+          (variant lib::Marked::included (types I64) (field (local reading) Reading::amount))
+          (variant lib::Marked::excluded (types I64) (field (local reading) Reading::amount)))))
+    (function create run-readings (visibility public)
+      (parameter create values (type (list Reading)))
+      (returns lib::Summary) (effect pure)
+      (body
+        (call lib::summarize (types Reading)
+          (record lib::Batch (types Reading) (field lib::Batch::items (local values)))
+          (function-value project))))
+    (test create empty (visibility private)
+      (actual (call run-readings (list Reading)))
+      (expected (record lib::Summary (field lib::Summary::count (i64 0)) (field lib::Summary::sum (i64 0)))))
+    (test create excluded (visibility private)
+      (actual
+        (call run-readings
+          (list Reading (record Reading (field Reading::enabled (bool false)) (field Reading::amount (i64 100))))))
+      (expected (record lib::Summary (field lib::Summary::count (i64 0)) (field lib::Summary::sum (i64 0))))))
+  (module create app (as $app)
+    (function create main (as $main) (visibility private)
+      (returns lib::Summary) (effect pure)
+      (body
+        (call readings::run-readings
+          (list readings::Reading
+            (record readings::Reading (field readings::Reading::enabled (bool true)) (field readings::Reading::amount (i64 3)))
+            (record readings::Reading (field readings::Reading::enabled (bool false)) (field readings::Reading::amount (i64 100)))
+            (record readings::Reading (field readings::Reading::enabled (bool true)) (field readings::Reading::amount (i64 -1)))))))
+    (test create mixed (visibility private)
+      (actual (call main))
+      (expected (record lib::Summary (field lib::Summary::count (i64 2)) (field lib::Summary::sum (i64 2)))))
+    (function create overflow (visibility private)
+      (returns lib::Summary) (effect pure)
+      (body
+        (call readings::run-readings
+          (list readings::Reading
+            (record readings::Reading (field readings::Reading::enabled (bool true)) (field readings::Reading::amount (i64 9223372036854775807)))
+            (record readings::Reading (field readings::Reading::enabled (bool true)) (field readings::Reading::amount (i64 1)))))))
+    (component create command (visibility private)
+      (port create main (type (function () lib::Summary)) (function main))
+      (port create overflow (type (function () lib::Summary)) (function overflow))))
+  (target create summary (component app::command) (runner command) (port app::command::main))
+  (target create overflow (component app::command) (runner command) (port app::command::overflow)))
+declarations.end

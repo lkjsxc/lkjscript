@@ -1,0 +1,140 @@
+request base=rev_e0dbc208edc1456282c5c9b3ec31925a04047d4d05890b743b167b4feaebb4b1 repository=repo_0dea14c9f8fbec93bbe33055825c6e3d package=pkg_d4cdcb5de313e2c85a849d3891764258
+
+declarations.begin
+(units
+  ; Reconstructed from canonical meaning. Original comments, formatting and type aliases are not stored.
+  (reference ref_included_11 case pkg_d4cdcb5de313e2c85a849d3891764258/case_4ec3999d8375060d554a2bd9df5ba9f7)
+  (reference ref_excluded_10 case pkg_d4cdcb5de313e2c85a849d3891764258/case_e8e080a3533ac86b024afa22e4382a67)
+  (reference ref_list-fold-left_1 declaration pkg_10000000000000000000000000000001/decl_07dace81aeeebbaa5afb29bcc93c6589)
+  (reference ref_add_12 declaration pkg_10000000000000000000000000000001/decl_72b38e6cd864cb4239b329b7e337577f)
+  (reference ref_summarize_8 declaration pkg_d4cdcb5de313e2c85a849d3891764258/decl_1282c607cf7fac372f1f6e6e4c49314a)
+  (reference ref_Summary_0 declaration pkg_d4cdcb5de313e2c85a849d3891764258/decl_697d3908398e370877d6389fa46d2ea7)
+  (reference ref_add-included_13 declaration pkg_d4cdcb5de313e2c85a849d3891764258/decl_77d7d3dddfcf07e14832e9edac17b934)
+  (reference ref_keep-marked_9 declaration pkg_d4cdcb5de313e2c85a849d3891764258/decl_a461c64bb7dccb8268e00ff91fc84116)
+  (reference ref_Marked_7 declaration pkg_d4cdcb5de313e2c85a849d3891764258/decl_aa4120d17116c5b45f0ef21d00644b53)
+  (reference ref_step_5 declaration pkg_d4cdcb5de313e2c85a849d3891764258/decl_aad118f1167f201ed8a02e461b997fb9)
+  (reference ref_Batch_6 declaration pkg_d4cdcb5de313e2c85a849d3891764258/decl_ae183990cc8394d73de6e593acd1fc42)
+  (reference ref_count_3 field pkg_d4cdcb5de313e2c85a849d3891764258/field_5235b006375ece9168d7fad06d8deab2)
+  (reference ref_sum_4 field pkg_d4cdcb5de313e2c85a849d3891764258/field_87be078039324cb674d78c2fca48c367)
+  (reference ref_items_2 field pkg_d4cdcb5de313e2c85a849d3891764258/field_edd6554eb2e89a85b83bf19f450ed335)
+  (type-alias type_0 ref_Summary_0)
+  (type-alias type_1 (parameter-type typeparam_0bb9828ff7fe7ce075a8b1ecfce5c3b6))
+  (type-alias type_2 (ref_Batch_6 type_1))
+  (type-alias type_3 (ref_Marked_7 I64))
+  (type-alias type_4 (function (type_1) type_3))
+  (type-alias type_5 (parameter-type typeparam_d51262ef9a5aeeb9bfd9a911afa0a369))
+  (type-alias type_6 (parameter-type typeparam_a92b81289a720854732be49f791ee1f5))
+  (type-alias type_7 (function (type_6) type_3))
+  (type-alias type_8 (parameter-type typeparam_fd7f47b29af0d6e99346b77ed48ec515))
+  (type-alias type_9 (list type_8))
+  (module edit mod_6030b90f1293d34f0dae68521f27de0e batches
+    (function create step-with-policy (visibility private)
+      (type-parameter create T (constraint capture-safe))
+      (parameter create projection (type (function (T) (Marked I64))))
+      (parameter create include_excluded (type Bool))
+      (parameter create state (type Summary))
+      (parameter create item (type T))
+      (returns Summary) (effect pure)
+      (body
+        (match (invoke (local projection) (local item))
+          (arm Marked::included (payload amount I64)
+            (call add-included (local state) (local amount)))
+          (arm Marked::excluded (payload amount I64)
+            (if (local include_excluded)
+              (call add-included (local state) (local amount))
+              (local state))))))
+    (function edit decl_1282c607cf7fac372f1f6e6e4c49314a summarize
+      (visibility public)
+      (returns type_0)
+      (effect pure)
+      (body (call ref_list-fold-left_1 (types type_1 type_0) (field (local batch) ref_items_2) (record ref_Summary_0 (field ref_count_3 (i64 0)) (field ref_sum_4 (i64 0))) (bind (function-value step-with-policy (types type_1)) (local projection) (local include_excluded))))
+      (type-parameter edit typeparam_0bb9828ff7fe7ce075a8b1ecfce5c3b6 T
+        (constraint capture-safe))
+      (parameter edit param_974bdb5b49e8926a183485a0ca7dc113 batch
+        (type type_2)
+        (use unrestricted))
+      (parameter edit param_b415c52d59ef881ee1591e3caa5b706b projection
+        (type type_4)
+        (use unrestricted))
+      (parameter create include_excluded (type Bool)))
+    (test edit decl_2121bc9eb34873005d4fc11657a6b840 empty
+      (visibility private)
+      (actual (call ref_summarize_8 (types type_3) (record ref_Batch_6 (types type_3) (field ref_items_2 (list type_3))) (function-value ref_keep-marked_9) (bool false)))
+      (expected (record ref_Summary_0 (field ref_count_3 (i64 0)) (field ref_sum_4 (i64 0)))))
+    (record edit decl_697d3908398e370877d6389fa46d2ea7 Summary
+      (visibility public)
+      (field edit field_5235b006375ece9168d7fad06d8deab2 count
+        (type I64))
+      (field edit field_87be078039324cb674d78c2fca48c367 sum
+        (type I64)))
+    (test edit decl_734d3db405ff60ff717a5be512262b81 excluded
+      (visibility private)
+      (actual (call ref_summarize_8 (types type_3) (record ref_Batch_6 (types type_3) (field ref_items_2 (list type_3 (variant ref_excluded_10 (types I64) (i64 100))))) (function-value ref_keep-marked_9) (bool false)))
+      (expected (record ref_Summary_0 (field ref_count_3 (i64 0)) (field ref_sum_4 (i64 0)))))
+    (test edit decl_76d14eb3dbc73ccc1825def8b2091cf4 mixed
+      (visibility private)
+      (actual (call ref_summarize_8 (types type_3) (record ref_Batch_6 (types type_3) (field ref_items_2 (list type_3 (variant ref_included_11 (types I64) (i64 3)) (variant ref_excluded_10 (types I64) (i64 100)) (variant ref_included_11 (types I64) (i64 -1))))) (function-value ref_keep-marked_9) (bool false)))
+      (expected (record ref_Summary_0 (field ref_count_3 (i64 2)) (field ref_sum_4 (i64 2)))))
+    (function edit decl_77d7d3dddfcf07e14832e9edac17b934 add-included
+      (visibility private)
+      (returns type_0)
+      (effect pure)
+      (body (record ref_Summary_0 (field ref_count_3 (call ref_add_12 (field (local state) ref_count_3) (i64 1))) (field ref_sum_4 (call ref_add_12 (field (local state) ref_sum_4) (local amount)))))
+      (parameter edit param_7025973cc89913fed25f5f87a777946d state
+        (type type_0)
+        (use unrestricted))
+      (parameter edit param_8d6efc38bc20d6617c7e08fa87c4b8c3 amount
+        (type I64)
+        (use unrestricted)))
+    (function edit decl_a461c64bb7dccb8268e00ff91fc84116 keep-marked
+      (visibility private)
+      (returns type_3)
+      (effect pure)
+      (body (local value))
+      (parameter edit param_8a069c31f1d17e13a3c1ce23d8847726 value
+        (type type_3)
+        (use unrestricted)))
+    (variant edit decl_aa4120d17116c5b45f0ef21d00644b53 Marked
+      (visibility public)
+      (type-parameter edit typeparam_d51262ef9a5aeeb9bfd9a911afa0a369 T
+        (constraint none))
+      (case edit case_4ec3999d8375060d554a2bd9df5ba9f7 included
+        (payload type_5))
+      (case edit case_e8e080a3533ac86b024afa22e4382a67 excluded
+        (payload type_5)))
+    (function edit decl_aad118f1167f201ed8a02e461b997fb9 step
+      (visibility private)
+      (returns type_0)
+      (effect pure)
+      (body (match (invoke (local projection) (local item)) (arm ref_included_11 (payload amount I64 (as $b_bind_c4c9edba75e57a3a48544b441cce5847)) (call ref_add-included_13 (local state) (local amount))) (arm ref_excluded_10 (payload amount I64 (as $b_bind_0511529281e8359f406d1f20ab80bbe1)) (local state))))
+      (type-parameter edit typeparam_a92b81289a720854732be49f791ee1f5 T
+        (constraint capture-safe))
+      (parameter edit param_e14ca86864a974aa65f76871567c2e96 projection
+        (type type_7)
+        (use unrestricted))
+      (parameter edit param_f359da28282ef4a2737f4d249ed92b4b state
+        (type type_0)
+        (use unrestricted))
+      (parameter edit param_da1656bca00aba47a7d53bb6ec1aac16 item
+        (type type_6)
+        (use unrestricted)))
+    (record edit decl_ae183990cc8394d73de6e593acd1fc42 Batch
+      (visibility public)
+      (type-parameter edit typeparam_fd7f47b29af0d6e99346b77ed48ec515 T
+        (constraint none))
+      (field edit field_edd6554eb2e89a85b83bf19f450ed335 items
+        (type type_9)))
+    (test create include-excluded (visibility private)
+      (actual
+        (call summarize (types (Marked I64))
+          (record Batch (types (Marked I64))
+            (field Batch::items
+              (list (Marked I64)
+                (variant Marked::included (types I64) (i64 3))
+                (variant Marked::excluded (types I64) (i64 100))
+                (variant Marked::included (types I64) (i64 -1)))))
+          (function-value keep-marked) (bool true)))
+      (expected (record Summary (field Summary::count (i64 3)) (field Summary::sum (i64 102)))))
+  )
+)
+declarations.end

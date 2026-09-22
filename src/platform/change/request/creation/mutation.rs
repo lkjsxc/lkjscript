@@ -64,6 +64,12 @@ pub(in crate::platform::change::request) fn collect_mutation_symbols(
         AuthoredChange::AddHttpRoute { symbol, .. } => {
             define_symbol(definitions, symbol, SymbolKind::HttpRoute)
         }
+        AuthoredChange::SetPort { implementation, .. } => {
+            if let AuthoredPortImplementation::Expression { expression } = implementation {
+                collect_expression_symbols(expression, definitions)?;
+            }
+            Ok(())
+        }
         AuthoredChange::SetDeclarationVisibility { .. }
         | AuthoredChange::SetFunctionContract { .. }
         | AuthoredChange::SetPortContract { .. }
@@ -92,6 +98,31 @@ pub(in crate::platform::change::request) fn lower_mutation<
 ) -> Result<(), Diagnostic> {
     use super::super::AuthoredChange;
     match change {
+        AuthoredChange::SetPort {
+            port,
+            function_type,
+            implementation,
+        } => {
+            let owner = lowerer.resolve_owner(port)?;
+            let function_type = lowerer.lower_type(function_type)?;
+            let implementation = match implementation {
+                AuthoredPortImplementation::Function { function } => {
+                    PortImplementation::Function(lowerer.lower_declaration_reference(function)?)
+                }
+                AuthoredPortImplementation::Expression { expression } => {
+                    PortImplementation::Expression(lowerer.lower_expression(expression)?)
+                }
+            };
+            let OwnerRecord::Port(record) = lowerer.candidate_mut(owner)? else {
+                return Err(mutation_kind("port", owner));
+            };
+            let old = std::mem::replace(&mut record.implementation, implementation);
+            record.function_type = function_type;
+            if let PortImplementation::Expression(old) = old {
+                super::super::deletion::retire_replaced_expression_tree(lowerer, old)?;
+            }
+            Ok(())
+        }
         AuthoredChange::AddField { record, field } => lower_add_field(lowerer, record, field),
         AuthoredChange::AddCase { variant, case } => lower_add_case(lowerer, variant, case),
         AuthoredChange::AddOperation {

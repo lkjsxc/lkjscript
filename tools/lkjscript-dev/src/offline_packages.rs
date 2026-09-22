@@ -182,11 +182,11 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
             schema: match selected_case.as_deref() {
                 Some("finite-callable") => "lkjscript-offline-finite-callable-1",
                 Some("validator-upgrade") => "lkjscript-offline-validator-upgrade-1",
-                Some("requirement-parameters") => "lkjscript-offline-requirement-parameters-2",
+                Some("requirement-parameters") => "lkjscript-offline-requirement-parameters-3",
                 Some("f64") => "lkjscript-offline-f64-1",
                 Some("parameter-type") => "lkjscript-offline-parameter-type-1",
                 Some("persistent-maps") => "lkjscript-offline-persistent-maps-1",
-                _ => "lkjscript-offline-packages-acceptance-16",
+                _ => "lkjscript-offline-packages-acceptance-17",
             }
             .to_owned(),
             status: "failed".to_owned(),
@@ -1870,7 +1870,7 @@ pub(crate) fn read_transferred_receipt(
         "offline receipt encoding or path is noncanonical",
     )?;
     require(
-        receipt.schema == "lkjscript-offline-packages-acceptance-16"
+        receipt.schema == "lkjscript-offline-packages-acceptance-17"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete

@@ -18,9 +18,10 @@ describes those frozen producers; the procedure below governs new candidates onl
 The [cutover campaign](campaigns/202609180007.md) selected non-publishing candidate and read-only
 consumer proof. The explicit release requests in the [v0.1.39 lineage](campaigns/202609201910.md)
 have fired its public-delivery trigger. The [delivery continuation](campaigns/202609210911.md)
-selects accepted producer `35508727722/1` at `b05e9e12133ef625b33462123468b9b896885dd4`
-and authorizes its annotated tag and existing scoped selection control. No further feature or
-candidate rebuild is a prerequisite. A private candidate built with occupied version 0.1.38
+published accepted producer `35508727722/1` at `b05e9e12133ef625b33462123468b9b896885dd4`
+unchanged as immutable v0.1.39 on 2026-09-21T23:49:32Z. Resumption `35668854407/1` completed
+selection, publication, anonymous acquisition/installed smoke and terminal jobs. Its candidate
+job was intentionally skipped; the original producer remains authoritative. A private candidate built with occupied version 0.1.38
 is never the public v0.1.38 release.
 
 ## Content and compatibility

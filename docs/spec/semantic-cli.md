@@ -111,6 +111,58 @@ Creation through a copied candidate binary requires no Cargo, checkout-relative 
 source file, database, container, or helper command. Release availability is current distribution
 state and is intentionally not part of this normative contract.
 
+## Native declaration units and editable drafts
+
+Change input contract 24 adds `declarations.begin` / `declarations.end` around a parenthesized
+`(units ...)` collection. All such blocks in one request are collected before typed resolution.
+The executable's change registry owns the concrete grammar. Complete units cover modules,
+records, variants, functions, constants, tests, interfaces, externals, components, requirements,
+ports and targets, including HTTP routes and ordered generic/effect/requirement/value parameters.
+Inline structural types and scoped type aliases are notation; nominal references retain their
+exact declaration identity. Bodies use the existing structural expression forms, with lexical
+parameter/binding names and optional explicit binder labels for otherwise shadowed references.
+Existing compact records and structural blocks remain supported in the same request.
+
+Creation and editing are distinct: `(FAMILY create NAME ...)` allocates an owner, while
+`(FAMILY edit EXACT_OWNER NAME ...)` requires the exact owner, family, displayed name and parent
+at the bound base. A displayed name never grants editing authority or causes upsert. A module
+edit is a patch; unselected declarations survive. Complete edited contracts must retain every
+existing child unless a precise `delete.owner` accounts for its removal. Positional contract
+children retain order, and additions explicitly create and append. Keyed fields/cases use the
+existing canonical identity ordering; the language adds no stored source-order dimension.
+Rename, move, deletion and exact dependency changes use the existing precise operations and
+complete-candidate validation. A supplied repository/package binding must agree with the base.
+
+`change draft --owner OWNER [--owner OWNER]... --output PATH [--bytes N]` reads one accepted
+revision. Selectors are exact local module, declaration or target IDs. Module selection expands
+only actual owned declarations; selected declarations include their complete contracts and
+bodies, and selected targets include their routes. References outside the selection remain
+exact typed locators. Canonical reads use the maintained aggregate definition admission, share
+cancellation, and charge expanded types and output growth before allocation. Unsupported or
+unrepresentable content is an error; the complete result must pass native input admission before
+it can be exposed. The byte maximum is positive and at most the complete change-input maximum.
+Output is atomically created at an absent destination outside accepted project storage; existing
+files are not overwritten. No draft operation changes accepted meaning.
+
+Generated drafts bind repository, package, revision, selected identities and contract children.
+They deterministically intern repeated structural types and generate readable typed aliases.
+Original comments, formatting and alias spellings are not recoverable because they are not
+canonical meaning. Draft files are disposable proposals and introduce no synchronization owner.
+An untouched plan reports `outcome=unchanged`, no semantic change, no owner recreation and no
+publication token. Such a request has no exportable plan; no-op apply retains the existing
+publication rejection policy. Real body replacements retain declaration and unchanged signature
+owners while following existing expression/binding replacement and retirement rules.
+
+All edits lower into the shared typed authored request and existing review/publication lock.
+Stale bases, missing repairs and altered reviewed meaning reject before publication. Accepted
+idempotent retries keep their immutable original result. Authored codec 18 adds complete constant,
+test and expression-backed port updates to existing graph meanings; requests using only earlier
+intent retain their original codec identity and commitment. Graph, artifact, transport, application
+data, deployment grants and runtime semantics have no format migration for this notation.
+
+See the generated [creation and re-entry example](../generated/change-grammar.md) for public
+commands, exact supplier staging and the complete native grammar.
+
 ## Operational data lifecycle
 
 ```text

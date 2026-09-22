@@ -732,7 +732,10 @@ pub(super) fn lower_test<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Si
 }
 
 impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer<'a, B, W> {
-    fn lower_type(&mut self, authored: &AuthoredType) -> Result<TypeObjectDigest, Diagnostic> {
+    pub(super) fn lower_type(
+        &mut self,
+        authored: &AuthoredType,
+    ) -> Result<TypeObjectDigest, Diagnostic> {
         let form = match authored {
             AuthoredType::Unit {} => TypeForm::Unit,
             AuthoredType::Bool {} => TypeForm::Bool,

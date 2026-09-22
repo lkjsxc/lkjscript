@@ -1,0 +1,11 @@
+{
+  "actual": {
+    "nonzero_kinds": 8,
+    "total_units": 310
+  },
+  "expected": {
+    "nonzero_kinds": 8,
+    "total_units": 310
+  },
+  "equal": true
+}

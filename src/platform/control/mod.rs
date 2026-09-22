@@ -4,6 +4,8 @@ mod change;
 mod compact;
 mod logical_plan;
 
+#[cfg(test)]
+pub(crate) use change::decode_compact_change;
 pub(crate) use change::{
     AUTHORED_CHANGE_CODEC_IDENTITY, AUTHORED_CHANGE_CODEC_VERSION,
     CHANGE_REQUEST_COMMITMENT_DOMAIN, COMPACT_CHANGE_CONTRACT_IDENTITY,
@@ -15,7 +17,8 @@ pub(crate) use change::{
     COMPACT_REFERENCE_NAMESPACES, COMPACT_TYPE_FORM_FIELDS, COMPACT_TYPE_FORMS,
     ChangeRequestCommitment, CompactChangeFieldForm, CompactChangeOperation,
     MAXIMUM_STRUCTURAL_SYNTAX_NODES, MAXIMUM_STRUCTURAL_TOKENS, NormalizedChangeRequest,
-    compact_change_operation_descriptor, decode_compact_change, normalize_change_request,
+    compact_change_operation_descriptor, decode_compact_change_in_repository,
+    normalize_change_request, render_native_draft,
 };
 pub use compact::{
     CompactField, CompactRecord, CompactResponseLimits, CompactResponseWriter,

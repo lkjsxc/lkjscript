@@ -17,28 +17,64 @@ pub(crate) const MAXIMUM_STRUCTURAL_SYNTAX_NODES: usize =
 pub(super) struct ChangeInput {
     pub records: Vec<CompactRecord>,
     pub blocks: BTreeMap<String, Block>,
+    pub units: Vec<Block>,
     pub public_labels: BTreeSet<String>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(super) struct Block {
     pub syntax: Vec<Syntax>,
     pub root: usize,
+    pub locals: BTreeMap<String, String>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(super) struct Syntax {
     pub kind: SyntaxKind,
     pub location: SourceLocation,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(super) enum SyntaxKind {
     Atom { value: String, quoted: bool },
     List(Vec<usize>),
 }
 
 impl Block {
+    pub fn subtree(&self, root: usize) -> Result<Self, Diagnostic> {
+        let mut order = Vec::new();
+        let mut pending = vec![root];
+        while let Some(id) = pending.pop() {
+            order.push(id);
+            if let SyntaxKind::List(children) = &self.syntax[id].kind {
+                pending.extend(children.iter().rev().copied());
+            }
+        }
+        let indices: BTreeMap<_, _> = order
+            .iter()
+            .enumerate()
+            .map(|(new, old)| (*old, new))
+            .collect();
+        let mut syntax = Vec::new();
+        syntax
+            .try_reserve(order.len())
+            .map_err(|_| resource(&self.syntax[root].location, "body syntax allocation failed"))?;
+        for id in order {
+            let mut node = self.syntax[id].clone();
+            if let SyntaxKind::List(children) = &mut node.kind {
+                for child in children {
+                    *child = indices[child];
+                }
+            }
+            syntax.push(node);
+        }
+        Ok(Self {
+            syntax,
+            root: 0,
+            locals: self.locals.clone(),
+        })
+    }
+
     pub fn list(&self, id: usize) -> Result<&[usize], Diagnostic> {
         match &self.syntax[id].kind {
             SyntaxKind::List(items) => Ok(items),
@@ -61,6 +97,13 @@ impl Block {
                 "change_block_atom",
                 "expected an unquoted name or typed reference atom",
             )),
+        }
+    }
+
+    pub fn text(&self, id: usize) -> Result<&str, Diagnostic> {
+        match &self.syntax[id].kind {
+            SyntaxKind::Atom { value, .. } => Ok(value),
+            _ => Err(self.error(id, "change_block_atom", "expected a string or atom")),
         }
     }
 
@@ -90,6 +133,7 @@ pub(super) fn parse(path: &str, input: &[u8]) -> Result<ChangeInput, Vec<Diagnos
         return parse_records(path, input).map(|records| ChangeInput {
             records,
             blocks: BTreeMap::new(),
+            units: Vec::new(),
             public_labels: BTreeSet::new(),
         });
     }
@@ -98,6 +142,7 @@ pub(super) fn parse(path: &str, input: &[u8]) -> Result<ChangeInput, Vec<Diagnos
     let mut result = ChangeInput {
         records: Vec::new(),
         blocks: BTreeMap::new(),
+        units: Vec::new(),
         public_labels: BTreeSet::new(),
     };
     let mut diagnostics = Vec::new();
@@ -110,14 +155,19 @@ pub(super) fn parse(path: &str, input: &[u8]) -> Result<ChangeInput, Vec<Diagnos
         let trimmed = line.trim_matches(|c: char| c.is_ascii_whitespace());
         let operation = trimmed.split_ascii_whitespace().next().unwrap_or("");
         if let Some((label, header, start, first_line)) = &active {
-            if operation == "expression.end" {
-                if trimmed != "expression.end" {
+            let ending = if header.operation == "declarations.begin" {
+                "declarations.end"
+            } else {
+                "expression.end"
+            };
+            if operation == ending {
+                if trimmed != ending {
                     return Err(vec![line_error(
                         path,
                         offset,
                         line_index + 1,
                         "change_block_end",
-                        "expression.end must be an otherwise empty standalone line",
+                        "block end marker must be an otherwise empty standalone line",
                     )]);
                 }
                 let block = tokenize(
@@ -130,7 +180,9 @@ pub(super) fn parse(path: &str, input: &[u8]) -> Result<ChangeInput, Vec<Diagnos
                     &mut result.public_labels,
                 )
                 .map_err(|error| vec![error])?;
-                if result.blocks.insert(label.clone(), block).is_some() {
+                if header.operation == "declarations.begin" {
+                    result.units.push(block);
+                } else if result.blocks.insert(label.clone(), block).is_some() {
                     return Err(vec![field_error(
                         header,
                         "as",
@@ -139,13 +191,13 @@ pub(super) fn parse(path: &str, input: &[u8]) -> Result<ChangeInput, Vec<Diagnos
                     )]);
                 }
                 active = None;
-            } else if operation == "expression.block" {
+            } else if matches!(operation, "expression.block" | "declarations.begin") {
                 return Err(vec![line_error(
                     path,
                     offset,
                     line_index + 1,
                     "change_block_nested",
-                    "expression blocks cannot contain another block header",
+                    "declaration and expression blocks cannot contain another block header",
                 )]);
             }
             offset += line.len();
@@ -186,11 +238,11 @@ pub(super) fn parse(path: &str, input: &[u8]) -> Result<ChangeInput, Vec<Diagnos
                         reserve_labels(&field.value, &mut result.public_labels);
                     }
                     match record.operation.as_str() {
-                        "expression.end" => {
+                        "expression.end" | "declarations.end" => {
                             return Err(vec![record_error(
                                 &record,
                                 "change_block_stray_end",
-                                "expression.end has no open expression block",
+                                "block end marker has no matching open block",
                             )]);
                         }
                         "expression.block" => {
@@ -198,6 +250,12 @@ pub(super) fn parse(path: &str, input: &[u8]) -> Result<ChangeInput, Vec<Diagnos
                             let label = symbol(&record, "as").map_err(|error| vec![error])?;
                             active =
                                 Some((label, record.clone(), offset + line.len(), line_index + 2));
+                        }
+                        "declarations.begin" => {
+                            check_fields(&record, &[]).map_err(|error| vec![error])?;
+                            active =
+                                Some((String::new(), record, offset + line.len(), line_index + 2));
+                            continue;
                         }
                         _ => {}
                     }
@@ -211,7 +269,7 @@ pub(super) fn parse(path: &str, input: &[u8]) -> Result<ChangeInput, Vec<Diagnos
         diagnostics.push(record_error(
             &header,
             "change_block_unclosed",
-            "expression block is missing expression.end",
+            "block is missing its matching declarations.end or expression.end marker",
         ));
     }
     if diagnostics.is_empty() {
@@ -447,7 +505,11 @@ fn tokenize(
             "expression block requires exactly one parenthesized expression",
         )
     })?;
-    let block = Block { syntax, root };
+    let block = Block {
+        syntax,
+        root,
+        locals: BTreeMap::new(),
+    };
     block.list(root)?;
     Ok(block)
 }

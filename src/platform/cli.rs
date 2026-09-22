@@ -24,11 +24,13 @@ use super::contract::{
     PublicOperation, RegistrySection, capabilities_snapshot, diagnostic_class_name,
     generated_documents, operation_descriptors, operation_record,
 };
+#[cfg(test)]
+use super::control::decode_compact_change;
 use super::control::{
     ChangePlanToken, CompactChangeOperation, CompactResponseLimits, CompactResponseWriter,
     LogicalChangePlan, LogicalPlanEncoding, MAXIMUM_COMPACT_INPUT_BYTES,
     MAXIMUM_LOGICAL_PLAN_BYTES, NormalizedChangeRequest, compact_change_operation_descriptor,
-    decode_compact_change, encode_logical_change_plan, normalize_change_request, render_record,
+    encode_logical_change_plan, normalize_change_request, render_record,
 };
 use super::data::{DataLimits, DataStore};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
@@ -2004,6 +2006,9 @@ fn execute_change_on_stack(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagno
             "change requires plan or apply; use 'capabilities change'",
         ))
     })?;
+    if action == "draft" {
+        return execute_change_draft(project, &arguments[2..]);
+    }
     let action = match action {
         "plan" => ChangeAction::Plan,
         "apply" => ChangeAction::Apply,
@@ -2031,7 +2036,7 @@ fn execute_change_on_stack(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagno
                 "registered direct change operation has no typed CLI adapter",
             )));
         }
-        None => decode_record_change(action, adapter_arguments)?,
+        None => decode_record_change(action, adapter_arguments, project.clone())?,
     };
     require_reviewed_change_request(
         action,
@@ -2042,9 +2047,114 @@ fn execute_change_on_stack(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagno
     execute_normalized_change(project, action, request)
 }
 
+fn execute_change_draft(
+    project: Option<PathBuf>,
+    arguments: &[String],
+) -> Result<Vec<u8>, Vec<Diagnostic>> {
+    let mut selected = Vec::new();
+    let mut destination = None;
+    let mut maximum = MAXIMUM_COMPACT_INPUT_BYTES;
+    let mut maximum_seen = false;
+    let mut cursor = 0;
+    while cursor < arguments.len() {
+        let key = &arguments[cursor];
+        let value = arguments
+            .get(cursor + 1)
+            .ok_or_else(|| single_diagnostic(usage_error("change draft options require values")))?;
+        match key.as_str() {
+            "--owner" => selected.push(value.parse::<KernelOwnerKey>().map_err(single_diagnostic)?),
+            "--output" if destination.is_none() => destination = Some(PathBuf::from(value)),
+            "--bytes" if !maximum_seen => {
+                maximum = value.parse::<usize>().map_err(|_| {
+                    single_diagnostic(usage_error("draft --bytes requires a positive byte count"))
+                })?;
+                maximum_seen = true;
+            }
+            _ => {
+                return Err(single_diagnostic(usage_error(
+                    "change draft accepts --owner OWNER (repeatable), --output PATH, and --bytes N",
+                )));
+            }
+        }
+        cursor += 2;
+    }
+    if maximum == 0 || maximum > MAXIMUM_COMPACT_INPUT_BYTES {
+        return Err(single_diagnostic(usage_error(
+            "draft byte admission must fit one complete change input",
+        )));
+    }
+    let destination = destination
+        .ok_or_else(|| single_diagnostic(usage_error("change draft requires --output PATH")))?;
+    let repository = open_normalized_repository(project).map_err(single_diagnostic)?;
+    let parent = destination
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let absolute_parent = fs::canonicalize(parent).map_err(|e| {
+        single_diagnostic(plan_output_io_error(
+            "change_draft_output_parent",
+            parent,
+            e,
+        ))
+    })?;
+    let root = fs::canonicalize(repository.root()).map_err(|e| {
+        single_diagnostic(plan_output_io_error(
+            "change_draft_project",
+            repository.root(),
+            e,
+        ))
+    })?;
+    if absolute_parent.starts_with(root) {
+        return Err(single_diagnostic(usage_error(
+            "draft output must be outside accepted project storage",
+        )));
+    }
+    let view = repository.view_current().map_err(single_diagnostic)?;
+    let bytes = super::control::render_native_draft(
+        &view,
+        &selected,
+        maximum,
+        ExecutionControl::uncancelled(),
+    )
+    .map_err(single_diagnostic)?;
+    let receipt = super::owned_output::publish_create_new(
+        &destination,
+        &bytes,
+        maximum,
+        "native declaration draft",
+    )
+    .map_err(single_diagnostic)?;
+    let mut output = compact_response_writer().map_err(single_diagnostic)?;
+    append_compact_record(
+        &mut output,
+        "result",
+        &[
+            ("status", "success".into()),
+            ("command", "change.draft".into()),
+        ],
+    )
+    .map_err(single_diagnostic)?;
+    append_compact_record(
+        &mut output,
+        "draft",
+        &[
+            ("base", view.revision().to_string()),
+            ("repository", view.current().head.repository_id.to_string()),
+            ("package", view.package().to_string()),
+            ("output", receipt.path.display().to_string()),
+            ("bytes", receipt.bytes.to_string()),
+            ("durability", receipt.durability.to_owned()),
+            ("stage-cleanup", receipt.stage_cleanup.to_owned()),
+        ],
+    )
+    .map_err(single_diagnostic)?;
+    Ok(output.finish())
+}
+
 fn decode_record_change(
     action: ChangeAction,
     options: &[String],
+    project: Option<PathBuf>,
 ) -> Result<ChangeCommandRequest, Vec<Diagnostic>> {
     let allowed = match action {
         ChangeAction::Plan => &["--input", "--input-file", "--output"][..],
@@ -2086,7 +2196,9 @@ fn decode_record_change(
             )));
         }
     };
-    let normalized = decode_compact_change(&source, &bytes)?;
+    let repository = open_normalized_repository(project).map_err(single_diagnostic)?;
+    let normalized =
+        super::control::decode_compact_change_in_repository(&source, &bytes, &repository)?;
     let reviewed = option_value(options, "--plan")
         .map_err(single_diagnostic)?
         .map(|value| value.parse::<ChangePlanToken>())
@@ -2300,13 +2412,46 @@ fn execute_normalized_change(
         None => repository.view_current().map_err(single_diagnostic)?,
     };
     let mut source_owners = std::collections::BTreeMap::new();
-    let mut prepared = base_view
-        .prepare_authored_change_with_source_owners(
-            &normalized.semantic,
-            normalized.options,
-            Some(&mut source_owners),
+    let preparation = base_view.prepare_authored_change_with_source_owners(
+        &normalized.semantic,
+        normalized.options,
+        Some(&mut source_owners),
+    );
+    if action == ChangeAction::Plan
+        && preparation.as_ref().err().is_some_and(|errors| {
+            errors.len() == 1 && errors[0].code == "publication_semantic_no_change"
+        })
+    {
+        if output_file.is_some() {
+            return Err(single_diagnostic(usage_error(
+                "unchanged requests have no publishable plan to export; omit --output to inspect the no-op result",
+            )));
+        }
+        let mut output = compact_response_writer().map_err(single_diagnostic)?;
+        append_compact_record(
+            &mut output,
+            "result",
+            &[
+                ("status", "success".into()),
+                ("command", "change.plan".into()),
+                ("outcome", "unchanged".into()),
+            ],
         )
-        .map_err(|mut errors| {
+        .map_err(single_diagnostic)?;
+        append_compact_record(
+            &mut output,
+            "change",
+            &[
+                ("base", base_view.revision().to_string()),
+                ("semantic-change", "false".into()),
+                ("owner-recreation", "false".into()),
+                ("publication", "none".into()),
+            ],
+        )
+        .map_err(single_diagnostic)?;
+        return Ok(output.finish());
+    }
+    let mut prepared = preparation.map_err(|mut errors| {
             for error in &mut errors {
                 if !matches!(error.class, DiagnosticClass::Resource | DiagnosticClass::Cancelled) {
                     normalized.origins.locate(error, &source_owners);

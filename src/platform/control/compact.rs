@@ -348,6 +348,10 @@ fn rendered_value_bytes(value: &str) -> Option<usize> {
     if !value.is_empty() && value.bytes().all(is_bare_byte) {
         return Some(value.len());
     }
+    quoted_value_bytes(value)
+}
+
+fn quoted_value_bytes(value: &str) -> Option<usize> {
     value.chars().try_fold(2_usize, |bytes, character| {
         let additional = match character {
             '"' | '\\' | '\n' | '\r' | '\t' => 2,
@@ -689,6 +693,33 @@ fn render_value(value: &str, output: &mut String) {
         output.push_str(value);
         return;
     }
+    render_quoted_value(value, output);
+}
+
+/// Structural strings share escapes with records, but are admitted by their complete input
+/// instead of an unrelated physical compact-record line limit.
+pub(super) fn render_structural_string(value: &str, maximum: usize) -> Result<String, Diagnostic> {
+    let bytes = quoted_value_bytes(value)
+        .filter(|n| *n <= maximum)
+        .ok_or_else(|| {
+            response_budget_error(
+                "change_draft_capacity",
+                "quoted string exceeds complete draft admission",
+            )
+        })?;
+    let mut output = String::new();
+    output.try_reserve_exact(bytes).map_err(|_| {
+        response_budget_error(
+            "change_draft_capacity",
+            "draft string allocation failed within admission",
+        )
+    })?;
+    render_quoted_value(value, &mut output);
+    debug_assert_eq!(output.len(), bytes);
+    Ok(output)
+}
+
+fn render_quoted_value(value: &str, output: &mut String) {
     output.push('"');
     for character in value.chars() {
         match character {

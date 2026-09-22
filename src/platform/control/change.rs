@@ -1,6 +1,12 @@
 //! Closed compact-record adapter for normalized semantic changes.
 
+mod canonical;
+mod declarations;
+mod draft;
 mod input;
+pub(crate) use draft::render as render_native_draft;
+#[cfg(test)]
+mod declaration_tests;
 mod origins;
 #[cfg(test)]
 mod parameter_tests;
@@ -41,10 +47,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-23";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 23;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-17";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 17;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-24";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 24;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-18";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 18;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -343,7 +349,7 @@ impl CompactChangeFieldForm {
             Self::RequestFragment => "%NAME",
             Self::DeclarationReference => "$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX",
             Self::PortReference => "$NAME|pkg_HEX/port_HEX",
-            Self::RunnerKind => "command|http|interactive",
+            Self::RunnerKind => "command|http|interactive|batch|worker|test",
             Self::OperationSelector => "$NAME|op_HEX",
             Self::Idempotency => "idempotent|idempotent-with-key|non-idempotent",
             Self::ExternalVisibility => "none|possible",
@@ -1109,8 +1115,13 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
             },
             CompactChangeOperationField {
                 name: "function",
-                required: true,
+                required: false,
                 form: FieldForm::DeclarationReference,
+            },
+            CompactChangeOperationField {
+                name: "value",
+                required: false,
+                form: FieldForm::ExpressionReference,
             },
         ],
         direct: None,
@@ -2650,12 +2661,92 @@ pub(crate) struct NormalizedChangeRequest {
     pub origins: origins::InputOrigins,
 }
 
+#[cfg(test)]
 pub(crate) fn decode_compact_change(
     path: &str,
     input: &[u8],
 ) -> Result<NormalizedChangeRequest, Vec<Diagnostic>> {
+    decode_parsed_change(input::parse(path, input)?, None)
+}
+
+pub(crate) fn decode_compact_change_in_repository(
+    path: &str,
+    input: &[u8],
+    repository: &crate::platform::publication::GraphRepository,
+) -> Result<NormalizedChangeRequest, Vec<Diagnostic>> {
     let parsed = input::parse(path, input)?;
+    if parsed.units.is_empty() {
+        return decode_parsed_change(parsed, None);
+    }
+    let header = parsed
+        .records
+        .iter()
+        .find(|r| r.operation == "request")
+        .ok_or_else(|| {
+            vec![Diagnostic::new(
+                DiagnosticClass::Source,
+                "change_request_missing",
+                "native units require an exact request base",
+            )]
+        })?;
+    let base = parse_field::<RevisionId>(header, "base").map_err(|e| vec![e])?;
+    let retry = optional(header, "idempotency")
+        .map(|key| repository.view_idempotency_base(key, base))
+        .transpose()
+        .map_err(|e| vec![e])?
+        .flatten();
+    let view = match retry {
+        Some(view) => view,
+        None => repository.view_current().map_err(|e| vec![e])?,
+    };
+    if view.revision() != base {
+        return Err(vec![field_error(
+            header,
+            "base",
+            "change_unit_base",
+            "native declaration base is stale",
+        )]);
+    }
+    for (name, expected) in [
+        ("repository", view.current().head.repository_id.to_string()),
+        ("package", view.package().to_string()),
+    ] {
+        if let Some(value) = optional(header, name)
+            && value != expected
+        {
+            return Err(vec![field_error(
+                header,
+                name,
+                "change_unit_identity",
+                format!("native request {name} does not match its accepted base"),
+            )]);
+        }
+    }
+    let mut reader = canonical::Reader::new(
+        &view,
+        crate::platform::execution::ExecutionControl::uncancelled(),
+    );
+    decode_parsed_change(parsed, Some(&mut reader))
+}
+
+fn decode_parsed_change(
+    mut parsed: input::ChangeInput,
+    mut reader: Option<&mut canonical::Reader<'_>>,
+) -> Result<NormalizedChangeRequest, Vec<Diagnostic>> {
+    if reader.is_none()
+        && let Some(header) = parsed.records.iter().find(|r| r.operation == "request")
+        && (optional(header, "repository").is_some() || optional(header, "package").is_some())
+    {
+        return Err(vec![record_error(
+            header,
+            "change_unit_context",
+            "repository/package-bound requests require native units and the exact repository context",
+        )]);
+    }
+    let lowered =
+        declarations::lower(&mut parsed, reader.as_deref_mut()).map_err(|error| vec![error])?;
     let mut origins = origins::InputOrigins::default();
+    origins.private.extend(lowered.private.iter().cloned());
     for record in &parsed.records {
         if record.operation == "set.parameter-type"
             && let Some(parameter) = field(record, "parameter")
@@ -2709,7 +2800,9 @@ pub(crate) fn decode_compact_change(
     origins.private.extend(symbols.locations.keys().cloned());
     origins.symbols.extend(symbols.locations);
     match decoder.decode() {
-        Ok(mut decoded) => {
+        Ok(decoded) => {
+            let mut decoded =
+                declarations::finish(decoded, lowered, reader).map_err(|error| vec![error])?;
             decoded.origins = origins;
             Ok(decoded)
         }
@@ -2938,7 +3031,10 @@ impl Decoder {
                 "compact change requires one request record with an exact base revision",
             )
         })?;
-        check_fields(&request, &["base", "idempotency", "intent"])?;
+        check_fields(
+            &request,
+            &["base", "idempotency", "intent", "repository", "package"],
+        )?;
         let base = parse_field::<RevisionId>(&request, "base")?;
         let idempotency_key = optional(&request, "idempotency").map(str::to_owned);
         let intent = optional(&request, "intent").map(str::to_owned);
@@ -3448,8 +3544,21 @@ impl Decoder {
                     symbol: symbol(record, "as")?,
                     name: parse_name(record, "name")?,
                     function_type: self.decode_type(required(record, "type")?)?,
-                    implementation: AuthoredPortImplementation::Function {
-                        function: self.parse_declaration_reference(record, "function")?,
+                    implementation: match (optional(record, "function"), optional(record, "value"))
+                    {
+                        (Some(_), None) => AuthoredPortImplementation::Function {
+                            function: self.parse_declaration_reference(record, "function")?,
+                        },
+                        (None, Some(value)) => AuthoredPortImplementation::Expression {
+                            expression: self.decode_expression(value)?,
+                        },
+                        _ => {
+                            return Err(record_error(
+                                record,
+                                "change_port_implementation",
+                                "add.port requires exactly one of function or value",
+                            ));
+                        }
                     },
                 },
             }),
@@ -4382,6 +4491,8 @@ fn change_request_commitment(
         "lkjscript-authored-change-codec-15"
     } else if intent.starts_with(b"LKJACR16") {
         "lkjscript-authored-change-codec-16"
+    } else if intent.starts_with(b"LKJACR17") {
+        "lkjscript-authored-change-codec-17"
     } else {
         AUTHORED_CHANGE_CODEC_IDENTITY
     };
@@ -4890,11 +5001,16 @@ fn parse_runner_kind(record: &CompactRecord, field_name: &str) -> Result<RunnerK
         "command" => Ok(RunnerKind::Command),
         "http" => Ok(RunnerKind::Http),
         "interactive" => Ok(RunnerKind::Interactive),
+        "batch" => Ok(RunnerKind::Batch),
+        "worker" => Ok(RunnerKind::Worker),
+        "test" => Ok(RunnerKind::Test),
         value => Err(field_error(
             record,
             field_name,
             "change_runner_kind",
-            format!("runner must be command, http, or interactive; observed '{value}'"),
+            format!(
+                "runner must be command, http, interactive, batch, worker, or test; observed '{value}'"
+            ),
         )),
     }
 }

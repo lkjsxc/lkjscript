@@ -1,0 +1,85 @@
+request base=rev_eb2430769aad27d732311b6a15a6be7e350c553b12e41881d93f0793ee61db24 repository=repo_fa29f7251e64493ac65cce00c9bf0d04 package=pkg_6fed26388ef0168aa69382985df1421f
+replace.dependency package=pkg_d4cdcb5de313e2c85a849d3891764258 semantic-revision=rev_5fb906219fa8ee816d8ab528f8e9ab4676e94955703ffe078e6581415b3a2791 package-revision=package_revision_0e0f3b00841c8fb1ba0e3ea2f0c258c91977226526cb9dd0627750e593679900
+
+declarations.begin
+(units
+  ; Reconstructed from canonical meaning. Original comments, formatting and type aliases are not stored.
+  (reference ref_included_2 case pkg_d4cdcb5de313e2c85a849d3891764258/case_4ec3999d8375060d554a2bd9df5ba9f7)
+  (reference ref_excluded_4 case pkg_d4cdcb5de313e2c85a849d3891764258/case_e8e080a3533ac86b024afa22e4382a67)
+  (reference ref_project_10 declaration pkg_6fed26388ef0168aa69382985df1421f/decl_86c83e6090d42d5881c059282ebd56d5)
+  (reference ref_run-readings_11 declaration pkg_6fed26388ef0168aa69382985df1421f/decl_8d7440d9778314c6bd9917935bcbdaa4)
+  (reference ref_main_14 declaration pkg_6fed26388ef0168aa69382985df1421f/decl_9e9f7de24a6600593644780059b3623d)
+  (reference ref_overflow_15 declaration pkg_6fed26388ef0168aa69382985df1421f/decl_a29b4710c8915d96a6803bfec6f2cc5b)
+  (reference ref_Reading_5 declaration pkg_6fed26388ef0168aa69382985df1421f/decl_dd6ffeba9f81d26511e124e2185d0ae7)
+  (reference ref_summarize_7 declaration pkg_d4cdcb5de313e2c85a849d3891764258/decl_1282c607cf7fac372f1f6e6e4c49314a)
+  (reference ref_Summary_6 declaration pkg_d4cdcb5de313e2c85a849d3891764258/decl_697d3908398e370877d6389fa46d2ea7)
+  (reference ref_Marked_0 declaration pkg_d4cdcb5de313e2c85a849d3891764258/decl_aa4120d17116c5b45f0ef21d00644b53)
+  (reference ref_Batch_8 declaration pkg_d4cdcb5de313e2c85a849d3891764258/decl_ae183990cc8394d73de6e593acd1fc42)
+  (reference ref_enabled_1 field pkg_6fed26388ef0168aa69382985df1421f/field_033a0fb9196c48992119649fd5613ba7)
+  (reference ref_amount_3 field pkg_6fed26388ef0168aa69382985df1421f/field_a22afb1484c2fc7cbac9aed565fc45d7)
+  (reference ref_count_12 field pkg_d4cdcb5de313e2c85a849d3891764258/field_5235b006375ece9168d7fad06d8deab2)
+  (reference ref_sum_13 field pkg_d4cdcb5de313e2c85a849d3891764258/field_87be078039324cb674d78c2fca48c367)
+  (reference ref_items_9 field pkg_d4cdcb5de313e2c85a849d3891764258/field_edd6554eb2e89a85b83bf19f450ed335)
+  (type-alias type_0 (ref_Marked_0 I64))
+  (type-alias type_1 ref_Reading_5)
+  (type-alias type_2 ref_Summary_6)
+  (type-alias type_3 (list type_1))
+  (type-alias type_4 (function () type_2))
+  (module edit mod_6d2b55efcd8576ef3de1617526762aed readings
+    (function edit decl_86c83e6090d42d5881c059282ebd56d5 project
+      (visibility public)
+      (returns type_0)
+      (effect pure)
+      (body (if (field (local reading) ref_enabled_1) (variant ref_included_2 (types I64) (field (local reading) ref_amount_3)) (variant ref_excluded_4 (types I64) (field (local reading) ref_amount_3))))
+      (parameter edit param_16d8c6552834c8e4918d5bae08cd0e69 reading
+        (type type_1)
+        (use unrestricted)))
+    (function edit decl_8d7440d9778314c6bd9917935bcbdaa4 run-readings
+      (visibility public)
+      (returns type_2)
+      (effect pure)
+      (body (call ref_summarize_7 (types type_1) (record ref_Batch_8 (types type_1) (field ref_items_9 (local values))) (function-value ref_project_10) (bool true)))
+      (parameter edit param_d4d9908fe6b7c626f2d8b91d65755b3d values
+        (type type_3)
+        (use unrestricted)))
+    (test edit decl_b9878c35a179edb8a8a2741b24f8853f excluded
+      (visibility private)
+      (actual (call ref_run-readings_11 (list type_1 (record ref_Reading_5 (field ref_enabled_1 (bool false)) (field ref_amount_3 (i64 100))))))
+      (expected (record ref_Summary_6 (field ref_count_12 (i64 1)) (field ref_sum_13 (i64 100)))))
+    (record edit decl_dd6ffeba9f81d26511e124e2185d0ae7 Reading
+      (visibility public)
+      (field edit field_033a0fb9196c48992119649fd5613ba7 enabled
+        (type Bool))
+      (field edit field_a22afb1484c2fc7cbac9aed565fc45d7 amount
+        (type I64)))
+    (test edit decl_f8c21656a658f5fe6539c17a29b23660 empty
+      (visibility private)
+      (actual (call ref_run-readings_11 (list type_1)))
+      (expected (record ref_Summary_6 (field ref_count_12 (i64 0)) (field ref_sum_13 (i64 0)))))
+  )
+  (module edit mod_e792f2ce62ed025f744248d71117dd43 app
+    (test edit decl_41b0ae2b4bf7acbe43b2dc09dbceb82e mixed
+      (visibility private)
+      (actual (call ref_main_14))
+      (expected (record ref_Summary_6 (field ref_count_12 (i64 3)) (field ref_sum_13 (i64 102)))))
+    (function edit decl_9e9f7de24a6600593644780059b3623d main
+      (visibility private)
+      (returns type_2)
+      (effect pure)
+      (body (call ref_run-readings_11 (list type_1 (record ref_Reading_5 (field ref_enabled_1 (bool true)) (field ref_amount_3 (i64 3))) (record ref_Reading_5 (field ref_enabled_1 (bool false)) (field ref_amount_3 (i64 100))) (record ref_Reading_5 (field ref_enabled_1 (bool true)) (field ref_amount_3 (i64 -1)))))))
+    (function edit decl_a29b4710c8915d96a6803bfec6f2cc5b overflow
+      (visibility private)
+      (returns type_2)
+      (effect pure)
+      (body (call ref_run-readings_11 (list type_1 (record ref_Reading_5 (field ref_enabled_1 (bool true)) (field ref_amount_3 (i64 9223372036854775807))) (record ref_Reading_5 (field ref_enabled_1 (bool true)) (field ref_amount_3 (i64 1)))))))
+    (component edit decl_b130ffa86cdddc6d608fe763a5038b8e command
+      (visibility private)
+      (port edit port_51aa13d6714313e364b229eb57f4d23d main
+        (type type_4)
+        (function ref_main_14))
+      (port edit port_a24c2f81332def706c6dd5ba5e6688d7 overflow
+        (type type_4)
+        (function ref_overflow_15)))
+  )
+)
+declarations.end

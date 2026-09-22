@@ -3081,6 +3081,103 @@ impl RepositoryView {
 }
 
 impl<'a> RepositoryDefinitionReader<'a> {
+    pub(crate) fn interface_names(
+        &mut self,
+        package: PackageId,
+    ) -> Result<BTreeMap<OwnerKey, crate::platform::kernel::Name>, Diagnostic> {
+        use crate::platform::kernel::PackageInterfaceRecord as I;
+        let read = self
+            .view
+            .dependency_admitted(package, &mut self.admission)?;
+        self.work.add(read.work);
+        let dependency = read.value.ok_or_else(|| {
+            read_error(
+                DiagnosticClass::Semantic,
+                "change_draft_dependency",
+                "draft reference has no exact accepted dependency",
+            )
+        })?;
+        let read = self
+            .view
+            .resolve_package_transport_admitted(dependency.package_revision, &mut self.admission)?;
+        self.work.add(read.work);
+        read.value
+            .root_revision
+            .matches_dependency(dependency.package_revision, &dependency)?;
+        Ok(read
+            .value
+            .root_interface
+            .owners
+            .into_iter()
+            .map(|(id, value)| {
+                let name = match value.record {
+                    I::Declaration(r) => r.name,
+                    I::TypeParameter(r) => r.name,
+                    I::EffectParameter(r) => r.name,
+                    I::RequirementParameter(r) => r.name,
+                    I::Field(r) => r.name,
+                    I::Case(r) => r.name,
+                    I::Operation(r) => r.name,
+                    I::Parameter(r) => r.name,
+                    I::Requirement(r) => r.name,
+                    I::Port(r) => r.name,
+                };
+                (id, name)
+            })
+            .collect())
+    }
+
+    pub(crate) fn type_object(
+        &mut self,
+        digest: TypeObjectDigest,
+    ) -> Result<Option<TypeObject>, Diagnostic> {
+        let read = self
+            .view
+            .type_object_admitted(digest, &mut self.admission)?;
+        self.work.add(read.work);
+        Ok(read.value)
+    }
+
+    pub(crate) fn blob(
+        &mut self,
+        digest: crate::platform::kernel::BlobObjectDigest,
+    ) -> Result<Vec<u8>, Diagnostic> {
+        self.view.read_required_object_admitted(
+            ObjectDomain::Blob,
+            digest.bytes(),
+            "draft references a missing canonical text blob",
+            &mut self.work,
+            &mut self.admission,
+        )
+    }
+
+    pub(crate) fn incoming(
+        &mut self,
+        owner: OwnerKey,
+        kind: RelationKind,
+        maximum: usize,
+    ) -> Result<Vec<RelationEdge>, Diagnostic> {
+        let read = self.view.relations(
+            RelationEndpoint::Owner(crate::platform::kernel::ExactOwnerKey {
+                package: self.view.package(),
+                owner,
+            }),
+            Some(kind),
+            maximum,
+            true,
+            &mut self.admission,
+        )?;
+        self.work.add(read.work);
+        if read.value.truncated {
+            return Err(read_error(
+                DiagnosticClass::Resource,
+                "change_draft_capacity",
+                "selected ownership scope exceeds draft admission; select smaller scopes",
+            ));
+        }
+        Ok(read.value.edges)
+    }
+
     fn new(view: &'a RepositoryView, admission: RepositoryDefinitionAdmission) -> Self {
         Self {
             view,

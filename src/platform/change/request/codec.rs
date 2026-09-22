@@ -117,6 +117,7 @@ struct Writer {
     requirement_extension: bool,
     outcome_extension: bool,
     f64_extension: bool,
+    declaration_body_extension: bool,
 }
 
 impl Writer {
@@ -127,11 +128,14 @@ impl Writer {
             requirement_extension: false,
             outcome_extension: false,
             f64_extension: false,
+            declaration_body_extension: false,
         }
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.f64_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+        if self.declaration_body_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR18");
+        } else if self.f64_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR17");
         } else if self.outcome_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR16");
@@ -771,6 +775,26 @@ impl Writer {
                 self.owner_selector(port, definitions)?;
                 self.authored_type(function_type, definitions, 1)
             }
+            AuthoredChange::SetPort {
+                port,
+                function_type,
+                implementation,
+            } => {
+                self.declaration_body_extension = true;
+                self.tag(46)?;
+                self.owner_selector(port, definitions)?;
+                self.authored_type(function_type, definitions, 1)?;
+                match implementation {
+                    AuthoredPortImplementation::Function { function } => {
+                        self.tag(1)?;
+                        self.declaration_reference(function, definitions)
+                    }
+                    AuthoredPortImplementation::Expression { expression } => {
+                        self.tag(2)?;
+                        self.expression(expression, definitions, 1)
+                    }
+                }
+            }
             AuthoredChange::SetOperationContract {
                 operation,
                 result,
@@ -857,6 +881,28 @@ impl Writer {
                 self.tag(35)?;
                 self.declaration_selector(function, definitions)?;
                 self.expression(body, definitions, 1)
+            }
+            AuthoredChange::SetConstant {
+                constant,
+                ty,
+                value,
+            } => {
+                self.declaration_body_extension = true;
+                self.tag(44)?;
+                self.declaration_selector(constant, definitions)?;
+                self.authored_type(ty, definitions, 1)?;
+                self.expression(value, definitions, 1)
+            }
+            AuthoredChange::SetTest {
+                test,
+                actual,
+                expected,
+            } => {
+                self.declaration_body_extension = true;
+                self.tag(45)?;
+                self.declaration_selector(test, definitions)?;
+                self.expression(actual, definitions, 1)?;
+                self.expression(expected, definitions, 1)
             }
             AuthoredChange::ExtractFunction {
                 symbol,

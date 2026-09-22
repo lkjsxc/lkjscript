@@ -81,7 +81,7 @@ struct Node {
     requirements: Vec<CompactField>,
     members: Vec<CompactRecord>,
     // Only lexical resolution constructs this value. User text always uses the public decoder.
-    lexical: Option<String>,
+    lexical: Option<AuthoredLocalReference>,
 }
 
 enum Work {
@@ -100,7 +100,11 @@ pub(super) fn layout(
         id: block.root,
         depth: 1,
     }];
-    let mut environment: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut environment: BTreeMap<String, Vec<String>> = block
+        .locals
+        .iter()
+        .map(|(name, value)| (name.clone(), vec![value.clone()]))
+        .collect();
     let mut maximum_depth = 0;
     while let Some(task) = work.pop() {
         let (id, depth) = match task {
@@ -208,8 +212,26 @@ pub(super) fn layout(
                         node.record.fields.push(block.field(args[0], "value")?);
                     } else {
                         let name = name(&block, args[0])?;
-                        node.lexical = Some(environment.get(name.as_str()).and_then(|values| values.last()).cloned()
-                            .ok_or_else(|| block.error(args[0], "change_block_local_unbound", format!("lexical local '{value}' is not bound in this block scope")))?);
+                        let symbol = environment
+                            .get(name.as_str())
+                            .and_then(|values| values.last())
+                            .cloned()
+                            .ok_or_else(|| {
+                                block.error(
+                                    args[0],
+                                    "change_block_local_unbound",
+                                    format!(
+                                        "lexical local '{value}' is not bound in this block scope"
+                                    ),
+                                )
+                            })?;
+                        node.lexical = Some(if symbol.starts_with(ParameterId::PREFIX) {
+                            AuthoredLocalReference::FunctionParameter {
+                                parameter: symbol.parse()?,
+                            }
+                        } else {
+                            AuthoredLocalReference::Symbol { symbol }
+                        });
                     }
                 }
             }
@@ -237,7 +259,8 @@ pub(super) fn layout(
                 arity(&block, args[args.len() - 1], body, 1)?;
                 let mut binding_actions = Vec::new();
                 for binding in &args[..args.len() - 1] {
-                    let parts = clause(&block, *binding, "binding")?;
+                    let all_parts = clause(&block, *binding, "binding")?;
+                    let (parts, explicit) = binder_alias(&block, all_parts, symbols)?;
                     if !(parts.len() == 2 || parts.len() == 3) {
                         return Err(block.error(
                             *binding,
@@ -246,7 +269,10 @@ pub(super) fn layout(
                         ));
                     }
                     let binder_name = name(&block, parts[0])?;
-                    let binder_symbol = symbols.allocate(&block.syntax[parts[0]].location)?;
+                    let binder_symbol = match explicit {
+                        Some(symbol) => symbol,
+                        None => symbols.allocate(&block.syntax[parts[0]].location)?,
+                    };
                     let mut record = member_record(&block, *binding);
                     record.fields.push(block.field(parts[0], "name")?);
                     record.fields.push(CompactField {
@@ -366,10 +392,14 @@ pub(super) fn layout(
                     let mut record = member_record(&block, *arm);
                     record.fields.push(block.field(parts[0], "case")?);
                     let binding = if parts.len() == 3 {
-                        let payload = clause(&block, parts[1], "payload")?;
-                        arity(&block, parts[1], payload, 2)?;
+                        let all_payload = clause(&block, parts[1], "payload")?;
+                        let (payload, explicit) = binder_alias(&block, all_payload, symbols)?;
+                        arity(&block, parts[1], &payload, 2)?;
                         let binder_name = name(&block, payload[0])?;
-                        let binder_symbol = symbols.allocate(&block.syntax[payload[0]].location)?;
+                        let binder_symbol = match explicit {
+                            Some(symbol) => symbol,
+                            None => symbols.allocate(&block.syntax[payload[0]].location)?,
+                        };
                         record.fields.push(block.field(payload[0], "name")?);
                         record.fields.push(block.field(payload[1], "type")?);
                         record.fields.push(CompactField {
@@ -436,10 +466,14 @@ pub(super) fn layout(
                         node.record.fields.push(block.field(*value, field)?);
                     }
                 }
-                let binder = clause(&block, args[binder_index], "binding")?;
-                arity(&block, args[binder_index], binder, 1)?;
+                let all_binder = clause(&block, args[binder_index], "binding")?;
+                let (binder, explicit) = binder_alias(&block, all_binder, symbols)?;
+                arity(&block, args[binder_index], &binder, 1)?;
                 let binder_name = name(&block, binder[0])?;
-                let binder_symbol = symbols.allocate(&block.syntax[binder[0]].location)?;
+                let binder_symbol = match explicit {
+                    Some(symbol) => symbol,
+                    None => symbols.allocate(&block.syntax[binder[0]].location)?,
+                };
                 node.record.fields.push(block.field(binder[0], "name")?);
                 node.record.fields.push(CompactField {
                     name: "binding".to_owned(),
@@ -489,6 +523,35 @@ fn member_record(block: &Block, id: usize) -> CompactRecord {
         fields: Vec::new(),
         location: block.syntax[id].location.clone(),
     }
+}
+
+fn binder_alias(
+    block: &Block,
+    parts: &[usize],
+    symbols: &mut PrivateSymbols,
+) -> Result<(Vec<usize>, Option<String>), Diagnostic> {
+    let mut remaining = Vec::new();
+    let mut explicit = None;
+    for part in parts {
+        if block.head(*part) == Some("as") {
+            let args = clause(block, *part, "as")?;
+            arity(block, *part, args, 1)?;
+            let value = block.atom(args[0])?.to_owned();
+            let record = member_record(block, *part);
+            validate_local_label(&record, "as", &value, '$')?;
+            if explicit.replace(value).is_some() {
+                return Err(block.error(
+                    *part,
+                    "change_block_binding_alias",
+                    "binding has more than one explicit alias",
+                ));
+            }
+            symbols.admit(&block.syntax[*part].location)?;
+        } else {
+            remaining.push(*part);
+        }
+    }
+    Ok((remaining, explicit))
 }
 
 fn name(block: &Block, id: usize) -> Result<Name, Diagnostic> {
@@ -649,7 +712,7 @@ fn lower_node(
         },
         "expression.local" => AuthoredExpressionOperation::Local {
             value: match node.lexical {
-                Some(symbol) => AuthoredLocalReference::Symbol { symbol },
+                Some(reference) => reference,
                 None => decoder.parse_local_reference(record, "value")?,
             },
         },

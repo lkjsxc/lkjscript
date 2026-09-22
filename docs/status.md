@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-09-21 UTC. This file describes implemented checkout reality. Executable-derived
+Status date: 2026-09-22 UTC. This file describes implemented checkout reality. Executable-derived
 public guides live under [generated](generated), including the
 [operation guide](generated/operations.md); this file does not duplicate them.
 
@@ -9,15 +9,27 @@ public guides live under [generated](generated), including the
 The explicit publication requests selected the already accepted v0.1.39 product at
 `b05e9e12133ef625b33462123468b9b896885dd4`, producer `35508727722/1`. The
 [delivery continuation](campaigns/202609210911.md) authenticates its original handoffs and
-selects unchanged assets. Consumer `35667263704/1`, controller source
-`0bf919f8718dcaaa265e84f73fc93f9d52f88f94`, passed source/content selection, independent
-publication authority and both transferred installed lifecycles. Draft creation then failed
-with HTTP 403 because the request supplied the old source as an unnecessary tag-creation target;
-the exact annotated tag already exists. The tested controller correction is integrated at
-`220bd11b093e1d4e290e42516fa2ecc3f18ab874`; resumption `35668854407/1` uses that controller
-with the original producer. No v0.1.39 release or anonymous public verification is yet
-claimed; public v0.1.38 remains the last completed release. No product rebuild, schema migration
-or production deployment is selected.
+selects unchanged assets. Immutable release `393365830` was published at
+2026-09-21T23:49:32Z. Resumption `35668854407/1`, controller
+`220bd11b093e1d4e290e42516fa2ecc3f18ab874`, completed selection, publication, anonymous
+acquisition/installed smoke and terminal jobs successfully. Candidate acceptance was deliberately
+skipped, retaining the original producer's accepted product. The earlier HTTP 403 and its tested
+controller repair remain in the campaign history. This closure refreshes hosted metadata; it
+does not rerun acceptance, rebuild the product, migrate application data or deploy to production.
+
+## Native declaration authoring — implementation in progress
+
+The [selected continuation](campaigns/202609220955.md) adds complete create/edit declaration units
+and canonical `change draft` through the existing reviewed change boundary. Development copies
+have completed fresh generic library/consumer creation, discarded-input re-entry, explicit input
+addition and exact dependency repair. Old/new detached artifacts return `(2, 2)` / `(3, 102)`;
+checked overflow and dependency-only arity rejection remain visible. The pinned disposable
+Orbloam experiment passed its original 72 tests, then 75 tests with a new native inventory helper;
+authenticated HTTP, unauthorized rejection and retained-store restart were observed. These are
+development observations, not final source/candidate acceptance or remote Orbloam adoption.
+An independent consumer completed creation, discarded-input drafting and behavior/test editing
+from the copied executable and generated guides alone. Maintained acceptance, integration and
+successor publication remain open. The campaign owns literal inputs, deviations and evidence.
 
 ## Persistent ordered maps
 

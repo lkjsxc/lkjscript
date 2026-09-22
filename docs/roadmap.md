@@ -91,9 +91,9 @@ completed the selected read-only proof: accept final neutral content once and co
 assets through authenticated selection and the small installed lifecycle. Consumer `35272533706/1`
 succeeded with determinate rejected promotion authority. The subsequent explicit requests selected
 v0.1.39, including [input evolution](campaigns/202609180608.md), maps, HTTP and data corrections.
-The [delivery continuation](campaigns/202609210911.md) promotes accepted producer `35508727722/1`
-through the maintained controller. Its current public outcome belongs to the
-[status summary](status.md#v0139-delivery); no further feature or healthy-candidate rebuild is a prerequisite.
+The [delivery continuation](campaigns/202609210911.md) published accepted producer `35508727722/1`
+unchanged. Resumption `35668854407/1` completed publication and anonymous public verification;
+the [status summary](status.md#v0139-delivery) records closure. No rebuild is due for this milestone.
 Independent callback effects still require an application policy for replay and idempotency.
 
 Numerical algorithms and failure policy belong in ordinary graph libraries. After delivery,
@@ -103,8 +103,12 @@ Representative measurements can revise that direction; it selects no additional 
 numerical-throughput claim.
 
 The [structural campaign](campaigns/202609150900.md) retains the original literal size observations;
-they establish assembly friction, not authoring time, model tokens or billing. Explicit declaration,
-reference, type, effect, constraint and dependency preludes remain. The completion API lets the
+they establish assembly friction, not authoring time, model tokens or billing. The selected
+[native-declaration continuation](campaigns/202609220955.md) is now implementing complete units
+and canonical re-entry to remove declaration, type, child-index and repeated reference assembly.
+Its development fresh and external workflows have run; maintained acceptance, integration and
+publication remain open. Explicit semantic contracts and exact dependency selection remain.
+The completion API lets the
 library own finalization across a caller-supplied requirement; fresh source and static-target
 acceptance establish the result through transport, callback failures and independent store observations.
 

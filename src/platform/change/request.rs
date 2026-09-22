@@ -240,6 +240,11 @@ pub enum AuthoredChange {
         port: OwnerSelector,
         function_type: AuthoredType,
     },
+    SetPort {
+        port: OwnerSelector,
+        function_type: AuthoredType,
+        implementation: AuthoredPortImplementation,
+    },
     SetOperationContract {
         operation: OwnerSelector,
         result: AuthoredType,
@@ -292,6 +297,16 @@ pub enum AuthoredChange {
     ReplaceFunctionBody {
         function: DeclarationSelector,
         body: AuthoredExpression,
+    },
+    SetConstant {
+        constant: DeclarationSelector,
+        ty: AuthoredType,
+        value: AuthoredExpression,
+    },
+    SetTest {
+        test: DeclarationSelector,
+        actual: AuthoredExpression,
+        expected: AuthoredExpression,
     },
     ExtractFunction {
         symbol: String,
@@ -882,6 +897,7 @@ pub(crate) fn lower_authored_changes_with_source_owners<
             | AuthoredChange::SetCasePayload { .. }
             | AuthoredChange::SetParameterType { .. }
             | AuthoredChange::SetPortContract { .. }
+            | AuthoredChange::SetPort { .. }
             | AuthoredChange::SetOperationContract { .. }
             | AuthoredChange::SetRequirementContract { .. }
             | AuthoredChange::SetTarget { .. }
@@ -909,6 +925,85 @@ pub(crate) fn lower_authored_changes_with_source_owners<
                     ));
                 };
                 record.module = module;
+            }
+            AuthoredChange::SetConstant {
+                constant,
+                ty,
+                value,
+            } => {
+                let id = lowerer.resolve_declaration(constant)?;
+                let owner = OwnerKey::Declaration(id);
+                let old = match lowerer.candidate_mut(owner)? {
+                    OwnerRecord::Declaration(record) => match &record.payload {
+                        crate::platform::kernel::DeclarationPayload::Constant { value, .. } => {
+                            *value
+                        }
+                        _ => {
+                            return Err(request_error(
+                                DiagnosticClass::Semantic,
+                                "change_constant_kind",
+                                "constant edit requires a constant declaration",
+                            ));
+                        }
+                    },
+                    _ => {
+                        return Err(request_error(
+                            DiagnosticClass::Semantic,
+                            "change_constant_kind",
+                            "constant edit requires a declaration",
+                        ));
+                    }
+                };
+                let ty = lowerer.lower_type(ty)?;
+                let value = lowerer.lower_expression(value)?;
+                if let OwnerRecord::Declaration(record) = lowerer.candidate_mut(owner)? {
+                    record.payload =
+                        crate::platform::kernel::DeclarationPayload::Constant { ty, value };
+                }
+                deletion::retire_replaced_expression_tree(&mut lowerer, old)?;
+            }
+            AuthoredChange::SetTest {
+                test,
+                actual,
+                expected,
+            } => {
+                let id = lowerer.resolve_declaration(test)?;
+                let owner = OwnerKey::Declaration(id);
+                let old = match lowerer.candidate_mut(owner)? {
+                    OwnerRecord::Declaration(record) => match &record.payload {
+                        crate::platform::kernel::DeclarationPayload::Test {
+                            actual,
+                            expected,
+                            ..
+                        } => [*actual, *expected],
+                        _ => {
+                            return Err(request_error(
+                                DiagnosticClass::Semantic,
+                                "change_test_kind",
+                                "test edit requires a test declaration",
+                            ));
+                        }
+                    },
+                    _ => {
+                        return Err(request_error(
+                            DiagnosticClass::Semantic,
+                            "change_test_kind",
+                            "test edit requires a declaration",
+                        ));
+                    }
+                };
+                let actual = lowerer.lower_expression(actual)?;
+                let expected = lowerer.lower_expression(expected)?;
+                if let OwnerRecord::Declaration(record) = lowerer.candidate_mut(owner)? {
+                    record.payload = crate::platform::kernel::DeclarationPayload::Test {
+                        actual,
+                        expected,
+                        comparison: crate::platform::kernel::ComparisonPolicy::Exact,
+                    };
+                }
+                for root in old {
+                    deletion::retire_replaced_expression_tree(&mut lowerer, root)?;
+                }
             }
             AuthoredChange::ReplaceFunctionBody { function, body } => {
                 let function = lowerer.resolve_declaration(function)?;
@@ -1071,6 +1166,7 @@ fn collect_symbol_definitions(
             | AuthoredChange::SetCasePayload { .. }
             | AuthoredChange::SetParameterType { .. }
             | AuthoredChange::SetPortContract { .. }
+            | AuthoredChange::SetPort { .. }
             | AuthoredChange::SetOperationContract { .. }
             | AuthoredChange::SetRequirementContract { .. }
             | AuthoredChange::SetTarget { .. }
@@ -1085,6 +1181,15 @@ fn collect_symbol_definitions(
             | AuthoredChange::MoveDeclaration { .. } => {}
             AuthoredChange::ReplaceFunctionBody { body, .. } => {
                 creation::collect_expression_symbols(body, &mut definitions)?
+            }
+            AuthoredChange::SetConstant { value, .. } => {
+                creation::collect_expression_symbols(value, &mut definitions)?
+            }
+            AuthoredChange::SetTest {
+                actual, expected, ..
+            } => {
+                creation::collect_expression_symbols(actual, &mut definitions)?;
+                creation::collect_expression_symbols(expected, &mut definitions)?;
             }
         }
     }

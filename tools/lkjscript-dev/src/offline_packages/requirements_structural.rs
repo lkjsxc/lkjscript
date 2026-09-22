@@ -1,6 +1,16 @@
 //! Public structural-library planning and inspection evidence; never writes semantic storage.
 use super::*;
 
+fn native_fixture(name: &str) -> Option<String> {
+    (name == "producer").then(|| {
+        format!(
+            "{}{}",
+            include_str!("requirements.producer.structural.lkjc"),
+            include_str!("requirements.resource-library.native.lkjc")
+        )
+    })
+}
+
 // The flat fixtures are an independently retained authoring oracle. Both notations are planned
 // against one base and the flat token authorizes the structural request; no live effect is replayed.
 pub(super) fn apply(
@@ -17,7 +27,12 @@ pub(super) fn apply(
     );
     let mut plans = Vec::new();
     let mut commands = Vec::new();
-    for (notation, literal) in [("flat", flat), ("structural", structural)] {
+    let native = native_fixture(name);
+    let mut notations = vec![("flat", flat), ("structural", structural)];
+    if let Some(native) = &native {
+        notations.push(("native", native));
+    }
+    for (notation, literal) in &notations {
         let input = context
             .evidence
             .join(format!("requirement-{name}-{notation}.lkjc"));
@@ -47,12 +62,19 @@ pub(super) fn apply(
         plans.push((decoded, process::read_bounded(&plan, MAXIMUM_OUTPUT_BYTES)?));
     }
     require(
-        plans[0] == plans[1],
-        &format!("flat and structural {name} changed canonical intent or reviewed candidate"),
+        plans.iter().all(|plan| plan == &plans[0]),
+        &format!(
+            "flat, structural or native {name} changed canonical intent or reviewed candidate"
+        ),
     )?;
-    let input = context
-        .evidence
-        .join(format!("requirement-{name}-structural.lkjc"));
+    let input = context.evidence.join(format!(
+        "requirement-{name}-{}.lkjc",
+        if native.is_some() {
+            "native"
+        } else {
+            "structural"
+        }
+    ));
     commands.push(context.receipt.commands.len());
     let applied = context.cli(
         Some(&package.path),
@@ -287,16 +309,19 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<(), DevError> {
         ),
     ] {
         let indices: Vec<usize> = serde_json::from_value(value[name]["commands"].clone())?;
+        let native = native_fixture(name);
+        let mut notations = vec![("flat", &flat), ("structural", &structural)];
+        if let Some(native) = &native {
+            notations.push(("native", native));
+        }
         require(
-            indices.len() == 3 && indices.windows(2).all(|pair| pair[0] < pair[1]),
+            indices.len() == notations.len() + 1
+                && indices.windows(2).all(|pair| pair[0] < pair[1]),
             "structural library plans/apply missing or reordered",
         )?;
         let mut prefix = None;
         let mut plans = Vec::new();
-        for ((notation, literal), index) in [("flat", &flat), ("structural", &structural)]
-            .into_iter()
-            .zip(&indices)
-        {
+        for ((notation, literal), index) in notations.iter().copied().zip(&indices) {
             let input_name = format!("requirement-{name}-{notation}.lkjc");
             let plan_name = format!("requirement-{name}-{notation}.lkjplan");
             let input = String::from_utf8(process::read_bounded(
@@ -350,12 +375,12 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<(), DevError> {
             plans.push((decoded, bytes));
         }
         require(
-            plans[0] == plans[1],
-            "independent flat/structural request commitments or reviewed candidates differ",
+            plans.iter().all(|plan| plan == &plans[0]),
+            "independent flat/structural/native request commitments or reviewed candidates differ",
         )?;
         let applied = receipt
             .commands
-            .get(indices[2])
+            .get(indices[notations.len()])
             .ok_or_else(|| DevError::corrupt("structural library apply absent"))?;
         require(
             applied.expects_success
@@ -368,7 +393,14 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<(), DevError> {
                         "apply".into(),
                         "--input-file".into(),
                         original_evidence
-                            .join(format!("requirement-{name}-structural.lkjc"))
+                            .join(format!(
+                                "requirement-{name}-{}.lkjc",
+                                if native.is_some() {
+                                    "native"
+                                } else {
+                                    "structural"
+                                }
+                            ))
                             .display()
                             .to_string(),
                         "--plan".into(),
@@ -376,7 +408,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<(), DevError> {
                     ],
             "structural apply did not consume the equivalent flat plan token",
         )?;
-        let output = structural_output(root, indices[2])?;
+        let output = structural_output(root, indices[notations.len()])?;
         require(
             field(&output, "plan", "token")? == plans[0].0.token
                 && value[name]["revision"] == field(&output, "revision", "result")?,
@@ -419,7 +451,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<(), DevError> {
             .and_then(|n| usize::try_from(n).ok())
             .ok_or_else(|| DevError::corrupt("structural function inspection index absent"))?;
         let definition = structural_output(root, index)?;
-        let created_index = value["producer"]["commands"][2]
+        let created_index = value["producer"]["commands"][3]
             .as_u64()
             .and_then(|n| usize::try_from(n).ok())
             .ok_or_else(|| DevError::corrupt("structural producer apply index absent"))?;

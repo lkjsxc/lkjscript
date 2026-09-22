@@ -1,0 +1,91 @@
+request base=rev_6aaf8ee080b208c3852bdbdcd1ce7aa4309ed9eca9354971d0a483969d5d713d repository=repo_10402312054de7e1f7a6a69d96460099 package=pkg_8e4d55489066456031faaa0d27c35ead
+
+declarations.begin
+(units
+  (use std builtin)
+  ; Reconstructed from canonical meaning. Original comments, formatting and type aliases are not stored.
+  (reference ref_divide_4 declaration pkg_10000000000000000000000000000001/decl_2359f838521f88ca35a944d96a3152ac)
+  (reference ref_subtract_3 declaration pkg_10000000000000000000000000000001/decl_5027c49a62b96f4b44ad43e9c22719a6)
+  (reference ref_json-encode_1 declaration pkg_10000000000000000000000000000001/decl_e625d267874ff150c9e7e123bd11a879)
+  (reference ref_max_2 declaration pkg_8e4d55489066456031faaa0d27c35ead/decl_3b1936fcb5109533d131727bb0e1454f)
+  (reference ref_respond_0 declaration pkg_8e4d55489066456031faaa0d27c35ead/decl_c7f997eedeaf51885599c21a1e253c0f)
+  (type-alias type_0 (record (name Text) (value Bytes)))
+  (type-alias type_1 (list type_0))
+  (type-alias Response (record (body Bytes) (headers type_1) (status I64)))
+  (type-alias type_3 (record (enabled Bool) (health I64) (id I64) (kind I64) (produced I64) (progress I64) (recipe I64) (status Text) (x I64) (y I64)))
+  (type-alias type_4 (list type_3))
+  (type-alias type_5 (record (count I64) (first I64) (start I64)))
+  (type-alias type_6 (list type_5))
+  (type-alias Inventory (map Text I64))
+  (type-alias type_8 (map Text Text))
+  (type-alias type_9 (record (job I64) (tier I64) (units I64) (workers I64) (x I64) (y I64)))
+  (type-alias type_10 (list type_9))
+  (type-alias Colony (record (buildings type_4) (cohorts type_6) (conversations I64) (created_tick I64) (deaths I64) (essence I64) (experience I64) (from_x I64) (from_y I64) (gathered I64) (id I64) (inventory Inventory) (last_intent Text) (move_at I64) (move_ms I64) (name Text) (neighbor I64) (next_building I64) (receipts type_8) (research Inventory) (routes type_10) (sequence I64) (to_x I64) (to_y I64)))
+  (type-alias type_12 (list Colony))
+  (type-alias type_13 (record (kind I64) (stock I64) (tick I64) (tier I64) (x I64) (y I64)))
+  (type-alias type_14 (map Text type_13))
+  (type-alias World (record (colonies type_12) (next_id I64) (nodes type_14) (tick I64) (version I64)))
+  (type-alias Envelope (record (backlog_ticks I64) (inventory_summary orbloam::InventorySummary) (me I64) (now_ms I64) (world World)))
+  (module edit mod_c25e1735449d57cce6fde6804d06edd7 orbloam
+    (record create InventorySummary (visibility private)
+      (field create nonzero_kinds (type I64))
+      (field create total_units (type I64)))
+    (function create inventory-step (visibility private)
+      (parameter create state (type InventorySummary))
+      (parameter create entry (type (record (key Text) (value I64))))
+      (returns InventorySummary) (effect pure)
+      (body
+        (record InventorySummary
+          (field InventorySummary::nonzero_kinds
+            (if (call std::i64-equal (field (local entry) (name value)) (i64 0))
+              (field (local state) InventorySummary::nonzero_kinds)
+              (call std::add (field (local state) InventorySummary::nonzero_kinds) (i64 1))))
+          (field InventorySummary::total_units
+            (call std::add (field (local state) InventorySummary::total_units) (field (local entry) (name value)))))))
+    (function create summarize-inventory (visibility private)
+      (parameter create inventory (type Inventory))
+      (returns InventorySummary) (effect pure)
+      (body
+        (call std::list-fold-left (types (record (key Text) (value I64)) InventorySummary)
+          (call std::map-entries (types Text I64) (local inventory))
+          (record InventorySummary (field InventorySummary::nonzero_kinds (i64 0)) (field InventorySummary::total_units (i64 0)))
+          (function-value inventory-step))))
+    (test create inventory-empty (visibility private)
+      (actual (call summarize-inventory (map Text I64)))
+      (expected (record InventorySummary (field InventorySummary::nonzero_kinds (i64 0)) (field InventorySummary::total_units (i64 0)))))
+    (test create inventory-nonzero (visibility private)
+      (actual (call summarize-inventory (map Text I64 (entry (text "wood") (i64 3)) (entry (text "stone") (i64 4)) (entry (text "spent") (i64 0)))))
+      (expected (record InventorySummary (field InventorySummary::nonzero_kinds (i64 2)) (field InventorySummary::total_units (i64 7)))))
+    (test create inventory-signed (visibility private)
+      (actual (call summarize-inventory (map Text I64 (entry (text "wood") (i64 -1)) (entry (text "stone") (i64 4)))))
+      (expected (record InventorySummary (field InventorySummary::nonzero_kinds (i64 2)) (field InventorySummary::total_units (i64 3)))))
+    (function edit decl_d0df748154043f9913819ab3fa4fdc1c envelope
+      (visibility private)
+      (returns Response)
+      (effect pure)
+      (body
+        (call ref_respond_0 (i64 200)
+          (call ref_json-encode_1 (types Envelope)
+            (record structural
+              (field backlog_ticks (call ref_max_2 (i64 0) (call ref_subtract_3 (call ref_divide_4 (local now) (i64 10000)) (field (local world) (name tick)))))
+              (field inventory_summary
+                (call summarize-inventory
+                  (field
+                    (call std::list-get (types Colony)
+                      (field (local world) (name colonies))
+                      (call orbloam::find-colony-index (field (local world) (name colonies)) (local id) (i64 0)))
+                    (name inventory))))
+              (field me (local id)) (field now_ms (local now)) (field world (local world))))
+          (text "application/json; charset=utf-8")))
+      (parameter edit param_2bbd68282be5a371336f956de4e8c6d7 world
+        (type World)
+        (use unrestricted))
+      (parameter edit param_71ae7dabfafab1cc922b433ae4194147 id
+        (type I64)
+        (use unrestricted))
+      (parameter edit param_6ae9b0a367117fbfc232f869d0e6d0bb now
+        (type I64)
+        (use unrestricted)))
+  )
+)
+declarations.end

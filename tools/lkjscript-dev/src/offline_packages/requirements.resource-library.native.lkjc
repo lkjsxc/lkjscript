@@ -1,0 +1,26 @@
+reference.owner as=$Queue package=$std class=declaration name=DurableQueue
+reference.owner as=$LeaseState package=$std class=declaration name=QueueLeaseState
+reference.owner as=$claim package=$std class=operation parent=$Queue name=claim
+reference.owner as=$lease-info package=$std class=operation parent=$Queue name=lease-info
+reference.owner as=$complete package=$std class=operation parent=$Queue name=complete
+reference.owner as=$live package=$std class=case parent=$LeaseState name=live
+reference.owner as=$absent-case package=$std class=case parent=$LeaseState name=absent
+declarations.begin
+(units
+  (function create finish-one (as $finish-one) (in $cells) (visibility public)
+    (requirement-parameter create R (as $queue-R)
+      (interface $Queue) (operations $claim $lease-info $complete))
+    (parameter create worker (as $worker) (type Text))
+    (parameter create now (as $now) (type I64))
+    (parameter create lease-duration (as $duration) (type I64))
+    (parameter create result (as $result) (type Bytes))
+    (returns Bool) (effect (task (requirement R)))
+    (body
+      (match
+        (capability-call R $claim (local worker) (local now) (local lease-duration))
+        (arm $live (payload lease (resource $Queue))
+          (sequence
+            (capability-call R $lease-info (local lease))
+            (capability-call R $complete (local lease) (local now) (local result))))
+        (arm $absent-case (bool false))))))
+declarations.end

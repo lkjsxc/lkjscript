@@ -100,9 +100,9 @@ use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-17";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 17;
-pub const CLI_CONTRACT_VERSION: u16 = 32;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-18";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 18;
+pub const CLI_CONTRACT_VERSION: u16 = 33;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -127,7 +127,7 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
     ("bind", "(bind CALLEE EXPR...)"),
     (
         "let",
-        "(let (binding NAME [(type TYPE)] INITIALIZER)... (in BODY))",
+        "(let (binding NAME [(as $BINDING)] [(type TYPE)] INITIALIZER)... (in BODY))",
     ),
     (
         "record",
@@ -142,7 +142,7 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
     ),
     (
         "match",
-        "(match SCRUTINEE (arm CASE [(payload NAME TYPE)] BODY)...)",
+        "(match SCRUTINEE (arm CASE [(payload NAME TYPE [(as $BINDING)])] BODY)...)",
     ),
     (
         "capability-call",
@@ -899,7 +899,9 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
             predecessor_policy: REJECT,
-            magic_values: &["LKJACR14", "LKJACR15", "LKJACR16", "LKJACR17", "LKJABG01"],
+            magic_values: &[
+                "LKJACR14", "LKJACR15", "LKJACR16", "LKJACR17", "LKJACR18", "LKJABG01",
+            ],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
                 CHANGE_REQUEST_COMMITMENT_DOMAIN,
@@ -1499,8 +1501,8 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         ),
         operation(
             PublicOperation::Change,
-            "Prepare, optionally export, or atomically apply one review-bound logical semantic change plan.",
-            "change plan ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] | extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT]) [--output PATH] | change apply ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] | extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT]) --plan TOKEN",
+            "Draft exact accepted declarations, prepare a reviewed change, or atomically apply its complete candidate.",
+            "change draft --owner OWNER [--owner OWNER]... --output PATH [--bytes N] | change plan ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] | extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT]) [--output PATH] | change apply ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] | extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT]) --plan TOKEN",
             (ControlModel::ChangeRequest, ControlModel::CompactResult),
             AuthorityEffect::AcceptedOnCommit,
             ProjectRequirement::Required,
@@ -2645,22 +2647,136 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Use an advertised external value input or reduce the value.",
         ),
         diagnostic(
+            "change_unit_form",
+            DiagnosticClass::Source,
+            "A native declaration unit or clause is malformed.",
+            "Use the advertised native declaration grammar and explicit semantic contracts.",
+        ),
+        diagnostic(
+            "change_unit_context",
+            DiagnosticClass::Source,
+            "A native request lacks its required accepted repository context.",
+            "Plan the complete request against its exact project and base.",
+        ),
+        diagnostic(
+            "change_unit_duplicate",
+            DiagnosticClass::Source,
+            "Two native names collide in one typed scope.",
+            "Rename a notation alias or use distinct names within that namespace.",
+        ),
+        diagnostic(
+            "change_unit_binding",
+            DiagnosticClass::Source,
+            "An edit's displayed kind or name disagrees with its exact owner.",
+            "Retain the exact edit binding and use an explicit reviewed rename operation.",
+        ),
+        diagnostic(
+            "change_unit_unresolved",
+            DiagnosticClass::Source,
+            "A typed native name cannot be resolved in its scope.",
+            "Qualify the local declaration or exact supplier member; do not rely on ambient lookup.",
+        ),
+        diagnostic(
+            "change_unit_parent",
+            DiagnosticClass::Source,
+            "An edit's owning scope differs from its bound canonical owner.",
+            "Restore the owning scope or use an explicit supported move.",
+        ),
+        diagnostic(
+            "change_unit_children",
+            DiagnosticClass::Source,
+            "A complete edited signature omits an existing contract child.",
+            "Retain every child binding or account for deletion with an explicit supported operation.",
+        ),
+        diagnostic(
+            "change_unit_order",
+            DiagnosticClass::Source,
+            "An edited ordered contract changes existing child order implicitly.",
+            "Retain existing order and append explicit new children.",
+        ),
+        diagnostic(
+            "change_unit_capacity",
+            DiagnosticClass::Source,
+            "The complete native request exceeds finite preparation admission.",
+            "Reduce one atomic request without assuming a partial publication occurred.",
+        ),
+        diagnostic(
+            "change_unit_base",
+            DiagnosticClass::Source,
+            "The native request's base is stale.",
+            "Draft or reconcile against the current accepted revision and review again.",
+        ),
+        diagnostic(
+            "change_unit_identity",
+            DiagnosticClass::Source,
+            "The request's repository or package binding does not match its base.",
+            "Use the exact intended project; names do not grant editing authority.",
+        ),
+        diagnostic(
+            "change_draft_dependency",
+            DiagnosticClass::Semantic,
+            "A draft reference has no accepted exact supplier binding.",
+            "Inspect the selected revision and its exact dependency context.",
+        ),
+        diagnostic(
+            "change_draft_definition",
+            DiagnosticClass::Source,
+            "A selected canonical definition cannot be represented completely.",
+            "Retain the exact selection and diagnostic; no truncated draft is successful.",
+        ),
+        diagnostic(
+            "change_draft_capacity",
+            DiagnosticClass::Resource,
+            "Complete draft preparation or output exceeds an admission bound.",
+            "Select a smaller connected ownership scope or an allowed larger output bound.",
+        ),
+        diagnostic(
+            "change_draft_output_parent",
+            DiagnosticClass::Infrastructure,
+            "The draft output parent cannot be resolved.",
+            "Use an existing writable output directory and an absent destination.",
+        ),
+        diagnostic(
+            "change_draft_project",
+            DiagnosticClass::Infrastructure,
+            "The accepted project storage path cannot be resolved.",
+            "Restore access to the intended repository without changing accepted content.",
+        ),
+        diagnostic(
+            "change_constant_kind",
+            DiagnosticClass::Semantic,
+            "A constant edit selects a different declaration kind.",
+            "Select the exact existing constant and review the corrected request.",
+        ),
+        diagnostic(
+            "change_test_kind",
+            DiagnosticClass::Semantic,
+            "A test edit selects a different declaration kind.",
+            "Select the exact existing graph test and review the corrected request.",
+        ),
+        diagnostic(
+            "change_port_implementation",
+            DiagnosticClass::Source,
+            "A port specifies neither or both function and expression implementations.",
+            "Provide exactly one explicit function or value implementation.",
+        ),
+        diagnostic(
             "change_block_end",
             DiagnosticClass::Source,
-            "An expression.end marker contains trailing fields or tokens.",
-            "Use an otherwise empty standalone expression.end line.",
+            "An expression.end or declarations.end marker contains trailing tokens.",
+            "Use an otherwise empty standalone block end line.",
         ),
         diagnostic(
             "change_block_nested",
             DiagnosticClass::Source,
-            "An expression block contains another block header.",
-            "Nest expressions with parentheses and export each block root separately.",
+            "A declaration or expression block contains another block header.",
+            "Nest structural forms with parentheses inside their matching block markers.",
         ),
         diagnostic(
             "change_block_stray_end",
             DiagnosticClass::Source,
-            "An expression.end marker has no open block.",
-            "Remove the marker or add its expression.block header.",
+            "A block end marker has no matching open block.",
+            "Remove the marker or add its matching block header.",
         ),
         diagnostic(
             "change_block_unclosed",
@@ -6081,6 +6197,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ],
             )?);
             structural_expression_records(&mut records)?;
+            native_declaration_records(&mut records)?;
             for descriptor in LOGICAL_PLAN_RECORD_DESCRIPTORS {
                 records.push(compact_record(
                     "change.plan-record",
@@ -7426,6 +7543,161 @@ pub fn operation_record(descriptor: &OperationDescriptor) -> Result<String, Stri
     )
 }
 
+fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
+    for (name, syntax, meaning) in [
+        (
+            "framing",
+            "request base=REVISION [repository=REPOSITORY] [package=PACKAGE] [idempotency=KEY] NEWLINE declarations.begin NEWLINE (units UNIT...) NEWLINE declarations.end",
+            "All blocks in one request share collected typed scopes and one atomic reviewed publication; compact records may appear outside blocks.",
+        ),
+        (
+            "unit",
+            "(FAMILY create NAME CLAUSE...)|(FAMILY edit EXACT_OWNER NAME CLAUSE...)",
+            "Creation allocates; editing binds exact current identity and displayed name. Never name-based upsert. Optional (as $SYMBOL) supplies deliberate cross-notation identity labels.",
+        ),
+        (
+            "module",
+            "(module MODE BINDING DECLARATION...)",
+            "A module nests its declarations. A top-level declaration may use (in MODULE). An edit is a patch; unselected declarations survive.",
+        ),
+        (
+            "record",
+            "(record MODE BINDING (visibility public|package|private) TYPE_PARAMETER... FIELD...)",
+            "Ordered authored fields and generic contracts; named types retain declaration identity.",
+        ),
+        (
+            "variant",
+            "(variant MODE BINDING (visibility VISIBILITY) TYPE_PARAMETER... CASE...)",
+            "Cases may contain an explicit payload type.",
+        ),
+        (
+            "function",
+            "(function MODE BINDING (visibility VISIBILITY) TYPE_PARAMETER... EFFECT_PARAMETER... REQUIREMENT_PARAMETER... PARAMETER... (returns TYPE) (effect pure|TASK) (body EXPR))",
+            "Explicit complete signature and structural body. Parameter names are lexical locals; no effect inference.",
+        ),
+        (
+            "external",
+            "(external MODE BINDING (visibility VISIBILITY) TYPE_PARAMETER... PARAMETER... (returns TYPE) (implementation IMPLEMENTATION))",
+            "Existing supported implementation boundary; not an executable host macro.",
+        ),
+        (
+            "constant",
+            "(constant MODE BINDING (visibility VISIBILITY) (type TYPE) (value EXPR))",
+            "Complete constant definition.",
+        ),
+        (
+            "test",
+            "(test MODE BINDING (visibility VISIBILITY) (actual EXPR) (expected EXPR))",
+            "Graph-owned equality expectation, admitted with the whole candidate.",
+        ),
+        (
+            "interface",
+            "(interface MODE BINDING (visibility VISIBILITY) OPERATION...)",
+            "Explicit capability contract.",
+        ),
+        (
+            "operation",
+            "(operation MODE BINDING PARAMETER... (returns TYPE) (idempotency idempotent|idempotent-with-key|non-idempotent) (external-visibility none|possible))",
+            "Operation contract owned by an interface.",
+        ),
+        (
+            "component",
+            "(component MODE BINDING (visibility VISIBILITY) REQUIREMENT... PORT...)",
+            "Explicit requirement and implementation connections; grants remain deployment-owned.",
+        ),
+        (
+            "requirement",
+            "(requirement MODE BINDING (interface DECLARATION) (operations OPERATION...) (limits (NAME MAXIMUM bytes|items|calls|tasks|milliseconds)...))",
+            "No implicit allowances or grants.",
+        ),
+        (
+            "port",
+            "(port MODE BINDING (type TYPE) (function DECLARATION))|(port MODE BINDING (type TYPE) (value EXPR))",
+            "Exactly one canonical implementation form.",
+        ),
+        (
+            "target",
+            "(target MODE BINDING (component DECLARATION) (runner command|http|interactive|batch|worker|test) [(port PORT)] ROUTE...)",
+            "Target runtime support and boundary contracts are independently validated.",
+        ),
+        (
+            "route",
+            "(route MODE BINDING (method METHOD) (path STRING)|(pattern STRING) (port PORT))",
+            "Owned by a target; edit BINDING is EXACT_ROUTE EXACT_ROUTE because routes have no stored display name.",
+        ),
+        (
+            "field",
+            "(field MODE BINDING (type TYPE))",
+            "Owned by a record.",
+        ),
+        (
+            "case",
+            "(case MODE BINDING [(payload TYPE)])",
+            "Owned by a variant.",
+        ),
+        (
+            "parameter",
+            "(parameter MODE BINDING (type TYPE) [(use unrestricted|borrow|consume)] [(requirement REQUIREMENT)])",
+            "Owned by a function, external or operation; additions explicitly create and append.",
+        ),
+        (
+            "type-parameter",
+            "(type-parameter MODE BINDING [(constraint none|capture-safe)])",
+            "Lexically scoped generic type; no escape to unrelated contracts.",
+        ),
+        (
+            "effect-parameter",
+            "(effect-parameter MODE BINDING)",
+            "Owned by a function.",
+        ),
+        (
+            "requirement-parameter",
+            "(requirement-parameter MODE BINDING (interface DECLARATION) (operations OPERATION...))",
+            "Owned by a function; requirement-position names resolve to parameter capabilities.",
+        ),
+        (
+            "supplier",
+            "(use ALIAS builtin)|(use ALIAS PACKAGE PACKAGE_REVISION)",
+            "Exact public supplier binding. Exported members use ALIAS::DECLARATION and ALIAS::DECLARATION::MEMBER. Interfaces expose no modules; ambiguous exports require an exact typed reference alias. No ambient lookup or upgrades.",
+        ),
+        (
+            "reference",
+            "(reference ALIAS NAMESPACE EXACT_REFERENCE)",
+            "Typed locator only; supplies no mutation or execution authority.",
+        ),
+        (
+            "types",
+            "Unit|Bool|I64|F64|Text|Bytes|StaticText|Secret|NAME|(NAME TYPE...)|(list TYPE)|(map TYPE TYPE)|(result TYPE TYPE)|(option TYPE)|(stream TYPE)|(record (NAME TYPE)...)|(function (TYPE...) TYPE)|(task-function (TYPE...) TYPE ROW)|(resource INTERFACE)|(parameter-type EXACT_PARAMETER)",
+            "Inline composition; (type-alias NAME TYPE) is scoped notation and is admitted even when unused.",
+        ),
+        (
+            "effects",
+            "(task (requirement REQUIREMENT)... (parameter EFFECT_PARAMETER)...)|(row (requirement REQUIREMENT)... (parameter EFFECT_PARAMETER)...)",
+            "Task declaration and callable type rows remain explicit, including an empty task row.",
+        ),
+        (
+            "draft",
+            "change draft --owner MODULE_OR_DECLARATION_OR_TARGET [--owner OWNER]... --output ABSENT_PATH [--bytes N]",
+            "Read-only canonical reconstruction at one base. Module selection expands actual ownership only. External definitions remain exact references. Output is complete, bounded, deterministic and atomically created without overwrite.",
+        ),
+        (
+            "editing",
+            "edit EXACT_OWNER NAME",
+            "All contract children must retain exact bindings or have explicit delete.owner; renames and moves require precise operations. Untouched plan reports unchanged without a publication token. Original formatting, comments and alias names cannot be recovered.",
+        ),
+    ] {
+        records.push(compact_record(
+            "change.declaration-syntax",
+            &[
+                ("name", name.to_owned()),
+                ("syntax", syntax.to_owned()),
+                ("meaning", meaning.to_owned()),
+            ],
+        )?);
+    }
+    Ok(())
+}
+
 fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String> {
     records.push(compact_record(
         "change.expression-block",
@@ -7957,6 +8229,8 @@ fn validate_compact_change_inventory(
             ("add.parameter", "operation"),
             ("add.parameter", "use"),
             ("add.parameter", "requirement"),
+            ("add.port", "function"),
+            ("add.port", "value"),
             ("add.http-route", "path"),
             ("add.http-route", "pattern"),
             ("set.http-route", "path"),
@@ -7977,6 +8251,8 @@ fn validate_compact_change_inventory(
         ("add.parameter", "operation"),
         ("add.parameter", "use"),
         ("add.parameter", "requirement"),
+        ("add.port", "function"),
+        ("add.port", "value"),
         ("add.http-route", "path"),
         ("add.http-route", "pattern"),
         ("set.http-route", "path"),

@@ -1,0 +1,12 @@
+request base=rev_0320900c5cbe0eef6082ee1b496bf6e5775ed5c53d4f0f731d753edcf6963557 idempotency=baseline-flat
+create.module as=$module name=baseline
+create.record as=$Box module=$module name=Box visibility=public
+add.type-parameter as=$T declaration=$Box name=T
+type.parameter as=@T parameter=$T
+type.list as=@Items item=@T
+add.field as=$items record=$Box name=items type=@Items
+add.parameter as=$value function=$identity name=value type=i64
+expression.block as=$body
+(local $value)
+expression.end
+create.function as=$identity module=$module name=identity visibility=public result=i64 effect=pure body=$body

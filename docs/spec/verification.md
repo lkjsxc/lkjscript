@@ -4,6 +4,26 @@ Status: normative.
 
 ## Independent correctness mechanisms
 
+Native declaration authoring extends the existing library, public CLI and offline-package owners.
+Independent flat literals must agree with native authored intent and complete planned canonical
+values when the same authored identities/order are supplied. The maintained resource library
+plans flat, structural and complete native requests against one base and applies the native input
+using the flat review token; its original flat fixture remains an independent oracle.
+Offline receipt 17 and focused requirement receipt 3 require that native third plan and apply;
+the producing reader checks all three complete plans, exact literals and the flat review binding.
+Public tests must exercise creation, canonical drafting after input removal, exact child retention,
+constant/test/port edits, no-op planning, stale/name/omission/review failures, accepted retry and
+absent-output/exact-fit/one-over admission. Cancellation must preserve accepted authority.
+
+Canonical-to-native rendering and parsing cannot be the only behavioral oracle. Fresh generic
+Batch/Marked aggregation uses fixed count/sum results, independent canonical signature inspection,
+checked overflow, exact dependency replacement and old/new artifact execution without authoring
+repositories. Maintained lkjournal definitions and authenticated external continuation are separate
+claims. The pinned Orbloam experiment adds an ordinary inventory summary through native authoring,
+checks signed pure fixtures, derives live expected results from the same HTTP inventory, rejects
+unauthorized access, and restarts on owned existing data. It does not establish remote adoption,
+production deployment or compiler self-hosting. Live effects are never differentially replayed.
+
 Persistent ordered-map acceptance extends the existing runtime, public/offline-package and
 consumer owners. The independent BTreeMap oracle checks all primitive keys, mixed ordered
 storage, randomized branching histories, retained versions and AVL invariants. Pointer-based

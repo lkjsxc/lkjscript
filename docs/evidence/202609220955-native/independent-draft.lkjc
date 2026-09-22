@@ -1,0 +1,61 @@
+request base=rev_b115ebd38b2b7ca7360bf7d1c082864ebe3efe0762bb32930d23da37ec41b71c repository=repo_8fd59cce2ad71f519ce9728616269700 package=pkg_ee6e750134cd59b4c3b6676cbad92b7c
+
+declarations.begin
+(units
+  ; Reconstructed from canonical meaning. Original comments, formatting and type aliases are not stored.
+  (reference ref_PackingTools_4 declaration pkg_ee6e750134cd59b4c3b6676cbad92b7c/decl_1067f7f501282c1d77140ffda0edddb4)
+  (reference ref_Parcel_1 declaration pkg_ee6e750134cd59b4c3b6676cbad92b7c/decl_981e4cacef3cf77aed6063bd02d7bc84)
+  (reference ref_recommend_0 declaration pkg_ee6e750134cd59b4c3b6676cbad92b7c/decl_f278c24cfa971c4c6b309876163363ea)
+  (reference ref_chilled_2 field pkg_ee6e750134cd59b4c3b6676cbad92b7c/field_0490654e220cf71c796feac554588f37)
+  (reference ref_fragile_3 field pkg_ee6e750134cd59b4c3b6676cbad92b7c/field_56a20ac2f3542c5fef32af56afa0d003)
+  (reference ref_advice_5 port pkg_ee6e750134cd59b4c3b6676cbad92b7c/port_d6c7da16b418ad845bdcca3e6fd574b6)
+  (type-alias type_0 ref_Parcel_1)
+  (type-alias type_1 (function (type_0) Text))
+  (module edit mod_96ddaf7771d74275bda402a0ab50cd8b packing
+    (test edit decl_070613db6d0ef3c0dad765008e8326be fragile-parcel
+      (visibility private)
+      (actual (call ref_recommend_0 (record ref_Parcel_1 (field ref_chilled_2 (bool false)) (field ref_fragile_3
+              (bool true)))))
+      (expected (text "Use a padded carton.")))
+    (component edit decl_1067f7f501282c1d77140ffda0edddb4 PackingTools
+      (visibility public)
+      (port edit port_d6c7da16b418ad845bdcca3e6fd574b6 advice
+        (type type_1)
+        (function ref_recommend_0)))
+    (test edit decl_162cd190f39ec6f8a98aec543f5ba5e6 fragile-chilled-parcel
+      (visibility private)
+      (actual (call ref_recommend_0 (record ref_Parcel_1 (field ref_chilled_2 (bool true)) (field ref_fragile_3
+              (bool true)))))
+      (expected (text "Use an insulated carton.")))
+    (test edit decl_55826696e82560dbe93000ede7be25f5 ordinary-parcel
+      (visibility private)
+      (actual (call ref_recommend_0 (record ref_Parcel_1 (field ref_chilled_2 (bool false)) (field ref_fragile_3
+              (bool false)))))
+      (expected (text "Use a standard carton.")))
+    (record edit decl_981e4cacef3cf77aed6063bd02d7bc84 Parcel
+      (visibility public)
+      (field edit field_0490654e220cf71c796feac554588f37 chilled
+        (type Bool))
+      (field edit field_56a20ac2f3542c5fef32af56afa0d003 fragile
+        (type Bool)))
+    (test edit decl_d0290c9cbc7e406578017a9a7e9f1001 chilled-parcel
+      (visibility private)
+      (actual (call ref_recommend_0 (record ref_Parcel_1 (field ref_chilled_2 (bool true)) (field ref_fragile_3
+              (bool false)))))
+      (expected (text "Use an insulated carton.")))
+    (function edit decl_f278c24cfa971c4c6b309876163363ea recommend
+      (visibility public)
+      (returns Text)
+      (effect pure)
+      (body (if (field (local parcel) ref_chilled_2) (text "Use an insulated carton.") (if (field (local parcel) ref_fragile_3)
+            (text "Use a padded carton.") (text "Use a standard carton."))))
+      (parameter edit param_65df492aab4d6105a872a3b0749345e8 parcel
+        (type type_0)
+        (use unrestricted)))
+  )
+  (target edit target_ba08db82ec1365aab3cd0fa0fe95bd2d packing-advice
+    (component ref_PackingTools_4)
+    (runner command)
+    (port ref_advice_5))
+)
+declarations.end
