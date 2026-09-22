@@ -63,7 +63,10 @@ semantic admission remain in `tools/lkjscript-dev/src/check/` and
 Each attempt uploads `verify-SOURCE-RUN-ATTEMPT` with 14-day retention. It contains
 execution context, environment observations, verifier identity, compact summary,
 the original receipt when admitted, and the original `.artifacts/lkjscript-dev/check`
-run directories, manifests, logs and retained outputs. Upload runs on failure too;
+run directories, manifests, logs and retained outputs. The separate
+`.artifacts/lkjscript-dev/service` directories retain the service owner's original
+receipts and diagnostics, including failures before any runner starts; its summary
+in the check logs is not a replacement for those originals. Upload runs on failure too;
 early runner/setup failure or cancellation can prevent evidence from being
 produced or uploaded. Absence is not a pass. GitHub's actual artifact expiry, not
 this retention request alone, determines availability. Download needed originals

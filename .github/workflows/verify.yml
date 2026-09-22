@@ -111,6 +111,7 @@ jobs:
           path: |
             ${{ runner.temp }}/verify-evidence
             ${{ github.workspace }}/.artifacts/lkjscript-dev/check
+            ${{ github.workspace }}/.artifacts/lkjscript-dev/service
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 14
