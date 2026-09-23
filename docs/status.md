@@ -13,14 +13,14 @@ JSON inputs while retaining the existing 1 MiB byte limit, strict decoder, typed
 admission and effect ordering. The selectors are mutually exclusive; omitted input
 remains `[]`. Relative files use the invocation directory and must be regular with
 no final symlink. The [native library guide](guides/native-library.md#read-arguments-from-a-file)
-shows both forms. Source `b7f4a83dcd2f6b99403336125895aac183416c85` passes all 20 fresh
-source gates with stable inputs and zero reuse, and reached remote main unchanged.
-Final-candidate acceptance and delivery of this successor remain pending; the
-running v0.1.41 candidate retains its frozen source and scope.
+shows both forms. Final-candidate acceptance and delivery of this successor remain
+pending; the running v0.1.41 candidate retains its frozen source and scope.
 
 The successor also shares immutable pack indexes across validated object reads.
-Source `caea6309139a64ec004ad5b9f3fd77df5fb6c8ea` passes all 20 fresh source gates
-with stable inputs and zero reuse, and reached remote main unchanged. The
+It uses one accepted source view for preparation, removing a redundant repository
+opening while retaining subsequent authority rechecks. Source
+`a1c462b521bdeab7c00797a0ebf329f1b3af57d2` passes all 20 fresh source gates with
+stable inputs and zero reuse, and reached remote main unchanged. The
 [matched public measurements](performance.md#shared-pack-index-comparison) retain
 slower cases and establish no general speedup or history-scale guarantee.
 

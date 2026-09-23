@@ -104,6 +104,39 @@ This identifies repeated repository opening as a further preparation cost to
 investigate; any reuse must preserve exact revision binding, cache admission and
 current execution authority checks.
 
+### One source view during preparation
+
+Source `a1c462b521bdeab7c00797a0ebf329f1b3af57d2` takes the accepted binding and
+package identity from the same revision-pinned view that exports the complete
+source closure, then drops that view. Closure admission, derived-cache validation
+and later authority rechecks remain. Its copied optimized executable `dd8e130f…`
+is compared with `caea6309` / `67699f6a…` on identical retained projects. All twelve
+traced check/run commands finish successfully; complete public stdout and accepted
+HEAD are identical in each pair. Catalog-manifest opens decrease from 13 to 12 and
+HEAD opens from 22 to 20 in all six pairs. Check and run have the same counts in
+each project; successful returned read bytes include process startup:
+
+| Project | Predecessor / candidate read calls | Predecessor / candidate read bytes | Predecessor / candidate pack opens |
+|---|---:|---:|---:|
+| Zero edits | 1,085 / 1,022 | 2,002,381 / 1,886,959 | 440 / 416 |
+| 256 body edits | 4,744 / 4,630 | 15,071,378 / 14,556,348 | 1,983 / 1,935 |
+| 256 renames | 1,784 / 1,662 | 6,003,801 / 5,582,046 | 737 / 687 |
+
+The existing profiler and empty-credential environment are unchanged. This is a
+syscall-count comparison, not a new elapsed-time or RSS comparison. Build/run
+originals and executable identities remain in the external evidence root's
+`preparation-view/` child. The new publication regression restores a renamed module
+to its original name, proves equal semantic state but a newer revision, rejects
+stale prepared check/run, and checks fresh execution against literal `"hello"`.
+
+Parsing the retained candidate traces identifies repeated catalog reads on the
+same open file handles and exact byte ranges. After 256 body edits, 1,453 repeated
+reads account for 9,458,665 bytes; all read handles resolve. This observation is not
+proof that every read may be cached. Any block reuse must independently admit the
+complete block, bind the immutable segment context, bound retained memory, preserve
+per-object admission/integrity and keep work observations truthful. Neither history
+deletion nor a new persistent cache format follows from these measurements.
+
 ## Persistent ordered maps, 2026-09-19
 
 The [map campaign](campaigns/202609191922.md#corrected-immutable-candidate)

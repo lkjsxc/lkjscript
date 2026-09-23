@@ -25,7 +25,7 @@ shipping workload returned correct results through 4,096 items, then its 196,611
 inline input failed with host `E2BIG` at 8,192 items before executable startup.
 The [continuation](campaigns/202609222330.md#native-command-input-files--next-measured-workload)
 selects bounded `--arguments-file` for development v0.1.42. Its acceptance is separate
-from the healthy frozen v0.1.41 producer. Source `b7f4a83d` passes all 20 fresh source
+from the healthy frozen v0.1.41 producer. Source `a1c462b5` passes all 20 fresh source
 gates and reached remote main unchanged; its own final-candidate/publication work
 remains due after the current shared publication identity clears. Further numerical/
 data-processing work should measure an actual public program to determine
@@ -36,10 +36,12 @@ finds increasing check/run cost through 256 edits of a nine-owner native program
 including a rename control with unchanged semantic meaning. Current-validation
 reports no semantic revalidation; the observation does not isolate all preparation
 costs or establish long-history scale. Check/run still admit complete source
-closures. Shared immutable pack indexes remove repeated copies, but matched
-measurements do not establish a general speedup; source `caea6309` passes all 20
-fresh source gates and reached remote main unchanged. No throughput, model-token or
-monetary-saving claim follows from input size or elapsed time alone.
+closures. Shared immutable pack indexes remove repeated copies, and reusing one
+accepted source view removes one catalog opening per preparation. The matched
+measurements do not establish a general speedup. Repeated reads of the
+same catalog blocks remain a concrete candidate for bounded, context-bound reuse;
+admission and truthful work accounting must be preserved. No throughput, model-token
+or monetary-saving claim follows from input size or elapsed time alone.
 
 Prefer ordinary libraries and direct native authoring. Native contributor-tool
 implementation needs a concrete supported workload with equivalent correctness,
