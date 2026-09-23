@@ -80,10 +80,18 @@ improvements. Source `8e9628ad3c8e71f886cd64aa750e032b20104bfa` passes all 20 fr
 source gates with stable inputs and reached remote main unchanged. After the v0.1.41
 publication identity cleared, one non-publishing candidate
 [35810382909/1](https://github.com/lkjsxc/lkjscript/actions/runs/35810382909) was dispatched
-at that exact product/controller source. Its final-candidate acceptance is pending;
-no v0.1.42 tag or scoped-selection update has occurred. The existing scoped selection
-still names completed v0.1.41. Later publication uses only explicitly authorized
-release-scoped operations after acceptance and fresh occupancy checks.
+at that exact product/controller source. It completes all source/final-candidate,
+installation and original-reader acceptance, with terminal `candidate_accepted`.
+All five authenticated artifact ZIPs are retained locally; earliest service expiry
+is 2026-10-07T03:18:46Z. The [continuation](campaigns/202609222330.md#typed-json-framing--newly-observed-output-boundary)
+then observes an existing typed-JSON framing defect: Map output exceeds the
+advertised JSON item bound, and source inspection finds undercounted entry-array
+depth. Publication of this candidate is withheld for
+correction, while its authentic successful evidence remains unchanged. No v0.1.42
+tag or scoped-selection update has occurred. The existing control still names
+completed v0.1.41. Corrected successor acceptance and explicit scoped publication
+authorization govern the next delivery; source/target proof must be renewed for
+the repair rather than transferred from this predecessor.
 
 ## Content and compatibility
 

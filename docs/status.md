@@ -15,10 +15,18 @@ encoding and joined cleanup. A late output failure does not undo application
 effects. Focused tests pass byte/limit, preflight and post-commit conflict cases.
 Fresh copied native counting returns complete maps through 32,768 distinct keys,
 and all 49 commands in the numerical owner pass with the new output bindings.
-Final source acceptance and delivery remain in progress. The
+Source `78b32e78f7ee14d17d47823d101b4ab109a7988e` passes all 20 fresh source
+gates with stable inputs and zero reuse, and reached remote main unchanged. The
 [guide](guides/native-library.md#save-a-command-result) documents the interface.
 Graph, artifact and data encodings remain compatible; numerical acceptance schema 3
 adds result-file bindings while frozen producers keep their original verifiers.
+
+Further boundary testing finds a shared JSON encoder defect: a 33,334-entry Map
+is emitted with 100,002 JSON collection children, then rejected by the strict input
+decoder's 100,000-item bound. Map pair framing is undercounted; output depth also
+needs reconciliation with actual JSON representation. Repair and renewed proof
+are required before successor publication. Existing successful smaller observations
+remain valid for their recorded scope.
 
 ## Command input files
 
@@ -29,7 +37,10 @@ admission and effect ordering. The selectors are mutually exclusive; omitted inp
 remains `[]`. Relative files use the invocation directory and must be regular with
 no final symlink. The [native library guide](guides/native-library.md#read-arguments-from-a-file)
 shows both forms. Candidate [35810382909/1](https://github.com/lkjsxc/lkjscript/actions/runs/35810382909)
-is running; final-candidate acceptance and delivery of this successor remain pending.
+completes source/final-candidate, installation and original-reader acceptance.
+Publication is withheld for the subsequently observed shared JSON framing defect;
+no tag or scoped-selection change occurred. The accepted lineage is retained,
+and corrected successor source/target acceptance remains due.
 
 The successor also shares immutable pack indexes across validated object reads.
 It uses one accepted source view for preparation and bounded reuse of fully

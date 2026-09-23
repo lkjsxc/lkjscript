@@ -12,11 +12,12 @@ acceptance; promotion `35809096928/1` passed publication, anonymous exact/latest
 installed verification and its terminal. The bounded installed participation
 observation also passes. Genuine failed/cancelled predecessors remain recorded.
 
-Successor v0.1.42 has fresh source acceptance at `8e9628ad` and one active candidate,
-`35810382909/1`, at that exact source. Its tag and scoped-selection update have not
-been performed. The existing [release owner](release.md) governs remaining
-acceptance and explicitly authorized publication. v0.1.39 through v0.1.41 have
-no remaining delivery obligation.
+Successor v0.1.42 candidate `35810382909/1` is accepted at exact source `8e9628ad`.
+Its tag and scoped-selection update have not been performed. A subsequent observed
+shared JSON framing defect withholds publication; preserve that accepted lineage,
+repair the encoder and renew the relevant source/target proof for the successor.
+The existing [release owner](release.md) governs acceptance and explicitly authorized
+publication. v0.1.39 through v0.1.41 have no remaining delivery obligation.
 
 ## Next workload and decision criteria
 
@@ -28,7 +29,8 @@ The [continuation](campaigns/202609222330.md#native-command-input-files--next-me
 selects bounded `--arguments-file` for development v0.1.42. Its acceptance is separate
 from the completed v0.1.41 producer. Source `8e9628ad` passes all 20 fresh source
 gates and reached remote main unchanged. The shared-publication trigger has cleared;
-its own candidate is running and public delivery remains due. Further numerical/
+its own candidate is accepted, but the later JSON framing finding requires correction
+before publication. Further numerical/
 data-processing work should measure an actual public program to determine
 whether authoring, repeated preparation/checking, representation or execution is
 its limiting dependency. Independent callback effects still require an application
@@ -55,8 +57,11 @@ that preserves both the competing file and a completed application transaction.
 Fresh copied native counting now returns complete independently expected maps
 through 32,768 distinct keys, including detached execution and an unchanged
 predecessor bundle. The numerical owner consumes result files with retained-byte
-bindings. Final source acceptance and delivery remain due; the healthy frozen
-v0.1.42 input-file candidate remains separate.
+bindings. Source `78b32e78` passes all 20 fresh source gates and reached remote main.
+The next adjacent-limit probe exposes undercounted Map pair framing in the shared
+JSON encoder. Correct item/depth accounting against independently fixed JSON shapes,
+preserving exact successful bytes and rejecting over-limit output before publication.
+The frozen v0.1.42 candidate remains retained rather than silently reclassified as failed.
 
 Prefer ordinary libraries and direct native authoring. Native contributor-tool
 implementation needs a concrete supported workload with equivalent correctness,
