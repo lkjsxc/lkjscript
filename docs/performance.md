@@ -334,6 +334,26 @@ executables remain beside the original native inputs. The first comparison harne
 misread the successful cleanup record; the product had succeeded. Its originals
 were admitted after correcting that assertion, and only pending children resumed.
 
+After the source gate produces an immutable successor with the same workspace
+configuration, a separate comparison removes the package-selection distinction.
+Both sides now use `cargo build --workspace --release --locked`, with unchanged
+toolchain, lockfile and release profile: adbe4f63 / 59580ca9… and 9394c0ea /
+18f15828…. The same bundle/inputs and independent exact-output assertions pass in
+all eight joined children. Source tests may run concurrently; these remain single
+alternating-order 1 ms observations with no timing or universal memory claim.
+
+| Copies | Previous sampled peak RSS, KiB | Corrected sampled peak RSS, KiB |
+|---|---:|---:|
+| 15 | 17,192 | 17,472 |
+| 16 | 17,728 | 17,732 |
+| 128 | 31,756 | 17,096 |
+| 1,024 | 147,180 | 15,660 |
+
+The small-case increases remain recorded. Successful bytes and both rejection
+boundaries are unchanged. `compare-workspace-configurations.cjs`,
+`reservation-comparison-workspace.json` and their separate original inputs,
+outputs and samples preserve this observation without relabelling the first one.
+
 ## Persistent ordered maps, 2026-09-19
 
 The [map campaign](campaigns/202609191922.md#corrected-immutable-candidate)

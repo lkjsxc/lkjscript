@@ -93,13 +93,13 @@ completed v0.1.41. Corrected successor acceptance and explicit scoped publicatio
 authorization govern the next delivery; source/target proof must be renewed for
 the repair rather than transferred from this predecessor.
 
-Development v0.1.43 adds result files and corrects JSON representation accounting.
-Source adbe4f63f178d4a418276461ea1345131565fbe4 passes all 20 fresh source gates
-and reached remote main unchanged. A subsequent buffer observation leads to early
-text reservation against the existing output-byte bound before large rejected
-results are expanded. Focused tests and the unchanged native bundle/input workload
-pass. The combined candidate will be dispatched after renewed source acceptance
-and mainline integration; no v0.1.43 producer is frozen yet. The user explicitly
+Development v0.1.43 adds result files, corrects JSON representation accounting and
+reserves aggregate text before copying an already oversized result. Combined source
+9394c0ea863823f0ce068e1e956253d92ae80471 passes all 20 fresh source gates and
+reached remote main unchanged. One candidate
+[35820435256/1](https://github.com/lkjsxc/lkjscript/actions/runs/35820435256) runs at
+that exact product/controller source after current occupancy and mainline admission.
+Final-candidate acceptance and subsequent publication remain due. The user explicitly
 authorized the complete corrected release operation, including annotated tag and
 scoped-selection updates, unchanged-asset publication and anonymous verification.
 That authorization does not waive any acceptance or immutability requirement.

@@ -272,6 +272,9 @@ The JSON structure limits also apply. For example, a flat `Map<Text,I64>` can re
 33,333 entries within the default 100,000-item bound; its entry arrays and their
 members all count. Larger or more deeply nested results reject before a result file
 is published. `capabilities --section runners` lists the current JSON bounds.
+When callers need counts or a most frequent key, the
+[collection summary walkthrough](native-summary.md) shows an ordinary native
+program that returns those fields from a larger internal Map.
 
 Paths are relative to the invocation directory. Existing files or directories, symlinks,
 missing parents and `..` traversal reject. Publication never overwrites a competing

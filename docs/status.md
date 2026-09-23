@@ -15,9 +15,7 @@ encoding and joined cleanup. A late output failure does not undo application
 effects. Focused tests pass byte/limit, preflight and post-commit conflict cases.
 Fresh copied native counting returns complete maps through 32,768 distinct keys,
 and all 49 commands in the numerical owner pass with the new output bindings.
-Source `78b32e78f7ee14d17d47823d101b4ab109a7988e` passes all 20 fresh source
-gates with stable inputs and zero reuse, and reached remote main unchanged. The
-[guide](guides/native-library.md#save-a-command-result) documents the interface.
+The [guide](guides/native-library.md#save-a-command-result) documents the interface.
 Graph, artifact and data encodings remain compatible; numerical acceptance schema 3
 adds result-file bindings while frozen producers keep their original verifiers.
 
@@ -28,16 +26,19 @@ authoring outside the checkout pass adjacent 33,333/33,334-key success/rejection
 on both routes. The unchanged predecessor bundle also returns the exact smaller
 result. Over-limit output now fails before file publication; valid bytes and
 typed-data limits remain unchanged.
-Source `adbe4f63f178d4a418276461ea1345131565fbe4` passes all 20 fresh source
-gates with stable inputs and zero reuse and reached remote main unchanged.
-The next correction reserves aggregate JSON text before copying it. Focused
-boundary tests and a copied native shared-text program pass; its 64 MiB logical
+Aggregate JSON text is reserved before copying it. Focused boundary tests and a
+copied native shared-text program pass; its 64 MiB logical
 result now rejects before full expansion, with exact valid bytes preserved.
 The [measurements](performance.md#rejected-json-text-materialization) retain all
-cases and their scope. Renewed source and final-target acceptance remain due;
-the user has authorized the complete release operation. The
+cases and their scope. Combined source `9394c0ea863823f0ce068e1e956253d92ae80471`
+passes all 20 fresh source gates with stable inputs and zero reuse and reached
+remote main unchanged. Candidate [35820435256/1](https://github.com/lkjsxc/lkjscript/actions/runs/35820435256)
+is running at that exact source; final-candidate and public acceptance remain due.
+The user has authorized the complete release operation. The
 [framing record](campaigns/202609222330.md#typed-json-framing--newly-observed-output-boundary)
 preserves the original defect and earlier evidence at its actual scope.
+The [native summary guide](guides/native-summary.md) also passes fresh authoring,
+checking and detached use, including a four-field result over 99,999 distinct keys.
 
 ## Command input files
 

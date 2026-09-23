@@ -19,6 +19,13 @@ repair the encoder and renew the relevant source/target proof for the successor.
 The existing [release owner](release.md) governs acceptance and explicitly authorized
 publication. v0.1.39 through v0.1.41 have no remaining delivery obligation.
 
+Corrected v0.1.43 source `9394c0ea` passes all 20 fresh source gates and reached
+remote main unchanged. Candidate [35820435256/1](https://github.com/lkjsxc/lkjscript/actions/runs/35820435256)
+is running at that exact source. Complete its source/final-target/installation
+acceptance, then the already authorized annotated tag, scoped selection and
+unchanged-asset publication with anonymous verification. Do not add another
+workload as a delivery prerequisite while this healthy candidate proceeds.
+
 ## Next workload and decision criteria
 
 Native declaration creation/canonical re-entry, callable-input evolution, persistent
@@ -66,8 +73,8 @@ The next native buffer probe finds large unnecessary text copies before correct
 output-byte rejection. Aggregate text is now reserved against the existing byte
 bound before growth, with valid bytes and final byte checks retained. Focused tests
 and the same native bundle/inputs pass; all memory observations remain at their
-owner. Renew source/final-target proof for the combined v0.1.43 delivery and publish
-the same accepted assets. Complete publication is already authorized.
+owner. Combined source acceptance is complete, and the selected candidate above
+owns remaining target proof and publication. Complete publication is already authorized.
 The frozen v0.1.42 candidate remains retained rather than silently reclassified as failed.
 
 Prefer ordinary libraries and direct native authoring. Native contributor-tool
