@@ -24,7 +24,7 @@ const CURRENT_FILES: &[&str] = &[
     "packages/standard/README.md",
 ];
 
-const CURRENT_DIRECTORIES: &[&str] = &["docs/generated", "docs/spec"];
+const CURRENT_DIRECTORIES: &[&str] = &["docs/generated", "docs/guides", "docs/spec"];
 const HISTORICAL_FILES: &[&str] = &["docs/spec/semantic-diff-merge.md"];
 
 const PUBLIC_COMMANDS: &[&str] = &[

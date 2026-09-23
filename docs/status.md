@@ -23,22 +23,24 @@ meaning and data format are unchanged. Native creation/drafting of generic
 [evidence owner](evidence/202609221952-cells/README.md) distinguishes focused public
 authoring, maintained adoption, official predecessor compatibility and release proof.
 
-Initial source `b52f51bd334dc71462e46c298dea12454f59ed6f` passed 20 fresh source
-gates and reached remote main. Candidate
+Candidate
 [35725872480/1](https://github.com/lkjsxc/lkjscript/actions/runs/35725872480) failed
-at a stale service-verifier artifact pin after the preceding five target owners
-passed. The [autonomous continuation](campaigns/202609222330.md) corrects that pin,
-adds early source regression coverage, and retains service diagnostic originals.
-Corrected source `c78840a74ce19ad5145e1e23ca5ff2b2a7198c0f` passed all 20 fresh
-source gates with stable inputs and zero reuse, then reached remote main unchanged.
-Replacement candidate [35798767360/1](https://github.com/lkjsxc/lkjscript/actions/runs/35798767360)
-was superseded during source acceptance after a public library tutorial reproduced
-a deployment-discovery defect: four required nullable fields were advertised as
-omittable. Cancellation was requested; the correction preserves existing decoder
-and runtime behavior. Fresh corrected source/candidate acceptance, immutable
-publication and anonymous public verification remain pending; v0.1.41 has no tag
-or publication selection. The [continuation record](campaigns/202609222330.md) owns
-this separate defect, regression evidence and candidate supersession.
+at a stale service-verifier artifact pin. The [autonomous continuation](campaigns/202609222330.md)
+repairs that pin, adds early regression coverage and retains diagnostic originals.
+Replacement [35798767360/1](https://github.com/lkjsxc/lkjscript/actions/runs/35798767360)
+was cancelled during source acceptance after a native library tutorial reproduced
+a discovery defect: four required nullable deployment fields were advertised as
+omittable. The correction preserves decoder/runtime behavior; original failed and
+cancelled evidence remains at the continuation owner.
+
+Corrected source `346c0366bde29151952a19332cb540681ad7bc7c` passes all 20 fresh
+source gates with stable inputs and zero reuse, and reached remote main unchanged.
+Current candidate [35801102943/1](https://github.com/lkjsxc/lkjscript/actions/runs/35801102943)
+is running at that exact product/controller source. Final-candidate acceptance,
+immutable publication and anonymous public verification remain pending; v0.1.41
+has no tag or publication selection. The new
+[native library guide](guides/native-library.md) is exercised on published v0.1.40;
+its generic library, exact import and standalone execution need no compiler checkout.
 
 ## Public binary release
 

@@ -59,8 +59,12 @@ was superseded during source acceptance for a subsequently reproduced public
 deployment-discovery defect: four required nullable fields were advertised as
 omittable. The [autonomous continuation](campaigns/202609222330.md) corrects the
 schema inventory while preserving strict descriptor/runtime behavior and requests
-cancellation of that unaccepted producer. Fresh corrected source/final-candidate
-acceptance, annotated v0.1.41 tag/scoped selection, unchanged-asset promotion and
+cancellation of that unaccepted producer; it ended cancelled with an incomplete
+terminal. Corrected source `346c0366bde29151952a19332cb540681ad7bc7c` passes all 20
+fresh source gates with stable inputs and zero reuse, and reached remote main
+unchanged. Current candidate [35801102943/1](https://github.com/lkjsxc/lkjscript/actions/runs/35801102943)
+is running at that exact product/controller source. Final-candidate acceptance,
+annotated v0.1.41 tag/scoped selection, unchanged-asset promotion and
 anonymous public verification remain due. v0.1.40 remains complete and unchanged.
 
 ## Content and compatibility
