@@ -2,6 +2,43 @@
 
 Measurements are observations, not promises.
 
+## Native byte inspection (2026-09-24)
+
+The accepted byte-inspection [campaign](campaigns/202609240603.md#accepted-final-source-and-exact-final-consumer-bytes)
+is bound to source `b7b0ff52`, not its documentation-only reporting descendants. These
+samples compare the predecessor **native integer-list** policy command with the final
+native Bytes command, on the same tracked checkout in the 8 GiB Linux development
+environment. Each sample is a complete `lkjscript-dev policy no-python --machine` child,
+including startup, preparation, Git/file observation, typed boundaries and reporting.
+Each returns passed / zero violations. Order alternates; one warmup pair is excluded.
+No owned build, test, archiving or acceptance job overlaps the measured pairs.
+
+| Pair | Predecessor native policy (ms) | Final Bytes policy (ms) |
+| --- | ---: | ---: |
+| 1 | 198.502 | 76.008 |
+| 2 | 244.689 | 72.995 |
+| 3 | 190.835 | 70.169 |
+| 4 | 192.112 | 72.962 |
+| 5 | 220.211 | 68.125 |
+| 6 | 217.208 | 77.264 |
+| 7 | 187.344 | 68.011 |
+| Median | **198.502** | **72.962** |
+
+The predecessor/final median wall-time ratio is **2.721**, or **63.24%**
+less elapsed time for this complete operation. The contributor executable grows from
+36,803,136 to 36,837,216 bytes (**+34,080**); the derived native-policy bundle grows from
+750,750 to 757,816 bytes (**+7,066**). No memory/RSS measurement was made. Base64 ingress
+still copies bytes: this is not zero-copy I/O. It is not a comparison with the historical
+Rust predicate and proves no general compiler or application speedup.
+
+The full suite passes all 26 gates freshly on stable source in 728.556 seconds. The final
+shared product output is not byte-identical to the initial producer copy; an identity
+guard records the mismatch, and ten public consumer tests subsequently pass on the
+exact immutable final product. The accepted old policy also runs on that product. Final
+samples are retained separately under `.artifacts/202609240603-native-bytes/final-costs/`;
+earlier preliminary observations are neither erased nor promoted to final-byte evidence.
+
+
 ## Native bounded selection, 2026-09-23
 
 The [ranking guide](guides/native-ranking.md) now selects the requested prefix

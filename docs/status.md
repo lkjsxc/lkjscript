@@ -7,6 +7,17 @@ retain detailed implementation and verification history.
 
 ## Native byte inspection (development checkout)
 
+Source `b7b0ff52` passes all 26 full-profile gates freshly, with zero result reuse and
+stable input (728.556 seconds). A stale verification-count assumption and an existing
+closed-output fixture race were fixed before this acceptance; failed runs remain in
+the campaign evidence. Ten targeted public CLI tests also pass on the immutable final
+product bytes, separately from earlier producer copies.
+
+The complete required policy command improves from median 198.502 to 72.962 ms in
+seven alternating matched pairs against the predecessor native implementation. The
+contributor executable grows by 34,080 bytes. This is not a Rust-predicate comparison,
+zero-copy claim or a general application speedup; see [measured costs](performance.md#native-byte-inspection-2026-09-24).
+
 The current standard adds `bytes-get(Bytes, I64) -> I64`: zero-based unsigned octet
 observation without text conversion, clamping or mutation. Out-of-range indices
 trap. Six new graph tests bring the standard to 51. Independent evaluators and
