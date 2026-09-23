@@ -14,7 +14,7 @@ admission and effect ordering. The selectors are mutually exclusive; omitted inp
 remains `[]`. Relative files use the invocation directory and must be regular with
 no final symlink. The [native library guide](guides/native-library.md#read-arguments-from-a-file)
 shows both forms. Final-candidate acceptance and delivery of this successor remain
-pending; the running v0.1.41 candidate retains its frozen source and scope.
+pending; the accepted v0.1.41 candidate retains its frozen source and scope.
 
 The successor also shares immutable pack indexes across validated object reads.
 It uses one accepted source view for preparation, removing a redundant repository
@@ -54,10 +54,11 @@ cancelled evidence remains at the continuation owner.
 
 Corrected source `346c0366bde29151952a19332cb540681ad7bc7c` passes all 20 fresh
 source gates with stable inputs and zero reuse, and reached remote main unchanged.
-Current candidate [35801102943/1](https://github.com/lkjsxc/lkjscript/actions/runs/35801102943)
-is running at that exact product/controller source. Final-candidate acceptance,
-immutable publication and anonymous public verification remain pending; v0.1.41
-has no tag or publication selection. The new
+Candidate [35801102943/1](https://github.com/lkjsxc/lkjscript/actions/runs/35801102943)
+completed source, finalized-candidate and original-reader acceptance at that exact
+product/controller source. The annotated v0.1.41 tag and scoped selection bind it.
+Promotion [35809096928/1](https://github.com/lkjsxc/lkjscript/actions/runs/35809096928)
+is running; immutable publication and anonymous public verification remain pending. The new
 [native library guide](guides/native-library.md) is exercised on published v0.1.40;
 its generic library, exact import and standalone execution need no compiler checkout.
 

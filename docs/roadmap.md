@@ -11,9 +11,10 @@ v0.1.41. Its implementation and fresh local source acceptance are integrated;
 replacement candidate `35798767360/1` at `c78840a7` was superseded for the subsequently
 reproduced deployment-discovery defect. The schema-presence correction preserves
 existing decoder/runtime behavior. Corrected `346c0366` passes all 20 fresh source
-gates and reached remote main; candidate `35801102943/1` is running at that source.
-Final-candidate acceptance, immutable
-publication and anonymous public verification remain due. The existing
+gates and reached remote main. Candidate `35801102943/1` completed source,
+finalized-candidate and original-reader acceptance at that source. Its annotated
+tag/scoped selection is established; promotion `35809096928/1` is running.
+Immutable publication and anonymous public verification remain due. The existing
 [release owner](release.md) governs that continuation. v0.1.39 and v0.1.40 are
 complete; their historical release work is not an implementation backlog.
 

@@ -224,3 +224,47 @@ executable; log `service-pin-regression-lib.log`. The initial test build selecte
 the binary wrapper and ran zero tests (`service-pin-regression.log`); that invocation
 is not regression proof. The corrected library selection ran exactly one test.
 These focused results do not replace source-tier or finalized-candidate acceptance.
+
+## Accepted candidate and publication selection
+
+Producer [35801102943/1](https://github.com/lkjsxc/lkjscript/actions/runs/35801102943)
+at exact product/controller `346c0366bde29151952a19332cb540681ad7bc7c` completed
+candidate job `106991398177` and terminal job `107013779866` successfully at
+2026-09-23T01:55:07Z. The authenticated candidate terminal reports 20 source gates,
+six target owners, two pinned userlands, installation/recovery and original-reader
+admission, with joined cleanup and no failure. Candidate mode intentionally skips
+the publication/consumer jobs; it does not yet prove public delivery.
+
+API originals and all five original service ZIPs are retained under
+`.artifacts/composable-20260922/candidate-35801102943-1-accepted`. Downloaded byte
+lengths and SHA-256 digests match the independently authenticated artifact API:
+
+| Original handoff | Artifact ID | Observed service expiry (UTC) |
+| --- | --- | --- |
+| Candidate assets | 10728318191 | 2026-10-07T01:54:36Z |
+| Candidate verifier | 10728482959 | 2026-10-07T01:54:37Z |
+| Candidate acceptance | 10728378117 | 2026-10-07T01:54:38Z |
+| Diagnostic originals | 10728472966 | 2026-10-07T01:54:39Z |
+| CI terminal | 10728966291 | 2026-10-07T01:55:04Z |
+
+The accepted static executable is SHA-256
+`fae719042b5f163ea6f01718459c66474671d3278472bcf5fec44345630ffdff`, 24,934,944 bytes.
+These retained downloads preserve diagnosis/resumption inputs; they do not
+manufacture relocatable original-reader proof or authorize their execution.
+
+Fresh source ancestry, tag/release/job occupancy and enabled immutable-release
+checks passed. The first read-only preflight exceeded a Node child-output buffer
+while listing 91 workflow runs; it stopped before tag/control mutation. Increasing
+the bounded capture fixed that launcher failure. The successful maintained path
+created ordinary annotation `a4c7416c6213f870ae449f900ecb6359fc327aa6` at exact
+346c0366 using the prepared meaningful notes. The scoped variable was compared
+immediately before its authorized write and read back; its prior value remains
+the preserved completed v0.1.40 annotation. This sequence is not atomic CAS.
+
+Promotion [35809096928/1](https://github.com/lkjsxc/lkjscript/actions/runs/35809096928)
+was dispatched once at 2026-09-23T02:07:27Z from controller
+`677aa75010a587b0344f4fc2a71962ea56b7abd0`, selecting original producer
+`35801102943/1`. It is currently building its trusted controller in job
+`107016373414`. Publication, anonymous exact/latest verification and the bounded
+installed participation observation remain pending. No candidate rebuild or
+execution with publication credentials occurred during this selection.

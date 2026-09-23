@@ -62,10 +62,15 @@ schema inventory while preserving strict descriptor/runtime behavior and request
 cancellation of that unaccepted producer; it ended cancelled with an incomplete
 terminal. Corrected source `346c0366bde29151952a19332cb540681ad7bc7c` passes all 20
 fresh source gates with stable inputs and zero reuse, and reached remote main
-unchanged. Current candidate [35801102943/1](https://github.com/lkjsxc/lkjscript/actions/runs/35801102943)
-is running at that exact product/controller source. Final-candidate acceptance,
-annotated v0.1.41 tag/scoped selection, unchanged-asset promotion and
-anonymous public verification remain due. v0.1.40 remains complete and unchanged.
+unchanged. Candidate [35801102943/1](https://github.com/lkjsxc/lkjscript/actions/runs/35801102943)
+completed source, finalized-candidate and original-reader acceptance and its terminal
+at that exact product/controller source on 2026-09-23T01:55:07Z. Its annotated
+v0.1.41 tag and explicitly authorized scoped selection now bind that product.
+Promotion [35809096928/1](https://github.com/lkjsxc/lkjscript/actions/runs/35809096928),
+dispatched from controller `677aa75010a587b0344f4fc2a71962ea56b7abd0`, is running.
+Immutable publication and anonymous public verification remain due. Original
+handoff identities/expiry are retained at the [evidence owner](evidence/202609221952-cells/README.md#accepted-candidate-and-publication-selection).
+v0.1.40 remains complete and unchanged.
 
 ## Content and compatibility
 

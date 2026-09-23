@@ -167,6 +167,7 @@ pub struct CatalogWork {
     pub segment_lookups: u64,
     pub segment_blocks_read: u64,
     pub segment_block_bytes_read: u64,
+    /// Complete entries admitted by successful block reads, excluding in-memory searches.
     pub segment_entries_examined: u64,
     pub targeted_pack_footers_read: u64,
     pub targeted_pack_footer_bytes_read: u64,

@@ -81,6 +81,15 @@ checksum, domain, and descriptor. `GraphRepository` additionally reads the curre
 through that path before returning a healthy repository. Catalog disagreement is derived
 corruption and may not make unavailable or wrong semantic bytes appear valid.
 
+An open store may retain at most 64 completely admitted blocks, keyed by immutable
+segment identity and block index, until its catalog and segment handles change.
+Full optional retention falls back to ordinary block reads; it does not reject
+valid objects or bypass any request allowance. Reuse preserves duplicate-key checks
+across live segments. Each object read still checks actual pack length, payload
+checksum and typed content identity. Catalog block-read and decoded-entry work
+counts describe successful physical reads and full admission, excluding searches
+of retained entries. This transient policy changes no persistent format or history.
+
 Each accepted pack set creates one level-zero delta directly from the sealed pack metadata already
 in memory. Equal levels merge as a deterministic binary counter through streaming sorted readers;
 the healthy path neither materializes the complete catalog nor rewrites every prior entry per

@@ -28,6 +28,8 @@ const MANIFEST_STAGE_PREFIX: &str = ".manifest-stage-";
 const SEGMENT_STAGE_PREFIX: &str = ".segment-stage-";
 const PACK_STAGE_PREFIX: &str = ".pack-stage-";
 const INJECTED_INTERRUPTION_CODE: &str = "pack_store_injected_interruption";
+// Optional retention per open store, not an object-admission or catalog-format limit.
+const MAXIMUM_CACHED_CATALOG_BLOCKS: usize = 64;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CatalogState {
@@ -177,6 +179,31 @@ struct StoreLayout {
 }
 
 #[derive(Debug)]
+struct CachedCatalogBlock {
+    segment: SegmentId,
+    index: usize,
+    entries: Vec<CatalogEntry>,
+}
+
+impl CachedCatalogBlock {
+    fn location(&self, key: ObjectKey) -> Result<Option<CatalogLocation>, StoreError> {
+        match self.entries.binary_search_by_key(&key, |entry| entry.key) {
+            Ok(index) => self
+                .entries
+                .get(index)
+                .map(|entry| Some(entry.location))
+                .ok_or_else(|| {
+                    corrupt(
+                        "catalog_block_index",
+                        "catalog block search escaped decoded entry bounds",
+                    )
+                }),
+            Err(_) => Ok(None),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct PackDirectoryStore {
     root: PathBuf,
     root_directory: File,
@@ -188,6 +215,7 @@ pub struct PackDirectoryStore {
     metadata: RefCell<BTreeMap<PackId, Arc<PackMetadata>>>,
     catalog: CatalogIndex,
     segment_files: BTreeMap<SegmentId, RefCell<File>>,
+    catalog_blocks: RefCell<Vec<CachedCatalogBlock>>,
     duplicates: Vec<DuplicateObject>,
     catalog_state: CatalogState,
     catalog_rebuild_note: Option<String>,
@@ -419,6 +447,7 @@ impl PackDirectoryStore {
             metadata: RefCell::new(BTreeMap::new()),
             catalog,
             segment_files,
+            catalog_blocks: RefCell::new(Vec::new()),
             duplicates,
             catalog_state,
             catalog_rebuild_note,
@@ -523,37 +552,13 @@ impl PackDirectoryStore {
                 if !block.might_contain(key) {
                     continue;
                 }
-                let file = self.segment_files.get(&segment.id).ok_or_else(|| {
-                    corrupt(
-                        "catalog_segment_handle",
-                        "manifest-selected segment has no immutable open handle",
-                    )
-                })?;
-                let entries = segment.read_block(&mut *file.borrow_mut(), block_index)?;
-                work.segment_blocks_read = work.segment_blocks_read.saturating_add(1);
-                work.segment_block_bytes_read = work.segment_block_bytes_read.saturating_add(
-                    (entries.len() as u64).saturating_mul(catalog::CATALOG_ENTRY_BYTES as u64),
-                );
-                work.segment_entries_examined = work
-                    .segment_entries_examined
-                    .saturating_add(entries.len() as u64);
-                if let Ok(index) = entries.binary_search_by_key(&key, |entry| entry.key) {
-                    let location =
-                        entries
-                            .get(index)
-                            .map(|entry| entry.location)
-                            .ok_or_else(|| {
-                                corrupt(
-                                    "catalog_block_index",
-                                    "catalog block search escaped decoded entry bounds",
-                                )
-                            })?;
-                    if found.replace(location).is_some() {
-                        return Err(corrupt(
-                            "catalog_object_duplicate",
-                            "one object key appears in multiple live catalog segments",
-                        ));
-                    }
+                if let Some(location) = self.lookup_block(segment, block_index, key, &mut work)?
+                    && found.replace(location).is_some()
+                {
+                    return Err(corrupt(
+                        "catalog_object_duplicate",
+                        "one object key appears in multiple live catalog segments",
+                    ));
                 }
             }
             Ok(found)
@@ -562,6 +567,48 @@ impl PackDirectoryStore {
         accumulated.add(work);
         self.catalog_work.set(accumulated);
         result
+    }
+
+    fn lookup_block(
+        &self,
+        segment: &SegmentMetadata,
+        index: usize,
+        key: ObjectKey,
+        work: &mut CatalogWork,
+    ) -> Result<Option<CatalogLocation>, StoreError> {
+        if let Some(block) = self
+            .catalog_blocks
+            .borrow()
+            .iter()
+            .find(|block| block.segment == segment.id && block.index == index)
+        {
+            return block.location(key);
+        }
+        let file = self.segment_files.get(&segment.id).ok_or_else(|| {
+            corrupt(
+                "catalog_segment_handle",
+                "manifest-selected segment has no immutable open handle",
+            )
+        })?;
+        let entries = segment.read_block(&mut *file.borrow_mut(), index)?;
+        work.segment_blocks_read = work.segment_blocks_read.saturating_add(1);
+        work.segment_block_bytes_read = work.segment_block_bytes_read.saturating_add(
+            (entries.len() as u64).saturating_mul(catalog::CATALOG_ENTRY_BYTES as u64),
+        );
+        work.segment_entries_examined = work
+            .segment_entries_examined
+            .saturating_add(entries.len() as u64);
+        let block = CachedCatalogBlock {
+            segment: segment.id,
+            index,
+            entries,
+        };
+        let location = block.location(key)?;
+        let mut cached = self.catalog_blocks.borrow_mut();
+        if cached.len() < MAXIMUM_CACHED_CATALOG_BLOCKS && cached.try_reserve_exact(1).is_ok() {
+            cached.push(block);
+        }
+        Ok(location)
     }
 
     fn validated_pack_entry(
@@ -712,6 +759,7 @@ impl PackDirectoryStore {
         let segment_files = open_segment_handles(&self.segments_directory, &next)?;
         self.catalog = next;
         self.segment_files = segment_files;
+        self.catalog_blocks.get_mut().clear();
         self.catalog_state = CatalogState::IncrementalPersisted;
         self.catalog_rebuild_note = None;
         self.duplicates.clear();

@@ -1116,6 +1116,183 @@ fn directory_store_detects_duplicate_physical_objects() {
 }
 
 #[test]
+fn directory_block_reuse_preserves_reads_across_catalog_replacement() {
+    let temporary = tempfile::TempDir::new().expect("temporary store parent");
+    let root = temporary.path().join("objects");
+    let mut store = PackDirectoryStore::initialize(&root).expect("store must initialize");
+    let first = object(ObjectDomain::Blob, b"first");
+    let second = object(ObjectDomain::Blob, b"second");
+    let mut work = StoreWork::default();
+    for (key, bytes) in [&first, &second] {
+        store.stage(*key, bytes, &mut work).expect("fixture stage");
+    }
+    store.seal_staged(16 * 1024, &mut work).expect("first seal");
+    let old = PackDirectoryStore::open(&root).expect("old view");
+    for source in [&store, &old] {
+        let mut admission = read_admission(2, 2, 11);
+        let mut reads = StoreWork::default();
+        for (key, bytes) in [&first, &second] {
+            assert_eq!(
+                source
+                    .read_admitted(*key, bytes.len(), &mut admission, &mut reads)
+                    .expect("admitted reads"),
+                Some(bytes.clone())
+            );
+        }
+        assert_eq!(admission.remaining(), read_admission(0, 0, 0).remaining());
+        assert_eq!(reads.catalog_lookups, 2);
+        assert_eq!(reads.packs_opened, 2);
+        assert_eq!(reads.objects_read, 2);
+        assert_eq!(reads.bytes_read, 11);
+        assert_eq!(source.catalog_work().segment_blocks_read, 1);
+        assert_eq!(source.catalog_work().segment_entries_examined, 2);
+    }
+
+    let third = object(ObjectDomain::Blob, b"third");
+    store
+        .stage(third.0, &third.1, &mut work)
+        .expect("new stage");
+    store
+        .seal_staged(16 * 1024, &mut work)
+        .expect("merging seal");
+    assert_eq!(store.catalog_observation().segments, 1);
+    let before = store.catalog_work();
+    for (key, bytes) in [&first, &second, &third] {
+        assert_eq!(
+            store
+                .read(*key, bytes.len(), &mut work)
+                .expect("new view read"),
+            Some(bytes.clone())
+        );
+    }
+    let after = store.catalog_work();
+    assert_eq!(after.segment_blocks_read - before.segment_blocks_read, 1);
+    assert_eq!(
+        after.segment_entries_examined - before.segment_entries_examined,
+        3
+    );
+    assert_eq!(
+        old.read(first.0, first.1.len(), &mut work)
+            .expect("retained old view read"),
+        Some(first.1)
+    );
+    assert!(
+        !old.contains(third.0, &mut work)
+            .expect("old view excludes new object")
+    );
+    let reopened = PackDirectoryStore::open(&root).expect("fresh view");
+    assert_eq!(reopened.catalog_work().segment_blocks_read, 0);
+    assert_eq!(
+        reopened
+            .read(third.0, third.1.len(), &mut work)
+            .expect("fresh read"),
+        Some(third.1)
+    );
+    assert_eq!(reopened.catalog_work().segment_blocks_read, 1);
+}
+
+#[test]
+fn directory_rejects_corrupt_blocks_before_retaining_any_entry() {
+    let temporary = tempfile::TempDir::new().expect("temporary store parent");
+    let root = temporary.path().join("objects");
+    let mut store = PackDirectoryStore::initialize(&root).expect("store must initialize");
+    let mut objects = [
+        object(ObjectDomain::Blob, b"first"),
+        object(ObjectDomain::Blob, b"last"),
+    ];
+    objects.sort_by_key(|(key, _)| *key);
+    let mut work = StoreWork::default();
+    for (key, bytes) in &objects {
+        store.stage(*key, bytes, &mut work).expect("fixture stage");
+    }
+    store
+        .seal_staged(16 * 1024, &mut work)
+        .expect("fixture seal");
+    let manifest = CatalogManifest::decode(
+        &std::fs::read(root.join("catalog/current.lkjc")).expect("manifest bytes"),
+    )
+    .expect("manifest");
+    let segment = manifest.segments[0].id;
+    let path = root.join("catalog/segments").join(segment.file_name());
+    let original = std::fs::read(&path).expect("segment bytes");
+    let metadata =
+        read_segment_metadata(&mut Cursor::new(&original), original.len() as u64, segment)
+            .expect("segment metadata");
+    let mut corrupted = original.clone();
+    let last_entry = usize::try_from(metadata.blocks[0].offset).expect("entry offset")
+        + super::catalog::CATALOG_ENTRY_BYTES;
+    corrupted[last_entry] ^= 1;
+    std::fs::write(&path, &corrupted).expect("corrupt unrequested entry");
+    let reopened = PackDirectoryStore::open(&root).expect("metadata remains valid");
+    for source in [&store, &reopened] {
+        let mut reads = StoreWork::default();
+        let error = source
+            .read(objects[0].0, objects[0].1.len(), &mut reads)
+            .expect_err("whole block must reject before serving its first entry");
+        assert_eq!(error.code, "catalog_block_checksum");
+        assert_eq!(reads.packs_opened, 0);
+        assert_eq!(reads.objects_read, 0);
+        assert_eq!(source.catalog_work().segment_blocks_read, 0);
+    }
+    std::fs::write(path, original).expect("restore owned fixture bytes");
+    for source in [&store, &reopened] {
+        assert_eq!(
+            source
+                .read(objects[0].0, objects[0].1.len(), &mut work)
+                .expect("failed block was not retained"),
+            Some(objects[0].1.clone())
+        );
+        assert_eq!(source.catalog_work().segment_blocks_read, 1);
+        assert_eq!(source.catalog_work().segment_entries_examined, 2);
+    }
+}
+
+#[test]
+fn directory_reads_beyond_block_retention_bound_without_admission_failure() {
+    let temporary = tempfile::TempDir::new().expect("temporary store parent");
+    let root = temporary.path().join("objects");
+    let mut store = PackDirectoryStore::initialize(&root).expect("store must initialize");
+    let mut work = StoreWork::default();
+    // 65 disjoint full blocks exceed the optional 64-block retention policy.
+    let mut objects = (0_u64..65 * 64)
+        .map(|ordinal| object(ObjectDomain::Blob, &ordinal.to_be_bytes()))
+        .collect::<Vec<_>>();
+    objects.sort_by_key(|(key, _)| *key);
+    for (key, bytes) in &objects {
+        store.stage(*key, bytes, &mut work).expect("fixture stage");
+    }
+    store
+        .seal_staged(1024 * 1024, &mut work)
+        .expect("fixture seal");
+    let mut admission = read_admission(67, 67, 67 * 8);
+    let mut reads = StoreWork::default();
+    for (key, bytes) in objects.iter().step_by(64) {
+        assert_eq!(
+            store
+                .read_admitted(*key, bytes.len(), &mut admission, &mut reads)
+                .expect("cache capacity must not limit reads"),
+            Some(bytes.clone())
+        );
+    }
+    assert_eq!(store.catalog_work().segment_blocks_read, 65);
+    for (key, bytes) in [&objects[0], &objects[64 * 64]] {
+        assert_eq!(
+            store
+                .read_admitted(*key, bytes.len(), &mut admission, &mut reads)
+                .expect("cached or fallback read"),
+            Some(bytes.clone())
+        );
+    }
+    assert_eq!(store.catalog_work().segment_blocks_read, 66);
+    assert_eq!(store.catalog_work().segment_entries_examined, 66 * 64);
+    assert_eq!(admission.remaining(), read_admission(0, 0, 0).remaining());
+    assert_eq!(reads.catalog_lookups, 67);
+    assert_eq!(reads.packs_opened, 67);
+    assert_eq!(reads.objects_read, 67);
+    assert_eq!(reads.bytes_read, 67 * 8);
+}
+
+#[test]
 fn directory_cached_metadata_still_detects_payload_and_length_corruption() {
     for reopen in [false, true] {
         let temporary = tempfile::TempDir::new().expect("temporary store parent");
