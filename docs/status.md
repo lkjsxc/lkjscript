@@ -12,22 +12,24 @@ It preserves order and clamps start/count without overflow at the signed I64
 extremes. The native standard request passes all 45 package tests, including
 eight new range/type cases. The existing transported aggregation consumer now
 uses it for structural entry pages and nominal events; its 72 copied-product
-commands and original reader pass with joined cleanup. Source `d104edc7` passes
-all 20 fresh source gates with stable inputs and zero reuse and reached remote
-main unchanged. Candidate [35827065894/1](https://github.com/lkjsxc/lkjscript/actions/runs/35827065894)
-passes source verification and asset construction but fails final-target acceptance:
-the HTTP verifier still expects the previous 38 tests after the product passes 46.
-The same audit finds three stale counts in the offline package owner. Corrected
-expectations pass fresh HTTP and complete offline workflows against those exact
-candidate bytes, with joined cleanup. Corrected source `9ea93419` passes all 20
-fresh source gates with stable inputs and zero reuse and reached remote main
-unchanged. New candidate [35833374673/1](https://github.com/lkjsxc/lkjscript/actions/runs/35833374673)
-is running at that exact source. Final-candidate acceptance and authorized
-publication remain due, with no v0.1.44 tag or selection change.
-Generated standard transport, artifact and discovery include
-the function. lkjournal keeps its prior exact supplier: checks pass and the
-complete rebuilt artifact is byte-identical. There is no data-format migration.
-v0.1.43 publication is complete at its separate frozen source.
+commands and original reader pass with joined cleanup. Generated standard transport,
+artifact and discovery include the function. lkjournal keeps its prior exact supplier:
+checks pass and the complete rebuilt artifact is byte-identical. There is no data-format migration.
+
+Corrected source `9ea93419` passes all 20 fresh source gates with stable inputs
+and zero reuse and reached remote main unchanged. Candidate
+[35833374673/1](https://github.com/lkjsxc/lkjscript/actions/runs/35833374673)
+is accepted at that exact source: six target owners, two pinned userlands,
+installation/recovery and original-reader admission all pass with joined cleanup.
+The annotated tag and scoped selection are set. Authorized promotion
+[35838470851/1](https://github.com/lkjsxc/lkjscript/actions/runs/35838470851)
+publishes the same assets as immutable v0.1.44. Its public verification rejects
+an empty asset inventory from the tag lookup; the same release ID reports all three
+accepted assets. The corrected controller resolves and strictly admits that same
+ID's complete inventory. Anonymous exact/latest installed verification remains due.
+The [release record](campaigns/202609222330.md#accepted-v0144-and-the-requested-release-stopping-point)
+retains authenticated originals and the first candidate's genuine stale-count
+rejection. v0.1.43 remains complete at its separate frozen source.
 
 ## Command result files
 

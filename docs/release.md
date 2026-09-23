@@ -286,6 +286,12 @@ published mismatches reject without deletion, replacement or retagging. Fresh au
 required. Successful product construction and broad acceptance do not rerun.
 
 A failed public boundary uses `operation=resume-public`, again selecting the original producer.
+Public exact acquisition resolves the tag response to its nonzero immutable release ID, then reads
+that ID and admits the complete accepted asset inventory. Both responses must identify the same
+ordinary published immutable release and selected tag. A tag response may contain only a valid
+subset of those assets; conflicting entries still reject. An incomplete or conflicting response
+from the release ID rejects before attestations or downloads. This handles an incomplete tag
+lookup without replacing public bytes or accepting an incomplete final inventory.
 Exact and latest acquisition have distinct identities. Selected publication requires latest to be
 this candidate; a moved alias cannot silently pass. A later read-only recheck may record the actual
 new latest identity as superseded/not applicable and still check immutable exact content. No different

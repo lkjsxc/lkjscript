@@ -391,6 +391,21 @@ fn published_state(
     })
 }
 
+fn admit_public_release(release: &Value, tag: &str) -> Result<u64, DevError> {
+    let id = number(release, "id")?;
+    if id == 0
+        || release.get("draft").and_then(Value::as_bool) != Some(false)
+        || release.get("immutable").and_then(Value::as_bool) != Some(true)
+        || release.get("prerelease").and_then(Value::as_bool) != Some(false)
+        || string(release, "tag_name")? != tag
+    {
+        return Err(DevError::corrupt(
+            "public exact release is not the selected immutable release",
+        ));
+    }
+    Ok(id)
+}
+
 pub(super) fn public_download(
     operations: &mut impl Operations,
     selection: &Selection,
@@ -426,18 +441,24 @@ pub(super) fn public_download(
             "public exact release selects a different source",
         ));
     }
-    let release = operations.api(
+    let alias = operations.api(
         "GET",
         &format!("repos/{REPOSITORY}/releases/tags/{tag}"),
         None,
     )?;
-    if release.get("draft").and_then(Value::as_bool) != Some(false)
-        || release.get("immutable").and_then(Value::as_bool) != Some(true)
-        || release.get("prerelease").and_then(Value::as_bool) != Some(false)
-        || string(&release, "tag_name")? != tag
-    {
+    let release_id = admit_public_release(&alias, tag)?;
+    // The tag lookup can omit assets that are present at the same release ID.
+    // Admit every advertised entry, then require the complete immutable inventory
+    // at that exact ID; contradictory alias metadata is never a fallback trigger.
+    verify_remote_assets(&alias, &selection.content, false)?;
+    let release = operations.api(
+        "GET",
+        &format!("repos/{REPOSITORY}/releases/{release_id}"),
+        None,
+    )?;
+    if admit_public_release(&release, tag)? != release_id {
         return Err(DevError::corrupt(
-            "public exact release is not the selected immutable release",
+            "public exact release identity changed after tag lookup",
         ));
     }
     verify_remote_assets(&release, &selection.content, true)?;

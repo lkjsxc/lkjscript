@@ -20,6 +20,7 @@ enum TagChange {
 /// deliberately no orchestrator-supplied build/heavy-owner counter used as its oracle.
 struct FakeApi {
     release: Option<Value>,
+    release_get_overrides: BTreeMap<String, Value>,
     requests: Vec<(String, String)>,
     release_create_requests: Vec<Value>,
     deny_historical_workflow_target: bool,
@@ -43,7 +44,7 @@ struct FakeApi {
 }
 impl FakeApi {
     fn new() -> Self {
-        Self {release:None,requests:Vec::new(),release_create_requests:Vec::new(),deny_historical_workflow_target:false,uploads:Vec::new(),fail_upload:None,fail_public:false,corrupt_latest:false,corrupt_latest_metadata:false,latest:"v9.8.7".to_owned(),tag_present:true,tag_object:TAG_OBJECT.to_owned(),tag_source:SOURCE.to_owned(),tag_type:"tag".to_owned(),tag_change_after_create:None,tag_change_after_upload:None,relation:"ahead".to_owned(),artifacts:["assets","verifier","acceptance"].iter().enumerate().map(|(i,role)|json!({"id":i+10,"name":format!("candidate-{role}-17-2"),"expired":false,"digest":format!("sha256:{}","a".repeat(64)),"size_in_bytes":3,"expires_at":"2026-10-01T00:00:00Z","workflow_run":{"id":17,"head_sha":SOURCE}})).collect(),run:json!({"id":17,"run_attempt":2,"head_sha":SOURCE,"event":"workflow_dispatch","head_branch":"main","path":WORKFLOW,"repository":{"full_name":REPOSITORY},"head_repository":{"full_name":REPOSITORY},"status":"completed","conclusion":"success","workflow_id":41}),job:json!({"id":51,"run_id":17,"head_sha":SOURCE,"name":ACCEPTANCE_JOB,"status":"completed","conclusion":"success","steps":[{"name":"Admit the final candidate and original evidence","status":"completed","conclusion":"success"},{"name":"Upload immutable candidate assets","status":"completed","conclusion":"success"},{"name":"Upload original candidate verifier","status":"completed","conclusion":"success"},{"name":"Upload essential acceptance handoff","status":"completed","conclusion":"success"}]}),public_bytes:BTreeMap::new()}
+        Self {release:None,release_get_overrides:BTreeMap::new(),requests:Vec::new(),release_create_requests:Vec::new(),deny_historical_workflow_target:false,uploads:Vec::new(),fail_upload:None,fail_public:false,corrupt_latest:false,corrupt_latest_metadata:false,latest:"v9.8.7".to_owned(),tag_present:true,tag_object:TAG_OBJECT.to_owned(),tag_source:SOURCE.to_owned(),tag_type:"tag".to_owned(),tag_change_after_create:None,tag_change_after_upload:None,relation:"ahead".to_owned(),artifacts:["assets","verifier","acceptance"].iter().enumerate().map(|(i,role)|json!({"id":i+10,"name":format!("candidate-{role}-17-2"),"expired":false,"digest":format!("sha256:{}","a".repeat(64)),"size_in_bytes":3,"expires_at":"2026-10-01T00:00:00Z","workflow_run":{"id":17,"head_sha":SOURCE}})).collect(),run:json!({"id":17,"run_attempt":2,"head_sha":SOURCE,"event":"workflow_dispatch","head_branch":"main","path":WORKFLOW,"repository":{"full_name":REPOSITORY},"head_repository":{"full_name":REPOSITORY},"status":"completed","conclusion":"success","workflow_id":41}),job:json!({"id":51,"run_id":17,"head_sha":SOURCE,"name":ACCEPTANCE_JOB,"status":"completed","conclusion":"success","steps":[{"name":"Admit the final candidate and original evidence","status":"completed","conclusion":"success"},{"name":"Upload immutable candidate assets","status":"completed","conclusion":"success"},{"name":"Upload original candidate verifier","status":"completed","conclusion":"success"},{"name":"Upload essential acceptance handoff","status":"completed","conclusion":"success"}]}),public_bytes:BTreeMap::new()}
     }
 
     fn change_tag(&mut self, change: TagChange) {
@@ -58,6 +59,11 @@ impl FakeApi {
 impl Operations for FakeApi {
     fn api(&mut self, method: &str, path: &str, body: Option<&Value>) -> Result<Value, DevError> {
         self.requests.push((method.to_owned(), path.to_owned()));
+        if method == "GET"
+            && let Some(release) = self.release_get_overrides.get(path)
+        {
+            return Ok(release.clone());
+        }
         if path.ends_with("/git/ref/heads/main") {
             return Ok(json!({"object":{"type":"commit","sha":CONTROLLER}}));
         }
@@ -123,7 +129,9 @@ impl Operations for FakeApi {
             }
             return Ok(latest);
         }
-        if path.ends_with("/releases/tags/v9.8.7") {
+        if method == "GET"
+            && (path.ends_with("/releases/tags/v9.8.7") || path.ends_with("/releases/91"))
+        {
             return self
                 .release
                 .clone()
@@ -632,6 +640,121 @@ fn public_failure_retries_only_public_boundary_and_latest_never_certifies_other_
         .expect("explicit exact-only recheck");
     assert_eq!(observed.latest, LatestState::Superseded);
     assert!(!superseded.join("latest").exists());
+}
+
+#[test]
+fn public_tag_inventory_resolves_complete_assets_at_the_same_release_id() {
+    for alias_asset_count in [0, 1] {
+        let temporary = tempfile::tempdir().expect("owned alias fixture");
+        let selection = selection(temporary.path());
+        let mut api = FakeApi::new();
+        let authority = authority(&mut api, &selection);
+        publication::publish(&mut api, &selection, temporary.path(), &authority)
+            .expect("published fixture");
+        for asset in &selection.content.assets {
+            api.public_bytes.insert(
+                asset.name.clone(),
+                fs::read(temporary.path().join("assets").join(&asset.name)).expect("frozen bytes"),
+            );
+        }
+        let before = api.release.clone();
+        let mut alias = before.clone().expect("published release");
+        alias["assets"]
+            .as_array_mut()
+            .expect("alias assets")
+            .truncate(alias_asset_count);
+        api.release_get_overrides
+            .insert(format!("repos/{REPOSITORY}/releases/tags/v9.8.7"), alias);
+        api.requests.clear();
+        let output = temporary.path().join("public");
+        fs::create_dir(&output).expect("public evidence");
+        let published = publication::public_download(&mut api, &selection, &output, true)
+            .expect("complete immutable inventory at the same release ID");
+        assert_eq!(published.release_id, 91);
+        assert_eq!(published.latest, LatestState::Selected);
+        assert_eq!(published.latest_release_id, 91);
+        assert!(api.requests.iter().all(|(method, _)| method == "GET"));
+        assert!(
+            api.requests
+                .contains(&("GET".to_owned(), format!("repos/{REPOSITORY}/releases/91")))
+        );
+        assert_eq!(api.uploads.len(), 3);
+        assert_eq!(api.release, before);
+        for route in ["exact", "latest"] {
+            verify_files(&output.join(route), &selection.content.assets)
+                .expect("unchanged accepted public bytes");
+        }
+    }
+}
+
+#[test]
+fn public_release_resolution_rejects_conflicts_before_acquisition() {
+    for endpoint in ["tags/v9.8.7", "91"] {
+        for fault in [
+            "zero-id",
+            "different-id",
+            "wrong-tag",
+            "draft",
+            "mutable",
+            "prerelease",
+            "foreign-asset",
+            "conflicting-asset",
+            "duplicate-asset",
+            "missing-asset",
+        ] {
+            if endpoint != "91" && fault == "missing-asset" {
+                continue; // A valid alias subset is resolved at its exact immutable ID.
+            }
+            let temporary = tempfile::tempdir().expect("owned conflicting metadata fixture");
+            let selection = selection(temporary.path());
+            let mut api = FakeApi::new();
+            let authority = authority(&mut api, &selection);
+            publication::publish(&mut api, &selection, temporary.path(), &authority)
+                .expect("published fixture");
+            let before = api.release.clone();
+            let mut response = before.clone().expect("published release");
+            match fault {
+                "zero-id" => response["id"] = json!(0),
+                "different-id" => response["id"] = json!(92),
+                "wrong-tag" => response["tag_name"] = json!("v9.8.8"),
+                "draft" => response["draft"] = json!(true),
+                "mutable" => response["immutable"] = json!(false),
+                "prerelease" => response["prerelease"] = json!(true),
+                "foreign-asset" => response["assets"][0]["name"] = json!("foreign.bin"),
+                "conflicting-asset" => {
+                    response["assets"][0]["digest"] = json!(format!("sha256:{}", "0".repeat(64)));
+                }
+                "duplicate-asset" => response["assets"][1] = response["assets"][0].clone(),
+                "missing-asset" => {
+                    response["assets"].as_array_mut().expect("assets").pop();
+                }
+                _ => unreachable!(),
+            }
+            // A changed alias ID must also reject when its lookup returns another identity.
+            if endpoint != "91" && fault == "different-id" {
+                api.release_get_overrides.insert(
+                    format!("repos/{REPOSITORY}/releases/92"),
+                    before.clone().expect("original ID"),
+                );
+            }
+            api.release_get_overrides
+                .insert(format!("repos/{REPOSITORY}/releases/{endpoint}"), response);
+            api.requests.clear();
+            let output = temporary.path().join("public");
+            fs::create_dir(&output).expect("public evidence");
+            assert!(
+                publication::public_download(&mut api, &selection, &output, true).is_err(),
+                "{endpoint}: {fault}"
+            );
+            assert!(
+                !output.join("release-attestation.json").exists(),
+                "{endpoint}: {fault} must reject metadata before attestation or download"
+            );
+            assert!(api.requests.iter().all(|(method, _)| method == "GET"));
+            assert_eq!(api.uploads.len(), 3);
+            assert_eq!(api.release, before);
+        }
+    }
 }
 
 #[test]
