@@ -489,7 +489,10 @@ declarations.end
     assert!(!result_file.exists());
     descriptor["secrets"] = serde_json::json!([]);
     std::fs::write(&deployment, serde_json::to_vec(&descriptor).unwrap()).unwrap();
-    let mut child = support::spawn(
+    // Establish BrokenPipe before spawn; a post-spawn close races with a fast child.
+    let (closed_stdout_reader, closed_stdout_writer) = std::io::pipe().unwrap();
+    drop(closed_stdout_reader);
+    let child = support::spawn(
         Command::new(&public.executable)
             .args([
                 "run",
@@ -502,11 +505,10 @@ declarations.end
             ])
             .current_dir(public.root.path())
             .env_clear()
-            .stdout(Stdio::piped())
+            .stdout(closed_stdout_writer)
             .stderr(Stdio::piped()),
     )
     .unwrap();
-    drop(child.take_stdout());
     let failed_delivery = child.wait_with_output().unwrap();
     assert_eq!(failed_delivery.status.code(), Some(6));
     let diagnostic: Value = serde_json::from_slice(&failed_delivery.stderr).unwrap();

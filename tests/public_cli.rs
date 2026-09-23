@@ -76,16 +76,18 @@ fn runtime_inventory_is_project_independent_and_closed_output_preserves_primary_
             .success()
         );
     }
-    let mut child = support::spawn(
+    // Establish BrokenPipe before spawn; a post-spawn close races with a fast child.
+    let (closed_stdout_reader, closed_stdout_writer) = std::io::pipe().unwrap();
+    drop(closed_stdout_reader);
+    let child = support::spawn(
         Command::new(&executable)
             .args(["runtime", "select", "v0.1.32", "--prefix", path(&prefix)])
             .current_dir(temporary.path())
             .env_clear()
-            .stdout(Stdio::piped())
+            .stdout(closed_stdout_writer)
             .stderr(Stdio::piped()),
     )
     .unwrap();
-    drop(child.take_stdout());
     let failed = child.wait_with_output().unwrap();
     assert!(!failed.status.success());
     let diagnostic: Value = serde_json::from_slice(&failed.stderr).unwrap();
