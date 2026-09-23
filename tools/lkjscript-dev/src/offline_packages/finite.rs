@@ -740,7 +740,7 @@ pub(super) fn read_focused(path: &Path, candidate: &Path, verifier: &Path) -> Re
                 | "lkjscript-offline-requirement-parameters-4"
                 | "lkjscript-offline-f64-1"
                 | "lkjscript-offline-parameter-type-1"
-                | "lkjscript-offline-persistent-maps-1"
+                | "lkjscript-offline-persistent-maps-2"
         ) && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -765,7 +765,7 @@ pub(super) fn read_focused(path: &Path, candidate: &Path, verifier: &Path) -> Re
     )?;
     let copied_foreground = matches!(
         receipt.schema.as_str(),
-        "lkjscript-offline-parameter-type-1" | "lkjscript-offline-persistent-maps-1"
+        "lkjscript-offline-parameter-type-1" | "lkjscript-offline-persistent-maps-2"
     );
     let pinned = if receipt.schema == "lkjscript-offline-validator-upgrade-1" {
         predecessor::validate(&receipt, root)?
@@ -784,7 +784,7 @@ pub(super) fn read_focused(path: &Path, candidate: &Path, verifier: &Path) -> Re
         )?;
         super::parameter_type::validate(&receipt, root, 0..4)?;
         Vec::new()
-    } else if receipt.schema == "lkjscript-offline-persistent-maps-1" {
+    } else if receipt.schema == "lkjscript-offline-persistent-maps-2" {
         require(
             receipt.inventories.len() == 4,
             "map focused source inventories incomplete",

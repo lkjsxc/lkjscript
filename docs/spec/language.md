@@ -87,6 +87,17 @@ Function signatures containing type parameters remain capture-safe leaves; this 
 capture of a bare unconstrained type parameter. Ordinary transient callable list elements retain
 their existing restrictions on equality, persistence, and resource containment.
 
+The standard pure graph function
+`list-window<Item>(items: List<Item>, start: I64, count: I64) -> List<Item>` returns an ordered
+subsequence. Let `length` be the input length, `lower = min(max(start, 0), length)` and
+`size = min(max(count, 0), length - lower)`. The result contains the input values at indexes
+`lower` through `lower + size - 1`, or is empty when size is zero. Negative indexes do not count
+back from the end. Clamping precedes end-index addition, including at both signed I64 extremes.
+The native function uses a private ordinary tail-recursive helper, indexed reads and persistent
+append. It invokes no callback and preserves input values and order. Item remains unconstrained;
+ordinary type, affinity, result encoding and execution admission still apply. This adds no
+intrinsic, borrowed slice, lazy stream or implicit iteration budget.
+
 Instantiated composite types are disposable derivations of exact rank-one substitutions.
 Production preparation closes all concrete signatures, constants, tests, ports, constructors and
 explicit calls over their nominal members; the canonical evaluator independently closes accepted

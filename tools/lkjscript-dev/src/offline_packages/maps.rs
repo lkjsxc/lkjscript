@@ -193,6 +193,15 @@ fn cases() -> Result<Vec<Case>, DevError> {
                 .entry(format!("group-{:02}", (i * 17) % 53))
                 .or_default() += i % 11 - 5 + increment;
         }
+        // Fixed key bounds are independent of the standard window's index loop.
+        let middle_entries = Value::Array(
+            expected
+                .iter()
+                .filter(|(key, _)| key.as_str() >= "group-15" && key.as_str() < "group-25")
+                .map(|(key, value)| json!({"key":key,"value":value}))
+                .collect(),
+        );
+        let middle_arguments = serde_json::to_string(&json!([events, 15, 10]))?;
         let large = Value::Array(expected.into_iter().map(|(k, v)| json!([k, v])).collect());
         for (name, target, arguments, expected) in [
             (
@@ -270,6 +279,131 @@ fn cases() -> Result<Vec<Case>, DevError> {
                 arguments,
                 expected: Ok(expected),
                 artifact: false,
+            });
+        }
+        let small_items = json!([
+            {"key":"b","amount":3},
+            {"key":"a","amount":2},
+            {"key":"b","amount":4}
+        ]);
+        for (name, target, arguments, expected) in [
+            (
+                if phase == "before" {
+                    "before-page-first"
+                } else {
+                    "after-page-first"
+                },
+                "page",
+                serde_json::to_string(&json!([small_items, 0, 1]))?,
+                json!([{"key":"a","value":a}]),
+            ),
+            (
+                if phase == "before" {
+                    "before-page-tail"
+                } else {
+                    "after-page-tail"
+                },
+                "page",
+                serde_json::to_string(&json!([small_items, 1, i64::MAX]))?,
+                json!([{"key":"b","value":b}]),
+            ),
+            (
+                if phase == "before" {
+                    "before-page-past-end"
+                } else {
+                    "after-page-past-end"
+                },
+                "page",
+                serde_json::to_string(&json!([small_items, i64::MAX, i64::MAX]))?,
+                json!([]),
+            ),
+            (
+                if phase == "before" {
+                    "before-page-negative-start"
+                } else {
+                    "after-page-negative-start"
+                },
+                "page",
+                serde_json::to_string(&json!([small_items, i64::MIN, 1]))?,
+                json!([{"key":"a","value":a}]),
+            ),
+            (
+                if phase == "before" {
+                    "before-page-negative-count"
+                } else {
+                    "after-page-negative-count"
+                },
+                "page",
+                serde_json::to_string(&json!([small_items, 0, i64::MIN]))?,
+                json!([]),
+            ),
+            (
+                if phase == "before" {
+                    "before-page-empty"
+                } else {
+                    "after-page-empty"
+                },
+                "page",
+                "[[],0,1]".to_owned(),
+                json!([]),
+            ),
+            (
+                if phase == "before" {
+                    "before-page-middle"
+                } else {
+                    "after-page-middle"
+                },
+                "page",
+                middle_arguments,
+                middle_entries,
+            ),
+            (
+                if phase == "before" {
+                    "before-event-window"
+                } else {
+                    "after-event-window"
+                },
+                "event-window",
+                serde_json::to_string(&json!([small_items, 1, 2]))?,
+                json!([{"key":"a","amount":2},{"key":"b","amount":4}]),
+            ),
+        ] {
+            cases.push(Case {
+                name,
+                phase,
+                target,
+                arguments,
+                expected: Ok(expected),
+                artifact: false,
+            });
+        }
+        for (name, target, expected) in [
+            (
+                if phase == "before" {
+                    "bundle-before-page"
+                } else {
+                    "bundle-after-page"
+                },
+                "page",
+                json!([{"key":"b","value":b}]),
+            ),
+            (
+                if phase == "before" {
+                    "bundle-before-event-window"
+                } else {
+                    "bundle-after-event-window"
+                },
+                "event-window",
+                json!([{"key":"a","amount":2},{"key":"b","amount":4}]),
+            ),
+        ] {
+            cases.push(Case {
+                name,
+                phase,
+                target,
+                arguments: serde_json::to_string(&json!([small_items, 1, 2]))?,
+                expected: Ok(expected),
+                artifact: true,
             });
         }
         for (name, target, arguments, expected) in [
@@ -1042,4 +1176,107 @@ pub(super) fn validate(
         }
     }
     Ok(copied)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[ignore = "requires retained focused persistent-map receipt and its original verifier"]
+    fn window_originals_reject_omission_and_rehashed_substitution() {
+        let source = PathBuf::from(
+            std::env::var_os("LKJSCRIPT_MAP_WINDOW_RECEIPT").expect("focused map receipt"),
+        );
+        let verifier = PathBuf::from(
+            std::env::var_os("LKJSCRIPT_MAP_WINDOW_VERIFIER").expect("original verifier"),
+        );
+        let mut receipt: Receipt = serde_json::from_slice(&fs::read(&source).unwrap()).unwrap();
+        let candidate = PathBuf::from(&receipt.pinned_runtime_path);
+        let admit = |path: &Path| super::super::finite::read_focused(path, &candidate, &verifier);
+        admit(&source).expect("authentic originals pass");
+        let owned = tempfile::tempdir().unwrap();
+        for file in &receipt.files {
+            assert_eq!(Path::new(&file.path).components().count(), 1);
+            fs::copy(
+                source.parent().unwrap().join(&file.path),
+                owned.path().join(&file.path),
+            )
+            .unwrap();
+        }
+        receipt.evidence_root = owned.path().display().to_string();
+        let path = owned.path().join("receipt.json");
+        fs::write(&path, evidence::encode_json(&receipt).unwrap()).unwrap();
+        admit(&path).expect("owned relocated fixture passes");
+
+        let mut witness: Witness =
+            serde_json::from_str(&receipt.observations["persistent_maps"]).unwrap();
+        let middle = witness.commands["before-page-middle"];
+        witness.commands.remove("before-page-middle").unwrap();
+        let mut fault = receipt.clone();
+        fault.observations.insert(
+            "persistent_maps".to_owned(),
+            serde_json::to_string(&witness).unwrap(),
+        );
+        fs::write(&path, evidence::encode_json(&fault).unwrap()).unwrap();
+        assert!(
+            admit(&path)
+                .expect_err("omitted page must reject")
+                .to_string()
+                .contains("map command missing")
+        );
+
+        let mut fault = receipt.clone();
+        *fault.commands[middle].command.last_mut().unwrap() = "[[],0,0]".to_owned();
+        fs::write(&path, evidence::encode_json(&fault).unwrap()).unwrap();
+        assert!(
+            admit(&path)
+                .expect_err("substituted page invocation must reject")
+                .to_string()
+                .contains("map command did not use exact copied-product inputs")
+        );
+
+        for (name, from, to, expected) in [
+            (
+                "maps-input-before-page-middle.json",
+                ",15,10]",
+                ",16,10]",
+                "map literal invocation input changed",
+            ),
+            (
+                "maps-consumer.lkjc",
+                "name=list-window",
+                "name=list-map",
+                "map literal authoring request changed",
+            ),
+        ] {
+            let file = owned.path().join(name);
+            let original = fs::read_to_string(&file).unwrap();
+            let changed = original.replace(from, to);
+            assert_ne!(changed, original);
+            fs::write(&file, changed).unwrap();
+            let mut fault = receipt.clone();
+            *fault
+                .files
+                .iter_mut()
+                .find(|file| file.path == name)
+                .unwrap() = evidence::proof(&file, name.to_owned()).unwrap();
+            fs::write(&path, evidence::encode_json(&fault).unwrap()).unwrap();
+            assert!(
+                admit(&path)
+                    .expect_err("rehashed substitution must reject")
+                    .to_string()
+                    .contains(expected)
+            );
+            fs::write(file, original).unwrap();
+        }
+
+        let mut fault = receipt.clone();
+        fault.schema = "lkjscript-offline-persistent-maps-1".to_owned();
+        fs::write(&path, evidence::encode_json(&fault).unwrap()).unwrap();
+        admit(&path).expect_err("predecessor schema cannot prove the new workload");
+        fs::write(&path, evidence::encode_json(&receipt).unwrap()).unwrap();
+        admit(&path).expect("restored fixture passes");
+        admit(&source).expect("originals remain untouched");
+    }
 }

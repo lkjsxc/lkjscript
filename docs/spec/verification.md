@@ -77,6 +77,17 @@ Matched predecessor/candidate composite workloads separately report preparation,
 result encoding, whole-process time and peak RSS, retaining small-map overhead and all samples.
 These measurements and runtime observations establish no token, billing or universal speed claim.
 
+Standard `list-window<Item>` extends this same maintained consumer. Native standard tests cover
+empty and middle ranges, signed I64 extremes, Unicode and structural records. The ordinary
+transported aggregation consumer selects sorted structural entry pages and windows over its own
+nominal Event type. Independent fixed results and a BTreeMap key-range oracle check first, tail,
+middle, empty and clamped pages before and after reviewed supplier evolution. Both bundles still
+run after authoring sources are removed. Original readers bind every new command, argument,
+literal authored body, source selection, full result and cleanup. Current aggregate receipt 19
+and focused persistent-map receipt 2 reject the predecessors for these expanded obligations;
+frozen releases keep their original workload and verifier. Existing lkjournal exact dependency
+selection and complete artifact bytes must remain unchanged for this additive pure-library update.
+
 Callable input evolution extends the existing offline-package owner with an ordinary numerical
 producer and separately authored exact consumer. Public edits retain function, parameter, port
 and target identities while changing F64 samples to enabled nominal readings. Omitted body/port
@@ -1003,7 +1014,7 @@ migration, effect replay or implicit runtime fallback.
 
 ## Requirement-parametric library obligations
 
-The offline-package owner's current receipt generation is 18. It includes the input-evolution
+The offline-package owner's current receipt generation is 19. It includes the input-evolution
 witness above and the literal
 `requirement-parameters` workload in its existing owner, covering producer-owned typed-cell
 operations/transactions, T/E/R applications and pure factories, distinct caller requirements,

@@ -1,0 +1,75 @@
+request base=rev_811d0d7a7f1792d6934eaa62defd6ea03c4306e01bcd7e463eb8c1cf68a0443e idempotency=standard-list-window
+reference.owner as=$core package=local class=module name=core
+reference.owner as=$length package=local class=declaration parent=$core name=list-length
+reference.owner as=$get package=local class=declaration parent=$core name=list-get
+reference.owner as=$append package=local class=declaration parent=$core name=list-append
+reference.owner as=$less package=local class=declaration parent=$core name=less
+reference.owner as=$subtract package=local class=declaration parent=$core name=subtract
+reference.owner as=$add package=local class=declaration parent=$core name=add
+declarations.begin
+(units
+  (function create list-window-loop (in $core) (visibility private)
+    (type-parameter create Item)
+    (parameter create items (type (list Item)))
+    (parameter create position (type I64))
+    (parameter create end (type I64))
+    (parameter create selected (type (list Item)))
+    (returns (list Item)) (effect pure)
+    (body
+      (if (call $less (local position) (local end))
+        (call list-window-loop (types Item) (local items)
+          (call $add (local position) (i64 1)) (local end)
+          (call $append (types Item) (local selected)
+            (call $get (types Item) (local items) (local position))))
+        (local selected))))
+  (function create list-window (in $core) (visibility public)
+    (type-parameter create Item)
+    (parameter create items (type (list Item)))
+    (parameter create start (type I64))
+    (parameter create count (type I64))
+    (returns (list Item)) (effect pure)
+    (body
+      (let
+        (binding length (call $length (types Item) (local items)))
+        (binding lower
+          (if (call $less (local start) (i64 0)) (i64 0)
+            (if (call $less (local length) (local start)) (local length) (local start))))
+        (binding remaining (call $subtract (local length) (local lower)))
+        (binding actual
+          (if (call $less (local count) (i64 0)) (i64 0)
+            (if (call $less (local remaining) (local count)) (local remaining) (local count))))
+        (in
+          (call list-window-loop (types Item) (local items) (local lower)
+            (call $add (local lower) (local actual)) (list Item))))))
+  (test create list-window-empty (in $core) (visibility private)
+    (actual (call list-window (types I64) (list I64) (i64 0) (i64 1)))
+    (expected (list I64)))
+  (test create list-window-middle (in $core) (visibility private)
+    (actual (call list-window (types I64) (list I64 (i64 1) (i64 2) (i64 3) (i64 4)) (i64 1) (i64 2)))
+    (expected (list I64 (i64 2) (i64 3))))
+  (test create list-window-negative-start (in $core) (visibility private)
+    (actual (call list-window (types I64) (list I64 (i64 1) (i64 2) (i64 3)) (i64 -9223372036854775808) (i64 2)))
+    (expected (list I64 (i64 1) (i64 2))))
+  (test create list-window-past-end (in $core) (visibility private)
+    (actual (call list-window (types I64) (list I64 (i64 1)) (i64 9223372036854775807) (i64 9223372036854775807)))
+    (expected (list I64)))
+  (test create list-window-large-count (in $core) (visibility private)
+    (actual (call list-window (types I64) (list I64 (i64 1) (i64 2) (i64 3)) (i64 1) (i64 9223372036854775807)))
+    (expected (list I64 (i64 2) (i64 3))))
+  (test create list-window-negative-count (in $core) (visibility private)
+    (actual (call list-window (types I64) (list I64 (i64 1)) (i64 0) (i64 -9223372036854775808)))
+    (expected (list I64)))
+  (test create list-window-text (in $core) (visibility private)
+    (actual (call list-window (types Text) (list Text (text "a") (text "猫") (text "é")) (i64 1) (i64 2)))
+    (expected (list Text (text "猫") (text "é"))))
+  (test create list-window-records (in $core) (visibility private)
+    (actual
+      (call list-window (types (record (key Text) (value I64)))
+        (list (record (key Text) (value I64))
+          (record structural (field key (text "a")) (field value (i64 7)))
+          (record structural (field key (text "b")) (field value (i64 9))))
+        (i64 1) (i64 1)))
+    (expected
+      (list (record (key Text) (value I64))
+        (record structural (field key (text "b")) (field value (i64 9)))))))
+declarations.end

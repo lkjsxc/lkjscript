@@ -5,6 +5,20 @@ outstanding delivery. [Generated guides](generated/operations.md) own public
 operations, [specifications](spec/) own semantics, and [campaigns](campaigns/)
 retain detailed implementation and verification history.
 
+## Standard list windows
+
+Development v0.1.44 adds ordinary pure `list-window<Item>(items, start, count)`.
+It preserves order and clamps start/count without overflow at the signed I64
+extremes. The native standard request passes all 45 package tests, including
+eight new range/type cases. The existing transported aggregation consumer now
+uses it for structural entry pages and nominal events; its 72 copied-product
+commands and original reader pass with joined cleanup. Complete source acceptance
+is still due. Generated standard transport, artifact and discovery include
+the function. lkjournal keeps its prior exact supplier: checks pass and the
+complete rebuilt artifact is byte-identical. There is no data-format migration.
+This next-version work is independent of v0.1.43 candidate acceptance and its
+already authorized publication.
+
 ## Command result files
 
 Development v0.1.43 adds optional `--result-file PATH` on both Command routes.
@@ -33,8 +47,10 @@ The [measurements](performance.md#rejected-json-text-materialization) retain all
 cases and their scope. Combined source `9394c0ea863823f0ce068e1e956253d92ae80471`
 passes all 20 fresh source gates with stable inputs and zero reuse and reached
 remote main unchanged. Candidate [35820435256/1](https://github.com/lkjsxc/lkjscript/actions/runs/35820435256)
-is running at that exact source; final-candidate and public acceptance remain due.
-The user has authorized the complete release operation. The
+passes final-candidate, installation and original-reader acceptance. Its five
+authenticated handoff artifacts are retained. The authorized annotation and scoped
+selection now bind that source; promotion [35823850909/1](https://github.com/lkjsxc/lkjscript/actions/runs/35823850909)
+is running. Immutable publication and anonymous verification remain due. The
 [framing record](campaigns/202609222330.md#typed-json-framing--newly-observed-output-boundary)
 preserves the original defect and earlier evidence at its actual scope.
 The [native summary guide](guides/native-summary.md) also passes fresh authoring,

@@ -36,6 +36,14 @@ result. The requested count is clamped to the remaining length before addition,
 so even the largest I64 start/count cannot overflow this index calculation.
 No negative-index-from-the-end convention is implied.
 
+Development v0.1.44 also provides this policy as the ordinary standard function
+`std::list-window<Item>`. New programs can call it directly, for example
+`(call std::list-window (types Text) (local items) (i64 0) (i64 10))`.
+Discover it with `package builtin query owners --name list-window`.
+The complete request here retains its own implementation so it also works with
+v0.1.43 and demonstrates exporting an ordinary generic library. The standard
+function and its maintained consumer have separate [acceptance obligations](../spec/verification.md).
+
 Plan, review and apply with the exact returned `plan_...` token:
 
 ```sh

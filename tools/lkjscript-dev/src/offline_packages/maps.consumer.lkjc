@@ -4,6 +4,7 @@ reference.owner as=$remove package=$std class=declaration name=map-remove
 reference.owner as=$get-or package=$std class=declaration name=map-get-or
 reference.owner as=$entries package=$std class=declaration name=map-entries
 reference.owner as=$length package=$std class=declaration name=map-length
+reference.owner as=$window package=$std class=declaration name=list-window
 reference.owner as=$totals-by package=$library class=declaration name=totals-by
 create.module as=$module name=event-command
 create.component as=$component module=$module name=events visibility=public
@@ -64,6 +65,36 @@ type.function as=@OrderedPort result=@Entries
 type.argument parent=@OrderedPort index=0 type=@Events
 add.port as=$ordered-port component=$component name=ordered type=@OrderedPort function=$ordered
 create.target as=$ordered-target name=ordered component=$component port=$ordered-port runner=command
+
+add.parameter as=$page-items function=$page name=items type=@Events
+add.parameter as=$page-start function=$page name=start type=i64
+add.parameter as=$page-count function=$page name=count type=i64
+expression.block as=$page-body
+  (call $window (types @Entry)
+    (call $entries (types text i64) (call $main (local $page-items)))
+    (local $page-start) (local $page-count))
+expression.end
+create.function as=$page module=$module name=page visibility=private result=@Entries effect=pure body=$page-body
+type.function as=@PagePort result=@Entries
+type.argument parent=@PagePort index=0 type=@Events
+type.argument parent=@PagePort index=1 type=i64
+type.argument parent=@PagePort index=2 type=i64
+add.port as=$page-port component=$component name=page type=@PagePort function=$page
+create.target as=$page-target name=page component=$component port=$page-port runner=command
+
+add.parameter as=$window-items function=$event-window name=items type=@Events
+add.parameter as=$window-start function=$event-window name=start type=i64
+add.parameter as=$window-count function=$event-window name=count type=i64
+expression.block as=$event-window-body
+  (call $window (types @Event) (local $window-items) (local $window-start) (local $window-count))
+expression.end
+create.function as=$event-window module=$module name=event-window visibility=private result=@Events effect=pure body=$event-window-body
+type.function as=@EventWindowPort result=@Events
+type.argument parent=@EventWindowPort index=0 type=@Events
+type.argument parent=@EventWindowPort index=1 type=i64
+type.argument parent=@EventWindowPort index=2 type=i64
+add.port as=$event-window-port component=$component name=event-window type=@EventWindowPort function=$event-window
+create.target as=$event-window-target name=event-window component=$component port=$event-window-port runner=command
 
 add.parameter as=$get-map function=$get name=map type=@Totals
 add.parameter as=$get-key function=$get name=key type=text

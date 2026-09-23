@@ -54,12 +54,12 @@ Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_811d0d7a7f1792d6934eaa62defd6ea03c4306e01bcd7e463eb8c1cf68a0443e`;
-- package revision: `package_revision_3b195535785762a7dcdec5df40080cd51e1abbb592bd2edfd2c26a05bcdd0a92`;
-- package transport: `package_transport_2cc869f1c3049806d7481e4934d9ad575c0fbe88ae45cc412d1d13a1d0e6e676`;
-- artifact manifest: `artifact_manifest_e4df6c4e62c4cddf973e69eed3856fcbf75a856762880ce819cc64b9b2fab826`;
-- artifact bundle: `artifact_bundle_56689036f3927a117963e54ffd091bf81b71e2a828f2e5a64a287fc81afd4325`;
-- 1,012 live semantic owners, 165 compiler units, and 37 graph tests.
+- semantic revision: `rev_0c24feeba2cf086edecde1241930f4a8019f0c1c7f5a6dfe72b187f02662a5bb`;
+- package revision: `package_revision_9694ca1acf820bd3e05276d9822dbc4cc7e48ec8138685f5efa97f291a5dd049`;
+- package transport: `package_transport_2c5257dfe49fed1773981b8af0188baf6feb72168ac518f165dcd0ad0c969312`;
+- artifact manifest: `artifact_manifest_5fea37511ac40b73692b4339b64a7af0453db53292b00b2a37995da95cdacdf9`;
+- artifact bundle: `artifact_bundle_afcfb7e4953d22fa2983f2f60c94ac51149748c9354aa5a5d9a988899ad4364c`;
+- 1,158 live semantic owners, 175 compiler units, and 45 graph tests.
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose
 ordinary parametric records with pure functions. Mapping invokes the first callback then the second,
@@ -100,6 +100,16 @@ order, appends successful results, and stops at the first failure. Empty input i
 Four additional graph tests cover empty, singleton, configured multi-item and heterogeneous maps.
 The shared runtime carrier preserves old aliases through bounded tail/spine copying and leaves
 existing list types, encodings, callback eligibility, and default execution limits unchanged.
+
+`list-window<Item>(items: List<Item>, start: I64, count: I64) -> List<Item>` selects values in
+their original order. Start is clamped to zero through the list length; count is clamped to zero
+through the remaining length before computing the end. Negative count or a start past the end
+returns an empty list. Both signed I64 extremes are valid inputs. The pure body and its private
+tail-recursive helper use ordinary indexed reads and persistent append, without a new intrinsic.
+The [literal native request](requests/20260923-list-window.lkjc) and eight graph tests cover ranges,
+empty input, extreme bounds, Unicode and structural records. The maintained transported aggregation
+consumer uses it for ordered entry pages and consumer-owned nominal events. Existing exact package
+selections remain valid; lkjournal retains its prior supplier and byte-identical artifact.
 
 `task-fold-left<Item,State;E>(List<Item>, State, TaskFunction(State,Item)->State ! E)->State ! E`
 and `task-map<Input,Output;E>(List<Input>, TaskFunction(Input)->Output ! E)->List<Output> ! E`

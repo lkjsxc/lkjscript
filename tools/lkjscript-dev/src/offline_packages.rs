@@ -185,8 +185,8 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
                 Some("requirement-parameters") => "lkjscript-offline-requirement-parameters-4",
                 Some("f64") => "lkjscript-offline-f64-1",
                 Some("parameter-type") => "lkjscript-offline-parameter-type-1",
-                Some("persistent-maps") => "lkjscript-offline-persistent-maps-1",
-                _ => "lkjscript-offline-packages-acceptance-18",
+                Some("persistent-maps") => "lkjscript-offline-persistent-maps-2",
+                _ => "lkjscript-offline-packages-acceptance-19",
             }
             .to_owned(),
             status: "failed".to_owned(),
@@ -1870,7 +1870,7 @@ pub(crate) fn read_transferred_receipt(
         "offline receipt encoding or path is noncanonical",
     )?;
     require(
-        receipt.schema == "lkjscript-offline-packages-acceptance-18"
+        receipt.schema == "lkjscript-offline-packages-acceptance-19"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete

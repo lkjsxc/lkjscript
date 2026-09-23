@@ -21,12 +21,20 @@ publication. v0.1.39 through v0.1.41 have no remaining delivery obligation.
 
 Corrected v0.1.43 source `9394c0ea` passes all 20 fresh source gates and reached
 remote main unchanged. Candidate [35820435256/1](https://github.com/lkjsxc/lkjscript/actions/runs/35820435256)
-is running at that exact source. Complete its source/final-target/installation
-acceptance, then the already authorized annotated tag, scoped selection and
-unchanged-asset publication with anonymous verification. Do not add another
+is accepted at that exact source, with its five authenticated handoff artifacts
+retained. Its authorized annotation and scoped selection are complete; promotion
+[35823850909/1](https://github.com/lkjsxc/lkjscript/actions/runs/35823850909) is running.
+Complete unchanged-asset publication and anonymous verification. Do not add another
 workload as a delivery prerequisite while this healthy candidate proceeds.
 
 ## Next workload and decision criteria
+
+The native paging example and its separately transported nominal consumer repeat
+the same generic list-window policy. Development v0.1.44 selects that small ordinary
+standard-library addition and adoption by the existing transported aggregation owner.
+The native package tests and 72-command page/type workflow pass with original-reader
+admission. Complete source acceptance remains due. Preserve old exact dependencies when their behavior and generated
+bytes remain valid. This increment must not delay the healthy v0.1.43 publication path.
 
 Native declaration creation/canonical re-entry, callable-input evolution, persistent
 maps and ordinary composable transaction participants are available. The native

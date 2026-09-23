@@ -42,6 +42,11 @@ It preserves all application owners, deployment settings and behavior. This is c
 maintenance; lkjournal does not adopt the new cell policy. Existing data and retained dependencies
 remain intact.
 
+The additive standard `list-window` update keeps this exact supplier selection. The application
+does not call the new function; checking and rebuilding with the successor executable preserve
+accepted HEAD and the complete existing artifact bytes. The 37 tests below belong to this pinned
+dependency, independently of the newer built-in standard package's 45 tests.
+
 ## Inspect and verify current authority
 
 From the repository root:
