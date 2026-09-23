@@ -242,6 +242,20 @@ read it back. That read/check/write is not atomic compare-and-swap. Preserve pri
 and genuine failures; never change immutability, credentials, access or protections to make admission
 pass. A tag push alone starts no build or publication.
 
+Preserve Markdown notes explicitly when creating an annotation:
+
+```sh
+git tag --annotate --cleanup=verbatim TAG SOURCE_COMMIT --file /absolute/release-notes.md
+```
+
+Git's default tag cleanup removes comment lines, including Markdown headings.
+Compare the actual local and remote annotation with the intended notes before selecting it.
+Complete and read back the scoped selection before dispatch, and check each step's result
+before starting its dependent action. A running workflow can retain the prior variable value;
+an update after dispatch does not establish that job's publication authority. If that boundary
+rejects before transfer, a fresh `promote` invocation with the same accepted producer must still
+complete transfer admission. `resume-publication` is for the subsequent publication boundary.
+
 The publisher requires that annotated tag to exist before release creation. The create request
 omits `target_commitish`, which GitHub documents as unused for an existing tag. Supplying a frozen
 source whose workflow files differ from current main can unnecessarily require workflow-write

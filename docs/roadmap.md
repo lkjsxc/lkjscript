@@ -23,7 +23,8 @@ Corrected v0.1.43 source `9394c0ea` passes all 20 fresh source gates and reached
 remote main unchanged. Candidate [35820435256/1](https://github.com/lkjsxc/lkjscript/actions/runs/35820435256)
 is accepted at that exact source, with its five authenticated handoff artifacts
 retained. Its authorized annotation and scoped selection are complete; promotion
-[35823850909/1](https://github.com/lkjsxc/lkjscript/actions/runs/35823850909) is running.
+[35824461469/1](https://github.com/lkjsxc/lkjscript/actions/runs/35824461469) is running,
+after the first promotion captured the prior scoped selection and rejected before transfer.
 Complete unchanged-asset publication and anonymous verification. Do not add another
 workload as a delivery prerequisite while this healthy candidate proceeds.
 

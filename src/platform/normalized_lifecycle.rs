@@ -1,7 +1,5 @@
 //! Shared Graph 10 compiler, linker, artifact-loader, and dense-runtime preparation.
 
-#[cfg(test)]
-use super::builtin_standard::BuiltinStandard;
 use super::compiler::{
     ArtifactBundleDigest, ArtifactLinkWork, ArtifactManifestDigest, CompilationBuildProfile,
     CompilationManifestDigest, OptimizationPolicy, build_clean, link_artifact,
@@ -695,14 +693,29 @@ mod tests {
     #[test]
     fn maintained_application_clean_build_matches_its_owned_artifact() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("applications/lkjournal");
-        let repository = GraphRepository::open(&root).expect("open maintained Graph 10 lkjournal");
+        let repository = GraphRepository::open(&root).expect("open maintained lkjournal");
         let compilation = build_clean(&repository, OptimizationPolicy::DeterministicBaseline)
             .expect("clean compile maintained lkjournal");
-        let standard = BuiltinStandard::load().expect("load exact built-in standard");
+        let closure = repository
+            .export_package_container()
+            .expect("admit maintained exact dependency closure");
+        let root = &closure.packages[&closure.container.root.package_revision];
+        let [dependency] = root.revision.dependencies.as_slice() else {
+            panic!("maintained lkjournal must select one exact standard dependency");
+        };
+        // A pure standard-library addition need not replace this application's exact pin.
+        // Compile its admitted source independently of the maintained artifact being compared.
+        let standard = &closure.packages[&dependency.package_revision];
+        assert!(standard.revision.dependencies.is_empty());
+        let standard =
+            super::super::compiler::compile_immutable(standard, &closure.container.objects, &[])
+                .expect("compile the application's exact standard source");
+        let standard = load_artifact(&standard.artifact.bytes)
+            .expect("admit the freshly compiled exact standard artifact");
         let linked = link_artifact(
             &repository,
             compilation.manifest_digest,
-            std::slice::from_ref(&standard.artifact),
+            std::slice::from_ref(&standard),
         )
         .expect("link maintained lkjournal");
         assert_eq!(

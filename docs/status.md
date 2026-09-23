@@ -49,8 +49,10 @@ passes all 20 fresh source gates with stable inputs and zero reuse and reached
 remote main unchanged. Candidate [35820435256/1](https://github.com/lkjsxc/lkjscript/actions/runs/35820435256)
 passes final-candidate, installation and original-reader acceptance. Its five
 authenticated handoff artifacts are retained. The authorized annotation and scoped
-selection now bind that source; promotion [35823850909/1](https://github.com/lkjsxc/lkjscript/actions/runs/35823850909)
-is running. Immutable publication and anonymous verification remain due. The
+selection now bind that source. The first promotion captured the prior selection
+and correctly rejected before transfer/publication. Promotion
+[35824461469/1](https://github.com/lkjsxc/lkjscript/actions/runs/35824461469) resumes with
+the same accepted producer. Immutable publication and anonymous verification remain due. The
 [framing record](campaigns/202609222330.md#typed-json-framing--newly-observed-output-boundary)
 preserves the original defect and earlier evidence at its actual scope.
 The [native summary guide](guides/native-summary.md) also passes fresh authoring,
