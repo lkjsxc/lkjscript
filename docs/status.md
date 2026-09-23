@@ -18,11 +18,13 @@ comparison preserves all registry/interface payloads, 20 required references and
 ten numeric limits. Six page layouts change to escaped HTML; two remain byte-identical.
 
 This is native tool adoption, not compiler self-hosting. Public v0.1.44 remains
-frozen. The predecessor source acceptance at `7b7a54ce` remains historical evidence,
-not acceptance of this successor. The [current campaign](campaigns/202609240132.md)
-owns successor source verification and delivery. Normal mainline push currently
-remains blocked on the workspace GitHub authentication; local implementation and
-validation are not remote integration or release publication.
+frozen. Source `ee2c6079` passes all 26 full-profile gates freshly, with stable
+inputs and zero reuse. The [current campaign](campaigns/202609240132.md) records
+the exact source evidence and public-binary reproduction. Matched eight-page
+generation rises from median 389.797 to 458.215 ms; the host binary grows by
+254,272 bytes. There is no speedup or application-runtime performance claim.
+Normal mainline push remains blocked on this workspace’s Git authentication/
+agent context. Local acceptance is not remote integration or release publication.
 
 ## Standard list windows
 

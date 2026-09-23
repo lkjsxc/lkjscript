@@ -100,3 +100,11 @@ The pure embedded program cannot opt into tasks or component grants. Normal type
 input/output bounds and cancellation remain in force. Balanced concatenation
 avoids repeatedly copying the document prefix; this is not a claim of superior
 speed to Rust. The campaign records matched generation costs and their limits.
+
+For accepted source `ee2c6079`, seven alternating fresh-process pairs measured
+complete eight-page generation at median 458.215 ms, versus 389.797 ms for the
+accepted two-native-page predecessor. Outputs were byte-checked per revision;
+filesystem caches were not flushed. The host executable grew by 254,272 bytes.
+These same-machine command costs are not application-runtime or peak-memory
+measurements. See the [completion campaign](../../docs/campaigns/202609240132.md)
+for the full fresh 26-gate source result, reproducibility, costs and delivery boundary.
