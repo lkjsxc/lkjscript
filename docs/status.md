@@ -15,8 +15,12 @@ uses it for structural entry pages and nominal events; its 72 copied-product
 commands and original reader pass with joined cleanup. Source `d104edc7` passes
 all 20 fresh source gates with stable inputs and zero reuse and reached remote
 main unchanged. Candidate [35827065894/1](https://github.com/lkjsxc/lkjscript/actions/runs/35827065894)
-is running at that exact source; final-candidate acceptance and the already
-authorized publication remain due. Generated standard transport, artifact and discovery include
+passes source verification and asset construction but fails final-target acceptance:
+the HTTP verifier still expects the previous 38 tests after the product passes 46.
+The same audit finds three stale counts in the offline package owner. Corrected
+expectations pass fresh HTTP and complete offline workflows against those exact
+candidate bytes, with joined cleanup. Renewed source/final-candidate acceptance and authorized
+publication remain due, with no v0.1.44 tag or selection change. Generated standard transport, artifact and discovery include
 the function. lkjournal keeps its prior exact supplier: checks pass and the
 complete rebuilt artifact is byte-identical. There is no data-format migration.
 v0.1.43 publication is complete at its separate frozen source.

@@ -56,6 +56,55 @@ in `/home/coder/workspace/lkjscript-selection-evidence-20260923`. The
 [continuation](campaigns/202609222330.md) keeps these designed library observations
 separate from v0.1.44's frozen release source and standard-library adoption.
 
+### Native heap alternative
+
+A subsequent native experiment retains the same `select-by` declaration, generic
+parameter and positional parameter identities while replacing its body through
+public review/application. It adds a private generic indexed record and an ordinary
+Map-backed maximum heap, ordered by the supplied comparator and original input
+position. Once full, the heap discards a later equivalent/worse item without
+replacement. Draining and reversal recover stable output order. Heap index
+arithmetic checks the presence of children before doubling an index. All Map
+reads refer to the private algorithm's contiguous occupied index range.
+
+The same c5e216cd… executable compares the preserved range-merge bundle with this
+heap bundle on the same host, with one excluded warmup and three measured pairs
+per case, alternating order. All 112 command results match independent oracles.
+Both use the complete frequency Map for counting workloads. Numeric inputs use
+the ordinary `less` comparator and expose input-order sensitivity separately.
+
+| Workload, requested count | Range merge invocation ms | Heap invocation ms |
+|---|---:|---:|
+| 512 rows / 131 keys, 17 | 12.004 | 7.554 |
+| 16,384 rows / 4,097 keys, 17 | 387.180 | 188.135 |
+| 99,998 rows / 25,001 keys, 17 | 2,393.448 | 1,208.442 |
+| 99,998 rows / 99,998 keys, 17 | 6,729.238 | 2,118.791 |
+| 65,516 rows / 4,096 varied keys, 17 | 879.966 | 632.468 |
+| 512 rows / 131 keys, zero | 4.382 | 4.479 |
+| 512 rows / 131 keys, all | 14.355 | 31.483 |
+| 16,384 rows / 4,097 keys, all | 645.015 | 1,754.313 |
+| Empty input | 0.075 | 0.075 |
+| 4,096 ascending numbers, 17 | 112.164 | 23.230 |
+| 4,096 descending numbers, 17 | 121.449 | 245.014 |
+| 4,096 permuted numbers, 17 | 114.514 | 26.833 |
+| 4,096 permuted numbers, 2,048 | 235.521 | 618.488 |
+| 4,096 permuted numbers, all | 263.009 | 781.757 |
+
+The heap is slower for descending input even at a small requested count, and for
+the larger/full selections. Its additional closure also usually increases
+preparation: the all-distinct example changes from 69.729 to 75.212 ms. These
+observations do not justify replacing the general guide's range implementation
+unconditionally or choosing a threshold from input size alone. The heap remains
+an experimental alternative with its literal native request and accepted graph
+preserved in `/home/coder/workspace/lkjscript-heap-selection-evidence-20260923`.
+
+All 58 library tests pass. An existing nominal consumer updates only its exact
+dependency selection, passes 61 tests, and returns the same 2,548 small numeric
+cases and five requested prefixes of 511 records. The 24 public edit/functional
+commands, 112 comparison commands, both bundles and all stage observations remain
+in that root. The comparison changes ordinary library meaning and closure size;
+it is not a kernel, native-tooling implementation or compiler-self-hosting claim.
+
 ## Repeated native editing, 2026-09-23
 
 The [autonomous continuation](campaigns/202609222330.md#repeated-native-editing--measurement-selection)
