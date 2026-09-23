@@ -4,8 +4,9 @@ The [summary example](native-summary.md) returns a few requested statistics.
 When callers need the complete frequency table, an ordinary generic function can
 select a page from the sorted entries. This example authors that function, uses
 it in a counting command and exports it for another application's record type.
-Use a v0.1.43 or later executable for the result-file commands; v0.1.43 is currently
-in candidate acceptance.
+Use a v0.1.43 or later executable for the result-file commands. The
+[ranking guide](native-ranking.md) instead orders entries by their frequency
+using an ordinary generic library and the development v0.1.44 standard window.
 
 ## Author the page command
 

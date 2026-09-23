@@ -1,0 +1,37 @@
+request base=CONSUMER_BASE
+add.dependency package=LIBRARY_PACKAGE semantic-revision=LIBRARY_REVISION package-revision=LIBRARY_PACKAGE_REVISION
+declarations.begin
+(units
+  (use std builtin)
+  (use ranking LIBRARY_PACKAGE LIBRARY_PACKAGE_REVISION)
+  (module create batches
+    (record create Shipment (visibility private)
+      (field create label (type Text))
+      (field create mass (type I64)))
+    (function create heavier (visibility private)
+      (parameter create left (type Shipment))
+      (parameter create right (type Shipment))
+      (returns Bool) (effect pure)
+      (body (call std::less (field (local right) Shipment::mass) (field (local left) Shipment::mass))))
+    (function create batch (visibility private)
+      (parameter create shipments (type (list Shipment)))
+      (returns (list Shipment)) (effect pure)
+      (body (call ranking::sort-by (types Shipment) (local shipments) (function-value heavier))))
+    (test create stable-order (visibility private)
+      (actual
+        (call batch
+          (list Shipment
+            (record Shipment (field Shipment::label (text "pear")) (field Shipment::mass (i64 9)))
+            (record Shipment (field Shipment::label (text "apple")) (field Shipment::mass (i64 9)))
+            (record Shipment (field Shipment::label (text "猫")) (field Shipment::mass (i64 11)))
+            (record Shipment (field Shipment::label (text "plum")) (field Shipment::mass (i64 9))))))
+      (expected
+        (list Shipment
+          (record Shipment (field Shipment::label (text "猫")) (field Shipment::mass (i64 11)))
+          (record Shipment (field Shipment::label (text "pear")) (field Shipment::mass (i64 9)))
+          (record Shipment (field Shipment::label (text "apple")) (field Shipment::mass (i64 9)))
+          (record Shipment (field Shipment::label (text "plum")) (field Shipment::mass (i64 9))))))
+    (component create console (visibility private)
+      (port create batch (type (function ((list Shipment)) (list Shipment))) (function batch))))
+  (target create batch (component batches::console) (runner command) (port batches::console::batch)))
+declarations.end

@@ -16,12 +16,11 @@ commands and original reader pass with joined cleanup. Complete source acceptanc
 is still due. Generated standard transport, artifact and discovery include
 the function. lkjournal keeps its prior exact supplier: checks pass and the
 complete rebuilt artifact is byte-identical. There is no data-format migration.
-This next-version work is independent of v0.1.43 candidate acceptance and its
-already authorized publication.
+v0.1.43 publication is complete at its separate frozen source.
 
 ## Command result files
 
-Development v0.1.43 adds optional `--result-file PATH` on both Command routes.
+Public v0.1.43 provides optional `--result-file PATH` on both Command routes.
 It publishes the exact bounded typed JSON through the existing create-new output
 owner, allowing values larger than one compact display record. Destination
 inspection precedes context/secret/adapter reads, and publication rechecks after
@@ -47,12 +46,12 @@ The [measurements](performance.md#rejected-json-text-materialization) retain all
 cases and their scope. Combined source `9394c0ea863823f0ce068e1e956253d92ae80471`
 passes all 20 fresh source gates with stable inputs and zero reuse and reached
 remote main unchanged. Candidate [35820435256/1](https://github.com/lkjsxc/lkjscript/actions/runs/35820435256)
-passes final-candidate, installation and original-reader acceptance. Its five
-authenticated handoff artifacts are retained. The authorized annotation and scoped
-selection now bind that source. The first promotion captured the prior selection
-and correctly rejected before transfer/publication. Promotion
-[35824461469/1](https://github.com/lkjsxc/lkjscript/actions/runs/35824461469) resumes with
-the same accepted producer. Immutable publication and anonymous verification remain due. The
+passes final-candidate, installation and original-reader acceptance. Promotion
+[35824461469/1](https://github.com/lkjsxc/lkjscript/actions/runs/35824461469) completes
+immutable publication and anonymous exact/latest installed verification. Public
+[v0.1.43](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.43) contains the same
+accepted assets. Candidate/publication originals and the genuinely rejected first
+promotion remain retained. The
 [framing record](campaigns/202609222330.md#typed-json-framing--newly-observed-output-boundary)
 preserves the original defect and earlier evidence at its actual scope.
 The [native summary guide](guides/native-summary.md) also passes fresh authoring,
@@ -60,10 +59,14 @@ checking and detached use, including a four-field result over 99,999 distinct ke
 The [paging guide](guides/native-pagination.md) returns all 99,997 independently
 checked entries in three bounded files and reuses its ordinary generic window
 function with a separately authored consumer's nominal record.
+The [ranking guide](guides/native-ranking.md) uses ordinary generic merge sort
+and the new standard window to return exact top entries. Its transported nominal
+consumer also runs on v0.1.43 after reviewed selection of the library's exact
+standard dependency; conflicting old/new pins reject before acceptance.
 
 ## Command input files
 
-Successor development v0.1.42 adds `--arguments-file PATH` to project and standalone
+Public v0.1.43 includes `--arguments-file PATH` on project and standalone
 command execution. It removes the observed OS argument-vector barrier for larger
 JSON inputs while retaining the existing 1 MiB byte limit, strict decoder, typed
 admission and effect ordering. The selectors are mutually exclusive; omitted input
@@ -73,7 +76,7 @@ shows both forms. Candidate [35810382909/1](https://github.com/lkjsxc/lkjscript/
 completes source/final-candidate, installation and original-reader acceptance.
 Publication is withheld for the subsequently observed shared JSON framing defect;
 no tag or scoped-selection change occurred. The accepted lineage is retained,
-and corrected successor source/target acceptance remains due.
+and its corrected successor v0.1.43 is publicly complete.
 
 The successor also shares immutable pack indexes across validated object reads.
 It uses one accepted source view for preparation and bounded reuse of fully

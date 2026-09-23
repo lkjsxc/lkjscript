@@ -24,7 +24,12 @@ const CURRENT_FILES: &[&str] = &[
     "packages/standard/README.md",
 ];
 
-const CURRENT_DIRECTORIES: &[&str] = &["docs/generated", "docs/guides", "docs/spec"];
+const CURRENT_DIRECTORIES: &[(&str, &str)] = &[
+    ("docs/generated", ".md"),
+    ("docs/guides", ".md"),
+    ("docs/guides/examples", ".lkjc"),
+    ("docs/spec", ".md"),
+];
 const HISTORICAL_FILES: &[&str] = &["docs/spec/semantic-diff-merge.md"];
 
 const PUBLIC_COMMANDS: &[&str] = &[
@@ -154,7 +159,7 @@ fn inspect_files(repository: &Path) -> Result<(Vec<Violation>, usize), DevError>
         .iter()
         .map(|path| (*path).to_owned())
         .collect::<Vec<_>>();
-    for directory in CURRENT_DIRECTORIES {
+    for &(directory, extension) in CURRENT_DIRECTORIES {
         let absolute = repository.join(directory);
         let metadata = fs::symlink_metadata(&absolute).map_err(|error| {
             DevError::infrastructure(format!(
@@ -197,13 +202,20 @@ fn inspect_files(repository: &Path) -> Result<(Vec<Violation>, usize), DevError>
                     absolute.display()
                 ))
             })?;
-            if !file_name.ends_with(".md") {
+            let relative = format!("{directory}/{file_name}");
+            // A nested owner is inspected independently, including its directory metadata.
+            if CURRENT_DIRECTORIES
+                .iter()
+                .any(|(owned, _)| *owned == relative.as_str())
+            {
+                continue;
+            }
+            if !file_name.ends_with(extension) {
                 return Err(DevError::infrastructure(format!(
                     "product-surface directory '{}' contains unexpected file '{file_name}'",
                     absolute.display()
                 )));
             }
-            let relative = format!("{directory}/{file_name}");
             if !HISTORICAL_FILES.contains(&relative.as_str()) {
                 paths.push(relative);
             }
@@ -501,6 +513,61 @@ fn repository_root() -> Result<std::path::PathBuf, DevError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn surface_fixture() -> tempfile::TempDir {
+        let root = tempfile::tempdir().unwrap();
+        for file in CURRENT_FILES {
+            let path = root.path().join(file);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, "current product guidance\n").unwrap();
+        }
+        for (directory, _) in CURRENT_DIRECTORIES {
+            fs::create_dir_all(root.path().join(directory)).unwrap();
+        }
+        root
+    }
+
+    #[test]
+    fn native_examples_receive_the_same_text_audit() {
+        let root = surface_fixture();
+        let path = root.path().join("docs/guides/examples/native.lkjc");
+        fs::write(&path, "request base=BASE\n").unwrap();
+        assert!(inspect_files(root.path()).unwrap().0.is_empty());
+        fs::write(&path, "Graph 5\n").unwrap();
+        let violations = inspect_files(root.path()).unwrap().0;
+        assert!(violations.iter().any(|violation| {
+            violation.path == "docs/guides/examples/native.lkjc"
+                && violation.kind == ViolationKind::TextLeak
+        }));
+    }
+
+    #[test]
+    fn native_examples_reject_unowned_entries_and_symlinks() {
+        let root = surface_fixture();
+        let examples = root.path().join("docs/guides/examples");
+        let unexpected = examples.join("unexpected.txt");
+        fs::write(&unexpected, "not a native request").unwrap();
+        assert!(inspect_files(root.path()).is_err());
+        fs::remove_file(unexpected).unwrap();
+        let nested = examples.join("unowned");
+        fs::create_dir(&nested).unwrap();
+        assert!(inspect_files(root.path()).is_err());
+        fs::remove_dir(nested).unwrap();
+        #[cfg(unix)]
+        {
+            let target = root.path().join("original.lkjc");
+            fs::write(&target, "request base=BASE\n").unwrap();
+            let alias = examples.join("alias.lkjc");
+            std::os::unix::fs::symlink(&target, &alias).unwrap();
+            assert!(inspect_files(root.path()).is_err());
+            fs::remove_file(alias).unwrap();
+            fs::remove_dir(&examples).unwrap();
+            let foreign = root.path().join("foreign-examples");
+            fs::create_dir(&foreign).unwrap();
+            std::os::unix::fs::symlink(&foreign, &examples).unwrap();
+            assert!(inspect_files(root.path()).is_err());
+        }
+    }
 
     #[test]
     fn patterns_reject_numbered_subsystems_without_false_positives() {
