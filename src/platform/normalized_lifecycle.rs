@@ -179,16 +179,17 @@ pub(crate) fn prepare_repository_with_control(
     control
         .check()
         .map_err(|error| Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message))?;
-    let current = repository.current()?;
-    let closure = repository
-        .view_current_with_control(control)?
-        .export_package_container()
-        .map_err(|mut error| {
+    // Bind authority and source to one observed revision without retaining the store afterward.
+    let (accepted, package_id, closure) = {
+        let view = repository.view_current_with_control(control)?;
+        let closure = view.export_package_container().map_err(|mut error| {
             error
                 .notes
                 .push("while exporting current accepted package closure".into());
             error
         })?;
+        (view.current().accepted, view.package(), closure)
+    };
     let oracle = super::package_transport::oracle::reconstruct(&closure.container).map_err(
         |mut error| {
             error
@@ -232,10 +233,10 @@ pub(crate) fn prepare_repository_with_control(
         .collect();
     let reference = PackageReference {
         binding: super::execution::normalized::NormalizedReferenceBinding {
-            repository: current.head.repository_id,
-            package: current.semantic_root.package_id,
-            revision: Some(current.head.revision),
-            semantic_state: Some(current.accepted.semantic_state),
+            repository: accepted.head.repository_id,
+            package: package_id,
+            revision: Some(accepted.head.revision),
+            semantic_state: Some(accepted.semantic_state),
         },
         oracle,
         schema: std::sync::Arc::new(schema),
@@ -244,10 +245,9 @@ pub(crate) fn prepare_repository_with_control(
     if reference
         .oracle
         .snapshots
-        .get(&current.semantic_root.package_id)
+        .get(&package_id)
         .is_none_or(|snapshot| {
-            super::kernel::semantic_state_digest(snapshot).ok()
-                != Some(current.accepted.semantic_state)
+            super::kernel::semantic_state_digest(snapshot).ok() != Some(accepted.semantic_state)
         })
     {
         return Err(lifecycle_error(
@@ -413,7 +413,7 @@ pub(crate) fn prepare_repository_with_control(
                         .manifest
                         .packages
                         .iter()
-                        .find(|package| package.package == current.semantic_root.package_id)
+                        .find(|package| package.package == package_id)
                         .ok_or_else(|| {
                             lifecycle_error(
                                 DiagnosticClass::Corrupt,
@@ -454,10 +454,10 @@ pub(crate) fn prepare_repository_with_control(
     let program = NormalizedProgram::prepare_with_control(artifact, control)?;
     let prepared = PreparedApplication {
         repository,
-        repository_id: current.head.repository_id,
-        package: current.semantic_root.package_id,
-        revision: current.head.revision,
-        semantic_state: current.accepted.semantic_state,
+        repository_id: accepted.head.repository_id,
+        package: package_id,
+        revision: accepted.head.revision,
+        semantic_state: accepted.semantic_state,
         cache_profile,
         compilation,
         units_compiled: units_compiled
@@ -613,6 +613,83 @@ mod tests {
         std::fs::write(&path, original).unwrap();
         let clean = prepare_repository(created.repository).unwrap();
         assert_eq!(clean.artifact_bytes, baseline.artifact_bytes);
+    }
+
+    #[test]
+    fn prepared_check_and_run_reject_a_new_revision_with_unchanged_meaning() {
+        use crate::platform::change::{
+            AuthoredChange, AuthoredChangeSet, ChangeBudget, OwnerSelector,
+        };
+        use crate::platform::kernel::OwnerRecord;
+        use crate::platform::project_creation::{ProjectTemplate, create_project};
+        use crate::platform::publication::{PublicationOptions, PublicationOutcome};
+
+        let temporary = tempfile::tempdir().expect("temporary command parent");
+        let root = temporary.path().join("command");
+        create_project(&root, "command", ProjectTemplate::Command).expect("command project");
+        let repository = GraphRepository::open(&root).expect("accepted command repository");
+        let prepared = prepare_repository(repository.clone()).expect("initial preparation");
+        let (module, original_name) = prepared.reference.oracle.snapshots[&prepared.package]
+            .owners
+            .iter()
+            .find_map(|(owner, record)| match record {
+                OwnerRecord::Module(module) => Some((*owner, module.name.clone())),
+                _ => None,
+            })
+            .expect("command module");
+        let mut revision = prepared.revision;
+        for name in [
+            Name::new("renamed-command").expect("renamed module"),
+            original_name,
+        ] {
+            let change = repository
+                .prepare_authored_change(
+                    &AuthoredChangeSet {
+                        base: revision,
+                        preconditions: Vec::new(),
+                        changes: vec![AuthoredChange::RenameOwner {
+                            owner: OwnerSelector::Exact { owner: module },
+                            name,
+                        }],
+                        budget: ChangeBudget::default(),
+                    },
+                    PublicationOptions::default(),
+                )
+                .expect("valid presentation change");
+            let PublicationOutcome::Accepted { current, .. } = repository
+                .publish(&change.publication)
+                .expect("publish presentation change")
+            else {
+                panic!("fresh rename must publish");
+            };
+            revision = current.head.revision;
+        }
+        let current = repository.current().expect("accepted restored name");
+        assert_eq!(current.head.revision, revision);
+        assert_ne!(current.head.revision, prepared.revision);
+        assert_eq!(current.accepted.semantic_state, prepared.semantic_state);
+
+        let control = ExecutionControl::default();
+        let target = Name::new("main").expect("command target");
+        let checked = prepared.check(&control).expect_err("stale check authority");
+        assert_eq!(checked.code, "lifecycle_authority_changed");
+        let run = prepared
+            .run(&target, b"[]", NormalizedCommandPolicy::default(), &control)
+            .expect_err("stale run authority");
+        assert_eq!(run.code, "lifecycle_authority_changed");
+        assert_eq!(
+            repository.current().expect("unchanged accepted HEAD").head,
+            current.head
+        );
+
+        let fresh = prepare_repository(repository).expect("fresh preparation after rename");
+        assert_eq!(fresh.revision, current.head.revision);
+        assert_eq!(fresh.check(&control).expect("fresh graph check").failed, 0);
+        let run = fresh
+            .run(&target, b"[]", NormalizedCommandPolicy::default(), &control)
+            .expect("fresh command run");
+        assert_eq!(run.result_json, b"\"hello\"");
+        assert_eq!(run.differential, "equal");
     }
 
     #[test]
