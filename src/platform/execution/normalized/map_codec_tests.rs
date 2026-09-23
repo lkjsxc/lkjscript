@@ -644,6 +644,47 @@ fn json_output_respects_the_unchanged_parser_container_limit() {
 }
 
 #[test]
+fn json_text_storage_rejects_before_serializing_the_value_tree() {
+    let mut fixture = fixture();
+    let list = admit_runtime_type(&mut fixture.program, TypeForm::List { item: fixture.text });
+    let mut canonical = (*fixture.reference.canonical).clone();
+    canonical
+        .types
+        .insert(list, fixture.program.types[&list].clone());
+    fixture.reference.canonical = Arc::new(canonical);
+    for schema in [
+        &fixture.program as &dyn super::super::value_schema::NormalizedValueSchema,
+        &fixture.reference,
+    ] {
+        // Count literal UTF-8 keys/values, independent of the encoder's traversal.
+        for (ty, json, text_bytes) in [
+            (list, br#"["abcd","abcd"]"#.as_slice(), 8),
+            (fixture.maps[3], br#"[["abcd",1],["efgh",2]]"#.as_slice(), 8),
+            (fixture.bytes, br#"{"$bytes":"AAECAw=="}"#.as_slice(), 14),
+            (fixture.text, "\"猫猫\"".as_bytes(), 6),
+        ] {
+            let value = codec::decode_typed(schema, json, ty, JsonLimits::default()).unwrap();
+            let retained = value.clone();
+            let limits = JsonLimits {
+                maximum_bytes: text_bytes - 1,
+                ..JsonLimits::default()
+            };
+            assert!(crate::platform::json::decode_application(json, limits).is_err());
+            // encode_value builds the JSON tree but never serializes it. The
+            // rejected text must not wait for encode_typed's final byte check.
+            let error = codec::encode_value(schema, &value, ty, limits).unwrap_err();
+            assert_eq!(error.class, DiagnosticClass::Resource);
+            assert_eq!(error.code, "normalized_json_output_bytes");
+            assert_eq!(value, retained);
+            assert_eq!(
+                codec::encode_typed(schema, &retained, ty, JsonLimits::default()).unwrap(),
+                json
+            );
+        }
+    }
+}
+
+#[test]
 fn map_key_encoding_cancellation_preserves_the_retained_value() {
     let fixture = fixture();
     let ty = fixture.maps[3];

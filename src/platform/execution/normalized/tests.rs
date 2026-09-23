@@ -3333,13 +3333,19 @@ fn nominal_and_structural_json_fields_obey_representation_limits() {
         &program as &dyn super::value_schema::NormalizedValueSchema,
         &reference,
     ] {
-        for (ty, json, items, string_bytes) in [
-            (record, br#"{"value":null}"#.as_slice(), 1, 5),
-            (structural, br#"{"flag":null}"#.as_slice(), 1, 4),
-            (payload_free, br#"{"case":"Ready"}"#.as_slice(), 1, 5),
-            (variant, br#"{"case":"A"}"#.as_slice(), 1, 4),
-            (variant, br#"{"case":"Ready"}"#.as_slice(), 1, 5),
-            (variant, br#"{"case":"B","value":null}"#.as_slice(), 2, 5),
+        for (ty, json, items, string_bytes, text_bytes) in [
+            (record, br#"{"value":null}"#.as_slice(), 1, 5, 5),
+            (structural, br#"{"flag":null}"#.as_slice(), 1, 4, 4),
+            (payload_free, br#"{"case":"Ready"}"#.as_slice(), 1, 5, 9),
+            (variant, br#"{"case":"A"}"#.as_slice(), 1, 4, 5),
+            (variant, br#"{"case":"Ready"}"#.as_slice(), 1, 5, 9),
+            (
+                variant,
+                br#"{"case":"B","value":null}"#.as_slice(),
+                2,
+                5,
+                10,
+            ),
         ] {
             assert_json_representation_limits(
                 schema,
@@ -3352,6 +3358,22 @@ fn nominal_and_structural_json_fields_obey_representation_limits() {
                     maximum_string_bytes: string_bytes,
                 },
             );
+            let value = decode_typed(schema, json, ty, JsonLimits::default()).unwrap();
+            let error = super::codec::encode_value(
+                schema,
+                &value,
+                ty,
+                JsonLimits {
+                    maximum_bytes: text_bytes - 1,
+                    ..JsonLimits::default()
+                },
+            )
+            .unwrap_err();
+            assert_eq!(
+                error.class,
+                crate::platform::diagnostic::DiagnosticClass::Resource
+            );
+            assert_eq!(error.code, "normalized_json_output_bytes");
         }
     }
 }

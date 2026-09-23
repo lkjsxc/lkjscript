@@ -58,6 +58,16 @@ that guard without disabling it. The joined 2 MiB codec worker retains independe
 typed-data acceptance through 128 Maps, JSON acceptance through 63 Maps and rejection
 of the next JSON pair level. Existing typed-data bytes and shared retained values survive.
 
+Aggregate text reservation has independent literal UTF-8 counts for repeated List
+values, Map keys, Unicode Text, Bytes base64 and keys, nominal/structural field
+names and variant tags. A byte limit below that lower bound must reject during
+JSON tree construction, before serialization. Retained runtime values must remain
+usable and reproduce the original bytes under sufficient limits. A copied native
+list-map program complements those tests with identical bundle/input bytes across
+predecessor and corrected executables: preserve exact valid output, output-byte
+rejection, absent failed outputs and joined cleanup. Sampled process-memory
+observations retain all cases and do not establish a whole-process memory cap.
+
 Offline-package receipt schema 16 adds the ordinary transported `totals-by<Item>` library and
 caller-owned nominal event consumer, six retained snapshots, checked overflow/missing lookup,
 reviewed body evolution, exact dependency replacement and old/new bundles after source removal.

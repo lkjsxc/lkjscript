@@ -307,6 +307,33 @@ may overlap, so no elapsed-time comparison follows. The initial `/usr/bin/time`
 launcher was unavailable before product startup; its failure remains preserved,
 and only the pending invocations resumed with the process sampler.
 
+The corrected encoder reserves aggregate text before cloning it. The same native
+bundle and four literal inputs are observed with accepted source adbe4f63's
+retained executable 59580ca9… and corrected executable f6c44a8c… (8e91d143 base
+with the reservation change). Both use Rust 1.98.0, locked dependencies, LTO and
+one codegen unit on the same x86-64 Linux host; the predecessor is the maintained
+workspace release build and the successor is a product-only release build.
+Package selection therefore differs. No isolated latency claim follows.
+
+| Copies | Previous sampled peak RSS, KiB | Corrected sampled peak RSS, KiB | Result |
+|---|---:|---:|---|
+| 15 | 17,560 | 17,056 | Identical 983,086-byte files |
+| 16 | 17,552 | 18,080 | Same final exact-byte rejection |
+| 128 | 31,984 | 15,600 | Corrected encoder rejects before text 17 is copied |
+| 1,024 | 146,924 | 16,036 | Corrected encoder rejects before text 17 is copied |
+
+One observation per executable/input alternates order and retains the higher
+small-case result. The 1 ms samples can miss the final peak. At 16 copies, text
+alone fits exactly but punctuation exceeds the bound; the final check remains
+necessary. Larger cases reject at the 1,114,112-byte text lower bound. All eight
+children join, failed output files remain absent, and the successful files match
+every byte. This establishes the bounded workload's output behavior and observed
+memory reduction, not a general process-memory bound. `reservation-products.json`,
+`reservation-comparison.json`, original argv/streams/exits/samples and both immutable
+executables remain beside the original native inputs. The first comparison harness
+misread the successful cleanup record; the product had succeeded. Its originals
+were admitted after correcting that assertion, and only pending children resumed.
+
 ## Persistent ordered maps, 2026-09-19
 
 The [map campaign](campaigns/202609191922.md#corrected-immutable-candidate)

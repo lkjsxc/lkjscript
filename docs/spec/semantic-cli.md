@@ -911,6 +911,14 @@ Bytes' `$bytes` value and variants' `case`/`value` fields also count. String-byt
 limits include object field names, case labels and base64 text. Whole-type
 directional eligibility still visits unused arguments and inactive cases separately.
 
+Before constructing JSON text, the encoder reserves its aggregate UTF-8 byte
+length against the existing encoded-byte bound. Repeated strings, object keys,
+case labels and generated base64 text all count before copying or allocation.
+This lower bound can reject an already oversized result with
+`normalized_json_output_bytes`; escaping, punctuation and scalar encoding still
+receive the final exact serialized-byte check. It is a boundary-output bound,
+not a whole-process memory cap or an internal language execution quota.
+
 Current defaults are 1 MiB of encoded bytes, 100,000 JSON items, depth 128 and
 1 MiB per decoded string. The pinned strict reader additionally admits at most
 127 nested array/object containers; the output encoder respects that same guard.

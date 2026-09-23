@@ -95,10 +95,11 @@ the repair rather than transferred from this predecessor.
 
 Development v0.1.43 adds result files and corrects JSON representation accounting.
 Source adbe4f63f178d4a418276461ea1345131565fbe4 passes all 20 fresh source gates
-and reached remote main unchanged. A subsequent buffer observation selects early
+and reached remote main unchanged. A subsequent buffer observation leads to early
 text reservation against the existing output-byte bound before large rejected
-results are expanded. The combined candidate will be dispatched after that change
-and renewed source acceptance; no v0.1.43 producer is frozen yet. The user explicitly
+results are expanded. Focused tests and the unchanged native bundle/input workload
+pass. The combined candidate will be dispatched after renewed source acceptance
+and mainline integration; no v0.1.43 producer is frozen yet. The user explicitly
 authorized the complete corrected release operation, including annotated tag and
 scoped-selection updates, unchanged-asset publication and anonymous verification.
 That authorization does not waive any acceptance or immutability requirement.

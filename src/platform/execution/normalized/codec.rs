@@ -118,6 +118,7 @@ pub(crate) fn encode_value_with_control(
     let mut state = EncodeState {
         limits,
         items: 0,
+        text_bytes: 0,
         control,
     };
     to_json(program, value, ty, &mut state, "$", 0)
@@ -899,12 +900,13 @@ fn bytes_to_json(
             "base64 bytes exceed the JSON string or output-byte limit",
         ));
     }
+    state.reserve_text(encoded_length, &field_path)?;
     Ok(serde_json::json!({
         "$bytes": base64::engine::general_purpose::STANDARD.encode(value),
     }))
 }
 
-fn text_to_json(value: &str, state: &EncodeState, path: &str) -> Result<JsonValue, Diagnostic> {
+fn text_to_json(value: &str, state: &mut EncodeState, path: &str) -> Result<JsonValue, Diagnostic> {
     state.require_string(value, path)?;
     Ok(JsonValue::String(value.to_owned()))
 }
@@ -913,6 +915,7 @@ fn text_to_json(value: &str, state: &EncodeState, path: &str) -> Result<JsonValu
 struct EncodeState<'a> {
     limits: JsonLimits,
     items: usize,
+    text_bytes: usize,
     control: &'a ExecutionControl,
 }
 
@@ -933,10 +936,35 @@ impl EncodeState<'_> {
         Ok(())
     }
 
-    fn require_string(&self, value: &str, path: &str) -> Result<(), Diagnostic> {
+    fn require_string(&mut self, value: &str, path: &str) -> Result<(), Diagnostic> {
         if value.len() > self.limits.maximum_string_bytes {
             return Err(type_error(path, "text exceeds the JSON string-byte limit"));
         }
+        self.reserve_text(value.len(), path)
+    }
+
+    // Every UTF-8 string byte needs at least one encoded byte. Reserve repeated
+    // values, object keys and generated text before cloning/allocating them.
+    // Punctuation and escaping still require the final exact serialized-byte check.
+    fn reserve_text(&mut self, bytes: usize, path: &str) -> Result<(), Diagnostic> {
+        let total = self.text_bytes.checked_add(bytes).ok_or_else(|| {
+            json_error(
+                DiagnosticClass::Resource,
+                "normalized_json_output_bytes",
+                format!("{path}: typed JSON text size overflowed its platform domain"),
+            )
+        })?;
+        if total > self.limits.maximum_bytes {
+            return Err(json_error(
+                DiagnosticClass::Resource,
+                "normalized_json_output_bytes",
+                format!(
+                    "{path}: typed JSON text alone needs at least {total} bytes; the output limit is {}",
+                    self.limits.maximum_bytes
+                ),
+            ));
+        }
+        self.text_bytes = total;
         Ok(())
     }
 

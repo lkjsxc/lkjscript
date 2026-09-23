@@ -30,9 +30,11 @@ result. Over-limit output now fails before file publication; valid bytes and
 typed-data limits remain unchanged.
 Source `adbe4f63f178d4a418276461ea1345131565fbe4` passes all 20 fresh source
 gates with stable inputs and zero reuse and reached remote main unchanged.
-Further output preparation work will reserve text before cloning: a shared
-64 MiB logical result is correctly rejected but currently materializes it first.
-Final-target acceptance and publication follow that improvement and renewed proof;
+The next correction reserves aggregate JSON text before copying it. Focused
+boundary tests and a copied native shared-text program pass; its 64 MiB logical
+result now rejects before full expansion, with exact valid bytes preserved.
+The [measurements](performance.md#rejected-json-text-materialization) retain all
+cases and their scope. Renewed source and final-target acceptance remain due;
 the user has authorized the complete release operation. The
 [framing record](campaigns/202609222330.md#typed-json-framing--newly-observed-output-boundary)
 preserves the original defect and earlier evidence at its actual scope.
