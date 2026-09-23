@@ -105,6 +105,129 @@ commands, 112 comparison commands, both bundles and all stage observations remai
 in that root. The comparison changes ordinary library meaning and closure size;
 it is not a kernel, native-tooling implementation or compiler-self-hosting claim.
 
+### Native tournament tree alternative
+
+A second ordinary implementation uses finite recursive private records/variants.
+It builds a balanced tree over the first clamped count of items; each branch caches
+its worst leaf and the child containing it. A better incoming item replaces only
+that leaf's path. Original input positions break equivalent comparisons, and
+worst-first removal followed by reversal preserves stable output. Replacement
+preserves the original tree depth; removal can shorten it. All implementation
+types are private and the entry helper is package-visible. The existing public
+`select-by` identity and interface remain unchanged.
+
+The same copied c5e216cd… executable, host and exact 14 input files compare the
+preserved range, Map heap and tournament bundles. One warmup round is excluded;
+the three measured rounds rotate order so each implementation occupies each
+position once. All 168 result files match independently counted/sorted expectations,
+with joined cleanup and no overlapping owned workload. These are fresh medians,
+not a combination of samples from the previous comparison.
+
+| Workload, requested count | Range ms | Map heap ms | Tournament ms |
+|---|---:|---:|---:|
+| 512 rows / 131 keys, 17 | 12.353 | 7.877 | 6.645 |
+| 16,384 rows / 4,097 keys, 17 | 389.420 | 187.991 | 168.511 |
+| 99,998 rows / 25,001 keys, 17 | 2,419.440 | 1,220.884 | 1,065.725 |
+| 99,998 rows / 99,998 keys, 17 | 6,986.022 | 2,106.259 | 1,780.303 |
+| 65,516 rows / 4,096 varied keys, 17 | 800.380 | 607.291 | 577.333 |
+| 512 rows / 131 keys, zero | 4.352 | 4.153 | 4.075 |
+| 512 rows / 131 keys, all | 14.566 | 31.491 | 19.079 |
+| 16,384 rows / 4,097 keys, all | 647.270 | 1,758.980 | 815.127 |
+| Empty input | 0.077 | 0.072 | 0.074 |
+| 4,096 ascending numbers, 17 | 119.206 | 23.439 | 13.948 |
+| 4,096 descending numbers, 17 | 119.982 | 258.913 | 159.578 |
+| 4,096 permuted numbers, 17 | 120.455 | 25.912 | 16.102 |
+| 4,096 permuted numbers, 2,048 | 246.367 | 582.762 | 370.717 |
+| 4,096 permuted numbers, all | 258.826 | 778.898 | 501.776 |
+
+The tree improves on the Map heap's measured nonempty selections, but still loses
+to range merge for descending input and large/full selections. Empty-input whole
+process time rises from 54.754 to 59.974 ms, including the larger closure's
+preparation. In the all-distinct workload, charged cumulative allocation is
+539,438,784 bytes versus the Map heap's 535,478,066; on descending numbers it is
+86,213,504 versus range merge's 70,072,251. These are cumulative charges, not peak
+memory. Faster invocation does not imply uniformly lower allocation or preparation.
+The general guide therefore retains range merge at this observation.
+
+The native edit creates 386 owners and 57 types, changes only the existing public
+function, and retires 27 replaced body/binding owners. All 58 library tests and 61
+transported-consumer tests pass, along with the same 2,548 small cases and five
+counts over 511 nominal records. Its 24,221-byte canonical module draft re-enters
+unchanged with identical accepted HEAD bytes. The initial request's misspelled
+standard equality name is a retained pre-acceptance rejection; the corrected
+request uses the known positive-size bound. Literal requests, actual plans,
+28 successful edit/functional/round-trip commands, that rejection, all 168
+comparison commands and raw stage observations remain in
+`/home/coder/workspace/lkjscript-tournament-selection-evidence-20260923`.
+This remains a native library experiment, separate from standard adoption and
+the frozen release candidate.
+
+### Native buffered selection
+
+The next implementation reuses the original range sort and bounded merge. It
+sorts the first clamped count, scans later items against the worst retained item,
+and collects better candidates in a buffer of at most that count. A full buffer
+is sorted and merged into the retained prefix; the remainder is flushed at the
+end. Earlier retained values win equivalent comparisons. When count covers the
+whole input, the initial range sort is already the result. The new algorithm adds
+two private helpers without requiring a new record, variant, Map or intrinsic.
+
+The prototype edits the same public declaration through a native reviewed change:
+145 created owners, six types, one updated declaration and 27 retired body/binding
+owners, with unchanged public interface. All 58 library and 61 transported-consumer
+tests pass, as do the same 2,548 small cases and five prefixes of 511 nominal records.
+Its 23,913-byte canonical module draft re-enters unchanged, with identical accepted
+HEAD bytes. The prototype is retained separately from the maintained guide below.
+
+The same c5e216cd… executable and host compare the original range bundle and the
+buffered prototype using all 14 prior input files. Each case has one excluded
+warmup pair and three measured pairs in alternating order. All 112 result files
+match the independent expected bytes, with joined cleanup and no overlapping
+owned workload. These are invocation medians from this comparison alone.
+
+| Workload, requested count | Range ms | Buffered ms |
+|---|---:|---:|
+| 512 rows / 131 keys, 17 | 11.882 | 7.121 |
+| 16,384 rows / 4,097 keys, 17 | 374.756 | 177.969 |
+| 99,998 rows / 25,001 keys, 17 | 2,313.606 | 1,136.745 |
+| 99,998 rows / 99,998 keys, 17 | 6,923.384 | 1,892.960 |
+| 65,516 rows / 4,096 varied keys, 17 | 799.704 | 592.177 |
+| 512 rows / 131 keys, zero | 4.124 | 4.370 |
+| 512 rows / 131 keys, all | 14.736 | 13.833 |
+| 16,384 rows / 4,097 keys, all | 651.353 | 649.672 |
+| Empty input | 0.082 | 0.072 |
+| 4,096 ascending numbers, 17 | 120.732 | 15.164 |
+| 4,096 descending numbers, 17 | 117.443 | 140.750 |
+| 4,096 permuted numbers, 17 | 118.567 | 16.653 |
+| 4,096 permuted numbers, 2,048 | 251.429 | 252.529 |
+| 4,096 permuted numbers, all | 265.969 | 260.089 |
+
+Descending input still loses, and the half-selection is slightly slower. The
+small counting workload's whole-process median rises from 65.965 to 66.476 ms
+despite faster invocation; preparation rises from 43.294 to 47.340 ms. For the
+all-distinct case, invocation ranges are 6,916.532–7,055.121 versus
+1,858.874–1,905.081 ms. Cumulative allocation changes from 2,090,155,259 to
+550,420,616 bytes and instructions from 29,032,957 to 6,303,000. On descending
+numbers cumulative allocation instead increases from 70,072,251 to 80,927,912.
+These charges are not peak memory, and three samples establish no universal
+latency, allocation, model-token or cost guarantee.
+
+Literal edits, accepted graphs, transports, bundles, 28 functional/round-trip
+commands, all 112 comparison commands, environment and raw stage observations
+remain in `/home/coder/workspace/lkjscript-buffered-selection-evidence-20260923`.
+The [ranking guide](guides/native-ranking.md) exposes this body as the optional
+`select-buffered-by` function and `top-buffered` command while keeping range
+selection available. That larger maintained program has a distinct accepted
+graph and closure; the prototype timings are not relabelled as its measurements.
+Fresh authoring of that exact maintained template passes 63 tests. A separate
+consumer chooses the buffered generic function for its own private record and
+passes 66 tests, all 2,548 numeric cases and five counts over 511 nominal records.
+The unchanged minimal guide consumer also passes 66 tests and both project/detached
+targets using range selection. All 45 public commands, the unchanged canonical
+round trip and literal inputs remain in
+`/home/coder/workspace/lkjscript-buffered-guide-evidence-20260923`. This is ordinary
+library authoring and use, not new standard adoption or a native compiler/tool.
+
 ## Repeated native editing, 2026-09-23
 
 The [autonomous continuation](campaigns/202609222330.md#repeated-native-editing--measurement-selection)

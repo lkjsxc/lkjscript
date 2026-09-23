@@ -5,6 +5,8 @@ An ordinary generic `select-by` function accepts the application's comparison
 function and keeps the requested prefix during merging. Equal frequencies retain
 the Map's ascending key order. The library also offers full stable merge sort;
 both functions accept a separate application's own nominal records.
+The same library also offers `select-buffered-by` for workloads that benefit from
+collecting candidate replacements and merging them in batches.
 
 The commands below use the built-in standard from development v0.1.44 or later,
 which provides `list-window`. The [summary guide](native-summary.md) covers a single most frequent
@@ -73,6 +75,27 @@ counter. Full `sort-by` still constructs immutable halves using standard
 `list-window`. Normal preparation, execution and result limits apply. Both
 algorithms are native library bodies in the request, using ordinary public calls.
 
+`select-buffered-by` has the same arguments, count clamping and stable-result
+contract as `select-by`. It first sorts the requested number of items, then scans
+the remainder against the worst retained item. Better candidates accumulate in
+a buffer bounded by the requested count. Each full buffer is sorted and merged
+with the retained prefix; a final partial buffer is merged at the end. Earlier
+retained items win equivalent comparisons against later buffered items. A complete
+selection uses the original range sort directly. The full frequency table is
+still built, and comparison calls/failures can differ between algorithms.
+
+The `top-buffered` command uses this alternative:
+
+```sh
+./lkjscript --project ./ranking run top-buffered --arguments '[["pear","apple","pear"],2]'
+```
+
+It returns the same two entries as `top`. For standalone execution, set the
+descriptor's `target` to `top-buffered`. The [matched prototype measurements](../performance.md#native-buffered-selection)
+show improvements for small prefixes over varied/permuted inputs, but a slowdown
+for descending numeric input. Choose using the actual workload; neither function
+promises a universal speedup.
+
 ## Run the bundle with file input
 
 Save `ranked.deployment.json` beside the bundle:
@@ -132,6 +155,7 @@ Export the accepted project and stage it in another command project:
 ./lkjscript --project ./batches package dependency stage --transport LIBRARY_TRANSPORT --input-file ./rankings.lkjp
 ./lkjscript --project ./batches package dependency query owners --package-revision LIBRARY_PACKAGE_REVISION --name sort-by
 ./lkjscript --project ./batches package dependency query owners --package-revision LIBRARY_PACKAGE_REVISION --name select-by
+./lkjscript --project ./batches package dependency query owners --package-revision LIBRARY_PACKAGE_REVISION --name select-buffered-by
 ./lkjscript --project ./batches status
 ```
 
@@ -142,6 +166,9 @@ defines its own private `Shipment` and passes a named `heavier` comparator to
 `ranking::sort-by (types Shipment)` or `ranking::select-by (types Shipment)`.
 Save it as `consumer.lkjc`, substitute those
 identities and replace `CONSUMER_BASE` with the consumer's current revision.
+To choose buffered selection, change its `ranking::select-by` call to
+`ranking::select-buffered-by` before planning; its generic argument and parameters
+are identical. Both versions accept the consumer's private `Shipment` type.
 
 ```sh
 ./lkjscript --project ./batches change plan --input-file ./consumer.lkjc --output ./consumer.logical-plan

@@ -74,7 +74,11 @@ The [ranking guide](guides/native-ranking.md) adds ordinary generic bounded
 selection alongside full merge sort. Its fresh native and transported nominal
 consumers pass, including 2,548 small input/count combinations. Matched
 [measurements](performance.md#native-bounded-selection-2026-09-23) retain both
-improvements and slower cases. The earlier full-sort consumer also runs on v0.1.43
+improvements and slower cases. The optional `select-buffered-by` function and
+`top-buffered` command reuse the same native merge helpers and preserve stable
+results while avoiding per-item replacement. Fresh authoring and transported
+nominal use pass; descending input remains a measured slower case, so range
+selection stays available. The earlier full-sort consumer also runs on v0.1.43
 after reviewed exact standard selection; conflicting pins reject before acceptance.
 
 ## Command input files

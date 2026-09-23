@@ -51,7 +51,12 @@ standard selection from a v0.1.43 client. This is a library workflow, not a new
 sorting intrinsic. An ordinary bounded-selection successor now avoids complete
 sorting for a small requested prefix, with independent numeric/nominal checks and
 matched measurements. This guide-library improvement does not change the frozen
-v0.1.44 product source or add a publication prerequisite. Further standard-library
+v0.1.44 product source or add a publication prerequisite. Measured Map-heap and
+tournament alternatives retain order-sensitive regressions. A buffered alternative
+reuses the existing merge helpers and is available explicitly in the native guide,
+with fresh authoring and nominal-consumer proof; it also retains descending-input
+regressions rather than replacing the general choice unconditionally. Further
+standard-library
 adoption needs a concrete maintained consumer and its normal closure acceptance.
 v0.1.43 publication is complete independently of this increment.
 
