@@ -7,29 +7,33 @@ retain detailed implementation and verification history.
 
 ## Standard list windows
 
-Development v0.1.44 adds ordinary pure `list-window<Item>(items, start, count)`.
+Public v0.1.44 adds ordinary pure `list-window<Item>(items, start, count)`.
 It preserves order and clamps start/count without overflow at the signed I64
 extremes. The native standard request passes all 45 package tests, including
 eight new range/type cases. The existing transported aggregation consumer now
 uses it for structural entry pages and nominal events; its 72 copied-product
 commands and original reader pass with joined cleanup. Generated standard transport,
 artifact and discovery include the function. lkjournal keeps its prior exact supplier:
-checks pass and the complete rebuilt artifact is byte-identical. There is no data-format migration.
+checks pass and the complete rebuilt artifact is byte-identical. There is no
+data-format migration.
 
 Corrected source `9ea93419` passes all 20 fresh source gates with stable inputs
 and zero reuse and reached remote main unchanged. Candidate
 [35833374673/1](https://github.com/lkjsxc/lkjscript/actions/runs/35833374673)
 is accepted at that exact source: six target owners, two pinned userlands,
 installation/recovery and original-reader admission all pass with joined cleanup.
-The annotated tag and scoped selection are set. Authorized promotion
+Authorized promotion
 [35838470851/1](https://github.com/lkjsxc/lkjscript/actions/runs/35838470851)
-publishes the same assets as immutable v0.1.44. Its public verification rejects
-an empty asset inventory from the tag lookup; the same release ID reports all three
-accepted assets. The corrected controller resolves and strictly admits that same
-ID's complete inventory. Anonymous exact/latest installed verification remains due.
+publishes the same assets as immutable
+[v0.1.44](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.44).
+After correcting the controller's public metadata lookup, resumption
+[35841466243/1](https://github.com/lkjsxc/lkjscript/actions/runs/35841466243)
+passes anonymous exact/latest acquisition, attestations, installed lifecycles and
+the terminal decision using the original accepted producer and verifier.
 The [release record](campaigns/202609222330.md#accepted-v0144-and-the-requested-release-stopping-point)
-retains authenticated originals and the first candidate's genuine stale-count
-rejection. v0.1.43 remains complete at its separate frozen source.
+retains authenticated originals, the first candidate's stale-count rejection and
+the first public-boundary failure. The requested release stopping point is complete.
+v0.1.43 remains complete at its separate frozen source.
 
 ## Command result files
 

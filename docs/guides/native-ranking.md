@@ -8,7 +8,7 @@ both functions accept a separate application's own nominal records.
 The same library also offers `select-buffered-by` for workloads that benefit from
 collecting candidate replacements and merging them in batches.
 
-The commands below use the built-in standard from development v0.1.44 or later,
+The commands below use the built-in standard from v0.1.44 or later,
 which provides `list-window`. The [summary guide](native-summary.md) covers a single most frequent
 key; the [paging guide](native-pagination.md) returns a complete table in key order.
 

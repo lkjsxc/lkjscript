@@ -88,21 +88,35 @@ then observes an existing typed-JSON framing defect: Map output exceeds the
 advertised JSON item bound, and source inspection finds undercounted entry-array
 depth. Publication of this candidate is withheld for
 correction, while its authentic successful evidence remains unchanged. No v0.1.42
-tag or scoped-selection update has occurred. The existing control still names
-completed v0.1.41. Corrected successor acceptance and explicit scoped publication
-authorization govern the next delivery; source/target proof must be renewed for
-the repair rather than transferred from this predecessor.
+tag or scoped-selection update occurred. At that checkpoint the control still
+named completed v0.1.41. The corrected successor below renewed source/target
+proof and supersedes this withheld lineage.
 
-Development v0.1.43 adds result files, corrects JSON representation accounting and
+Public v0.1.43 adds result files, corrects JSON representation accounting and
 reserves aggregate text before copying an already oversized result. Combined source
 9394c0ea863823f0ce068e1e956253d92ae80471 passes all 20 fresh source gates and
-reached remote main unchanged. One candidate
-[35820435256/1](https://github.com/lkjsxc/lkjscript/actions/runs/35820435256) runs at
-that exact product/controller source after current occupancy and mainline admission.
-Final-candidate acceptance and subsequent publication remain due. The user explicitly
-authorized the complete corrected release operation, including annotated tag and
-scoped-selection updates, unchanged-asset publication and anonymous verification.
-That authorization does not waive any acceptance or immutability requirement.
+reached remote main unchanged. Candidate
+[35820435256/1](https://github.com/lkjsxc/lkjscript/actions/runs/35820435256) passed
+at that exact product/controller source. Promotion
+[35824461469/1](https://github.com/lkjsxc/lkjscript/actions/runs/35824461469) completed
+immutable publication and anonymous exact/latest installed verification. The
+[release record](campaigns/202609222330.md#typed-json-framing--newly-observed-output-boundary)
+preserves its accepted originals and genuinely rejected first promotion.
+
+v0.1.44 adds ordinary standard `list-window` and maintained transported adoption.
+Candidate [35833374673/1](https://github.com/lkjsxc/lkjscript/actions/runs/35833374673)
+is accepted at exact source `9ea93419f1c5e76126548ac5460752fe4cc4511b`.
+Promotion [35838470851/1](https://github.com/lkjsxc/lkjscript/actions/runs/35838470851)
+published its same three assets as immutable release
+[v0.1.44](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.44), `394461526`,
+then public verification rejected an incomplete tag-lookup inventory. The corrected
+controller at `6ea0ff6db6605f07fe8192a53dbf708f5d4ecc5f` resumed only that boundary in
+[35841466243/1](https://github.com/lkjsxc/lkjscript/actions/runs/35841466243), using
+the original accepted producer and verifier. Anonymous exact/latest acquisition,
+attestations, installed lifecycles and terminal `public_recheck_passed` complete
+this release. The [record](campaigns/202609222330.md#v0144-public-metadata-boundary-and-resumption)
+retains original identities, failures and the separate controller proof. The user's
+release authorization remains valid without waiving acceptance or immutability.
 
 ## Content and compatibility
 

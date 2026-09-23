@@ -6,7 +6,7 @@ select a page from the sorted entries. This example authors that function, uses
 it in a counting command and exports it for another application's record type.
 Use a v0.1.43 or later executable for the result-file commands. The
 [ranking guide](native-ranking.md) instead orders entries by their frequency
-using an ordinary generic library and the development v0.1.44 standard window.
+using an ordinary generic library and the v0.1.44 standard window.
 
 ## Author the page command
 
@@ -37,7 +37,7 @@ result. The requested count is clamped to the remaining length before addition,
 so even the largest I64 start/count cannot overflow this index calculation.
 No negative-index-from-the-end convention is implied.
 
-Development v0.1.44 also provides this policy as the ordinary standard function
+v0.1.44 also provides this policy as the ordinary standard function
 `std::list-window<Item>`. New programs can call it directly, for example
 `(call std::list-window (types Text) (local items) (i64 0) (i64 10))`.
 Discover it with `package builtin query owners --name list-window`.

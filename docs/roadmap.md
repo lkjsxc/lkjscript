@@ -35,13 +35,14 @@ and reached remote main unchanged. Candidate
 passes final-candidate, installation/recovery and original-reader acceptance.
 The tag and scoped selector bind that accepted source; authorized promotion
 [35838470851/1](https://github.com/lkjsxc/lkjscript/actions/runs/35838470851)
-publishes immutable v0.1.44, then public verification rejects an empty tag-lookup
-inventory despite complete assets at the same release ID. The corrected controller
-resolves that same ID and admits its full inventory; resume anonymous exact/latest
-installed verification with the original producer. Completing this release is the
-user's selected stopping point. The
+publishes immutable [v0.1.44](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.44).
+Public-only resumption
+[35841466243/1](https://github.com/lkjsxc/lkjscript/actions/runs/35841466243)
+completes anonymous exact/latest installed verification after a controller metadata
+lookup correction, using the original accepted producer and verifier. The user's
+selected stopping point is complete; no further autonomous work is selected. The
 [record](campaigns/202609222330.md#accepted-v0144-and-the-requested-release-stopping-point)
-retains the rejected first producer, corrected fixture expectations and all originals.
+retains the rejected first producer, failed first public boundary and all originals.
 
 ## Next workload and decision criteria
 
