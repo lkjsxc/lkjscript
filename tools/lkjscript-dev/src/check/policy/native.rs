@@ -1,5 +1,6 @@
 //! Typed observation adapter. All extension/shebang decisions belong to native meaning.
 use crate::error::DevError;
+use base64::Engine;
 use lkjscript::platform::{ExecutionControl, JsonLimits, native_tool::PureTool};
 use serde::Serialize;
 use std::sync::OnceLock;
@@ -12,7 +13,10 @@ pub(super) fn extensions(values: &[&str]) -> Result<Vec<bool>, DevError> {
 }
 
 pub(super) fn shebangs(values: &[Vec<u8>]) -> Result<Vec<bool>, DevError> {
-    classify("shebangs", values)
+    let observations = values.iter().map(|value| {
+        serde_json::json!({"$bytes": base64::engine::general_purpose::STANDARD.encode(value)})
+    }).collect::<Vec<_>>();
+    classify("shebangs", &observations)
 }
 
 fn classify<T: Serialize>(target: &str, observations: &[T]) -> Result<Vec<bool>, DevError> {

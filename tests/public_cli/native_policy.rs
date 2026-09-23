@@ -3,7 +3,7 @@ use super::*;
 use lkjscript::platform::{ExecutionControl, JsonLimits, native_tool::PureTool};
 use serde_json::json;
 
-const SOURCE: &str = include_str!("../../tools/native-policy/requests/create.lkjc");
+const SOURCE: &str = include_str!("../../tools/native-policy/requests/create-bytes.lkjc");
 
 struct PolicyTool {
     root: tempfile::TempDir,
@@ -116,7 +116,7 @@ impl PolicyTool {
         let records = self.project(&["check"]);
         assert_eq!(
             compact_field(compact_record(&records, "tests"), "passed"),
-            Some("56")
+            Some("62")
         );
         assert_eq!(
             compact_field(compact_record(&records, "tests"), "differential"),

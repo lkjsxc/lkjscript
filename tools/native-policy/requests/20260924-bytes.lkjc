@@ -1,0 +1,179 @@
+request base=rev_789555a65fd64a1d0673778d125c34973ec26a5ec045a5b157b9030664daa19e repository=repo_54ed788f6c9db58a37e0a2ed48cfa0dc package=pkg_f612694a4745b4a6078d0fff23e24bc8
+replace.dependency package=pkg_10000000000000000000000000000001 semantic-revision=rev_5d00fff04177aa1dc77315c97b6826f94be77e742fca0f70177f75c6b2dae858 package-revision=package_revision_3961d45ef8575628bb8d34e3991c2901091908671450e23474094ce6ca88da30
+
+declarations.begin
+(units
+  (use std builtin)
+  ; Reconstructed from canonical meaning. Original comments, formatting and type aliases are not stored.
+  (reference ref_i64-equal_4 declaration pkg_10000000000000000000000000000001/decl_222d72e76ff0ecd3763618cf1815c6f8)
+  (reference ref_list-get_5 declaration pkg_10000000000000000000000000000001/decl_2afcba2a7b41a407a020891e0f65a161)
+  (reference ref_less_3 declaration pkg_10000000000000000000000000000001/decl_3b91f4bc0297fb837202526c46a9e7a7)
+  (reference ref_subtract_12 declaration pkg_10000000000000000000000000000001/decl_5027c49a62b96f4b44ad43e9c22719a6)
+  (reference ref_bool-and_16 declaration pkg_10000000000000000000000000000001/decl_71c478bf0e7b81c77939a8665d18b56f)
+  (reference ref_add_8 declaration pkg_10000000000000000000000000000001/decl_72b38e6cd864cb4239b329b7e337577f)
+  (reference ref_list-map_9 declaration pkg_10000000000000000000000000000001/decl_9ca145d9a773745bb3f85dc25beb8962)
+  (reference ref_list-length_13 declaration pkg_10000000000000000000000000000001/decl_9de45297544f0f5d3c933f6d16e3f685)
+  (reference ref_bool-or_1 declaration pkg_10000000000000000000000000000001/decl_b09b84a15dcf1596ce4b62bceaf0b2ac)
+  (reference ref_text-equal_2 declaration pkg_10000000000000000000000000000001/decl_c9fdb1f4b300f81480dfd2f74d2e7bab)
+  (reference ref_python-extension_15 declaration pkg_f612694a4745b4a6078d0fff23e24bc8/decl_07308e4eae1dcaa62812f12a765dd04c)
+  (reference ref_search-first-line_7 declaration pkg_f612694a4745b4a6078d0fff23e24bc8/decl_0a013ee0d4de918d3a5d01131e0f898a)
+  (reference ref_shebangs_11 declaration pkg_f612694a4745b4a6078d0fff23e24bc8/decl_141db5750331aa2cb7f83ffac11ff664)
+  (reference ref_ascii-equal_14 declaration pkg_f612694a4745b4a6078d0fff23e24bc8/decl_4b412aa6c7cf7e4dbed74e79793d02df)
+  (reference ref_word-at_6 declaration pkg_f612694a4745b4a6078d0fff23e24bc8/decl_5094ad93e37ca07ea208d6e44bab02e7)
+  (reference ref_extensions_10 declaration pkg_f612694a4745b4a6078d0fff23e24bc8/decl_717493f5cc064d20a1696a1b0d847d32)
+  (reference ref_python-shebang_0 declaration pkg_f612694a4745b4a6078d0fff23e24bc8/decl_7f5e04c250dfb972786b55278d2126bc)
+  (type-alias type_0 Bytes)
+  (type-alias type_1 (list Bool))
+  (type-alias type_2 (list type_0))
+  (type-alias type_3 (function (type_2) type_1))
+  (type-alias type_4 (list Text))
+  (type-alias type_5 (function (type_4) type_1))
+  (module edit mod_f53ea9926059fa17fbc19a537d308214 policy
+    (test edit decl_02eda2bb44c1f2b4af68a3a9c7b79918 mixed-case-raw-shebang
+      (visibility private)
+      (actual (call ref_python-shebang_0 (field (call std::json-decode-or (types Bytes) (call std::bytes-from-text (text "{\"$bytes\":\"IyH/UHlUaE9uAA==\"}")) (call std::bytes-from-text (text ""))) (name value))))
+      (expected (bool true)))
+    (function edit decl_07308e4eae1dcaa62812f12a765dd04c python-extension
+      (visibility public)
+      (returns Bool)
+      (effect pure)
+      (body (call ref_bool-or_1 (call ref_bool-or_1 (call ref_text-equal_2 (local extension) (text "py"))
+            (call ref_text-equal_2 (local extension) (text "pY"))) (call ref_bool-or_1 (call ref_text-equal_2
+              (local extension) (text "Py")) (call ref_text-equal_2 (local extension) (text "PY")))))
+      (parameter edit param_19e448a25702aa5c63218cab62460304 extension
+        (type Text)
+        (use unrestricted)))
+    (function edit decl_0a013ee0d4de918d3a5d01131e0f898a search-first-line
+      (visibility private)
+      (returns Bool)
+      (effect pure)
+      (body (if (call ref_less_3 (local position) (local limit)) (if (call ref_i64-equal_4 (call std::bytes-get (local bytes) (local position)) (i64 10)) (bool false) (if (call ref_word-at_6
+                (local bytes) (local position) (local limit) (call std::bytes-from-text (text "python")) (i64 0)) (bool true) (call ref_search-first-line_7 (local bytes)
+                (call ref_add_8 (local position) (i64 1)) (local limit)))) (bool false)))
+      (parameter edit param_459db1e8cfff7beb6126aad7852abe8d bytes
+        (type type_0)
+        (use unrestricted))
+      (parameter edit param_765c3f255f97a48d34fbc751949e2d8d position
+        (type I64)
+        (use unrestricted))
+      (parameter edit param_4e9eff86a734f75a4d481986b85dd7f5 limit
+        (type I64)
+        (use unrestricted)))
+    (function edit decl_141db5750331aa2cb7f83ffac11ff664 shebangs
+      (visibility public)
+      (returns type_1)
+      (effect pure)
+      (body (call ref_list-map_9 (types type_0 Bool) (local values) (function-value ref_python-shebang_0)))
+      (parameter edit param_c1656cf5fc24fd26e9e749fd0f8fa9ce values
+        (type type_2)
+        (use unrestricted)))
+    (test edit decl_1a5834a4e1006fbd744ec168c7e2e005 extension-cases
+      (visibility private)
+      (actual (call ref_extensions_10 (list Text (text "py") (text "pY") (text "Py") (text "PY"))))
+      (expected (list Bool (bool true) (bool true) (bool true) (bool true))))
+    (test edit decl_1a9fa3875569b2f473cd55e94d303dff empty-prefix
+      (visibility private)
+      (actual (call ref_python-shebang_0 (call std::bytes-from-text (text ""))))
+      (expected (bool false)))
+    (test edit decl_3a22424b9d8fb1a3913f356df8e476f4 empty-batches
+      (visibility private)
+      (actual (call ref_extensions_10 (list Text)))
+      (expected (list Bool)))
+    (component edit decl_47de55c379a7fead63dd61dd92d92156 console
+      (visibility private)
+      (port edit port_6a88b21feeea0e51945e28439bea9217 shebangs
+        (type type_3)
+        (function ref_shebangs_11))
+      (port edit port_f092a2cb0026272d6c50709c9fc13fdf extensions
+        (type type_5)
+        (function ref_extensions_10)))
+    (function edit decl_4b412aa6c7cf7e4dbed74e79793d02df ascii-equal
+      (visibility private)
+      (returns Bool)
+      (effect pure)
+      (body (call ref_bool-or_1 (call ref_i64-equal_4 (local value) (local lowercase)) (call ref_i64-equal_4
+            (local value) (call ref_subtract_12 (local lowercase) (i64 32)))))
+      (parameter edit param_9f9a68913584d2aff675a17618349cf6 value
+        (type I64)
+        (use unrestricted))
+      (parameter edit param_c296653cf66a7412e488128168adecfb lowercase
+        (type I64)
+        (use unrestricted)))
+    (function edit decl_5094ad93e37ca07ea208d6e44bab02e7 word-at
+      (visibility private)
+      (returns Bool)
+      (effect pure)
+      (body (if (call ref_i64-equal_4 (local offset) (call std::bytes-length (local word)))
+          (bool true) (let (binding index (as $b_bind_ff0c0d899b55c4fd7f39605ba99f6a24) (call ref_add_8
+                (local position) (local offset))) (in (if (call ref_less_3 (local index) (local limit))
+                (if (call ref_ascii-equal_14 (call std::bytes-get (local bytes) (local index))
+                    (call std::bytes-get (local word) (local offset))) (call ref_word-at_6
+                    (local bytes) (local position) (local limit) (local word) (call ref_add_8 (local offset)
+                      (i64 1))) (bool false)) (bool false))))))
+      (parameter edit param_460a99ba00e8d274beaef56fb34c2c3a bytes
+        (type type_0)
+        (use unrestricted))
+      (parameter edit param_28964304b378f54bd169a18f96a96fcc position
+        (type I64)
+        (use unrestricted))
+      (parameter edit param_b69794268a38af301b691c552b9dc74f limit
+        (type I64)
+        (use unrestricted))
+      (parameter edit param_41c7b820693cffa2302a2717911dbdf5 word
+        (type type_0)
+        (use unrestricted))
+      (parameter edit param_56b722744024c94dec0fa9e64b2c83e0 offset
+        (type I64)
+        (use unrestricted)))
+    (test edit decl_542d75d85afec615cab98bd8aed8a70f second-line-ignored
+      (visibility private)
+      (actual (call ref_python-shebang_0 (call std::bytes-from-text (text "#!\npython"))))
+      (expected (bool false)))
+    (test edit decl_5bfdaa3567e28b3f35c220ce46fb6531 non-shebang
+      (visibility private)
+      (actual (call ref_python-shebang_0 (call std::bytes-from-text (text "python"))))
+      (expected (bool false)))
+    (function edit decl_717493f5cc064d20a1696a1b0d847d32 extensions
+      (visibility public)
+      (returns type_1)
+      (effect pure)
+      (body (call ref_list-map_9 (types Text Bool) (local values) (function-value ref_python-extension_15)))
+      (parameter edit param_a955689edb963695cfb818fac86399ec values
+        (type type_4)
+        (use unrestricted)))
+    (test edit decl_7e636e783939d92f628afa501a1043fc lone-hash
+      (visibility private)
+      (actual (call ref_python-shebang_0 (call std::bytes-from-text (text "#"))))
+      (expected (bool false)))
+    (function edit decl_7f5e04c250dfb972786b55278d2126bc python-shebang
+      (visibility public)
+      (returns Bool)
+      (effect pure)
+      (body (let (binding length (as $b_bind_38986f61885c9ff77dd30407946296c4) (call std::bytes-length (local bytes))) (in (if (call ref_less_3 (local length) (i64 2)) (bool false)
+              (if (call ref_bool-and_16 (call ref_i64-equal_4 (call std::bytes-get (local bytes)
+                      (i64 0)) (i64 35)) (call ref_i64-equal_4 (call std::bytes-get (local bytes)
+                      (i64 1)) (i64 33))) (call ref_search-first-line_7 (local bytes) (i64 2) (if (call ref_less_3
+                      (local length) (i64 512)) (local length) (i64 512))) (bool false))))))
+      (parameter edit param_6a43279627fb548a544f87b464e33dc5 bytes
+        (type type_0)
+        (use unrestricted)))
+    (test edit decl_83a45b288892b77e6d64b7e7da0ac353 other-extensions
+      (visibility private)
+      (actual (call ref_extensions_10 (list Text (text "") (text "pyc") (text ".py") (text "py ") (text "ｐｙ")
+            (text "rs"))))
+      (expected (list Bool (bool false) (bool false) (bool false) (bool false) (bool false) (bool false))))
+    (test edit decl_a15700de9c38891aedd0b4c4900f3b6b empty-shebang
+      (visibility private)
+      (actual (call ref_python-shebang_0 (call std::bytes-from-text (text "#!"))))
+      (expected (bool false)))
+    (test edit decl_ce341fb7b2848ad34052fa04da47cb0f newline-inside-word
+      (visibility private)
+      (actual (call ref_python-shebang_0 (call std::bytes-from-text (text "#!py\nthon"))))
+      (expected (bool false)))
+    (test edit decl_e5259ca4580f78cae805d388995bc4e4 lowercase-shebang
+      (visibility private)
+      (actual (call ref_python-shebang_0 (call std::bytes-from-text (text "#!python"))))
+      (expected (bool true)))
+  )
+)
+declarations.end

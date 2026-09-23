@@ -181,6 +181,11 @@ fn validate_shape(
             &IntrinsicType::Bytes,
         ),
         "core.bytes.length" => exact(signature, &[IntrinsicType::Bytes], &IntrinsicType::I64),
+        "core.bytes.get" => exact(
+            signature,
+            &[IntrinsicType::Bytes, IntrinsicType::I64],
+            &IntrinsicType::I64,
+        ),
         "core.bytes.to-hex" => exact(signature, &[IntrinsicType::Bytes], &IntrinsicType::Text),
         "core.bytes.equal" => exact(
             signature,
@@ -591,4 +596,49 @@ fn kernel_type<R: ExpressionRead + ?Sized>(
             Box::new(child(*result)?),
         ),
     })
+}
+
+#[cfg(test)]
+mod byte_contract_tests {
+    use super::*;
+
+    #[test]
+    fn byte_index_has_one_exact_closed_signature() {
+        for parameters in [
+            vec![IntrinsicType::Bytes, IntrinsicType::I64],
+            vec![IntrinsicType::Text, IntrinsicType::I64],
+            vec![IntrinsicType::Bytes, IntrinsicType::Bool],
+            vec![IntrinsicType::Bytes],
+            vec![IntrinsicType::Bytes, IntrinsicType::I64, IntrinsicType::I64],
+        ] {
+            for result in [
+                IntrinsicType::I64,
+                IntrinsicType::Bool,
+                IntrinsicType::Bytes,
+            ] {
+                let expected = parameters == [IntrinsicType::Bytes, IntrinsicType::I64]
+                    && result == IntrinsicType::I64;
+                let signature = IntrinsicSignature {
+                    parameters: parameters.clone(),
+                    result,
+                    effectful: false,
+                };
+                assert_eq!(
+                    validate_shape("core.bytes.get", &signature).is_ok(),
+                    expected
+                );
+            }
+        }
+        assert!(
+            validate_shape(
+                "core.bytes.get",
+                &IntrinsicSignature {
+                    parameters: vec![IntrinsicType::Bytes, IntrinsicType::I64],
+                    result: IntrinsicType::I64,
+                    effectful: true,
+                }
+            )
+            .is_err()
+        );
+    }
 }

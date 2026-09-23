@@ -5,7 +5,27 @@ outstanding delivery. [Generated guides](generated/operations.md) own public
 operations, [specifications](spec/) own semantics, and [campaigns](campaigns/)
 retain detailed implementation and verification history.
 
-## Native development tooling (development checkout)
+## Native byte inspection (development checkout)
+
+The current standard adds `bytes-get(Bytes, I64) -> I64`: zero-based unsigned octet
+observation without text conversion, clamping or mutation. Out-of-range indices
+trap. Six new graph tests bring the standard to 51. Independent evaluators and
+copied public CLI tests cover every octet, both I64 extremes, invalid input, empty
+buffers and detached execution after source removal. The closed external-signature
+validator feature changes, but graph/artifact/data encodings do not.
+
+The required native repository policy now receives `List<Bytes>`, not expanded
+integer lists, and passes 62 differential tests. Its nine host tests retain the
+independent 1,600-case rule oracle and all file/read/order semantics. Unchanged guide
+and lkjournal selections are not upgraded: the maintained guide still has 61 tests
+and its bundle rebuilds byte-identically. New guide authorship explicitly selects
+the actually exported standard and passes 67 tests. The old policy bundle works on
+the new runtime; the predecessor runtime rejects the new intrinsic before execution.
+The [byte campaign](campaigns/202609240603.md) records exact native requests, migration,
+focused evidence and acceptance. This is development source, not an update to the
+frozen public v0.1.44 assets or a compiler-self-hosting claim.
+
+## Native development tooling (earlier acceptance)
 
 The [native guide tool](../tools/native-guides/README.md) now owns all eight reference
 pages in ordinary lkjscript, including prose, layout, escaping and required-reference
@@ -31,7 +51,7 @@ The [native repository-policy tool](../tools/native-policy/README.md) now suppli
 extension and raw-shebang decisions to the existing required no-Python gate.
 Rust keeps Git/path observation, bounded filesystem reads and report/exit handling;
 the old Rust decision implementation is removed. Both maintained native tools use
-one grant-free pure artifact embedding boundary. Native policy meaning passes
+one grant-free pure artifact embedding boundary. The initial native policy meaning passed
 11 policy and 45 exact-standard tests; focused host tests compare 1,600 case/byte
 variants plus first-line, prefix-boundary, link and multi-batch cases.
 Implementation `9e5e192b` passes all 26 full-profile gates freshly, with zero

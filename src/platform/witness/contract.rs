@@ -48,7 +48,7 @@ pub struct ValidatorFeatureDescriptor {
 pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 27] = [
     ValidatorFeatureDescriptor {
         name: "closed_external_signatures",
-        version: 1,
+        version: 2,
     },
     ValidatorFeatureDescriptor {
         name: "canonical_binary64_computation",

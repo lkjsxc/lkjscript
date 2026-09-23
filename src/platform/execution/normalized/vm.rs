@@ -2781,6 +2781,17 @@ fn call_core_intrinsic(
             };
             Ok(NormalizedValue::I64(normalized_length(value.len())?))
         }
+        "core.bytes.get" => {
+            let [NormalizedValue::Bytes(value), NormalizedValue::I64(index)] = arguments.as_slice()
+            else {
+                return Err(type_error("byte lookup received foreign values"));
+            };
+            usize::try_from(*index)
+                .ok()
+                .and_then(|index| value.get(index))
+                .map(|byte| NormalizedValue::I64(i64::from(*byte)))
+                .ok_or_else(|| trap_error("normalized_bytes_index", "byte index is out of bounds"))
+        }
         "core.bytes.to-hex" => {
             let [NormalizedValue::Bytes(value)] = arguments.as_slice() else {
                 return Err(type_error("hex encoding received a foreign value"));

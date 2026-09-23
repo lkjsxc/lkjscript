@@ -183,7 +183,23 @@ fn native_guides_author_edit_and_run_without_compiler_checkout_or_host_tools() {
     let revision = compact_field(compact_record(&status, "revision"), "id").unwrap();
     let request = tool.write(
         "create.lkjc",
-        SOURCE.replacen("base=BASE", &format!("base={revision}"), 1),
+        SOURCE
+            .replacen("base=BASE", &format!("base={revision}"), 1)
+            // Fresh authorship chooses the actually exported exact supplier. The
+            // maintained guide graph keeps its unchanged predecessor dependency.
+            .replacen(
+                SOURCE
+                    .lines()
+                    .find(|line| line.starts_with("add.dependency "))
+                    .unwrap(),
+                &format!(
+                    "add.dependency package={} semantic-revision={} package-revision={}",
+                    compact_field(standard, "id").unwrap(),
+                    compact_field(standard, "revision").unwrap(),
+                    compact_field(standard, "package-revision").unwrap(),
+                ),
+                1,
+            ),
     );
     let plan = tool.plan(&request, "create.logical-plan");
     tool.apply(&request, &plan);
@@ -191,7 +207,7 @@ fn native_guides_author_edit_and_run_without_compiler_checkout_or_host_tools() {
     let check = tool.project(&["check"]);
     assert_eq!(
         compact_field(compact_record(&check, "tests"), "passed"),
-        Some("61")
+        Some("67")
     );
     let original = tool.result("diagnostics", &diagnostic_input(), "original");
     let expected = concat!(

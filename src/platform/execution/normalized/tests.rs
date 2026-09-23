@@ -33,6 +33,9 @@ pub(crate) mod transaction_outcome_tests;
 #[path = "transaction_participation_tests.rs"]
 mod transaction_participation_tests;
 
+#[path = "bytes_tests.rs"]
+mod bytes_tests;
+
 #[path = "f64_tests.rs"]
 mod f64_tests;
 

@@ -2,7 +2,7 @@
 
 # Built-in standard package public interface
 
-Package <code>pkg_10000000000000000000000000000001</code> at exact package revision <code>package_revision_9694ca1acf820bd3e05276d9822dbc4cc7e48ec8138685f5efa97f291a5dd049</code>.
+Package <code>pkg_10000000000000000000000000000001</code> at exact package revision <code>package_revision_3961d45ef8575628bb8d34e3991c2901091908671450e23474094ce6ca88da30</code>.
 
 The records below are implementation-free public interface projections. Exact `reference` values are accepted by compact change records.
 
@@ -216,6 +216,15 @@ owner kind=parameter id=param_b43089a8e6d060bf9a7cf031f9f3fa3d name=fallback par
 parameter index=2 name=fallback use=unrestricted type-path=parameter.fallback
 type path=parameter.fallback digest=type_object_a2f1e16c1101d88bbd2387e1afb71734f292e8ef61c350f2d4819e4d32784211 form=parameter parameter=typeparam_9db832a0a08b9a027dc0d1934258408f
 type path=result digest=type_object_a2f1e16c1101d88bbd2387e1afb71734f292e8ef61c350f2d4819e4d32784211 form=parameter parameter=typeparam_9db832a0a08b9a027dc0d1934258408f
+owner kind=external id=decl_1ebf8d1e8db25ccd54cf7b283fed61ae name=bytes-get parent=package reference=pkg_10000000000000000000000000000001/decl_1ebf8d1e8db25ccd54cf7b283fed61ae
+declaration kind=external name=bytes-get children=2 effect=pure
+owner kind=parameter id=param_d1d39e5ffccc50ff61cd9860b61fce58 name=bytes parent=decl_1ebf8d1e8db25ccd54cf7b283fed61ae reference=pkg_10000000000000000000000000000001/param_d1d39e5ffccc50ff61cd9860b61fce58
+parameter index=0 name=bytes use=unrestricted type-path=parameter.bytes
+type path=parameter.bytes digest=type_object_d0c1482fe2c3b3a0e43655b8203f2db9390c9db928d141c15b85eebaa9b56d90 form=bytes
+owner kind=parameter id=param_f5e4bb7fa5ede9f14657b3d7737a2672 name=index parent=decl_1ebf8d1e8db25ccd54cf7b283fed61ae reference=pkg_10000000000000000000000000000001/param_f5e4bb7fa5ede9f14657b3d7737a2672
+parameter index=1 name=index use=unrestricted type-path=parameter.index
+type path=parameter.index digest=type_object_4872f33f8c53c3dbf43ad114824e6c18f4537f45cb609d7d2a82c1d479e23062 form=i64
+type path=result digest=type_object_4872f33f8c53c3dbf43ad114824e6c18f4537f45cb609d7d2a82c1d479e23062 form=i64
 owner kind=external id=decl_1f90c55aa8d593603dd730e1457e38a2 name=f64-abs parent=package reference=pkg_10000000000000000000000000000001/decl_1f90c55aa8d593603dd730e1457e38a2
 declaration kind=external name=f64-abs children=1 effect=pure
 owner kind=parameter id=param_7017efaef6317be820190970c963f4bb name=value parent=decl_1f90c55aa8d593603dd730e1457e38a2 reference=pkg_10000000000000000000000000000001/param_7017efaef6317be820190970c963f4bb

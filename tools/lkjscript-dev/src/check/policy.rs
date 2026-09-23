@@ -9,7 +9,7 @@ use std::io::Read;
 use std::path::{Component, Path};
 
 const MAXIMUM_SHEBANG_BYTES: u64 = 512;
-// At most 32,768 observed bytes per call, below the ordinary typed-JSON item bound.
+// At most 32,768 raw observed bytes per call, encoded as bounded typed Bytes.
 const OBSERVATIONS_PER_BATCH: usize = 64;
 const MAXIMUM_REPORTED_VIOLATIONS: usize = 64;
 

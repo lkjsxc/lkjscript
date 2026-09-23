@@ -4,6 +4,25 @@ Status: normative for the typed meaning graph.
 
 ## Representation and evaluation
 
+### Raw byte observation
+
+`bytes-get(bytes: Bytes, index: I64) -> I64` returns the octet at a zero-based byte
+offset as an integer in 0 through 255. Bytes is opaque binary data: NUL, CR, LF,
+invalid UTF-8 and UTF-8 continuation octets are observed without conversion.
+Negative offsets, offsets at or beyond the byte length, and every offset into an
+empty buffer trap. Neither I64 extreme wraps, clamps or counts backwards. Callers
+that require a fallback can guard with `bytes-length` and ordinary conditionals.
+
+The general closed external `core.bytes.get` has exactly `(Bytes, I64) -> I64`
+and is pure. It preserves the input and aliases, performs a checked indexed read,
+and does not allocate or copy a byte buffer. Existing value admission, execution
+cancellation and caller budgets remain in force. The production and source-reference
+implementations are separate. This does not add byte literals, implicit integer-list
+conversion, text character indexing, filesystem authority or a new persisted encoding.
+A runtime lacking this intrinsic rejects its external declaration during ordinary
+closure admission; unchanged old exact closures retain their previous behavior.
+
+
 Runtime lists are immutable flat logical sequences. Their private carrier is a bounded 32-way
 index trie with a tail of at most 32 elements. Length and handle sharing are O(1); indexing is
 O(log_32(N+1)); ordered traversal is O(N). Append copies the changed branch spine and a bounded

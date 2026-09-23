@@ -54,12 +54,12 @@ Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_0c24feeba2cf086edecde1241930f4a8019f0c1c7f5a6dfe72b187f02662a5bb`;
-- package revision: `package_revision_9694ca1acf820bd3e05276d9822dbc4cc7e48ec8138685f5efa97f291a5dd049`;
-- package transport: `package_transport_2c5257dfe49fed1773981b8af0188baf6feb72168ac518f165dcd0ad0c969312`;
-- artifact manifest: `artifact_manifest_5fea37511ac40b73692b4339b64a7af0453db53292b00b2a37995da95cdacdf9`;
-- artifact bundle: `artifact_bundle_afcfb7e4953d22fa2983f2f60c94ac51149748c9354aa5a5d9a988899ad4364c`;
-- 1,158 live semantic owners, 175 compiler units, and 45 graph tests.
+- semantic revision: `rev_5d00fff04177aa1dc77315c97b6826f94be77e742fca0f70177f75c6b2dae858`;
+- package revision: `package_revision_3961d45ef8575628bb8d34e3991c2901091908671450e23474094ce6ca88da30`;
+- package transport: `package_transport_3fd768dfb897719bd919d6b82f34dbd339b6e8753f774695f4d1201456a67540`;
+- artifact manifest: `artifact_manifest_4cfc6098b385e67db19f79ba5aef6c2329e770e480ff695320ee39bd575e9f0d`;
+- artifact bundle: `artifact_bundle_7e80271c01519c851c58f525f714ff8fa5fcf4f1c8e29e8fbb8b1a6ab22ea085`;
+- 1,197 live semantic owners, 182 compiler units, and 51 graph tests.
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose
 ordinary parametric records with pure functions. Mapping invokes the first callback then the second,
@@ -159,3 +159,16 @@ binds its runtime value into the private ordinary `function-constant-first<Value
 Argument and both helper parameters stay unconstrained. Runtime Text, lists and safe nominal data
 can be retained; an empty `List<Secret>` still rejects. Two maintained tests fix scalar behavior
 and nested `List<Text>` results through standard map. No constant-function intrinsic is involved.
+
+`bytes-get(bytes: Bytes, index: I64) -> I64` observes the unsigned octet at a
+zero-based byte offset. It does not decode UTF-8, copy the complete buffer or alter
+aliases. Negative, past-end and empty-buffer indexing traps, including both signed
+I64 extremes; a caller can guard with `bytes-length`. The closed representation
+primitive is `core.bytes.get`. Its [native declaration and six fixed graph tests](requests/20260924-bytes-get.lkjc)
+cover NUL, ASCII and individual UTF-8 octets. Independent evaluator/public tests cover
+all 256 octets, invalid encodings and bounds. The maintained repository policy now
+inspects Bytes directly; it no longer receives an integer-list expansion.
+
+This addition is development source after v0.1.44, not a capability of that frozen
+release. Its exact new standard requires the byte-index intrinsic. Old exact
+standard closures remain usable and unchanged consumers retain their selections.

@@ -3462,6 +3462,20 @@ fn reference_intrinsic(
             }
             _ => Err(reference_type_error("byte length received a foreign value")),
         },
+        "core.bytes.get" => match arguments.as_slice() {
+            [NormalizedValue::Bytes(value), NormalizedValue::I64(index)] => {
+                match usize::try_from(*index) {
+                    Ok(index) if index < value.len() => {
+                        Ok(NormalizedValue::I64(i64::from(value[index])))
+                    }
+                    _ => Err(reference_trap(
+                        "reference_bytes_index",
+                        "byte index is out of bounds",
+                    )),
+                }
+            }
+            _ => Err(reference_type_error("byte lookup received foreign values")),
+        },
         "core.bytes.to-hex" => match arguments.as_slice() {
             [NormalizedValue::Bytes(value)] => {
                 let size = value.len().checked_mul(2).ok_or_else(|| {
