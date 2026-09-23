@@ -37,6 +37,19 @@ The results are `[{"key":"pear","value":2},{"key":"apple","value":1}]`
 and `[-5,-1,0,2,9,9]`. Native tests also cover empty input, equal frequencies,
 bounded selection, and comparators that would trap if invoked on empty/singleton input.
 
+You can reconstruct editable declarations from accepted meaning after the original
+input is unavailable. Find the ranking module with `query find module ranking`,
+then use its `mod_...` identity:
+
+```sh
+./lkjscript --project ./ranking change draft --owner RANKING_MODULE --output ./ranking-edit.lkjc
+./lkjscript --project ./ranking change plan --input-file ./ranking-edit.lkjc
+```
+
+The unchanged draft reports `outcome=unchanged` and creates no publication token.
+It preserves the generic contracts, parameter order and private helper references.
+Make a deliberate body edit in this draft, then review and apply the resulting plan.
+
 `sort-by<Item>` accepts a `Function(Item,Item)->Bool`. Supply a strict ordering:
 the comparator says whether its first argument belongs before its second. Recursive
 halves are processed left to right. During merging, the right value is selected

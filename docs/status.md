@@ -12,8 +12,11 @@ It preserves order and clamps start/count without overflow at the signed I64
 extremes. The native standard request passes all 45 package tests, including
 eight new range/type cases. The existing transported aggregation consumer now
 uses it for structural entry pages and nominal events; its 72 copied-product
-commands and original reader pass with joined cleanup. Complete source acceptance
-is still due. Generated standard transport, artifact and discovery include
+commands and original reader pass with joined cleanup. Source `d104edc7` passes
+all 20 fresh source gates with stable inputs and zero reuse and reached remote
+main unchanged. Candidate [35827065894/1](https://github.com/lkjsxc/lkjscript/actions/runs/35827065894)
+is running at that exact source; final-candidate acceptance and the already
+authorized publication remain due. Generated standard transport, artifact and discovery include
 the function. lkjournal keeps its prior exact supplier: checks pass and the
 complete rebuilt artifact is byte-identical. There is no data-format migration.
 v0.1.43 publication is complete at its separate frozen source.
