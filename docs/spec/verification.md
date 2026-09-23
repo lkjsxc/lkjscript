@@ -402,6 +402,27 @@ expression authoring; declarations, signatures, types and reference preludes sta
 
 ## Command lifecycle requirements
 
+The copied public CLI must admit `--arguments-file` for project and standalone Command
+execution with the same strict application JSON and typed input policy as inline arguments.
+Exercise a 200,000-character native Text input, exactly 1 MiB including whitespace, and
+one byte beyond it; retain failures for malformed/trailing JSON, duplicate fields, invalid
+UTF-8, wrong types, duplicate/conflicting selectors, absent files, directories, final symlinks
+and FIFOs. Selection/read failures precede context reads, and typed failures precede secrets.
+Relative input paths use the invocation directory. Successful and rejected calls leave accepted
+HEAD unchanged; a bundle still executes after moving its authoring project.
+
+The existing offline numerical owner uses argument files for project decimals, the unchanged
+4,096-sample artifact workload, and both invalid-input-before-effect cases. Its scale input
+contains 200,000 bytes with trailing JSON whitespace; arithmetic expectations and sample count
+are unchanged. Other calls retain inline coverage. Its original reader binds the selector,
+file path, complete retained bytes and independently expected result; consistently rehashed
+inline substitution or altered file input must fail. Numerical evidence schema 2 rejects
+schema 1 for this expanded obligation; frozen releases retain their original verifiers.
+The ignored `argument_file_originals_reject_rehashed_substitution` test uses
+`LKJSCRIPT_F64_ARGUMENT_RECEIPT` from `offline-packages --case f64` and its exact
+`LKJSCRIPT_F64_ARGUMENT_VERIFIER`. It checks an owned copy through the complete focused
+reader, restores healthy acceptance and leaves the original evidence untouched.
+
 Foreground acceptance extends the existing offline-package effect child, required by the current
 offline-package owner and exact-final-candidate admission. Standalone full retains the same owner;
 transfer and public boundaries consume its accepted binding without replaying its applications. It freshly authors

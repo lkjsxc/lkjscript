@@ -5,6 +5,17 @@ outstanding delivery. [Generated guides](generated/operations.md) own public
 operations, [specifications](spec/) own semantics, and [campaigns](campaigns/)
 retain detailed implementation and verification history.
 
+## Command input files
+
+Successor development v0.1.42 adds `--arguments-file PATH` to project and standalone
+command execution. It removes the observed OS argument-vector barrier for larger
+JSON inputs while retaining the existing 1 MiB byte limit, strict decoder, typed
+admission and effect ordering. The selectors are mutually exclusive; omitted input
+remains `[]`. Relative files use the invocation directory and must be regular with
+no final symlink. The [native library guide](guides/native-library.md#read-arguments-from-a-file)
+shows both forms. Source acceptance and delivery of this successor remain pending;
+the running v0.1.41 candidate retains its frozen source and scope.
+
 ## Composable typed-cell updates
 
 The [selected milestone](campaigns/202609221952.md) is implemented on main for

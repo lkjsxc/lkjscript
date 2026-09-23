@@ -229,8 +229,36 @@ machine executable. Deployment execution invokes production once and reports
 `verification=not-performed`; project checks and project runs supplied differential
 verification earlier. This pure command needs no capability grants.
 
+## Read arguments from a file
+
+Development v0.1.42 adds `--arguments-file`; published v0.1.40 and the selected
+v0.1.41 candidate use the inline form above. With the newer executable, save this
+ordinary JSON as `runtime/parcels.json`:
+
+```json
+[[{"units":2,"grams":125},{"units":3,"grams":200}]]
+```
+
+From the walkthrough's original directory, run either form:
+
+```sh
+./lkjscript --project ./shipping run weight --arguments-file ./runtime/parcels.json
+./runtime/lkjscript run --deployment ./runtime/weight.deployment.json --arguments-file ./runtime/parcels.json
+```
+
+Both return `850`. The file path is relative to the current working directory,
+including when the descriptor is elsewhere. Use one argument selector per call;
+omitting both supplies `[]`. The file must be regular, with no final symlink, and
+fit within the current 1 MiB JSON limit including whitespace. JSON structure and
+typed-value limits also apply. This allows inputs too large for the operating
+system's command-line arguments; it does not stream an unbounded data set.
+
 The literal library and consumer were exercised with a copied official v0.1.40
 binary outside the compiler checkout, including unchanged drafting, empty input,
 multiplication/addition overflow, build after moving the producer, and execution
 after moving the consumer. The [continuation record](../campaigns/202609222330.md)
 owns that bounded tutorial observation. It is separate from release acceptance.
+The v0.1.42 development file-input observation freshly authors the same two native
+programs and returns `2048000` from 8,192 parcels through both project and detached
+bundle execution. Its 196,612-byte input includes a newline. The retained malformed,
+wrong-type and overflow inputs reject, and accepted HEAD stays unchanged.

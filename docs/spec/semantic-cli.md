@@ -833,9 +833,21 @@ artifact and preserves existing data. Build does not alter accepted authority.
 ## Run
 
 ```text
-run TARGET [--arguments JSON]
-run --deployment PATH [--arguments JSON]
+run TARGET [--arguments JSON | --arguments-file PATH]
+run --deployment PATH [--arguments JSON | --arguments-file PATH]
 ```
+
+The two argument selectors are mutually exclusive and may occur at most once; omission
+selects `[]`. `--arguments-file` reads one ordinary file relative to the invocation's
+working directory, independently of the project or descriptor location. Final-component
+symlinks and nonregular files reject. Metadata inspection and bounded nonblocking opening
+admit at most the discovered application JSON byte limit (currently 1,048,576), including
+whitespace; growth beyond that limit also rejects. This is a transport alternative for
+input that cannot fit in the host's process argument vector. It does not increase JSON,
+typed-value or execution limits, stream values, or interpret `-` as standard input.
+Both selectors feed the same application decoder and typed input admission. Conflicting
+selectors, duplicate options and missing option values reject before argument-file,
+project or descriptor reads.
 
 Pure `run` execution records include `production-peak-call-frames`,
 `reference-peak-call-frames`, `production-tail-transfers`, and `reference-tail-transfers` as

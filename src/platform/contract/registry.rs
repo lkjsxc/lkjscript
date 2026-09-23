@@ -1538,7 +1538,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         operation(
             PublicOperation::Run,
             "Run a pure project target differentially, or run one exact pure/task Command artifact once through production with deployment grants and joined cleanup.",
-            "run TARGET [--arguments JSON] | run --deployment PATH [--arguments JSON]",
+            "run TARGET [--arguments JSON | --arguments-file PATH] | run --deployment PATH [--arguments JSON | --arguments-file PATH]",
             (ControlModel::RunRequest, ControlModel::RunResult),
             AuthorityEffect::ExternalRuntime,
             ProjectRequirement::ProjectOrDescriptor,
@@ -6999,8 +6999,29 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ),
                 ],
             )?);
+            records.push(compact_record(
+                "execution.arguments",
+                &[
+                    (
+                        "selectors",
+                        "--arguments JSON | --arguments-file PATH".to_owned(),
+                    ),
+                    (
+                        "selection",
+                        "mutually-exclusive-omission-is-empty-array".to_owned(),
+                    ),
+                    ("file", "bounded-regular-file-no-final-symlink".to_owned()),
+                    ("path-base", "invocation-working-directory".to_owned()),
+                    ("maximum-bytes", codec.maximum_bytes.to_string()),
+                    (
+                        "admission",
+                        "same-strict-application-json-array-and-typed-input-before-effects"
+                            .to_owned(),
+                    ),
+                ],
+            )?);
             records.push(compact_record("execution.foreground", &[
-                ("selector", "run --deployment PATH [--arguments JSON]".to_owned()),
+                ("selector", "run --deployment PATH [--arguments JSON | --arguments-file PATH]".to_owned()),
                 ("runner", "command".to_owned()),
                 ("entry", "closed-pure-or-task-including-empty-row".to_owned()),
                 ("execution-mode", "production".to_owned()),

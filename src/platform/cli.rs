@@ -694,6 +694,23 @@ pub struct ForegroundRunOptions {
     arguments: Vec<u8>,
 }
 
+fn run_argument_bytes(options: &[String]) -> Result<Vec<u8>, Diagnostic> {
+    let inline = option_value(options, "--arguments")?;
+    let file = option_value(options, "--arguments-file")?;
+    match (inline, file) {
+        (Some(value), None) => Ok(value.into_bytes()),
+        (None, Some(path)) => read_bounded(
+            Path::new(&path),
+            super::json::JsonLimits::default().maximum_bytes,
+            "run arguments",
+        ),
+        (None, None) => Ok(b"[]".to_vec()),
+        (Some(_), Some(_)) => Err(usage_error(
+            "supply at most one of --arguments or --arguments-file",
+        )),
+    }
+}
+
 /// This grammar is resolved before project discovery, runtime setup or deployment reads.
 pub fn parse_foreground_run(arguments: &[String]) -> Result<ForegroundRunOptions, Diagnostic> {
     if arguments.first().map(String::as_str) != Some("run") {
@@ -701,23 +718,25 @@ pub fn parse_foreground_run(arguments: &[String]) -> Result<ForegroundRunOptions
             "run --deployment cannot select --project or a positional target",
         ));
     }
-    ensure_options(&arguments[1..], &["--deployment", "--arguments"], &[])?;
+    ensure_options(
+        &arguments[1..],
+        &["--deployment", "--arguments", "--arguments-file"],
+        &[],
+    )?;
     let descriptor = required_option(&arguments[1..], "--deployment")?;
     if descriptor.is_empty() || descriptor.len() > 4096 || descriptor.contains('\0') {
         return Err(usage_error(
             "--deployment requires a bounded descriptor path",
         ));
     }
-    let arguments =
-        option_value(&arguments[1..], "--arguments")?.unwrap_or_else(|| "[]".to_owned());
-    let value =
-        super::json::decode_application(arguments.as_bytes(), super::json::JsonLimits::default())?;
+    let arguments = run_argument_bytes(&arguments[1..])?;
+    let value = super::json::decode_application(&arguments, super::json::JsonLimits::default())?;
     if !value.is_array() {
-        return Err(usage_error("--arguments must be one JSON array"));
+        return Err(usage_error("run arguments must be one JSON array"));
     }
     Ok(ForegroundRunOptions {
         descriptor: PathBuf::from(descriptor),
-        arguments: arguments.into_bytes(),
+        arguments,
     })
 }
 
@@ -896,14 +915,13 @@ pub fn execute_run(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
         .get(1)
         .filter(|value| !value.starts_with("--"))
         .ok_or_else(|| usage_error("run requires one target name"))?;
-    ensure_options(&arguments[2..], &["--arguments"], &[])?;
-    let encoded_arguments =
-        option_value(&arguments[2..], "--arguments")?.unwrap_or_else(|| "[]".to_owned());
+    ensure_options(&arguments[2..], &["--arguments", "--arguments-file"], &[])?;
+    let encoded_arguments = run_argument_bytes(&arguments[2..])?;
     let repository = open_normalized_repository(project)?;
     let prepared = prepare_repository(repository)?;
     let run = prepared.run(
         &Name::new(target.clone())?,
-        encoded_arguments.as_bytes(),
+        &encoded_arguments,
         NormalizedCommandPolicy::default(),
         &ExecutionControl::default(),
     )?;

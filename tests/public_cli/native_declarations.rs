@@ -168,6 +168,148 @@ const COMPLETE: &str = r#"declarations.begin
 declarations.end
 "#;
 
+#[test]
+fn native_command_argument_files_preserve_large_inputs_and_pre_effect_admission() {
+    let public = Native::template("command");
+    let input = public.input(
+        "measure.lkjc",
+        &format!(
+            r#"request base={}
+declarations.begin
+(units
+  (use std builtin)
+  (module create text-input
+    (function create measure (visibility private)
+      (parameter create value (type Text))
+      (returns I64) (effect pure)
+      (body (call std::text-length (local value))))
+    (component create console (visibility private)
+      (port create measure (type (function (Text) I64)) (function measure))))
+  (target create measure (component text-input::console) (runner command)
+    (port text-input::console::measure)))
+declarations.end
+"#,
+            public.revision()
+        ),
+    );
+    public.apply(&input, &public.plan(&input, true), true);
+    let head = std::fs::read(public.project.join("HEAD")).unwrap();
+    let bundle = public.root.path().join("bundle");
+    std::fs::create_dir(&bundle).unwrap();
+    public.cli(
+        &["build", "--output", path(&bundle.join("command.lkja"))],
+        true,
+    );
+    let mut descriptor: Value = serde_json::from_slice(
+        &std::fs::read(public.project.join("command.deployment.json")).unwrap(),
+    )
+    .unwrap();
+    descriptor["artifact"] = serde_json::json!("command.lkja");
+    descriptor["target"] = serde_json::json!("measure");
+    let deployment = bundle.join("command.deployment.json");
+    std::fs::write(&deployment, serde_json::to_vec(&descriptor).unwrap()).unwrap();
+    let data = public.root.path().join("arguments.json");
+    let routes = [
+        vec!["run", "measure"],
+        vec!["run", "--deployment", path(&deployment)],
+    ];
+
+    // Host code supplies ordinary input data; the native program computes its length.
+    for (bytes, expected) in [
+        (
+            serde_json::to_vec(&vec!["x".repeat(200_000)]).unwrap(),
+            "200000",
+        ),
+        (
+            {
+                let mut exact = b"[\"ok\"]".to_vec();
+                exact.resize(1_048_576, b' ');
+                exact
+            },
+            "2",
+        ),
+    ] {
+        std::fs::write(&data, bytes).unwrap();
+        for route in &routes {
+            let mut arguments = route.clone();
+            // The file is relative to the process directory, not project or descriptor.
+            arguments.extend(["--arguments-file", "arguments.json"]);
+            let output = public.cli(&arguments, true);
+            assert_eq!(
+                compact_field(compact_record(&output, "execution"), "value"),
+                expected
+            );
+        }
+    }
+    for (bytes, code) in [
+        (vec![b' '; 1_048_577], "read_limit"),
+        (b"[\"unterminated]".to_vec(), "json_decode"),
+        (b"[] []".to_vec(), "json_trailing"),
+        (b"[{\"a\":1,\"a\":2}]".to_vec(), "json_decode"),
+        (vec![b'[', b'"', 0xff, b'"', b']'], "json_decode"),
+        (b"[0]".to_vec(), "normalized_json_type"),
+    ] {
+        std::fs::write(&data, bytes).unwrap();
+        for route in &routes {
+            let mut arguments = route.clone();
+            arguments.extend(["--arguments-file", path(&data)]);
+            let output = public.cli(&arguments, false);
+            assert_eq!(
+                compact_field(compact_record(&output, "diagnostic"), "code"),
+                code
+            );
+        }
+    }
+    descriptor["secrets"] = serde_json::json!([
+        {"name":"must-not-load", "variable":"LKJSCRIPT_ARGUMENT_FILE_ABSENT_SECRET"}
+    ]);
+    let protected = bundle.join("protected.deployment.json");
+    std::fs::write(&protected, serde_json::to_vec(&descriptor).unwrap()).unwrap();
+    for (value, code) in [
+        ("[0]", "normalized_json_type"),
+        ("[\"ok\"]", "secret_missing"),
+    ] {
+        std::fs::write(&data, value).unwrap();
+        let output = public.cli(
+            &[
+                "run",
+                "--deployment",
+                path(&protected),
+                "--arguments-file",
+                path(&data),
+            ],
+            false,
+        );
+        assert_eq!(
+            compact_field(compact_record(&output, "diagnostic"), "code"),
+            code
+        );
+    }
+    assert_eq!(std::fs::read(public.project.join("HEAD")).unwrap(), head);
+    std::fs::rename(&public.project, public.root.path().join("retained-project")).unwrap();
+    let output = public.cli(
+        &[
+            "run",
+            "--deployment",
+            path(&deployment),
+            "--arguments-file",
+            path(&data),
+        ],
+        true,
+    );
+    assert_eq!(
+        compact_field(compact_record(&output, "execution"), "value"),
+        "2"
+    );
+    let cleanup: Value = serde_json::from_str(compact_field(
+        compact_record(&output, "execution"),
+        "cleanup",
+    ))
+    .unwrap();
+    assert_eq!(cleanup["remaining_tasks"], 0);
+    assert_eq!(cleanup["cleanup_failures"], serde_json::json!([]));
+}
+
 fn identity(records: &[CompactRecord], symbol: &str) -> String {
     compact_field(
         records

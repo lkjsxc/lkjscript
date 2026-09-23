@@ -22,8 +22,9 @@ reporting. Native user authoring is distinct from native contributor tooling or 
 self-hosted compiler; Rust remains the supported kernel and platform boundary.
 
 Current main also implements composable typed-cell participants selected for
-v0.1.41; candidate acceptance and public delivery are still pending. See
-[current status](docs/status.md) for that boundary and [release procedure](docs/release.md)
+v0.1.41; candidate acceptance and public delivery are still pending. Successor
+development v0.1.42 adds bounded JSON argument files for project and standalone
+commands. See [current status](docs/status.md) for that boundary and [release procedure](docs/release.md)
 for verified distributed bytes, retained failures and recovery. Historical campaign
 records do not redefine the behavior of the current public binary.
 

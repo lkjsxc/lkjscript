@@ -229,6 +229,17 @@ fn invoke(
         context.evidence.join(format!("f64-input-{name}.json")),
         arguments,
     )?;
+    let input_file = context.root.join(format!("f64-input-{name}.json"));
+    let file_argument = input_file.display().to_string();
+    let (selector, input) = if matches!(
+        name,
+        "project-decimals" | "scale" | "invalid-before-effect" | "invalid-f64-before-effect"
+    ) {
+        fs::write(&input_file, arguments)?;
+        ("--arguments-file", file_argument.as_str())
+    } else {
+        ("--arguments", arguments)
+    };
     let command = context.receipt.commands.len();
     let output = if let Some(artifact) = artifact {
         let filename = format!("f64-{artifact}-{target}.deployment.json");
@@ -244,15 +255,15 @@ fn invoke(
                 "run",
                 "--deployment",
                 &descriptor.display().to_string(),
-                "--arguments",
-                arguments,
+                selector,
+                input,
             ],
             passes,
         )?
     } else {
         context.cli(
             Some(&package.path),
-            &["run", target, "--arguments", arguments],
+            &["run", target, selector, input],
             passes,
         )?
     };
@@ -336,7 +347,11 @@ fn scale_input() -> String {
         .map(|i| format!("{}{}", 1_000_000 + i / 4, [".0", ".25", ".5", ".75"][i % 4]))
         .collect::<Vec<_>>()
         .join(",");
-    format!("[[{items}]]")
+    // Whitespace grows only the transport, preserving the independently fixed numeric workload.
+    // This file exceeds the observed Linux single-argument capacity without expanding JSON limits.
+    let mut input = format!("[[{items}]]");
+    input.extend(std::iter::repeat_n(' ', 200_000 - input.len()));
+    input
 }
 
 fn expect_value(records: &[CompactRecord], expected: &Value, name: &str) -> Result<(), DevError> {
@@ -699,7 +714,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
     )?;
     validate_store_observations(&observations)?;
     let numerical = NumericalEvidence {
-        schema: "lkjscript-numerical-library-1".into(),
+        schema: "lkjscript-numerical-library-2".into(),
         standard: standard_identity,
         producer: producer_identity,
         before,
@@ -1300,7 +1315,7 @@ pub(super) fn validate(
             .ok_or_else(|| DevError::corrupt("ordinary F64 library original evidence missing"))?,
     )?;
     require(
-        numerical.schema == "lkjscript-numerical-library-1"
+        numerical.schema == "lkjscript-numerical-library-2"
             && numerical.producer_removed_before_run
             && numerical.producer.package != numerical.before.package
             && numerical.before.package == numerical.after.package
@@ -1391,6 +1406,20 @@ pub(super) fn validate(
         )?;
         let original_command = command(receipt, call.command)?;
         let expected = expected_value(name, &checkpoint, &state)?;
+        // The reader independently requires both file routes and the two pre-effect failures.
+        let (selector, input) = match name {
+            "project-decimals"
+            | "scale"
+            | "invalid-before-effect"
+            | "invalid-f64-before-effect" => (
+                "--arguments-file",
+                isolated
+                    .join(format!("f64-input-{name}.json"))
+                    .display()
+                    .to_string(),
+            ),
+            _ => ("--arguments", arguments),
+        };
         let expected_command = if let Some(artifact) = artifact {
             let filename = format!("f64-{artifact}-{target}.deployment.json");
             require(
@@ -1410,8 +1439,8 @@ pub(super) fn validate(
                     .join(filename)
                     .display()
                     .to_string(),
-                "--arguments".into(),
-                arguments,
+                selector.into(),
+                input,
             ]
         } else {
             vec![
@@ -1420,8 +1449,8 @@ pub(super) fn validate(
                 isolated.join("f64-consumer").display().to_string(),
                 "run".into(),
                 target.into(),
-                "--arguments".into(),
-                arguments,
+                selector.into(),
+                input,
             ]
         };
         require(
@@ -1501,4 +1530,87 @@ pub(super) fn validate(
     )?)?;
     validate_store_observations(&observations)?;
     Ok(installed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[ignore = "requires retained focused F64 receipt and its original verifier"]
+    fn argument_file_originals_reject_rehashed_substitution() {
+        let source = PathBuf::from(
+            std::env::var_os("LKJSCRIPT_F64_ARGUMENT_RECEIPT").expect("focused F64 receipt"),
+        );
+        let verifier = PathBuf::from(
+            std::env::var_os("LKJSCRIPT_F64_ARGUMENT_VERIFIER").expect("original verifier"),
+        );
+        let mut receipt: Receipt = serde_json::from_slice(&fs::read(&source).unwrap()).unwrap();
+        let candidate = PathBuf::from(&receipt.pinned_runtime_path);
+        super::super::finite::read_focused(&source, &candidate, &verifier)
+            .expect("unaltered original passes current reader");
+        let owned = tempfile::tempdir().unwrap();
+        for file in &receipt.files {
+            assert_eq!(Path::new(&file.path).components().count(), 1);
+            fs::copy(
+                source.parent().unwrap().join(&file.path),
+                owned.path().join(&file.path),
+            )
+            .unwrap();
+        }
+        receipt.evidence_root = owned.path().display().to_string();
+        let path = owned.path().join("receipt.json");
+        fs::write(&path, evidence::encode_json(&receipt).unwrap()).unwrap();
+        super::super::finite::read_focused(&path, &candidate, &verifier)
+            .expect("owned relocated fixture passes");
+        let numerical: NumericalEvidence =
+            serde_json::from_str(&receipt.observations["f64"]).unwrap();
+        let index = numerical
+            .calls
+            .iter()
+            .find(|call| call.name == "scale")
+            .unwrap()
+            .command;
+        let name = "f64-input-scale.json";
+        let input = fs::read_to_string(owned.path().join(name)).unwrap();
+        assert_eq!(input.len(), 200_000);
+
+        let mut fault = receipt.clone();
+        let arguments = &mut fault.commands[index].command;
+        let length = arguments.len();
+        assert_eq!(arguments[length - 2], "--arguments-file");
+        arguments[length - 2] = "--arguments".into();
+        arguments[length - 1] = input.clone();
+        fs::write(&path, evidence::encode_json(&fault).unwrap()).unwrap();
+        let rejected = super::super::finite::read_focused(&path, &candidate, &verifier)
+            .expect_err("inline substitution must not prove file delivery");
+        assert!(
+            rejected
+                .to_string()
+                .contains("F64 actual invocation differs")
+        );
+
+        fs::write(owned.path().join(name), input.trim_end()).unwrap();
+        let mut fault = receipt.clone();
+        *fault
+            .files
+            .iter_mut()
+            .find(|file| file.path == name)
+            .unwrap() = evidence::proof(&owned.path().join(name), name.to_owned()).unwrap();
+        fs::write(&path, evidence::encode_json(&fault).unwrap()).unwrap();
+        let rejected = super::super::finite::read_focused(&path, &candidate, &verifier)
+            .expect_err("rehashed padding removal must not prove large file delivery");
+        assert!(
+            rejected
+                .to_string()
+                .contains("F64 retained runtime input differs")
+        );
+
+        fs::write(owned.path().join(name), input).unwrap();
+        fs::write(&path, evidence::encode_json(&receipt).unwrap()).unwrap();
+        super::super::finite::read_focused(&path, &candidate, &verifier)
+            .expect("healthy restored fixture passes");
+        super::super::finite::read_focused(&source, &candidate, &verifier)
+            .expect("originals remain untouched");
+    }
 }

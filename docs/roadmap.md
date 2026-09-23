@@ -20,8 +20,13 @@ complete; their historical release work is not an implementation backlog.
 ## Next workload and decision criteria
 
 Native declaration creation/canonical re-entry, callable-input evolution, persistent
-maps and ordinary composable transaction participants are available. Further
-numerical/data-processing work should measure an actual public program to determine
+maps and ordinary composable transaction participants are available. The native
+shipping workload returned correct results through 4,096 items, then its 196,611-byte
+inline input failed with host `E2BIG` at 8,192 items before executable startup.
+The [continuation](campaigns/202609222330.md#native-command-input-files--next-measured-workload)
+selects bounded `--arguments-file` for development v0.1.42. Its acceptance is separate
+from the healthy frozen v0.1.41 producer. Further numerical/data-processing work
+should measure an actual public program to determine
 whether authoring, repeated preparation/checking, representation or execution is
 its limiting dependency. Independent callback effects still require an application
 policy for replay/idempotency. Historical-repository revalidation cost remains

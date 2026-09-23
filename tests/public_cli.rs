@@ -226,6 +226,25 @@ fn foreground_grammar_rejects_conflicts_before_any_project_or_deployment_read() 
             "[]",
         ],
         vec!["run", "--deployment", "absent", "--unknown", "x"],
+        vec!["run", "--deployment", "absent", "--arguments-file"],
+        vec![
+            "run",
+            "--deployment",
+            "absent",
+            "--arguments-file",
+            "missing",
+            "--arguments-file",
+            "other",
+        ],
+        vec![
+            "run",
+            "--deployment",
+            "absent",
+            "--arguments",
+            "[]",
+            "--arguments-file",
+            "missing",
+        ],
         vec!["run", "--deployment"],
     ] {
         let rejected = compact_failure_output(command_at(&binary(), temporary.path(), &arguments));
@@ -235,6 +254,71 @@ fn foreground_grammar_rejects_conflicts_before_any_project_or_deployment_read() 
         );
     }
     assert_eq!(std::fs::read_dir(temporary.path()).unwrap().count(), 0);
+}
+
+#[test]
+fn argument_files_reject_ambiguous_and_nonregular_inputs_before_context_reads() {
+    let temporary = tempfile::tempdir().unwrap();
+    let copied = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &copied);
+    let routes = [
+        vec!["--project", "absent-project", "run", "main"],
+        vec!["run", "--deployment", "absent.deployment.json"],
+    ];
+    for route in &routes {
+        for options in [
+            vec!["--arguments-file"],
+            vec!["--arguments-file", "missing", "--arguments-file", "other"],
+            vec!["--arguments-file", "missing", "--arguments", "[]"],
+        ] {
+            let mut arguments = route.clone();
+            arguments.extend(options);
+            let failure = compact_failure_output(command_at(&copied, temporary.path(), &arguments));
+            assert_eq!(
+                compact_field(compact_record(&failure, "diagnostic"), "code"),
+                Some("cli_usage")
+            );
+        }
+    }
+    let ordinary = temporary.path().join("ordinary.json");
+    std::fs::write(&ordinary, b"[]").unwrap();
+    let large = temporary.path().join("large.json");
+    File::create(&large).unwrap().set_len(1_048_577).unwrap();
+    let mut invalid = vec![
+        (temporary.path().to_path_buf(), "read_type", 2),
+        (temporary.path().join("missing.json"), "read_open", 6),
+        (large, "read_limit", 4),
+    ];
+    #[cfg(unix)]
+    {
+        let link = temporary.path().join("linked.json");
+        std::os::unix::fs::symlink(&ordinary, &link).unwrap();
+        invalid.push((link, "read_type", 2));
+        let fifo = temporary.path().join("arguments.fifo");
+        rustix::fs::mkfifoat(
+            rustix::fs::CWD,
+            &fifo,
+            rustix::fs::Mode::RUSR | rustix::fs::Mode::WUSR,
+        )
+        .unwrap();
+        invalid.push((fifo, "read_type", 2));
+    }
+    for (input, code, status) in invalid {
+        for route in &routes {
+            let mut arguments = route.clone();
+            arguments.extend(["--arguments-file", path(&input)]);
+            let failure = compact_failure_output_with_status(
+                command_at(&copied, temporary.path(), &arguments),
+                status,
+            );
+            assert_eq!(
+                compact_field(compact_record(&failure, "diagnostic"), "code"),
+                Some(code)
+            );
+        }
+    }
+    assert!(!temporary.path().join("absent-project").exists());
+    assert!(!temporary.path().join("absent.deployment.json").exists());
 }
 
 #[test]
