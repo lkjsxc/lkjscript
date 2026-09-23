@@ -18,6 +18,12 @@ source gates with stable inputs and zero reuse, and reached remote main unchange
 Final-candidate acceptance and delivery of this successor remain pending; the
 running v0.1.41 candidate retains its frozen source and scope.
 
+The successor also shares immutable pack indexes across validated object reads.
+Source `caea6309139a64ec004ad5b9f3fd77df5fb6c8ea` passes all 20 fresh source gates
+with stable inputs and zero reuse, and reached remote main unchanged. The
+[matched public measurements](performance.md#shared-pack-index-comparison) retain
+slower cases and establish no general speedup or history-scale guarantee.
+
 ## Composable typed-cell updates
 
 The [selected milestone](campaigns/202609221952.md) is implemented on main for

@@ -35,8 +35,11 @@ policy for replay/idempotency. A [bounded repeated-edit observation](performance
 finds increasing check/run cost through 256 edits of a nine-owner native program,
 including a rename control with unchanged semantic meaning. Current-validation
 reports no semantic revalidation; the observation does not isolate all preparation
-costs or establish long-history scale. No throughput, model-token or monetary-saving
-claim follows from input size or elapsed time alone.
+costs or establish long-history scale. Check/run still admit complete source
+closures. Shared immutable pack indexes remove repeated copies, but matched
+measurements do not establish a general speedup; source `caea6309` passes all 20
+fresh source gates and reached remote main unchanged. No throughput, model-token or
+monetary-saving claim follows from input size or elapsed time alone.
 
 Prefer ordinary libraries and direct native authoring. Native contributor-tool
 implementation needs a concrete supported workload with equivalent correctness,

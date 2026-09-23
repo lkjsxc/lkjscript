@@ -45,6 +45,65 @@ collided with an owner record's `kind` field, and reused an output filename. The
 originals remain separate from the completed measurements. This evidence makes
 no model-token, monetary, universal speed or live-memory-saving claim.
 
+### Shared pack-index comparison
+
+The storage change at `caea6309139a64ec004ad5b9f3fd77df5fb6c8ea` replaces two
+whole-index copies per cached object read with one immutable shared metadata
+handle, and moves newly sealed metadata into that same cache. It preserves
+descriptor/entry admission, per-read file length, payload checksum and typed
+digest verification. It does not remove accepted history or weaken complete
+closure admission.
+
+The timed candidate is `67699f6a…`; predecessor `8da427c6…` is the same b7f4a83d
+binary as above. Both use locked Rust 1.98.0 release builds of the product and dev
+packages, LTO and one codegen unit. The intervening 3f94643c Markdown renderer
+change is outside the timed paths. The same accepted projects and copied standard
+library are used for both binaries, with identical environment and profiler. One
+excluded warmup and three measured samples per cell and executable alternate pair
+order. No owned build or test runs during the 112 measured/warmup commands.
+Accepted HEAD, test results, generated artifact identities and canonical drafts
+remain equal; the standard library passes all 37 graph tests on both binaries.
+
+| Project / operation | Predecessor process ms | Candidate process ms |
+|---|---:|---:|
+| Body edits / status | 7.218 | 7.142 |
+| Body edits / owners | 7.272 | 6.865 |
+| Body edits / check | 55.483 | 57.780 |
+| Body edits / run | 55.330 | 54.816 |
+| Body edits / draft | 14.279 | 12.555 |
+| Body edits / unchanged plan | 10.599 | 10.308 |
+| Renames / status | 7.203 | 6.736 |
+| Renames / owners | 6.945 | 6.762 |
+| Renames / check | 25.795 | 25.393 |
+| Renames / run | 25.748 | 25.486 |
+| Renames / draft | 12.438 | 12.673 |
+| Renames / unchanged plan | 9.231 | 9.290 |
+| Standard / status | 5.347 | 5.867 |
+| Standard / check | 1,830.181 | 1,762.240 |
+
+These are medians, not a general speedup claim. Body check, rename draft/unchanged
+planning and standard status are slower. Standard check ranges overlap:
+1,829.399–1,842.796 ms versus 1,749.177–1,887.776 ms. Its maximum RSS median also
+increases from 27,868 to 28,384 KiB. Eliminating the observed index copies does not
+establish a live-memory reduction or solve the repeated-edit preparation cost.
+All samples and maximum RSS observations, build context, retained executable
+copies and original outputs remain in the evidence root's `paired/` directory.
+
+A separate syscall observation uses the unchanged candidate and strace 6.8 from
+the configured Ubuntu package, extracted locally after package-digest admission.
+It creates another fresh native zero-returning program and copies the two retained
+history projects. All three `run` calls report exact-current compilation, value zero
+and equal differential results, with accepted HEAD unchanged. Each opens catalog
+manifests 13 times and HEAD files 22 times. Successful pack-file opens are 440 / 1,983 /
+737 for zero edits / 256 body edits / 256 renames; total returned `read` bytes,
+including startup, are 2,002,381 / 15,071,378 / 6,003,801. These are diagnostic call
+counts, not elapsed-time comparisons. The preceding fresh `check` also creates its
+derived compilation cache and is not interchangeable with these warm run cases.
+Original traces, argv, outputs and the read-only count summary remain in `tracer/`.
+This identifies repeated repository opening as a further preparation cost to
+investigate; any reuse must preserve exact revision binding, cache admission and
+current execution authority checks.
+
 ## Persistent ordered maps, 2026-09-19
 
 The [map campaign](campaigns/202609191922.md#corrected-immutable-candidate)
