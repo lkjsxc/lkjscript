@@ -85,7 +85,7 @@ fn operations_markdown(snapshot: &CapabilitiesSnapshot) -> Result<String, String
             operation.request_model.name(),
             operation.response_model.name(),
             operation.authority_effect.name(),
-            operation.usage
+            operation.usage.replace('|', "\\|")
         );
     }
     output.push_str("\n## Project templates\n\n");
