@@ -551,6 +551,99 @@ fn map_key_encoding_checks_exact_types_limits_and_static_text_origin() {
 }
 
 #[test]
+fn map_and_byte_json_wrappers_obey_representation_limits() {
+    let fixture = fixture();
+    for schema in [
+        &fixture.program as &dyn super::super::value_schema::NormalizedValueSchema,
+        &fixture.reference,
+    ] {
+        for (ty, json, items, depth, string_bytes) in [
+            (fixture.maps[1], b"[[1,2]]".as_slice(), 3, 2, 0),
+            (fixture.maps[1], b"[[1,2],[3,4]]".as_slice(), 6, 2, 0),
+            (fixture.maps[3], "[[\"猫\",1]]".as_bytes(), 3, 2, 3),
+            (fixture.nested, br#"[["a",[1,2]]]"#.as_slice(), 5, 3, 1),
+            (
+                fixture.maps[2],
+                br#"[[{"$bytes":"AA=="},1]]"#.as_slice(),
+                4,
+                3,
+                6,
+            ),
+            (fixture.bytes, br#"{"$bytes":""}"#.as_slice(), 1, 1, 6),
+            (
+                fixture.bytes,
+                br#"{"$bytes":"AAECAw=="}"#.as_slice(),
+                1,
+                1,
+                8,
+            ),
+            (fixture.text, "\"猫\"".as_bytes(), 0, 0, 3),
+        ] {
+            assert_json_representation_limits(
+                schema,
+                ty,
+                json,
+                JsonLimits {
+                    maximum_bytes: json.len(),
+                    maximum_depth: depth,
+                    maximum_items: items,
+                    maximum_string_bytes: string_bytes,
+                },
+            );
+        }
+        // Empty containers have no pair/element representation to charge. Type
+        // eligibility still visits their complete element types independently.
+        for ty in [fixture.maps[1], fixture.list] {
+            let value = codec::decode_typed(schema, b"[]", ty, JsonLimits::default()).unwrap();
+            assert_eq!(
+                codec::encode_typed(
+                    schema,
+                    &value,
+                    ty,
+                    JsonLimits {
+                        maximum_items: 0,
+                        maximum_string_bytes: 0,
+                        ..JsonLimits::default()
+                    },
+                )
+                .unwrap(),
+                b"[]"
+            );
+        }
+    }
+}
+
+#[test]
+fn json_output_respects_the_unchanged_parser_container_limit() {
+    let mut fixture = fixture();
+    let mut ty = fixture.integer;
+    let mut value = NormalizedValue::I64(7);
+    for depth in 1..=128 {
+        ty = admit_runtime_type(&mut fixture.program, TypeForm::List { item: ty });
+        value = NormalizedValue::list(vec![value]).unwrap();
+        if depth < 127 {
+            continue;
+        }
+        let json = format!("{}7{}", "[".repeat(depth), "]".repeat(depth));
+        let parsed =
+            crate::platform::json::decode_application(json.as_bytes(), JsonLimits::default());
+        let encoded = codec::encode_typed(&fixture.program, &value, ty, JsonLimits::default());
+        if depth == 127 {
+            parsed.unwrap();
+            assert_eq!(encoded.unwrap(), json.as_bytes());
+        } else {
+            assert!(
+                parsed
+                    .unwrap_err()
+                    .message
+                    .contains("recursion limit exceeded")
+            );
+            assert_eq!(encoded.unwrap_err().code, "normalized_json_type");
+        }
+    }
+}
+
+#[test]
 fn map_key_encoding_cancellation_preserves_the_retained_value() {
     let fixture = fixture();
     let ty = fixture.maps[3];
@@ -768,21 +861,34 @@ fn map_codec_nested_boundaries_fit_the_existing_stack_and_preserve_shared_values
                 &fixture.program as &dyn super::super::value_schema::NormalizedValueSchema,
                 &fixture.reference,
             ] {
-                let json = codec::encode_value(schema, &value, ty, JsonLimits::default()).unwrap();
-                assert_json_map_chain(&json, 128);
-                let decoded =
-                    codec::decode_value(schema, &json, ty, JsonLimits::default()).unwrap();
-                assert_map_chain(&decoded, 128);
-                // Pair arrays contribute two JSON container levels per map at the byte
-                // parser. Exercise that separate, unchanged limit with a shallower chain.
+                // JSON pair framing contributes two container levels per map;
+                // typed data retains its independent 128-map layout boundary.
                 let shallow = shared_map_chain(63);
                 let shallow_ty = fixture.map_chain[63];
+                let json = codec::encode_value(schema, &shallow, shallow_ty, JsonLimits::default())
+                    .unwrap();
+                assert_json_map_chain(&json, 63);
+                let decoded =
+                    codec::decode_value(schema, &json, shallow_ty, JsonLimits::default()).unwrap();
+                assert_map_chain(&decoded, 63);
                 let bytes =
                     codec::encode_typed(schema, &shallow, shallow_ty, JsonLimits::default())
                         .unwrap();
                 let decoded =
                     codec::decode_typed(schema, &bytes, shallow_ty, JsonLimits::default()).unwrap();
                 assert_map_chain(&decoded, 63);
+                for depth in [64, 128] {
+                    let excessive = shared_map_chain(depth);
+                    let error = codec::encode_value(
+                        schema,
+                        &excessive,
+                        fixture.map_chain[depth],
+                        JsonLimits::default(),
+                    )
+                    .unwrap_err();
+                    assert_eq!(error.class, DiagnosticClass::Source);
+                    assert_eq!(error.code, "normalized_json_type");
+                }
             }
             let excessive = shared_map_chain(129);
             let excessive_ty = fixture.map_chain[129];

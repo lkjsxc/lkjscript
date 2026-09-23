@@ -47,6 +47,17 @@ separately from the shared carrier's observations. Fixed JSON/typed-data bytes a
 predecessor fixtures preserve sorted encoding, JSON unordered-unique acceptance and typed-data
 strict ordering. Existing standard, lkjournal HTTP/session, generated-asset and full gates remain.
 
+Typed JSON output bounds use fixed literal shapes and the unchanged strict byte reader
+as independent oracles. Check exact-fit and one-less byte/item/depth/string limits for
+primitive and nested Maps, Bytes keys/values, Unicode Text, structural/nominal record
+fields, payload-free variants and variants with payloads. Count Map pair arrays,
+generated object fields, case labels and base64 text. Empty collections charge no
+absent members while complete directional type eligibility remains required.
+The strict parser accepts 127 nested containers and rejects 128; output must obey
+that guard without disabling it. The joined 2 MiB codec worker retains independent
+typed-data acceptance through 128 Maps, JSON acceptance through 63 Maps and rejection
+of the next JSON pair level. Existing typed-data bytes and shared retained values survive.
+
 Offline-package receipt schema 16 adds the ordinary transported `totals-by<Item>` library and
 caller-owned nominal event consumer, six retained snapshots, checked overflow/missing lookup,
 reviewed body evolution, exact dependency replacement and old/new bundles after source removal.
@@ -446,6 +457,12 @@ Closing stdout after a copied artifact invocation preserves the complete result 
 and reports its prior publication on stderr.
 Retain a copied native counting workload whose output exceeded compact-record capacity,
 with independently expected map contents and authoring paths unavailable to artifact runs.
+The native counter additionally returns all 33,333 distinct keys, each with count one,
+as exactly 533,329 bytes (99,999 JSON items) on both routes. At 33,334 keys, 100,002
+JSON items reject before file publication, with no successful execution record,
+staging debris or accepted-HEAD mutation. Retain adjacent-limit originals outside
+the compiler checkout. Keep the original over-limit output unchanged; rejection
+by the repaired encoder is a new observation.
 
 Foreground acceptance extends the existing offline-package effect child, required by the current
 offline-package owner and exact-final-candidate admission. Standalone full retains the same owner;

@@ -527,6 +527,107 @@ declarations.end
     );
 }
 
+#[test]
+fn native_command_map_results_count_json_entry_arrays_before_publication() {
+    let public = Native::template("command");
+    let input = public.input(
+        "counts.lkjc",
+        &format!(
+            r#"request base={}
+declarations.begin
+(units
+  (use std builtin)
+  (module create counts
+    (function create step (visibility private)
+      (parameter create totals (type (map Text I64)))
+      (parameter create item (type Text))
+      (returns (map Text I64)) (effect pure)
+      (body (call std::map-insert (types Text I64) (local totals) (local item)
+        (call std::add
+          (call std::map-get-or (types Text I64) (local totals) (local item) (i64 0))
+          (i64 1)))))
+    (function create frequencies (visibility private)
+      (parameter create items (type (list Text)))
+      (returns (map Text I64)) (effect pure)
+      (body (call std::list-fold-left (types Text (map Text I64))
+        (local items) (map Text I64) (function-value step))))
+    (component create console (visibility private)
+      (port create count (type (function ((list Text)) (map Text I64))) (function frequencies))))
+  (target create count (component counts::console) (runner command) (port counts::console::count)))
+declarations.end
+"#,
+            public.revision()
+        ),
+    );
+    public.apply(&input, &public.plan(&input, true), true);
+    let head = std::fs::read(public.project.join("HEAD")).unwrap();
+    public.cli(&["build", "--output", "counts.lkja"], true);
+    let mut descriptor: Value = serde_json::from_slice(
+        &std::fs::read(public.project.join("command.deployment.json")).unwrap(),
+    )
+    .unwrap();
+    descriptor["artifact"] = serde_json::json!("counts.lkja");
+    descriptor["target"] = serde_json::json!("count");
+    let deployment = public.root.path().join("counts.deployment.json");
+    std::fs::write(&deployment, serde_json::to_vec(&descriptor).unwrap()).unwrap();
+    let result = public.root.path().join("result.json");
+    for detached in [false, true] {
+        if detached {
+            std::fs::rename(&public.project, public.root.path().join("retained-project")).unwrap();
+        }
+        for count in [33_333, 33_334] {
+            let keys = (0..count)
+                .map(|index| format!("key-{index:05}"))
+                .collect::<Vec<_>>();
+            let input = serde_json::to_vec(&[&keys]).unwrap();
+            public.input("arguments.json", std::str::from_utf8(&input).unwrap());
+            let mut route = if detached {
+                vec!["run", "--deployment", path(&deployment)]
+            } else {
+                vec!["run", "count"]
+            };
+            route.extend([
+                "--arguments-file",
+                "arguments.json",
+                "--result-file",
+                "result.json",
+            ]);
+            let records = public.cli(&route, count == 33_333);
+            if count == 33_333 {
+                // One outer entry-array member plus its two members: 99,999 items.
+                let expected =
+                    serde_json::to_vec(&keys.iter().map(|key| (key, 1)).collect::<Vec<_>>())
+                        .unwrap();
+                assert_eq!(expected.len(), 533_329);
+                assert_eq!(std::fs::read(&result).unwrap(), expected);
+                lkjscript::platform::json::decode_application(&expected, Default::default())
+                    .unwrap();
+                std::fs::remove_file(&result).unwrap();
+            } else {
+                // 100,002 actual JSON items must fail before create-new publication.
+                let diagnostic = compact_record(&records, "diagnostic");
+                assert_eq!(compact_field(diagnostic, "code"), "normalized_json_type");
+                assert!(compact_field(diagnostic, "message").contains("item-count limit"));
+                assert!(!result.exists());
+                assert!(records.iter().all(|record| record.operation != "execution"));
+            }
+            assert!(std::fs::read_dir(public.root.path()).unwrap().all(|entry| {
+                !entry
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".lkjscript-output-stage-")
+            }));
+        }
+        let project = if detached {
+            public.root.path().join("retained-project")
+        } else {
+            public.project.clone()
+        };
+        assert_eq!(std::fs::read(project.join("HEAD")).unwrap(), head);
+    }
+}
+
 #[tokio::test]
 async fn result_file_conflict_after_preflight_preserves_the_committed_effect() {
     use lkjscript::platform::{execute_foreground_run, parse_foreground_run};

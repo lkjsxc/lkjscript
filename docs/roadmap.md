@@ -59,8 +59,10 @@ through 32,768 distinct keys, including detached execution and an unchanged
 predecessor bundle. The numerical owner consumes result files with retained-byte
 bindings. Source `78b32e78` passes all 20 fresh source gates and reached remote main.
 The next adjacent-limit probe exposes undercounted Map pair framing in the shared
-JSON encoder. Correct item/depth accounting against independently fixed JSON shapes,
-preserving exact successful bytes and rejecting over-limit output before publication.
+JSON encoder. The successor corrects representation accounting, generated fields
+and the unchanged parser guard. Fixed-shape and public adjacent-limit tests pass;
+renew source/final-target proof for corrected delivery, preserving exact successful
+bytes and rejecting over-limit output before publication.
 The frozen v0.1.42 candidate remains retained rather than silently reclassified as failed.
 
 Prefer ordinary libraries and direct native authoring. Native contributor-tool

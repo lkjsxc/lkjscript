@@ -8,6 +8,12 @@ use std::fmt;
 
 pub const JSON_CONTRACT_VERSION: u16 = 1;
 
+// The pinned serde_json reader admits 127 nested arrays/objects before its
+// independent stack guard rejects. Typed output must fit the same reader even
+// when JsonLimits.maximum_depth allows a deeper value. Keep the reader enabled;
+// fixed 127/128-container tests detect a dependency change to this boundary.
+pub(crate) const MAXIMUM_JSON_CONTAINER_NESTING: usize = 127;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum JsonIntegerPolicy {
     SignedI64,

@@ -902,6 +902,25 @@ retain their strict integer policies. Byte/depth/item/string limits, duplicate f
 strings and trailing input reject under both policies. Typed JSON built-ins and project/artifact
 commands use the same application policy.
 
+Typed output checks the emitted JSON representation before returning success. The
+root has depth zero; each array member or object value adds one level. Every array
+member and object field consumes one item, including generated typed wrappers.
+A Map entry `[key,value]` consumes three items and places its key/value two levels
+below the Map array; nested values consume their additional items and levels.
+Bytes' `$bytes` value and variants' `case`/`value` fields also count. String-byte
+limits include object field names, case labels and base64 text. Whole-type
+directional eligibility still visits unused arguments and inactive cases separately.
+
+Current defaults are 1 MiB of encoded bytes, 100,000 JSON items, depth 128 and
+1 MiB per decoded string. The pinned strict reader additionally admits at most
+127 nested array/object containers; the output encoder respects that same guard.
+`execution.foreground-limits` exposes these independent representation bounds.
+For example, a flat primitive-key/primitive-value Map fits the item bound at 33,333
+entries and exceeds it at 33,334. Byte-identical encodings within the bounds remain
+compatible. Previously emitted over-limit shapes now reject with
+`normalized_json_type` before result publication. This correction changes no graph,
+artifact or typed-data encoding and imposes no new internal execution quota.
+
 `capabilities --section runners` advertises the F64 arithmetic, comparison, parse/format,
 conversion and transport policies in `execution.f64`, `execution.f64-conversion` and
 `execution.f64-transport`. Ordinary standard declarations use the existing built-in package

@@ -262,6 +262,27 @@ unrun state above remain historical evidence; they are not rewritten as passes.
 The maintained numerical owner separately consumes result files; this native
 counting program remains a designed public workflow rather than maintained adoption.
 
+### JSON framing boundary
+
+The next adjacent-limit observation with bd876cdf exposes a shared encoder defect:
+33,334 entries produce 533,345 correct-content bytes but exceed the strict reader's
+100,000-item limit. Each Map pair contributes three JSON items. The original output
+and its successful encoding/failed read remain retained rather than reclassified.
+
+Corrected copied executable 33fdd616… freshly authors the same literal native program
+in `/home/coder/workspace/lkjscript-json-framing-evidence-20260923`. Its 42 graph tests
+and 14 public commands pass their expected outcomes. Project and detached runs return
+33,333 entries as exactly 533,329 bytes, with every independently expected count one;
+the strict public reader admits those bytes. Both routes reject 33,334 entries before
+file publication, and detached cleanup reports zero owned tasks/failures. The original
+8e9628ad-authored bundle also returns the same valid boundary output. Accepted HEADs
+and the old invalid output remain unchanged, and no stage remains.
+
+This is correctness and compatibility evidence, not a speed comparison. Raw single
+timings remain in the owned originals without a throughput or memory-scale claim.
+The correction also enforces generated-field/string bounds and the unchanged strict
+parser's container guard. In-memory and typed-data capacity have separate owners.
+
 ## Persistent ordered maps, 2026-09-19
 
 The [map campaign](campaigns/202609191922.md#corrected-immutable-candidate)

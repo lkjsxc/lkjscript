@@ -8,7 +8,7 @@ use super::value_schema::NormalizedValueSchema;
 use crate::platform::binary64::Binary64;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::ExecutionControl;
-use crate::platform::json::{JsonLimits, decode_application};
+use crate::platform::json::{JsonLimits, MAXIMUM_JSON_CONTAINER_NESTING, decode_application};
 use crate::platform::kernel::{TypeForm, TypeObjectDigest};
 use base64::Engine;
 use serde_json::{Map, Value as JsonValue};
@@ -536,6 +536,16 @@ fn to_json(
 ) -> Result<JsonValue, Diagnostic> {
     state.require_depth(path, depth)?;
     let form = json_form(program, ty, false, path)?;
+    if matches!(
+        form,
+        TypeForm::Named { .. }
+            | TypeForm::Applied { .. }
+            | TypeForm::StructuralRecord { .. }
+            | TypeForm::List { .. }
+            | TypeForm::Map { .. }
+    ) {
+        state.require_container_depth(path, depth)?;
+    }
     match (value, form) {
         (NormalizedValue::Unit, TypeForm::Unit) => Ok(JsonValue::Null),
         (NormalizedValue::Bool(value), TypeForm::Bool) => Ok(JsonValue::Bool(*value)),
@@ -551,7 +561,9 @@ fn to_json(
                     )
                 })
         }
-        (NormalizedValue::Bytes(value), TypeForm::Bytes) => bytes_to_json(value, state, path),
+        (NormalizedValue::Bytes(value), TypeForm::Bytes) => {
+            bytes_to_json(value, state, path, depth)
+        }
         (NormalizedValue::Text(value), TypeForm::Text)
         | (NormalizedValue::StaticText(value), TypeForm::StaticText) => {
             text_to_json(value, state, path)
@@ -578,6 +590,7 @@ fn to_json(
             let mut object = Map::new();
             for ((name, value), field) in values.iter().zip(fields) {
                 let field_path = format!("{path}.{}", name.as_str());
+                state.require_string(name.as_str(), &field_path)?;
                 object.insert(
                     name.as_str().to_owned(),
                     to_json(program, value, field.ty, state, &field_path, depth + 1)?,
@@ -645,7 +658,12 @@ fn map_to_json(
     path: &str,
     depth: usize,
 ) -> Result<JsonValue, Diagnostic> {
-    state.charge(values.len().saturating_mul(2), path)?;
+    // Every entry contributes its outer-array member and both pair members.
+    let items = values.len().checked_mul(3).ok_or_else(json_item_overflow)?;
+    state.charge(items, path)?;
+    if values.len() != 0 {
+        state.require_container_depth(&format!("{path}[0]"), depth + 1)?;
+    }
     let mut entries = Vec::new();
     let mut cursor = values.iter();
     for (index, (map_key, value)) in cursor.by_ref().enumerate() {
@@ -655,7 +673,7 @@ fn map_to_json(
             key_type,
             state,
             &format!("{path}[{index}][0]"),
-            depth + 1,
+            depth + 2,
         )?;
         let value = to_json(
             program,
@@ -663,7 +681,7 @@ fn map_to_json(
             item_type,
             state,
             &format!("{path}[{index}][1]"),
-            depth + 1,
+            depth + 2,
         )?;
         entries.push(JsonValue::Array(vec![key, value]));
     }
@@ -696,6 +714,7 @@ fn encode_named(
         let mut object = Map::new();
         for (value, field) in fields.iter().zip(layout.fields.iter()) {
             let field_path = format!("{path}.{}", field.name.as_str());
+            state.require_string(field.name.as_str(), &field_path)?;
             object.insert(
                 field.name.as_str().to_owned(),
                 to_json(program, value, field.ty, state, &field_path, depth + 1)?,
@@ -723,14 +742,18 @@ fn encode_named(
             .get(*case as usize)
             .ok_or_else(|| type_error(path, "runtime variant case escaped its exact layout"))?;
         state.charge(if case.payload.is_some() { 2 } else { 1 }, path)?;
+        let case_path = format!("{path}.case");
+        state.require_string("case", &case_path)?;
+        state.require_depth(&case_path, depth + 1)?;
         let mut object = Map::new();
         object.insert(
             "case".to_owned(),
-            JsonValue::String(case.name.as_str().to_owned()),
+            text_to_json(case.name.as_str(), state, &case_path)?,
         );
         match (&case.payload, payload) {
             (None, None) => {}
             (Some(ty), Some(value)) => {
+                state.require_string("value", &format!("{path}.value"))?;
                 object.insert(
                     "value".to_owned(),
                     to_json(
@@ -834,7 +857,9 @@ fn map_key_to_json(
     match (key, json_form(program, ty, false, path)?) {
         (NormalizedMapKey::Bool(value), TypeForm::Bool) => Ok(JsonValue::Bool(*value)),
         (NormalizedMapKey::I64(value), TypeForm::I64) => Ok(JsonValue::from(*value)),
-        (NormalizedMapKey::Bytes(value), TypeForm::Bytes) => bytes_to_json(value, state, path),
+        (NormalizedMapKey::Bytes(value), TypeForm::Bytes) => {
+            bytes_to_json(value, state, path, depth)
+        }
         (NormalizedMapKey::Text(value), TypeForm::Text) => text_to_json(value, state, path),
         _ => Err(type_error(
             path,
@@ -847,8 +872,13 @@ fn bytes_to_json(
     value: &[u8],
     state: &mut EncodeState,
     path: &str,
+    depth: usize,
 ) -> Result<JsonValue, Diagnostic> {
+    state.require_container_depth(path, depth)?;
     state.charge(1, path)?;
+    let field_path = format!("{path}.$bytes");
+    state.require_string("$bytes", &field_path)?;
+    state.require_depth(&field_path, depth + 1)?;
     let encoded_length = value
         .len()
         .checked_add(2)
@@ -875,9 +905,7 @@ fn bytes_to_json(
 }
 
 fn text_to_json(value: &str, state: &EncodeState, path: &str) -> Result<JsonValue, Diagnostic> {
-    if value.len() > state.limits.maximum_string_bytes {
-        return Err(type_error(path, "text exceeds the JSON string-byte limit"));
-    }
+    state.require_string(value, path)?;
     Ok(JsonValue::String(value.to_owned()))
 }
 
@@ -894,19 +922,42 @@ impl EncodeState<'_> {
         require_depth(self.limits, path, depth)
     }
 
+    fn require_container_depth(&self, path: &str, depth: usize) -> Result<(), Diagnostic> {
+        self.require_depth(path, depth)?;
+        if depth >= MAXIMUM_JSON_CONTAINER_NESTING {
+            return Err(type_error(
+                path,
+                "typed JSON exceeds the reader's container-nesting limit",
+            ));
+        }
+        Ok(())
+    }
+
+    fn require_string(&self, value: &str, path: &str) -> Result<(), Diagnostic> {
+        if value.len() > self.limits.maximum_string_bytes {
+            return Err(type_error(path, "text exceeds the JSON string-byte limit"));
+        }
+        Ok(())
+    }
+
     fn charge(&mut self, items: usize, path: &str) -> Result<(), Diagnostic> {
-        self.items = self.items.checked_add(items).ok_or_else(|| {
-            json_error(
-                DiagnosticClass::Resource,
-                "normalized_json_item_overflow",
-                "typed JSON item accounting overflowed",
-            )
-        })?;
+        self.items = self
+            .items
+            .checked_add(items)
+            .ok_or_else(json_item_overflow)?;
         if self.items > self.limits.maximum_items {
             return Err(type_error(path, "typed JSON exceeds the item-count limit"));
         }
         Ok(())
     }
+}
+
+fn json_item_overflow() -> Diagnostic {
+    json_error(
+        DiagnosticClass::Resource,
+        "normalized_json_item_overflow",
+        "typed JSON item accounting overflowed",
+    )
 }
 
 fn require_depth(limits: JsonLimits, path: &str, depth: usize) -> Result<(), Diagnostic> {

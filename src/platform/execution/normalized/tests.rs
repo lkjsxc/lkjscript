@@ -3143,6 +3143,219 @@ fn normalized_json_codec_uses_exact_runtime_layouts_and_bounds() {
     );
 }
 
+// Literal JSON and its independently counted minima are the oracle. Lower one
+// limit at a time; the unchanged strict byte reader must reject the same shape.
+fn assert_json_representation_limits(
+    schema: &dyn super::value_schema::NormalizedValueSchema,
+    ty: TypeObjectDigest,
+    json: &[u8],
+    limits: JsonLimits,
+) {
+    let value = decode_typed(schema, json, ty, JsonLimits::default()).unwrap();
+    let expected = crate::platform::json::decode_application(json, limits).unwrap();
+    assert_eq!(encode_typed(schema, &value, ty, limits).unwrap(), json);
+    assert_eq!(
+        super::codec::encode_value(schema, &value, ty, limits).unwrap(),
+        expected
+    );
+    for boundary in 0..4 {
+        let mut lower = limits;
+        let maximum = match boundary {
+            0 => &mut lower.maximum_bytes,
+            1 => &mut lower.maximum_depth,
+            2 => &mut lower.maximum_items,
+            _ => &mut lower.maximum_string_bytes,
+        };
+        if *maximum == 0 {
+            continue;
+        }
+        *maximum -= 1;
+        assert!(crate::platform::json::decode_application(json, lower).is_err());
+        let expected_code = if boundary == 0 {
+            "normalized_json_output_bytes"
+        } else {
+            "normalized_json_type"
+        };
+        assert_eq!(
+            encode_typed(schema, &value, ty, lower).unwrap_err().code,
+            expected_code,
+            "JSON {} with {lower:?}",
+            std::str::from_utf8(json).unwrap()
+        );
+        if boundary != 0 {
+            assert_eq!(
+                super::codec::encode_value(schema, &value, ty, lower)
+                    .unwrap_err()
+                    .code,
+                expected_code
+            );
+        }
+    }
+}
+
+#[test]
+fn nominal_and_structural_json_fields_obey_representation_limits() {
+    let mut snapshot = crate::platform::kernel::tests::witness_snapshot();
+    let unit = admit_snapshot_type(&mut snapshot, TypeForm::Unit);
+    let module = snapshot
+        .owners
+        .keys()
+        .find_map(|owner| match owner {
+            OwnerKey::Module(module) => Some(*module),
+            _ => None,
+        })
+        .unwrap();
+    let declaration = DeclarationId::migrate(b"json-framing-variant", 0);
+    let mut cases = Vec::new();
+    for (index, (name, payload)) in [("A", None), ("Ready", None), ("B", Some(unit))]
+        .into_iter()
+        .enumerate()
+    {
+        let case =
+            crate::platform::semantic_id::CaseId::migrate(b"json-framing-variant", index as u64);
+        cases.push(case);
+        snapshot.owners.insert(
+            OwnerKey::Case(case),
+            OwnerRecord::Case(crate::platform::kernel::CaseRecord {
+                header: OwnerHeader::new(OwnerKey::Case(case), OwnerKind::Case),
+                declaration,
+                name: Name::new(name).unwrap(),
+                payload,
+            }),
+        );
+    }
+    cases.sort();
+    snapshot.owners.insert(
+        OwnerKey::Declaration(declaration),
+        OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(OwnerKey::Declaration(declaration), OwnerKind::Variant),
+            module,
+            name: Name::new("Framing").unwrap(),
+            visibility: DeclarationVisibility::Public,
+            payload: DeclarationPayload::Variant {
+                type_parameters: vec![],
+                cases,
+            },
+        }),
+    );
+    let package = snapshot.root.package_id;
+    let variant = admit_snapshot_type(
+        &mut snapshot,
+        TypeForm::Named {
+            declaration: DeclarationReference {
+                package,
+                declaration,
+            },
+        },
+    );
+    let structural = admit_snapshot_type(
+        &mut snapshot,
+        TypeForm::StructuralRecord {
+            fields: vec![StructuralTypeField {
+                name: Name::new("flag").unwrap(),
+                ty: unit,
+            }],
+        },
+    );
+    let function = DeclarationId::migrate(b"json-framing-variant", 1);
+    let body = ExpressionId::migrate(b"json-framing-variant", 0);
+    snapshot.owners.insert(
+        OwnerKey::Expression(body),
+        OwnerRecord::Expression(ExpressionRecord::new(body, ExpressionOperation::Unit {}).unwrap()),
+    );
+    let mut parameters = Vec::new();
+    for (index, ty) in [variant, structural].into_iter().enumerate() {
+        let parameter = ParameterId::migrate(b"json-framing-variant", index as u64);
+        parameters.push(parameter);
+        snapshot.owners.insert(
+            OwnerKey::Parameter(parameter),
+            OwnerRecord::Parameter(ParameterRecord {
+                header: OwnerHeader::new(OwnerKey::Parameter(parameter), OwnerKind::Parameter),
+                parent: ParameterParent::Function(function),
+                name: Name::new(format!("input{index}")).unwrap(),
+                ty,
+                use_mode: crate::platform::kernel::ParameterUse::Unrestricted,
+                resource_requirement: None,
+            }),
+        );
+    }
+    snapshot.owners.insert(
+        OwnerKey::Declaration(function),
+        OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(OwnerKey::Declaration(function), OwnerKind::PureFunction),
+            module,
+            name: Name::new("consume-framing").unwrap(),
+            visibility: DeclarationVisibility::Private,
+            payload: DeclarationPayload::Function(FunctionDeclaration {
+                requirement_parameters: vec![],
+                effect_parameters: vec![],
+                type_parameters: vec![],
+                parameters,
+                result: unit,
+                effect: FunctionEffect::Pure,
+                body,
+            }),
+        }),
+    );
+    snapshot.root.owners = MapRoot::from_parts(
+        snapshot.root.owners.page(),
+        snapshot.owners.len() as u64,
+        snapshot.root.owners.content(),
+    );
+    let mut program = prepare_snapshot(&snapshot);
+    let record_declaration = program.records[0].declaration;
+    let record = admit_runtime_type(
+        &mut program,
+        TypeForm::Named {
+            declaration: record_declaration,
+        },
+    );
+    let payload_free_declaration = program
+        .variants
+        .iter()
+        .find(|layout| layout.declaration.declaration != declaration)
+        .unwrap()
+        .declaration;
+    let payload_free = admit_runtime_type(
+        &mut program,
+        TypeForm::Named {
+            declaration: payload_free_declaration,
+        },
+    );
+    let mut canonical =
+        super::reference_schema::NormalizedReferenceSchema::reconstruct([&snapshot]).unwrap();
+    canonical.types.extend(program.types.clone());
+    let reference = super::reference::BoundReferenceSchema {
+        canonical: Arc::new(canonical),
+        value_origin: program.value_origin,
+    };
+    for schema in [
+        &program as &dyn super::value_schema::NormalizedValueSchema,
+        &reference,
+    ] {
+        for (ty, json, items, string_bytes) in [
+            (record, br#"{"value":null}"#.as_slice(), 1, 5),
+            (structural, br#"{"flag":null}"#.as_slice(), 1, 4),
+            (payload_free, br#"{"case":"Ready"}"#.as_slice(), 1, 5),
+            (variant, br#"{"case":"A"}"#.as_slice(), 1, 4),
+            (variant, br#"{"case":"Ready"}"#.as_slice(), 1, 5),
+            (variant, br#"{"case":"B","value":null}"#.as_slice(), 2, 5),
+        ] {
+            assert_json_representation_limits(
+                schema,
+                ty,
+                json,
+                JsonLimits {
+                    maximum_bytes: json.len(),
+                    maximum_depth: 1,
+                    maximum_items: items,
+                    maximum_string_bytes: string_bytes,
+                },
+            );
+        }
+    }
+}
+
 #[test]
 fn normalized_runners_execute_pure_commands_and_graph_owned_tests_differentially() {
     let effectful_snapshot = crate::platform::kernel::tests::witness_snapshot();

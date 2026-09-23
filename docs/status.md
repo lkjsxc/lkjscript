@@ -21,12 +21,16 @@ gates with stable inputs and zero reuse, and reached remote main unchanged. The
 Graph, artifact and data encodings remain compatible; numerical acceptance schema 3
 adds result-file bindings while frozen producers keep their original verifiers.
 
-Further boundary testing finds a shared JSON encoder defect: a 33,334-entry Map
-is emitted with 100,002 JSON collection children, then rejected by the strict input
-decoder's 100,000-item bound. Map pair framing is undercounted; output depth also
-needs reconciliation with actual JSON representation. Repair and renewed proof
-are required before successor publication. Existing successful smaller observations
-remain valid for their recorded scope.
+The successor correction counts actual JSON Map pair arrays and synthetic fields,
+checks object-key/tag/base64 string bounds, and respects the unchanged parser's
+127-container guard. Fixed-shape codec tests, the copied CLI and fresh native
+authoring outside the checkout pass adjacent 33,333/33,334-key success/rejection
+on both routes. The unchanged predecessor bundle also returns the exact smaller
+result. Over-limit output now fails before file publication; valid bytes and
+typed-data limits remain unchanged.
+Renewed source/final-target acceptance is due before successor publication. The
+[framing record](campaigns/202609222330.md#typed-json-framing--newly-observed-output-boundary)
+preserves the original defect and earlier evidence at its actual scope.
 
 ## Command input files
 

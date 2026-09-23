@@ -268,6 +268,11 @@ publication durability and stage cleanup. The file carries the typed JSON value,
 to the existing 1 MiB encoding limit, so larger lists or maps need not fit in one
 display record. Omit `--result-file` to retain the usual inline result.
 
+The JSON structure limits also apply. For example, a flat `Map<Text,I64>` can return
+33,333 entries within the default 100,000-item bound; its entry arrays and their
+members all count. Larger or more deeply nested results reject before a result file
+is published. `capabilities --section runners` lists the current JSON bounds.
+
 Paths are relative to the invocation directory. Existing files or directories, symlinks,
 missing parents and `..` traversal reject. Publication never overwrites a competing
 file. Destination inspection occurs before execution, but later disk/permission failures

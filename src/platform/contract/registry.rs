@@ -6988,7 +6988,16 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ),
                     ("json-bytes", codec.maximum_bytes.to_string()),
                     ("json-depth", codec.maximum_depth.to_string()),
+                    (
+                        "json-container-nesting",
+                        crate::platform::json::MAXIMUM_JSON_CONTAINER_NESTING.to_string(),
+                    ),
                     ("json-items", codec.maximum_items.to_string()),
+                    ("json-string-bytes", codec.maximum_string_bytes.to_string()),
+                    (
+                        "json-item-counting",
+                        "array-members-and-object-fields-including-typed-wrappers".to_owned(),
+                    ),
                     (
                         "frontier",
                         "current-representation-not-permanent-language-semantics".to_owned(),
