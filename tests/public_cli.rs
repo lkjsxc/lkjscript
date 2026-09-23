@@ -10,6 +10,8 @@ mod support;
 mod native_declarations;
 #[path = "public_cli/native_guides.rs"]
 mod native_guides;
+#[path = "public_cli/native_policy.rs"]
+mod native_policy;
 #[path = "public_cli/parameter_type.rs"]
 mod parameter_type;
 

@@ -39,6 +39,7 @@ pub mod json;
 pub(crate) mod kernel;
 pub mod language;
 pub mod meaning;
+pub mod native_tool;
 pub(crate) mod normalized_lifecycle;
 pub(crate) mod normalized_query;
 pub mod object;

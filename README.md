@@ -576,6 +576,10 @@ Its accepted lkjscript program renders all eight reference pages and validates t
 required exact references. Rust supplies observed metadata and the pure execution/
 publication boundary; no Rust page renderer remains. This tool is not included in
 the frozen v0.1.44 public release and is not a self-hosted compiler.
+The [native repository-policy tool](tools/native-policy/README.md) also owns the
+required no-Python gate's extension and bounded raw-shebang decisions. The two tools
+share strict grant-free pure artifact embedding; Rust retains metadata/filesystem
+observation and contributor orchestration. This introduces no application dependency.
 
 `serve` and `worker` load the standalone artifact bundle named by their strict deployment
 descriptors and prepare the selected target through the same normalized VM used by current graph

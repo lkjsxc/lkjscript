@@ -6,7 +6,10 @@ execute its embedded artifact. Native meaning owns page prose, layout, escaping,
 required-reference selection and missing/ambiguous-reference rejection. Rust
 observes authoritative registry/interface metadata and numeric adapter defaults,
 admits typed arguments, executes pure commands and publishes derived files.
-No parallel Rust page renderer remains.
+No parallel Rust page renderer remains. Its strict grant-free artifact embedding
+uses the shared `platform::native_tool::PureTool` boundary also adopted by the
+[repository-policy tool](../native-policy/README.md). Preparation is shared only
+for immutable code; invocation state and cancellation remain per call.
 
 This is native development-tool adoption, not compiler self-hosting. The program
 needs no Python, Node, shell subprocess or compiler checkout at runtime. The

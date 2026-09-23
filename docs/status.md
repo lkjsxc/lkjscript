@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-09-23 UTC. This page describes current product boundaries and
+Status date: 2026-09-24 Asia/Tokyo. This page describes current product boundaries and
 outstanding delivery. [Generated guides](generated/operations.md) own public
 operations, [specifications](spec/) own semantics, and [campaigns](campaigns/)
 retain detailed implementation and verification history.
@@ -23,8 +23,20 @@ inputs and zero reuse. The [current campaign](campaigns/202609240132.md) records
 the exact source evidence and public-binary reproduction. Matched eight-page
 generation rises from median 389.797 to 458.215 ms; the host binary grows by
 254,272 bytes. There is no speedup or application-runtime performance claim.
-Normal mainline push remains blocked on this workspace’s Git authentication/
-agent context. Local acceptance is not remote integration or release publication.
+That accepted history reached remote main at reporting descendant `41861c85`.
+The earlier workspace Git-authentication blocker is resolved; source acceptance
+and mainline integration remain separate from frozen public-release publication.
+
+The [native repository-policy tool](../tools/native-policy/README.md) now supplies
+extension and raw-shebang decisions to the existing required no-Python gate.
+Rust keeps Git/path observation, bounded filesystem reads and report/exit handling;
+the old Rust decision implementation is removed. Both maintained native tools use
+one grant-free pure artifact embedding boundary. Native policy meaning passes
+11 policy and 45 exact-standard tests; focused host tests compare 1,600 case/byte
+variants plus first-line, prefix-boundary, link and multi-batch cases.
+The [campaign](campaigns/202609240414.md) owns final source acceptance, matched
+costs and delivery. This does not add an application requirement, language
+intrinsic, filesystem capability or compiler-self-hosting claim.
 
 ## Standard list windows
 
@@ -223,8 +235,9 @@ assets. Public builds regenerate those assets; contributor inspection does not
 write accepted meaning.
 
 Native user authoring and all eight native reference-page targets are implemented.
-Rust remains the supported parser/kernel/platform boundary and still implements
-the other contributor and release tools. This is a concrete native-tool adoption,
+Rust remains the supported parser/kernel/platform boundary and implements
+contributor/release orchestration and host observation. Guide rendering and the
+required repository-policy decisions now have native owners. This is native-tool adoption,
 not compiler self-hosting or a claim that development already runs entirely in
 lkjscript.
 

@@ -58,29 +58,27 @@ fn immutable_native_artifact_still_uses_cancellation_and_output_admission() {
     let input = serde_json::to_vec(&input()).expect("JSON input");
     let control = ExecutionControl::uncancelled();
     control.cancel();
-    let target = Name::new("diagnostics").expect("target");
-    let error = run_pure_artifact_command(
-        program().expect("program"),
-        &target,
-        &input,
-        NormalizedCommandPolicy::default(),
-        &control,
-    )
-    .expect_err("cancelled native rendering");
+    let error = program()
+        .expect("program")
+        .run_json("diagnostics", &input, JsonLimits::default(), &control)
+        .expect_err("cancelled native rendering");
     assert_eq!(
         error.class,
         crate::platform::diagnostic::DiagnosticClass::Cancelled
     );
-    let mut policy = NormalizedCommandPolicy::default();
-    policy.json.maximum_bytes = 512;
-    let error = run_pure_artifact_command(
-        program().expect("program"),
-        &target,
-        &input,
-        policy,
-        &ExecutionControl::uncancelled(),
-    )
-    .expect_err("rendered output exceeds input-fitting bound");
+    let policy = JsonLimits {
+        maximum_bytes: 512,
+        ..JsonLimits::default()
+    };
+    let error = program()
+        .expect("program")
+        .run_json(
+            "diagnostics",
+            &input,
+            policy,
+            &ExecutionControl::uncancelled(),
+        )
+        .expect_err("rendered output exceeds input-fitting bound");
     assert_eq!(error.code, "normalized_json_output_bytes");
 }
 

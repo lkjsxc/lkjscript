@@ -7,18 +7,15 @@ use super::registry::{
     CapabilitiesSnapshot, RegistrySection, diagnostic_class_name, diagnostic_descriptors,
     exit_status_descriptors, operation_descriptors,
 };
-use crate::platform::compiler::load_artifact;
 use crate::platform::execution::ExecutionControl;
-use crate::platform::execution::normalized::{
-    NormalizedCommandPolicy, NormalizedProgram, NormalizedRunPolicy, run_pure_artifact_command,
-};
-use crate::platform::kernel::Name;
+use crate::platform::json::JsonLimits;
+use crate::platform::native_tool::PureTool;
 use crate::platform::project_creation::ProjectTemplate;
 use serde_json::{Value, json};
 use std::sync::OnceLock;
 
 const ARTIFACT: &[u8] = include_bytes!("../../../tools/native-guides/generated/guides.lkja");
-static PROGRAM: OnceLock<Result<NormalizedProgram, String>> = OnceLock::new();
+static PROGRAM: OnceLock<Result<PureTool, String>> = OnceLock::new();
 
 fn build(snapshot: &CapabilitiesSnapshot) -> Value {
     json!({
@@ -131,11 +128,10 @@ pub(super) fn relay_information(snapshot: &CapabilitiesSnapshot) -> Result<Strin
     )
 }
 
-fn program() -> Result<&'static NormalizedProgram, String> {
+fn program() -> Result<&'static PureTool, String> {
     PROGRAM
         .get_or_init(|| {
-            let artifact = load_artifact(ARTIFACT).map_err(|error| error.to_string())?;
-            NormalizedProgram::prepare_with_control(artifact, &ExecutionControl::uncancelled())
+            PureTool::load(ARTIFACT, &ExecutionControl::uncancelled())
                 .map_err(|error| error.to_string())
         })
         .as_ref()
@@ -144,18 +140,14 @@ fn program() -> Result<&'static NormalizedProgram, String> {
 
 fn execute(target: &str, input: Value) -> Result<Vec<u8>, String> {
     let input = serde_json::to_vec(&input).map_err(|error| error.to_string())?;
-    let target = Name::new(target).map_err(|error| error.to_string())?;
-    run_pure_artifact_command(
-        program()?,
-        &target,
-        &input,
-        NormalizedCommandPolicy {
-            execution: NormalizedRunPolicy::foreground(),
-            ..NormalizedCommandPolicy::default()
-        },
-        &ExecutionControl::uncancelled(),
-    )
-    .map_err(|error| error.to_string())
+    program()?
+        .run_json(
+            target,
+            &input,
+            JsonLimits::default(),
+            &ExecutionControl::uncancelled(),
+        )
+        .map_err(|error| error.to_string())
 }
 
 fn render(target: &str, input: Value) -> Result<String, String> {
