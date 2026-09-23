@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-09-22 UTC. This page describes current product boundaries and
+Status date: 2026-09-23 UTC. This page describes current product boundaries and
 outstanding delivery. [Generated guides](generated/operations.md) own public
 operations, [specifications](spec/) own semantics, and [campaigns](campaigns/)
 retain detailed implementation and verification history.
@@ -32,9 +32,13 @@ adds early source regression coverage, and retains service diagnostic originals.
 Corrected source `c78840a74ce19ad5145e1e23ca5ff2b2a7198c0f` passed all 20 fresh
 source gates with stable inputs and zero reuse, then reached remote main unchanged.
 Replacement candidate [35798767360/1](https://github.com/lkjsxc/lkjscript/actions/runs/35798767360)
-is in progress at that exact product/controller source. Candidate acceptance,
-immutable publication and anonymous public verification remain pending; v0.1.41
-has no tag or publication selection.
+was superseded during source acceptance after a public library tutorial reproduced
+a deployment-discovery defect: four required nullable fields were advertised as
+omittable. Cancellation was requested; the correction preserves existing decoder
+and runtime behavior. Fresh corrected source/candidate acceptance, immutable
+publication and anonymous public verification remain pending; v0.1.41 has no tag
+or publication selection. The [continuation record](campaigns/202609222330.md) owns
+this separate defect, regression evidence and candidate supersession.
 
 ## Public binary release
 

@@ -55,9 +55,13 @@ the existing candidate diagnostics. Corrected source
 `c78840a74ce19ad5145e1e23ca5ff2b2a7198c0f` passed all 20 fresh source gates with
 stable inputs and zero reuse, then reached remote main unchanged. Replacement
 candidate [35798767360/1](https://github.com/lkjsxc/lkjscript/actions/runs/35798767360)
-is running at that exact product/controller source. Its final-target/installation
+was superseded during source acceptance for a subsequently reproduced public
+deployment-discovery defect: four required nullable fields were advertised as
+omittable. The [autonomous continuation](campaigns/202609222330.md) corrects the
+schema inventory while preserving strict descriptor/runtime behavior and requests
+cancellation of that unaccepted producer. Fresh corrected source/final-candidate
 acceptance, annotated v0.1.41 tag/scoped selection, unchanged-asset promotion and
-anonymous public verification are still pending. v0.1.40 remains complete and unchanged.
+anonymous public verification remain due. v0.1.40 remains complete and unchanged.
 
 ## Content and compatibility
 

@@ -524,6 +524,10 @@ Names do not resolve packages, staged transitive availability does not grant imp
 and private-body transport is not source confidentiality. There is no registry, mutable version,
 network resolver, or package publication operation.
 
+The [native library walkthrough](docs/guides/native-library.md) creates a generic
+aggregation library, imports it into a separate typed shipping command, tests it,
+and runs the resulting standalone bundle with literal native authoring inputs.
+
 The executable embeds one exact package transport and one exact artifact bundle generated from
 `packages/standard`:
 

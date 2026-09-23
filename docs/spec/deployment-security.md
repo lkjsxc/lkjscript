@@ -26,7 +26,9 @@ application work. Artifacts contain none of these deployment facts.
 Foreground `run --deployment` uses this same descriptor and loader. Only this route permits
 omitting `execution` and `runtime`; explicit null rejects. The raw schema preserves omission
 until route validation. Resident routes require both complete numeric objects. Command topology
-requires null listener, HTTP, session and worker fields. Other field requirements are unchanged.
+requires null listener, HTTP, session and worker fields. Discovery marks these four
+topology fields `required=true`: accepting null does not make a JSON field omittable.
+Other field requirements are unchanged.
 Exact Command runner, full component requirements, grant/interface mapping, bounded arguments
 and every result-type encoding branch are admitted read-only before named secrets or live
 adapters. Partial adapter preparation closes earlier owners on failure.

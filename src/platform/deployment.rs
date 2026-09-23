@@ -259,7 +259,7 @@ pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
         None,
     ),
     schema_field("deployment.target", "name", Some(1), Some(128), false, None),
-    optional_schema_field(
+    schema_field(
         "deployment.listen",
         "null|string",
         Some(1),
@@ -283,7 +283,7 @@ pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
         false,
         Some("execution"),
     ),
-    optional_schema_field(
+    schema_field(
         "deployment.http",
         "null|object",
         None,
@@ -291,7 +291,7 @@ pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
         false,
         Some("http"),
     ),
-    optional_schema_field(
+    schema_field(
         "deployment.session",
         "null|object",
         None,
@@ -299,7 +299,7 @@ pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
         false,
         Some("session"),
     ),
-    optional_schema_field(
+    schema_field(
         "deployment.worker",
         "null|object",
         None,
@@ -2839,6 +2839,33 @@ mod tests {
         assert_eq!(normalized.maximum_capability_calls, Some(100_000));
         assert_eq!(normalized.maximum_call_depth, bounded.maximum_call_depth);
         assert_eq!(normalized.maximum_value_stack, bounded.maximum_value_stack);
+    }
+
+    #[test]
+    fn discovered_top_level_presence_matches_strict_deployment_decoder() {
+        let encoded = encode_deployment(&starter_command_deployment()).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&encoded).unwrap();
+        decode_deployment(&encoded).expect("complete foreground descriptor");
+        for field in DEPLOYMENT_SCHEMA_FIELDS {
+            let Some(name) = field.path.strip_prefix("deployment.") else {
+                continue;
+            };
+            if name.contains('.') {
+                continue;
+            }
+            let mut missing = value.clone();
+            missing.as_object_mut().unwrap().remove(name);
+            let decoded = decode_deployment(&serde_json::to_vec(&missing).unwrap());
+            assert_eq!(
+                decoded.is_err(),
+                field.required,
+                "discovered presence requirement for {} disagrees with the decoder",
+                field.path
+            );
+            if let Err(error) = decoded {
+                assert_eq!(error.code, "deployment_json", "{}", field.path);
+            }
+        }
     }
 
     #[test]
