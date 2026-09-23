@@ -1,0 +1,31 @@
+request base=CONSUMER_BASE
+add.dependency package=LIBRARY_PACKAGE semantic-revision=LIBRARY_REVISION package-revision=LIBRARY_PACKAGE_REVISION
+declarations.begin
+(units
+  (use windows LIBRARY_PACKAGE LIBRARY_PACKAGE_REVISION)
+  (module create batches
+    (record create Shipment (visibility private)
+      (field create label (type Text))
+      (field create mass (type I64)))
+    (function create batch (visibility private)
+      (parameter create shipments (type (list Shipment)))
+      (parameter create start (type I64))
+      (parameter create count (type I64))
+      (returns (list Shipment)) (effect pure)
+      (body (call windows::window (types Shipment) (local shipments) (local start) (local count))))
+    (test create middle (visibility private)
+      (actual
+        (call batch
+          (list Shipment
+            (record Shipment (field Shipment::label (text "apple")) (field Shipment::mass (i64 7)))
+            (record Shipment (field Shipment::label (text "pear")) (field Shipment::mass (i64 9)))
+            (record Shipment (field Shipment::label (text "猫")) (field Shipment::mass (i64 11))))
+          (i64 1) (i64 2)))
+      (expected
+        (list Shipment
+          (record Shipment (field Shipment::label (text "pear")) (field Shipment::mass (i64 9)))
+          (record Shipment (field Shipment::label (text "猫")) (field Shipment::mass (i64 11))))))
+    (component create console (visibility private)
+      (port create batch (type (function ((list Shipment) I64 I64) (list Shipment))) (function batch))))
+  (target create batch (component batches::console) (runner command) (port batches::console::batch)))
+declarations.end

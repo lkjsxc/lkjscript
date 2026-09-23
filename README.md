@@ -531,6 +531,8 @@ aggregation library, imports it into a separate typed shipping command, tests it
 and runs the resulting standalone bundle with literal native authoring inputs.
 The [collection summary walkthrough](docs/guides/native-summary.md) composes List
 and Map functions to count text keys and return an application-owned summary.
+The [paging walkthrough](docs/guides/native-pagination.md) returns a complete
+table in bounded files and transports its generic window function to another program.
 
 The executable embeds one exact package transport and one exact artifact bundle generated from
 `packages/standard`:

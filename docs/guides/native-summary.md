@@ -166,6 +166,9 @@ Maps stay subject to the runtime's actual structural and value limits. This
 program does not stream an unbounded collection, and its summary does not return
 the complete frequency table. To return bounded complete values, use the
 [result-file interface](native-library.md#save-a-command-result).
+For a complete frequency table larger than one result, the
+[paging example](native-pagination.md) uses an ordinary generic window function
+and shows its reuse with an application-owned record type.
 
 The literal program and commands were exercised through a copied executable
 outside the compiler checkout. The [continuation record](../campaigns/202609222330.md)

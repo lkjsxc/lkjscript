@@ -39,6 +39,9 @@ The user has authorized the complete release operation. The
 preserves the original defect and earlier evidence at its actual scope.
 The [native summary guide](guides/native-summary.md) also passes fresh authoring,
 checking and detached use, including a four-field result over 99,999 distinct keys.
+The [paging guide](guides/native-pagination.md) returns all 99,997 independently
+checked entries in three bounded files and reuses its ordinary generic window
+function with a separately authored consumer's nominal record.
 
 ## Command input files
 
