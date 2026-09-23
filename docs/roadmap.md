@@ -45,6 +45,14 @@ retain slower cases and do not establish a general speedup. Further object I/O
 reuse requires preserved current integrity and authority checks. No throughput, model-token
 or monetary-saving claim follows from input size or elapsed time alone.
 
+The next [native counting workload](performance.md#native-text-frequencies-2026-09-23)
+returns exact counts for 65,536 items over 16 text keys. At 4,096 distinct keys,
+the result exceeds the existing 64 KiB compact-record bound. Investigate an
+explicit bounded result-file path using the current typed encoder and create-new
+output owner, with pre-execution path checks and honest post-effect failures.
+No result-file facility or broader output capacity is implemented yet; the healthy
+v0.1.42 input-file candidate remains separate.
+
 Prefer ordinary libraries and direct native authoring. Native contributor-tool
 implementation needs a concrete supported workload with equivalent correctness,
 recovery and maintainability; compiler self-hosting is a separate decision. There

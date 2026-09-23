@@ -194,6 +194,41 @@ nonretention, the 65-block fallback boundary, catalog replacement, fresh opening
 warmed payload corruption and request-budget rejection. The optimization preserves
 history and persistent formats; it does not establish long-history scale.
 
+## Native text frequencies, 2026-09-23
+
+A fresh native program uses ordinary `list-fold-left`, `map-get-or`, `map-insert`
+and checked integer addition to count exact text keys. Its four graph tests cover
+empty, repeated, reordered and distinct Unicode spellings; the complete check
+passes 42 tests including the starter and exact standard closure. The detached
+bundle also runs through official installed v0.1.41 with independently expected
+`[["apple",1],["pear",2]]`. Native literals and public launch originals remain at
+`/home/coder/workspace/lkjscript-grouping-evidence-20260923`.
+
+Source 8e9628ad's copied executable accepts larger inputs through `--arguments-file`.
+Operational test data cycles fixed ASCII keys; expected counts are independently
+specified by quotient and remainder.
+Single foreground observations on the same Linux/Ryzen host, with only
+`LANG=C.UTF-8` and no concurrent owned build/test, separate invocation from whole
+process costs. They are not a throughput, RSS or general complexity guarantee.
+
+| Input items / distinct keys | Invocation ms | Whole process ms |
+|---|---:|---:|
+| 16 / 16 | 0.266 | 47.558 |
+| 256 / 16 | 2.475 | 50.169 |
+| 4,096 / 16 | 31.805 | 75.930 |
+| 4,101 / 16 | 33.574 | 75.205 |
+| 16,384 / 16 | 134.186 | 180.214 |
+| 65,536 / 16 | 514.863 | 578.340 |
+| 256 / 256 | 2.093 | 40.431 |
+
+Every completed case has exact expected counts, joined cleanup and 6,671 reported
+type-derivation steps. The 4,096-distinct-key case fails at compact response
+rendering with `control_render_record_bytes`, the existing 65,536-byte record
+bound. No result value was returned for comparison. The launcher stops with the
+failure preserved; 16,384/32,768-distinct-key cases are unrun. Typed result JSON has
+a separate 1 MiB bound. A result-file facility is an actionable investigation;
+none was added by this observation, and no language/evaluator limit was raised.
+
 ## Persistent ordered maps, 2026-09-19
 
 The [map campaign](campaigns/202609191922.md#corrected-immutable-candidate)
