@@ -28,7 +28,12 @@ authoring outside the checkout pass adjacent 33,333/33,334-key success/rejection
 on both routes. The unchanged predecessor bundle also returns the exact smaller
 result. Over-limit output now fails before file publication; valid bytes and
 typed-data limits remain unchanged.
-Renewed source/final-target acceptance is due before successor publication. The
+Source `adbe4f63f178d4a418276461ea1345131565fbe4` passes all 20 fresh source
+gates with stable inputs and zero reuse and reached remote main unchanged.
+Further output preparation work will reserve text before cloning: a shared
+64 MiB logical result is correctly rejected but currently materializes it first.
+Final-target acceptance and publication follow that improvement and renewed proof;
+the user has authorized the complete release operation. The
 [framing record](campaigns/202609222330.md#typed-json-framing--newly-observed-output-boundary)
 preserves the original defect and earlier evidence at its actual scope.
 

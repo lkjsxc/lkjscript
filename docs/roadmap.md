@@ -61,8 +61,11 @@ bindings. Source `78b32e78` passes all 20 fresh source gates and reached remote 
 The next adjacent-limit probe exposes undercounted Map pair framing in the shared
 JSON encoder. The successor corrects representation accounting, generated fields
 and the unchanged parser guard. Fixed-shape and public adjacent-limit tests pass;
-renew source/final-target proof for corrected delivery, preserving exact successful
-bytes and rejecting over-limit output before publication.
+source adbe4f63 passes all 20 fresh gates and reached remote main unchanged.
+The next native buffer probe finds large unnecessary text copies before correct
+output-byte rejection. Reserve that text against the existing byte bound before
+growth, retain valid bytes and final byte checks, then renew source/final-target
+proof for the combined v0.1.43 delivery. Complete publication is already authorized.
 The frozen v0.1.42 candidate remains retained rather than silently reclassified as failed.
 
 Prefer ordinary libraries and direct native authoring. Native contributor-tool

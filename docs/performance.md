@@ -283,6 +283,30 @@ timings remain in the owned originals without a throughput or memory-scale claim
 The correction also enforces generated-field/string bounds and the unchanged strict
 parser's container guard. In-memory and typed-data capacity have separate owners.
 
+### Rejected JSON text materialization
+
+A fresh native program maps a shared 65,536-byte Text across an ordinary list,
+then returns the resulting `List<Text>` through a detached command. It uses only
+standard list-map and a bound pure callback. Immutable executable 33fdd616… and
+the literal request/bundle/inputs remain in
+`/home/coder/workspace/lkjscript-json-buffer-evidence-20260923`.
+
+| Copies | Input bytes | Logical JSON bytes | Outcome | Sampled process peak RSS, KiB |
+|---|---:|---:|---|---:|
+| 15 | 65,572 | 983,086 | Exact result file | 17,276 |
+| 16 | 65,574 | 1,048,625 | Output-byte rejection | 17,292 |
+| 128 | 65,798 | 8,388,993 | Output-byte rejection | 31,960 |
+| 1,024 | 67,590 | 67,111,937 | Output-byte rejection | 147,108 |
+
+Every rejected output remains absent and reports joined cleanup. The byte cap is
+correctly enforced after materialization; it is not a one-MiB process-memory cap.
+The selected improvement is to reserve aggregate JSON text before copying it,
+retaining the final exact encoded-byte check. These are single observations from
+1 ms samples of Linux per-process VmHWM; a final peak can be missed. Source gates
+may overlap, so no elapsed-time comparison follows. The initial `/usr/bin/time`
+launcher was unavailable before product startup; its failure remains preserved,
+and only the pending invocations resumed with the process sampler.
+
 ## Persistent ordered maps, 2026-09-19
 
 The [map campaign](campaigns/202609191922.md#corrected-immutable-candidate)
