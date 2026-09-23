@@ -1116,28 +1116,61 @@ fn directory_store_detects_duplicate_physical_objects() {
 }
 
 #[test]
-fn directory_point_read_detects_payload_corruption() {
-    let temporary = tempfile::TempDir::new().expect("temporary store parent");
-    let root = temporary.path().join("objects");
-    let mut store = PackDirectoryStore::initialize(&root).expect("store must initialize");
-    let (key, bytes) = object(ObjectDomain::Owner, b"payload-to-corrupt");
-    let mut work = StoreWork::default();
-    store
-        .stage(key, &bytes, &mut work)
-        .expect("object must stage");
-    let receipt = store
-        .seal_staged(16 * 1024, &mut work)
-        .expect("object must seal");
-    let path = root.join("packs").join(receipt.packs[0].file_name());
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .open(path)
-        .expect("pack fixture must open");
-    file.seek(SeekFrom::Start(super::pack::HEADER_BYTES as u64))
-        .expect("payload seek");
-    file.write_all(b"X").expect("payload corruption");
-    file.sync_all().expect("payload corruption sync");
-    assert!(store.read(key, bytes.len(), &mut work).is_err());
+fn directory_cached_metadata_still_detects_payload_and_length_corruption() {
+    for reopen in [false, true] {
+        let temporary = tempfile::TempDir::new().expect("temporary store parent");
+        let root = temporary.path().join("objects");
+        let mut store = PackDirectoryStore::initialize(&root).expect("store must initialize");
+        let (key, bytes) = object(ObjectDomain::Owner, b"payload-to-corrupt");
+        let mut work = StoreWork::default();
+        store
+            .stage(key, &bytes, &mut work)
+            .expect("object must stage");
+        let receipt = store
+            .seal_staged(16 * 1024, &mut work)
+            .expect("object must seal");
+        if reopen {
+            drop(store);
+            store = PackDirectoryStore::open(&root).expect("store must reopen");
+        }
+        assert_eq!(
+            store.read(key, bytes.len(), &mut work).expect("warm read"),
+            Some(bytes.clone())
+        );
+        assert!(store.contains(key, &mut work).expect("cached membership"));
+        assert_eq!(
+            store.catalog_work().targeted_pack_footers_read,
+            u64::from(reopen)
+        );
+        let path = root.join("packs").join(receipt.packs[0].file_name());
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .open(path)
+            .expect("pack fixture must open");
+        file.seek(SeekFrom::Start(super::pack::HEADER_BYTES as u64))
+            .expect("payload seek");
+        file.write_all(b"X").expect("payload corruption");
+        file.sync_all().expect("payload corruption sync");
+        let mut corrupt_work = StoreWork::default();
+        let error = store
+            .read(key, bytes.len(), &mut corrupt_work)
+            .expect_err("cached metadata must not authorize corrupted payload bytes");
+        assert_eq!(error.code, "pack_entry_checksum");
+        assert_eq!(corrupt_work.objects_read, 0);
+        assert_eq!(corrupt_work.bytes_read, 0);
+
+        file.set_len(super::pack::HEADER_BYTES as u64)
+            .expect("pack truncation");
+        file.sync_all().expect("pack truncation sync");
+        let error = store
+            .read(key, bytes.len(), &mut work)
+            .expect_err("cached metadata must not hide a changed pack length");
+        assert_eq!(error.code, "pack_length_changed");
+        assert_eq!(
+            store.catalog_work().targeted_pack_footers_read,
+            u64::from(reopen)
+        );
+    }
 }
 
 #[cfg(unix)]

@@ -2,6 +2,49 @@
 
 Measurements are observations, not promises.
 
+## Repeated native editing, 2026-09-23
+
+The [autonomous continuation](campaigns/202609222330.md#repeated-native-editing--measurement-selection)
+uses the retained optimized `b7f4a83d` executable (`8da427c6…`) outside the compiler
+checkout. A fresh native command returns zero and a graph-owned test expects zero.
+Each of two projects keeps nine active owners. One alternates literal body and
+expected-result edits; the other alternates a function name through reviewed public
+rename operations. Every even boundary returns the same value. The rename control
+also retains exactly its original semantic-state identity and zero retirements;
+body edits add three retirements per edit. Neither arm edits accepted storage.
+
+The host is x86-64 Linux 7.2.3-arch1-2 on AMD Ryzen 9 9955HX with twelve visible
+logical CPUs, pinned Rust 1.98.0 and GNU Time extracted from the previously retained
+Ubuntu profiler package. Each product process has only `LANG=C.UTF-8`. No owned
+build or test overlaps these measurements. At each boundary, four samples of
+status, owner query, check, run, canonical draft and unchanged planning retain one
+excluded warmup and three measured samples. Whole-process medians include the
+profiler wrapper and CLI preparation; milliseconds are not isolated evaluator time.
+
+| Accepted edits | Body edit: check / run | Rename: check / run | Body / rename repository bytes |
+|---|---:|---:|---:|
+| 0 | 10.890 / 11.149 | 10.899 / 10.873 | 29,029 / 29,029 |
+| 2 | 13.745 / 12.824 | 12.756 / 12.506 | 73,510 / 42,885 |
+| 16 | 18.063 / 17.670 | 14.875 / 14.931 | 430,583 / 137,722 |
+| 64 | 27.493 / 28.373 | 22.705 / 21.892 | 2,304,375 / 874,247 |
+| 256 | 54.494 / 53.693 | 25.990 / 24.211 | 11,328,678 / 2,997,079 |
+
+These are bounded observations of a small program, not a history-scale guarantee.
+Status still reports accepted-current validation with no semantic revalidation at
+every boundary; its final medians are 6.954 / 7.083 ms. Final check/run maximum RSS
+medians are 19,848 / 20,272 KiB for body edits and 18,416 / 18,692 KiB for renames.
+The two arms separate unchanged semantic meaning from retirement growth but do
+not isolate every catalog, transport, compilation or allocation cost. Removing
+history or weakening closure admission is not justified by these results.
+
+Each arm completed 635 commands and 256 accepted edits. Literal requests, plans,
+all six operation samples, environment, outputs and three genuine launcher setup
+failures remain in `/home/coder/workspace/lkjscript-history-evidence-20260923`, with
+the rename control in `rename/`. The setup failures used a wrong result field,
+collided with an owner record's `kind` field, and reused an output filename. Their
+originals remain separate from the completed measurements. This evidence makes
+no model-token, monetary, universal speed or live-memory-saving claim.
+
 ## Persistent ordered maps, 2026-09-19
 
 The [map campaign](campaigns/202609191922.md#corrected-immutable-candidate)

@@ -10,13 +10,14 @@ use super::object::{
     ImmutableObjectStore, ObjectKey, StageOutcome, StoreError, StoreErrorClass, StoreReadAdmission,
     StoreWork, stage_into_map,
 };
-use super::pack::{PackBuilder, PackId, PackIndexEntry, PackMetadata, SealedPack};
+use super::pack::{PackBuilder, PackId, PackMetadata, SealedPack};
 use rustix::fs::{AtFlags, Dir, Mode, OFlags};
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 const PACKS_DIRECTORY: &str = "packs";
 const CATALOG_DIRECTORY: &str = "catalog";
@@ -184,7 +185,7 @@ pub struct PackDirectoryStore {
     segments_directory: File,
     staging_directory: File,
     staged: BTreeMap<ObjectKey, Vec<u8>>,
-    metadata: RefCell<BTreeMap<PackId, PackMetadata>>,
+    metadata: RefCell<BTreeMap<PackId, Arc<PackMetadata>>>,
     catalog: CatalogIndex,
     segment_files: BTreeMap<SegmentId, RefCell<File>>,
     duplicates: Vec<DuplicateObject>,
@@ -568,7 +569,7 @@ impl PackDirectoryStore {
         key: ObjectKey,
         location: CatalogLocation,
         maximum_bytes: usize,
-    ) -> Result<(PackMetadata, PackIndexEntry), StoreError> {
+    ) -> Result<Arc<PackMetadata>, StoreError> {
         let descriptor = self.catalog.pack(location.pack).cloned().ok_or_else(|| {
             corrupt(
                 "catalog_pack_descriptor",
@@ -606,10 +607,11 @@ impl PackDirectoryStore {
                 let mut accumulated = self.catalog_work.get();
                 accumulated.add(observed);
                 self.catalog_work.set(accumulated);
+                let metadata = Arc::new(read.metadata);
                 self.metadata
                     .borrow_mut()
-                    .insert(location.pack, read.metadata.clone());
-                read.metadata
+                    .insert(location.pack, Arc::clone(&metadata));
+                metadata
             }
         };
         let (entry, _) = metadata
@@ -630,7 +632,7 @@ impl PackDirectoryStore {
                 "catalog coordinates disagree with the exact typed pack entry",
             ));
         }
-        Ok((metadata.clone(), entry.clone()))
+        Ok(metadata)
     }
 
     pub fn seal_staged(
@@ -703,8 +705,8 @@ impl PackDirectoryStore {
         )?;
         {
             let mut metadata = self.metadata.borrow_mut();
-            for pack in &packs {
-                metadata.insert(pack.id, pack.metadata.clone());
+            for pack in packs {
+                metadata.insert(pack.id, Arc::new(pack.metadata));
             }
         }
         let segment_files = open_segment_handles(&self.segments_directory, &next)?;
@@ -832,7 +834,7 @@ impl ImmutableObjectStore for PackDirectoryStore {
             ));
         }
         admission.admit_object_bytes(location.length)?;
-        let (metadata, _) = self.validated_pack_entry(key, location, maximum_bytes)?;
+        let metadata = self.validated_pack_entry(key, location, maximum_bytes)?;
         let mut file = open_regular_file_at(
             &self.packs_directory,
             &location.pack.file_name(),

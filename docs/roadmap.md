@@ -31,9 +31,12 @@ remains due after the current shared publication identity clears. Further numeri
 data-processing work should measure an actual public program to determine
 whether authoring, repeated preparation/checking, representation or execution is
 its limiting dependency. Independent callback effects still require an application
-policy for replay/idempotency. Historical-repository revalidation cost remains
-unmeasured. No throughput, model-token or monetary-saving claim follows from input
-size or elapsed time alone.
+policy for replay/idempotency. A [bounded repeated-edit observation](performance.md#repeated-native-editing-2026-09-23)
+finds increasing check/run cost through 256 edits of a nine-owner native program,
+including a rename control with unchanged semantic meaning. Current-validation
+reports no semantic revalidation; the observation does not isolate all preparation
+costs or establish long-history scale. No throughput, model-token or monetary-saving
+claim follows from input size or elapsed time alone.
 
 Prefer ordinary libraries and direct native authoring. Native contributor-tool
 implementation needs a concrete supported workload with equivalent correctness,
