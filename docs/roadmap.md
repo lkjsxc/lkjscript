@@ -40,7 +40,9 @@ Public-only resumption
 [35841466243/1](https://github.com/lkjsxc/lkjscript/actions/runs/35841466243)
 completes anonymous exact/latest installed verification after a controller metadata
 lookup correction, using the original accepted producer and verifier. The user's
-selected stopping point is complete; no further autonomous work is selected. The
+selected stopping point for that mandate is complete. The later
+[native development-tool mandate](campaigns/202609232247.md) selects operation and
+diagnostic guide generation without changing the frozen v0.1.44 source. The
 [record](campaigns/202609222330.md#accepted-v0144-and-the-requested-release-stopping-point)
 retains the rejected first producer, failed first public boundary and all originals.
 

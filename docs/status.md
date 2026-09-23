@@ -154,7 +154,14 @@ its generic library, exact import and standalone execution need no compiler chec
 
 ## Public binary release
 
-The current published product is immutable
+The current published product is immutable [v0.1.44](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.44).
+The [standard-window delivery record](#standard-list-windows) owns its exact
+accepted source, publication and public verification. Native guide-tool development
+is separate from that frozen release.
+
+### v0.1.41 delivery
+
+The historical v0.1.41 product is immutable
 [v0.1.41](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.41), source
 `346c0366bde29151952a19332cb540681ad7bc7c`. Producer `35801102943/1` passed source,
 final-target and installation acceptance. Promotion `35809096928/1` published
@@ -210,9 +217,11 @@ data policy. Their maintained owners record exact current identities and generat
 assets. Public builds regenerate those assets; contributor inspection does not
 write accepted meaning.
 
-Native user authoring is implemented. Rust remains the parser/kernel/adapter and
-contributor/release-tool implementation boundary. This does not establish native
-tool implementation or compiler self-hosting.
+Native user authoring and the operation/diagnostic native guide tool are implemented.
+Rust remains the supported parser/kernel/platform boundary and still implements
+the other contributor and release tools. This is a concrete native-tool adoption,
+not compiler self-hosting or a claim that development already runs entirely in
+lkjscript.
 
 ## Language and runtime boundary
 
