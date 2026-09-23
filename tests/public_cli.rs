@@ -8,6 +8,8 @@ mod support;
 
 #[path = "public_cli/native_declarations.rs"]
 mod native_declarations;
+#[path = "public_cli/native_guides.rs"]
+mod native_guides;
 #[path = "public_cli/parameter_type.rs"]
 mod parameter_type;
 

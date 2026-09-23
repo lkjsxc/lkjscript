@@ -123,23 +123,7 @@ pub fn run_pure_command(
     validate_authority_binding(program, authority_binding)?;
     let invocation =
         prepare_command_invocation(program, target_name, arguments_json, policy.json, control)?;
-    let component = program
-        .components
-        .get(invocation.target.component.0 as usize)
-        .ok_or_else(|| {
-            runner_error(
-                DiagnosticClass::Corrupt,
-                "normalized_runner_component",
-                "selected target component escaped the prepared runtime table",
-            )
-        })?;
-    if invocation.task || !component.requirements.is_empty() {
-        return Err(runner_error(
-            DiagnosticClass::Capability,
-            "normalized_runner_grants_required",
-            "effectful target requires one production execution with exact deployment grants",
-        ));
-    }
+    require_pure_invocation(program, &invocation)?;
 
     let production = NormalizedVm::new(program, policy.execution)
         .invoke_root_target(target_name, invocation.arguments.clone(), None, control)
@@ -170,6 +154,56 @@ pub fn run_pure_command(
         reference: reference.1,
         differential: "equal",
     })
+}
+
+/// Executes an admitted pure artifact without a source repository or ambient grants.
+/// This is one production invocation, not differential evidence. Task identity and
+/// component requirements reject before invoking code, even for an empty effect row.
+pub(crate) fn run_pure_artifact_command(
+    program: &NormalizedProgram,
+    target_name: &Name,
+    arguments_json: &[u8],
+    policy: NormalizedCommandPolicy,
+    control: &ExecutionControl,
+) -> Result<Vec<u8>, Diagnostic> {
+    let invocation =
+        prepare_command_invocation(program, target_name, arguments_json, policy.json, control)?;
+    require_pure_invocation(program, &invocation)?;
+    let (value, _) = NormalizedVm::new(program, policy.execution)
+        .invoke_root_target(target_name, invocation.arguments, None, control)
+        .map_err(execution_diagnostic)?;
+    encode_typed_with_control(
+        program,
+        &value,
+        invocation.result_type,
+        policy.json,
+        control,
+    )
+}
+
+fn require_pure_invocation(
+    program: &NormalizedProgram,
+    invocation: &PreparedCommandInvocation,
+) -> Result<(), Diagnostic> {
+    let component = program
+        .components
+        .get(invocation.target.component.0 as usize)
+        .ok_or_else(|| {
+            runner_error(
+                DiagnosticClass::Corrupt,
+                "normalized_runner_component",
+                "selected target component escaped the prepared runtime table",
+            )
+        })?;
+    if invocation.task || !component.requirements.is_empty() {
+        return Err(runner_error(
+            DiagnosticClass::Capability,
+            "normalized_runner_grants_required",
+            "effectful target requires one production execution with exact deployment grants",
+        ));
+    }
+
+    Ok(())
 }
 
 #[derive(Debug)]

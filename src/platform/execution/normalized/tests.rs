@@ -6070,3 +6070,62 @@ type.argument parent=@items index=0 type=i64"#)
         }
     }
 }
+
+#[test]
+fn pure_artifact_commands_admit_inputs_and_reject_both_effect_authorities() {
+    use super::runner::run_pure_artifact_command;
+    let control = ExecutionControl::uncancelled();
+    let policy = NormalizedCommandPolicy::default();
+    let program = prepare_snapshot(&pure_command_snapshot());
+    let target = Name::new("pure").unwrap();
+    assert_eq!(
+        run_pure_artifact_command(&program, &target, b"[]", policy, &control).unwrap(),
+        b"null"
+    );
+    assert_eq!(
+        run_pure_artifact_command(&program, &target, b"[null]", policy, &control)
+            .unwrap_err()
+            .code,
+        "normalized_runner_argument_count"
+    );
+    assert!(run_pure_artifact_command(&program, &target, b"[] true", policy, &control).is_err());
+    let effects = prepare_snapshot(&crate::platform::kernel::tests::witness_snapshot());
+    assert_eq!(
+        run_pure_artifact_command(
+            &effects,
+            &Name::new("command").unwrap(),
+            b"[]",
+            policy,
+            &control
+        )
+        .unwrap_err()
+        .code,
+        "normalized_runner_grants_required"
+    );
+    for task in [false, true] {
+        let mut snapshot = normalized_worker_snapshot(task, false);
+        for record in snapshot.owners.values_mut() {
+            if let OwnerRecord::Target(target) = record
+                && target.name.as_str() == "work"
+            {
+                target.runner = RunnerKind::Command;
+            }
+        }
+        let program = prepare_snapshot(&snapshot);
+        let result = run_pure_artifact_command(
+            &program,
+            &Name::new("work").unwrap(),
+            b"[]",
+            policy,
+            &control,
+        );
+        if task {
+            assert_eq!(
+                result.unwrap_err().code,
+                "normalized_runner_grants_required"
+            );
+        } else {
+            assert_eq!(result.unwrap(), b"false");
+        }
+    }
+}

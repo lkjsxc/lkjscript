@@ -6,8 +6,8 @@ Native declaration units and canonical drafts let people and agents propose chan
 reviewed plan/apply validates and publishes their meaning. Stable typed identities
 preserve continuity through edits, while names remain mutable locators.
 
-The current public release is [v0.1.41](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.41),
-source `346c0366bde29151952a19332cb540681ad7bc7c`. It provides complete native
+The current public release is [v0.1.44](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.44),
+source `9ea93419f1c5e76126548ac5460752fe4cc4511b`. It provides complete native
 declaration authoring, canonical `change draft`, exact offline libraries, graph-owned
 tests, deterministic artifact bundles, and pure/task command execution through one
 copied binary. HTTP applications, interactive WebSocket sessions, deployment-bound
@@ -23,8 +23,9 @@ self-hosted compiler; Rust remains the supported kernel and platform boundary.
 
 Public v0.1.41 also provides composable typed-cell updates in caller-owned
 transactions, with an explicit guard and a separate standalone completion wrapper.
-Successor development v0.1.42 adds bounded JSON argument files for project and
-standalone commands, plus measured reductions in repeated catalog reads.
+Public v0.1.43 adds bounded JSON argument/result files for project and standalone
+commands, plus measured reductions in repeated catalog reads. Public v0.1.44 adds
+the ordinary standard `list-window` function.
 See [current status](docs/status.md) for that boundary and [release procedure](docs/release.md)
 for verified distributed bytes, retained failures and recovery. Historical campaign
 records do not redefine the behavior of the current public binary.
@@ -569,6 +570,12 @@ The standard package and `lkjournal` are typed meaning graph repositories and us
 
 Their checked-in files under `generated/` are deterministic current outputs. The standard artifact
 and transport also own the executable's built-in bytes.
+
+This development checkout also adopts [a native guide tool](tools/native-guides/README.md).
+Its accepted lkjscript program and embedded bundle now render operation and diagnostic
+guides; Rust only supplies their typed metadata and execution/publication boundary.
+Six other reference pages still use Rust renderers. This tool is not included in the
+frozen v0.1.44 public release and is not a self-hosted compiler.
 
 `serve` and `worker` load the standalone artifact bundle named by their strict deployment
 descriptors and prepare the selected target through the same normalized VM used by current graph

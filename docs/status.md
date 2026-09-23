@@ -5,6 +5,17 @@ outstanding delivery. [Generated guides](generated/operations.md) own public
 operations, [specifications](spec/) own semantics, and [campaigns](campaigns/)
 retain detailed implementation and verification history.
 
+## Native development tooling (development checkout)
+
+The [native guide tool](../tools/native-guides/README.md) implements operation and
+diagnostic reference-page rendering in ordinary lkjscript. Its accepted meaning
+and checked-in artifact replace the corresponding Rust formatting loops. Rust
+retains registry observations, strict input/output admission, pure execution and
+derived-file publication. Six other reference pages remain implemented in Rust.
+This is native tool adoption, not compiler self-hosting; the frozen public v0.1.44
+executable is unchanged. The [campaign](campaigns/202609232247.md) records validation
+and the separate source-delivery boundary.
+
 ## Standard list windows
 
 Public v0.1.44 adds ordinary pure `list-window<Item>(items, start, count)`.

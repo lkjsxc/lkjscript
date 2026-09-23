@@ -1,6 +1,7 @@
 //! Executable ownership of public and stored contract discovery.
 
 mod generated;
+mod native_guides;
 pub(crate) mod registry;
 
 pub use generated::{GeneratedDocument, generated_documents};

@@ -59,7 +59,7 @@ pub(crate) use resident::NormalizedResidentDeployment;
 pub(crate) use runner::{
     NormalizedCommandPolicy, NormalizedCommandReceipt, NormalizedTestReceipt,
     PreparedCommandInvocation, execution_diagnostic, prepare_command_invocation,
-    run_foreground_command, run_graph_tests, run_pure_command,
+    run_foreground_command, run_graph_tests, run_pure_artifact_command, run_pure_command,
 };
 pub(crate) use session::NormalizedSessionApplication;
 pub(crate) use vm::NormalizedRunObservation;
