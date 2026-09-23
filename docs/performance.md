@@ -2,6 +2,60 @@
 
 Measurements are observations, not promises.
 
+## Native bounded selection, 2026-09-23
+
+The [ranking guide](guides/native-ranking.md) now selects the requested prefix
+during an ordinary native merge. It shares the input by index ranges and keeps
+at most the requested count in each recursive result. Counts and Map entries
+are still constructed in full. No compiler intrinsic or Rust execution change
+implements this algorithm.
+
+Both programs run with the same copied development v0.1.44 executable, SHA-256
+c5e216cd2ace9fccea5b4dfe5310a12c0b3df13499d8956cd66be846247919ce, outside the
+checkout on x86-64 Linux 7.2.3-arch1-2 with twelve available logical CPUs. The
+reported CPU model is AMD Ryzen 9 9955HX; some processor entries report unknown.
+Each process receives only `LANG=C.UTF-8`. No owned build or other workload
+overlaps measurement. The preserved full-sort bundle and the new selection bundle
+receive identical input bytes, and all result bytes match independently counted
+and ordered expectations. Authoring projects are absent from their original paths.
+
+For each row, one warmup pair is excluded and three measured pairs alternate
+execution order. These are medians of the product's separate preparation and
+invocation observations; whole-process times, encoding times and all individual
+samples remain in the originals. The larger selection program includes additional
+functions and tests, so its preparation difference also includes that closure.
+
+| Input rows / distinct keys / returned count | Preparation ms, full / selected | Invocation ms, full / selected |
+|---|---:|---:|
+| 512 / 131 / 17 | 45.171 / 42.926 | 21.209 / 11.759 |
+| 16,384 / 4,097 / 17 | 49.834 / 49.882 | 1,004.198 / 371.675 |
+| 99,998 / 25,001 / 17 | 68.059 / 69.522 | 6,947.995 / 2,386.343 |
+| 99,998 / 99,998 / 17 | 72.992 / 68.114 | 28,667.597 / 6,896.300 |
+| 65,516 / 4,096 / 17, varied frequencies | 63.572 / 61.600 | 1,468.490 / 794.810 |
+| 512 / 131 / 0 | 45.225 / 46.714 | 22.198 / 4.662 |
+| 512 / 131 / 131 | 44.872 / 43.125 | 22.934 / 14.131 |
+| 16,384 / 4,097 / 4,097 | 46.786 / 46.798 | 995.240 / 613.905 |
+| 0 / 0 / 0 | 45.453 / 46.055 | 0.084 / 0.075 |
+
+The all-distinct invocation ranges are 27,737.956–29,524.628 ms for full sorting
+and 6,653.777–6,967.024 ms for selection. Its charged cumulative allocation drops
+from 6,740,952,982 to 2,090,155,259 bytes, and observed instructions from 93,672,844
+to 29,032,957. Cumulative allocation is not peak live memory or RSS. Empty-input
+whole-process median increases from 55.263 to 56.061 ms, and charged allocation
+increases from 547,398 to 605,179 bytes. Some preparation and encoding observations
+also increase. These results establish neither universal speedup nor a latency,
+memory, model-token or monetary guarantee.
+
+All 72 measurement commands finish with independently exact results and joined
+cleanup. The 41 other public commands author/check the native library, export and
+consume its generic interface, check all 2,548 small numeric input/count cases,
+and exercise stable selection of consumer-owned nominal records. Both maintained
+native guide files have fresh public authoring evidence. Literal requests, actual
+reviewed plans, bundles, environment, raw outputs and the excluded warmups remain
+in `/home/coder/workspace/lkjscript-selection-evidence-20260923`. The
+[continuation](campaigns/202609222330.md) keeps these designed library observations
+separate from v0.1.44's frozen release source and standard-library adoption.
+
 ## Repeated native editing, 2026-09-23
 
 The [autonomous continuation](campaigns/202609222330.md#repeated-native-editing--measurement-selection)

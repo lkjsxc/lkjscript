@@ -17,6 +17,24 @@ declarations.begin
       (parameter create shipments (type (list Shipment)))
       (returns (list Shipment)) (effect pure)
       (body (call ranking::sort-by (types Shipment) (local shipments) (function-value heavier))))
+    (function create selected (visibility private)
+      (parameter create shipments (type (list Shipment)))
+      (parameter create count (type I64))
+      (returns (list Shipment)) (effect pure)
+      (body (call ranking::select-by (types Shipment) (local shipments) (local count) (function-value heavier))))
+    (test create stable-selection (visibility private)
+      (actual
+        (call selected
+          (list Shipment
+            (record Shipment (field Shipment::label (text "pear")) (field Shipment::mass (i64 9)))
+            (record Shipment (field Shipment::label (text "apple")) (field Shipment::mass (i64 9)))
+            (record Shipment (field Shipment::label (text "猫")) (field Shipment::mass (i64 11)))
+            (record Shipment (field Shipment::label (text "plum")) (field Shipment::mass (i64 9))))
+          (i64 2)))
+      (expected
+        (list Shipment
+          (record Shipment (field Shipment::label (text "猫")) (field Shipment::mass (i64 11)))
+          (record Shipment (field Shipment::label (text "pear")) (field Shipment::mass (i64 9))))))
     (test create stable-order (visibility private)
       (actual
         (call batch
@@ -32,6 +50,8 @@ declarations.begin
           (record Shipment (field Shipment::label (text "apple")) (field Shipment::mass (i64 9)))
           (record Shipment (field Shipment::label (text "plum")) (field Shipment::mass (i64 9))))))
     (component create console (visibility private)
+      (port create selected (type (function ((list Shipment) I64) (list Shipment))) (function selected))
       (port create batch (type (function ((list Shipment)) (list Shipment))) (function batch))))
+  (target create selected (component batches::console) (runner command) (port batches::console::selected))
   (target create batch (component batches::console) (runner command) (port batches::console::batch)))
 declarations.end

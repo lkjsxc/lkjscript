@@ -62,10 +62,12 @@ checking and detached use, including a four-field result over 99,999 distinct ke
 The [paging guide](guides/native-pagination.md) returns all 99,997 independently
 checked entries in three bounded files and reuses its ordinary generic window
 function with a separately authored consumer's nominal record.
-The [ranking guide](guides/native-ranking.md) uses ordinary generic merge sort
-and the new standard window to return exact top entries. Its transported nominal
-consumer also runs on v0.1.43 after reviewed selection of the library's exact
-standard dependency; conflicting old/new pins reject before acceptance.
+The [ranking guide](guides/native-ranking.md) adds ordinary generic bounded
+selection alongside full merge sort. Its fresh native and transported nominal
+consumers pass, including 2,548 small input/count combinations. Matched
+[measurements](performance.md#native-bounded-selection-2026-09-23) retain both
+improvements and slower cases. The earlier full-sort consumer also runs on v0.1.43
+after reviewed exact standard selection; conflicting pins reject before acceptance.
 
 ## Command input files
 
