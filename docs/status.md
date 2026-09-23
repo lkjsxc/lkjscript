@@ -34,8 +34,12 @@ the old Rust decision implementation is removed. Both maintained native tools us
 one grant-free pure artifact embedding boundary. Native policy meaning passes
 11 policy and 45 exact-standard tests; focused host tests compare 1,600 case/byte
 variants plus first-line, prefix-boundary, link and multi-batch cases.
-The [campaign](campaigns/202609240414.md) owns final source acceptance, matched
-costs and delivery. This does not add an application requirement, language
+Implementation `9e5e192b` passes all 26 full-profile gates freshly, with zero
+reused results and stable before/after inputs (750.277 seconds). The required
+policy command is slower: alternating seven-pair medians are 7.287 ms before and
+190.284 ms after; the contributor executable grows by 770,424 bytes. This is
+a measured native-tool adoption cost, not an application speedup claim. The
+[campaign](campaigns/202609240414.md) retains scope, evidence and delivery boundaries. This does not add an application requirement, language
 intrinsic, filesystem capability or compiler-self-hosting claim.
 
 ## Standard list windows
