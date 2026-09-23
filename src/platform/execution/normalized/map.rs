@@ -336,7 +336,6 @@ impl Map {
         self.length
     }
 
-    #[cfg(test)]
     pub(super) fn is_empty(&self) -> bool {
         self.length == 0
     }

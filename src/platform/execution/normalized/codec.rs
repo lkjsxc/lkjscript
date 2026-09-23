@@ -661,7 +661,7 @@ fn map_to_json(
     // Every entry contributes its outer-array member and both pair members.
     let items = values.len().checked_mul(3).ok_or_else(json_item_overflow)?;
     state.charge(items, path)?;
-    if values.len() != 0 {
+    if !values.is_empty() {
         state.require_container_depth(&format!("{path}[0]"), depth + 1)?;
     }
     let mut entries = Vec::new();
