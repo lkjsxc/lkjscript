@@ -13,20 +13,20 @@ JSON inputs while retaining the existing 1 MiB byte limit, strict decoder, typed
 admission and effect ordering. The selectors are mutually exclusive; omitted input
 remains `[]`. Relative files use the invocation directory and must be regular with
 no final symlink. The [native library guide](guides/native-library.md#read-arguments-from-a-file)
-shows both forms. Final-candidate acceptance and delivery of this successor remain
-pending; the accepted v0.1.41 candidate retains its frozen source and scope.
+shows both forms. Candidate [35810382909/1](https://github.com/lkjsxc/lkjscript/actions/runs/35810382909)
+is running; final-candidate acceptance and delivery of this successor remain pending.
 
 The successor also shares immutable pack indexes across validated object reads.
-It uses one accepted source view for preparation, removing a redundant repository
-opening while retaining subsequent authority rechecks. Source
-`a1c462b521bdeab7c00797a0ebf329f1b3af57d2` passes all 20 fresh source gates with
-stable inputs and zero reuse, and reached remote main unchanged. The
-[matched public measurements](performance.md#shared-pack-index-comparison) retain
-slower cases and establish no general speedup or history-scale guarantee.
+It uses one accepted source view for preparation and bounded reuse of fully
+admitted catalog blocks, retaining authority rechecks and per-object integrity and
+request allowances. Source `8e9628ad3c8e71f886cd64aa750e032b20104bfa` passes all 20
+fresh source gates with stable inputs and zero reuse, and reached remote main
+unchanged. The [matched public measurements](performance.md#bounded-catalog-block-reuse)
+retain slower cases and establish no general speedup or history-scale guarantee.
 
 ## Composable typed-cell updates
 
-The [selected milestone](campaigns/202609221952.md) is implemented on main for
+The [selected milestone](campaigns/202609221952.md) is publicly delivered in
 v0.1.41. Ordinary native-authored standard tasks expose two contracts:
 `data-cell-update-in-transaction` stages a tentative value in its caller's matching
 transaction; `data-cell-try-update` owns a transaction and returns its completed
@@ -42,38 +42,27 @@ meaning and data format are unchanged. Native creation/drafting of generic
 [evidence owner](evidence/202609221952-cells/README.md) distinguishes focused public
 authoring, maintained adoption, official predecessor compatibility and release proof.
 
-Candidate
-[35725872480/1](https://github.com/lkjsxc/lkjscript/actions/runs/35725872480) failed
-at a stale service-verifier artifact pin. The [autonomous continuation](campaigns/202609222330.md)
-repairs that pin, adds early regression coverage and retains diagnostic originals.
-Replacement [35798767360/1](https://github.com/lkjsxc/lkjscript/actions/runs/35798767360)
-was cancelled during source acceptance after a native library tutorial reproduced
-a discovery defect: four required nullable deployment fields were advertised as
-omittable. The correction preserves decoder/runtime behavior; original failed and
-cancelled evidence remains at the continuation owner.
-
-Corrected source `346c0366bde29151952a19332cb540681ad7bc7c` passes all 20 fresh
-source gates with stable inputs and zero reuse, and reached remote main unchanged.
-Candidate [35801102943/1](https://github.com/lkjsxc/lkjscript/actions/runs/35801102943)
-completed source, finalized-candidate and original-reader acceptance at that exact
-product/controller source. The annotated v0.1.41 tag and scoped selection bind it.
-Promotion [35809096928/1](https://github.com/lkjsxc/lkjscript/actions/runs/35809096928)
-is running; immutable publication and anonymous public verification remain pending. The new
+The [autonomous continuation](campaigns/202609222330.md) repaired a stale service
+artifact pin and required-nullable deployment discovery while preserving original
+failed/cancelled evidence. Corrected source `346c0366` is the accepted and published
+product. Its [installed participation observation](evidence/202609221952-cells/README.md#immutable-publication-and-installed-participation)
+passes two participants under one owner, separate-process reads, absent-owner
+rejection before a trapping callback and unchanged data HEAD. The
 [native library guide](guides/native-library.md) is exercised on published v0.1.40;
 its generic library, exact import and standalone execution need no compiler checkout.
 
 ## Public binary release
 
 The current published product is immutable
-[v0.1.40](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.40), source
-`1cdaf72888a1f46359a6d38956050747335f8e32`. Producer `35685667968/1` passed source,
-final-target and installation acceptance. Promotion `35711837606/1` published
-the same assets and passed anonymous exact/latest installed verification. The
-[delivery record](campaigns/202609221813.md) retains original identities and expiry.
-The bounded [public native-authoring observation](evidence/202609220955-native/public-v0.1.40/README.md)
-also passes creation, canonical re-entry without the original input, reviewed
-identity-preserving edit and detached old/new execution. It is a designed witness,
-separate from maintained adoption or an independent-agent experiment.
+[v0.1.41](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.41), source
+`346c0366bde29151952a19332cb540681ad7bc7c`. Producer `35801102943/1` passed source,
+final-target and installation acceptance. Promotion `35809096928/1` published
+the same assets and passed anonymous exact/latest installed verification and its
+terminal. The [delivery record](evidence/202609221952-cells/README.md#immutable-publication-and-installed-participation)
+retains original identities and expiry. The earlier bounded
+[public native-authoring observation](evidence/202609220955-native/public-v0.1.40/README.md)
+on v0.1.40 remains valid for its recorded scope; it is a designed witness, separate
+from maintained adoption or an independent-agent experiment.
 
 The supported distribution is `x86_64-unknown-linux-musl`, with the exact static
 binary admitted in the pinned Alpine and Debian userlands. The native installer

@@ -137,6 +137,63 @@ complete block, bind the immutable segment context, bound retained memory, prese
 per-object admission/integrity and keep work observations truthful. Neither history
 deletion nor a new persistent cache format follows from these measurements.
 
+### Bounded catalog block reuse
+
+Source `8e9628ad3c8e71f886cd64aa750e032b20104bfa` retains at most 64 completely
+admitted catalog blocks per open store and clears them on catalog replacement.
+A full cache falls back to ordinary reads. Request allowances, duplicate-key
+checks and per-object payload/length/type checks still apply. Its copied optimized
+executable `bfc17d83…` is compared with `a1c462b5` / `dd8e130f…`, using the same
+two-package release configuration, pinned toolchain, environment and profiler.
+
+The same 14 cells contain one excluded warmup and three measured samples per
+executable, with alternating pair order. All 112 calls succeed with identical
+accepted HEAD, fixed test/command results, artifacts and canonical drafts. No
+owned build, test, download or tracer overlaps the timed calls. These whole-process
+medians include the profiler and preparation; they do not isolate evaluator cost.
+
+| Project / operation | Predecessor / candidate ms | Predecessor / candidate maximum RSS KiB |
+|---|---:|---:|
+| Body edits / status | 7.183 / 6.617 | 12,576 / 10,748 |
+| Body edits / owners | 7.542 / 7.137 | 12,580 / 10,932 |
+| Body edits / check | 54.682 / 44.103 | 19,708 / 16,744 |
+| Body edits / run | 52.640 / 44.246 | 20,148 / 17,268 |
+| Body edits / draft | 13.578 / 18.082 | 12,488 / 9,964 |
+| Body edits / unchanged plan | 10.536 / 9.528 | 14,776 / 11,936 |
+| Renames / status | 6.967 / 6.529 | 12,628 / 10,680 |
+| Renames / owners | 7.126 / 6.845 | 12,656 / 10,844 |
+| Renames / check | 23.803 / 19.964 | 18,888 / 15,244 |
+| Renames / run | 24.316 / 19.773 | 18,964 / 15,480 |
+| Renames / draft | 13.143 / 11.951 | 12,412 / 10,092 |
+| Renames / unchanged plan | 10.195 / 8.677 | 14,212 / 11,832 |
+| Standard / status | 5.787 / 5.533 | 12,264 / 10,428 |
+| Standard / check | 1,750.575 / 1,498.009 | 27,944 / 25,372 |
+
+Body-edit draft generation is slower at the median. Its ranges overlap:
+12.224–18.454 ms versus 11.689–19.650 ms. The unfavorable samples remain intact;
+there is no broad speedup or guaranteed memory-reduction claim. Standard check
+still passes all 37 graph tests. Separate fresh native creation, plan/apply, check
+and execution through the new copied binary also pass, with literal result zero.
+
+A subsequent twelve-command syscall comparison retains identical complete stdout
+and HEAD for every pair. Both binaries open catalogs 12 times and HEAD 20 times.
+Pack-file opens remain 416 / 1,935 / 687 for the three projects: object reads still
+perform their own I/O and validation. Check and run have identical counts within
+each project; returned bytes include startup:
+
+| Project | Predecessor / candidate read calls | Predecessor / candidate read bytes |
+|---|---:|---:|
+| Zero edits | 1,022 / 652 | 1,886,955 / 274,211 |
+| 256 body edits | 4,630 / 3,578 | 14,556,344 / 7,997,703 |
+| 256 renames | 1,662 / 1,132 | 5,582,042 / 3,069,818 |
+
+All raw samples, literal inputs, complete argv/stdout/stderr, immutable executables,
+traces and summaries remain in the external history evidence root's `catalog-block/`
+child. The storage tests separately cover whole-block corruption, failed-block
+nonretention, the 65-block fallback boundary, catalog replacement, fresh opening,
+warmed payload corruption and request-budget rejection. The optimization preserves
+history and persistent formats; it does not establish long-history scale.
+
 ## Persistent ordered maps, 2026-09-19
 
 The [map campaign](campaigns/202609191922.md#corrected-immutable-candidate)

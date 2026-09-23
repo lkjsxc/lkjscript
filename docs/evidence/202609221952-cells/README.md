@@ -268,3 +268,53 @@ was dispatched once at 2026-09-23T02:07:27Z from controller
 `107016373414`. Publication, anonymous exact/latest verification and the bounded
 installed participation observation remain pending. No candidate rebuild or
 execution with publication credentials occurred during this selection.
+
+## Immutable publication and installed participation
+
+Promotion `35809096928/1` completed all selected jobs and its terminal at
+2026-09-23T02:16:09Z. Selection job `107016373414`, publication `107017522822`,
+anonymous public verification `107017634755` and terminal `107018036810` all passed.
+Its candidate job was intentionally skipped; the authoritative producer remains
+`35801102943/1`, source 346c0366. The terminal reports
+`immutable_published_and_public_verified`, authorized publication and latest
+selecting that exact product. No product build or broad application replay was
+performed by the publication/public owners.
+
+Immutable [v0.1.41](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.41), release
+`394244926`, was published at 2026-09-23T02:13:28Z. All three actual public asset
+IDs, lengths and digests are retained in `public-v0.1.41/release.json` under campaign
+artifact storage; they match the accepted candidate identities. The public owner
+admits anonymous exact/latest bytes and their installed pair with equal archives,
+checksums, installers, manifests and executables. Both lifecycle results are
+`fresh_passed`, cleanup is complete and failure is absent.
+
+The terminal, publication and public original ZIPs are preserved locally with
+service-digest/length verification under
+`.artifacts/composable-20260922/public-v0.1.41`. Their artifact IDs and observed
+service expiry are respectively `10728523661` / 2026-10-07T02:16:06Z,
+`10728718214` / 2026-10-07T02:13:29Z and `10729805196` /
+2026-10-07T02:15:15Z. Authenticated metadata also retains the controller, selection
+and consumer-diagnostics identities/expiry; those originals remain in CI rather
+than being reconstructed locally. Candidate originals remain at their earlier owner.
+
+The separate bounded observation anonymously acquires the exact public bootstrap,
+checks it against the accepted/public identity, and installs into a fresh owned
+prefix outside the compiler checkout. Native installation admits archive
+`456bdca9…` and executable `fae71904…`, 24,934,944 bytes. The launcher and every
+product process have no publishing credentials. Thirteen product commands use
+the retained literal participation program to discover the four required nullable
+fields, create/plan/apply/build a consumer, detach its authoring project, and use
+the absolute installed executable for actual data operations. Two participants
+produce independently expected `Committed(60)`; separate processes read 60.
+The absent-owner call rejects with `normalized_data_transaction_required` before
+the trapping callback, preserves data HEAD, and leaves a later read at 60. Cleanup
+is joined and final data verification succeeds. No broad suite or live differential
+replay is added. This is a designed installed witness, separate from maintained
+adoption and native contributor-tool implementation.
+
+All inputs, launch/exit/stdout/stderr originals, the immutable installation,
+consumer bundle and disposable application state remain at
+`/home/coder/workspace/lkjscript-installed-cells-20260923`; no owned process remains.
+The compatibility and tested portability boundaries are unchanged. The composable
+milestone now has source/target proof, exact-source mainline ancestry, immutable
+publication, required anonymous verification and the selected supplementary witness.

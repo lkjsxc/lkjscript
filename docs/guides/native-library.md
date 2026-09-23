@@ -231,8 +231,8 @@ verification earlier. This pure command needs no capability grants.
 
 ## Read arguments from a file
 
-Development v0.1.42 adds `--arguments-file`; published v0.1.40 and the selected
-v0.1.41 candidate use the inline form above. With the newer executable, save this
+Development v0.1.42 adds `--arguments-file`; published v0.1.40 and v0.1.41
+use the inline form above. With the newer executable, save this
 ordinary JSON as `runtime/parcels.json`:
 
 ```json

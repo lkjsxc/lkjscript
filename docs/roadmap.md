@@ -6,17 +6,17 @@ work, failures and exact evidence. This page contains contingent future directio
 
 ## Selected delivery
 
-The [composable-cell milestone](campaigns/202609221952.md) remains selected for
-v0.1.41. Its implementation and fresh local source acceptance are integrated;
-replacement candidate `35798767360/1` at `c78840a7` was superseded for the subsequently
-reproduced deployment-discovery defect. The schema-presence correction preserves
-existing decoder/runtime behavior. Corrected `346c0366` passes all 20 fresh source
-gates and reached remote main. Candidate `35801102943/1` completed source,
-finalized-candidate and original-reader acceptance at that source. Its annotated
-tag/scoped selection is established; promotion `35809096928/1` is running.
-Immutable publication and anonymous public verification remain due. The existing
-[release owner](release.md) governs that continuation. v0.1.39 and v0.1.40 are
-complete; their historical release work is not an implementation backlog.
+The [composable-cell milestone](campaigns/202609221952.md) is complete as immutable
+v0.1.41 at `346c0366`. Producer `35801102943/1` passed source/finalized-candidate
+acceptance; promotion `35809096928/1` passed publication, anonymous exact/latest
+installed verification and its terminal. The bounded installed participation
+observation also passes. Genuine failed/cancelled predecessors remain recorded.
+
+Successor v0.1.42 has fresh source acceptance at `8e9628ad` and one active candidate,
+`35810382909/1`, at that exact source. Its tag and scoped-selection update have not
+been performed. The existing [release owner](release.md) governs remaining
+acceptance and explicitly authorized publication. v0.1.39 through v0.1.41 have
+no remaining delivery obligation.
 
 ## Next workload and decision criteria
 
@@ -26,9 +26,9 @@ shipping workload returned correct results through 4,096 items, then its 196,611
 inline input failed with host `E2BIG` at 8,192 items before executable startup.
 The [continuation](campaigns/202609222330.md#native-command-input-files--next-measured-workload)
 selects bounded `--arguments-file` for development v0.1.42. Its acceptance is separate
-from the healthy frozen v0.1.41 producer. Source `a1c462b5` passes all 20 fresh source
-gates and reached remote main unchanged; its own final-candidate/publication work
-remains due after the current shared publication identity clears. Further numerical/
+from the completed v0.1.41 producer. Source `8e9628ad` passes all 20 fresh source
+gates and reached remote main unchanged. The shared-publication trigger has cleared;
+its own candidate is running and public delivery remains due. Further numerical/
 data-processing work should measure an actual public program to determine
 whether authoring, repeated preparation/checking, representation or execution is
 its limiting dependency. Independent callback effects still require an application
@@ -38,10 +38,11 @@ including a rename control with unchanged semantic meaning. Current-validation
 reports no semantic revalidation; the observation does not isolate all preparation
 costs or establish long-history scale. Check/run still admit complete source
 closures. Shared immutable pack indexes remove repeated copies, and reusing one
-accepted source view removes one catalog opening per preparation. The matched
-measurements do not establish a general speedup. Repeated reads of the
-same catalog blocks remain a concrete candidate for bounded, context-bound reuse;
-admission and truthful work accounting must be preserved. No throughput, model-token
+accepted source view removes one catalog opening per preparation. Bounded reuse of
+fully admitted catalog blocks further reduces repeated I/O while preserving object
+checks and truthful work accounting. [Matched measurements](performance.md#bounded-catalog-block-reuse)
+retain slower cases and do not establish a general speedup. Further object I/O
+reuse requires preserved current integrity and authority checks. No throughput, model-token
 or monetary-saving claim follows from input size or elapsed time alone.
 
 Prefer ordinary libraries and direct native authoring. Native contributor-tool

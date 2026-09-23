@@ -6,8 +6,8 @@ Native declaration units and canonical drafts let people and agents propose chan
 reviewed plan/apply validates and publishes their meaning. Stable typed identities
 preserve continuity through edits, while names remain mutable locators.
 
-The current public release is [v0.1.40](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.40),
-source `1cdaf72888a1f46359a6d38956050747335f8e32`. It provides complete native
+The current public release is [v0.1.41](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.41),
+source `346c0366bde29151952a19332cb540681ad7bc7c`. It provides complete native
 declaration authoring, canonical `change draft`, exact offline libraries, graph-owned
 tests, deterministic artifact bundles, and pure/task command execution through one
 copied binary. HTTP applications, interactive WebSocket sessions, deployment-bound
@@ -21,10 +21,11 @@ provide folds, maps, binary64 operations, typed persistence and transaction-comp
 reporting. Native user authoring is distinct from native contributor tooling or a
 self-hosted compiler; Rust remains the supported kernel and platform boundary.
 
-Current main also implements composable typed-cell participants selected for
-v0.1.41; candidate acceptance and public delivery are still pending. Successor
-development v0.1.42 adds bounded JSON argument files for project and standalone
-commands. See [current status](docs/status.md) for that boundary and [release procedure](docs/release.md)
+Public v0.1.41 also provides composable typed-cell updates in caller-owned
+transactions, with an explicit guard and a separate standalone completion wrapper.
+Successor development v0.1.42 adds bounded JSON argument files for project and
+standalone commands, plus measured reductions in repeated catalog reads.
+See [current status](docs/status.md) for that boundary and [release procedure](docs/release.md)
 for verified distributed bytes, retained failures and recovery. Historical campaign
 records do not redefine the behavior of the current public binary.
 
@@ -43,7 +44,7 @@ records measured workloads and their limits.
 ## Download and install
 
 The supported runtime is Linux x86-64, statically linked for `x86_64-unknown-linux-musl`.
-Public v0.1.40 includes immutable version slots and an explicit default selection. Anonymous
+Public v0.1.41 includes immutable version slots and an explicit default selection. Anonymous
 exact/latest downloads and installed application acceptance are complete; see
 [release state](docs/release.md) for the frozen source and delivery evidence.
 The latest bootstrap is acquired completely before execution with this single compound invocation:
@@ -66,9 +67,9 @@ lkjscript runtime list
 For download/inspect/run, use the exact immutable URL and review the complete script first:
 
 ```sh
-curl -q --fail --location --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 180 --max-filesize 16384 --output install-v0.1.40.sh https://github.com/lkjsxc/lkjscript/releases/download/v0.1.40/install.sh
-cat install-v0.1.40.sh
-sh install-v0.1.40.sh --prefix "$HOME/.local"
+curl -q --fail --location --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 180 --max-filesize 16384 --output install-v0.1.41.sh https://github.com/lkjsxc/lkjscript/releases/download/v0.1.41/install.sh
+cat install-v0.1.41.sh
+sh install-v0.1.41.sh --prefix "$HOME/.local"
 ```
 
 Trust the initial script as executable code from the selected GitHub HTTPS source. Its embedded
@@ -81,14 +82,14 @@ metadata and attestations are separate from anonymous download.
 The public native offline boundary takes a local archive and its expected lowercase SHA-256:
 
 ```sh
-manager="$HOME/.local/lib/lkjscript/versions/v0.1.40/x86_64-unknown-linux-musl/lkjscript"
+manager="$HOME/.local/lib/lkjscript/versions/v0.1.41/x86_64-unknown-linux-musl/lkjscript"
 "$manager" runtime install --archive "$PWD/lkjscript-x86_64-unknown-linux-musl.tar.gz" --sha256 "$archive_sha256" --prefix "$HOME/.local"
 "$manager" runtime list --prefix "$HOME/.local"
-"$manager" runtime select v0.1.40 --prefix "$HOME/.local"
+"$manager" runtime select v0.1.41 --prefix "$HOME/.local"
 ```
 
 Set `archive_sha256` to the exact archive checksum from the chosen trusted release. Historical
-dry-run archives retain their declared, unverified publication status. v0.1.40 supports
+dry-run archives retain their declared, unverified publication status. v0.1.41 supports
 publication-neutral content; older managers such as v0.1.38 may reject that encoding,
 so use the exact new bootstrap when upgrading. Different archives cannot replace one immutable
 tag slot. Installation without `--activate` does not change the default. Inventory
@@ -103,7 +104,7 @@ recover through the retained newer manager:
 ```sh
 "$manager" runtime select v0.1.32 --prefix "$HOME/.local"
 "$HOME/.local/bin/lkjscript" --version
-"$manager" runtime select v0.1.40 --prefix "$HOME/.local"
+"$manager" runtime select v0.1.41 --prefix "$HOME/.local"
 "$manager" run --deployment /absolute/application/command.deployment.json
 ```
 
