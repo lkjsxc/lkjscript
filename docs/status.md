@@ -13,8 +13,13 @@ and checked-in artifact replace the corresponding Rust formatting loops. Rust
 retains registry observations, strict input/output admission, pure execution and
 derived-file publication. Six other reference pages remain implemented in Rust.
 This is native tool adoption, not compiler self-hosting; the frozen public v0.1.44
-executable is unchanged. The [campaign](campaigns/202609232247.md) records validation
-and the separate source-delivery boundary.
+executable is unchanged. Source `7b7a54ce` passes all 20 fresh source gates with
+stable inputs and zero reuse. The Git-only tool also checks and rebuilds identically
+using the published v0.1.44 executable. Normal mainline push remains blocked on
+the authorized development environment's existing GitHub authentication; this
+local acceptance is not remote integration or release publication. The
+[campaign](campaigns/202609232247.md#stable-source-acceptance-and-measured-cost)
+records the exact evidence, generation-cost increase and recovery resources.
 
 ## Standard list windows
 
