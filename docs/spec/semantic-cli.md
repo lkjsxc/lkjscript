@@ -833,8 +833,8 @@ artifact and preserves existing data. Build does not alter accepted authority.
 ## Run
 
 ```text
-run TARGET [--arguments JSON | --arguments-file PATH]
-run --deployment PATH [--arguments JSON | --arguments-file PATH]
+run TARGET [--arguments JSON | --arguments-file PATH] [--result-file PATH]
+run --deployment PATH [--arguments JSON | --arguments-file PATH] [--result-file PATH]
 ```
 
 The two argument selectors are mutually exclusive and may occur at most once; omission
@@ -848,6 +848,29 @@ typed-value or execution limits, stream values, or interpret `-` as standard inp
 Both selectors feed the same application decoder and typed input admission. Conflicting
 selectors, duplicate options and missing option values reject before argument-file,
 project or descriptor reads.
+
+`--result-file` selects one create-new output independently of either argument selector.
+It writes the exact complete typed JSON bytes, without a newline or re-encoding, under
+the same application JSON limits. Default output remains the compact `execution.value`.
+With a result file, `execution.result-file` replaces `value` and names the absolute
+output; a separate `output` record reports `path`, `bytes`, `visibility`, `durability`
+and `stage-cleanup`. This permits a bounded typed result larger than the compact
+record's display capacity; it does not raise either format's limits.
+
+The selector occurs at most once and accepts a nonempty UTF-8 path of at most 4096
+bytes, including its resolved absolute form. Relative paths use the invocation directory;
+`-` is an ordinary filename. Before context reads, secrets or adapters, inspect the absent
+destination and its existing ordinary parent. Existing files, directories and dangling
+symlinks, symlinked parents and `..` traversal reject. Inspection creates or reserves
+nothing, and does not promise later absence, writability or disk capacity. Encoding and
+owned execution cleanup complete before publication. The existing create-new output owner
+rechecks the destination, writes and synchronizes an owned sibling stage, and exposes the
+complete file atomically without replacing a competing output. It reports actual directory
+durability and stage cleanup. Preparation, invocation or encoding failure publishes no
+result file. A later conflict or write failure can occur after application effects;
+neither failure nor missing stdout proves rollback or safe retry. A successfully exposed
+file remains visible if later receipt delivery fails. Result-file publication and application
+transactions are separate authorities.
 
 Pure `run` execution records include `production-peak-call-frames`,
 `reference-peak-call-frames`, `production-tail-transfers`, and `reference-tail-transfers` as

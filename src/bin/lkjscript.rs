@@ -354,6 +354,9 @@ fn foreground_run(arguments: &[String]) -> ExitCode {
             Ok(()) => ExitCode::SUCCESS,
             Err(mut error) => {
                 error.notes.push("invocation and cleanup completed; earlier effects may be visible and automatic retry is not safe".to_owned());
+                if arguments.iter().any(|argument| argument == "--result-file") {
+                    error.notes.push("the requested result file is already published; stdout failure does not remove it".to_owned());
+                }
                 // The output stream is broken. Preserve bounded failure evidence on stderr.
                 if let Ok(mut bytes) = serde_json::to_vec(&error) {
                     bytes.push(b'\n');

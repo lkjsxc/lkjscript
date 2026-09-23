@@ -241,6 +241,16 @@ fn invoke(
         ("--arguments", arguments)
     };
     let command = context.receipt.commands.len();
+    let result_file = context.root.join(format!("f64-result-{name}.json"));
+    let result_path = result_file.display().to_string();
+    let to_file = matches!(
+        name,
+        "project-decimals" | "scalar-observation" | "data-save" | "committed-json-failure"
+    );
+    require(
+        !result_file.exists(),
+        "F64 result destination already exists",
+    )?;
     let output = if let Some(artifact) = artifact {
         let filename = format!("f64-{artifact}-{target}.deployment.json");
         let descriptor = bundle.join(&filename);
@@ -249,24 +259,34 @@ fn invoke(
             fs::write(&descriptor, &bytes)?;
             fs::write(context.evidence.join(filename), bytes)?;
         }
-        context.cli(
-            None,
-            &[
-                "run",
-                "--deployment",
-                &descriptor.display().to_string(),
-                selector,
-                input,
-            ],
-            passes,
-        )?
+        let descriptor_path = descriptor.display().to_string();
+        let mut arguments = vec!["run", "--deployment", &descriptor_path, selector, input];
+        if to_file {
+            arguments.extend(["--result-file", result_path.as_str()]);
+        }
+        context.cli(None, &arguments, passes)?
     } else {
-        context.cli(
-            Some(&package.path),
-            &["run", target, selector, input],
-            passes,
-        )?
+        let mut arguments = vec!["run", target, selector, input];
+        if to_file {
+            arguments.extend(["--result-file", result_path.as_str()]);
+        }
+        context.cli(Some(&package.path), &arguments, passes)?
     };
+    if to_file && passes {
+        require(
+            field(&output, "execution", "result-file")? == result_path,
+            "F64 result was not published at the requested destination",
+        )?;
+        fs::copy(
+            &result_file,
+            context.evidence.join(format!("f64-result-{name}.json")),
+        )?;
+    } else {
+        require(
+            !result_file.exists(),
+            "F64 failure or inline command published a result file",
+        )?;
+    }
     Ok((
         Invocation {
             name: name.to_owned(),
@@ -354,8 +374,31 @@ fn scale_input() -> String {
     input
 }
 
-fn expect_value(records: &[CompactRecord], expected: &Value, name: &str) -> Result<(), DevError> {
-    let actual = field(records, "execution", "value")?;
+fn expect_value(
+    records: &[CompactRecord],
+    expected: &Value,
+    name: &str,
+    root: &Path,
+) -> Result<(), DevError> {
+    let actual = if matches!(
+        name,
+        "project-decimals" | "scalar-observation" | "data-save"
+    ) {
+        let bytes =
+            process::read_bounded(&root.join(format!("f64-result-{name}.json")), 1_048_576)?;
+        require(
+            field(records, "execution", "value").is_err()
+                && field(records, "execution", "result-file")? == field(records, "output", "path")?
+                && field(records, "output", "bytes")? == bytes.len().to_string()
+                && field(records, "output", "visibility")? == "created"
+                && field(records, "output", "durability")? == "synchronized"
+                && field(records, "output", "stage-cleanup")? == "removed",
+            "F64 result-file publication metadata differs",
+        )?;
+        String::from_utf8(bytes).map_err(|_| DevError::corrupt("F64 result file is not UTF-8"))?
+    } else {
+        field(records, "execution", "value")?
+    };
     // The expected values are independent dyadic constants and fixed binary64 sqrt bits.
     // Compare their canonical JSON directly: generic JSON float parsing must not become
     // a second rounding step or the arithmetic oracle.
@@ -534,7 +577,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
         let (call, output) = invoke(
             context, &consumer, &bundle, name, artifact, target, &arguments, true,
         )?;
-        expect_value(&output, &expected, name)?;
+        expect_value(&output, &expected, name, &context.evidence)?;
         if name == "halfway-state" {
             halfway_state = Some(transport_value(&output)?["value"].clone());
         }
@@ -575,7 +618,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
         &resumed_arguments,
         true,
     )?;
-    expect_value(&resumed, &large_summary(), "resume")?;
+    expect_value(&resumed, &large_summary(), "resume", &context.evidence)?;
     calls.push(resume_call);
     let (bad_checkpoint, bad_output) = invoke(
         context,
@@ -591,6 +634,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
         &bad_output,
         &json!({"case":"InvalidArithmetic"}),
         "invalid-checkpoint",
+        &context.evidence,
     )?;
     calls.push(bad_checkpoint);
     let edited = author(context, &mut consumer, "edit", "", EDIT)?;
@@ -613,7 +657,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
             &format!("[{MEASUREMENTS},0.25]"),
             true,
         )?;
-        expect_value(&output, &expected, name)?;
+        expect_value(&output, &expected, name, &context.evidence)?;
         calls.push(call);
     }
     let (scalar_call, scalar_output) = invoke(
@@ -626,7 +670,12 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
         "[]",
         true,
     )?;
-    expect_value(&scalar_output, &scalar_observation(), "scalar-observation")?;
+    expect_value(
+        &scalar_output,
+        &scalar_observation(),
+        "scalar-observation",
+        &context.evidence,
+    )?;
     calls.push(scalar_call);
     context.cli(
         None,
@@ -697,7 +746,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
             expected.is_some(),
         )?;
         if let Some(expected) = expected {
-            expect_value(&output, &expected, name)?;
+            expect_value(&output, &expected, name, &context.evidence)?;
         } else {
             require(
                 field(&output, "diagnostic", "code")?.contains("json"),
@@ -714,7 +763,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
     )?;
     validate_store_observations(&observations)?;
     let numerical = NumericalEvidence {
-        schema: "lkjscript-numerical-library-2".into(),
+        schema: "lkjscript-numerical-library-3".into(),
         standard: standard_identity,
         producer: producer_identity,
         before,
@@ -1315,7 +1364,7 @@ pub(super) fn validate(
             .ok_or_else(|| DevError::corrupt("ordinary F64 library original evidence missing"))?,
     )?;
     require(
-        numerical.schema == "lkjscript-numerical-library-2"
+        numerical.schema == "lkjscript-numerical-library-3"
             && numerical.producer_removed_before_run
             && numerical.producer.package != numerical.before.package
             && numerical.before.package == numerical.after.package
@@ -1382,6 +1431,7 @@ pub(super) fn validate(
         &halfway,
         &json!({"case":"Accumulated","value":{"count":2,"mean":1_099_511_627_776.375,"m2":0.03125}}),
         "halfway-state",
+        root,
     )?;
     let state = transport_value(&halfway)?["value"].clone();
     require(
@@ -1420,7 +1470,7 @@ pub(super) fn validate(
             ),
             _ => ("--arguments", arguments),
         };
-        let expected_command = if let Some(artifact) = artifact {
+        let mut expected_command = if let Some(artifact) = artifact {
             let filename = format!("f64-{artifact}-{target}.deployment.json");
             require(
                 serde_json::from_slice::<Value>(&process::read_bounded(
@@ -1453,6 +1503,27 @@ pub(super) fn validate(
                 input,
             ]
         };
+        if matches!(
+            name,
+            "project-decimals" | "scalar-observation" | "data-save" | "committed-json-failure"
+        ) {
+            let path = isolated
+                .join(format!("f64-result-{name}.json"))
+                .display()
+                .to_string();
+            expected_command.extend(["--result-file".into(), path.clone()]);
+            if expected.is_some() {
+                require(
+                    field(&output(root, call.command)?, "execution", "result-file")? == path,
+                    "F64 original result-file path differs from the selected destination",
+                )?;
+            } else {
+                require(
+                    !root.join(format!("f64-result-{name}.json")).exists(),
+                    "F64 nonfinite result has a published result file",
+                )?;
+            }
+        }
         require(
             original_command.command == expected_command
                 && original_command.expects_success == expected.is_some(),
@@ -1482,7 +1553,7 @@ pub(super) fn validate(
                     "F64 original project execution differs from admitted accepted source identity",
                 )?;
             }
-            expect_value(&original_output, &expected, name)?;
+            expect_value(&original_output, &expected, name, root)?;
             if artifact.is_none() {
                 require(
                     field(&original_output, "execution", "differential")? == "equal",
@@ -1607,6 +1678,43 @@ mod tests {
         );
 
         fs::write(owned.path().join(name), input).unwrap();
+        let output_index = numerical
+            .calls
+            .iter()
+            .find(|call| call.name == "project-decimals")
+            .unwrap()
+            .command;
+        let mut fault = receipt.clone();
+        let arguments = &mut fault.commands[output_index].command;
+        let length = arguments.len();
+        assert_eq!(arguments[length - 2], "--result-file");
+        arguments.truncate(length - 2);
+        fs::write(&path, evidence::encode_json(&fault).unwrap()).unwrap();
+        let rejected = super::super::finite::read_focused(&path, &candidate, &verifier)
+            .expect_err("inline result substitution must not prove result-file delivery");
+        assert!(
+            rejected
+                .to_string()
+                .contains("F64 actual invocation differs")
+        );
+
+        let name = "f64-result-project-decimals.json";
+        let original = fs::read_to_string(owned.path().join(name)).unwrap();
+        let changed = original.replace("\"mean\":2.0", "\"mean\":3.0");
+        assert_ne!(original, changed);
+        assert_eq!(original.len(), changed.len());
+        fs::write(owned.path().join(name), changed).unwrap();
+        let mut fault = receipt.clone();
+        *fault
+            .files
+            .iter_mut()
+            .find(|file| file.path == name)
+            .unwrap() = evidence::proof(&owned.path().join(name), name.to_owned()).unwrap();
+        fs::write(&path, evidence::encode_json(&fault).unwrap()).unwrap();
+        let rejected = super::super::finite::read_focused(&path, &candidate, &verifier)
+            .expect_err("rehashed result mutation must fail independent arithmetic expectation");
+        assert!(rejected.to_string().contains("independently expected"));
+        fs::write(owned.path().join(name), original).unwrap();
         fs::write(&path, evidence::encode_json(&receipt).unwrap()).unwrap();
         super::super::finite::read_focused(&path, &candidate, &verifier)
             .expect("healthy restored fixture passes");

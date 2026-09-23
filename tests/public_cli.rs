@@ -322,6 +322,79 @@ fn argument_files_reject_ambiguous_and_nonregular_inputs_before_context_reads() 
 }
 
 #[test]
+fn result_files_reject_invalid_destinations_before_context_reads() {
+    let temporary = tempfile::tempdir().unwrap();
+    let copied = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &copied);
+    let routes = [
+        vec!["--project", "absent-project", "run", "main"],
+        vec!["run", "--deployment", "absent.deployment.json"],
+    ];
+    for route in &routes {
+        for options in [
+            vec!["--result-file"],
+            vec!["--result-file", "one", "--result-file", "two"],
+            vec!["--result-file", ""],
+        ] {
+            let mut arguments = route.clone();
+            arguments.extend(options);
+            let failure = compact_failure_output(command_at(&copied, temporary.path(), &arguments));
+            assert_eq!(
+                compact_field(compact_record(&failure, "diagnostic"), "code"),
+                Some("cli_usage")
+            );
+        }
+    }
+    let existing = temporary.path().join("existing.json");
+    std::fs::write(&existing, b"preserve existing bytes").unwrap();
+    let mut invalid = vec![
+        (existing.clone(), "output_conflict"),
+        (temporary.path().to_path_buf(), "output_conflict"),
+        (temporary.path().join("absent/result.json"), "output_parent"),
+        (existing.join("result.json"), "output_parent_type"),
+        (temporary.path().join("../result.json"), "output_traversal"),
+    ];
+    #[cfg(unix)]
+    {
+        let link = temporary.path().join("linked.json");
+        std::os::unix::fs::symlink(&existing, &link).unwrap();
+        invalid.push((link, "output_conflict"));
+        let dangling = temporary.path().join("dangling.json");
+        std::os::unix::fs::symlink("missing", &dangling).unwrap();
+        invalid.push((dangling, "output_conflict"));
+        let linked_parent = temporary.path().join("linked-parent");
+        std::os::unix::fs::symlink(temporary.path(), &linked_parent).unwrap();
+        invalid.push((linked_parent.join("result.json"), "output_symlink"));
+        let fifo = temporary.path().join("result.fifo");
+        rustix::fs::mkfifoat(
+            rustix::fs::CWD,
+            &fifo,
+            rustix::fs::Mode::RUSR | rustix::fs::Mode::WUSR,
+        )
+        .unwrap();
+        invalid.push((fifo, "output_conflict"));
+    }
+    for (destination, code) in invalid {
+        for route in &routes {
+            let mut arguments = route.clone();
+            arguments.extend(["--result-file", path(&destination)]);
+            let failure = compact_failure_output(command_at(&copied, temporary.path(), &arguments));
+            assert_eq!(
+                compact_field(compact_record(&failure, "diagnostic"), "code"),
+                Some(code)
+            );
+        }
+    }
+    assert_eq!(
+        std::fs::read(&existing).unwrap(),
+        b"preserve existing bytes"
+    );
+    assert!(!temporary.path().join("absent-project").exists());
+    assert!(!temporary.path().join("absent.deployment.json").exists());
+    assert!(!temporary.path().join("one").exists());
+}
+
+#[test]
 fn foreground_rejects_http_before_loading_a_named_secret_or_opening_a_listener() {
     let temporary = tempfile::tempdir().unwrap();
     let project = temporary.path().join("service");

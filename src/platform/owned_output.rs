@@ -28,6 +28,75 @@ pub fn publish_create_new(
             format!("{label} exceeds its {maximum_bytes}-byte output bound"),
         ));
     }
+    let output = inspect_create_new(path)?;
+    let parent = output.parent().ok_or_else(|| {
+        output_error(
+            DiagnosticClass::Source,
+            "output_parent",
+            "output has no parent",
+        )
+    })?;
+    // A legal destination name can already use the filesystem's full component bound.
+    // The owned stage must not append to that name and fail only after invocation.
+    let stage = parent.join(format!(
+        ".lkjscript-output-stage-{}",
+        RepositoryId::generate()?
+    ));
+    let mut stage_created = false;
+    let staged = (|| {
+        let mut file = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&stage)
+            .map_err(|error| io_error("output_stage_create", &stage, error))?;
+        stage_created = true;
+        file.write_all(bytes)
+            .map_err(|error| io_error("output_stage_write", &stage, error))?;
+        file.sync_all()
+            .map_err(|error| io_error("output_stage_sync", &stage, error))?;
+        fs::hard_link(&stage, &output).map_err(|error| output_link_error(&output, error))?;
+        Ok::<(), Diagnostic>(())
+    })();
+    if let Err(mut error) = staged {
+        if stage_created
+            && let Err(cleanup) = fs::remove_file(&stage)
+            && cleanup.kind() != std::io::ErrorKind::NotFound
+        {
+            error.notes.push(format!(
+                "owned output stage '{}' could not be removed: {cleanup}",
+                stage.display()
+            ));
+        }
+        return Err(error);
+    }
+
+    let durability = if sync_directory(parent).is_ok() {
+        "synchronized"
+    } else {
+        "uncertain"
+    };
+    let stage_cleanup = if fs::remove_file(&stage).is_ok() {
+        "removed"
+    } else {
+        "retained"
+    };
+    let durability = if sync_directory(parent).is_ok() {
+        durability
+    } else {
+        "uncertain"
+    };
+    Ok(OwnedOutputReceipt {
+        path: output,
+        bytes: bytes.len() as u64,
+        visibility: "created",
+        durability,
+        stage_cleanup,
+    })
+}
+
+/// Inspect an absent destination without creating or reserving resources. Publication
+/// rechecks it: this observation does not promise later writability, capacity or absence.
+pub fn inspect_create_new(path: &Path) -> Result<PathBuf, Diagnostic> {
     let file_name = path
         .file_name()
         .and_then(|value| value.to_str())
@@ -92,47 +161,7 @@ pub fn publish_create_new(
         }
     }
 
-    let stage = parent.join(format!(".{file_name}.stage-{}", RepositoryId::generate()?));
-    let staged = (|| {
-        let mut file = OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(&stage)
-            .map_err(|error| io_error("output_stage_create", &stage, error))?;
-        file.write_all(bytes)
-            .map_err(|error| io_error("output_stage_write", &stage, error))?;
-        file.sync_all()
-            .map_err(|error| io_error("output_stage_sync", &stage, error))?;
-        fs::hard_link(&stage, &output).map_err(|error| output_link_error(&output, error))?;
-        Ok::<(), Diagnostic>(())
-    })();
-    if let Err(error) = staged {
-        let _ = fs::remove_file(&stage);
-        return Err(error);
-    }
-
-    let durability = if sync_directory(&parent).is_ok() {
-        "synchronized"
-    } else {
-        "uncertain"
-    };
-    let stage_cleanup = if fs::remove_file(&stage).is_ok() {
-        "removed"
-    } else {
-        "retained"
-    };
-    let durability = if sync_directory(&parent).is_ok() {
-        durability
-    } else {
-        "uncertain"
-    };
-    Ok(OwnedOutputReceipt {
-        path: output,
-        bytes: bytes.len() as u64,
-        visibility: "created",
-        durability,
-        stage_cleanup,
-    })
+    Ok(output)
 }
 
 fn reject_symlinked_path(path: &Path) -> Result<(), Diagnostic> {
@@ -226,6 +255,35 @@ fn output_error(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inspection_reserves_nothing_and_publication_rechecks_the_destination() {
+        let temporary = tempfile::TempDir::new().expect("temporary output parent");
+        let path = temporary.path().join("result.json");
+        let inspected = inspect_create_new(&path).expect("inspect absent result");
+        assert_eq!(fs::read_dir(temporary.path()).expect("parent").count(), 0);
+        fs::write(&path, b"competing output").expect("competing writer");
+        let error = publish_create_new(&inspected, b"new output", 16, "test result")
+            .expect_err("late conflict");
+        assert_eq!(error.code, "output_conflict");
+        assert_eq!(
+            fs::read(&path).expect("preserved bytes"),
+            b"competing output"
+        );
+        assert_eq!(fs::read_dir(temporary.path()).expect("parent").count(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn publication_accepts_a_full_length_destination_component() {
+        let temporary = tempfile::TempDir::new().expect("temporary output parent");
+        let output = temporary.path().join("x".repeat(255));
+        let receipt = publish_create_new(&output, b"complete", 8, "test output")
+            .expect("stage name does not extend the destination component");
+        assert_eq!(receipt.stage_cleanup, "removed");
+        assert_eq!(fs::read(&output).expect("read output"), b"complete");
+        assert_eq!(fs::read_dir(temporary.path()).expect("parent").count(), 1);
+    }
 
     #[test]
     fn publication_is_create_new_and_preserves_existing_bytes() {

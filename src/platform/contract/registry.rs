@@ -1538,7 +1538,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         operation(
             PublicOperation::Run,
             "Run a pure project target differentially, or run one exact pure/task Command artifact once through production with deployment grants and joined cleanup.",
-            "run TARGET [--arguments JSON | --arguments-file PATH] | run --deployment PATH [--arguments JSON | --arguments-file PATH]",
+            "run TARGET [--arguments JSON | --arguments-file PATH] [--result-file PATH] | run --deployment PATH [--arguments JSON | --arguments-file PATH] [--result-file PATH]",
             (ControlModel::RunRequest, ControlModel::RunResult),
             AuthorityEffect::ExternalRuntime,
             ProjectRequirement::ProjectOrDescriptor,
@@ -7020,8 +7020,23 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ),
                 ],
             )?);
+            records.push(compact_record(
+                "execution.result-file",
+                &[
+                    ("selector", "--result-file PATH".to_owned()),
+                    ("routes", "project-and-foreground-command".to_owned()),
+                    ("encoding", "exact-typed-json-without-added-newline".to_owned()),
+                    ("maximum-bytes", codec.maximum_bytes.to_string()),
+                    ("path-base", "invocation-working-directory".to_owned()),
+                    ("preflight", "absent-path-ordinary-existing-parent-no-symlinks-no-parent-traversal-before-context-secrets-adapters".to_owned()),
+                    ("publication", "rechecked-create-new-atomic-exposure-after-encoding-and-joined-cleanup".to_owned()),
+                    ("execution-field", "result-file-replaces-value".to_owned()),
+                    ("output-fields", "path,bytes,visibility,durability,stage-cleanup".to_owned()),
+                    ("failure", "no-automatic-retry-no-rollback-of-application-effects-or-visible-result".to_owned()),
+                ],
+            )?);
             records.push(compact_record("execution.foreground", &[
-                ("selector", "run --deployment PATH [--arguments JSON | --arguments-file PATH]".to_owned()),
+                ("selector", "run --deployment PATH [--arguments JSON | --arguments-file PATH] [--result-file PATH]".to_owned()),
                 ("runner", "command".to_owned()),
                 ("entry", "closed-pure-or-task-including-empty-row".to_owned()),
                 ("execution-mode", "production".to_owned()),
@@ -7057,6 +7072,10 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ("production-observation", "json-object"),
                 ("cleanup", "json-object"),
                 ("value", "typed-json"),
+                (
+                    "result-file",
+                    "absolute-utf8-path-instead-of-value-when-selected",
+                ),
             ] {
                 records.push(compact_record(
                     "execution.foreground-field",

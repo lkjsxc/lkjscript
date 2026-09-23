@@ -692,6 +692,7 @@ fn maximum_artifact_output_bytes() -> Result<usize, Diagnostic> {
 pub struct ForegroundRunOptions {
     descriptor: PathBuf,
     arguments: Vec<u8>,
+    result_file: Option<PathBuf>,
 }
 
 fn run_argument_bytes(options: &[String]) -> Result<Vec<u8>, Diagnostic> {
@@ -711,6 +712,75 @@ fn run_argument_bytes(options: &[String]) -> Result<Vec<u8>, Diagnostic> {
     }
 }
 
+fn run_result_path(options: &[String]) -> Result<Option<PathBuf>, Diagnostic> {
+    let Some(path) = option_value(options, "--result-file")? else {
+        return Ok(None);
+    };
+    if path.is_empty() || path.len() > 4096 || path.contains('\0') {
+        return Err(usage_error("--result-file requires a bounded output path"));
+    }
+    let path = super::owned_output::inspect_create_new(Path::new(&path))?;
+    if path.to_str().is_none_or(|path| path.len() > 4096) {
+        return Err(usage_error(
+            "--result-file requires an absolute UTF-8 path of at most 4096 bytes",
+        ));
+    }
+    Ok(Some(path))
+}
+
+struct RunResultOutput {
+    field: (&'static str, String),
+    file: Option<(PathBuf, String)>,
+}
+
+impl RunResultOutput {
+    fn new(result: String, path: Option<PathBuf>) -> Self {
+        match path {
+            Some(path) => Self {
+                field: ("result-file", path.display().to_string()),
+                file: Some((path, result)),
+            },
+            None => Self {
+                field: ("value", result),
+                file: None,
+            },
+        }
+    }
+}
+
+fn publish_run_result(
+    output: &mut CompactResponseWriter,
+    file: Option<(PathBuf, String)>,
+) -> Result<(), Diagnostic> {
+    let Some((path, result)) = file else {
+        return Ok(());
+    };
+    let publication = publish_create_new(
+        &path,
+        result.as_bytes(),
+        super::json::JsonLimits::default().maximum_bytes,
+        "typed command result",
+    )?;
+    append_compact_record(
+        output,
+        "output",
+        &[
+            ("path", publication.path.display().to_string()),
+            ("bytes", publication.bytes.to_string()),
+            ("visibility", publication.visibility.to_owned()),
+            ("durability", publication.durability.to_owned()),
+            ("stage-cleanup", publication.stage_cleanup.to_owned()),
+        ],
+    )
+    .map_err(|mut error| {
+        error.notes.push(format!(
+            "typed result file '{}' is already visible; output reporting failure does not remove it",
+            publication.path.display()
+        ));
+        error
+    })
+}
+
 /// This grammar is resolved before project discovery, runtime setup or deployment reads.
 pub fn parse_foreground_run(arguments: &[String]) -> Result<ForegroundRunOptions, Diagnostic> {
     if arguments.first().map(String::as_str) != Some("run") {
@@ -720,7 +790,12 @@ pub fn parse_foreground_run(arguments: &[String]) -> Result<ForegroundRunOptions
     }
     ensure_options(
         &arguments[1..],
-        &["--deployment", "--arguments", "--arguments-file"],
+        &[
+            "--deployment",
+            "--arguments",
+            "--arguments-file",
+            "--result-file",
+        ],
         &[],
     )?;
     let descriptor = required_option(&arguments[1..], "--deployment")?;
@@ -729,14 +804,17 @@ pub fn parse_foreground_run(arguments: &[String]) -> Result<ForegroundRunOptions
             "--deployment requires a bounded descriptor path",
         ));
     }
-    let arguments = run_argument_bytes(&arguments[1..])?;
-    let value = super::json::decode_application(&arguments, super::json::JsonLimits::default())?;
+    let encoded_arguments = run_argument_bytes(&arguments[1..])?;
+    let value =
+        super::json::decode_application(&encoded_arguments, super::json::JsonLimits::default())?;
     if !value.is_array() {
         return Err(usage_error("run arguments must be one JSON array"));
     }
+    let result_file = run_result_path(&arguments[1..])?;
     Ok(ForegroundRunOptions {
         descriptor: PathBuf::from(descriptor),
-        arguments,
+        arguments: encoded_arguments,
+        result_file,
     })
 }
 
@@ -749,6 +827,7 @@ pub async fn execute_foreground_run(
     let control = ExecutionControl::uncancelled();
     let preparation_control = control.clone();
     let runtime = tokio::runtime::Handle::current();
+    let result_file = options.result_file;
     let mut preparing = tokio::task::spawn_blocking(move || {
         PreparedDeployment::load_foreground(
             &options.descriptor,
@@ -777,6 +856,12 @@ pub async fn execute_foreground_run(
     };
     let preparation_nanoseconds = started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64;
     let receipt = prepared.run_foreground(invocation, cancellation).await?;
+    let cleanup_note = format!(
+        "foreground cleanup: admission-stopped={} remaining-owned-tasks={} failures={}",
+        receipt.shutdown.admission_stopped,
+        receipt.shutdown.remaining_tasks,
+        receipt.shutdown.cleanup_failures.len()
+    );
     let result = (|| {
         let result = String::from_utf8(receipt.result_json).map_err(|_| {
             Diagnostic::new(
@@ -785,6 +870,7 @@ pub async fn execute_foreground_run(
                 "typed foreground result is not UTF-8 JSON",
             )
         })?;
+        let result = RunResultOutput::new(result, result_file);
         let mut public_observation = serde_json::to_value(&receipt.production).map_err(|_| {
             Diagnostic::new(
                 DiagnosticClass::Infrastructure,
@@ -887,12 +973,14 @@ pub async fn execute_foreground_run(
                     receipt.result_encoding_nanoseconds.to_string(),
                 ),
                 ("cleanup", cleanup),
-                ("value", result),
+                result.field,
             ],
         )?;
+        publish_run_result(&mut output, result.file)?;
         Ok(output.finish())
     })();
-    result.map_err(|mut error| {
+    result.map_err(|mut error: Diagnostic| {
+        error.notes.push(cleanup_note);
         foreground_visibility(&mut error);
         error
     })
@@ -915,8 +1003,13 @@ pub fn execute_run(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
         .get(1)
         .filter(|value| !value.starts_with("--"))
         .ok_or_else(|| usage_error("run requires one target name"))?;
-    ensure_options(&arguments[2..], &["--arguments", "--arguments-file"], &[])?;
+    ensure_options(
+        &arguments[2..],
+        &["--arguments", "--arguments-file", "--result-file"],
+        &[],
+    )?;
     let encoded_arguments = run_argument_bytes(&arguments[2..])?;
+    let result_file = run_result_path(&arguments[2..])?;
     let repository = open_normalized_repository(project)?;
     let prepared = prepare_repository(repository)?;
     let run = prepared.run(
@@ -932,6 +1025,7 @@ pub fn execute_run(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
             "normalized typed result is not canonical UTF-8 JSON",
         )
     })?;
+    let result = RunResultOutput::new(result, result_file);
     let mut output = compact_response_writer()?;
     append_compact_record(
         &mut output,
@@ -947,7 +1041,7 @@ pub fn execute_run(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
         "execution",
         &[
             ("target", run.target.as_str().to_owned()),
-            ("value", result),
+            result.field,
             ("differential", run.differential.to_owned()),
             (
                 "production-instructions",
@@ -1274,6 +1368,7 @@ pub fn execute_run(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
             ),
         ],
     )?;
+    publish_run_result(&mut output, result.file)?;
     Ok(output.finish())
 }
 

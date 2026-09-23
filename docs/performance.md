@@ -229,6 +229,39 @@ failure preserved; 16,384/32,768-distinct-key cases are unrun. Typed result JSON
 a separate 1 MiB bound. A result-file facility is an actionable investigation;
 none was added by this observation, and no language/evaluator limit was raised.
 
+### Explicit result files
+
+The v0.1.43 development continuation uses copied executable `bd876cdf…` (locked
+Rust 1.98.0 release build, LTO and one codegen unit) in a fresh outside-checkout
+directory, `/home/coder/workspace/lkjscript-result-file-evidence-20260923`.
+Its unchanged literal native frequency program is freshly created, reviewed,
+applied and checked: all 42 graph tests pass differentially. A project invocation
+with 4,096 distinct keys now returns the independently expected complete map
+through `--result-file`, also with evaluator agreement. The 65,537-byte typed JSON
+file is distinct from the compact response. The ordinary inline route still
+rejects this input at `control_render_record_bytes`; neither format limit is raised.
+
+After building and moving the authoring project away, standalone invocations
+return the complete expected map for the previously failing case and the two
+previously unrun larger cases. Each key's independently fixed expected count is
+one. These are single correctness observations on the same host and `LANG`-only
+environment as above, with no overlapping owned build/test and no RSS measurement:
+
+| Distinct text keys | Exact JSON bytes | Invocation ms | Whole process ms |
+|---|---:|---:|---:|
+| 4,096 | 65,537 | 35.623 | 86.700 |
+| 16,384 | 262,145 | 133.898 | 196.026 |
+| 32,768 | 524,289 | 272.391 | 344.825 |
+
+This is not a paired speed comparison or throughput guarantee. The complete
+13-command observation retains the default-output failure, an existing-file
+rejection with unchanged bytes, all literal inputs/outputs and joined cleanup.
+It also executes the original 8e9628ad-authored bundle unchanged through the new
+runtime/file selector, returning the same 4,096-key map. The original failure and
+unrun state above remain historical evidence; they are not rewritten as passes.
+The maintained numerical owner separately consumes result files; this native
+counting program remains a designed public workflow rather than maintained adoption.
+
 ## Persistent ordered maps, 2026-09-19
 
 The [map campaign](campaigns/202609191922.md#corrected-immutable-candidate)

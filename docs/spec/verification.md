@@ -418,10 +418,34 @@ are unchanged. Other calls retain inline coverage. Its original reader binds the
 file path, complete retained bytes and independently expected result; consistently rehashed
 inline substitution or altered file input must fail. Numerical evidence schema 2 rejects
 schema 1 for this expanded obligation; frozen releases retain their original verifiers.
+Result-file coverage extends this numerical child to schema 3: the project decimal
+result, artifact scalar observations and completed data save use `--result-file`.
+The same owner requests a result file for the post-commit nonfinite failure, requires
+its absence, and observes the committed value in the subsequent invocation. Original
+readers bind the exact selected paths, byte counts, create-new publication/cleanup
+fields and complete unchanged typed JSON against independent numeric expectations.
+Schema 2 does not prove these added output obligations. Consistently rehashed selector
+substitution or altered result bytes must fail; all prior arithmetic and input-file
+checks remain required. No application effect is replayed for transport comparison.
 The ignored `argument_file_originals_reject_rehashed_substitution` test uses
 `LKJSCRIPT_F64_ARGUMENT_RECEIPT` from `offline-packages --case f64` and its exact
 `LKJSCRIPT_F64_ARGUMENT_VERIFIER`. It checks an owned copy through the complete focused
 reader, restores healthy acceptance and leaves the original evidence untouched.
+
+The copied CLI source suite exercises result files on both routes with escaped Unicode,
+negative zero, adjacent binary64 values, a 200,002-byte Text result and exactly 1 MiB
+of typed JSON. Larger encoded output, nonfinite values, wrong input types and preparation
+failure publish no result. Existing files/directories, symlinks, FIFOs, missing parents,
+traversal and duplicate selectors reject before context/secret reads. The owned publisher's
+late-conflict proof preserves a file created after inspection; inspection reserves nothing.
+An invocation split at the public parse/execute API boundary deterministically admits
+an absent path, introduces a competing file, commits one native typed-cell update and
+rejects publication. The competitor survives and a copied executable reads the committed
+value afterward; this is a source/API boundary proof, not a transferred candidate run.
+Closing stdout after a copied artifact invocation preserves the complete result file
+and reports its prior publication on stderr.
+Retain a copied native counting workload whose output exceeded compact-record capacity,
+with independently expected map contents and authoring paths unavailable to artifact runs.
 
 Foreground acceptance extends the existing offline-package effect child, required by the current
 offline-package owner and exact-final-candidate admission. Standalone full retains the same owner;

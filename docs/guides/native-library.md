@@ -253,6 +253,27 @@ fit within the current 1 MiB JSON limit including whitespace. JSON structure and
 typed-value limits also apply. This allows inputs too large for the operating
 system's command-line arguments; it does not stream an unbounded data set.
 
+## Save a command result
+
+Development v0.1.43 adds `--result-file`. From the original walkthrough directory,
+choose a new output file in an existing directory:
+
+```sh
+./runtime/lkjscript run --deployment ./runtime/weight.deployment.json --arguments-file ./runtime/parcels.json --result-file ./runtime/weight.json
+```
+
+`weight.json` contains exactly `850`, without a newline. Project runs accept the same
+option. The compact response names the result file and reports its byte count,
+publication durability and stage cleanup. The file carries the typed JSON value, up
+to the existing 1 MiB encoding limit, so larger lists or maps need not fit in one
+display record. Omit `--result-file` to retain the usual inline result.
+
+Paths are relative to the invocation directory. Existing files or directories, symlinks,
+missing parents and `..` traversal reject. Publication never overwrites a competing
+file. Destination inspection occurs before execution, but later disk/permission failures
+and races are still possible. For effectful commands, missing output does not imply
+rollback or make retry safe; a published file also survives a later stdout failure.
+
 The literal library and consumer were exercised with a copied official v0.1.40
 binary outside the compiler checkout, including unchanged drafting, empty input,
 multiplication/addition overflow, build after moving the producer, and execution

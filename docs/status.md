@@ -5,6 +5,21 @@ outstanding delivery. [Generated guides](generated/operations.md) own public
 operations, [specifications](spec/) own semantics, and [campaigns](campaigns/)
 retain detailed implementation and verification history.
 
+## Command result files
+
+Development v0.1.43 adds optional `--result-file PATH` on both Command routes.
+It publishes the exact bounded typed JSON through the existing create-new output
+owner, allowing values larger than one compact display record. Destination
+inspection precedes context/secret/adapter reads, and publication rechecks after
+encoding and joined cleanup. A late output failure does not undo application
+effects. Focused tests pass byte/limit, preflight and post-commit conflict cases.
+Fresh copied native counting returns complete maps through 32,768 distinct keys,
+and all 49 commands in the numerical owner pass with the new output bindings.
+Final source acceptance and delivery remain in progress. The
+[guide](guides/native-library.md#save-a-command-result) documents the interface.
+Graph, artifact and data encodings remain compatible; numerical acceptance schema 3
+adds result-file bindings while frozen producers keep their original verifiers.
+
 ## Command input files
 
 Successor development v0.1.42 adds `--arguments-file PATH` to project and standalone

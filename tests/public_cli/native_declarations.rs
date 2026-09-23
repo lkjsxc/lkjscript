@@ -310,6 +310,324 @@ declarations.end
     assert_eq!(cleanup["cleanup_failures"], serde_json::json!([]));
 }
 
+#[test]
+fn native_command_result_files_preserve_typed_bytes_limits_and_detached_execution() {
+    let public = Native::template("command");
+    let input = public.input("result.lkjc", &format!(r#"request base={}
+declarations.begin
+(units
+  (use std builtin)
+  (module create results
+    (function create double (visibility private)
+      (parameter create value (type Text)) (returns Text) (effect pure)
+      (body (call std::text-concat (local value) (local value))))
+    (function create scalar (visibility private)
+      (parameter create value (type F64)) (returns F64) (effect pure)
+      (body (local value)))
+    (function create invalid (visibility private)
+      (returns F64) (effect pure) (body (f64 inf)))
+    (component create console (visibility private)
+      (port create double (type (function (Text) Text)) (function double))
+      (port create scalar (type (function (F64) F64)) (function scalar))
+      (port create invalid (type (function () F64)) (function invalid))))
+  (target create double (component results::console) (runner command) (port results::console::double))
+  (target create scalar (component results::console) (runner command) (port results::console::scalar))
+  (target create invalid (component results::console) (runner command) (port results::console::invalid)))
+declarations.end
+"#, public.revision()));
+    public.apply(&input, &public.plan(&input, true), true);
+    let head = std::fs::read(public.project.join("HEAD")).unwrap();
+    let bundle = public.root.path().join("bundle");
+    std::fs::create_dir(&bundle).unwrap();
+    public.cli(
+        &["build", "--output", path(&bundle.join("command.lkja"))],
+        true,
+    );
+    let mut descriptor: Value = serde_json::from_slice(
+        &std::fs::read(public.project.join("command.deployment.json")).unwrap(),
+    )
+    .unwrap();
+    descriptor["artifact"] = serde_json::json!("command.lkja");
+    let deployment = bundle.join("command.deployment.json");
+    let arguments_file = public.root.path().join("arguments.json");
+    let result_file = public.root.path().join("result.json");
+    // Each expected result is fixed independently; numeric text must not be reparsed.
+    let cases = [
+        (
+            "double",
+            "[\"猫\\n\"]".to_owned(),
+            "\"猫\\n猫\\n\"".to_owned(),
+        ),
+        (
+            "double",
+            format!("[\"{}\"]", "x".repeat(100_000)),
+            format!("\"{}\"", "x".repeat(200_000)),
+        ),
+        (
+            "double",
+            format!("[\"{}\"]", "y".repeat(524_287)),
+            format!("\"{}\"", "y".repeat(1_048_574)),
+        ),
+        ("scalar", "[-0]".to_owned(), "-0.0".to_owned()),
+        (
+            "scalar",
+            "[1.0000000000000002]".to_owned(),
+            "1.0000000000000002".to_owned(),
+        ),
+    ];
+    for detached in [false, true] {
+        if detached {
+            assert_eq!(std::fs::read(public.project.join("HEAD")).unwrap(), head);
+            std::fs::rename(&public.project, public.root.path().join("retained-project")).unwrap();
+        }
+        for (target, arguments, expected) in &cases {
+            descriptor["target"] = serde_json::json!(target);
+            std::fs::write(&deployment, serde_json::to_vec(&descriptor).unwrap()).unwrap();
+            std::fs::write(&arguments_file, arguments).unwrap();
+            let mut route = if detached {
+                vec!["run", "--deployment", path(&deployment)]
+            } else {
+                vec!["run", *target]
+            };
+            route.extend([
+                "--arguments-file",
+                "arguments.json",
+                "--result-file",
+                "result.json",
+            ]);
+            let records = public.cli(&route, true);
+            assert_eq!(std::fs::read(&result_file).unwrap(), expected.as_bytes());
+            let execution = compact_record(&records, "execution");
+            assert!(super::compact_field(execution, "value").is_none());
+            assert_eq!(compact_field(execution, "result-file"), path(&result_file));
+            let output = compact_record(&records, "output");
+            for (key, value) in [
+                ("path", path(&result_file)),
+                ("visibility", "created"),
+                ("durability", "synchronized"),
+                ("stage-cleanup", "removed"),
+            ] {
+                assert_eq!(compact_field(output, key), value);
+            }
+            assert_eq!(compact_field(output, "bytes"), expected.len().to_string());
+            if detached {
+                let cleanup: Value =
+                    serde_json::from_str(compact_field(execution, "cleanup")).unwrap();
+                assert_eq!(cleanup["remaining_tasks"], 0);
+                assert_eq!(cleanup["cleanup_failures"], serde_json::json!([]));
+            } else {
+                assert_eq!(compact_field(execution, "differential"), "equal");
+            }
+            let failed = public.cli(&route, false);
+            assert_eq!(
+                compact_field(compact_record(&failed, "diagnostic"), "code"),
+                "output_conflict"
+            );
+            assert_eq!(std::fs::read(&result_file).unwrap(), expected.as_bytes());
+            std::fs::remove_file(&result_file).unwrap();
+        }
+        for (target, arguments, code) in [
+            (
+                "double",
+                format!("[\"{}\"]", "z".repeat(524_288)),
+                "normalized_json_output_bytes",
+            ),
+            ("scalar", "[\"wrong\"]".to_owned(), "normalized_json_type"),
+            ("invalid", "[]".to_owned(), "normalized_json_nonfinite"),
+        ] {
+            descriptor["target"] = serde_json::json!(target);
+            std::fs::write(&deployment, serde_json::to_vec(&descriptor).unwrap()).unwrap();
+            std::fs::write(&arguments_file, arguments).unwrap();
+            let mut route = if detached {
+                vec!["run", "--deployment", path(&deployment)]
+            } else {
+                vec!["run", target]
+            };
+            route.extend([
+                "--arguments-file",
+                "arguments.json",
+                "--result-file",
+                "result.json",
+            ]);
+            let records = public.cli(&route, false);
+            assert_eq!(
+                compact_field(compact_record(&records, "diagnostic"), "code"),
+                code
+            );
+            assert!(
+                !records
+                    .iter()
+                    .any(|record| record.operation == "execution" || record.operation == "output")
+            );
+            assert!(!result_file.exists());
+        }
+    }
+    descriptor["target"] = serde_json::json!("scalar");
+    descriptor["secrets"] = serde_json::json!([{"name":"must-not-load", "variable":"LKJSCRIPT_RESULT_FILE_ABSENT_SECRET"}]);
+    std::fs::write(&deployment, serde_json::to_vec(&descriptor).unwrap()).unwrap();
+    std::fs::write(&result_file, b"preserve").unwrap();
+    let route = [
+        "run",
+        "--deployment",
+        path(&deployment),
+        "--arguments",
+        "[0]",
+        "--result-file",
+        "result.json",
+    ];
+    let rejected = public.cli(&route, false);
+    assert_eq!(
+        compact_field(compact_record(&rejected, "diagnostic"), "code"),
+        "output_conflict"
+    );
+    std::fs::remove_file(&result_file).unwrap();
+    let rejected = public.cli(&route, false);
+    assert_eq!(
+        compact_field(compact_record(&rejected, "diagnostic"), "code"),
+        "secret_missing"
+    );
+    assert!(!result_file.exists());
+    descriptor["secrets"] = serde_json::json!([]);
+    std::fs::write(&deployment, serde_json::to_vec(&descriptor).unwrap()).unwrap();
+    let mut child = support::spawn(
+        Command::new(&public.executable)
+            .args([
+                "run",
+                "--deployment",
+                path(&deployment),
+                "--arguments",
+                "[-0]",
+                "--result-file",
+                path(&result_file),
+            ])
+            .current_dir(public.root.path())
+            .env_clear()
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped()),
+    )
+    .unwrap();
+    drop(child.take_stdout());
+    let failed_delivery = child.wait_with_output().unwrap();
+    assert_eq!(failed_delivery.status.code(), Some(6));
+    let diagnostic: Value = serde_json::from_slice(&failed_delivery.stderr).unwrap();
+    assert!(diagnostic["notes"].as_array().unwrap().iter().any(|note| {
+        note.as_str()
+            .unwrap()
+            .contains("result file is already published")
+    }));
+    assert_eq!(std::fs::read(&result_file).unwrap(), b"-0.0");
+    assert!(
+        !std::fs::read_dir(public.root.path())
+            .unwrap()
+            .any(|entry| entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .contains("stage-"))
+    );
+}
+
+#[tokio::test]
+async fn result_file_conflict_after_preflight_preserves_the_committed_effect() {
+    use lkjscript::platform::{execute_foreground_run, parse_foreground_run};
+    let public = Native::template("command");
+    let input = public.input("save.lkjc", &format!(r#"request base={}
+declarations.begin
+(units
+  (use std builtin)
+  (module create saved-result
+    (constant create key (visibility private) (type (list std::DataKeyPart))
+      (value (list std::DataKeyPart (variant std::DataKeyPart::Text (text "value")))))
+    (function create add-two (visibility private)
+      (parameter create value (type I64)) (returns I64) (effect (task))
+      (body (call std::add (local value) (i64 2))))
+    (function create save (visibility private)
+      (returns (std::TransactionOutcome I64)) (effect (task (requirement store::data)))
+      (body (call std::data-cell-try-update (types I64) (effects (row)) (requirements store::data)
+        (static-text "result") (i64 40) (function-value add-two) (constant key))))
+    (function create read (visibility private)
+      (returns I64) (effect (task (requirement store::data)))
+      (body (call std::data-decode-or (types I64)
+        (field (call std::list-get (types std::DataEntry)
+          (capability-call store::data std::DataStore::get (static-text "result") (constant key))
+          (i64 0)) std::DataEntry::value) (i64 -1))))
+    (component create store (visibility private)
+      (requirement create data (interface std::DataStore)
+        (operations std::DataStore::get std::DataStore::put std::DataStore::transaction std::DataStore::require-transaction)
+        (limits (maximum_calls 64 calls)))
+      (port create save (type (task-function () (std::TransactionOutcome I64) (row (requirement data)))) (function save))
+      (port create read (type (task-function () I64 (row (requirement data)))) (function read))))
+  (target create save (component saved-result::store) (runner command) (port saved-result::store::save))
+  (target create read (component saved-result::store) (runner command) (port saved-result::store::read)))
+declarations.end
+"#, public.revision()));
+    public.apply(&input, &public.plan(&input, true), true);
+    let artifact = public.root.path().join("command.lkja");
+    public.cli(&["build", "--output", path(&artifact)], true);
+    let data = public.root.path().join("data");
+    compact_success_at(
+        &public.executable,
+        public.root.path(),
+        &["data", "initialize", "--root", path(&data)],
+    );
+    let before = std::fs::read(data.join("HEAD")).unwrap();
+    let deployment = public.root.path().join("save.deployment.json");
+    let mut descriptor = serde_json::json!({
+        "artifact":"command.lkja", "target":"save", "listen":null, "http":null, "session":null, "worker":null,
+        "streams":lkjscript::platform::stream::StreamLimits::default(), "configuration":{}, "secrets":[],
+        "grants":[{"requirement":"data", "sharing_domain":"saved-result", "authority_revision":"52".repeat(32),
+            "adapter":{"kind":"data", "root":"data", "namespace":"saved-result", "limits":lkjscript::platform::data::DataLimits::default()}}]
+    });
+    std::fs::write(&deployment, serde_json::to_vec(&descriptor).unwrap()).unwrap();
+    std::fs::rename(&public.project, public.root.path().join("retained-project")).unwrap();
+    let output = public.root.path().join("result.json");
+    // Exercise the actual public preparation/execution boundary deterministically.
+    // The competitor appears after CLI preflight; no invocation is replayed.
+    let options = parse_foreground_run(
+        &[
+            "run",
+            "--deployment",
+            path(&deployment),
+            "--result-file",
+            path(&output),
+        ]
+        .map(str::to_owned),
+    )
+    .unwrap();
+    assert!(!output.exists());
+    std::fs::write(&output, b"competing writer").unwrap();
+    let failure = execute_foreground_run(options, std::future::pending())
+        .await
+        .unwrap_err();
+    assert_eq!(failure.code, "output_conflict");
+    assert!(
+        failure
+            .notes
+            .iter()
+            .any(|note| note.contains("earlier application effects may already be visible"))
+    );
+    assert!(failure.notes.iter().any(|note| note
+        == "foreground cleanup: admission-stopped=true remaining-owned-tasks=0 failures=0"));
+    assert_eq!(std::fs::read(&output).unwrap(), b"competing writer");
+    assert_ne!(std::fs::read(data.join("HEAD")).unwrap(), before);
+    descriptor["target"] = serde_json::json!("read");
+    std::fs::write(&deployment, serde_json::to_vec(&descriptor).unwrap()).unwrap();
+    let read = public.cli(&["run", "--deployment", path(&deployment)], true);
+    assert_eq!(
+        compact_field(compact_record(&read, "execution"), "value"),
+        "42"
+    );
+    assert!(
+        !std::fs::read_dir(public.root.path())
+            .unwrap()
+            .any(|entry| entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .contains("stage-"))
+    );
+}
+
 fn identity(records: &[CompactRecord], symbol: &str) -> String {
     compact_field(
         records
