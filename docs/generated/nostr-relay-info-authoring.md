@@ -6,21 +6,64 @@ This generated composition guide describes the closed NIP-11 information slice. 
 
 ## Exact recipe and capability
 
-```text
-relay-info.recipe template=nostr-relay-info usage="new DEST --template nostr-relay-info [--name NAME] --relay-url URL" artifact=generated/application.lkja runner=http
-relay-info.interface name=HttpClient reference=pkg_10000000000000000000000000000001/decl_f1084ba5dca02ba338140747d0ea9d46
-relay-info.operation name=get reference=pkg_10000000000000000000000000000001/op_558ecccb75126a205c817b69d2e84ff5 argument="ordered-list<{name:text,value:bytes}>" result="{status:i64,headers:list<{name:text,value:bytes}>,body:bytes}"
-```
+<table>
+<thead>
+<tr><th>Template</th><th>Purpose</th><th>Runner</th><th>Starter deployment</th><th>Recommended artifact output</th></tr>
+</thead>
+<tbody>
+<tr><td><code>nostr-relay-info</code></td><td>Create a tested NIP-11 relay-information proxy with one deployment-bound endpoint.</td><td><code>http</code></td><td><code>true</code></td><td><code>generated/application.lkja</code></td></tr>
+</tbody>
+</table>
+
+<pre>new DEST --template nostr-relay-info [--name NAME] --relay-url URL
+</pre>
+
+<table>
+<thead>
+<tr><th>Kind</th><th>Name</th><th>Exact reference</th></tr>
+</thead>
+<tbody>
+<tr><td><code>interface</code></td><td><code>HttpClient</code></td><td><code>pkg_10000000000000000000000000000001/decl_f1084ba5dca02ba338140747d0ea9d46</code></td></tr>
+<tr><td><code>operation</code></td><td><code>get</code></td><td><code>pkg_10000000000000000000000000000001/op_558ecccb75126a205c817b69d2e84ff5</code></td></tr>
+</tbody>
+</table>
+
+<pre>argument: ordered-list&lt;{name:text,value:bytes}&gt;
+result: {status:i64,headers:list&lt;{name:text,value:bytes}&gt;,body:bytes}
+</pre>
 
 ## Closed behavior
 
-```text
-relay-info.normalization secure="wss->https,https->https" development="ws->http,http->http" plaintext=loopback-only reject="userinfo,query,fragment,noncanonical-authority"
-relay-info.request inbound="GET /relay-info" outbound="GET exact-deployment-endpoint" accept=application/nostr+json body=none
-relay-info.response success="status=200+base-media-type=application/nostr+json" body=bounded-byte-exact failure="local-status=502 body=bad-gateway" remote-detail=redacted
+<pre>relay-info.normalization secure=&quot;wss-&gt;https,https-&gt;https&quot; development=&quot;ws-&gt;http,http-&gt;http&quot; plaintext=loopback-only reject=&quot;userinfo,query,fragment,noncanonical-authority&quot;
+relay-info.request inbound=&quot;GET /relay-info&quot; outbound=&quot;GET exact-deployment-endpoint&quot; accept=application/nostr+json body=none
+relay-info.response success=&quot;status=200+base-media-type=application/nostr+json&quot; body=bounded-byte-exact failure=&quot;local-status=502 body=bad-gateway&quot; remote-detail=redacted
 relay-info.transport protocol=http/1.1 redirects=never retries=never decompression=never proxy=none credentials=none
-relay-info.default-limits request-headers=16 request-header-bytes=8192 response-headers=128 response-header-bytes=32768 response-body-bytes=1048576 dns-results=8 concurrent-requests=16 connection-milliseconds=5000 total-milliseconds=10000 cleanup-milliseconds=5000
-relay-info.lifecycle inspect=status+query+inspect verify=check derive="build --output generated/application.lkja" execute="serve --deployment service.deployment.json"
-```
+</pre>
+
+## Default transport limits
+
+<table>
+<thead>
+<tr><th>Limit</th><th>Maximum</th></tr>
+</thead>
+<tbody>
+<tr><td><code>request-headers</code></td><td>16</td></tr>
+<tr><td><code>request-header-bytes</code></td><td>8192</td></tr>
+<tr><td><code>response-headers</code></td><td>128</td></tr>
+<tr><td><code>response-header-bytes</code></td><td>32768</td></tr>
+<tr><td><code>response-body-bytes</code></td><td>1048576</td></tr>
+<tr><td><code>dns-results</code></td><td>8</td></tr>
+<tr><td><code>concurrent-requests</code></td><td>16</td></tr>
+<tr><td><code>connection-milliseconds</code></td><td>5000</td></tr>
+<tr><td><code>total-milliseconds</code></td><td>10000</td></tr>
+<tr><td><code>cleanup-milliseconds</code></td><td>5000</td></tr>
+</tbody>
+</table>
+
+## Lifecycle
+
+<pre>relay-info.lifecycle inspect=status+query+inspect verify=check derive=&quot;build --output generated/application.lkja&quot; execute=&quot;serve --deployment service.deployment.json&quot;
+</pre>
+
 
 Read `deployment.md` for the executable-owned strict adapter schema and global maxima. Read the normative outbound-client specification for DNS/address classification, TLS trust, cancellation, cleanup, and security nonclaims.

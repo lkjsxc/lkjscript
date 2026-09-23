@@ -4,8 +4,7 @@
 
 The following compact records are the executable-owned current public capability.
 
-```text
-inspection.definition usage="inspect owner KIND ID --detail definition [--package PACKAGE] [--limit N] [--bytes N] [--continuation TOKEN]" authority=accepted-revision-derived-read-only scope=live-local-pure-or-task-function-with-body reference-cutoff=named-owner-and-type-boundary continuation=stateless-exclusive-record-key prefix=icont_
+<pre>inspection.definition usage=&quot;inspect owner KIND ID --detail definition [--package PACKAGE] [--limit N] [--bytes N] [--continuation TOKEN]&quot; authority=accepted-revision-derived-read-only scope=live-local-pure-or-task-function-with-body reference-cutoff=named-owner-and-type-boundary continuation=stateless-exclusive-record-key prefix=icont_
 inspection.definition-section ordinal=1 name=definition-header
 inspection.definition-section ordinal=2 name=function-contract
 inspection.definition-section ordinal=3 name=structural-body-preorder
@@ -251,4 +250,4 @@ inspection.definition-nonclaim name=not-change-input-or-round-trip-authority
 inspection.definition-nonclaim name=no-dependency-implementation-disclosure
 inspection.definition-nonclaim name=no-storage-cache-artifact-runtime-deployment-or-operational-data
 inspection.definition-nonclaim name=no-mutable-session-cursor-or-body-cache
-```
+</pre>

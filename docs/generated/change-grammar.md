@@ -77,33 +77,32 @@ Review the complete input with `change plan --input-file PATH`, then submit the 
 
 The following compact records are the executable-owned current public capability.
 
-```text
-change request-model=change_request request-record=request plan-prefix=plan_ plan-hex-characters=128 request-commitment=opaque-digest prepared-plan=opaque-commitment plan-output-action=plan-only expression-notations="flat|block"
-change.expression-block header="expression.block as=$ROOT" header-fields=as body=exactly-one-parenthesized-expression end=expression.end root=ordinary-request-local-expression authority=reviewed-authored-intent
-change.expression-syntax name=unit syntax="(unit)"
-change.expression-syntax name=bool syntax="(bool true|false)"
-change.expression-syntax name=i64 syntax="(i64 I64)"
-change.expression-syntax name=f64 syntax="(f64 DECIMAL|nan|inf|-inf)"
-change.expression-syntax name=text syntax="(text \"TEXT\")"
-change.expression-syntax name=static-text syntax="(static-text \"TEXT\")"
-change.expression-syntax name=local syntax="(local NAME)|(local $PARAMETER)|(local (exact LOCAL_SELECTOR))"
-change.expression-syntax name=constant syntax="(constant DECLARATION)"
-change.expression-syntax name=if syntax="(if CONDITION WHEN_TRUE WHEN_FALSE)"
-change.expression-syntax name=sequence syntax="(sequence EXPR...)"
-change.expression-syntax name=call syntax="(call FUNCTION APPLICATIONS EXPR...)"
-change.expression-syntax name=function-value syntax="(function-value FUNCTION APPLICATIONS)"
-change.expression-syntax name=invoke syntax="(invoke CALLEE EXPR...)"
-change.expression-syntax name=bind syntax="(bind CALLEE EXPR...)"
-change.expression-syntax name=let syntax="(let (binding NAME [(as $BINDING)] [(type TYPE)] INITIALIZER)... (in BODY))"
-change.expression-syntax name=record syntax="(record DECLARATION TYPE_APPLICATION (field FIELD EXPR)...)|(record structural (field NAME EXPR)...)"
-change.expression-syntax name=variant syntax="(variant CASE TYPE_APPLICATION [PAYLOAD])"
-change.expression-syntax name=field syntax="(field EXPR FIELD)|(field EXPR (name NAME))"
-change.expression-syntax name=list syntax="(list TYPE EXPR...)"
-change.expression-syntax name=map syntax="(map KEY_TYPE VALUE_TYPE (entry KEY_EXPR VALUE_EXPR)...)"
-change.expression-syntax name=match syntax="(match SCRUTINEE (arm CASE [(payload NAME TYPE [(as $BINDING)])] BODY)...)"
-change.expression-syntax name=capability-call syntax="(capability-call REQUIREMENT OPERATION EXPR...)"
-change.expression-syntax name=transaction syntax="(transaction REQUIREMENT (binding NAME) BODY)"
-change.expression-syntax name=transaction-outcome syntax="(transaction-outcome REQUIREMENT (types TYPE) (outcome OUTCOME REASON COMMITTED ABORTED CONDITION-FAILED CONFLICT) (binding NAME) BODY)"
+<pre>change request-model=change_request request-record=request plan-prefix=plan_ plan-hex-characters=128 request-commitment=opaque-digest prepared-plan=opaque-commitment plan-output-action=plan-only expression-notations=&quot;flat|block&quot;
+change.expression-block header=&quot;expression.block as=$ROOT&quot; header-fields=as body=exactly-one-parenthesized-expression end=expression.end root=ordinary-request-local-expression authority=reviewed-authored-intent
+change.expression-syntax name=unit syntax=&quot;(unit)&quot;
+change.expression-syntax name=bool syntax=&quot;(bool true|false)&quot;
+change.expression-syntax name=i64 syntax=&quot;(i64 I64)&quot;
+change.expression-syntax name=f64 syntax=&quot;(f64 DECIMAL|nan|inf|-inf)&quot;
+change.expression-syntax name=text syntax=&quot;(text \&quot;TEXT\&quot;)&quot;
+change.expression-syntax name=static-text syntax=&quot;(static-text \&quot;TEXT\&quot;)&quot;
+change.expression-syntax name=local syntax=&quot;(local NAME)|(local $PARAMETER)|(local (exact LOCAL_SELECTOR))&quot;
+change.expression-syntax name=constant syntax=&quot;(constant DECLARATION)&quot;
+change.expression-syntax name=if syntax=&quot;(if CONDITION WHEN_TRUE WHEN_FALSE)&quot;
+change.expression-syntax name=sequence syntax=&quot;(sequence EXPR...)&quot;
+change.expression-syntax name=call syntax=&quot;(call FUNCTION APPLICATIONS EXPR...)&quot;
+change.expression-syntax name=function-value syntax=&quot;(function-value FUNCTION APPLICATIONS)&quot;
+change.expression-syntax name=invoke syntax=&quot;(invoke CALLEE EXPR...)&quot;
+change.expression-syntax name=bind syntax=&quot;(bind CALLEE EXPR...)&quot;
+change.expression-syntax name=let syntax=&quot;(let (binding NAME [(as $BINDING)] [(type TYPE)] INITIALIZER)... (in BODY))&quot;
+change.expression-syntax name=record syntax=&quot;(record DECLARATION TYPE_APPLICATION (field FIELD EXPR)...)|(record structural (field NAME EXPR)...)&quot;
+change.expression-syntax name=variant syntax=&quot;(variant CASE TYPE_APPLICATION [PAYLOAD])&quot;
+change.expression-syntax name=field syntax=&quot;(field EXPR FIELD)|(field EXPR (name NAME))&quot;
+change.expression-syntax name=list syntax=&quot;(list TYPE EXPR...)&quot;
+change.expression-syntax name=map syntax=&quot;(map KEY_TYPE VALUE_TYPE (entry KEY_EXPR VALUE_EXPR)...)&quot;
+change.expression-syntax name=match syntax=&quot;(match SCRUTINEE (arm CASE [(payload NAME TYPE [(as $BINDING)])] BODY)...)&quot;
+change.expression-syntax name=capability-call syntax=&quot;(capability-call REQUIREMENT OPERATION EXPR...)&quot;
+change.expression-syntax name=transaction syntax=&quot;(transaction REQUIREMENT (binding NAME) BODY)&quot;
+change.expression-syntax name=transaction-outcome syntax=&quot;(transaction-outcome REQUIREMENT (types TYPE) (outcome OUTCOME REASON COMMITTED ABORTED CONDITION-FAILED CONFLICT) (binding NAME) BODY)&quot;
 change.expression-limit name=maximum-input-bytes value=4194304 unit=bytes scope=whole-request
 change.expression-limit name=maximum-structural-tokens value=2560000 unit=tokens scope=whole-request
 change.expression-limit name=maximum-structural-syntax-nodes value=1000000 unit=nodes scope=whole-request
@@ -111,52 +110,52 @@ change.expression-limit name=default-authored-identities value=100000 unit=ident
 change.expression-limit name=maximum-expanded-type-nodes value=1000000 unit=nodes scope=whole-request
 change.expression-limit name=maximum-combined-expression-depth value=1024 unit=depth scope=whole-request
 change.expression-limit name=maximum-type-depth value=256 unit=depth scope=whole-request
-change.expression-rule name=metavariables syntax="EXPR|TYPE|ROW|NAME|[...]|..." meaning="uppercase words are grammar metavariables; brackets mark optional syntax and ellipsis repetition; neither brackets nor ellipsis are input tokens"
-change.expression-rule name=framing syntax="expression.block as=$ROOT NEWLINE EXPR NEWLINE expression.end" meaning="markers are standalone lines with surrounding whitespace; reject nested headers, stray or missing end markers, extra header fields, multiple body expressions and trailing tokens; quoted marker text is literal data"
-change.expression-rule name=tokens syntax="ASCII-whitespace|(|)|;comment|\"TEXT\"" meaning="semicolon comments end at the physical newline outside strings; text uses compact escapes and Unicode validation; unescaped physical newlines and control characters in strings reject"
-change.expression-rule name=names syntax=NAME meaning="unquoted portable Name; declaration, member, requirement, type and row atoms use existing typed reference spellings and exact resolution"
-change.expression-rule name=applications syntax="[(types TYPE...)] [(effects ROW...)] [(requirements REQUIREMENT...)]" meaning="call and function-value only; at most one clause of each kind in this order before value arguments; omission and explicit empty clauses both mean an empty vector without inference; duplicate, unknown, out-of-order or misplaced clauses reject"
-change.expression-rule name=type-application syntax="[(types TYPE...)]" meaning="nominal record and variant only; existing arity, constraints, visibility and validity apply"
-change.expression-rule name=requirement-argument syntax="REQUIREMENT|parameter:$R" meaning="preserve concrete requirement versus exact requirement-parameter substitution; no inferred grants or attenuation"
-change.expression-rule name=local syntax="(local NAME)|(local $PARAMETER)|(local (exact param_HEX|bind_HEX))" meaning="bare NAME selects the nearest binding in this block only, including names resembling exact identities; $PARAMETER uses typed public resolution; exact requires a local identity and ordinary scope validation; no fallback or implicit closure"
-change.expression-rule name=let-scope syntax="(binding NAME [(type TYPE)] INITIALIZER)" meaning="sequential and nested shadowing are allowed; resolve each initializer before introducing its distinct binder; restore the outer binding on scope exit; unbound self and forward locals reject"
-change.expression-rule name=payload-scope syntax="(arm CASE (payload NAME TYPE) BODY)" meaning="a payload binding exists only in its own arm body"
-change.expression-rule name=transaction-scope syntax="(transaction REQUIREMENT (binding NAME) BODY)" meaning="the distinct transaction binding exists only in BODY and has no authored type annotation; existing transaction and affine validation apply"
-change.expression-rule name=transaction-outcome syntax="(transaction-outcome REQUIREMENT (types TYPE) (outcome OUTCOME REASON COMMITTED ABORTED CONDITION-FAILED CONFLICT) (binding NAME) BODY)" meaning="exact ordinary standard nominal references and one explicit body type argument; return completed Committed(TYPE) or Aborted(reason) after this transaction finalizes; no retry or new retention permission"
-change.expression-rule name=root-ownership syntax=$ROOT meaning="consume exactly once in an outer change or genuine flat parent; unused or shared roots reject; nested expressions and binders are private; flat edges cannot extend a block root or reach private children; a block cannot splice a flat expression into its interior"
-change.expression-rule name=delayed-references syntax="$ALIAS|@TYPE|@ROW" meaning="public typed aliases may be declared later in the whole request; all references including unused bindings and untaken branches undergo complete validation"
-change.expression-rule name=occurrences-and-order syntax=EXPR meaning="each syntactic occurrence owns a distinct expression; only let reuses an evaluated value; preserve authored argument, sequence, field and map-entry order, callee-before-arguments and selected-branch evaluation"
-change.expression-rule name=normalization syntax="flat|block" meaning="equivalent normalized authored trees preserve canonical intent, request commitments and same-base plans; preserve semantic Names, optional annotations and explicit applications; formatting, comments and request labels are not meaning"
-change.expression-rule name=capacity syntax=whole-request meaning="charge parentheses and atoms as tokens and lists/atoms as syntax nodes across blocks; admit resulting expression/binder/public identities and expanded type input/cache/copy work cumulatively; combined expression depth includes flat ancestors and starts at one; syntax wrappers add no semantic expression depth; authored defaults are unchanged"
-change.expression-rule name=compatibility syntax="change plan|change apply" meaning="both notations use the same reviewed typed intent and publication; body replacement preserves its declaration and unchanged parameters; saved requests remain proposals and definition projections remain read-only; compact responses retain flat framing"
-change.declaration-syntax name=framing syntax="request base=REVISION [repository=REPOSITORY] [package=PACKAGE] [idempotency=KEY] NEWLINE declarations.begin NEWLINE (units UNIT...) NEWLINE declarations.end" meaning="All blocks in one request share collected typed scopes and one atomic reviewed publication; compact records may appear outside blocks."
-change.declaration-syntax name=unit syntax="(FAMILY create NAME CLAUSE...)|(FAMILY edit EXACT_OWNER NAME CLAUSE...)" meaning="Creation allocates; editing binds exact current identity and displayed name. Never name-based upsert. Optional (as $SYMBOL) supplies deliberate cross-notation identity labels."
-change.declaration-syntax name=module syntax="(module MODE BINDING DECLARATION...)" meaning="A module nests its declarations. A top-level declaration may use (in MODULE). An edit is a patch; unselected declarations survive."
-change.declaration-syntax name=record syntax="(record MODE BINDING (visibility public|package|private) TYPE_PARAMETER... FIELD...)" meaning="Ordered authored fields and generic contracts; named types retain declaration identity."
-change.declaration-syntax name=variant syntax="(variant MODE BINDING (visibility VISIBILITY) TYPE_PARAMETER... CASE...)" meaning="Cases may contain an explicit payload type."
-change.declaration-syntax name=function syntax="(function MODE BINDING (visibility VISIBILITY) TYPE_PARAMETER... EFFECT_PARAMETER... REQUIREMENT_PARAMETER... PARAMETER... (returns TYPE) (effect pure|TASK) (body EXPR))" meaning="Explicit complete signature and structural body. Parameter names are lexical locals; no effect inference."
-change.declaration-syntax name=external syntax="(external MODE BINDING (visibility VISIBILITY) TYPE_PARAMETER... PARAMETER... (returns TYPE) (implementation IMPLEMENTATION))" meaning="Existing supported implementation boundary; not an executable host macro."
-change.declaration-syntax name=constant syntax="(constant MODE BINDING (visibility VISIBILITY) (type TYPE) (value EXPR))" meaning="Complete constant definition."
-change.declaration-syntax name=test syntax="(test MODE BINDING (visibility VISIBILITY) (actual EXPR) (expected EXPR))" meaning="Graph-owned equality expectation, admitted with the whole candidate."
-change.declaration-syntax name=interface syntax="(interface MODE BINDING (visibility VISIBILITY) OPERATION...)" meaning="Explicit capability contract."
-change.declaration-syntax name=operation syntax="(operation MODE BINDING PARAMETER... (returns TYPE) (idempotency idempotent|idempotent-with-key|non-idempotent) (external-visibility none|possible))" meaning="Operation contract owned by an interface."
-change.declaration-syntax name=component syntax="(component MODE BINDING (visibility VISIBILITY) REQUIREMENT... PORT...)" meaning="Explicit requirement and implementation connections; grants remain deployment-owned."
-change.declaration-syntax name=requirement syntax="(requirement MODE BINDING (interface DECLARATION) (operations OPERATION...) (limits (NAME MAXIMUM bytes|items|calls|tasks|milliseconds)...))" meaning="No implicit allowances or grants."
-change.declaration-syntax name=port syntax="(port MODE BINDING (type TYPE) (function DECLARATION))|(port MODE BINDING (type TYPE) (value EXPR))" meaning="Exactly one canonical implementation form."
-change.declaration-syntax name=target syntax="(target MODE BINDING (component DECLARATION) (runner command|http|interactive|batch|worker|test) [(port PORT)] ROUTE...)" meaning="Target runtime support and boundary contracts are independently validated."
-change.declaration-syntax name=route syntax="(route MODE BINDING (method METHOD) (path STRING)|(pattern STRING) (port PORT))" meaning="Owned by a target; edit BINDING is EXACT_ROUTE EXACT_ROUTE because routes have no stored display name."
-change.declaration-syntax name=field syntax="(field MODE BINDING (type TYPE))" meaning="Owned by a record."
-change.declaration-syntax name=case syntax="(case MODE BINDING [(payload TYPE)])" meaning="Owned by a variant."
-change.declaration-syntax name=parameter syntax="(parameter MODE BINDING (type TYPE) [(use unrestricted|borrow|consume)] [(requirement REQUIREMENT)])" meaning="Owned by a function, external or operation; additions explicitly create and append."
-change.declaration-syntax name=type-parameter syntax="(type-parameter MODE BINDING [(constraint none|capture-safe)])" meaning="Lexically scoped generic type; no escape to unrelated contracts."
-change.declaration-syntax name=effect-parameter syntax="(effect-parameter MODE BINDING)" meaning="Owned by a function."
-change.declaration-syntax name=requirement-parameter syntax="(requirement-parameter MODE BINDING (interface DECLARATION) (operations OPERATION...))" meaning="Owned by a function; requirement-position names resolve to parameter capabilities."
-change.declaration-syntax name=supplier syntax="(use ALIAS builtin)|(use ALIAS PACKAGE PACKAGE_REVISION)" meaning="Exact public supplier binding. Exported members use ALIAS::DECLARATION and ALIAS::DECLARATION::MEMBER. Interfaces expose no modules; ambiguous exports require an exact typed reference alias. No ambient lookup or upgrades."
-change.declaration-syntax name=reference syntax="(reference ALIAS NAMESPACE EXACT_REFERENCE)" meaning="Typed locator only; supplies no mutation or execution authority."
-change.declaration-syntax name=types syntax="Unit|Bool|I64|F64|Text|Bytes|StaticText|Secret|NAME|(NAME TYPE...)|(list TYPE)|(map TYPE TYPE)|(result TYPE TYPE)|(option TYPE)|(stream TYPE)|(record (NAME TYPE)...)|(function (TYPE...) TYPE)|(task-function (TYPE...) TYPE ROW)|(resource INTERFACE)|(parameter-type EXACT_PARAMETER)" meaning="Inline composition; (type-alias NAME TYPE) is scoped notation and is admitted even when unused."
-change.declaration-syntax name=effects syntax="(task (requirement REQUIREMENT)... (parameter EFFECT_PARAMETER)...)|(row (requirement REQUIREMENT)... (parameter EFFECT_PARAMETER)...)" meaning="Task declaration and callable type rows remain explicit, including an empty task row."
-change.declaration-syntax name=draft syntax="change draft --owner MODULE_OR_DECLARATION_OR_TARGET [--owner OWNER]... --output ABSENT_PATH [--bytes N]" meaning="Read-only canonical reconstruction at one base. Module selection expands actual ownership only. External definitions remain exact references. Output is complete, bounded, deterministic and atomically created without overwrite."
-change.declaration-syntax name=editing syntax="edit EXACT_OWNER NAME" meaning="All contract children must retain exact bindings or have explicit delete.owner; renames and moves require precise operations. Untouched plan reports unchanged without a publication token. Original formatting, comments and alias names cannot be recovered."
+change.expression-rule name=metavariables syntax=&quot;EXPR|TYPE|ROW|NAME|[...]|...&quot; meaning=&quot;uppercase words are grammar metavariables; brackets mark optional syntax and ellipsis repetition; neither brackets nor ellipsis are input tokens&quot;
+change.expression-rule name=framing syntax=&quot;expression.block as=$ROOT NEWLINE EXPR NEWLINE expression.end&quot; meaning=&quot;markers are standalone lines with surrounding whitespace; reject nested headers, stray or missing end markers, extra header fields, multiple body expressions and trailing tokens; quoted marker text is literal data&quot;
+change.expression-rule name=tokens syntax=&quot;ASCII-whitespace|(|)|;comment|\&quot;TEXT\&quot;&quot; meaning=&quot;semicolon comments end at the physical newline outside strings; text uses compact escapes and Unicode validation; unescaped physical newlines and control characters in strings reject&quot;
+change.expression-rule name=names syntax=NAME meaning=&quot;unquoted portable Name; declaration, member, requirement, type and row atoms use existing typed reference spellings and exact resolution&quot;
+change.expression-rule name=applications syntax=&quot;[(types TYPE...)] [(effects ROW...)] [(requirements REQUIREMENT...)]&quot; meaning=&quot;call and function-value only; at most one clause of each kind in this order before value arguments; omission and explicit empty clauses both mean an empty vector without inference; duplicate, unknown, out-of-order or misplaced clauses reject&quot;
+change.expression-rule name=type-application syntax=&quot;[(types TYPE...)]&quot; meaning=&quot;nominal record and variant only; existing arity, constraints, visibility and validity apply&quot;
+change.expression-rule name=requirement-argument syntax=&quot;REQUIREMENT|parameter:$R&quot; meaning=&quot;preserve concrete requirement versus exact requirement-parameter substitution; no inferred grants or attenuation&quot;
+change.expression-rule name=local syntax=&quot;(local NAME)|(local $PARAMETER)|(local (exact param_HEX|bind_HEX))&quot; meaning=&quot;bare NAME selects the nearest binding in this block only, including names resembling exact identities; $PARAMETER uses typed public resolution; exact requires a local identity and ordinary scope validation; no fallback or implicit closure&quot;
+change.expression-rule name=let-scope syntax=&quot;(binding NAME [(type TYPE)] INITIALIZER)&quot; meaning=&quot;sequential and nested shadowing are allowed; resolve each initializer before introducing its distinct binder; restore the outer binding on scope exit; unbound self and forward locals reject&quot;
+change.expression-rule name=payload-scope syntax=&quot;(arm CASE (payload NAME TYPE) BODY)&quot; meaning=&quot;a payload binding exists only in its own arm body&quot;
+change.expression-rule name=transaction-scope syntax=&quot;(transaction REQUIREMENT (binding NAME) BODY)&quot; meaning=&quot;the distinct transaction binding exists only in BODY and has no authored type annotation; existing transaction and affine validation apply&quot;
+change.expression-rule name=transaction-outcome syntax=&quot;(transaction-outcome REQUIREMENT (types TYPE) (outcome OUTCOME REASON COMMITTED ABORTED CONDITION-FAILED CONFLICT) (binding NAME) BODY)&quot; meaning=&quot;exact ordinary standard nominal references and one explicit body type argument; return completed Committed(TYPE) or Aborted(reason) after this transaction finalizes; no retry or new retention permission&quot;
+change.expression-rule name=root-ownership syntax=$ROOT meaning=&quot;consume exactly once in an outer change or genuine flat parent; unused or shared roots reject; nested expressions and binders are private; flat edges cannot extend a block root or reach private children; a block cannot splice a flat expression into its interior&quot;
+change.expression-rule name=delayed-references syntax=&quot;$ALIAS|@TYPE|@ROW&quot; meaning=&quot;public typed aliases may be declared later in the whole request; all references including unused bindings and untaken branches undergo complete validation&quot;
+change.expression-rule name=occurrences-and-order syntax=EXPR meaning=&quot;each syntactic occurrence owns a distinct expression; only let reuses an evaluated value; preserve authored argument, sequence, field and map-entry order, callee-before-arguments and selected-branch evaluation&quot;
+change.expression-rule name=normalization syntax=&quot;flat|block&quot; meaning=&quot;equivalent normalized authored trees preserve canonical intent, request commitments and same-base plans; preserve semantic Names, optional annotations and explicit applications; formatting, comments and request labels are not meaning&quot;
+change.expression-rule name=capacity syntax=whole-request meaning=&quot;charge parentheses and atoms as tokens and lists/atoms as syntax nodes across blocks; admit resulting expression/binder/public identities and expanded type input/cache/copy work cumulatively; combined expression depth includes flat ancestors and starts at one; syntax wrappers add no semantic expression depth; authored defaults are unchanged&quot;
+change.expression-rule name=compatibility syntax=&quot;change plan|change apply&quot; meaning=&quot;both notations use the same reviewed typed intent and publication; body replacement preserves its declaration and unchanged parameters; saved requests remain proposals and definition projections remain read-only; compact responses retain flat framing&quot;
+change.declaration-syntax name=framing syntax=&quot;request base=REVISION [repository=REPOSITORY] [package=PACKAGE] [idempotency=KEY] NEWLINE declarations.begin NEWLINE (units UNIT...) NEWLINE declarations.end&quot; meaning=&quot;All blocks in one request share collected typed scopes and one atomic reviewed publication; compact records may appear outside blocks.&quot;
+change.declaration-syntax name=unit syntax=&quot;(FAMILY create NAME CLAUSE...)|(FAMILY edit EXACT_OWNER NAME CLAUSE...)&quot; meaning=&quot;Creation allocates; editing binds exact current identity and displayed name. Never name-based upsert. Optional (as $SYMBOL) supplies deliberate cross-notation identity labels.&quot;
+change.declaration-syntax name=module syntax=&quot;(module MODE BINDING DECLARATION...)&quot; meaning=&quot;A module nests its declarations. A top-level declaration may use (in MODULE). An edit is a patch; unselected declarations survive.&quot;
+change.declaration-syntax name=record syntax=&quot;(record MODE BINDING (visibility public|package|private) TYPE_PARAMETER... FIELD...)&quot; meaning=&quot;Ordered authored fields and generic contracts; named types retain declaration identity.&quot;
+change.declaration-syntax name=variant syntax=&quot;(variant MODE BINDING (visibility VISIBILITY) TYPE_PARAMETER... CASE...)&quot; meaning=&quot;Cases may contain an explicit payload type.&quot;
+change.declaration-syntax name=function syntax=&quot;(function MODE BINDING (visibility VISIBILITY) TYPE_PARAMETER... EFFECT_PARAMETER... REQUIREMENT_PARAMETER... PARAMETER... (returns TYPE) (effect pure|TASK) (body EXPR))&quot; meaning=&quot;Explicit complete signature and structural body. Parameter names are lexical locals; no effect inference.&quot;
+change.declaration-syntax name=external syntax=&quot;(external MODE BINDING (visibility VISIBILITY) TYPE_PARAMETER... PARAMETER... (returns TYPE) (implementation IMPLEMENTATION))&quot; meaning=&quot;Existing supported implementation boundary; not an executable host macro.&quot;
+change.declaration-syntax name=constant syntax=&quot;(constant MODE BINDING (visibility VISIBILITY) (type TYPE) (value EXPR))&quot; meaning=&quot;Complete constant definition.&quot;
+change.declaration-syntax name=test syntax=&quot;(test MODE BINDING (visibility VISIBILITY) (actual EXPR) (expected EXPR))&quot; meaning=&quot;Graph-owned equality expectation, admitted with the whole candidate.&quot;
+change.declaration-syntax name=interface syntax=&quot;(interface MODE BINDING (visibility VISIBILITY) OPERATION...)&quot; meaning=&quot;Explicit capability contract.&quot;
+change.declaration-syntax name=operation syntax=&quot;(operation MODE BINDING PARAMETER... (returns TYPE) (idempotency idempotent|idempotent-with-key|non-idempotent) (external-visibility none|possible))&quot; meaning=&quot;Operation contract owned by an interface.&quot;
+change.declaration-syntax name=component syntax=&quot;(component MODE BINDING (visibility VISIBILITY) REQUIREMENT... PORT...)&quot; meaning=&quot;Explicit requirement and implementation connections; grants remain deployment-owned.&quot;
+change.declaration-syntax name=requirement syntax=&quot;(requirement MODE BINDING (interface DECLARATION) (operations OPERATION...) (limits (NAME MAXIMUM bytes|items|calls|tasks|milliseconds)...))&quot; meaning=&quot;No implicit allowances or grants.&quot;
+change.declaration-syntax name=port syntax=&quot;(port MODE BINDING (type TYPE) (function DECLARATION))|(port MODE BINDING (type TYPE) (value EXPR))&quot; meaning=&quot;Exactly one canonical implementation form.&quot;
+change.declaration-syntax name=target syntax=&quot;(target MODE BINDING (component DECLARATION) (runner command|http|interactive|batch|worker|test) [(port PORT)] ROUTE...)&quot; meaning=&quot;Target runtime support and boundary contracts are independently validated.&quot;
+change.declaration-syntax name=route syntax=&quot;(route MODE BINDING (method METHOD) (path STRING)|(pattern STRING) (port PORT))&quot; meaning=&quot;Owned by a target; edit BINDING is EXACT_ROUTE EXACT_ROUTE because routes have no stored display name.&quot;
+change.declaration-syntax name=field syntax=&quot;(field MODE BINDING (type TYPE))&quot; meaning=&quot;Owned by a record.&quot;
+change.declaration-syntax name=case syntax=&quot;(case MODE BINDING [(payload TYPE)])&quot; meaning=&quot;Owned by a variant.&quot;
+change.declaration-syntax name=parameter syntax=&quot;(parameter MODE BINDING (type TYPE) [(use unrestricted|borrow|consume)] [(requirement REQUIREMENT)])&quot; meaning=&quot;Owned by a function, external or operation; additions explicitly create and append.&quot;
+change.declaration-syntax name=type-parameter syntax=&quot;(type-parameter MODE BINDING [(constraint none|capture-safe)])&quot; meaning=&quot;Lexically scoped generic type; no escape to unrelated contracts.&quot;
+change.declaration-syntax name=effect-parameter syntax=&quot;(effect-parameter MODE BINDING)&quot; meaning=&quot;Owned by a function.&quot;
+change.declaration-syntax name=requirement-parameter syntax=&quot;(requirement-parameter MODE BINDING (interface DECLARATION) (operations OPERATION...))&quot; meaning=&quot;Owned by a function; requirement-position names resolve to parameter capabilities.&quot;
+change.declaration-syntax name=supplier syntax=&quot;(use ALIAS builtin)|(use ALIAS PACKAGE PACKAGE_REVISION)&quot; meaning=&quot;Exact public supplier binding. Exported members use ALIAS::DECLARATION and ALIAS::DECLARATION::MEMBER. Interfaces expose no modules; ambiguous exports require an exact typed reference alias. No ambient lookup or upgrades.&quot;
+change.declaration-syntax name=reference syntax=&quot;(reference ALIAS NAMESPACE EXACT_REFERENCE)&quot; meaning=&quot;Typed locator only; supplies no mutation or execution authority.&quot;
+change.declaration-syntax name=types syntax=&quot;Unit|Bool|I64|F64|Text|Bytes|StaticText|Secret|NAME|(NAME TYPE...)|(list TYPE)|(map TYPE TYPE)|(result TYPE TYPE)|(option TYPE)|(stream TYPE)|(record (NAME TYPE)...)|(function (TYPE...) TYPE)|(task-function (TYPE...) TYPE ROW)|(resource INTERFACE)|(parameter-type EXACT_PARAMETER)&quot; meaning=&quot;Inline composition; (type-alias NAME TYPE) is scoped notation and is admitted even when unused.&quot;
+change.declaration-syntax name=effects syntax=&quot;(task (requirement REQUIREMENT)... (parameter EFFECT_PARAMETER)...)|(row (requirement REQUIREMENT)... (parameter EFFECT_PARAMETER)...)&quot; meaning=&quot;Task declaration and callable type rows remain explicit, including an empty task row.&quot;
+change.declaration-syntax name=draft syntax=&quot;change draft --owner MODULE_OR_DECLARATION_OR_TARGET [--owner OWNER]... --output ABSENT_PATH [--bytes N]&quot; meaning=&quot;Read-only canonical reconstruction at one base. Module selection expands actual ownership only. External definitions remain exact references. Output is complete, bounded, deterministic and atomically created without overwrite.&quot;
+change.declaration-syntax name=editing syntax=&quot;edit EXACT_OWNER NAME&quot; meaning=&quot;All contract children must retain exact bindings or have explicit delete.owner; renames and moves require precise operations. Untouched plan reports unchanged without a publication token. Original formatting, comments and alias names cannot be recovered.&quot;
 change.plan-record name=logical-plan
 change.plan-record-field record=logical-plan name=product
 change.plan-record-field record=logical-plan name=version
@@ -632,7 +631,7 @@ change.operation-field operation=delete.owner name=policy required=true form=del
 change.operation name=rename.owner
 change.operation-field operation=rename.owner name=owner required=true form=owner_selector
 change.operation-field operation=rename.owner name=name required=true form=name
-change.direct-operation name=rename.owner plan-usage="change plan rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] [--output PATH]" apply-usage="change apply rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] --plan PLAN"
+change.direct-operation name=rename.owner plan-usage=&quot;change plan rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] [--output PATH]&quot; apply-usage=&quot;change apply rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] --plan PLAN&quot;
 change.operation name=move.declaration
 change.operation-field operation=move.declaration name=declaration required=true form=declaration_selector
 change.operation-field operation=move.declaration name=module required=true form=module_selector
@@ -644,9 +643,9 @@ change.operation-field operation=extract.function name=as required=true form=req
 change.operation-field operation=extract.function name=function required=true form=declaration_selector
 change.operation-field operation=extract.function name=expression required=true form=exact_expression
 change.operation-field operation=extract.function name=name required=true form=name
-change.direct-operation name=extract.function plan-usage="change plan extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT] [--output PATH]" apply-usage="change apply extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT] --plan PLAN"
-change.operation-rule operation=create.target condition="runner=http" port=forbidden
-change.operation-rule operation=create.target condition="runner=command|interactive|batch|worker|test" port=required
+change.direct-operation name=extract.function plan-usage=&quot;change plan extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT] [--output PATH]&quot; apply-usage=&quot;change apply extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT] --plan PLAN&quot;
+change.operation-rule operation=create.target condition=&quot;runner=http&quot; port=forbidden
+change.operation-rule operation=create.target condition=&quot;runner=command|interactive|batch|worker|test&quot; port=required
 change.operation-rule operation=set.parameter-type selector=local-parameter-owner-or-typed-alias type-context=defining-lexical-and-generic-scope preserves=identity-parent-name-order-use-requirement validation=complete-final-candidate repair=explicit-calls-bodies-and-port-contracts-in-same-request result-and-effect=set.function-contract
 change.extraction-limit name=maximum-extraction-moved-owners value=4096 unit=owners
 change.extraction-limit name=maximum-extraction-captures value=4096 unit=captures
@@ -657,40 +656,40 @@ change.extraction-limit name=maximum-extraction-changed-owners value=4097 unit=o
 change.extraction-limit name=maximum-extraction-generated-owners value=8194 unit=owners
 change.field-form name=reference_alias syntax=$REFERENCE_ALIAS
 change.field-form name=exact_declaration syntax=decl_HEX
-change.field-form name=existing_owner_reference syntax="$REFERENCE_ALIAS|DOMAIN_HEX"
-change.field-form name=reference_package_selector syntax="local|$PACKAGE_ALIAS"
+change.field-form name=existing_owner_reference syntax=&quot;$REFERENCE_ALIAS|DOMAIN_HEX&quot;
+change.field-form name=reference_package_selector syntax=&quot;local|$PACKAGE_ALIAS&quot;
 change.field-form name=reference_package_source syntax=builtin
 change.field-form name=request_local_symbol syntax=$NAME
-change.field-form name=module_selector syntax="$NAME|mod_HEX|MODULE_NAME"
-change.field-form name=declaration_selector syntax="$NAME|decl_HEX|MODULE/NAME"
-change.field-form name=owner_selector syntax="$NAME|DOMAIN_HEX"
+change.field-form name=module_selector syntax=&quot;$NAME|mod_HEX|MODULE_NAME&quot;
+change.field-form name=declaration_selector syntax=&quot;$NAME|decl_HEX|MODULE/NAME&quot;
+change.field-form name=owner_selector syntax=&quot;$NAME|DOMAIN_HEX&quot;
 change.field-form name=exact_owner syntax=DOMAIN_HEX
-change.field-form name=name syntax="[A-Za-z_][A-Za-z0-9_-]{0,127}"
-change.field-form name=declaration_visibility syntax="private|package|public"
-change.field-form name=function_effect syntax="pure|task"
-change.field-form name=type_reference syntax="unit|bool|i64|f64|bytes|text|static-text|secret|@NAME"
+change.field-form name=name syntax=&quot;[A-Za-z_][A-Za-z0-9_-]{0,127}&quot;
+change.field-form name=declaration_visibility syntax=&quot;private|package|public&quot;
+change.field-form name=function_effect syntax=&quot;pure|task&quot;
+change.field-form name=type_reference syntax=&quot;unit|bool|i64|f64|bytes|text|static-text|secret|@NAME&quot;
 change.field-form name=expression_reference syntax=$NAME
-change.field-form name=delete_policy syntax="reject|owned-closure"
-change.field-form name=owner_parent syntax="package|$REFERENCE_ALIAS|DOMAIN_HEX"
+change.field-form name=delete_policy syntax=&quot;reject|owned-closure&quot;
+change.field-form name=owner_parent syntax=&quot;package|$REFERENCE_ALIAS|DOMAIN_HEX&quot;
 change.field-form name=namespace_class syntax=change.namespace-class.name
 change.field-form name=exact_package syntax=pkg_HEX
 change.field-form name=exact_revision syntax=rev_HEX
 change.field-form name=exact_package_revision syntax=package_revision_HEX
 change.field-form name=request_fragment syntax=%NAME
-change.field-form name=declaration_reference syntax="$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX"
-change.field-form name=port_reference syntax="$NAME|pkg_HEX/port_HEX"
-change.field-form name=runner_kind syntax="command|http|interactive|batch|worker|test"
-change.field-form name=operation_selector syntax="$NAME|op_HEX"
-change.field-form name=idempotency syntax="idempotent|idempotent-with-key|non-idempotent"
-change.field-form name=external_visibility syntax="none|possible"
-change.field-form name=parameter_use syntax="unrestricted|borrow|consume"
-change.field-form name=type_parameter_constraint syntax="none|capture-safe"
-change.field-form name=requirement_reference syntax="$NAME|pkg_HEX/req_HEX"
+change.field-form name=declaration_reference syntax=&quot;$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX&quot;
+change.field-form name=port_reference syntax=&quot;$NAME|pkg_HEX/port_HEX&quot;
+change.field-form name=runner_kind syntax=&quot;command|http|interactive|batch|worker|test&quot;
+change.field-form name=operation_selector syntax=&quot;$NAME|op_HEX&quot;
+change.field-form name=idempotency syntax=&quot;idempotent|idempotent-with-key|non-idempotent&quot;
+change.field-form name=external_visibility syntax=&quot;none|possible&quot;
+change.field-form name=parameter_use syntax=&quot;unrestricted|borrow|consume&quot;
+change.field-form name=type_parameter_constraint syntax=&quot;none|capture-safe&quot;
+change.field-form name=requirement_reference syntax=&quot;$NAME|pkg_HEX/req_HEX&quot;
 change.field-form name=implementation_name syntax=dot.separated.name
 change.field-form name=exact_expression syntax=expr_HEX
 change.field-form name=http_method syntax=ASCII_HTTP_TOKEN_1_TO_32_BYTES
 change.field-form name=http_path syntax=/EXACT_PATH_1_TO_16384_BYTES
-change.field-form name=http_pattern syntax="/LITERAL/{capture}/..._1_TO_64_SEGMENTS"
+change.field-form name=http_pattern syntax=&quot;/LITERAL/{capture}/..._1_TO_64_SEGMENTS&quot;
 change.precondition name=precondition.owner-exists
 change.precondition name=precondition.owner-absent
 change.precondition name=precondition.owner-name
@@ -733,43 +732,43 @@ change.namespace-class name=port
 change.namespace-class name=effect-parameter
 change.namespace-class name=requirement-parameter
 change.namespace-class name=target
-change.reference-namespace class=module local-parent=package-root dependency-parent=unexposed resolution="exact-base-or-explicit-dependency;all-declarations-reviewed"
-change.reference-namespace class=declaration local-parent=module dependency-parent=interface-root resolution="exact-base-or-explicit-dependency;all-declarations-reviewed"
-change.reference-namespace class=type-parameter local-parent="record|variant|function|external" dependency-parent=declaring-exported-owner resolution="exact-base-or-explicit-dependency;all-declarations-reviewed"
-change.reference-namespace class=effect-parameter local-parent=function dependency-parent=declaring-exported-function resolution="exact-base-or-explicit-dependency;all-declarations-reviewed"
-change.reference-namespace class=field local-parent=record dependency-parent=exported-record resolution="exact-base-or-explicit-dependency;all-declarations-reviewed"
-change.reference-namespace class=case local-parent=variant dependency-parent=exported-variant resolution="exact-base-or-explicit-dependency;all-declarations-reviewed"
-change.reference-namespace class=operation local-parent=interface dependency-parent=exported-interface resolution="exact-base-or-explicit-dependency;all-declarations-reviewed"
-change.reference-namespace class=parameter local-parent="function|external|operation" dependency-parent="exported-function|external|operation" resolution="exact-base-or-explicit-dependency;all-declarations-reviewed"
-change.reference-namespace class=requirement-parameter local-parent=pure-function-or-task-function dependency-parent=exported-function resolution="exact-base-or-explicit-dependency;all-declarations-reviewed"
-change.reference-namespace class=requirement local-parent=component dependency-parent=exported-component resolution="exact-base-or-explicit-dependency;all-declarations-reviewed"
-change.reference-namespace class=port local-parent=component dependency-parent=exported-component resolution="exact-base-or-explicit-dependency;all-declarations-reviewed"
-change.reference-namespace class=target local-parent=package-root dependency-parent=unexposed resolution="exact-base-or-explicit-dependency;all-declarations-reviewed"
+change.reference-namespace class=module local-parent=package-root dependency-parent=unexposed resolution=&quot;exact-base-or-explicit-dependency;all-declarations-reviewed&quot;
+change.reference-namespace class=declaration local-parent=module dependency-parent=interface-root resolution=&quot;exact-base-or-explicit-dependency;all-declarations-reviewed&quot;
+change.reference-namespace class=type-parameter local-parent=&quot;record|variant|function|external&quot; dependency-parent=declaring-exported-owner resolution=&quot;exact-base-or-explicit-dependency;all-declarations-reviewed&quot;
+change.reference-namespace class=effect-parameter local-parent=function dependency-parent=declaring-exported-function resolution=&quot;exact-base-or-explicit-dependency;all-declarations-reviewed&quot;
+change.reference-namespace class=field local-parent=record dependency-parent=exported-record resolution=&quot;exact-base-or-explicit-dependency;all-declarations-reviewed&quot;
+change.reference-namespace class=case local-parent=variant dependency-parent=exported-variant resolution=&quot;exact-base-or-explicit-dependency;all-declarations-reviewed&quot;
+change.reference-namespace class=operation local-parent=interface dependency-parent=exported-interface resolution=&quot;exact-base-or-explicit-dependency;all-declarations-reviewed&quot;
+change.reference-namespace class=parameter local-parent=&quot;function|external|operation&quot; dependency-parent=&quot;exported-function|external|operation&quot; resolution=&quot;exact-base-or-explicit-dependency;all-declarations-reviewed&quot;
+change.reference-namespace class=requirement-parameter local-parent=pure-function-or-task-function dependency-parent=exported-function resolution=&quot;exact-base-or-explicit-dependency;all-declarations-reviewed&quot;
+change.reference-namespace class=requirement local-parent=component dependency-parent=exported-component resolution=&quot;exact-base-or-explicit-dependency;all-declarations-reviewed&quot;
+change.reference-namespace class=port local-parent=component dependency-parent=exported-component resolution=&quot;exact-base-or-explicit-dependency;all-declarations-reviewed&quot;
+change.reference-namespace class=target local-parent=package-root dependency-parent=unexposed resolution=&quot;exact-base-or-explicit-dependency;all-declarations-reviewed&quot;
 change.parent-form name=package syntax=package
 change.parent-form name=exact_owner syntax=DOMAIN_HEX
 change.parent-form name=reference_alias syntax=$REFERENCE_ALIAS
 change.edge name=requirement.argument parent=call-or-function-value child=requirement-operand order=zero-based-contiguous-index
 change.edge-field edge=requirement.argument name=parent required=true syntax=$NAME
 change.edge-field edge=requirement.argument name=index required=true syntax=zero-based-index
-change.edge-field edge=requirement.argument name=requirement required=true syntax="$NAME|pkg_ID/req_ID|parameter:$NAME|parameter:pkg_ID/reqparam_ID"
+change.edge-field edge=requirement.argument name=requirement required=true syntax=&quot;$NAME|pkg_ID/req_ID|parameter:$NAME|parameter:pkg_ID/reqparam_ID&quot;
 change.edge name=requirement-parameter.operation parent=requirement-parameter-or-constraint-fragment child=operation-reference order=zero-based-contiguous-index
-change.edge-field edge=requirement-parameter.operation name=parent required=true syntax="$NAME|%NAME"
+change.edge-field edge=requirement-parameter.operation name=parent required=true syntax=&quot;$NAME|%NAME&quot;
 change.edge-field edge=requirement-parameter.operation name=index required=true syntax=zero-based-index
-change.edge-field edge=requirement-parameter.operation name=operation required=true syntax="$NAME|pkg_ID/op_ID"
+change.edge-field edge=requirement-parameter.operation name=operation required=true syntax=&quot;$NAME|pkg_ID/op_ID&quot;
 change.edge name=effect.argument parent=call-or-function-value child=effect-row order=zero-based-contiguous-index
 change.edge-field edge=effect.argument name=parent required=true syntax=$NAME
 change.edge-field edge=effect.argument name=index required=true syntax=zero-based-index
 change.edge-field edge=effect.argument name=effect required=true syntax=@NAME
 change.edge name=effect.parameter parent=effect-row-or-task-function-or-contract-fragment child=effect-parameter-reference order=zero-based-contiguous-index
-change.edge-field edge=effect.parameter name=parent required=true syntax="@NAME|$NAME|%NAME"
+change.edge-field edge=effect.parameter name=parent required=true syntax=&quot;@NAME|$NAME|%NAME&quot;
 change.edge-field edge=effect.parameter name=index required=true syntax=zero-based-index
-change.edge-field edge=effect.parameter name=parameter required=true syntax="$NAME|pkg_HEX/effectparam_HEX"
+change.edge-field edge=effect.parameter name=parameter required=true syntax=&quot;$NAME|pkg_HEX/effectparam_HEX&quot;
 change.edge name=expression.argument parent=expression child=expression order=zero-based-contiguous-index
 change.edge-field edge=expression.argument name=parent required=true syntax=$NAME
 change.edge-field edge=expression.argument name=index required=true syntax=zero-based-index
 change.edge-field edge=expression.argument name=expression required=true syntax=$NAME
 change.edge name=type.argument parent=type-or-expression child=type order=zero-based-contiguous-index
-change.edge-field edge=type.argument name=parent required=true syntax="@NAME|$NAME"
+change.edge-field edge=type.argument name=parent required=true syntax=&quot;@NAME|$NAME&quot;
 change.edge-field edge=type.argument name=index required=true syntax=zero-based-index
 change.edge-field edge=type.argument name=type required=true syntax=type-reference
 change.edge name=type.field parent=structural-record-type child=structural-field order=zero-based-contiguous-index
@@ -778,19 +777,19 @@ change.edge-field edge=type.field name=index required=true syntax=zero-based-ind
 change.edge-field edge=type.field name=name required=true syntax=name
 change.edge-field edge=type.field name=type required=true syntax=type-reference
 change.edge name=effect.requirement parent=effect-row-or-task-function-or-contract-fragment child=requirement-reference order=zero-based-contiguous-index
-change.edge-field edge=effect.requirement name=parent required=true syntax="@NAME|$NAME|%NAME"
+change.edge-field edge=effect.requirement name=parent required=true syntax=&quot;@NAME|$NAME|%NAME&quot;
 change.edge-field edge=effect.requirement name=index required=true syntax=zero-based-index
-change.edge-field edge=effect.requirement name=requirement required=true syntax="$NAME|pkg_HEX/req_HEX|parameter:$NAME|parameter:pkg_HEX/reqparam_HEX"
+change.edge-field edge=effect.requirement name=requirement required=true syntax=&quot;$NAME|pkg_HEX/req_HEX|parameter:$NAME|parameter:pkg_HEX/reqparam_HEX&quot;
 change.edge name=requirement.operation parent=requirement child=operation-reference order=zero-based-contiguous-index
 change.edge-field edge=requirement.operation name=parent required=true syntax=$NAME
 change.edge-field edge=requirement.operation name=index required=true syntax=zero-based-index
-change.edge-field edge=requirement.operation name=operation required=true syntax="$NAME|pkg_HEX/op_HEX"
+change.edge-field edge=requirement.operation name=operation required=true syntax=&quot;$NAME|pkg_HEX/op_HEX&quot;
 change.edge name=requirement.limit parent=requirement child=resource-limit order=zero-based-contiguous-index
 change.edge-field edge=requirement.limit name=parent required=true syntax=$NAME
 change.edge-field edge=requirement.limit name=index required=true syntax=zero-based-index
 change.edge-field edge=requirement.limit name=name required=true syntax=name
 change.edge-field edge=requirement.limit name=maximum required=true syntax=positive-u64
-change.edge-field edge=requirement.limit name=unit required=true syntax="bytes|items|calls|tasks|milliseconds"
+change.edge-field edge=requirement.limit name=unit required=true syntax=&quot;bytes|items|calls|tasks|milliseconds&quot;
 change.edge name=expression.binding parent=let-expression child=lexical-binding order=zero-based-contiguous-index
 change.edge-field edge=expression.binding name=parent required=true syntax=$NAME
 change.edge-field edge=expression.binding name=index required=true syntax=zero-based-index
@@ -802,7 +801,7 @@ change.edge name=expression.record-field parent=record-expression child=record-f
 change.edge-field edge=expression.record-field name=parent required=true syntax=$NAME
 change.edge-field edge=expression.record-field name=index required=true syntax=zero-based-index
 change.edge-field edge=expression.record-field name=name required=false syntax=structural-field-name
-change.edge-field edge=expression.record-field name=field required=false syntax="$NAME|pkg_HEX/field_HEX"
+change.edge-field edge=expression.record-field name=field required=false syntax=&quot;$NAME|pkg_HEX/field_HEX&quot;
 change.edge-field edge=expression.record-field name=value required=true syntax=$NAME
 change.edge name=expression.map-entry parent=map-expression child=map-entry order=zero-based-contiguous-index
 change.edge-field edge=expression.map-entry name=parent required=true syntax=$NAME
@@ -812,7 +811,7 @@ change.edge-field edge=expression.map-entry name=value required=true syntax=$NAM
 change.edge name=expression.match-arm parent=match-expression child=match-arm order=zero-based-contiguous-index
 change.edge-field edge=expression.match-arm name=parent required=true syntax=$NAME
 change.edge-field edge=expression.match-arm name=index required=true syntax=zero-based-index
-change.edge-field edge=expression.match-arm name=case required=true syntax="$NAME|pkg_HEX/case_HEX"
+change.edge-field edge=expression.match-arm name=case required=true syntax=&quot;$NAME|pkg_HEX/case_HEX&quot;
 change.edge-field edge=expression.match-arm name=as required=false syntax=$NAME
 change.edge-field edge=expression.match-arm name=name required=false syntax=name
 change.edge-field edge=expression.match-arm name=type required=false syntax=type-reference
@@ -859,13 +858,13 @@ type.field form=text name=as required=true syntax=@NAME
 type.field form=static-text name=as required=true syntax=@NAME
 type.field form=secret name=as required=true syntax=@NAME
 type.field form=parameter name=as required=true syntax=@NAME
-type.field form=parameter name=parameter required=true syntax="$NAME|tparam_HEX"
+type.field form=parameter name=parameter required=true syntax=&quot;$NAME|tparam_HEX&quot;
 type.field form=named name=as required=true syntax=@NAME
-type.field form=named name=declaration required=true syntax="$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX"
+type.field form=named name=declaration required=true syntax=&quot;$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX&quot;
 type.field form=application name=as required=true syntax=@NAME
-type.field form=application name=declaration required=true syntax="$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX"
+type.field form=application name=declaration required=true syntax=&quot;$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX&quot;
 type.field form=capability-resource name=as required=true syntax=@NAME
-type.field form=capability-resource name=interface required=true syntax="$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX"
+type.field form=capability-resource name=interface required=true syntax=&quot;$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX&quot;
 type.field form=structural-record name=as required=true syntax=@NAME
 type.field form=list name=as required=true syntax=@NAME
 type.field form=list name=item required=true syntax=type-reference
@@ -907,28 +906,28 @@ expression.form name=transaction
 expression.form name=transaction-outcome
 expression.field form=unit name=as required=true syntax=$NAME
 expression.field form=bool name=as required=true syntax=$NAME
-expression.field form=bool name=value required=true syntax="true|false"
+expression.field form=bool name=value required=true syntax=&quot;true|false&quot;
 expression.field form=i64 name=as required=true syntax=$NAME
 expression.field form=i64 name=value required=true syntax=signed-i64
 expression.field form=f64 name=as required=true syntax=$NAME
-expression.field form=f64 name=value required=true syntax="json-decimal|nan|inf|-inf"
+expression.field form=f64 name=value required=true syntax=&quot;json-decimal|nan|inf|-inf&quot;
 expression.field form=text name=as required=true syntax=$NAME
 expression.field form=text name=value required=true syntax=escaped-utf8
 expression.field form=static-text name=as required=true syntax=$NAME
 expression.field form=static-text name=value required=true syntax=escaped-utf8
 expression.field form=local name=as required=true syntax=$NAME
-expression.field form=local name=value required=true syntax="$NAME|param_HEX|bind_HEX"
+expression.field form=local name=value required=true syntax=&quot;$NAME|param_HEX|bind_HEX&quot;
 expression.field form=constant name=as required=true syntax=$NAME
-expression.field form=constant name=declaration required=true syntax="$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX"
+expression.field form=constant name=declaration required=true syntax=&quot;$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX&quot;
 expression.field form=if name=as required=true syntax=$NAME
 expression.field form=if name=condition required=true syntax=$NAME
 expression.field form=if name=when-true required=true syntax=$NAME
 expression.field form=if name=when-false required=true syntax=$NAME
 expression.field form=sequence name=as required=true syntax=$NAME
 expression.field form=call name=as required=true syntax=$NAME
-expression.field form=call name=function required=true syntax="$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX"
+expression.field form=call name=function required=true syntax=&quot;$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX&quot;
 expression.field form=function-value name=as required=true syntax=$NAME
-expression.field form=function-value name=function required=true syntax="$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX"
+expression.field form=function-value name=function required=true syntax=&quot;$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX&quot;
 expression.field form=invoke name=as required=true syntax=$NAME
 expression.field form=invoke name=function required=true syntax=$NAME
 expression.field form=bind name=as required=true syntax=$NAME
@@ -936,14 +935,14 @@ expression.field form=bind name=callee required=true syntax=$NAME
 expression.field form=let name=as required=true syntax=$NAME
 expression.field form=let name=body required=true syntax=$NAME
 expression.field form=record name=as required=true syntax=$NAME
-expression.field form=record name=type required=false syntax="$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX"
+expression.field form=record name=type required=false syntax=&quot;$NAME|decl_HEX|MODULE/NAME|pkg_HEX/decl_HEX&quot;
 expression.field form=variant name=as required=true syntax=$NAME
-expression.field form=variant name=case required=true syntax="$NAME|pkg_HEX/case_HEX"
+expression.field form=variant name=case required=true syntax=&quot;$NAME|pkg_HEX/case_HEX&quot;
 expression.field form=variant name=payload required=false syntax=$NAME
 expression.field form=field name=as required=true syntax=$NAME
 expression.field form=field name=value required=true syntax=$NAME
 expression.field form=field name=name required=false syntax=structural-field-name
-expression.field form=field name=field required=false syntax="$NAME|pkg_HEX/field_HEX"
+expression.field form=field name=field required=false syntax=&quot;$NAME|pkg_HEX/field_HEX&quot;
 expression.field form=list name=as required=true syntax=$NAME
 expression.field form=list name=item required=true syntax=type-reference
 expression.field form=map name=as required=true syntax=$NAME
@@ -952,23 +951,23 @@ expression.field form=map name=value required=true syntax=type-reference
 expression.field form=match name=as required=true syntax=$NAME
 expression.field form=match name=value required=true syntax=$NAME
 expression.field form=capability-call name=as required=true syntax=$NAME
-expression.field form=capability-call name=requirement required=true syntax="$NAME|pkg_HEX/req_HEX|parameter:$NAME|parameter:pkg_HEX/reqparam_HEX"
-expression.field form=capability-call name=operation required=true syntax="$NAME|pkg_HEX/op_HEX"
+expression.field form=capability-call name=requirement required=true syntax=&quot;$NAME|pkg_HEX/req_HEX|parameter:$NAME|parameter:pkg_HEX/reqparam_HEX&quot;
+expression.field form=capability-call name=operation required=true syntax=&quot;$NAME|pkg_HEX/op_HEX&quot;
 expression.field form=transaction name=as required=true syntax=$NAME
-expression.field form=transaction name=requirement required=true syntax="$NAME|pkg_HEX/req_HEX|parameter:$NAME|parameter:pkg_HEX/reqparam_HEX"
+expression.field form=transaction name=requirement required=true syntax=&quot;$NAME|pkg_HEX/req_HEX|parameter:$NAME|parameter:pkg_HEX/reqparam_HEX&quot;
 expression.field form=transaction name=binding required=true syntax=$NAME
 expression.field form=transaction name=name required=true syntax=name
 expression.field form=transaction name=body required=true syntax=$NAME
 expression.field form=transaction-outcome name=as required=true syntax=$NAME
-expression.field form=transaction-outcome name=requirement required=true syntax="$NAME|pkg_HEX/req_HEX|parameter:$NAME|parameter:pkg_HEX/reqparam_HEX"
+expression.field form=transaction-outcome name=requirement required=true syntax=&quot;$NAME|pkg_HEX/req_HEX|parameter:$NAME|parameter:pkg_HEX/reqparam_HEX&quot;
 expression.field form=transaction-outcome name=binding required=true syntax=$NAME
 expression.field form=transaction-outcome name=name required=true syntax=name
 expression.field form=transaction-outcome name=body required=true syntax=$NAME
 expression.field form=transaction-outcome name=type required=true syntax=type-reference
-expression.field form=transaction-outcome name=outcome required=true syntax="$NAME|pkg_HEX/decl_HEX"
-expression.field form=transaction-outcome name=abort-reason required=true syntax="$NAME|pkg_HEX/decl_HEX"
-expression.field form=transaction-outcome name=committed required=true syntax="$NAME|pkg_HEX/case_HEX"
-expression.field form=transaction-outcome name=aborted required=true syntax="$NAME|pkg_HEX/case_HEX"
-expression.field form=transaction-outcome name=condition-failed required=true syntax="$NAME|pkg_HEX/case_HEX"
-expression.field form=transaction-outcome name=conflict required=true syntax="$NAME|pkg_HEX/case_HEX"
-```
+expression.field form=transaction-outcome name=outcome required=true syntax=&quot;$NAME|pkg_HEX/decl_HEX&quot;
+expression.field form=transaction-outcome name=abort-reason required=true syntax=&quot;$NAME|pkg_HEX/decl_HEX&quot;
+expression.field form=transaction-outcome name=committed required=true syntax=&quot;$NAME|pkg_HEX/case_HEX&quot;
+expression.field form=transaction-outcome name=aborted required=true syntax=&quot;$NAME|pkg_HEX/case_HEX&quot;
+expression.field form=transaction-outcome name=condition-failed required=true syntax=&quot;$NAME|pkg_HEX/case_HEX&quot;
+expression.field form=transaction-outcome name=conflict required=true syntax=&quot;$NAME|pkg_HEX/case_HEX&quot;
+</pre>

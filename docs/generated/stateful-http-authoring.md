@@ -6,39 +6,44 @@ This is a generated composition guide, not a second authoring authority. Start f
 
 ## Current exact capability and declaration references
 
-```text
-walkthrough.interface name=byte-stream reference=pkg_10000000000000000000000000000001/decl_e29e0ac407696662f355e9056172ac2b
-walkthrough.operation name=read-all reference=pkg_10000000000000000000000000000001/op_30cd44d5491201efdafea2b9e22adff0
-walkthrough.interface name=data reference=pkg_10000000000000000000000000000001/decl_640e96fa57dee1c09557eb4bc7b53398
-walkthrough.operation name=schema-read reference=pkg_10000000000000000000000000000001/op_447868fc8e76bf7946b47b5869cb6131
-walkthrough.operation name=transaction reference=pkg_10000000000000000000000000000001/op_1c083402875f8f088541c27751f61d22
-walkthrough.operation name=schema-set reference=pkg_10000000000000000000000000000001/op_a68f4d1e5082bdbf91585b0571334faa
-walkthrough.operation name=get reference=pkg_10000000000000000000000000000001/op_91eb7f3db756e28665c80cc8c01763fa
-walkthrough.operation name=scan reference=pkg_10000000000000000000000000000001/op_b8c83e1d6855986087d03a0483ec3a32
-walkthrough.operation name=put reference=pkg_10000000000000000000000000000001/op_5f56052f1e836cef10bf270d1731c620
-walkthrough.operation name=delete reference=pkg_10000000000000000000000000000001/op_93c7e22a2dd2febd1416bfd796c92e56
-walkthrough.declaration name=json-decode-or reference=pkg_10000000000000000000000000000001/decl_59f3b693468ea4478ef52d5c79ea034c
-walkthrough.declaration name=json-encode reference=pkg_10000000000000000000000000000001/decl_e625d267874ff150c9e7e123bd11a879
-walkthrough.declaration name=list-length reference=pkg_10000000000000000000000000000001/decl_9de45297544f0f5d3c933f6d16e3f685
-walkthrough.declaration name=list-get reference=pkg_10000000000000000000000000000001/decl_2afcba2a7b41a407a020891e0f65a161
-walkthrough.declaration name=data-key-part reference=pkg_10000000000000000000000000000001/decl_14b03b7e7e25e1cf4bd5a5e3932e73ab
-walkthrough.declaration name=data-entry reference=pkg_10000000000000000000000000000001/decl_8b2cf37fae3bc1fd3cdd43367ac5b3e6
-walkthrough.declaration name=data-encode reference=pkg_10000000000000000000000000000001/decl_b2af26e13e1ac1155a1d38fda478cd3c
-walkthrough.declaration name=data-decode-or reference=pkg_10000000000000000000000000000001/decl_dd099791687142dcb89f4b6a73849668
-```
+<table>
+<thead>
+<tr><th>Kind</th><th>Name</th><th>Exact reference</th></tr>
+</thead>
+<tbody>
+<tr><td><code>interface</code></td><td><code>byte-stream</code></td><td><code>pkg_10000000000000000000000000000001/decl_e29e0ac407696662f355e9056172ac2b</code></td></tr>
+<tr><td><code>operation</code></td><td><code>read-all</code></td><td><code>pkg_10000000000000000000000000000001/op_30cd44d5491201efdafea2b9e22adff0</code></td></tr>
+<tr><td><code>interface</code></td><td><code>data</code></td><td><code>pkg_10000000000000000000000000000001/decl_640e96fa57dee1c09557eb4bc7b53398</code></td></tr>
+<tr><td><code>operation</code></td><td><code>schema-read</code></td><td><code>pkg_10000000000000000000000000000001/op_447868fc8e76bf7946b47b5869cb6131</code></td></tr>
+<tr><td><code>operation</code></td><td><code>transaction</code></td><td><code>pkg_10000000000000000000000000000001/op_1c083402875f8f088541c27751f61d22</code></td></tr>
+<tr><td><code>operation</code></td><td><code>schema-set</code></td><td><code>pkg_10000000000000000000000000000001/op_a68f4d1e5082bdbf91585b0571334faa</code></td></tr>
+<tr><td><code>operation</code></td><td><code>get</code></td><td><code>pkg_10000000000000000000000000000001/op_91eb7f3db756e28665c80cc8c01763fa</code></td></tr>
+<tr><td><code>operation</code></td><td><code>scan</code></td><td><code>pkg_10000000000000000000000000000001/op_b8c83e1d6855986087d03a0483ec3a32</code></td></tr>
+<tr><td><code>operation</code></td><td><code>put</code></td><td><code>pkg_10000000000000000000000000000001/op_5f56052f1e836cef10bf270d1731c620</code></td></tr>
+<tr><td><code>operation</code></td><td><code>delete</code></td><td><code>pkg_10000000000000000000000000000001/op_93c7e22a2dd2febd1416bfd796c92e56</code></td></tr>
+<tr><td><code>external</code></td><td><code>json-decode-or</code></td><td><code>pkg_10000000000000000000000000000001/decl_59f3b693468ea4478ef52d5c79ea034c</code></td></tr>
+<tr><td><code>external</code></td><td><code>json-encode</code></td><td><code>pkg_10000000000000000000000000000001/decl_e625d267874ff150c9e7e123bd11a879</code></td></tr>
+<tr><td><code>external</code></td><td><code>list-length</code></td><td><code>pkg_10000000000000000000000000000001/decl_9de45297544f0f5d3c933f6d16e3f685</code></td></tr>
+<tr><td><code>external</code></td><td><code>list-get</code></td><td><code>pkg_10000000000000000000000000000001/decl_2afcba2a7b41a407a020891e0f65a161</code></td></tr>
+<tr><td><code>variant</code></td><td><code>data-key-part</code></td><td><code>pkg_10000000000000000000000000000001/decl_14b03b7e7e25e1cf4bd5a5e3932e73ab</code></td></tr>
+<tr><td><code>record</code></td><td><code>data-entry</code></td><td><code>pkg_10000000000000000000000000000001/decl_8b2cf37fae3bc1fd3cdd43367ac5b3e6</code></td></tr>
+<tr><td><code>external</code></td><td><code>data-encode</code></td><td><code>pkg_10000000000000000000000000000001/decl_b2af26e13e1ac1155a1d38fda478cd3c</code></td></tr>
+<tr><td><code>external</code></td><td><code>data-decode-or</code></td><td><code>pkg_10000000000000000000000000000001/decl_dd099791687142dcb89f4b6a73849668</code></td></tr>
+</tbody>
+</table>
 
 ## Composition
 
-```text
-walkthrough.bootstrap template=minimal owners=0 dependencies=0
+<pre>walkthrough.bootstrap template=minimal owners=0 dependencies=0
 walkthrough.dependency operation=add.dependency binding=package+semantic-revision+package-revision transport=builtin-export+dependency-stage
 walkthrough.topology operations=create.component+add.requirement+add.port+create.target+add.http-route port=function-backed route=GET+/ runner=http
-walkthrough.request parameter=$request projection="method,path,query_parameters,headers,body"
+walkthrough.request parameter=$request projection=&quot;method,path,query_parameters,headers,body&quot;
 walkthrough.body form=field+capability-call stream-operation=read-all maximum=65536 unit=bytes
-walkthrough.json form=call+type.argument+field decoder=json-decode-or strict="duplicate,trailing,shape reject" encoder=json-encode
-walkthrough.data form=transaction+capability-call operations="schema-read,schema-set,get,scan,put,delete" keys=static-space+typed-key-parts values=canonical-typed-data-bytes
-walkthrough.response form=structural-record fields="status:i64,headers:list<{name:text,value:bytes}>,body:bytes" policy=graph-owned
-walkthrough.grant requirement=data adapter=data root=deployment-relative-local-directory secret-value=none limits="keys,values,transactions,scans,live-resources"
-```
+walkthrough.json form=call+type.argument+field decoder=json-decode-or strict=&quot;duplicate,trailing,shape reject&quot; encoder=json-encode
+walkthrough.data form=transaction+capability-call operations=&quot;schema-read,schema-set,get,scan,put,delete&quot; keys=static-space+typed-key-parts values=canonical-typed-data-bytes
+walkthrough.response form=structural-record fields=&quot;status:i64,headers:list&lt;{name:text,value:bytes}&gt;,body:bytes&quot; policy=graph-owned
+walkthrough.grant requirement=data adapter=data root=deployment-relative-local-directory secret-value=none limits=&quot;keys,values,transactions,scans,live-resources&quot;
+</pre>
+
 
 The transport stage must leave semantic `HEAD` unchanged. Use reviewed `change plan`, export and decode the complete logical plan, then apply the exact plan token and idempotently re-prepare it. Run `check`, clean/incremental `build`, and `serve --deployment` only after publication. Runtime work reads the artifact and cannot advance project authority.

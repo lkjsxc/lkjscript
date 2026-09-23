@@ -571,11 +571,11 @@ The standard package and `lkjournal` are typed meaning graph repositories and us
 Their checked-in files under `generated/` are deterministic current outputs. The standard artifact
 and transport also own the executable's built-in bytes.
 
-This development checkout also adopts [a native guide tool](tools/native-guides/README.md).
-Its accepted lkjscript program and embedded bundle now render operation and diagnostic
-guides; Rust only supplies their typed metadata and execution/publication boundary.
-Six other reference pages still use Rust renderers. This tool is not included in the
-frozen v0.1.44 public release and is not a self-hosted compiler.
+This development checkout adopts [a native guide tool](tools/native-guides/README.md).
+Its accepted lkjscript program renders all eight reference pages and validates their
+required exact references. Rust supplies observed metadata and the pure execution/
+publication boundary; no Rust page renderer remains. This tool is not included in
+the frozen v0.1.44 public release and is not a self-hosted compiler.
 
 `serve` and `worker` load the standalone artifact bundle named by their strict deployment
 descriptors and prepare the selected target through the same normalized VM used by current graph

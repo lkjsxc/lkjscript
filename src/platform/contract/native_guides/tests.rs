@@ -107,3 +107,5 @@ fn native_operations_keep_typed_columns_and_escape_runner_observations() {
     assert!(result.contains("<td><code>true</code></td><td><code>app.lkja</code></td>"));
     assert!(result.ends_with("<pre>```&lt;svg&gt;&amp;\n</pre>\n"));
 }
+
+mod reference_pages;

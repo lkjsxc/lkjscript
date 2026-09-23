@@ -7,19 +7,22 @@ retain detailed implementation and verification history.
 
 ## Native development tooling (development checkout)
 
-The [native guide tool](../tools/native-guides/README.md) implements operation and
-diagnostic reference-page rendering in ordinary lkjscript. Its accepted meaning
-and checked-in artifact replace the corresponding Rust formatting loops. Rust
-retains registry observations, strict input/output admission, pure execution and
-derived-file publication. Six other reference pages remain implemented in Rust.
-This is native tool adoption, not compiler self-hosting; the frozen public v0.1.44
-executable is unchanged. Source `7b7a54ce` passes all 20 fresh source gates with
-stable inputs and zero reuse. The Git-only tool also checks and rebuilds identically
-using the published v0.1.44 executable. Normal mainline push remains blocked on
-the authorized development environment's existing GitHub authentication; this
-local acceptance is not remote integration or release publication. The
-[campaign](campaigns/202609232247.md#stable-source-acceptance-and-measured-cost)
-records the exact evidence, generation-cost increase and recovery resources.
+The [native guide tool](../tools/native-guides/README.md) now owns all eight reference
+pages in ordinary lkjscript, including prose, layout, escaping and required-reference
+selection. Missing, duplicate or empty exact references reject in native meaning.
+Rust retains read-only metadata observation, typed admission, pure execution and
+derived-file publication; the six remaining Rust page renderers are removed.
+The maintained program passes 61 differential graph tests; ten adapter tests and
+two copied-product authoring/regeneration/edit/detached tests pass. Independent
+comparison preserves all registry/interface payloads, 20 required references and
+ten numeric limits. Six page layouts change to escaped HTML; two remain byte-identical.
+
+This is native tool adoption, not compiler self-hosting. Public v0.1.44 remains
+frozen. The predecessor source acceptance at `7b7a54ce` remains historical evidence,
+not acceptance of this successor. The [current campaign](campaigns/202609240132.md)
+owns successor source verification and delivery. Normal mainline push currently
+remains blocked on the workspace GitHub authentication; local implementation and
+validation are not remote integration or release publication.
 
 ## Standard list windows
 
@@ -217,7 +220,7 @@ data policy. Their maintained owners record exact current identities and generat
 assets. Public builds regenerate those assets; contributor inspection does not
 write accepted meaning.
 
-Native user authoring and the operation/diagnostic native guide tool are implemented.
+Native user authoring and all eight native reference-page targets are implemented.
 Rust remains the supported parser/kernel/platform boundary and still implements
 the other contributor and release tools. This is a concrete native-tool adoption,
 not compiler self-hosting or a claim that development already runs entirely in

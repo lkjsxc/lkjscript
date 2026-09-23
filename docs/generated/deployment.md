@@ -4,17 +4,16 @@
 
 The following compact records are the executable-owned current public capability.
 
-```text
-deployment.foreground-policy execution-omitted=trusted-no-cumulative-instruction-allocation-collection-capability-quota runtime-omitted=no-deadline-default-bounded-cleanup-grace execution-runtime-null=reject resident-execution-runtime=required-complete-numeric-objects explicit-execution-cumulative-defaults="allocated-bytes=268435456,collection-items=1000000,capability-calls=100000" topology=listen-http-session-worker-required-null remaining-limits=call-depth-value-stack-single-value-container-type-codec-adapter-and-canonical-grant frontier=current-representation-and-admission-not-permanent-language-ceilings recovery=retain-matching-executable-and-immutable-bundle-no-data-migration
+<pre>deployment.foreground-policy execution-omitted=trusted-no-cumulative-instruction-allocation-collection-capability-quota runtime-omitted=no-deadline-default-bounded-cleanup-grace execution-runtime-null=reject resident-execution-runtime=required-complete-numeric-objects explicit-execution-cumulative-defaults=&quot;allocated-bytes=268435456,collection-items=1000000,capability-calls=100000&quot; topology=listen-http-session-worker-required-null remaining-limits=call-depth-value-stack-single-value-container-type-codec-adapter-and-canonical-grant frontier=current-representation-and-admission-not-permanent-language-ceilings recovery=retain-matching-executable-and-immutable-bundle-no-data-migration
 deployment.schema maximum-bytes=1048576 maximum-grants=1024 strict-json=true unknown-fields=reject
 deployment.field path=deployment.artifact required=true scalar=relative-path secret-name=false minimum=1 maximum=4096
 deployment.field path=deployment.target required=true scalar=name secret-name=false minimum=1 maximum=128
-deployment.field path=deployment.listen required=true scalar="null|string" secret-name=false minimum=1 maximum=512
+deployment.field path=deployment.listen required=true scalar=&quot;null|string&quot; secret-name=false minimum=1 maximum=512
 deployment.field path=deployment.runtime required=false scalar=object secret-name=false nested=runtime
 deployment.field path=deployment.execution required=false scalar=object secret-name=false nested=execution
-deployment.field path=deployment.http required=true scalar="null|object" secret-name=false nested=http
-deployment.field path=deployment.session required=true scalar="null|object" secret-name=false nested=session
-deployment.field path=deployment.worker required=true scalar="null|object" secret-name=false nested=worker
+deployment.field path=deployment.http required=true scalar=&quot;null|object&quot; secret-name=false nested=http
+deployment.field path=deployment.session required=true scalar=&quot;null|object&quot; secret-name=false nested=session
+deployment.field path=deployment.worker required=true scalar=&quot;null|object&quot; secret-name=false nested=worker
 deployment.field path=deployment.streams required=true scalar=object secret-name=false nested=streams
 deployment.field path=deployment.configuration required=true scalar=map secret-name=false minimum=0 maximum=4096 nested=configuration-value
 deployment.field path=deployment.secrets required=true scalar=array secret-name=false minimum=0 maximum=1024 nested=secret-binding
@@ -57,8 +56,8 @@ deployment.field path=streams.maximum_chunk_bytes required=true scalar=usize sec
 deployment.field path=streams.maximum_buffered_chunks required=true scalar=usize secret-name=false minimum=1 maximum=1024
 deployment.field path=streams.maximum_total_bytes required=true scalar=u64 secret-name=false minimum=1 maximum=18446744073709551615
 deployment.field path=streams.maximum_live_streams required=true scalar=usize secret-name=false minimum=1 maximum=65536
-deployment.field path=configuration-value.kind required=true scalar="enum:text|i64|bool" secret-name=false
-deployment.field path=configuration-value.value required=true scalar="string|i64|bool" secret-name=false minimum=0 maximum=1048576 nested=kind-selected
+deployment.field path=configuration-value.kind required=true scalar=&quot;enum:text|i64|bool&quot; secret-name=false
+deployment.field path=configuration-value.value required=true scalar=&quot;string|i64|bool&quot; secret-name=false minimum=0 maximum=1048576 nested=kind-selected
 deployment.field path=configuration-entry.name required=true scalar=configuration-name secret-name=false minimum=1 maximum=256
 deployment.field path=secret-binding.name required=true scalar=name secret-name=true minimum=1 maximum=256
 deployment.field path=secret-binding.variable required=true scalar=environment-name secret-name=false minimum=1 maximum=256
@@ -116,7 +115,7 @@ deployment.adapter-field adapter=byte_stream path=adapter.byte_stream.kind requi
 deployment.adapter kind=http_client fields=5
 deployment.adapter-field adapter=http_client path=adapter.http_client.kind required=true scalar=literal:http_client secret-name=false
 deployment.adapter-field adapter=http_client path=adapter.http_client.endpoint required=true scalar=canonical-http-endpoint secret-name=false minimum=1 maximum=4096
-deployment.adapter-field adapter=http_client path=adapter.http_client.address_policy required=true scalar="enum:public_only|loopback_only" secret-name=false
+deployment.adapter-field adapter=http_client path=adapter.http_client.address_policy required=true scalar=&quot;enum:public_only|loopback_only&quot; secret-name=false
 deployment.adapter-field adapter=http_client path=adapter.http_client.trust required=true scalar=tagged-object secret-name=false nested=http-client-trust
 deployment.adapter-field adapter=http_client path=adapter.http_client.limits required=true scalar=object secret-name=false nested=http-client-limits
 deployment.adapter kind=data fields=4
@@ -150,4 +149,4 @@ deployment.adapter-field adapter=durable_queue_data path=adapter.durable_queue_d
 deployment.adapter-field adapter=durable_queue_data path=adapter.durable_queue_data.namespace required=true scalar=deployment-token secret-name=false minimum=1 maximum=128
 deployment.adapter-field adapter=durable_queue_data path=adapter.durable_queue_data.data_limits required=true scalar=object secret-name=false nested=data-limits
 deployment.adapter-field adapter=durable_queue_data path=adapter.durable_queue_data.limits required=true scalar=object secret-name=false nested=queue-limits
-```
+</pre>

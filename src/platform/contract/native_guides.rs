@@ -1,7 +1,7 @@
-//! Read-only registry input for the ordinary native guide program.
-//!
-//! Layout and escaping belong to tools/native-guides/project. This adapter does
-//! not render prose or tables, load a host interpreter, or open a user project.
+//! Read-only observations and execution for the ordinary native guide program.
+//! Page prose, layout, escaping and reference selection belong to its meaning.
+
+mod metadata;
 
 use super::registry::{
     CapabilitiesSnapshot, RegistrySection, diagnostic_class_name, diagnostic_descriptors,
@@ -43,24 +43,16 @@ pub(super) fn operations(snapshot: &CapabilitiesSnapshot) -> Result<String, Stri
         .collect::<Vec<_>>();
     let templates = ProjectTemplate::ALL
         .into_iter()
-        .map(|item| {
-            json!({
-                "name": item.name(),
-                "purpose": item.purpose(),
-                "runner": item.runner(),
-                "deployment": item.emits_deployment(),
-                "artifact": item.recommended_artifact_output().unwrap_or("none"),
-            })
-        })
+        .map(metadata::template)
         .collect::<Vec<_>>();
-    let runners = snapshot
-        .section(RegistrySection::Runners)
-        .ok_or_else(|| "generated operations lack runner observations".to_owned())?;
-    let runners = std::str::from_utf8(&runners.bytes)
-        .map_err(|_| "runner observations are not UTF-8".to_owned())?;
     render(
         "operations",
-        json!([build(snapshot), operations, templates, runners]),
+        json!([
+            build(snapshot),
+            operations,
+            templates,
+            metadata::section(snapshot, RegistrySection::Runners)?
+        ]),
     )
 }
 
@@ -68,12 +60,8 @@ pub(super) fn diagnostics(snapshot: &CapabilitiesSnapshot) -> Result<String, Str
     let diagnostics = diagnostic_descriptors()
         .iter()
         .map(|item| {
-            json!({
-                "code": item.code,
-                "class": diagnostic_class_name(item.class),
-                "meaning": item.meaning,
-                "retry": item.retry,
-            })
+            json!({"code": item.code, "class": diagnostic_class_name(item.class),
+            "meaning": item.meaning, "retry": item.retry})
         })
         .collect::<Vec<_>>();
     let exits = exit_status_descriptors()
@@ -81,6 +69,66 @@ pub(super) fn diagnostics(snapshot: &CapabilitiesSnapshot) -> Result<String, Str
         .map(|item| json!({"status": item.status, "meaning": item.meaning}))
         .collect::<Vec<_>>();
     render("diagnostics", json!([build(snapshot), diagnostics, exits]))
+}
+
+pub(super) fn change_grammar(snapshot: &CapabilitiesSnapshot) -> Result<String, String> {
+    render(
+        "change-grammar",
+        json!([
+            build(snapshot),
+            [
+                metadata::section(snapshot, RegistrySection::Change)?,
+                metadata::section(snapshot, RegistrySection::Type)?,
+                metadata::section(snapshot, RegistrySection::Expression)?,
+            ]
+        ]),
+    )
+}
+
+pub(super) fn function_definition(snapshot: &CapabilitiesSnapshot) -> Result<String, String> {
+    render(
+        "function-definition",
+        json!([
+            build(snapshot),
+            metadata::section(snapshot, RegistrySection::Inspection)?
+        ]),
+    )
+}
+
+pub(super) fn deployment(snapshot: &CapabilitiesSnapshot) -> Result<String, String> {
+    render(
+        "deployment",
+        json!([
+            build(snapshot),
+            metadata::section(snapshot, RegistrySection::Deployment)?
+        ]),
+    )
+}
+
+pub(super) fn builtin_standard(snapshot: &CapabilitiesSnapshot) -> Result<String, String> {
+    render(
+        "builtin-standard",
+        json!([build(snapshot), metadata::standard()?]),
+    )
+}
+
+pub(super) fn stateful_http(snapshot: &CapabilitiesSnapshot) -> Result<String, String> {
+    render_document(
+        "stateful-http",
+        json!([build(snapshot), metadata::owners()?]),
+    )
+}
+
+pub(super) fn relay_information(snapshot: &CapabilitiesSnapshot) -> Result<String, String> {
+    render_document(
+        "relay-information",
+        json!([
+            build(snapshot),
+            metadata::template(ProjectTemplate::NostrRelayInfo),
+            metadata::owners()?,
+            metadata::limits()
+        ]),
+    )
 }
 
 fn program() -> Result<&'static NormalizedProgram, String> {
@@ -94,10 +142,10 @@ fn program() -> Result<&'static NormalizedProgram, String> {
         .map_err(Clone::clone)
 }
 
-fn render(target: &str, input: Value) -> Result<String, String> {
+fn execute(target: &str, input: Value) -> Result<Vec<u8>, String> {
     let input = serde_json::to_vec(&input).map_err(|error| error.to_string())?;
     let target = Name::new(target).map_err(|error| error.to_string())?;
-    let result = run_pure_artifact_command(
+    run_pure_artifact_command(
         program()?,
         &target,
         &input,
@@ -107,8 +155,27 @@ fn render(target: &str, input: Value) -> Result<String, String> {
         },
         &ExecutionControl::uncancelled(),
     )
-    .map_err(|error| error.to_string())?;
-    serde_json::from_slice::<String>(&result).map_err(|error| error.to_string())
+    .map_err(|error| error.to_string())
+}
+
+fn render(target: &str, input: Value) -> Result<String, String> {
+    serde_json::from_slice::<String>(&execute(target, input)?).map_err(|error| error.to_string())
+}
+
+fn render_document(target: &str, input: Value) -> Result<String, String> {
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Document {
+        valid: bool,
+        content: String,
+    }
+    let document: Document =
+        serde_json::from_slice(&execute(target, input)?).map_err(|error| error.to_string())?;
+    if document.valid {
+        Ok(document.content)
+    } else {
+        Err(document.content)
+    }
 }
 
 #[cfg(test)]

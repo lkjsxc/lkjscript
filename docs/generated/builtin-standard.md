@@ -2,7 +2,7 @@
 
 # Built-in standard package public interface
 
-Package `pkg_10000000000000000000000000000001` at exact package revision `package_revision_9694ca1acf820bd3e05276d9822dbc4cc7e48ec8138685f5efa97f291a5dd049`.
+Package <code>pkg_10000000000000000000000000000001</code> at exact package revision <code>package_revision_9694ca1acf820bd3e05276d9822dbc4cc7e48ec8138685f5efa97f291a5dd049</code>.
 
 The records below are implementation-free public interface projections. Exact `reference` values are accepted by compact change records.
 
@@ -19,8 +19,7 @@ The participant first calls `require-transaction() -> Unit`, an idempotent task 
 
 Unit is no transaction token, and retained descriptors are checked when invoked. Ordinary argument effects can precede entry; independent callback effects can survive a parent abort. There is no automatic retry. Fallback is caller policy, not schema migration or recovery from operational failure. The functions do not constrain T to capture-safe; binding and encoding enforce their own existing rules. See the [data capability specification](../spec/data-capabilities.md#explicit-participation-and-typed-cells).
 
-```text
-owner kind=pure_function id=decl_00e189b2f9ccc0f54cc60eebbf4f742b name=pair-map parent=package reference=pkg_10000000000000000000000000000001/decl_00e189b2f9ccc0f54cc60eebbf4f742b
+<pre>owner kind=pure_function id=decl_00e189b2f9ccc0f54cc60eebbf4f742b name=pair-map parent=package reference=pkg_10000000000000000000000000000001/decl_00e189b2f9ccc0f54cc60eebbf4f742b
 declaration kind=pure_function name=pair-map children=3 effect=pure
 owner kind=type_parameter id=typeparam_7a6277ac694ecd8ef8b03eb35ce48747 name=First parent=decl_00e189b2f9ccc0f54cc60eebbf4f742b reference=pkg_10000000000000000000000000000001/typeparam_7a6277ac694ecd8ef8b03eb35ce48747 constraint=none
 type-parameter index=0 name=First constraint=none
@@ -1579,4 +1578,4 @@ owner kind=parameter id=param_20073552afab176efe9730db90fbb842 name=right parent
 parameter index=1 name=right use=unrestricted type-path=parameter.right
 type path=parameter.right digest=type_object_4872f33f8c53c3dbf43ad114824e6c18f4537f45cb609d7d2a82c1d479e23062 form=i64
 type path=result digest=type_object_f32823898c8d778d2f8edf1629baf0a7b23c884d2ba5509e44550fdbd5bf9044 form=bool
-```
+</pre>
