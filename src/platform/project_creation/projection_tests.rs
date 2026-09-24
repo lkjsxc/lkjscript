@@ -83,14 +83,53 @@ fn recipes_match_captured_generation_neutral_projections() {
             "{} relations",
             template.name()
         );
+        let captured = predecessor_policy_projection(&path, &projection).unwrap_or(projection);
         assert_eq!(
-            projection.digest,
+            captured.digest,
             expected_digest,
-            "{} projection ({} bytes)",
+            "{} captured projection ({} bytes)",
             template.name(),
-            projection.bytes
+            captured.bytes
         );
     }
+}
+
+// Preserve the frozen graph/topology/deployment oracle rather than replacing its digest
+// with whatever the changed recipe produces. Independently assert the exact new policy,
+// then back out only that intentional field change in this owned disposable descriptor.
+fn predecessor_policy_projection(
+    path: &Path,
+    current: &RecipeProjection,
+) -> Option<RecipeProjection> {
+    let descriptor = path.join(STARTER_HTTP_DESCRIPTOR_PATH);
+    if !descriptor.exists() {
+        return None;
+    }
+    let original = std::fs::read(&descriptor).expect("owned current recipe descriptor");
+    let mut value: Value = serde_json::from_slice(&original).expect("current recipe JSON");
+    assert_eq!(
+        value["execution"],
+        serde_json::json!({
+            "instruction_fuel": null, "maximum_call_depth": 4096, "maximum_value_stack": 1000000,
+            "maximum_allocated_bytes": null, "maximum_collection_items": null,
+            "maximum_capability_calls": null
+        })
+    );
+    value["execution"] = serde_json::json!({
+        "instruction_fuel": 10000000, "maximum_call_depth": 4096, "maximum_value_stack": 1000000
+    });
+    std::fs::write(
+        &descriptor,
+        serde_json::to_vec(&value).expect("legacy policy JSON"),
+    )
+    .expect("substitute only owned deployment policy");
+    let previous = recipe_projection(path);
+    std::fs::write(&descriptor, original).expect("restore owned current descriptor");
+    assert_ne!(
+        current.digest, previous.digest,
+        "policy change must be observable"
+    );
+    Some(previous)
 }
 
 fn recipe_projection(path: &Path) -> RecipeProjection {

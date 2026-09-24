@@ -63,6 +63,16 @@ Keep the original numeric descriptor and executable for rollback; changing the
 runtime selection does not rewrite application data or grants. An artifact remains
 a runtime-dependent bundle, not a standalone machine executable.
 
+The relay-information recipe uses the same explicit HTTP policy choice. Its graph,
+route, grant and live-limit projection is checked against the original captured
+recipe after backing out only the documented execution-policy transition.
+
+Rust embedders must adapt RunPolicy construction: instruction_fuel is now
+Option<u64>, and the three additional quota fields must be supplied or inherited
+through ..RunPolicy::default(). RunPolicy::unmetered() explicitly chooses four
+absent cumulative quotas. This is a Rust source-API change; compatibility of old
+three-field JSON descriptors does not make old Rust struct literals compile unchanged.
+
 ## Operational boundary
 
 These work counters are per invocation. Unbounded observations saturate at u64::MAX
