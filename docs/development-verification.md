@@ -51,6 +51,31 @@ Code capable of changing its own verifier still needs substantive review. A gree
 workflow is evidence about the inspected candidate, not an independent security
 certificate or an authorization to execute arbitrary code with greater authority.
 
+## Executable observations and compatibility
+
+Check/source receipt contract 7 and cache contract 3 bind each selected command to
+an `ExecutableProof`. Its `entry` retains the ordinary file or symlink observation;
+`resolved` additionally binds a symlink's regular target bytes and mode. Plain files
+have no duplicate target proof. General source FileProofs still do not follow final
+symlinks. Both observations use the logical command label, so different immutable
+copy directories do not alone defeat valid reuse. The existing digest and cache
+owners remain authoritative; no new hash algorithm or acceptance store is added.
+
+On Linux, explicit relative and empty PATH entries resolve against the child cwd,
+and lookup skips candidates that the effective identity cannot execute. A bare
+command without an explicit PATH fails observation rather than certifying a guessed
+search path. Missing programs retain missing observations; a selected broken,
+cyclic or nonregular linked target cannot be admitted as executable file evidence.
+The runtime reader re-observes this same binding, including consistently rehashed
+forgeries, and predecessor check/cache records cannot become current acceptance.
+Frozen releases keep their original verifier and contracts.
+
+This binds the observed command leaf, not all interpreters, dynamic libraries,
+plugins, rustup-selected backends or other transitive runtime dependencies. It does
+not pin a file against concurrent replacement or provide a hostile-filesystem
+sandbox. Independent fixtures exercise actual PATH execution and a cached successful
+program changed to fail behind the same link, with restored legitimate reuse.
+
 ## Acceptance and retained evidence
 
 Success requires the verifier's zero exit status, a nonempty fully passed fresh

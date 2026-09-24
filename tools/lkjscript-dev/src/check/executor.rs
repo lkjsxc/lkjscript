@@ -1,7 +1,7 @@
 use super::cache::{self, VerificationCache};
 use super::model::{
-    CacheLookupStatus, CacheObservation, ExecutionKind, Gate, GateReceipt, GateStatus,
-    InputSnapshot, MAXIMUM_FAILURE_EXCERPT_BYTES, RuntimeIdentity,
+    CacheLookupStatus, CacheObservation, ExecutableProof, ExecutionKind, Gate, GateReceipt,
+    GateStatus, InputSnapshot, MAXIMUM_FAILURE_EXCERPT_BYTES, RuntimeIdentity,
 };
 use super::registry::GateRegistry;
 use super::snapshot;
@@ -385,7 +385,7 @@ fn skipped_receipt(
         process: None,
         outputs: Vec::new(),
         retained_outputs: Vec::new(),
-        input_fingerprint: fingerprint,
+        input_fingerprint: fingerprint.clone(),
         evidence_digest: VerificationDigest::of(&evidence_bytes),
         cache: CacheObservation {
             eligible: false,
@@ -497,7 +497,7 @@ pub(super) fn gate_fingerprint(
         worktree_input_digest: &'a VerificationDigest,
         cargo_lock_digest: &'a VerificationDigest,
         runtime_input_digest: &'a VerificationDigest,
-        command_executable: FileProof,
+        command_executable: ExecutableProof,
     }
     let dependency_identity = dependencies
         .iter()
@@ -515,7 +515,7 @@ pub(super) fn gate_fingerprint(
         .collect();
     let mut executable = snapshot::executable_proof(repository, &gate.command[0])?;
     if let Some(identity) = gate.identity_command().first() {
-        executable.path.clone_from(identity);
+        executable.relabel(identity);
     }
     let identity = FingerprintIdentity {
         cache_contract_version: super::model::CACHE_CONTRACT_VERSION,

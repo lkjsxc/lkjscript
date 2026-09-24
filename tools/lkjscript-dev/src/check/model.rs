@@ -5,8 +5,8 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-pub(crate) const CHECK_CONTRACT_VERSION: u32 = 6;
-pub(crate) const CACHE_CONTRACT_VERSION: u32 = 2;
+pub(crate) const CHECK_CONTRACT_VERSION: u32 = 7;
+pub(crate) const CACHE_CONTRACT_VERSION: u32 = 3;
 pub(crate) const DEFAULT_TIMEOUT: Duration = Duration::from_secs(3_600);
 pub(crate) const DEFAULT_MAXIMUM_STREAM_BYTES: u64 = 64 * 1024 * 1024;
 pub(crate) const MAXIMUM_WORKERS: usize = 8;
@@ -77,6 +77,24 @@ pub(crate) enum InputSource {
     Untracked,
 }
 
+/// Preserve the selected directory entry and, for a symlink, its admitted file bytes.
+/// Ordinary source-file proofs deliberately keep their non-following semantics.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ExecutableProof {
+    pub(crate) entry: FileProof,
+    pub(crate) resolved: Option<FileProof>,
+}
+
+impl ExecutableProof {
+    pub(crate) fn relabel(&mut self, identity: &str) {
+        self.entry.path = identity.to_owned();
+        if let Some(resolved) = &mut self.resolved {
+            resolved.path = identity.to_owned();
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct RuntimeIdentity {
@@ -87,10 +105,10 @@ pub(crate) struct RuntimeIdentity {
     pub(crate) environment_digest: VerificationDigest,
     pub(crate) environment_names: Vec<String>,
     pub(crate) harness: FileProof,
-    pub(crate) command_executables: BTreeMap<String, FileProof>,
+    pub(crate) command_executables: BTreeMap<String, ExecutableProof>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct PlatformIdentity {
     pub(crate) operating_system: String,
@@ -152,7 +170,7 @@ impl GateReceipt {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct CacheObservation {
     pub(crate) eligible: bool,
