@@ -1,0 +1,95 @@
+request base=LIBRARY_BASE
+
+declarations.begin
+(units
+  (use std builtin)
+  (module create ui-tests
+    (test create input-contexts (visibility private)
+      (actual (call ui::render-input (record ui::input
+        (field ui::input::name (text "x\" onfocus=\"bad"))
+        (field ui::input::label (text "<img>&\"'"))
+        (field ui::input::value (text "\"><script>&\"'")))))
+      (expected (text "<label><span>&lt;img&gt;&amp;&quot;&#39;</span><input type=\"text\" name=\"x&quot; onfocus=&quot;bad\" value=\"&quot;&gt;&lt;script&gt;&amp;&quot;&#39;\"></label>")))
+    (test create empty-input (visibility private)
+      (actual (call ui::render-input (record ui::input
+        (field ui::input::name (text "")) (field ui::input::label (text ""))
+        (field ui::input::value (text "")))))
+      (expected (text "<label><span></span><input type=\"text\" name=\"\" value=\"\"></label>")))
+    (test create button-contexts (visibility private)
+      (actual (call ui::render-button (record ui::button
+        (field ui::button::name (text "n\" autofocus"))
+        (field ui::button::value (text "v\"><img>"))
+        (field ui::button::label (text "</button>&")))))
+      (expected (text "<button type=\"submit\" name=\"n&quot; autofocus\" value=\"v&quot;&gt;&lt;img&gt;\">&lt;/button&gt;&amp;</button>")))
+    (test create unicode-input (visibility private)
+      (actual (call ui::render-input (record ui::input
+        (field ui::input::name (text "名前")) (field ui::input::label (text "日本語🌱"))
+        (field ui::input::value (text "a+b & c=d")))))
+      (expected (text "<label><span>日本語🌱</span><input type=\"text\" name=\"名前\" value=\"a+b &amp; c=d\"></label>")))
+    (test create entities-remain-data (visibility private)
+      (actual (call ui::render-node (variant ui::node::paragraph (text "&lt;&#39;&"))))
+      (expected (text "<p>&amp;lt;&amp;#39;&amp;</p>")))
+    (test create heading-context (visibility private)
+      (actual (call ui::render-node (variant ui::node::heading (text "</h2><script>"))))
+      (expected (text "<h2>&lt;/h2&gt;&lt;script&gt;</h2>")))
+    (test create empty-nodes (visibility private)
+      (actual (call ui::render-nodes (list ui::node))) (expected (text "")))
+    (test create ordered-nodes (visibility private)
+      (actual (call ui::render-nodes (list ui::node
+        (variant ui::node::heading (text "one"))
+        (variant ui::node::paragraph (text "two"))
+        (variant ui::node::paragraph (text "three")))))
+      (expected (text "<h2>one</h2><p>two</p><p>three</p>")))
+    (test create empty-card (visibility private)
+      (actual (call ui::render-node (variant ui::node::card (list ui::node))))
+      (expected (text "<section class=\"card stack comfortable\"></section>")))
+    (test create nested-layout (visibility private)
+      (actual (call ui::render-node (variant ui::node::stack (record ui::stack
+        (field ui::stack::spacing (variant ui::spacing::compact))
+        (field ui::stack::children (list ui::node
+          (variant ui::node::card (list ui::node
+            (variant ui::node::paragraph (text "<x>"))))))))))
+      (expected (text "<div class=\"stack compact\"><section class=\"card stack comfortable\"><p>&lt;x&gt;</p></section></div>")))
+    (test create empty-form (visibility private)
+      (actual (call ui::render-form (record ui::query-form
+        (field ui::query-form::title (text "<legend>"))
+        (field ui::query-form::inputs (list ui::input))
+        (field ui::query-form::buttons (list ui::button)))))
+      (expected (text "<form method=\"get\" accept-charset=\"UTF-8\"><fieldset><legend>&lt;legend&gt;</legend><div class=\"stack comfortable\"><div class=\"actions\"></div></div></fieldset></form>")))
+    (test create ordered-buttons (visibility private)
+      (actual (call ui::render-form (record ui::query-form
+        (field ui::query-form::title (text "Choose"))
+        (field ui::query-form::inputs (list ui::input))
+        (field ui::query-form::buttons (list ui::button
+          (record ui::button (field ui::button::name (text "mode"))
+            (field ui::button::value (text "a")) (field ui::button::label (text "A")))
+          (record ui::button (field ui::button::name (text "mode"))
+            (field ui::button::value (text "b")) (field ui::button::label (text "B"))))))))
+      (expected (text "<form method=\"get\" accept-charset=\"UTF-8\"><fieldset><legend>Choose</legend><div class=\"stack comfortable\"><div class=\"actions\"><button type=\"submit\" name=\"mode\" value=\"a\">A</button><button type=\"submit\" name=\"mode\" value=\"b\">B</button></div></div></fieldset></form>")))
+    (test create light-name (visibility private)
+      (actual (call ui::theme-name (variant ui::theme::light))) (expected (text "light")))
+    (test create dark-name (visibility private)
+      (actual (call ui::theme-name (variant ui::theme::dark))) (expected (text "dark")))
+    (test create compact-name (visibility private)
+      (actual (call ui::spacing-name (variant ui::spacing::compact))) (expected (text "compact")))
+    (test create comfortable-name (visibility private)
+      (actual (call ui::spacing-name (variant ui::spacing::comfortable))) (expected (text "comfortable")))
+    (test create nul-is-text-not-markup (visibility private)
+      (actual (call ui::render-node (variant ui::node::paragraph (text "\u{0}\r\n<x>"))))
+      (expected (text "<p>\u{0}\r\n&lt;x&gt;</p>")))
+    (test create empty-document (visibility private)
+      (actual (call ui::document (text "en") (text "")
+        (variant ui::theme::dark) (list ui::node)))
+      (expected (call std::text-concat
+        (text "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title></title><style>")
+        (call std::text-concat (call ui::stylesheet)
+          (text "</style></head><body class=\"dark\"><main class=\"stack comfortable\"><h1></h1></main></body></html>")))))
+    (test create document-contexts (visibility private)
+      (actual (call ui::document (text "\" onload=\"<&") (text "</title><script>&")
+        (variant ui::theme::light) (list ui::node
+          (variant ui::node::paragraph (text "<body>")))))
+      (expected (call std::text-concat
+        (text "<!doctype html><html lang=\"&quot; onload=&quot;&lt;&amp;\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>&lt;/title&gt;&lt;script&gt;&amp;</title><style>")
+        (call std::text-concat (call ui::stylesheet)
+          (text "</style></head><body class=\"light\"><main class=\"stack comfortable\"><h1>&lt;/title&gt;&lt;script&gt;&amp;</h1><p>&lt;body&gt;</p></main></body></html>")))))))
+declarations.end
