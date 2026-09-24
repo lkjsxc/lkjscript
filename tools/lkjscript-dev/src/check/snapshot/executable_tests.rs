@@ -41,7 +41,10 @@ fn unchanged_link_observes_same_length_target_replacement_and_mode() {
     );
     assert_ne!(before.resolved, changed.resolved);
     let plain = evidence::proof(&alias, before.entry.path.clone()).expect("ordinary source link");
-    assert_eq!(plain, before.entry, "source symlink semantics must not change");
+    assert_eq!(
+        plain, before.entry,
+        "source symlink semantics must not change"
+    );
 
     fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).expect("change leaf mode");
     let mode = proof(root.path(), "./alias").expect("new leaf mode");
@@ -68,7 +71,10 @@ fn link_chains_and_retargeting_preserve_both_observation_roles() {
     let mut after = proof(root.path(), "./alias").expect("retargeted chain");
     after.relabel("$TOOL");
     assert_ne!(before.entry, after.entry);
-    assert_eq!(before.resolved, after.resolved, "identical leaf bytes and modes");
+    assert_eq!(
+        before.resolved, after.resolved,
+        "identical leaf bytes and modes"
+    );
 }
 
 #[test]
@@ -103,7 +109,10 @@ fn logical_labels_preserve_reuse_across_immutable_copies() {
         linked.push(link);
         let mut file = proof(&directory, "./payload").expect("copy file");
         file.relabel("$TOOL");
-        assert!(file.resolved.is_none(), "plain files need no duplicate proof");
+        assert!(
+            file.resolved.is_none(),
+            "plain files need no duplicate proof"
+        );
         plain.push(file);
     }
     assert_eq!(linked[0], linked[1]);
@@ -241,7 +250,9 @@ fn a_changed_symlink_target_cannot_reuse_a_previous_successful_gate() {
         &root.path().join("old.stderr"),
     );
     assert!(rejected.cached.is_none());
-    cache.store(&gate, &first).expect("restore original current cache record");
+    cache
+        .store(&gate, &first)
+        .expect("restore original current cache record");
 
     let original_link = proof(root.path(), "./alias").unwrap().entry;
     script(&target, 7);
@@ -299,7 +310,10 @@ fn a_missing_interpreter_cannot_switch_execution_to_an_unobserved_path_candidate
     let marker = root.path().join("unchecked");
     fs::write(
         &first,
-        format!("#!{}\nexit 0\n", root.path().join("absent-interpreter").display()),
+        format!(
+            "#!{}\nexit 0\n",
+            root.path().join("absent-interpreter").display()
+        ),
     )
     .unwrap();
     fs::set_permissions(&first, fs::Permissions::from_mode(0o755)).unwrap();
@@ -307,8 +321,11 @@ fn a_missing_interpreter_cannot_switch_execution_to_an_unobserved_path_candidate
     let original = observe_with_path(root.path(), "probe", Some(path)).unwrap();
     assert_eq!(original.path.as_deref(), Some(first.as_path()));
     for exit in [37, 7] {
-        fs::write(&second, format!("#!/bin/sh\nprintf visited > unchecked\nexit {exit}\n"))
-            .unwrap();
+        fs::write(
+            &second,
+            format!("#!/bin/sh\nprintf visited > unchecked\nexit {exit}\n"),
+        )
+        .unwrap();
         fs::set_permissions(&second, fs::Permissions::from_mode(0o755)).unwrap();
         let observed = observe_with_path(root.path(), "probe", Some(path)).unwrap();
         assert_eq!(observed.proof, original.proof);
