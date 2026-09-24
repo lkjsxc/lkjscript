@@ -6,6 +6,9 @@ intrinsics or automatically maintained application packages.
 
 | Guide | What it demonstrates |
 | --- | --- |
+| [First native command](native-command.md) | A literal function/test/target, reviewed publication, canonical re-entry and detached execution on public v0.1.44 and development v0.1.45. |
+| [Native text composition](native-text.md) | Development-standard text-join, exact separators and caller-owned escaping. |
+| [HTML over HTTP](native-html-http.md) | Compose the separate typed HTML and HTTP libraries in a detached public-v0.1.44 service. |
 | [Resident execution policy](resident-policy.md) | Development-only nullable cumulative quotas, preserved legacy limits and independent deadline/grant controls. |
 | [Typed HTML composition](native-html.md) | Ordinary recursive inline/block types, exact library transport and a separately authored article consumer on public v0.1.44. |
 | [HTTP service and response library](native-http.md) | Public v0.1.44 library transport, typed routes, query input, bounded byte-stream echo, detached serving and reviewed route edits. |

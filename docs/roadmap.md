@@ -1,216 +1,80 @@
 # Evidence-gated roadmap
 
-[Current status](status.md) describes implemented capabilities and public delivery.
-[Specifications](spec/) own their contracts; [campaigns](campaigns/) retain completed
-work, failures and exact evidence. This page contains contingent future directions.
+[Current status](status.md) describes available behavior and release state.
+[Specifications](spec/) own contracts; [campaigns](campaigns/) retain decisions,
+failed experiments and exact evidence. This page selects direction, not history.
 
 ## Selected delivery
 
-The [composable-cell milestone](campaigns/202609221952.md) is complete as immutable
-v0.1.41 at `346c0366`. Producer `35801102943/1` passed source/finalized-candidate
-acceptance; promotion `35809096928/1` passed publication, anonymous exact/latest
-installed verification and its terminal. The bounded installed participation
-observation also passes. Genuine failed/cancelled predecessors remain recorded.
+Finish [v0.1.45](campaigns/202609250650.md): native guide/policy tooling, reusable
+text/byte operations, explicit optional resident quotas and contributor process
+reliability. The combined implementation is mainline and fully verified; the
+versioned producer must still accept its finalized distribution, then pass immutable
+publication and anonymous installed use. Do not rebuild or mutate an accepted
+candidate merely to update documentation. Public v0.1.44 remains unchanged.
 
-Successor v0.1.42 candidate `35810382909/1` is accepted at exact source `8e9628ad`.
-Its tag and scoped-selection update were not performed. A subsequent observed
-shared JSON framing defect withheld publication; the accepted lineage remains
-retained and the corrected successor below completes its delivery obligation.
-The existing [release owner](release.md) governs acceptance and explicitly authorized
-publication. v0.1.39 through v0.1.41 have no remaining delivery obligation.
-
-Corrected v0.1.43 source `9394c0ea` passes all 20 fresh source gates and reached
-remote main unchanged. Candidate [35820435256/1](https://github.com/lkjsxc/lkjscript/actions/runs/35820435256)
-is accepted at that exact source, with its five authenticated handoff artifacts
-retained. Promotion [35824461469/1](https://github.com/lkjsxc/lkjscript/actions/runs/35824461469)
-completes immutable publication and anonymous exact/latest installed verification.
-Public v0.1.43 contains the same accepted assets. The first promotion's captured
-prior selection and genuine pre-transfer rejection remain recorded; it is superseded
-by this successful publication, not erased or relabelled.
-
-v0.1.44 adds ordinary standard `list-window` and adoption by the transported
-aggregation owner. Corrected source `9ea93419` passes all 20 fresh source gates
-and reached remote main unchanged. Candidate
-[35833374673/1](https://github.com/lkjsxc/lkjscript/actions/runs/35833374673)
-passes final-candidate, installation/recovery and original-reader acceptance.
-The tag and scoped selector bind that accepted source; authorized promotion
-[35838470851/1](https://github.com/lkjsxc/lkjscript/actions/runs/35838470851)
-publishes immutable [v0.1.44](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.44).
-Public-only resumption
-[35841466243/1](https://github.com/lkjsxc/lkjscript/actions/runs/35841466243)
-completes anonymous exact/latest installed verification after a controller metadata
-lookup correction, using the original accepted producer and verifier. The user's
-selected stopping point for that mandate is complete. The later
-[native development-tool mandate](campaigns/202609232247.md) selects operation and
-diagnostic guide generation without changing the frozen v0.1.44 source. The
-[record](campaigns/202609222330.md#accepted-v0144-and-the-requested-release-stopping-point)
-retains the rejected first producer, failed first public boundary and all originals.
-
-The [native guide completion](campaigns/202609240132.md) moves the remaining six
-reference pages into ordinary lkjscript, including parent-aware reference selection
-and explicit missing/ambiguous-input rejection. All eight page renderers now have
-one native owner. Retain measured generation costs; further native tooling should
-be selected from a real development workload, not from a language-percentage target.
-
-The [native policy campaign](campaigns/202609240414.md) selects the existing
-required no-Python gate as a second maintained native consumer. Ordinary native
-functions own its extension and bounded raw-byte shebang decisions; host Git and
-filesystem observation remain separate. A shared grant-free pure artifact adapter
-replaces the guide-specific embedding setup. Evaluate its measured developer-command
-cost, not a native-language percentage. Broader filesystem/process tooling remains
-unselected until an actual workload fixes its authority and failure boundaries.
-
-The [native text campaign](campaigns/202609250013.md) generalizes a repeated guide/HTML
-operation into ordinary standard `text-join` and removes the maintained guide tool's
-copy. Its literal native inputs, exact supplier transition and copied-product tests
-remain separate from compiler self-hosting and the frozen v0.1.44 release. Further
-library adoption should similarly remove a real duplicate, not invent new host
-intrinsics or force unaffected exact consumers to upgrade.
+This milestone should make the implemented language easier to acquire and use.
+Native application development and native contributor-tool adoption are distinct
+from a self-hosted compiler. Raising a language-percentage metric is not a goal.
 
 ## Next workload and decision criteria
 
-Preserve old exact dependencies when their behavior and generated bytes remain
-valid, as lkjournal does across the standard-window addition. The copied native ranking
-example and a transported nominal consumer also pass, including explicit shared
-standard selection from a v0.1.43 client. This is a library workflow, not a new
-sorting intrinsic. An ordinary bounded-selection successor now avoids complete
-sorting for a small requested prefix, with independent numeric/nominal checks and
-matched measurements. This guide-library improvement does not change the frozen
-v0.1.44 product source or add a publication prerequisite. Measured Map-heap and
-tournament alternatives retain order-sensitive regressions. A buffered alternative
-reuses the existing merge helpers and is available explicitly in the native guide,
-with fresh authoring and nominal-consumer proof; it also retains descending-input
-regressions rather than replacing the general choice unconditionally. Further
-standard-library adoption needs a concrete maintained consumer and its normal
-closure acceptance.
-v0.1.43 publication is complete independently of this increment.
+Prefer the shortest complete route from an ordinary native program to useful
+behavior. Choose the next change by observing a real user's public authoring,
+editing, testing, composition or execution workload, not by expanding a feature list.
 
-Native declaration creation/canonical re-entry, callable-input evolution, persistent
-maps and ordinary composable transaction participants are available. The native
-shipping workload returned correct results through 4,096 items, then its 196,611-byte
-inline input failed with host `E2BIG` at 8,192 items before executable startup.
-The [continuation](campaigns/202609222330.md#native-command-input-files--next-measured-workload)
-selects bounded `--arguments-file` for development v0.1.42. Its acceptance is separate
-from the completed v0.1.41 producer. Source `8e9628ad` passes all 20 fresh source
-gates and reached remote main unchanged. The shared-publication trigger has cleared;
-its own candidate was accepted and then withheld for the later JSON framing finding.
-Corrected v0.1.43 now completes publication. Further numerical/
-data-processing work should measure an actual public program to determine
-whether authoring, repeated preparation/checking, representation or execution is
-its limiting dependency. Independent callback effects still require an application
-policy for replay/idempotency. A [bounded repeated-edit observation](performance.md#repeated-native-editing-2026-09-23)
-finds increasing check/run cost through 256 edits of a nine-owner native program,
-including a rename control with unchanged semantic meaning. Current-validation
-reports no semantic revalidation; the observation does not isolate all preparation
-costs or establish long-history scale. Check/run still admit complete source
-closures. Shared immutable pack indexes remove repeated copies, and reusing one
-accepted source view removes one catalog opening per preparation. Bounded reuse of
-fully admitted catalog blocks further reduces repeated I/O while preserving object
-checks and truthful work accounting. [Matched measurements](performance.md#bounded-catalog-block-reuse)
-retain slower cases and do not establish a general speedup. Further object I/O
-reuse requires preserved current integrity and authority checks. No throughput, model-token
-or monetary-saving claim follows from input size or elapsed time alone.
+The next investigation should exercise a library-backed web application through
+native proposals, exact packages and a standalone runtime. Existing
+[HTTP](guides/native-http.md), [typed HTML](guides/native-html.md) and
+[HTML-over-HTTP](guides/native-html-http.md) programs provide a starting point,
+not a requirement to finish a particular experimental application. Measure the
+first real impediment: repeated authoring/preparation, error diagnosis, library
+composition or runtime work. Improve the common owner, retaining the public input
+and an independent expected result. A browser/Wasm backend is not a prerequisite
+for server-side usefulness.
 
-The next [native counting workload](performance.md#native-text-frequencies-2026-09-23)
-returns exact counts for 65,536 items over 16 text keys. At 4,096 distinct keys,
-the result exceeds the existing 64 KiB compact-record bound. Development v0.1.43
-adds an explicit bounded result-file path using the current typed encoder and
-create-new output owner, with pre-execution path inspection and honest post-effect
-failures. Focused tests cover output limits, byte preservation and a late conflict
-that preserves both the competing file and a completed application transaction.
-Fresh copied native counting now returns complete independently expected maps
-through 32,768 distinct keys, including detached execution and an unchanged
-predecessor bundle. The numerical owner consumes result files with retained-byte
-bindings. Source `78b32e78` passes all 20 fresh source gates and reached remote main.
-The next adjacent-limit probe exposes undercounted Map pair framing in the shared
-JSON encoder. The successor corrects representation accounting, generated fields
-and the unchanged parser guard. Fixed-shape and public adjacent-limit tests pass;
-source adbe4f63 passes all 20 fresh gates and reached remote main unchanged.
-The next native buffer probe finds large unnecessary text copies before correct
-output-byte rejection. Aggregate text is now reserved against the existing byte
-bound before growth, with valid bytes and final byte checks retained. Focused tests
-and the same native bundle/inputs pass; all memory observations remain at their
-owner. Combined source acceptance, final-target proof and immutable publication
-are complete at the exact v0.1.43 source recorded above.
-The frozen v0.1.42 candidate remains retained rather than silently reclassified as failed.
+Keep the public path small: discover, author, review, check, build and run.
+Retire a replaced implementation when a native library/tool actually assumes its
+responsibility with equivalent correctness, failure recovery and maintainability.
+A host wrapper or generated string emitter does not remove an external dependency.
+The supported Rust kernel/platform boundary may remain where it is the better owner.
 
-Prefer ordinary libraries and direct native authoring. Native contributor-tool
-implementation needs a concrete supported workload with equivalent correctness,
-recovery and maintainability; compiler self-hosting is a separate decision. There
-is no percentage-of-lkjscript target and no automatic wholesale rewrite mandate.
+## Conditions for larger changes
 
-Each future item requires demonstrated usefulness and composition through a representative public
-workload, an exact contract, independent proof, reversal conditions, and a complete cutover/deletion
-plan. A new witness may justify a foundation that current limitations prevent maintained consumers
-from expressing. Existing adoption and new witnesses must be reported separately; no application
-count is a prerequisite. These possibilities are contingent, not an authorized work queue.
+| Direction | Evidence required before selecting it |
+| --- | --- |
+| Native tooling and libraries | A concrete maintained consumer or blocked public witness, a real removed duplicate, public reproducibility and honest measured costs. Keep unaffected exact suppliers. |
+| Faster preparation and execution | Matched behavior/workloads, source/reference correctness, clean/incremental equality and separate preparation, I/O, allocation and execution measurements. Retain regressions. |
+| Additional authoring operations | A demonstrated edit workflow, typed intent, identity continuity, review binding, complete discovery, independent negative cases and a complete consumer transition. |
+| Richer abstraction/resource ownership | A public composition need fixing the lifetime/failure protocol, type/effect/capture safety, producer/consumer admission and retirement of a superseded path. |
+| Worker recipes and network capabilities | A standalone consumer fixing topology, exact endpoint/grant authority, cancellation, owned resources and an implementation-disjoint live oracle. |
+| Browser/Wasm or another binary target | A useful program and precise host/ABI boundary, compatible transport, effect/grant policy, hosted execution oracle, distribution identity and measured costs. Do not create a speculative target matrix. |
+| External package distribution | Named consumer, exact publication/resolution authority, immutable content, recovery/revocation and explicit mutable-name policy. No ambient network resolver. |
+| Million-owner compilation or long history | Select compilation, graph history and operational-data scale separately. Require independent correctness/reachability, interruption recovery and exact resource observations before deletion or compaction. |
+| Broader CI, signing or distribution integrations | A distinct operating need, source/trust ownership, retention, revocation/recovery and maintenance responsibility. Existing release automation is not a blanket mandate. |
 
-1. **Worker project recipe from a public binary-only workload.** Add one only when a representative
-   standalone consumer fixes its semantic topology, grant closure, deployment defaults, and live
-   acceptance. Do not infer a worker recipe from the existence of the resident runner.
-2. **Outbound WebSocket clients and Nostr event semantics from a public workload.** Reuse the
-   exact endpoint, DNS/address, TLS trust, cancellation, and resource ownership established by
-   `HttpClient` without widening it into an ambient URL or socket capability. Keep the implemented
-   inbound structured-session server independent. Define outbound connection ownership,
-   reconnect/backoff, NIP-01 event canonicalization, signing/key authority, relay authentication,
-   replay visibility, and an implementation-disjoint client oracle before adding graph meaning or
-   an outbound adapter.
-3. **Broader affine lifetime or result protocols from a public workload.** The current direct
-   handoff intentionally admits only one final consume parameter on a private same-package acyclic
-   task helper. Add resource results, borrowing parameters, public or cross-package signatures,
-   closures, affine containers, async ownership, or linear must-use values only when a representative
-   workload fixes the complete lifetime/failure protocol and an independent oracle, migration, and
-   predecessor deletion prove it.
-4. **Million-owner compiler admission and separately selected data/history scale.** The current
-   harness admits both a 100,100-owner module/function full lifecycle and a one-million independent-
-   module capacity lifecycle. Select a million-owner check/compiler/build admission only from a
-   measured compiler workload with exact clean/current artifact equality. Design operational-data
-   scale and long-history retention as a separate campaign with reader leases, registered backup
-   roots, an independent reachability oracle, interruption/recovery proof, and exact CPU/RSS/I/O
-   observations before any deletion, packing, or compaction mechanism.
-5. **Remaining maintained authored operations.** Add operations such as move, rebind, signature
-   edits, inline, and repair only from demonstrated public workflows. Field/case type edits now use
-   the current public nominal-data path. Keep typed
-   intent, exact identity continuity, reviewed semantic effects, complete discovery, proving tests,
-   and predecessor rejection in each vertical slice.
-6. **Additional platform releases one target at a time.** Treat each architecture and operating
-   system as its own dependency-closed admission with a hosted execution oracle, exact runtime
-   inventory, stable asset identity, and public-download smoke. Do not introduce a speculative
-   build matrix.
-7. **External package distribution and removed project workflows.** Offline code-complete export,
-   staging, exact binding, and staged-interface inspection use the common immutable package path.
-   Canonical declaration drafts now use `change draft`. Select publication/network resolution,
-   history, project backup/restore, and repository health only from a named consumer with explicit
-   authority and recovery. Do not reinstate Graph 4
-   readers, compatibility commands, a mutable remote registry, or storage bytes as authoring input.
-8. **Broader incremental compilation and validation.** Generalize beyond the currently selected
-   compiler impacts and semantic edit classes only after clean/incremental artifact equality and
-   randomized full-oracle evidence hold for signatures, types, effects, capabilities, targets,
-   tests, dependencies, and mixed changes.
-9. **Broad branch and pull-request CI.** Select this only when its independent operating value,
-   required gate profile, retention, trust model, and recovery policy are explicit. Do not treat
-   the release workflow or its transient artifacts as general CI.
-10. **Additional distribution integrations, signing, and build provenance.** The selected native installer
-   covers one Linux target and explicit local selection. Each additional registry, installer,
-   updater, mirror, signing identity, or provenance mechanism needs a named consumer, mutable
-   authority policy, credential boundary, revocation/recovery procedure, and maintenance owner.
-   None follows automatically from immutable release integrity.
-11. **Further language abstraction from public composition needs.** Campaign 202609090021 proves
-   explicit pure prefix binding and graph-owned function composition; its bounded acceptance is
-   recorded in that campaign's evidence owner. Persistent lists and explicit capture-safe generic
-   constraints are also implemented, with graph-owned list-map and function-constant families.
-   Finite recursive nominal data, explicit effects and reusable task libraries,
-   constant-space task calls and iteration have completed their selected public
-   delivery; [current status](status.md) links the responsible history. Fresh public
-   composition witnesses remain distinct from maintained application adoption.
-   Expanding nominal schemes and expanding ordinary-type function recursion remain
-   outside those milestones.
-   Richer state/resource composition, automatic lexical capture, component
-   composition, specialization, AOT, JIT, SIMD, and allocation redesign require their own public
-   witness, independent semantic/reference behavior, measurements where relevant, and reversal
-   conditions. Explicit prefix binding does not imply anonymous bodies or free-variable inference.
+None of these rows is an automatic implementation queue. A large architectural
+revision is appropriate when evidence favors it; continuity with an old campaign
+is not a reason to retain a bad design. Conversely, a proposed improvement must not
+weaken current authority, admission, atomic publication or verification to appear
+simpler. Keep semantics, operational policy, derived caches and deployment data as
+different responsibilities.
 
-Inbound TLS is not a roadmap item. The present listener remains plaintext and requires an
-appropriate external trusted transport boundary; outbound HTTPS trust is confined to one exact
-client endpoint. Local data encryption, hostile-code sandboxing, and multi-tenant isolation are
-separate unselected problems.
+## Reversal and completion
+
+For each selected increment, retain a literal public workload, an exact intended
+contract, independent failure/success expectations and a concrete delivery point.
+Measure competing implementations where performance is the claim. Finish affected
+consumers, generated assets, documentation and migration or explicit rejection.
+A partial prototype, local commit or open PR is not mainline completion.
+
+Preserve accepted history and old runtime/artifact pairs when compatibility requires
+it. Use digests only where an identity, integrity or compatibility contract needs
+them; do not add redundant inventories or receipt systems. Failed experiments
+remain failed even when a later design succeeds. The [release owner](release.md)
+separates source acceptance, exact distributable bytes and public acquisition.
+
+Do not make a particular experimental application the language's purpose.
+Ordinary native users and their reusable mechanisms are the long-term product.
+Inbound TLS, encrypted local storage and hostile multi-tenant sandboxing remain
+separate unselected systems; current limits do not imply those guarantees.

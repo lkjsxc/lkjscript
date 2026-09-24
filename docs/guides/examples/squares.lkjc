@@ -1,0 +1,18 @@
+request base=BASE
+declarations.begin
+(units
+  (use std builtin)
+  (module create math (as $math)
+    (function create square (visibility public)
+      (parameter create value (type I64))
+      (returns I64) (effect pure)
+      (body (call std::multiply (local value) (local value))))
+    (function create answer (visibility private)
+      (returns I64) (effect pure)
+      (body (call square (i64 12))))
+    (test create twelve-squared (visibility private)
+      (actual (call square (i64 12))) (expected (i64 144)))
+    (component create console (visibility private)
+      (port create main (type (function () I64)) (function answer))))
+  (target create squares (component math::console) (runner command) (port math::console::main)))
+declarations.end
