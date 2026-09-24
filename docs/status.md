@@ -22,6 +22,10 @@ agree. Other exact consumers and the published-v0.1.44 HTML library retain their
 existing selections. These changes are development source, not an official release
 or compiler self-hosting. The [campaign](campaigns/202609250013.md) owns final-source
 acceptance, runtime-case evidence, measured costs and delivery state.
+Implementation `d8dbb8650ff2f547155db0b09124457ebf6f9ce3` passes the full profile with
+26 fresh passes, zero reuse and stable inputs, and is independently confirmed on
+remote main. The seven focused public tests also pass against its retained production
+build. Later reporting-only commits do not change the source named by that receipt.
 
 ## Joined contributor processes and native HTML composition
 

@@ -1843,3 +1843,9 @@ Original inputs, result files, process outputs and all 42 samples are retained u
 attempt's absolute artifact path correctly rejected with `deployment_path` before
 execution; its input and failure remain separately retained. The
 [campaign](campaigns/202609250013.md) owns source acceptance and mainline delivery.
+
+Environment recorded after this comparison on the same supplied machine: AMD Ryzen 9
+9955HX, Linux 7.2.3-arch1-2 x86-64; `nproc` reports 12 available processing units,
+the visible CPU quota is `max 100000`, and the cgroup memory limit is 8,589,934,592
+bytes. These observations do not prove exclusive host use during measurement. The
+raw environment record is retained separately from the original timing samples.
