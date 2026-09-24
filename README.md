@@ -87,6 +87,10 @@ and [HTML over HTTP](docs/guides/native-html-http.md) are ordinary composable
 libraries and programs, not a compiler-owned web framework. These guides retain
 their actual public-v0.1.44 experiments.
 
+The development [paged-list guide](docs/guides/native-list.md) adds native bounded
+query-number parsing, list windows, exact text/HTML composition and reviewed
+function-level editing. It needs the newer standard rather than public v0.1.44.
+
 ### Nostr relay information from the public binary
 
 The [relay-information recipe](docs/generated/nostr-relay-info-authoring.md)

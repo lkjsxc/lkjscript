@@ -23,15 +23,23 @@ Prefer the shortest complete route from an ordinary native program to useful
 behavior. Choose the next change by observing a real user's public authoring,
 editing, testing, composition or execution workload, not by expanding a feature list.
 
-The next investigation should exercise a library-backed web application through
-native proposals, exact packages and a standalone runtime. Existing
-[HTTP](guides/native-http.md), [typed HTML](guides/native-html.md) and
-[HTML-over-HTTP](guides/native-html-http.md) programs provide a starting point,
-not a requirement to finish a particular experimental application. Measure the
-first real impediment: repeated authoring/preparation, error diagnosis, library
-composition or runtime work. Improve the common owner, retaining the public input
-and an independent expected result. A browser/Wasm backend is not a prerequisite
-for server-side usefulness.
+The [paged-list workload](guides/native-list.md) now exercises fresh library-backed
+HTTP composition, strict native query-number parsing, detached use and a reviewed
+edit. No additional kernel or framework primitive was needed. It leaves a concrete
+next question about edit/review scale: at the same revision and intended small edit,
+function-only drafting reduces the proposal from 18,732 to 3,066 bytes, but both
+complete logical plans remain 155,246 bytes with 34 recreated internal owners.
+These are one workload's byte/owner counts, not model-token, monetary or latency
+claims. Prefer the existing targeted draft immediately; investigate finer edits or
+review presentation only against a demonstrated workflow, preserving full validation,
+identity continuity and review binding. Do not mistake a large optional proof file
+for compulsory model input or remove correctness evidence merely to shrink it.
+
+Continue selecting common improvements from ordinary native applications, not a
+particular experimental game's completion. A browser/Wasm backend is not a
+prerequisite for useful server-side development. The existing [HTTP](guides/native-http.md),
+[typed HTML](guides/native-html.md) and [HTML-over-HTTP](guides/native-html-http.md)
+programs remain useful separate composition witnesses with their own runtime bounds.
 
 Keep the public path small: discover, author, review, check, build and run.
 Retire a replaced implementation when a native library/tool actually assumes its

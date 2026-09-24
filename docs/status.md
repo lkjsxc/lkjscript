@@ -77,6 +77,13 @@ replace a maintained application, or imply that new development defaults applied
 to those older executions. Their literal inputs and actual tested runtimes remain
 at their own guide and campaign owners.
 
+A development-v0.1.45 [paged-list workload](guides/native-list.md) combines those
+libraries with byte inspection, ordinary text joining and list windows. Its native
+parser rejects ambiguous/overflowing pagination before arithmetic; 98 graph tests,
+1,860 independent number cases and 72 detached HTTP requests pass. This is an
+executable example, not a new runtime primitive or part of the frozen candidate
+source. The [delivery campaign](campaigns/202609250650.md) records its distinct proof.
+
 ## Language and runtime boundary
 
 The language supports explicit generic records/variants, finite recursive nominal

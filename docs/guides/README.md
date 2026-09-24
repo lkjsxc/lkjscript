@@ -6,6 +6,7 @@ intrinsics or automatically maintained application packages.
 
 | Guide | What it demonstrates |
 | --- | --- |
+| [Paged native HTTP list](native-list.md) | Native bounded-decimal input, reusable list/text operations, exact HTML/response imports and detached HTTP execution on development v0.1.45. |
 | [First native command](native-command.md) | A literal function/test/target, reviewed publication, canonical re-entry and detached execution on public v0.1.44 and development v0.1.45. |
 | [Native text composition](native-text.md) | Development-standard text-join, exact separators and caller-owned escaping. |
 | [HTML over HTTP](native-html-http.md) | Compose the separate typed HTML and HTTP libraries in a detached public-v0.1.44 service. |
