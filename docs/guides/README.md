@@ -6,6 +6,7 @@ intrinsics or automatically maintained application packages.
 
 | Guide | What it demonstrates |
 | --- | --- |
+| [Typed HTML composition](native-html.md) | Ordinary recursive inline/block types, exact library transport and a separately authored article consumer on public v0.1.44. |
 | [HTTP service and response library](native-http.md) | Public v0.1.44 library transport, typed routes, query input, bounded byte-stream echo, detached serving and reviewed route edits. |
 | [Native library](native-library.md) | Generic library creation, exact imports, application-owned types and standalone command execution. |
 | [Native summary](native-summary.md) | Ordinary counting and complete bounded command results. |

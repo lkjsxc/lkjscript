@@ -1,0 +1,58 @@
+request base=CONSUMER_BASE
+add.dependency package=pkg_10000000000000000000000000000001 semantic-revision=STANDARD_REVISION package-revision=STANDARD_PACKAGE_REVISION
+add.dependency package=HTML_PACKAGE semantic-revision=HTML_REVISION package-revision=HTML_PACKAGE_REVISION
+
+declarations.begin
+(units
+  (use std builtin)
+  (use html HTML_PACKAGE HTML_PACKAGE_REVISION)
+  (module create article
+    (record create entry (visibility public)
+      (field create title (type Text))
+      (field create body (type Text)))
+    (function create entry-blocks (visibility private)
+      (parameter create item (type entry))
+      (returns (list html::block)) (effect pure)
+      (body (list html::block
+        (variant html::block::paragraph (list html::inline
+          (variant html::inline::strong (list html::inline
+            (variant html::inline::text (field (local item) entry::title))))
+          (variant html::inline::line-break)
+          (variant html::inline::text (field (local item) entry::body)))))))
+    (function create page (visibility public)
+      (parameter create language (type Text))
+      (parameter create title (type Text))
+      (parameter create items (type (list entry)))
+      (returns Text) (effect pure)
+      (body (call html::document (local language) (local title)
+        (list html::block
+          (variant html::block::heading (local title))
+          (variant html::block::unordered-list
+            (call std::list-map (types entry (list html::block))
+              (local items) (function-value entry-blocks)))))))
+    (function create render (visibility public)
+      (parameter create language (type Text))
+      (parameter create title (type Text))
+      (parameter create nodes (type (list html::block)))
+      (returns Text) (effect pure)
+      (body (call html::document (local language) (local title) (local nodes))))
+    (test create empty-page (visibility private)
+      (actual (call page (text "ja") (text "Notes") (list entry)))
+      (expected (text "<!doctype html><html lang=\"ja\"><head><meta charset=\"utf-8\"><title>Notes</title></head><body><h2>Notes</h2><ul></ul></body></html>")))
+    (test create imported-nominal-composition (visibility private)
+      (actual (call page (text "en") (text "<title>") (list entry
+        (record entry (field entry::title (text "A&B")) (field entry::body (text "<body>"))))))
+      (expected (text "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>&lt;title&gt;</title></head><body><h2>&lt;title&gt;</h2><ul><li><p><strong>A&amp;B</strong><br>&lt;body&gt;</p></li></ul></body></html>")))
+    (test create transported-recursion (visibility private)
+      (actual (call html::render-block (variant html::block::section (list html::block
+        (variant html::block::unordered-list (list (list html::block) (list html::block
+          (variant html::block::paragraph (list html::inline
+            (variant html::inline::emphasis (list html::inline
+              (variant html::inline::code (text "<&>")))))))))))))
+      (expected (text "<section><ul><li><p><em><code>&lt;&amp;&gt;</code></em></p></li></ul></section>")))
+    (component create console (visibility private)
+      (port create page (type (function (Text Text (list entry)) Text)) (function page))
+      (port create render (type (function (Text Text (list html::block)) Text)) (function render))))
+  (target create page (component article::console) (runner command) (port article::console::page))
+  (target create render (component article::console) (runner command) (port article::console::render)))
+declarations.end
