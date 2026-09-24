@@ -20,8 +20,11 @@ original captured projections, detached HTTP beyond the previous instruction lim
 independent exhaustion and recovery, and per-invocation/grant separation. The
 [campaign](campaigns/202609250154.md) retains each failed full attempt and its diagnosis,
 including an identified zeroed debug-executable code section corrected by a scoped
-rebuild, not a data-restore semantic change. Complete source acceptance and mainline
-delivery are not yet claimed for this increment. Public v0.1.44 remains unchanged.
+rebuild, not a data-restore semantic change. Source `8242f3a7` now passes all 26
+full-profile gates freshly, with zero reuse (740.134 seconds), and is independently
+confirmed on remote main. Public v0.1.44 remains unchanged. The
+[delivery campaign](campaigns/202609250650.md) selects successor v0.1.45; candidate
+acceptance and publication are separate, not yet completed stages.
 
 ## Native standard text composition
 

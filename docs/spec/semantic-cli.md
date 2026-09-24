@@ -973,8 +973,13 @@ numeric objects retain their legacy bounded meaning, including cumulative defaul
 1,000,000 collection items and 100,000 invocation capability calls. Structural call/stack,
 single-value/container, preparation/codec and adapter limits and canonical per-grant quotas
 remain binding. Saturated observation counters are lower bounds; real storage arithmetic and
-explicit quota overflow still reject. Project differential execution and resident policies retain
-their bounded defaults. An installed executable runs independent bundles in separate processes;
+explicit quota overflow still reject. Project differential execution retains bounded defaults.
+Resident descriptors require complete execution and runtime objects, but each cumulative quota
+may explicitly be null. Fresh HTTP recipes select four nulls; omitted new quota fields in older
+objects retain the legacy defaults above. The named trusted foreground profile is reported only
+when all four cumulative quotas are absent. See [deployment security](deployment-security.md)
+and the [resident-policy guide](../guides/resident-policy.md). An installed executable runs
+independent bundles in separate processes;
 `.lkja` files require that runtime and do not embed it.
 
 ## Serve and worker
