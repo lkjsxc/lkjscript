@@ -54,12 +54,12 @@ Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_5d00fff04177aa1dc77315c97b6826f94be77e742fca0f70177f75c6b2dae858`;
-- package revision: `package_revision_3961d45ef8575628bb8d34e3991c2901091908671450e23474094ce6ca88da30`;
-- package transport: `package_transport_3fd768dfb897719bd919d6b82f34dbd339b6e8753f774695f4d1201456a67540`;
-- artifact manifest: `artifact_manifest_4cfc6098b385e67db19f79ba5aef6c2329e770e480ff695320ee39bd575e9f0d`;
-- artifact bundle: `artifact_bundle_7e80271c01519c851c58f525f714ff8fa5fcf4f1c8e29e8fbb8b1a6ab22ea085`;
-- 1,197 live semantic owners, 182 compiler units, and 51 graph tests.
+- semantic revision: `rev_321acc95265487d1cb77d5d54daabdab3cf3b887d53cab7ae04d2c50cb08d6b3`;
+- package revision: `package_revision_4e0c38c3a20c3ddda1f108009c926cc7343eaeffdeb231309f8fb780e5d1a839`;
+- package transport: `package_transport_f519a2638ccfab14417d046824c6ea9bdbe0117e979777bfa867453755d1f9d9`;
+- artifact manifest: `artifact_manifest_bbd7486d5afa2922f641212e3d94f4601dead3366eed2c8072f549031e31970a`;
+- artifact bundle: `artifact_bundle_6ff3ea56a563fea2e5281590515ef2551b8a0992d12f04e8f732430b2a7f1059`;
+- 1,357 live semantic owners, 196 compiler units, and 63 graph tests.
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose
 ordinary parametric records with pure functions. Mapping invokes the first callback then the second,
@@ -172,3 +172,16 @@ inspects Bytes directly; it no longer receives an integer-list expansion.
 This addition is development source after v0.1.44, not a capability of that frozen
 release. Its exact new standard requires the byte-index intrinsic. Old exact
 standard closures remain usable and unchanged consumers retain their selections.
+
+`text-join(items: List<Text>, separator: Text) -> Text` is an ordinary pure function.
+Empty input returns empty text; a singleton returns its item; separators occur exactly
+between items, including empty ones. Text, order, Unicode and control characters are
+preserved without quoting, escaping or normalization. A private balanced-range helper
+prefixes nonfirst leaves and combines halves; empty separators retain leaf values
+directly. This has logarithmic recursive depth but still copies concatenated text and
+retains the existing list-index cost. It introduces no intrinsic or output-limit change.
+The [native request](requests/20260924-text-join.lkjc) adds twelve fixed graph tests;
+the [native text guide](../../docs/guides/native-text.md) demonstrates ordinary mapping,
+caller-owned HTML escaping and detached execution. The maintained reference-page tool
+now uses this function instead of its own range implementation. Other exact consumers
+are unchanged. This function is development source after the frozen v0.1.44 release.

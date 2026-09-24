@@ -2815,8 +2815,8 @@ mod tests {
         let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
         let before = std::fs::read(project.join("HEAD")).expect("standard HEAD before oracle");
         let inventory = semantic_inventory(&project).expect("standard semantic inventory");
-        // Byte indexing adds one external, two parameters and six tests (39 owners).
-        assert_eq!(inventory.owners, 1_197);
+        // Native text joining adds two functions and twelve tests (160 owners).
+        assert_eq!(inventory.owners, 1_357);
         assert_eq!(inventory.modules, 13);
         assert!(inventory.functions > 0);
         assert!(inventory.relations > 0);

@@ -510,8 +510,8 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
     context.receipt.nominal.producer_removed_before_execution =
         !library.path.exists() && !library.container.exists();
     context.build(&consumer, "nominal-after-producer-removal")?;
-    // This closure contributes the 51 current standard tests and no new graph test.
-    context.check(&consumer, 51, 3)?;
+    // This closure contributes the 63 current standard tests and no new graph test.
+    context.check(&consumer, 63, 3)?;
     for (name, original_items, changed_items) in [
         ("i64", json!([1, 2, 4]), json!([-2, 0, 9])),
         ("text", json!(["a", "bc"]), json!(["changed"])),

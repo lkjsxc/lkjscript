@@ -1219,8 +1219,8 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         "producers_absent_before_execution".to_owned(),
         "true".to_owned(),
     );
-    // 51 current standard tests plus one in each of the four diamond packages.
-    context.check(&a, 55, 5)?;
+    // 63 current standard tests plus one in each of the four diamond packages.
+    context.check(&a, 67, 5)?;
     context.run(&a, 11)?;
     let mapped = context.cli(
         Some(&a.path),
@@ -1484,7 +1484,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
         ],
         "change_authored_stale_base",
     )?;
-    context.check(&a, 55, 5)?;
+    context.check(&a, 67, 5)?;
     context.run(&a, 12)?;
     context.cache_recovery(&a, "a2")?;
     let second = context.export(&mut a)?;

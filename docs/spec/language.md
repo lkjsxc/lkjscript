@@ -117,6 +117,18 @@ append. It invokes no callback and preserves input values and order. Item remain
 ordinary type, affinity, result encoding and execution admission still apply. This adds no
 intrinsic, borrowed slice, lazy stream or implicit iteration budget.
 
+The standard pure graph function
+`text-join(items: List<Text>, separator: Text) -> Text` returns the ordered items
+with the exact separator between adjacent items. Empty input returns empty Text;
+a singleton returns its item. Empty items keep their positions. No prefix or suffix
+separator, escaping, quoting, normalization or coercion is implicit. The native body
+uses a private balanced-range helper: nonfirst leaves prefix the separator, and
+internal nodes concatenate ordered halves. Empty separators retain the leaf value.
+The implementation introduces no intrinsic or output-limit exception. Recursive
+control depth is logarithmic in item count; concatenation still allocates Text and
+indexed reads retain their existing cost. Typed input and execution admission,
+cancellation and result encoding apply independently of this value contract.
+
 Instantiated composite types are disposable derivations of exact rank-one substitutions.
 Production preparation closes all concrete signatures, constants, tests, ports, constructors and
 explicit calls over their nominal members; the canonical evaluator independently closes accepted

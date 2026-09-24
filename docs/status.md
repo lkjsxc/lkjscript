@@ -1,9 +1,27 @@
 # Current status
 
-Status date: 2026-09-24 Asia/Tokyo. This page describes current product boundaries and
+Status date: 2026-09-25 Asia/Tokyo. This page describes current product boundaries and
 outstanding delivery. [Generated guides](generated/operations.md) own public
 operations, [specifications](spec/) own semantics, and [campaigns](campaigns/)
 retain detailed implementation and verification history.
+
+## Native standard text composition
+
+Development standard now provides ordinary pure `text-join(List<Text>, Text)`: exact
+order and text, separators only between entries, and empty/singleton behavior without
+coercion or escaping. The native balanced-range implementation adds twelve fixed tests;
+all 63 standard tests agree between evaluators. No Rust intrinsic or format change is
+added. The copied public example checks 2,197 independent runtime cases through
+32,768 items both before and after source removal. Three deliberately wrong separator
+implementations are caught by the existing literal graph tests. The
+[native guide](guides/native-text.md) owns the copied-product usage.
+
+The maintained eight-page reference tool adopts that standard function and retires
+its duplicate range helper, preserving its public join identity. All 79 closure tests
+agree. Other exact consumers and the published-v0.1.44 HTML library retain their
+existing selections. These changes are development source, not an official release
+or compiler self-hosting. The [campaign](campaigns/202609250013.md) owns final-source
+acceptance, runtime-case evidence, measured costs and delivery state.
 
 ## Joined contributor processes and native HTML composition
 

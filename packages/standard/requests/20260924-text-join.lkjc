@@ -1,0 +1,77 @@
+request base=rev_5d00fff04177aa1dc77315c97b6826f94be77e742fca0f70177f75c6b2dae858 idempotency=standard-text-join
+reference.owner as=$core package=local class=module name=core
+reference.owner as=$length package=local class=declaration parent=$core name=list-length
+reference.owner as=$get package=local class=declaration parent=$core name=list-get
+reference.owner as=$concat package=local class=declaration parent=$core name=text-concat
+reference.owner as=$equal package=local class=declaration parent=$core name=i64-equal
+reference.owner as=$divide package=local class=declaration parent=$core name=divide
+reference.owner as=$subtract package=local class=declaration parent=$core name=subtract
+reference.owner as=$add package=local class=declaration parent=$core name=add
+reference.owner as=$text-equal package=local class=declaration parent=$core name=text-equal
+declarations.begin
+(units
+  (function create text-join-range (in $core) (visibility private)
+    (parameter create items (type (list Text)))
+    (parameter create separator (type Text))
+    (parameter create start (type I64))
+    (parameter create count (type I64))
+    (returns Text) (effect pure)
+    (body
+      (if (call $equal (local count) (i64 0)) (text "")
+        (if (call $equal (local count) (i64 1))
+          (let (binding item (call $get (types Text) (local items) (local start)))
+            (in
+              (if (call $equal (local start) (i64 0)) (local item)
+                (if (call $text-equal (local separator) (text "")) (local item)
+                  (call $concat (local separator) (local item))))))
+          (let (binding half (call $divide (local count) (i64 2)))
+            (in
+              (call $concat
+                (call text-join-range (local items) (local separator) (local start) (local half))
+                (call text-join-range (local items) (local separator)
+                  (call $add (local start) (local half))
+                  (call $subtract (local count) (local half))))))))))
+  (function create text-join (in $core) (visibility public)
+    (parameter create items (type (list Text)))
+    (parameter create separator (type Text))
+    (returns Text) (effect pure)
+    (body
+      (call text-join-range (local items) (local separator) (i64 0)
+        (call $length (types Text) (local items)))))
+  (test create text-join-empty (in $core) (visibility private)
+    (actual (call text-join (list Text) (text "unused")))
+    (expected (text "")))
+  (test create text-join-singleton (in $core) (visibility private)
+    (actual (call text-join (list Text (text "only")) (text ",")))
+    (expected (text "only")))
+  (test create text-join-pair (in $core) (visibility private)
+    (actual (call text-join (list Text (text "first") (text "last")) (text " / ")))
+    (expected (text "first / last")))
+  (test create text-join-odd (in $core) (visibility private)
+    (actual (call text-join (list Text (text "a") (text "b") (text "c") (text "d") (text "e")) (text ":")))
+    (expected (text "a:b:c:d:e")))
+  (test create text-join-even (in $core) (visibility private)
+    (actual (call text-join (list Text (text "0") (text "1") (text "2") (text "3") (text "4") (text "5") (text "6") (text "7")) (text "|")))
+    (expected (text "0|1|2|3|4|5|6|7")))
+  (test create text-join-empty-entries (in $core) (visibility private)
+    (actual (call text-join (list Text (text "") (text "a") (text "") (text "")) (text ":")))
+    (expected (text ":a::")))
+  (test create text-join-all-empty (in $core) (visibility private)
+    (actual (call text-join (list Text (text "") (text "") (text "")) (text ";")))
+    (expected (text ";;")))
+  (test create text-join-no-separator (in $core) (visibility private)
+    (actual (call text-join (list Text (text "a") (text "") (text "猫") (text "🌱")) (text "")))
+    (expected (text "a猫🌱")))
+  (test create text-join-unicode (in $core) (visibility private)
+    (actual (call text-join (list Text (text "日本語") (text "é") (text "é")) (text "🌱")))
+    (expected (text "日本語🌱é🌱é")))
+  (test create text-join-control-characters (in $core) (visibility private)
+    (actual (call text-join (list Text (text "\u{0}a") (text "b\r\n") (text "")) (text "\u{0}")))
+    (expected (text "\u{0}a\u{0}b\r\n\u{0}")))
+  (test create text-join-no-escaping (in $core) (visibility private)
+    (actual (call text-join (list Text (text "<tag>") (text "&amp;") (text "\"'")) (text "&")))
+    (expected (text "<tag>&&amp;&\"'")))
+  (test create text-join-lines (in $core) (visibility private)
+    (actual (call text-join (list Text (text "one") (text "two") (text "")) (text "\r\n")))
+    (expected (text "one\r\ntwo\r\n"))))
+declarations.end

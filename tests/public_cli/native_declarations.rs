@@ -1609,3 +1609,6 @@ fn native_generic_library_and_nominal_consumer_use_exact_transport_and_canonical
 
 #[path = "native_bytes.rs"]
 mod native_bytes;
+
+#[path = "native_text.rs"]
+mod native_text;

@@ -20,13 +20,16 @@ It is not part of the frozen public v0.1.44 executable.
 ## Authority and regeneration
 
 `project/` is the accepted editable meaning repository. `markup` owns reusable
-HTML tables, escaped code blocks and balanced Text concatenation. `guides` owns
+HTML tables and escaped code blocks; its join function delegates to standard text-join. `guides` owns
 typed observations, native selection/validation and all eight command targets.
-The literal proposals in `requests/` preserve initial authorship, not a second
-synchronized authority. `create.lkjc` creates the initial tool; the additive
+The literal proposals in `requests/` are authoring inputs, not a second
+synchronized authority. `create.lkjc` now creates the tool with standard text-join; the additive
 `reference-pages.lkjc` extends its observed `guides` module. Fresh reproduction
 substitutes only `BASE` and, for the extension, `GUIDES` with observed identities.
 Maintained edits are drafted from accepted meaning, not replayed over existing owners.
+The reviewed `text-join.lkjc` edit preserves the public join identity, explicitly selects
+the new exact standard and retires its redundant private range helper. The historical
+initial creation input remains in Git history.
 
 From the compiler repository root, using a compatible installed executable:
 
@@ -41,7 +44,7 @@ lkjscript --project tools/native-guides/project build --output rebuilt-guides.lk
 
 Replace `MODULE` and `TOKEN` with observed exact identities. An untouched draft
 plans as unchanged and has no publication token; omit `--output` for that no-op.
-Check runs 16 native tests plus 45 tests from the exact standard supplier,
+Check runs 16 native tests plus 63 tests from the exact standard supplier,
 differentially. An unchanged build must match `generated/guides.lkja` exactly.
 After a reviewed edit, replace that derived artifact with the accepted build,
 rebuild the host executable, then regenerate and verify `docs/generated/` through

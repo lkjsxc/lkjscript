@@ -106,17 +106,34 @@ impl PolicyTool {
         let revision = compact_field(compact_record(&status, "revision"), "id").unwrap();
         let input = self.write(
             "create.lkjc",
-            SOURCE.replacen("base=BASE", &format!("base={revision}"), 1),
+            SOURCE
+                .replacen("base=BASE", &format!("base={revision}"), 1)
+                // Fresh authorship selects the exported supplier; the maintained
+                // policy keeps its old exact standard and byte-identical bundle.
+                .replacen(
+                    SOURCE
+                        .lines()
+                        .find(|line| line.starts_with("add.dependency "))
+                        .unwrap(),
+                    &format!(
+                        "add.dependency package={} semantic-revision={} package-revision={}",
+                        compact_field(compact_record(&records, "package"), "id").unwrap(),
+                        compact_field(compact_record(&records, "package"), "revision").unwrap(),
+                        compact_field(compact_record(&records, "package"), "package-revision")
+                            .unwrap(),
+                    ),
+                    1,
+                ),
         );
         self.accept(&input, "create.logical-plan");
         input
     }
 
-    fn check(&self) {
+    fn check(&self, expected: &str) {
         let records = self.project(&["check"]);
         assert_eq!(
             compact_field(compact_record(&records, "tests"), "passed"),
-            Some("62")
+            Some(expected)
         );
         assert_eq!(
             compact_field(compact_record(&records, "tests"), "differential"),
@@ -170,7 +187,7 @@ fn maintained_native_policy_rebuilds_exactly_from_copied_accepted_meaning() {
         }
     }
     let head = std::fs::read(tool.project.join("HEAD")).unwrap();
-    tool.check();
+    tool.check("62");
     assert_eq!(
         std::fs::read(tool.build("rebuilt")).unwrap(),
         std::fs::read(repository.join("tools/native-policy/generated/policy.lkja")).unwrap()
@@ -182,7 +199,7 @@ fn maintained_native_policy_rebuilds_exactly_from_copied_accepted_meaning() {
 fn native_policy_authors_edits_and_runs_detached_without_host_tools() {
     let tool = PolicyTool::new();
     let input = tool.author();
-    tool.check();
+    tool.check("74");
     let old_artifact = tool.build("old");
     let bytes = std::fs::read(&old_artifact).unwrap();
     let control = ExecutionControl::uncancelled();
@@ -255,7 +272,7 @@ fn native_policy_authors_edits_and_runs_detached_without_host_tools() {
     assert!(original.contains("(text \"py\")"));
     std::fs::write(&draft, original.replace("(text \"py\")", "(text \"rb\")")).unwrap();
     tool.accept(&draft, "edit.logical-plan");
-    tool.check();
+    tool.check("74");
     tool.build("new");
     std::fs::remove_dir_all(&tool.project).unwrap();
     for path in [input, draft, tool.root.path().join("standard.lkjp")] {

@@ -1,5 +1,5 @@
 request base=BASE
-add.dependency package=pkg_10000000000000000000000000000001 semantic-revision=rev_0c24feeba2cf086edecde1241930f4a8019f0c1c7f5a6dfe72b187f02662a5bb package-revision=package_revision_9694ca1acf820bd3e05276d9822dbc4cc7e48ec8138685f5efa97f291a5dd049
+add.dependency package=pkg_10000000000000000000000000000001 semantic-revision=rev_321acc95265487d1cb77d5d54daabdab3cf3b887d53cab7ae04d2c50cb08d6b3 package-revision=package_revision_4e0c38c3a20c3ddda1f108009c926cc7343eaeffdeb231309f8fb780e5d1a839
 declarations.begin
 (units
   (use std builtin)
@@ -7,27 +7,10 @@ declarations.begin
     (record create Cell (visibility public)
       (field create value (type Text))
       (field create code (type Bool)))
-    (function create join-range (visibility private)
-      (parameter create chunks (type (list Text)))
-      (parameter create start (type I64))
-      (parameter create count (type I64))
-      (returns Text) (effect pure)
-      (body
-        (if (call std::i64-equal (local count) (i64 0)) (text "")
-          (if (call std::i64-equal (local count) (i64 1))
-            (call std::list-get (types Text) (local chunks) (local start))
-            (let
-              (binding half (call std::divide (local count) (i64 2)))
-              (in
-                (call std::text-concat
-                  (call join-range (local chunks) (local start) (local half))
-                  (call join-range (local chunks) (call std::add (local start) (local half))
-                    (call std::subtract (local count) (local half))))))))))
     (function create join (visibility public)
       (parameter create chunks (type (list Text)))
       (returns Text) (effect pure)
-      (body (call join-range (local chunks) (i64 0)
-        (call std::list-length (types Text) (local chunks)))))
+      (body (call std::text-join (local chunks) (text ""))))
     (function create cell (visibility private)
       (parameter create item (type Cell))
       (returns Text) (effect pure)

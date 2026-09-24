@@ -1783,3 +1783,63 @@ an executable-writer DAG race. This is not yet final commit-bound or fresh-check
 current claim is made for provider cost, correction depth, startup, RSS, incremental compilation,
 or million-owner complete-workflow performance. The one measured working-tree release binary was
 15,031,768 bytes; it is an observation, not a size regression curve.
+
+## Native standard text joining (2026-09-25)
+
+The maintained reference-page tool replaces its private balanced concatenation helper
+with ordinary standard `text-join`. The same retained pre-change development executable
+runs both the old and new complete guide bundles through standalone `run --deployment`.
+This keeps the runtime, Command target, literal inputs, output encoding and process
+boundary fixed. The overall comparison includes preparation and native execution:
+the new guide also selects the newer complete standard closure, including its tests
+and byte-index external. The runtime-reported stage observations are separated below. This is not an official-v0.1.44 compatibility or Rust-renderer comparison.
+
+Seven alternating fresh-process pairs for each diagnostic-row count use the same
+Build metadata, Unicode/HTML-sensitive rows and one exit-status row. Every old/new
+result file is byte-identical. Cargo and other campaign tests were not running during
+measurement; filesystem caches were not flushed. Wall times include process startup,
+artifact admission, execution, encoding and result-file publication on the supplied
+Linux development environment. They are not application-runtime-only or RSS figures.
+
+| Diagnostic rows | Before median (min–max), ms | After median (min–max), ms |
+| --- | --- | --- |
+| 0 | 99.222 (69.073–135.952) | 84.619 (71.220–200.194) |
+| 32 | 67.550 (66.098–82.982) | 76.561 (71.297–96.531) |
+| 1,024 | 201.219 (184.199–263.989) | 210.697 (206.737–231.473) |
+
+The same original execution records report these per-stage medians. They need not
+sum to the end-to-end median, and medians of separate stages are not paired differences.
+
+| Rows | Preparation before → after, ms | Invocation before → after, ms | Instructions before → after |
+| --- | --- | --- | --- |
+| 0 | 54.662 → 60.564 | 0.449 → 0.495 | 2,444 → 3,168 |
+| 32 | 52.369 → 57.051 | 4.289 → 4.698 | 31,435 → 40,089 |
+| 1,024 | 56.355 → 61.141 | 131.223 → 137.068 | 931,179 → 1,185,849 |
+
+Instruction counts are identical across each group of seven repetitions. At 1,024
+rows the maximum call depth remains 13, while runtime-accounted allocation rises from
+60,081,108 to 73,475,869 bytes. These are logical execution counters, not observed
+allocator traffic or peak resident memory. Both preparation and the more general
+separator-aware invocation cost are visible; this does not attribute every difference
+to one operation or establish a language-wide performance result.
+
+The slower 32-row and 1,024-row cases are retained; overlapping ranges and seven pairs
+do not establish a general speedup or slowdown. The guide bundle grows from 1,079,297
+to 1,177,820 bytes as its exact closure changes. The purpose of this cutover is a useful
+shared native library with one maintained algorithm, not a speed claim. The normal
+seven non-standard generated pages also remain byte-identical; the standard interface
+page changes for the new public function and exact package identity.
+
+The standard implementation prefixes separators at nonfirst leaves and combines
+balanced halves. Empty separators retain leaf values directly. This avoids a growing
+prefix and an additional right-subtree copy per internal separator, but does not make
+Text concatenation zero-copy or streamed. The copied public example independently
+matches Rust's ordered string-join expectations for 2,197 inputs, including 32,768
+items, both before and after authoring-project removal. These bounded observations
+do not establish unlimited input, history, output or library scale.
+
+Original inputs, result files, process outputs and all 42 samples are retained under
+`.artifacts/202609250013-native-text/matched-guide-cost-corrected/`. The first driver
+attempt's absolute artifact path correctly rejected with `deployment_path` before
+execution; its input and failure remain separately retained. The
+[campaign](campaigns/202609250013.md) owns source acceptance and mainline delivery.

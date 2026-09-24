@@ -115,7 +115,7 @@ fn maintained_native_guides_regenerate_the_exact_embedded_artifact() {
     let tests = tool.project(&["check"]);
     assert_eq!(
         compact_field(compact_record(&tests, "tests"), "passed"),
-        Some("61")
+        Some("79")
     );
     assert_eq!(
         compact_field(compact_record(&tests, "tests"), "differential"),
@@ -186,7 +186,7 @@ fn native_guides_author_edit_and_run_without_compiler_checkout_or_host_tools() {
         SOURCE
             .replacen("base=BASE", &format!("base={revision}"), 1)
             // Fresh authorship chooses the actually exported exact supplier. The
-            // maintained guide graph keeps its unchanged predecessor dependency.
+            // maintained guide graph also selects this standard for text-join.
             .replacen(
                 SOURCE
                     .lines()
@@ -207,7 +207,7 @@ fn native_guides_author_edit_and_run_without_compiler_checkout_or_host_tools() {
     let check = tool.project(&["check"]);
     assert_eq!(
         compact_field(compact_record(&check, "tests"), "passed"),
-        Some("67")
+        Some("79")
     );
     let original = tool.result("diagnostics", &diagnostic_input(), "original");
     let expected = concat!(

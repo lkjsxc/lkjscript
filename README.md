@@ -534,6 +534,9 @@ The [collection summary walkthrough](docs/guides/native-summary.md) composes Lis
 and Map functions to count text keys and return an application-owned summary.
 The [paging walkthrough](docs/guides/native-pagination.md) returns a complete
 table in bounded files and transports its generic window function to another program.
+The development [text composition walkthrough](docs/guides/native-text.md) uses ordinary
+standard `text-join`, caller-owned escaping and a source-free Command bundle. This
+addition is not part of the frozen public v0.1.44 standard.
 
 The executable embeds one exact package transport and one exact artifact bundle generated from
 `packages/standard`:

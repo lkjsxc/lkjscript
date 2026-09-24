@@ -1,0 +1,15 @@
+request base=rev_041777aca045e140294031405c4594101c10605b08dcfd26f980d5fea6d0bb09 repository=repo_c56d6c6284887b12b9553e0b83888804 package=pkg_495268c7ec07be3d71a5e11c7e91cfe1
+replace.dependency package=pkg_10000000000000000000000000000001 semantic-revision=rev_321acc95265487d1cb77d5d54daabdab3cf3b887d53cab7ae04d2c50cb08d6b3 package-revision=package_revision_4e0c38c3a20c3ddda1f108009c926cc7343eaeffdeb231309f8fb780e5d1a839
+delete.owner owner=decl_9e98a7fdb6e6a7a2e6cf34798b4329fd policy=owned-closure
+
+declarations.begin
+(units
+  (reference standard-join declaration pkg_10000000000000000000000000000001/decl_7e62d088f4e820b2ab4445001c1f61b1)
+  (module edit mod_85b139548fc856c5782c9c4af450e7a0 markup
+    (function edit decl_cf0b4fd72adaa6dd6ef123ceb220467d join
+      (visibility public)
+      (returns Text) (effect pure)
+      (body (call standard-join (local chunks) (text "")))
+      (parameter edit param_8953ac7ffb7cbbe214eed30f985173bd chunks
+        (type (list Text)) (use unrestricted)))))
+declarations.end
