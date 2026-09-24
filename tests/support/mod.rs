@@ -378,9 +378,21 @@ mod tests {
             }
         }
         assert!(ready);
+        // The readiness handshake and retained stdin keep this child independently live.
+        // Exercise the shared observation API in every integration-test crate using it.
+        let expected_pid = child.child.id();
+        assert_eq!(child.id(), expected_pid);
+        assert_eq!(child.try_wait().unwrap(), None);
+        assert!(!child.joined);
         child.kill().unwrap();
         drop(stdout);
-        assert!(!child.wait_with_output().unwrap().status.success());
+        let expected_status = child.child.wait().unwrap();
+        assert!(!expected_status.success());
+        assert_eq!(child.try_wait().unwrap(), Some(expected_status));
+        assert!(child.joined);
+        assert_eq!(child.try_wait().unwrap(), Some(expected_status));
+        assert_eq!(child.id(), expected_pid);
+        assert_eq!(child.wait_with_output().unwrap().status, expected_status);
         assert_eq!(std::fs::read(effect).unwrap(), b"started\n");
     }
 }

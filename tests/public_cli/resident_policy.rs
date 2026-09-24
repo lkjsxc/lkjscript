@@ -261,7 +261,9 @@ fn detached_resident_quotas_remain_optional_and_operational_deadlines_still_join
     }
     let mut timed = descriptor.clone();
     timed["runtime"]["maximum_concurrent_tasks"] = json!(1);
-    timed["runtime"]["request_deadline_milliseconds"] = json!(100);
+    // The earlier 100 ms focused test passed. Allow scheduling margin in the debug
+    // workspace suite without changing the product's default or cancellation contract.
+    timed["runtime"]["request_deadline_milliseconds"] = json!(1000);
     let server = Server::start(&public, "deadline", &timed);
     let failed = server.get("/deadline");
     assert_eq!(failed.0, 503, "{failed:?}");
