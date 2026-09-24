@@ -5,6 +5,32 @@ outstanding delivery. [Generated guides](generated/operations.md) own public
 operations, [specifications](spec/) own semantics, and [campaigns](campaigns/)
 retain detailed implementation and verification history.
 
+## Joined contributor processes and native HTML composition
+
+Source `4ead1716` passes all 26 full-profile gates freshly, with zero result reuse
+and stable input (677.449 seconds). The shared contributor process owner no longer
+reaps before its final group signal or blocks indefinitely joining inherited output.
+Nonblocking streams retain deadlines, output bounds and cancellation after direct-child
+exit; sampled owned descendants are cleaned on every shared route. Git/toolchain
+identity commands use the same owner. Eleven new regression tests include two finite
+fixtures that fail on the predecessor. This is not hostile-process containment or an
+application VM speedup. See the [execution record](campaigns/202609242248.md).
+
+The public v0.1.44 [typed HTML library](guides/native-html.md) now has 88 independently
+checked detached render cases, six rejected runtime inputs and successful article
+recovery. The new 76-line [native HTTP composition](guides/native-html-http.md) connects
+that library to the separate response library without a new intrinsic or host renderer.
+Its 74 differential graph tests include four new composition tests. Nineteen successful
+HTML responses, three expected 404s, eight simultaneous clients and two clean detached
+server lifecycles are separately observed. Runtime files are only the executable,
+bundle and deployment descriptor; exact authoring roots are not runtime dependencies.
+
+The HTTP adapter still requires its explicit request-stream owner even for this GET
+handler. The generated numeric resident execution policy remains unchanged. These
+public-binary experiments and their documentation are separate evidence from the
+Rust full-profile source above. No official binary release or production deployment
+was performed, and frozen v0.1.44 assets are unchanged.
+
 ## Native byte inspection (development checkout)
 
 Source `b7b0ff52` passes all 26 full-profile gates freshly, with zero result reuse and

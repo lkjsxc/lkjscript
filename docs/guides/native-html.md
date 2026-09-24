@@ -9,8 +9,9 @@ files are reproducible proposals, not a second synchronized source of truth.
 This is a deliberately small example library, not a complete web framework or a
 new built-in standard package. It demonstrates recursive nominal data, ordinary
 function composition, exact offline package transport and standalone execution.
-The [execution record](../campaigns/202609242152.md) distinguishes completed tests
-from the unfinished larger external test matrix.
+The [original execution record](../campaigns/202609242152.md) retains the initial
+partial experiment; the [completion record](../campaigns/202609242248.md) records
+the later independent detached matrix and actual native HTTP composition.
 
 ## Separate inline and block content
 
@@ -170,15 +171,35 @@ is required in that runtime directory. The command is pure and needs no grants.
 The recorded detached `render` run succeeds after both authoring projects have
 been moved away from their original paths; the originals are retained, not deleted.
 
-The resulting text can be supplied to the separate native HTTP response library
-with `text/html; charset=utf-8` and the existing text-to-bytes function. That is a
-composition direction, **not a tested HTTP integration of this library**. No server
-was started in this campaign, and resident runtime policy is unchanged.
+The [typed HTML HTTP site](native-html-http.md) now demonstrates that composition:
+the existing text-to-bytes function and the separate native response library serve
+this rendered document as `text/html; charset=utf-8`. It has its own 74-test native
+check and 22-request detached HTTP acceptance. It adds no application-specific
+intrinsic and does not change resident execution policy.
 
-The next acceptance work is the larger detached input matrix and independent
-HTML-tree checks for nonempty adversarial text, followed by an actual typed HTTP
-consumer. The first detached empty-text tree passed exact output and independent
-parse5 structure checks, but the larger driver stopped on an incorrectly assumed
-cleanup-summary spelling. Its attempted correction then had a JavaScript syntax
-error; a further correction was blocked by the tool safety check and not retried.
-Do not report the planned 88 rendering cases or six malformed-input cases as passed.
+## Completed detached matrix
+
+A later independent run uses the same authenticated public v0.1.44 executable and
+the retained article artifact, not a new authoring claim. It passes **88** detached
+rendering cases: ten explicit text samples, 64 deterministic recursive cases, eight
+breadths through 2,048 paragraphs and six nesting depths through 24 sections. Exact
+serialized output and the full ordered parse5 8.0.0 element/attribute/namespace/text
+tree agree with separately constructed expectations. Existing entity text, Unicode,
+HTML-looking strings, empty children and preserved order are included.
+
+NUL intentionally causes the parser's expected null-character diagnostic in 23 cases;
+all other parse diagnostics reject. Title/attribute replacement and body-text removal,
+plus line-ending normalization, are checked explicitly. This is not a claim of lossless
+browser text round-tripping or sanitization of arbitrary HTML.
+
+Six malformed runtime inputs reject without creating result files: an unknown case,
+block content in a paragraph or strong element, a payload on line-break, a missing
+heading payload and a non-text heading payload. The separate article target succeeds
+after these failures. All 89 successful invocations report stopped admission, drained
+work, zero remaining tasks and no cleanup failures. These external runs use production
+execution only; the earlier 61/64 native checks own differential evaluator agreement.
+
+The initial failed drivers remain historical failures. Their single successful empty
+case has not been relabeled as the later matrix. The new acceptance uses a separately
+retained driver and source-free runtime directory; see the
+[completion record](../campaigns/202609242248.md) for exact boundaries.

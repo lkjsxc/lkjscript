@@ -1,0 +1,76 @@
+request base=SITE_BASE
+add.dependency package=HTML_PACKAGE semantic-revision=HTML_REVISION package-revision=HTML_PACKAGE_REVISION
+add.dependency package=RESPONSES_PACKAGE semantic-revision=RESPONSES_REVISION package-revision=RESPONSES_PACKAGE_REVISION
+
+declarations.begin
+(units
+  (use std builtin)
+  (use html HTML_PACKAGE HTML_PACKAGE_REVISION)
+  (use replies RESPONSES_PACKAGE RESPONSES_PACKAGE_REVISION)
+  (type-alias Header (record (name Text) (value Bytes)))
+  (type-alias Request (record
+    (body (stream Bytes)) (headers (list Header)) (method Text)
+    (path Text) (query Text) (query_parameters (map Text (list Text)))))
+  (type-alias Response (record (body Bytes) (headers (list Header)) (status I64)))
+  (module create pages
+    (function create first-value (visibility private)
+      (parameter create query (type (map Text (list Text))))
+      (parameter create name (type Text))
+      (parameter create fallback (type Text))
+      (returns Text) (effect pure)
+      (body (let
+        (binding values (call std::map-get-or (types Text (list Text))
+          (local query) (local name) (list Text)))
+        (in (if (call std::less (i64 0) (call std::list-length (types Text) (local values)))
+          (call std::list-get (types Text) (local values) (i64 0))
+          (local fallback))))))
+    (function create page (visibility private)
+      (parameter create title (type Text))
+      (parameter create body (type Text))
+      (returns Response) (effect pure)
+      (body (call replies::with-header
+        (call replies::respond (i64 200) (text "text/html; charset=utf-8")
+          (call std::bytes-from-text (call html::document (text "ja") (local title)
+            (list html::block
+              (variant html::block::heading (local title))
+              (variant html::block::paragraph (list html::inline
+                (variant html::inline::strong (list html::inline
+                  (variant html::inline::text (text "Native lkjscript"))))
+                (variant html::inline::line-break)
+                (variant html::inline::text (local body))))))))
+        (text "x-content-type-options") (text "nosniff"))))
+    (function create home (visibility private)
+      (parameter create request (type Request))
+      (returns Response) (effect (task (requirement server::streams)))
+      (body (call page
+        (call first-value (field (local request) (name query_parameters))
+          (text "title") (text "Native page"))
+        (call first-value (field (local request) (name query_parameters))
+          (text "body") (text "Built from two ordinary libraries.")))))
+    (component create server (visibility private)
+      (requirement create streams (interface std::ByteStream)
+        (operations std::ByteStream::read-all) (limits (maximum_calls 1 calls)))
+      (port create home (type (task-function (Request) Response (row (requirement streams))))
+        (function home)))
+    (test create escaped-composition (visibility private)
+      (actual (field (call page (text "<title>") (text "日本語 & <script>")) (name body)))
+      (expected (call std::bytes-from-text
+        (text "<!doctype html><html lang=\"ja\"><head><meta charset=\"utf-8\"><title>&lt;title&gt;</title></head><body><h2>&lt;title&gt;</h2><p><strong>Native lkjscript</strong><br>日本語 &amp; &lt;script&gt;</p></body></html>"))))
+    (test create content-type-and-nosniff (visibility private)
+      (actual (field (call page (text "") (text "")) (name headers)))
+      (expected (list Header
+        (record structural (field name (text "content-type"))
+          (field value (call std::bytes-from-text (text "text/html; charset=utf-8"))))
+        (record structural (field name (text "x-content-type-options"))
+          (field value (call std::bytes-from-text (text "nosniff")))))))
+    (test create first-decoded-value (visibility private)
+      (actual (call first-value
+        (map Text (list Text) (entry (text "title") (list Text (text "") (text "later"))))
+        (text "title") (text "fallback")))
+      (expected (text "")))
+    (test create absent-value (visibility private)
+      (actual (call first-value (map Text (list Text)) (text "body") (text "fallback")))
+      (expected (text "fallback"))))
+  (target create typed-web (component pages::server) (runner http)
+    (route create home (method GET) (path "/") (port pages::server::home))))
+declarations.end
