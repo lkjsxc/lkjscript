@@ -95,7 +95,10 @@ impl Consumer {
         .unwrap();
         assert!(
             output.status.code().is_some(),
-            "child crashed: {arguments:?}"
+            "child crashed: {arguments:?}: status={} stdout={} stderr={}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
         );
         assert_eq!(
             output.status.success(),

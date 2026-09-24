@@ -5,6 +5,24 @@ outstanding delivery. [Generated guides](generated/operations.md) own public
 operations, [specifications](spec/) own semantics, and [campaigns](campaigns/)
 retain detailed implementation and verification history.
 
+## Explicit resident cumulative quotas (development source)
+
+The [resident policy guide](guides/resident-policy.md) describes four independent,
+nullable deployment quotas: instructions, cumulative allocated bytes, collection
+items and invocation capability calls. Fresh HTTP and relay-information recipes
+choose four explicit nulls. Existing numeric descriptors retain their previous
+implicit limits when added fields are absent. Stack/depth, operational deadlines,
+cancellation, concurrent tasks, streams and exact grants remain separate controls.
+Deployment discovery contract 5 changes; graph, artifact and data formats do not.
+
+Focused checks cover strict legacy/null admission, recipe transitions against the
+original captured projections, detached HTTP beyond the previous instruction limit,
+independent exhaustion and recovery, and per-invocation/grant separation. The
+[campaign](campaigns/202609250154.md) retains each failed full attempt and its diagnosis,
+including an identified zeroed debug-executable code section corrected by a scoped
+rebuild, not a data-restore semantic change. Complete source acceptance and mainline
+delivery are not yet claimed for this increment. Public v0.1.44 remains unchanged.
+
 ## Native standard text composition
 
 Development standard now provides ordinary pure `text-join(List<Text>, Text)`: exact
@@ -48,7 +66,7 @@ server lifecycles are separately observed. Runtime files are only the executable
 bundle and deployment descriptor; exact authoring roots are not runtime dependencies.
 
 The HTTP adapter still requires its explicit request-stream owner even for this GET
-handler. The generated numeric resident execution policy remains unchanged. These
+handler. Those v0.1.44 experiments retained their generated numeric policy. These
 public-binary experiments and their documentation are separate evidence from the
 Rust full-profile source above. No official binary release or production deployment
 was performed, and frozen v0.1.44 assets are unchanged.
