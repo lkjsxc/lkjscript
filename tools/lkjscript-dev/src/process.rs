@@ -1,23 +1,24 @@
 #[cfg(target_os = "linux")]
 mod descendants;
 mod launch;
+#[cfg(target_os = "linux")]
+mod output;
+#[cfg(target_os = "linux")]
+mod owned;
+#[cfg(target_os = "linux")]
+mod supervisor;
 
 use crate::error::DevError;
 use crate::evidence::{self, FileProof};
-#[cfg(target_os = "linux")]
-use rustix::process::{Pid, Signal, kill_process_group};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::env;
 use std::fs::{File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
-#[cfg(target_os = "linux")]
-use std::os::unix::process::ExitStatusExt;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
-use std::thread;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::{Duration, Instant};
 
 const READ_CHUNK_BYTES: usize = 64 * 1024;
@@ -158,13 +159,12 @@ struct ProcessCompletion {
 #[derive(Default)]
 struct ProcessOptions<'a> {
     stdin_file: Option<(&'a Path, u64)>,
-    supervise_descendants: bool,
     close_stdout: bool,
     program: launch::Program<'a>,
 }
 
 pub(crate) fn run(specification: &ProcessSpec, repository: &Path) -> ProcessObservation {
-    run_configured(specification, repository, None, None, false)
+    run_configured(specification, repository, None, None)
 }
 
 pub(crate) fn run_selected(
@@ -192,7 +192,6 @@ pub(crate) fn run_closed_stdout(
         repository,
         None,
         ProcessOptions {
-            supervise_descendants: true,
             close_stdout: true,
             ..ProcessOptions::default()
         },
@@ -204,7 +203,7 @@ pub(crate) fn run_controlled(
     repository: &Path,
     control: &ProcessControl,
 ) -> ProcessObservation {
-    run_configured(specification, repository, Some(control), None, false)
+    run_configured(specification, repository, Some(control), None)
 }
 
 #[cfg(test)]
@@ -219,7 +218,6 @@ pub(crate) fn run_with_stdin_file(
         repository,
         None,
         Some((stdin_path, maximum_stdin_bytes)),
-        false,
     )
 }
 
@@ -228,7 +226,7 @@ pub(crate) fn run_supervised(
     repository: &Path,
     control: Option<&ProcessControl>,
 ) -> ProcessObservation {
-    run_configured(specification, repository, control, None, true)
+    run_configured(specification, repository, control, None)
 }
 
 fn run_configured(
@@ -236,7 +234,6 @@ fn run_configured(
     repository: &Path,
     control: Option<&ProcessControl>,
     stdin_file: Option<(&Path, u64)>,
-    supervise_descendants: bool,
 ) -> ProcessObservation {
     run_configured_output(
         specification,
@@ -244,7 +241,6 @@ fn run_configured(
         control,
         ProcessOptions {
             stdin_file,
-            supervise_descendants,
             ..ProcessOptions::default()
         },
     )
@@ -274,13 +270,27 @@ fn run_inner(
     if specification.command.is_empty() {
         return Err(DevError::infrastructure("child command is empty"));
     }
-    let stdout_output = prepare_log(&specification.stdout_path)?;
-    let stderr_output = prepare_log(&specification.stderr_path)?;
+    let (stdout, stdout_pipe) = output::Output::new(
+        &specification.stdout_path,
+        specification.maximum_stdout_bytes,
+        options.close_stdout,
+    )?;
+    let (stderr, stderr_pipe) = output::Output::new(
+        &specification.stderr_path,
+        specification.maximum_stderr_bytes,
+        false,
+    )?;
     let stdin = match options.stdin_file {
         Some((path, maximum)) => bounded_stdin(path, maximum)?,
         None => Stdio::null(),
     };
-    let mut child = match launch::spawn(specification, stdin, options.program) {
+    let child = match launch::spawn(
+        specification,
+        stdin,
+        stdout_pipe,
+        stderr_pipe,
+        options.program,
+    ) {
         Ok(child) => child,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return observation(
@@ -303,197 +313,18 @@ fn run_inner(
             )));
         }
     };
-    let process_group = Pid::from_child(&child);
-    let mut descendants = options
-        .supervise_descendants
-        .then(|| descendants::Descendants::new(child.id()));
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| DevError::infrastructure("child stdout pipe is unavailable"))?;
-    let stdout: Box<dyn Read + Send> = if options.close_stdout {
-        drop(stdout);
-        Box::new(std::io::empty())
-    } else {
-        Box::new(stdout)
-    };
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| DevError::infrastructure("child stderr pipe is unavailable"))?;
-    let stdout_total = Arc::new(AtomicU64::new(0));
-    let stderr_total = Arc::new(AtomicU64::new(0));
-    let stdout_exhausted = Arc::new(AtomicBool::new(false));
-    let stderr_exhausted = Arc::new(AtomicBool::new(false));
-    let stdout_reader = spawn_reader(
-        stdout,
-        stdout_output,
-        specification.stdout_path.clone(),
-        Arc::clone(&stdout_total),
-        Arc::clone(&stdout_exhausted),
-        specification.maximum_stdout_bytes,
-    );
-    let stderr_reader = spawn_reader(
-        stderr,
-        stderr_output,
-        specification.stderr_path.clone(),
-        Arc::clone(&stderr_total),
-        Arc::clone(&stderr_exhausted),
-        specification.maximum_stderr_bytes,
-    );
-
-    let mut descendant_failure = None;
-    let mut terminal_reason = None;
-    let mut sent_control = CONTROL_NONE;
-    let mut resources = ProcessResources::default();
-    let exit_status = loop {
-        sample_linux_process(child.id(), &mut resources);
-        if let Some(tree) = &mut descendants
-            && let Err(error) = tree.sample()
-        {
-            descendant_failure = Some(error.to_string());
-            if let Some(tree) = &mut descendants
-                && let Err(error) = tree.terminate()
-            {
-                descendant_failure = Some(error.to_string());
-            }
-            let _ = kill_process_group(process_group, Signal::KILL);
-        }
-        if let Some(status) = child.try_wait().map_err(|error| {
-            DevError::infrastructure(format!(
-                "poll child '{}': {error}",
-                specification.command[0]
-            ))
-        })? {
-            break status;
-        }
-        if stdout_exhausted.load(Ordering::Acquire) || stderr_exhausted.load(Ordering::Acquire) {
-            terminal_reason = Some(ProcessStatus::OutputExhausted);
-            if let Some(tree) = &mut descendants
-                && let Err(error) = tree.terminate()
-            {
-                descendant_failure = Some(error.to_string());
-            }
-            let _ = kill_process_group(process_group, Signal::KILL);
-            break child.wait().map_err(|error| {
-                DevError::infrastructure(format!(
-                    "wait for output-exhausted child '{}': {error}",
-                    specification.command[0]
-                ))
-            })?;
-        }
-        if let Some(control) = control {
-            let requested = control.requested();
-            if requested > sent_control {
-                if requested >= CONTROL_KILL {
-                    terminal_reason = Some(ProcessStatus::Signaled);
-                    if let Some(tree) = &mut descendants
-                        && let Err(error) = tree.terminate()
-                    {
-                        descendant_failure = Some(error.to_string());
-                    }
-                    let _ = kill_process_group(process_group, Signal::KILL);
-                    break child.wait().map_err(|error| {
-                        DevError::infrastructure(format!(
-                            "wait for killed child '{}': {error}",
-                            specification.command[0]
-                        ))
-                    })?;
-                }
-                let signal = if requested == CONTROL_TERMINATE {
-                    Signal::TERM
-                } else {
-                    Signal::INT
-                };
-                let _ = kill_process_group(process_group, signal);
-                sent_control = requested;
-            }
-        }
-        if started.elapsed() >= specification.timeout {
-            terminal_reason = Some(ProcessStatus::Timeout);
-            if let Some(tree) = &mut descendants
-                && let Err(error) = tree.terminate()
-            {
-                descendant_failure = Some(error.to_string());
-            }
-            let _ = kill_process_group(process_group, Signal::KILL);
-            break child.wait().map_err(|error| {
-                DevError::infrastructure(format!(
-                    "wait for timed-out child '{}': {error}",
-                    specification.command[0]
-                ))
-            })?;
-        }
-        thread::sleep(POLL_INTERVAL);
-    };
-
-    if let Some(tree) = &mut descendants {
-        match tree.finish() {
-            Ok(true) if terminal_reason.is_none() => {
-                descendant_failure =
-                    Some("owned descendants survived child exit and were terminated".to_owned())
-            }
-            Err(error) => descendant_failure = Some(error.to_string()),
-            _ => {}
-        }
-    }
-    join_reader(stdout_reader, "stdout")?;
-    join_reader(stderr_reader, "stderr")?;
-    let stdout_limit_exhausted = stdout_exhausted.load(Ordering::Acquire);
-    let stderr_limit_exhausted = stderr_exhausted.load(Ordering::Acquire);
-    let (mut status, mut reason) = match terminal_reason {
-        Some(ProcessStatus::OutputExhausted) => (
-            ProcessStatus::OutputExhausted,
-            Some(exhausted_reason(
-                stdout_limit_exhausted,
-                stderr_limit_exhausted,
-            )),
-        ),
-        Some(ProcessStatus::Timeout) => (ProcessStatus::Timeout, Some("timeout".to_owned())),
-        Some(ProcessStatus::Signaled) => (ProcessStatus::Signaled, Some("control_kill".to_owned())),
-        Some(_) => {
-            return Err(DevError::infrastructure(
-                "invalid terminal child-process state",
-            ));
-        }
-        None if stdout_limit_exhausted || stderr_limit_exhausted => (
-            ProcessStatus::OutputExhausted,
-            Some(exhausted_reason(
-                stdout_limit_exhausted,
-                stderr_limit_exhausted,
-            )),
-        ),
-        None if exit_status.success() => (ProcessStatus::Passed, None),
-        None if specification
-            .unavailable_exit_code
-            .is_some_and(|expected| exit_status.code() == Some(expected)) =>
-        {
-            (
-                ProcessStatus::Unavailable,
-                Some("configured_unavailable_exit".to_owned()),
-            )
-        }
-        None if exit_status.signal().is_some() => {
-            (ProcessStatus::Signaled, Some("signal".to_owned()))
-        }
-        None => (ProcessStatus::Failed, Some("nonzero_exit".to_owned())),
-    };
-    if let Some(failure) = descendant_failure {
-        status = ProcessStatus::InfrastructureFailure;
-        reason = Some(failure);
-    }
-    observation(
+    let finished = supervisor::run(child, stdout, stderr, specification, started, control);
+    let mut result = observation(
         specification,
         repository,
         started,
-        ProcessCompletion {
-            status,
-            exit_code: exit_status.code(),
-            signal: exit_status.signal(),
-            reason,
-        },
-        resources,
-    )
+        finished.completion,
+        finished.resources,
+    )?;
+    // Exhaustion remains true even when a later cleanup/I/O failure owns the reason.
+    result.stdout_limit_exhausted = finished.stdout_exhausted;
+    result.stderr_limit_exhausted = finished.stderr_exhausted;
+    Ok(result)
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -531,58 +362,6 @@ fn exhausted_reason(stdout: bool, stderr: bool) -> String {
         (false, true) => "stderr_limit".to_owned(),
         (false, false) => "output_limit".to_owned(),
     }
-}
-
-fn spawn_reader<R: Read + Send + 'static>(
-    mut input: R,
-    mut output: File,
-    path: PathBuf,
-    total: Arc<AtomicU64>,
-    exhausted: Arc<AtomicBool>,
-    maximum: u64,
-) -> thread::JoinHandle<Result<(), DevError>> {
-    thread::spawn(move || {
-        let mut buffer = [0_u8; READ_CHUNK_BYTES];
-        loop {
-            let read = input.read(&mut buffer).map_err(|error| {
-                DevError::infrastructure(format!(
-                    "read child pipe for '{}': {error}",
-                    path.display()
-                ))
-            })?;
-            if read == 0 {
-                break;
-            }
-            let prior = total.fetch_add(read as u64, Ordering::AcqRel);
-            let writable = maximum.saturating_sub(prior).min(read as u64) as usize;
-            if writable > 0 {
-                output.write_all(&buffer[..writable]).map_err(|error| {
-                    DevError::infrastructure(format!(
-                        "write child log '{}': {error}",
-                        path.display()
-                    ))
-                })?;
-            }
-            if writable != read {
-                exhausted.store(true, Ordering::Release);
-            }
-        }
-        output.sync_all().map_err(|error| {
-            DevError::infrastructure(format!(
-                "synchronize child log '{}': {error}",
-                path.display()
-            ))
-        })
-    })
-}
-
-fn join_reader(
-    reader: thread::JoinHandle<Result<(), DevError>>,
-    stream: &str,
-) -> Result<(), DevError> {
-    reader
-        .join()
-        .map_err(|_| DevError::infrastructure(format!("{stream} reader thread panicked")))?
 }
 
 fn observation(
@@ -1014,3 +793,6 @@ mod tests {
         );
     }
 }
+
+#[cfg(all(test, target_os = "linux"))]
+mod lifecycle_tests;

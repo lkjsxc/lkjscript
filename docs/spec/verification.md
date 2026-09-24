@@ -825,6 +825,41 @@ rechecking of immutable published bytes does not manufacture historical acceptan
 completion requires no later manual reconstruction campaign. Older failures and evidence gaps keep
 their original meaning; they are not retroactively certified under this contract.
 
+## Contributor process completion
+
+Every shared contributor process route, including selected-program, controlled,
+closed-output, transferred and identity-probe calls, uses one Linux process owner.
+Direct-child exit and complete stdout/stderr EOF are separate observations. The
+configured execution deadline, output bounds and control requests remain active while
+inherited writers retain a pipe. Reads are nonblocking and service both streams with
+finite per-turn work. Exact-limit output is accepted; a further byte records exhaustion,
+including a final burst from an already exited child. A later cleanup or I/O failure
+must not erase those exhaustion observations.
+
+Keep the direct child waitable until all group signals are complete, then reap it.
+All normal/error paths attempt bounded owned-descendant termination, direct-child
+reaping, stream completion and log synchronization. Cleanup has a separate five-second
+allowance for process/pipe observation; failure or missing EOF is infrastructure failure,
+not successful joined cleanup. Blocking kernel filesystem operations are not a hard
+whole-host wall-time guarantee. Preserve the primary failure alongside cleanup errors.
+A normal exit with sampled surviving descendants cannot certify clean completion.
+Graceful interrupt/termination retains the actual application exit classification.
+
+The Linux sampler follows already-owned identities after reparenting, including newly
+created descendants of a known branch. PID/start identity and pidfd checks remain
+required before individual signals. This is not complete hostile-process containment:
+a separate-session descendant created and reparented entirely between samples may be
+unobserved. Unobserved inherited output still cannot create an indefinite reader join.
+Git and toolchain identity probes share this lifecycle, a 30-second execution allowance,
+existing stdout/stderr byte bounds and disposable logs outside the observed checkout.
+
+Independent finite fixtures must discriminate inherited stdout and stderr, output
+exact-fit/one-over and final bursts, controls after direct exit, direct-child reaping,
+sampled separate groups, reparented branches with later children, incomplete stream
+cleanup, log-write failure, deterministic pre-spawn broken stdout and healthy recovery.
+The ordinary workspace gate owns these tests; no new receipt family or language
+execution quota is introduced. Runtime/verifier identity invalidates predecessor reuse.
+
 ## Verification profiles and receipts
 
 The contributor owner is:

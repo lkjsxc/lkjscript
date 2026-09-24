@@ -31,10 +31,17 @@ impl Descendants {
         }
     }
     pub(super) fn sample(&mut self) -> Result<(), DevError> {
+        if self.root_identity.is_none() {
+            return Err(DevError::infrastructure(
+                "owned root identity is unavailable",
+            ));
+        }
         self.discover(false)
     }
     fn discover(&mut self, stop: bool) -> Result<(), DevError> {
-        let mut pending = vec![(self.root, 0)];
+        // Continue from already-owned branches after their parents exit/reparent.
+        let mut pending: Vec<_> = self.known.keys().map(|pid| (*pid, 0)).collect();
+        pending.push((self.root, 0));
         let mut visited = BTreeSet::new();
         while let Some((pid, depth)) = pending.pop() {
             if !visited.insert(pid) {
@@ -123,17 +130,19 @@ impl Descendants {
             Ok(())
         }
     }
-    pub(super) fn finish(&mut self) -> Result<bool, DevError> {
+    pub(super) fn has_live(&self) -> Result<bool, DevError> {
         let mut survivors = false;
         for identity in self.known.values() {
             survivors |=
                 observe(identity.pid)?.is_some_and(|(current, live)| current == *identity && live);
         }
-        if !survivors {
+        Ok(survivors)
+    }
+    pub(super) fn finish(&mut self, deadline: Instant) -> Result<bool, DevError> {
+        if !self.has_live()? {
             return Ok(false);
         }
         self.terminate()?;
-        let started = Instant::now();
         loop {
             let mut live = false;
             for identity in self.known.values() {
@@ -146,7 +155,7 @@ impl Descendants {
             if !live {
                 return Ok(true);
             }
-            if started.elapsed() > Duration::from_secs(5) {
+            if Instant::now() >= deadline {
                 return Err(DevError::infrastructure(
                     "owned descendants did not terminate",
                 ));
@@ -309,5 +318,60 @@ mod tests {
             Some(b"1234".to_vec())
         );
         assert!(read_contents(Cursor::new(b"12345"), 4).is_err());
+    }
+}
+
+#[cfg(test)]
+mod reparenting_tests {
+    use super::*;
+    use std::os::unix::process::CommandExt;
+    use std::process::{Command, Stdio};
+
+    #[test]
+    fn sampled_reparented_branch_discovers_its_later_children() {
+        let root = tempfile::tempdir().unwrap();
+        // Every fixture process also has a finite fallback lifetime if an assertion fails.
+        let mut child = Command::new("/bin/sh").args(["-c",
+            "setsid sh -c 'echo $$ > branch; i=0; while test ! -f phase && test $i -lt 100; do i=$((i+1)); sleep 0.01; done; sleep 0.6 & echo $! > leaf; wait' & sleep 1.5"])
+            .current_dir(root.path()).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
+            .process_group(0).spawn().unwrap();
+        let mut tree = Descendants::new(child.id());
+        let began = Instant::now();
+        let branch = loop {
+            tree.sample().unwrap();
+            if let Ok(text) = fs::read_to_string(root.path().join("branch"))
+                && let Ok(pid) = text.trim().parse::<u32>()
+                && tree.known.contains_key(&pid)
+            {
+                break pid;
+            }
+            assert!(began.elapsed() < Duration::from_secs(2));
+            std::thread::sleep(Duration::from_millis(5));
+        };
+        child.kill().unwrap();
+        child.wait().unwrap();
+        fs::write(root.path().join("phase"), b"create later child").unwrap();
+        let leaf = loop {
+            tree.sample().unwrap();
+            if let Ok(text) = fs::read_to_string(root.path().join("leaf"))
+                && let Ok(pid) = text.trim().parse::<u32>()
+            {
+                break pid;
+            }
+            assert!(began.elapsed() < Duration::from_secs(2));
+            std::thread::sleep(Duration::from_millis(5));
+        };
+        tree.sample().unwrap();
+        let discovered = tree.known.contains_key(&leaf);
+        tree.terminate().unwrap();
+        tree.finish(Instant::now() + Duration::from_secs(2))
+            .unwrap();
+        assert!(
+            discovered,
+            "later child of the known reparented branch was not sampled"
+        );
+        for pid in [branch, leaf] {
+            assert!(observe(pid).unwrap().is_none_or(|(_, live)| !live));
+        }
     }
 }

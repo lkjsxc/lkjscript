@@ -13,8 +13,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::ffi::OsStr;
 use std::path::{Component, Path};
-use std::process::{Command, Stdio};
-use std::thread;
+use std::time::Duration;
 
 const MAXIMUM_COMMAND_OUTPUT_BYTES: usize = 64 * 1024 * 1024;
 const MAXIMUM_COMMAND_ERROR_BYTES: usize = 1024 * 1024;
@@ -121,7 +120,7 @@ pub(crate) fn runtime_identity(
         architecture: env::consts::ARCH.to_owned(),
         family: env::consts::FAMILY.to_owned(),
         child_process_control: if cfg!(target_os = "linux") {
-            "linux_process_group_sigkill".to_owned()
+            "linux_waitable_child_nonblocking_streams_owned_tree".to_owned()
         } else {
             "unsupported".to_owned()
         },
@@ -325,81 +324,46 @@ fn checked_bytes_with_limit(
     let program = command
         .first()
         .ok_or_else(|| DevError::infrastructure("empty identity command"))?;
-    let mut child = Command::new(program);
-    child
-        .args(&command[1..])
-        .current_dir(repository)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .env_clear()
-        .envs(process::environment());
-    let mut child = child.spawn().map_err(|error| {
-        DevError::infrastructure(format!("run identity command '{program}': {error}"))
-    })?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| DevError::infrastructure("identity stdout pipe is unavailable"))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| DevError::infrastructure("identity stderr pipe is unavailable"))?;
-    let stdout_reader = thread::spawn(move || read_pipe_bounded(stdout, maximum));
-    let stderr_reader =
-        thread::spawn(move || read_pipe_bounded(stderr, MAXIMUM_COMMAND_ERROR_BYTES));
-    let status = child.wait().map_err(|error| {
-        DevError::infrastructure(format!("wait for identity command '{program}': {error}"))
-    })?;
-    let (stdout, stdout_exceeded) = join_pipe(stdout_reader, "stdout")?;
-    let (_, stderr_exceeded) = join_pipe(stderr_reader, "stderr")?;
-    if stdout_exceeded {
-        return Err(DevError::infrastructure(format!(
-            "identity command '{program}' exceeded {maximum} stdout bytes"
-        )));
-    }
-    if stderr_exceeded {
-        return Err(DevError::infrastructure(format!(
-            "identity command '{program}' exceeded {MAXIMUM_COMMAND_ERROR_BYTES} stderr bytes"
-        )));
-    }
-    if !status.success() {
-        return Err(DevError::infrastructure(format!(
-            "identity command '{program}' failed with {:?}",
-            status.code()
-        )));
-    }
-    Ok(stdout)
+    checked_command(
+        repository,
+        command,
+        program,
+        maximum,
+        Duration::from_secs(30),
+    )
 }
 
-fn read_pipe_bounded(
-    mut pipe: impl std::io::Read,
+fn checked_command(
+    repository: &Path,
+    command: &[&str],
+    program: &str,
     maximum: usize,
-) -> Result<(Vec<u8>, bool), DevError> {
-    let mut retained = Vec::with_capacity(maximum.min(64 * 1024));
-    let mut exceeded = false;
-    let mut buffer = [0_u8; 64 * 1024];
-    loop {
-        let read = pipe.read(&mut buffer).map_err(|error| {
-            DevError::infrastructure(format!("read identity command pipe: {error}"))
-        })?;
-        if read == 0 {
-            return Ok((retained, exceeded));
-        }
-        let remaining = maximum.saturating_sub(retained.len());
-        let keep = remaining.min(read);
-        retained.extend_from_slice(&buffer[..keep]);
-        exceeded |= keep != read;
+    timeout: Duration,
+) -> Result<Vec<u8>, DevError> {
+    // Outside the checkout: observing inputs must not add its own logs to that snapshot.
+    let logs = tempfile::Builder::new()
+        .prefix("lkjscript-identity-")
+        .tempdir()?;
+    let specification = process::ProcessSpec {
+        command: command.iter().map(|value| (*value).to_owned()).collect(),
+        cwd: repository.to_path_buf(),
+        environment: process::environment(),
+        timeout,
+        maximum_stdout_bytes: maximum as u64,
+        maximum_stderr_bytes: MAXIMUM_COMMAND_ERROR_BYTES as u64,
+        stdout_path: logs.path().join("stdout"),
+        stderr_path: logs.path().join("stderr"),
+        unavailable_exit_code: None,
+    };
+    let result = process::run(&specification, repository);
+    if result.status != process::ProcessStatus::Passed {
+        return Err(DevError::infrastructure(format!(
+            "identity command '{program}' failed: {:?}: {}",
+            result.status,
+            result.reason.as_deref().unwrap_or("no reason")
+        )));
     }
-}
-
-fn join_pipe(
-    reader: thread::JoinHandle<Result<(Vec<u8>, bool), DevError>>,
-    stream: &str,
-) -> Result<(Vec<u8>, bool), DevError> {
-    reader
-        .join()
-        .map_err(|_| DevError::infrastructure(format!("identity {stream} reader panicked")))?
+    process::read_bounded(&specification.stdout_path, maximum as u64)
 }
 
 fn decode_path(bytes: &[u8]) -> Result<String, DevError> {
@@ -417,5 +381,46 @@ mod tests {
         let result =
             checked_bytes_with_limit(temporary.path(), &["/usr/bin/printf", "123456789"], 4);
         assert!(result.is_err());
+    }
+}
+
+#[cfg(test)]
+mod command_lifecycle_tests {
+    use super::*;
+    #[test]
+    fn identity_commands_share_deadlines_output_errors_and_recovery() {
+        let root = tempfile::tempdir().unwrap();
+        for script in [
+            "sleep 0.6 & printf done",
+            "sleep 0.6 >/dev/null & printf error >&2",
+            "exec sleep 0.6",
+        ] {
+            let started = std::time::Instant::now();
+            let result = checked_command(
+                root.path(),
+                &["/bin/sh", "-c", script],
+                "/bin/sh",
+                1024,
+                Duration::from_millis(60),
+            );
+            assert!(result.is_err());
+            assert!(started.elapsed() < Duration::from_millis(500));
+        }
+        assert!(
+            checked_bytes_with_limit(
+                root.path(),
+                &["/bin/sh", "-c", "head -c 1048577 /dev/zero >&2"],
+                4
+            )
+            .is_err()
+        );
+        assert_eq!(
+            checked_bytes_with_limit(root.path(), &["/usr/bin/printf", "1234"], 4).unwrap(),
+            b"1234"
+        );
+        assert!(
+            std::fs::read_dir(root.path()).unwrap().next().is_none(),
+            "identity observation wrote into observed input"
+        );
     }
 }

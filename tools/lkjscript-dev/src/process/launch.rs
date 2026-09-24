@@ -15,6 +15,8 @@ pub(super) enum Program<'a> {
 pub(super) fn spawn(
     specification: &ProcessSpec,
     stdin: Stdio,
+    stdout: Stdio,
+    stderr: Stdio,
     program: Program<'_>,
 ) -> io::Result<Child> {
     use std::os::unix::process::CommandExt;
@@ -34,8 +36,8 @@ pub(super) fn spawn(
         .args(&specification.command[1..])
         .current_dir(&specification.cwd)
         .stdin(stdin)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdout(stdout)
+        .stderr(stderr)
         .env_clear()
         .envs(&specification.environment)
         .process_group(0);
