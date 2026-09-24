@@ -1,5 +1,6 @@
 #[cfg(target_os = "linux")]
 mod descendants;
+mod launch;
 
 use crate::error::DevError;
 use crate::evidence::{self, FileProof};
@@ -11,9 +12,9 @@ use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 #[cfg(target_os = "linux")]
-use std::os::unix::process::{CommandExt, ExitStatusExt};
+use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use std::thread;
@@ -154,15 +155,48 @@ struct ProcessCompletion {
     reason: Option<String>,
 }
 
+#[derive(Default)]
+struct ProcessOptions<'a> {
+    stdin_file: Option<(&'a Path, u64)>,
+    supervise_descendants: bool,
+    close_stdout: bool,
+    program: launch::Program<'a>,
+}
+
 pub(crate) fn run(specification: &ProcessSpec, repository: &Path) -> ProcessObservation {
     run_configured(specification, repository, None, None, false)
+}
+
+pub(crate) fn run_selected(
+    specification: &ProcessSpec,
+    repository: &Path,
+    program: Option<&Path>,
+) -> ProcessObservation {
+    run_configured_output(
+        specification,
+        repository,
+        None,
+        ProcessOptions {
+            program: launch::Program::Selected(program),
+            ..ProcessOptions::default()
+        },
+    )
 }
 
 pub(crate) fn run_closed_stdout(
     specification: &ProcessSpec,
     repository: &Path,
 ) -> ProcessObservation {
-    run_configured_output(specification, repository, None, None, true, true)
+    run_configured_output(
+        specification,
+        repository,
+        None,
+        ProcessOptions {
+            supervise_descendants: true,
+            close_stdout: true,
+            ..ProcessOptions::default()
+        },
+    )
 }
 
 pub(crate) fn run_controlled(
@@ -208,9 +242,11 @@ fn run_configured(
         specification,
         repository,
         control,
-        stdin_file,
-        supervise_descendants,
-        false,
+        ProcessOptions {
+            stdin_file,
+            supervise_descendants,
+            ..ProcessOptions::default()
+        },
     )
 }
 
@@ -218,20 +254,10 @@ fn run_configured_output(
     specification: &ProcessSpec,
     repository: &Path,
     control: Option<&ProcessControl>,
-    stdin_file: Option<(&Path, u64)>,
-    supervise_descendants: bool,
-    close_stdout: bool,
+    options: ProcessOptions<'_>,
 ) -> ProcessObservation {
     let started = Instant::now();
-    match run_inner(
-        specification,
-        repository,
-        started,
-        control,
-        stdin_file,
-        supervise_descendants,
-        close_stdout,
-    ) {
+    match run_inner(specification, repository, started, control, options) {
         Ok(observation) => observation,
         Err(error) => infrastructure_observation(specification, repository, started, error),
     }
@@ -243,32 +269,18 @@ fn run_inner(
     repository: &Path,
     started: Instant,
     control: Option<&ProcessControl>,
-    stdin_file: Option<(&Path, u64)>,
-    supervise_descendants: bool,
-    close_stdout: bool,
+    options: ProcessOptions<'_>,
 ) -> Result<ProcessObservation, DevError> {
     if specification.command.is_empty() {
         return Err(DevError::infrastructure("child command is empty"));
     }
     let stdout_output = prepare_log(&specification.stdout_path)?;
     let stderr_output = prepare_log(&specification.stderr_path)?;
-    let stdin = match stdin_file {
+    let stdin = match options.stdin_file {
         Some((path, maximum)) => bounded_stdin(path, maximum)?,
         None => Stdio::null(),
     };
-    let mut command = Command::new(&specification.command[0]);
-    command
-        .args(&specification.command[1..])
-        .current_dir(&specification.cwd)
-        .stdin(stdin)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .env_clear()
-        .process_group(0);
-    for (name, value) in &specification.environment {
-        command.env(name, value);
-    }
-    let mut child = match command.spawn() {
+    let mut child = match launch::spawn(specification, stdin, options.program) {
         Ok(child) => child,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return observation(
@@ -292,12 +304,14 @@ fn run_inner(
         }
     };
     let process_group = Pid::from_child(&child);
-    let mut descendants = supervise_descendants.then(|| descendants::Descendants::new(child.id()));
+    let mut descendants = options
+        .supervise_descendants
+        .then(|| descendants::Descendants::new(child.id()));
     let stdout = child
         .stdout
         .take()
         .ok_or_else(|| DevError::infrastructure("child stdout pipe is unavailable"))?;
-    let stdout: Box<dyn Read + Send> = if close_stdout {
+    let stdout: Box<dyn Read + Send> = if options.close_stdout {
         drop(stdout);
         Box::new(std::io::empty())
     } else {
@@ -488,9 +502,7 @@ fn run_inner(
     _repository: &Path,
     _started: Instant,
     _control: Option<&ProcessControl>,
-    _stdin_file: Option<(&Path, u64)>,
-    _supervise_descendants: bool,
-    _close_stdout: bool,
+    _options: ProcessOptions<'_>,
 ) -> Result<ProcessObservation, DevError> {
     Err(DevError::infrastructure(
         "bounded process execution requires Linux process-group signaling",

@@ -14,11 +14,14 @@ owned branch under `verify/`, for example:
 git push origin HEAD:refs/heads/verify/my-change
 ```
 
-A Git-object client can create a branch at the base commit and then update it to
-the candidate with `force=false`. The candidate must include this workflow.
-The push selects its immutable event SHA; the workflow checks out that exact SHA
-rather than a moving branch name. It also checks the workflow/source relationship,
-clean inputs and the commit's whitespace delta before building.
+A Git-object client should create a new branch directly at the prepared candidate
+SHA. Branch creation itself is a push event: creating it at the base and then
+updating it starts an unnecessary base run before the candidate. For an existing
+owned branch, update to a real corrective descendant with `force=false`.
+The candidate must include this workflow. Each push selects its immutable event
+SHA; the workflow checks out that exact SHA rather than a moving branch name.
+It also checks the workflow/source relationship, clean inputs and the commit's
+whitespace delta before building.
 
 Manual `workflow_dispatch` is an alternative once the workflow is on the default
 branch. Select the intended branch or tag through GitHub's ordinary workflow UI
@@ -50,6 +53,41 @@ a privileged artifact consumer without a separately reviewed trust design.
 Code capable of changing its own verifier still needs substantive review. A green
 workflow is evidence about the inspected candidate, not an independent security
 certificate or an authorization to execute arbitrary code with greater authority.
+
+## Executable observations and compatibility
+
+Check/source receipt contract 7 and cache contract 3 bind each selected command to
+an `ExecutableProof`. Its `entry` retains the ordinary file or symlink observation;
+`resolved` additionally binds a symlink's regular target bytes and mode. Plain files
+have no duplicate target proof. General source FileProofs still do not follow final
+symlinks. Both observations use the logical command label, so different immutable
+copy directories do not alone defeat valid reuse. The existing digest and cache
+owners remain authoritative; no new hash algorithm or acceptance store is added.
+
+On Linux, explicit relative and empty PATH entries resolve against the child cwd,
+and lookup skips candidates that the effective identity cannot execute. A bare
+command without an explicit PATH fails observation rather than certifying a guessed
+search path. Missing programs retain missing observations; a selected broken,
+cyclic or nonregular linked target cannot be admitted as executable file evidence.
+The runtime reader re-observes this same binding, including consistently rehashed
+forgeries, and predecessor check/cache records cannot become current acceptance.
+Frozen releases keep their original verifier and contracts.
+
+A gate's fingerprint and fresh execution share one selection. Execution supplies
+its absolute selected pathname to the existing process owner while preserving the
+declared argv[0], arguments, cwd, environment, logs and bounds. It does not repeat
+PATH search. In particular, an executable script whose interpreter is missing is
+unavailable; execution must not fall through to a later unobserved candidate.
+A missing selection never launches the original bare command as a fallback.
+General process helpers keep their ordinary lookup semantics. The selected path
+remains an alias rather than being replaced with its canonical target name.
+
+This binds the observed command leaf and selection, not all interpreters, dynamic
+libraries, plugins, rustup-selected backends or other transitive dependencies. It
+does not pin an inode against concurrent replacement or provide a hostile-filesystem
+sandbox. Independent fixtures exercise actual PATH execution, prevention of an
+unobserved fallback, declared argv[0], inherited process bounds and a cached
+successful program changed to fail behind the same link, with restored valid reuse.
 
 ## Acceptance and retained evidence
 

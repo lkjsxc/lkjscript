@@ -1,13 +1,18 @@
-use super::model::{InputEntry, InputSnapshot, InputSource, PlatformIdentity, RuntimeIdentity};
+mod executable;
+
+use super::model::{
+    ExecutableProof, InputEntry, InputSnapshot, InputSource, PlatformIdentity, RuntimeIdentity,
+};
 use super::registry;
 use crate::error::DevError;
 use crate::evidence::{self, FileKind, VerificationDigest};
 use crate::process;
+pub(crate) use executable::{observe as observe_executable, proof as executable_proof};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::ffi::OsStr;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Component, Path};
 use std::process::{Command, Stdio};
 use std::thread;
 
@@ -106,7 +111,7 @@ pub(crate) fn runtime_identity(
     let mut command_executables = BTreeMap::new();
     for (command, identity) in commands {
         let mut proof = executable_proof(repository, &command)?;
-        proof.path.clone_from(&identity);
+        proof.relabel(&identity);
         command_executables.insert(identity, proof);
     }
     let rustc = checked_text(repository, &["rustc", "-Vv"])?;
@@ -143,7 +148,7 @@ pub(super) fn runtime_digest(identity: &RuntimeIdentity) -> Result<VerificationD
         platform: &'a PlatformIdentity,
         environment_digest: &'a VerificationDigest,
         harness: &'a evidence::FileProof,
-        command_executables: &'a BTreeMap<String, evidence::FileProof>,
+        command_executables: &'a BTreeMap<String, ExecutableProof>,
     }
     let material = serde_json::to_vec(&RuntimeMaterial {
         rustc: &identity.rustc,
@@ -395,38 +400,6 @@ fn join_pipe(
     reader
         .join()
         .map_err(|_| DevError::infrastructure(format!("identity {stream} reader panicked")))?
-}
-
-fn resolve_executable(repository: &Path, command: &str) -> Option<PathBuf> {
-    if command.contains(std::path::MAIN_SEPARATOR) {
-        let path = PathBuf::from(command);
-        return Some(if path.is_absolute() {
-            path
-        } else {
-            repository.join(path)
-        });
-    }
-    let path = env::var_os("PATH")?;
-    env::split_paths(&path)
-        .map(|directory| directory.join(command))
-        .find(|candidate| candidate.is_file())
-}
-
-pub(crate) fn executable_proof(
-    repository: &Path,
-    command: &str,
-) -> Result<evidence::FileProof, DevError> {
-    match resolve_executable(repository, command) {
-        Some(path) => evidence::proof(&path, path.to_string_lossy().into_owned()),
-        None => Ok(evidence::FileProof {
-            path: command.to_owned(),
-            kind: FileKind::Missing,
-            mode: None,
-            bytes: None,
-            digest: None,
-            link_target: None,
-        }),
-    }
 }
 
 fn decode_path(bytes: &[u8]) -> Result<String, DevError> {

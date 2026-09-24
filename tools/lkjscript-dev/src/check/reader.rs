@@ -256,7 +256,7 @@ fn require(condition: bool, message: &str) -> Result<(), DevError> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::model::{Gate, RuntimeIdentity};
+    use super::super::model::{ExecutableProof, Gate, RuntimeIdentity};
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -401,7 +401,7 @@ mod tests {
         // A later build replacing the mutable output does not replace its preserved original.
         fs::write(&output, b"different later build").expect("replace mutable output");
         read(&baseline).expect("original output retained");
-        for case in 0..10 {
+        for case in 0..12 {
             let mut fault = baseline.clone();
             match case {
                 0 => {
@@ -435,11 +435,30 @@ mod tests {
                 }
                 9 => {
                     let runtime = fault.runtime.as_mut().expect("runtime");
-                    runtime
-                        .command_executables
-                        .insert("invented-tool".to_owned(), runtime.harness.clone());
+                    runtime.command_executables.insert(
+                        "invented-tool".to_owned(),
+                        ExecutableProof {
+                            entry: runtime.harness.clone(),
+                            resolved: None,
+                        },
+                    );
                     runtime.digest =
                         snapshot::runtime_digest(runtime).expect("consistently rehashed runtime");
+                }
+                10 => {
+                    let runtime = fault.runtime.as_mut().expect("runtime");
+                    let forged_target = runtime.harness.clone();
+                    runtime
+                        .command_executables
+                        .values_mut()
+                        .next()
+                        .expect("observed command")
+                        .resolved = Some(forged_target);
+                    runtime.digest =
+                        snapshot::runtime_digest(runtime).expect("rehash forged target proof");
+                }
+                11 => {
+                    fault.contract_version = 6;
                 }
                 _ => unreachable!(),
             }
