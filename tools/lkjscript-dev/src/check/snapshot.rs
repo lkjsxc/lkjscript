@@ -7,7 +7,7 @@ use super::registry;
 use crate::error::DevError;
 use crate::evidence::{self, FileKind, VerificationDigest};
 use crate::process;
-pub(crate) use executable::proof as executable_proof;
+pub(crate) use executable::{observe as observe_executable, proof as executable_proof};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;

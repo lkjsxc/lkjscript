@@ -7,27 +7,48 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub(crate) fn proof(repository: &Path, command: &str) -> Result<ExecutableProof, DevError> {
-    let path = env::var_os("PATH");
-    proof_with_path(repository, command, path.as_deref())
+pub(crate) struct Selection {
+    pub(crate) path: Option<PathBuf>,
+    pub(crate) proof: ExecutableProof,
 }
 
+pub(crate) fn observe(repository: &Path, command: &str) -> Result<Selection, DevError> {
+    let path = env::var_os("PATH");
+    observe_with_path(repository, command, path.as_deref())
+}
+
+pub(crate) fn proof(repository: &Path, command: &str) -> Result<ExecutableProof, DevError> {
+    Ok(observe(repository, command)?.proof)
+}
+
+#[cfg(test)]
 fn proof_with_path(
     repository: &Path,
     command: &str,
     search_path: Option<&OsStr>,
 ) -> Result<ExecutableProof, DevError> {
+    Ok(observe_with_path(repository, command, search_path)?.proof)
+}
+
+fn observe_with_path(
+    repository: &Path,
+    command: &str,
+    search_path: Option<&OsStr>,
+) -> Result<Selection, DevError> {
     let Some(path) = resolve(repository, command, search_path)? else {
-        return Ok(ExecutableProof {
-            entry: FileProof {
-                path: command.to_owned(),
-                kind: FileKind::Missing,
-                mode: None,
-                bytes: None,
-                digest: None,
-                link_target: None,
+        return Ok(Selection {
+            path: None,
+            proof: ExecutableProof {
+                entry: FileProof {
+                    path: command.to_owned(),
+                    kind: FileKind::Missing,
+                    mode: None,
+                    bytes: None,
+                    digest: None,
+                    link_target: None,
+                },
+                resolved: None,
             },
-            resolved: None,
         });
     };
     let label = path.to_string_lossy().into_owned();
@@ -49,7 +70,10 @@ fn proof_with_path(
     } else {
         None
     };
-    Ok(ExecutableProof { entry, resolved })
+    Ok(Selection {
+        path: Some(path),
+        proof: ExecutableProof { entry, resolved },
+    })
 }
 
 fn resolve(
@@ -57,6 +81,7 @@ fn resolve(
     command: &str,
     search_path: Option<&OsStr>,
 ) -> Result<Option<PathBuf>, DevError> {
+    let repository = std::path::absolute(repository)?;
     if command.contains(std::path::MAIN_SEPARATOR) {
         return Ok(Some(repository.join(command)));
     }

@@ -14,11 +14,14 @@ owned branch under `verify/`, for example:
 git push origin HEAD:refs/heads/verify/my-change
 ```
 
-A Git-object client can create a branch at the base commit and then update it to
-the candidate with `force=false`. The candidate must include this workflow.
-The push selects its immutable event SHA; the workflow checks out that exact SHA
-rather than a moving branch name. It also checks the workflow/source relationship,
-clean inputs and the commit's whitespace delta before building.
+A Git-object client should create a new branch directly at the prepared candidate
+SHA. Branch creation itself is a push event: creating it at the base and then
+updating it starts an unnecessary base run before the candidate. For an existing
+owned branch, update to a real corrective descendant with `force=false`.
+The candidate must include this workflow. Each push selects its immutable event
+SHA; the workflow checks out that exact SHA rather than a moving branch name.
+It also checks the workflow/source relationship, clean inputs and the commit's
+whitespace delta before building.
 
 Manual `workflow_dispatch` is an alternative once the workflow is on the default
 branch. Select the intended branch or tag through GitHub's ordinary workflow UI
@@ -70,11 +73,21 @@ The runtime reader re-observes this same binding, including consistently rehashe
 forgeries, and predecessor check/cache records cannot become current acceptance.
 Frozen releases keep their original verifier and contracts.
 
-This binds the observed command leaf, not all interpreters, dynamic libraries,
-plugins, rustup-selected backends or other transitive runtime dependencies. It does
-not pin a file against concurrent replacement or provide a hostile-filesystem
-sandbox. Independent fixtures exercise actual PATH execution and a cached successful
-program changed to fail behind the same link, with restored legitimate reuse.
+A gate's fingerprint and fresh execution share one selection. Execution supplies
+its absolute selected pathname to the existing process owner while preserving the
+declared argv[0], arguments, cwd, environment, logs and bounds. It does not repeat
+PATH search. In particular, an executable script whose interpreter is missing is
+unavailable; execution must not fall through to a later unobserved candidate.
+A missing selection never launches the original bare command as a fallback.
+General process helpers keep their ordinary lookup semantics. The selected path
+remains an alias rather than being replaced with its canonical target name.
+
+This binds the observed command leaf and selection, not all interpreters, dynamic
+libraries, plugins, rustup-selected backends or other transitive dependencies. It
+does not pin an inode against concurrent replacement or provide a hostile-filesystem
+sandbox. Independent fixtures exercise actual PATH execution, prevention of an
+unobserved fallback, declared argv[0], inherited process bounds and a cached
+successful program changed to fail behind the same link, with restored valid reuse.
 
 ## Acceptance and retained evidence
 

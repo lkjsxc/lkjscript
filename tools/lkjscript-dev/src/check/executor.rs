@@ -201,7 +201,15 @@ fn execute_gate(
 ) -> Result<GateReceipt, DevError> {
     let started_wall = unix_nanoseconds()?;
     let started = Instant::now();
-    let fingerprint = gate_fingerprint(repository, gate, snapshot, runtime, dependencies)?;
+    let selected = snapshot::observe_executable(repository, &gate.command[0])?;
+    let fingerprint = fingerprint_with_executable(
+        repository,
+        gate,
+        snapshot,
+        runtime,
+        dependencies,
+        selected.proof,
+    )?;
     let stdout_path = run_directory.join(format!("{}.stdout.log", gate.name));
     let stderr_path = run_directory.join(format!("{}.stderr.log", gate.name));
     if allow_reuse && gate.cacheable {
@@ -242,6 +250,7 @@ fn execute_gate(
         return execute_fresh(
             repository,
             gate,
+            selected.path.as_deref(),
             fingerprint,
             stdout_path,
             stderr_path,
@@ -259,6 +268,7 @@ fn execute_gate(
     execute_fresh(
         repository,
         gate,
+        selected.path.as_deref(),
         fingerprint,
         stdout_path,
         stderr_path,
@@ -282,6 +292,7 @@ fn execute_gate(
 fn execute_fresh(
     repository: &Path,
     gate: &Gate,
+    program: Option<&Path>,
     fingerprint: VerificationDigest,
     stdout_path: PathBuf,
     stderr_path: PathBuf,
@@ -289,7 +300,7 @@ fn execute_fresh(
     started: Instant,
     cache_observation: CacheObservation,
 ) -> Result<GateReceipt, DevError> {
-    let process = process::run(
+    let process = process::run_selected(
         &ProcessSpec {
             command: gate.command.clone(),
             cwd: repository.to_path_buf(),
@@ -302,6 +313,7 @@ fn execute_fresh(
             unavailable_exit_code: gate.unavailable_exit_code,
         },
         repository,
+        program,
     );
     let outputs = cache::output_proofs(repository, &gate.required_outputs)?;
     let run_directory = stdout_path
@@ -385,7 +397,7 @@ fn skipped_receipt(
         process: None,
         outputs: Vec::new(),
         retained_outputs: Vec::new(),
-        input_fingerprint: fingerprint.clone(),
+        input_fingerprint: fingerprint,
         evidence_digest: VerificationDigest::of(&evidence_bytes),
         cache: CacheObservation {
             eligible: false,
@@ -476,6 +488,24 @@ pub(super) fn gate_fingerprint(
     runtime: &RuntimeIdentity,
     dependencies: &BTreeMap<String, GateReceipt>,
 ) -> Result<VerificationDigest, DevError> {
+    fingerprint_with_executable(
+        repository,
+        gate,
+        snapshot,
+        runtime,
+        dependencies,
+        snapshot::executable_proof(repository, &gate.command[0])?,
+    )
+}
+
+fn fingerprint_with_executable(
+    repository: &Path,
+    gate: &Gate,
+    snapshot: &InputSnapshot,
+    runtime: &RuntimeIdentity,
+    dependencies: &BTreeMap<String, GateReceipt>,
+    mut executable: ExecutableProof,
+) -> Result<VerificationDigest, DevError> {
     #[derive(Serialize)]
     struct DependencyIdentity<'a> {
         status: GateStatus,
@@ -513,7 +543,6 @@ pub(super) fn gate_fingerprint(
             )
         })
         .collect();
-    let mut executable = snapshot::executable_proof(repository, &gate.command[0])?;
     if let Some(identity) = gate.identity_command().first() {
         executable.relabel(identity);
     }

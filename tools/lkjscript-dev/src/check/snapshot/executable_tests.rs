@@ -7,6 +7,7 @@ use crate::check::model::{
 };
 use crate::check::{registry::GateRegistry, snapshot};
 use crate::evidence::VerificationDigest;
+use crate::process::{self, ProcessSpec, ProcessStatus};
 use std::collections::BTreeMap;
 use std::os::unix::fs::{PermissionsExt, symlink};
 use std::process::{Command, Stdio};
@@ -34,7 +35,10 @@ fn unchanged_link_observes_same_length_target_replacement_and_mode() {
     let changed = proof(root.path(), "./alias").expect("changed linked proof");
     // This is the predecessor's negative control: its entire observation is unchanged.
     assert_eq!(before.entry, changed.entry);
-    assert_eq!(before.resolved.as_ref().unwrap().bytes, changed.resolved.as_ref().unwrap().bytes);
+    assert_eq!(
+        before.resolved.as_ref().unwrap().bytes,
+        changed.resolved.as_ref().unwrap().bytes
+    );
     assert_ne!(before.resolved, changed.resolved);
     let plain = evidence::proof(&alias, before.entry.path.clone()).expect("ordinary source link");
     assert_eq!(plain, before.entry, "source symlink semantics must not change");
@@ -42,7 +46,10 @@ fn unchanged_link_observes_same_length_target_replacement_and_mode() {
     fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).expect("change leaf mode");
     let mode = proof(root.path(), "./alias").expect("new leaf mode");
     assert_eq!(mode.entry, changed.entry);
-    assert_eq!(mode.resolved.as_ref().unwrap().digest, changed.resolved.as_ref().unwrap().digest);
+    assert_eq!(
+        mode.resolved.as_ref().unwrap().digest,
+        changed.resolved.as_ref().unwrap().digest
+    );
     assert_ne!(mode.resolved, changed.resolved);
 }
 
@@ -110,8 +117,11 @@ fn relative_empty_and_nonexecutable_path_entries_match_actual_linux_execution() 
         fs::create_dir(root.path().join(directory)).expect("PATH directory");
     }
     script(&root.path().join("first/probe"), 11);
-    fs::set_permissions(root.path().join("first/probe"), fs::Permissions::from_mode(0o644))
-        .expect("nonexecutable earlier candidate");
+    fs::set_permissions(
+        root.path().join("first/probe"),
+        fs::Permissions::from_mode(0o644),
+    )
+    .expect("nonexecutable earlier candidate");
     script(&root.path().join("second/probe"), 37);
     script(&root.path().join("probe"), 19);
     for (path, leaf, expected) in [
@@ -121,11 +131,8 @@ fn relative_empty_and_nonexecutable_path_entries_match_actual_linux_execution() 
     ] {
         let observed = proof_with_path(root.path(), "probe", Some(OsStr::new(path)))
             .expect("explicit PATH observation");
-        let expected_file = evidence::proof(
-            &root.path().join(leaf),
-            observed.entry.path.clone(),
-        )
-        .expect("selected file oracle");
+        let expected_file = evidence::proof(&root.path().join(leaf), observed.entry.path.clone())
+            .expect("selected file oracle");
         assert_eq!(observed.entry, expected_file);
         let status = Command::new("probe")
             .current_dir(root.path())
@@ -182,7 +189,7 @@ fn cached_gate(
     let registry = GateRegistry::new(vec![gate.clone()]).expect("one real gate");
     executor::execute_dag(
         &registry,
-        &[gate.name.clone()],
+        std::slice::from_ref(&gate.name),
         &ExecutionOptions {
             repository: root,
             run_directory: &directory,
@@ -205,7 +212,10 @@ fn a_changed_symlink_target_cannot_reuse_a_previous_successful_gate() {
     let target = root.path().join("payload");
     script(&target, 0);
     symlink("payload", root.path().join("alias")).expect("stable executable alias");
-    let mut gate = Gate::new("linked", vec![root.path().join("alias").display().to_string()]);
+    let mut gate = Gate::new(
+        "linked",
+        vec![root.path().join("alias").display().to_string()],
+    );
     gate.identity_command = Some(vec!["$TOOL".to_owned()]);
     gate.timeout = Duration::from_secs(2);
     let (snapshot, runtime) = fixed_inputs(root.path());
@@ -276,4 +286,58 @@ fn runtime_reader_rejects_changed_target_and_recovers_with_original_bytes() {
     script(&target, 0);
     snapshot::validate_runtime(root.path(), &original, &copy, commands)
         .expect("restored exact target and verifier");
+}
+
+#[test]
+fn a_missing_interpreter_cannot_switch_execution_to_an_unobserved_path_candidate() {
+    let root = tempfile::tempdir().expect("owned interpreter fallback regression");
+    for directory in ["first", "second"] {
+        fs::create_dir(root.path().join(directory)).unwrap();
+    }
+    let first = root.path().join("first/probe");
+    let second = root.path().join("second/probe");
+    let marker = root.path().join("unchecked");
+    fs::write(
+        &first,
+        format!("#!{}\nexit 0\n", root.path().join("absent-interpreter").display()),
+    )
+    .unwrap();
+    fs::set_permissions(&first, fs::Permissions::from_mode(0o755)).unwrap();
+    let path = OsStr::new("first:second");
+    let original = observe_with_path(root.path(), "probe", Some(path)).unwrap();
+    assert_eq!(original.path.as_deref(), Some(first.as_path()));
+    for exit in [37, 7] {
+        fs::write(&second, format!("#!/bin/sh\nprintf visited > unchecked\nexit {exit}\n"))
+            .unwrap();
+        fs::set_permissions(&second, fs::Permissions::from_mode(0o755)).unwrap();
+        let observed = observe_with_path(root.path(), "probe", Some(path)).unwrap();
+        assert_eq!(observed.proof, original.proof);
+        // Independent raw execution demonstrates why a second PATH search is unsound.
+        let raw = Command::new("probe")
+            .current_dir(root.path())
+            .env_clear()
+            .env("PATH", path)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .unwrap();
+        assert_eq!(raw.code(), Some(exit));
+        assert_eq!(fs::read(&marker).unwrap(), b"visited");
+        fs::remove_file(&marker).unwrap();
+        let spec = ProcessSpec {
+            command: vec!["probe".to_owned()],
+            cwd: root.path().to_path_buf(),
+            environment: BTreeMap::from([("PATH".to_owned(), "first:second".to_owned())]),
+            timeout: Duration::from_secs(2),
+            maximum_stdout_bytes: 1_024,
+            maximum_stderr_bytes: 1_024,
+            stdout_path: root.path().join(format!("bound-{exit}.stdout")),
+            stderr_path: root.path().join(format!("bound-{exit}.stderr")),
+            unavailable_exit_code: None,
+        };
+        let result = process::run_selected(&spec, root.path(), observed.path.as_deref());
+        assert_eq!(result.status, ProcessStatus::Unavailable);
+        assert!(!marker.exists(), "unobserved fallback ran");
+    }
 }

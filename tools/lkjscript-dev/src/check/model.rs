@@ -108,7 +108,7 @@ pub(crate) struct RuntimeIdentity {
     pub(crate) command_executables: BTreeMap<String, ExecutableProof>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct PlatformIdentity {
     pub(crate) operating_system: String,
@@ -170,7 +170,7 @@ impl GateReceipt {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct CacheObservation {
     pub(crate) eligible: bool,
