@@ -124,6 +124,16 @@ pub struct SpawnedChild {
 }
 
 impl SpawnedChild {
+    pub fn id(&self) -> u32 {
+        self.child.id()
+    }
+
+    pub fn try_wait(&mut self) -> io::Result<Option<std::process::ExitStatus>> {
+        let status = self.child.try_wait()?;
+        self.joined |= status.is_some();
+        Ok(status)
+    }
+
     pub fn take_stdout(&mut self) -> Option<ChildStdout> {
         self.child.stdout.take()
     }

@@ -31,6 +31,22 @@ preceded cancellation, cancellation count, remaining tasks, cleanup failures, an
 stalled blocking task is infrastructure failure; possibly visible work is not replayed. Process
 restart reloads artifact and durable adapters and discards tasks/queues/caches.
 
+## Cumulative work policy
+
+Resident and foreground execution share the same quota conversion and VM counters.
+An explicit execution object may independently enable or disable instruction,
+allocated-byte, collection-item and invocation capability-call quotas. Null means
+no cumulative limit, not no accounting. The strict presence and legacy-default rules
+are owned by [deployment-security.md](deployment-security.md).
+
+No-cumulative-quota resident work still receives its operational deadline and owning
+cancellation control. Shutdown and request failure must join owned work and close
+adapters; removing a quota does not permit detached tasks or automatic effect replay.
+Positive stack/depth limits, queue/concurrency admission and all stream/HTTP/session/
+worker limits remain independent. A capability-call quota is not a grant: disabling
+it neither enables a forbidden operation nor increases an exact grant's maximum.
+There is no claim that these controls provide hostile-code isolation or a live heap cap.
+
 ## Byte streams
 
 A stream is an opaque task-scoped resource ID owned by one `StreamRegistry`. Global limits are at

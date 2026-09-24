@@ -69,7 +69,7 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::runtime::Handle;
 
-pub const DEPLOYMENT_CONTRACT_VERSION: u16 = 4;
+pub const DEPLOYMENT_CONTRACT_VERSION: u16 = 5;
 pub const MAXIMUM_DEPLOYMENT_BYTES: usize = 1024 * 1024;
 pub const MAXIMUM_DEPLOYMENT_GRANTS: usize = 1_024;
 pub(crate) const STARTER_HTTP_DESCRIPTOR_PATH: &str = "service.deployment.json";
@@ -381,7 +381,7 @@ pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
     ),
     schema_field(
         "execution.instruction_fuel",
-        "u64",
+        "null|u64",
         Some(1),
         Some(u64::MAX),
         false,
@@ -400,6 +400,30 @@ pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
         "usize",
         Some(1),
         Some(usize::MAX as u64),
+        false,
+        None,
+    ),
+    optional_schema_field(
+        "execution.maximum_allocated_bytes",
+        "null|u64",
+        Some(1),
+        Some(u64::MAX),
+        false,
+        None,
+    ),
+    optional_schema_field(
+        "execution.maximum_collection_items",
+        "null|u64",
+        Some(1),
+        Some(u64::MAX),
+        false,
+        None,
+    ),
+    optional_schema_field(
+        "execution.maximum_capability_calls",
+        "null|u64",
+        Some(1),
+        Some(u64::MAX),
         false,
         None,
     ),
@@ -1375,7 +1399,7 @@ pub(crate) fn starter_http_deployment() -> Result<DeploymentDescriptor, Diagnost
             cancellation_grace_milliseconds: 5_000,
             ..ResidentLimits::default()
         }),
-        execution: Some(RunPolicy::default()),
+        execution: Some(RunPolicy::unmetered()),
         http: Some(HttpLimits {
             maximum_request_body_bytes: 8 * 1024 * 1024,
             maximum_response_body_bytes: 4 * 1024 * 1024,
@@ -2100,13 +2124,19 @@ fn validate_descriptor(descriptor: &DeploymentDescriptor) -> Result<(), Diagnost
         return Err(missing_resident_policy());
     }
     if descriptor.execution.is_some_and(|execution| {
-        execution.instruction_fuel == 0
+        [
+            execution.instruction_fuel,
+            execution.maximum_allocated_bytes,
+            execution.maximum_collection_items,
+            execution.maximum_capability_calls,
+        ]
+        .contains(&Some(0))
             || execution.maximum_call_depth == 0
             || execution.maximum_value_stack == 0
     }) {
         return Err(deployment_error(
             "deployment_execution_limit",
-            "execution fuel, call depth, and value stack limits must be positive",
+            "specified cumulative quotas, call depth, and value stack limits must be positive",
         ));
     }
     if let Some(http) = &descriptor.http {
@@ -2526,12 +2556,7 @@ fn normalized_adapter(
 }
 
 fn normalized_run_policy(policy: RunPolicy) -> NormalizedRunPolicy {
-    NormalizedRunPolicy {
-        instruction_steps: Some(policy.instruction_fuel),
-        maximum_call_depth: policy.maximum_call_depth,
-        maximum_value_stack: policy.maximum_value_stack,
-        ..NormalizedRunPolicy::default()
-    }
+    policy.into()
 }
 
 fn missing_resident_policy() -> Diagnostic {
@@ -2833,7 +2858,7 @@ mod tests {
         }
         let bounded = RunPolicy::default();
         let normalized = normalized_run_policy(bounded);
-        assert_eq!(normalized.instruction_steps, Some(bounded.instruction_fuel));
+        assert_eq!(normalized.instruction_steps, bounded.instruction_fuel);
         assert_eq!(normalized.maximum_allocated_bytes, Some(256 * 1024 * 1024));
         assert_eq!(normalized.maximum_collection_items, Some(1_000_000));
         assert_eq!(normalized.maximum_capability_calls, Some(100_000));
@@ -2921,7 +2946,7 @@ mod tests {
                 .as_ref()
                 .expect("explicit starter policy")
                 .instruction_fuel,
-            10_000_000
+            None
         );
         assert_eq!(
             first
@@ -3097,3 +3122,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "deployment_policy_tests.rs"]
+mod policy_tests;

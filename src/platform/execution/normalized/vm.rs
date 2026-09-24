@@ -41,16 +41,22 @@ pub struct NormalizedRunPolicy {
     pub maximum_capability_calls: Option<u64>,
 }
 
+impl From<crate::platform::execution::RunPolicy> for NormalizedRunPolicy {
+    fn from(policy: crate::platform::execution::RunPolicy) -> Self {
+        Self {
+            instruction_steps: policy.instruction_fuel,
+            maximum_call_depth: policy.maximum_call_depth,
+            maximum_value_stack: policy.maximum_value_stack,
+            maximum_allocated_bytes: policy.maximum_allocated_bytes,
+            maximum_collection_items: policy.maximum_collection_items,
+            maximum_capability_calls: policy.maximum_capability_calls,
+        }
+    }
+}
+
 impl Default for NormalizedRunPolicy {
     fn default() -> Self {
-        Self {
-            instruction_steps: Some(10_000_000),
-            maximum_call_depth: 4_096,
-            maximum_value_stack: 1_000_000,
-            maximum_allocated_bytes: Some(256 * 1024 * 1024),
-            maximum_collection_items: Some(1_000_000),
-            maximum_capability_calls: Some(100_000),
-        }
+        crate::platform::execution::RunPolicy::default().into()
     }
 }
 
@@ -58,13 +64,7 @@ impl NormalizedRunPolicy {
     /// Trusted foreground execution has no cumulative work quotas. Structural limits,
     /// cancellation, admission and exact deployment-grant accounting remain independent.
     pub fn foreground() -> Self {
-        Self {
-            instruction_steps: None,
-            maximum_allocated_bytes: None,
-            maximum_collection_items: None,
-            maximum_capability_calls: None,
-            ..Self::default()
-        }
+        crate::platform::execution::RunPolicy::unmetered().into()
     }
 }
 

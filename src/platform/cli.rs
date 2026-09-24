@@ -923,7 +923,15 @@ pub async fn execute_foreground_run(
                 ("verification", "not-performed".to_owned()),
                 (
                     "execution-profile",
-                    if receipt.policy.instruction_steps.is_none() {
+                    if [
+                        receipt.policy.instruction_steps,
+                        receipt.policy.maximum_allocated_bytes,
+                        receipt.policy.maximum_collection_items,
+                        receipt.policy.maximum_capability_calls,
+                    ]
+                    .iter()
+                    .all(Option::is_none)
+                    {
                         "trusted-foreground"
                     } else {
                         "bounded"

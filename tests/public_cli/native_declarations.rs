@@ -1612,3 +1612,7 @@ mod native_bytes;
 
 #[path = "native_text.rs"]
 mod native_text;
+
+#[cfg(target_os = "linux")]
+#[path = "resident_policy.rs"]
+mod resident_policy;

@@ -740,7 +740,7 @@ fn lifecycle(context: &mut Context, consumer: &Consumer) -> Result<(), DevError>
     )?;
     descriptor["target"] = json!("main");
     descriptor["execution"] = json!(lkjscript::platform::RunPolicy {
-        instruction_fuel: 100,
+        instruction_fuel: Some(100),
         ..Default::default()
     });
     failure(

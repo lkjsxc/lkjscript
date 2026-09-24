@@ -49,17 +49,58 @@ impl ExecutionError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RunPolicy {
-    pub instruction_fuel: u64,
+    // Missing is an error; only explicit null disables an existing instruction quota.
+    #[serde(deserialize_with = "required_quota")]
+    pub instruction_fuel: Option<u64>,
     pub maximum_call_depth: usize,
     pub maximum_value_stack: usize,
+    // Omission preserves the previously implicit limits of numeric deployments.
+    #[serde(default = "default_allocated_bytes")]
+    pub maximum_allocated_bytes: Option<u64>,
+    #[serde(default = "default_collection_items")]
+    pub maximum_collection_items: Option<u64>,
+    #[serde(default = "default_capability_calls")]
+    pub maximum_capability_calls: Option<u64>,
+}
+
+fn required_quota<'de, D: serde::Deserializer<'de>>(decoder: D) -> Result<Option<u64>, D::Error> {
+    serde::Deserialize::deserialize(decoder)
+}
+
+const fn default_allocated_bytes() -> Option<u64> {
+    Some(256 * 1024 * 1024)
+}
+
+const fn default_collection_items() -> Option<u64> {
+    Some(1_000_000)
+}
+
+const fn default_capability_calls() -> Option<u64> {
+    Some(100_000)
 }
 
 impl Default for RunPolicy {
     fn default() -> Self {
         Self {
-            instruction_fuel: 10_000_000,
+            instruction_fuel: Some(10_000_000),
             maximum_call_depth: 4_096,
             maximum_value_stack: 1_000_000,
+            maximum_allocated_bytes: default_allocated_bytes(),
+            maximum_collection_items: default_collection_items(),
+            maximum_capability_calls: default_capability_calls(),
+        }
+    }
+}
+
+impl RunPolicy {
+    /// No cumulative quotas. Work is still observed; live limits and controls remain separate.
+    pub fn unmetered() -> Self {
+        Self {
+            instruction_fuel: None,
+            maximum_allocated_bytes: None,
+            maximum_collection_items: None,
+            maximum_capability_calls: None,
+            ..Self::default()
         }
     }
 }

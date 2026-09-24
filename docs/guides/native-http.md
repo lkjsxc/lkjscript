@@ -119,11 +119,15 @@ The health body is `ready` with `cache-control: no-store`; the greeting is
 SIGINT termination was observed to join successfully. Do not assume SIGTERM has
 the same graceful behavior in this runner.
 
-Resident HTTP currently requires explicit numeric execution and runtime policy.
+The published v0.1.44 executable used by this walkthrough requires explicit numeric
+execution and runtime policy.
 Removing `execution` or using `instruction_fuel: null` is not an unmetered mode.
 Keep the generated values for this example; its 10,000,000 instruction allowance
 is a deployment setting, not a new language requirement introduced by this library.
-This guide does not extend foreground optional metering to resident execution.
+This v0.1.44 observation does not claim optional resident metering. Newer development
+executables provide explicit nullable cumulative quotas as described in the
+[resident policy guide](resident-policy.md); preserve the matching executable and
+configuration when using either contract.
 
 ## Run without the authoring projects
 

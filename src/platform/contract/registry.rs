@@ -2346,7 +2346,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "deployment_policy_required",
             DiagnosticClass::Source,
             "A resident or private runner descriptor omitted execution or runtime policy.",
-            "Supply complete numeric policies; omission is reserved for foreground Command execution.",
+            "Supply complete live-limit policies and explicit numeric or null cumulative quotas; policy-object omission is reserved for foreground Command execution.",
         ),
         diagnostic(
             "deployment_command_runner",
@@ -7498,12 +7498,25 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ("execution-omitted", "trusted-no-cumulative-instruction-allocation-collection-capability-quota".to_owned()),
                 ("runtime-omitted", "no-deadline-default-bounded-cleanup-grace".to_owned()),
                 ("execution-runtime-null", "reject".to_owned()),
-                ("resident-execution-runtime", "required-complete-numeric-objects".to_owned()),
+                ("resident-execution-runtime", "required-objects-positive-live-limits-nullable-cumulative-quotas".to_owned()),
                 ("explicit-execution-cumulative-defaults", "allocated-bytes=268435456,collection-items=1000000,capability-calls=100000".to_owned()),
                 ("topology", "listen-http-session-worker-required-null".to_owned()),
                 ("remaining-limits", "call-depth-value-stack-single-value-container-type-codec-adapter-and-canonical-grant".to_owned()),
                 ("frontier", "current-representation-and-admission-not-permanent-language-ceilings".to_owned()),
                 ("recovery", "retain-matching-executable-and-immutable-bundle-no-data-migration".to_owned()),
+            ])?);
+            records.push(compact_record("deployment.cumulative-quotas", &[
+                ("fields", "instruction_fuel,maximum_allocated_bytes,maximum_collection_items,maximum_capability_calls".to_owned()),
+                ("numeric", "positive-u64".to_owned()),
+                ("null", "no-cumulative-quota-for-that-field".to_owned()),
+                ("fuel-omitted", "reject".to_owned()),
+                ("added-field-omitted", "preserve-legacy-default".to_owned()),
+                ("counter-scope", "one-invocation".to_owned()),
+                ("counter-overflow", "saturated-u64-is-lower-bound".to_owned()),
+                ("new-http-recipe", "four-explicit-nulls".to_owned()),
+                ("live-controls", "deadlines-cancellation-depth-stack-concurrency-codecs-grants-streams-retained".to_owned()),
+                ("memory", "cumulative-accounting-not-rss-or-live-heap-limit".to_owned()),
+                ("encoding", "materialize-all-selected-fields".to_owned()),
             ])?);
             records.push(compact_record(
                 "deployment.schema",

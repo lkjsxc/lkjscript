@@ -25,7 +25,8 @@ application work. Artifacts contain none of these deployment facts.
 
 Foreground `run --deployment` uses this same descriptor and loader. Only this route permits
 omitting `execution` and `runtime`; explicit null rejects. The raw schema preserves omission
-until route validation. Resident routes require both complete numeric objects. Command topology
+until route validation. Resident routes require both policy objects, with positive live limits
+and explicit numeric or null cumulative quota choices. Command topology
 requires null listener, HTTP, session and worker fields. Discovery marks these four
 topology fields `required=true`: accepting null does not make a JSON field omittable.
 Other field requirements are unchanged.
@@ -34,8 +35,37 @@ and every result-type encoding branch are admitted read-only before named secret
 adapters. Partial adapter preparation closes earlier owners on failure.
 
 Absent execution selects trusted foreground work without cumulative instruction, allocated-byte,
-collection-item or invocation capability-call quotas. Explicit execution retains its instruction,
-depth and stack values and the existing cumulative 256 MiB/1,000,000-item/100,000-call defaults.
+collection-item or invocation capability-call quotas. Explicit execution has six fields:
+
+| Field | Presence | Accepted value | Omitted-field behavior |
+| --- | --- | --- | --- |
+| `instruction_fuel` | Required | Positive u64 or null | Reject |
+| `maximum_call_depth` | Required | Positive usize | Reject |
+| `maximum_value_stack` | Required | Positive usize | Reject |
+| `maximum_allocated_bytes` | Optional | Positive u64 or null | 268,435,456 bytes |
+| `maximum_collection_items` | Optional | Positive u64 or null | 1,000,000 items |
+| `maximum_capability_calls` | Optional | Positive u64 or null | 100,000 calls |
+
+Each null disables only that cumulative quota. Numeric zero, negative, fractional,
+excessive, duplicate and unknown fields reject before artifact/secret/adapter access.
+Omission of the three added fields preserves the actual limits of older numeric
+three-field descriptors. Encoding materializes those selections, so an encode/decode
+round trip does not remove a previously implicit quota. Null instruction fuel alone
+therefore does not remove allocation, collection or capability-call quotas.
+
+The counters are per invocation, not a process-lifetime budget. Unbounded counters
+remain observed and saturate at u64::MAX, where the value is a lower bound rather than
+an exact total. Allocated bytes and collection items are cumulative work accounting,
+not an RSS or live-heap ceiling. Depth, stack, admission/codec bounds, task concurrency,
+body/stream limits and exact per-grant authority remain independently enforced.
+
+New HTTP recipes explicitly set all four cumulative quotas to null. Existing authored
+descriptors keep their previous numeric selections; no configuration file is implicitly
+rewritten. Internal discovery contract 5 describes the expanded choice. Older executables
+reject null fuel or the new fields; selecting this syntax requires a supporting executable,
+while rollback retains the earlier numeric descriptor and its matching executable.
+No graph, artifact, package or application-data migration is required.
+
 Absent runtime removes only this route's invocation deadline; shutdown and cancellation grace
 remain finite. Explicit runtime preserves its supplied deadline and cleanup policy. Neither
 policy supplies capabilities, alters per-grant maxima, removes finite preparation/codec or
