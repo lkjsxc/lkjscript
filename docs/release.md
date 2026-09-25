@@ -132,10 +132,13 @@ published at 2026-09-25T00:11:48Z and observed as latest. No replacement produce
 product rebuild was requested. The [resumption record](campaigns/202609250926.md)
 confirms the completed jobs without relabeling earlier pending observations.
 
-The byte-conversion and strict-form increment after that source is unreleased.
-Its new closed intrinsics are not available in immutable v0.1.45. A successor
-publication is deferred until a useful durable native UI editor consumes them;
-normal source integration does not require rewriting the completed release.
+The byte-conversion and strict-form increment after that source is absent from
+immutable v0.1.45. The [durable editor campaign](campaigns/202609251211.md) now consumes
+it in an ordinary authenticated, conflict-aware native UI with source-free restart
+and actual script-free browser operation. This fires the successor trigger and
+selects v0.1.46 after observing the tag/release unoccupied and prior publication
+complete. Source, candidate and public acceptance remain distinct; selection alone
+is not publication, and the completed v0.1.45 assets are not rewritten.
 
 ## Content and compatibility
 

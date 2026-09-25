@@ -4,7 +4,9 @@ This guide requires **unreleased development source after v0.1.45**. The officia
 immutable v0.1.45 binary does not recognize `core.bytes.from-list` or
 `core.bytes.to-text-result` and correctly rejects the new closure. Application
 use requires a compatible executable, not Cargo or a compiler checkout at runtime.
-The [campaign](../campaigns/202609250926.md) owns actual acceptance and delivery.
+The [campaign](../campaigns/202609250926.md) owns this increment's acceptance.
+The [durable editor](native-editor.md) consumes it for authenticated, conditional
+saves and selects successor v0.1.46; [release status](../release.md) remains separate.
 
 ## A library, not a form-specific runtime primitive
 
@@ -115,7 +117,9 @@ see the [OWASP CSRF guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cro
 Persistent actions additionally need exact-base conditional updates, a completed
 transaction outcome and explicit conflict/error responses. This codec does not
 claim those application properties, accounts, multipart uploads, browser end-to-end
-coverage or a finished stateful framework.
+coverage or a finished stateful framework. The separate [durable editor](native-editor.md)
+now supplies and tests a small explicit admission/transaction/UI composition rather
+than putting those policies inside this codec.
 
 ## Compose a stateless POST receiver
 
@@ -172,5 +176,6 @@ execution observations, not throughput, accessibility or live-browser claims.
 
 This receiver merely reports supplied values and saves nothing. It has no account,
 session, origin authorization or durable action. It does not make a POST endpoint
-safe for a later effectful application. The next product workload remains a native
-UI editor with explicit access/origin policy and conflict-aware durable saves.
+safe for a later effectful application. The separate [native editor](native-editor.md)
+now composes explicit access/origin policy and conflict-aware durable saves;
+those application guarantees remain at that workload's owner, not in this codec.

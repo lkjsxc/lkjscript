@@ -58,8 +58,10 @@ source. The [campaign](campaigns/202609250926.md) preserves the earlier interrup
 run, the genuine 25-of-26 failed attempt and its exact-supplier assertion repairs.
 Subsequent reporting changes do not relabel that full acceptance with another SHA.
 
-The existing v0.1.45 binary remains the separately accepted and published release;
-new byte construction and strict form decoding are unreleased mainline source.
+The existing v0.1.45 binary remains the separately accepted and published release.
+The native durable-editor milestone selects successor v0.1.46, including the prior
+byte/form increment; candidate acceptance and publication are not inferred from
+its version label. The [editor campaign](campaigns/202609251211.md) owns current delivery.
 
 | Capability | Actual implementation and evidence owner |
 | --- | --- |
@@ -83,14 +85,13 @@ replace a maintained application, or imply that new development defaults applied
 to those older executions. Their literal inputs and actual tested runtimes remain
 at their own guide and campaign owners.
 
-The [native UI library](guides/native-ui.md) and separate application also run on
-public v0.1.44. Applications describe typed cards, stacks, labeled inputs, submit
-buttons and light/dark themes without directly authoring HTML/CSS/JavaScript.
-The library owns fixed HTML/CSS; no JavaScript is emitted or required. This is a
-GET-only, stateless example, not durable actions, accounts or a complete framework.
-Its original HTTP and offline-browser proofs remain distinct from unavailable live
-browser end-to-end proof. Its compatibility and renderer are unchanged by the
-[unselected consolidation experiment](campaigns/202609250903.md).
+The original [native UI library](guides/native-ui.md) and GET-only application were
+proved on public v0.1.44. Typed cards, stacks, labels, buttons and themes need no
+application-authored HTML/CSS/JavaScript. The library owns fixed HTML/CSS and emits
+no script. That historical HTTP/offline-browser proof remains distinct from its
+unavailable live-browser proof. The [unselected join-consolidation experiment](campaigns/202609250903.md)
+remains unselected. The current ordinary UI package extends controls for the durable
+editor below; old exact imports are not automatically upgraded.
 
 A development-v0.1.45 [paged-list workload](guides/native-list.md) combines those
 libraries with byte inspection, ordinary text joining and list windows. Its native
@@ -108,6 +109,35 @@ Its source, public authoring and acceptance boundaries belong to the
 [campaign](campaigns/202609250926.md). This is not another released v0.1.45 binary.
 The codec does not itself supply authentication, CSRF policy, persistent mutation,
 file uploads or a complete stateful UI framework.
+
+## Native durable editor
+
+The [new editor](guides/native-editor.md) uses the UI/form libraries and existing
+HTTP, configuration, secret verification and transactional data capabilities.
+It has explicit POST saves, labeled multiline fields, hidden base revisions,
+strict domain validation, shared Basic authentication and configured Host/Origin
+admission. It adds no kernel primitive, browser script, external database or
+application-authored markup. Its operator-facing descriptor is also a test input.
+
+A save compares the displayed revision and conditionally writes within one
+completed transaction. Concurrent writers get visible conflicts retaining their
+drafts; review and another explicit action are required. GET is read-only. Malformed
+stored values and version exhaustion are not silently overwritten. There is no
+automatic live-effect retry, and a missing response does not imply rollback.
+
+Development authoring/check/build passes 165 combined graph tests, including 38 new
+editor tests. Independent HTTP checks include 8 competing writers across 2 processes
+(one commit, seven conflicts) and detached restart. Chromium 153 with page JavaScript
+disabled performs actual authentication, form POST/redirect/GET, two-tab conflict and
+review; leading LF/Unicode round-trip and 360px layout pass. This browser trial found
+and corrected the no-referrer/Origin-null incompatibility without weakening admission.
+Maintained tests and the [campaign](campaigns/202609251211.md) own complete source evidence.
+
+This is one bounded shared note, not accounts, sessions, a public production deployment,
+rich text, multiple documents or a complete framework. The UI extension is an explicit
+package update; exhaustive consumers of its closed node variant need the new cases.
+The reference runtime remains Rust, and native application composition is not compiler
+self-hosting or a Wasm/browser backend.
 
 ## Language and runtime boundary
 

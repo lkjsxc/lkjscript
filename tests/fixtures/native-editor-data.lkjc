@@ -1,0 +1,45 @@
+request base=FIXTURE_BASE
+
+declarations.begin
+(units
+  (use std builtin)
+  (type-alias Note (record (version I64) (text Text)))
+  (module create fixture
+    (constant create key (visibility private) (type (list std::DataKeyPart))
+      (value (list std::DataKeyPart (variant std::DataKeyPart::Text (text "note")))))
+    (function create value (visibility private)
+      (parameter create mode (type I64)) (returns Bytes) (effect pure)
+      (body (if (call std::i64-equal (local mode) (i64 0))
+        (call std::bytes-from-text (text "not typed data"))
+        (if (call std::i64-equal (local mode) (i64 1))
+          (call std::data-encode (types I64) (i64 17))
+          (call std::data-encode (types Note) (record structural
+            (field version (if (call std::i64-equal (local mode) (i64 2))
+              (i64 9223372036854775807)
+              (if (call std::i64-equal (local mode) (i64 3)) (i64 -1) (i64 1))))
+            (field text (if (call std::i64-equal (local mode) (i64 4))
+              (text "not\rcanonical") (text "fixture note")))))))))
+    (function create replace (visibility private)
+      (parameter create mode (type I64)) (returns (std::TransactionOutcome Bool))
+      (effect (task (requirement store::data)))
+      (body (transaction-outcome store::data (types Bool)
+        (outcome std::TransactionOutcome std::TransactionAbortReason
+          std::TransactionOutcome::Committed std::TransactionOutcome::Aborted
+          std::TransactionAbortReason::ConditionFailed std::TransactionAbortReason::Conflict)
+        (binding write)
+        (let (binding entries (capability-call store::data std::DataStore::get
+            (static-text "native-editor") (constant key)))
+          (in (capability-call store::data std::DataStore::put
+            (static-text "native-editor") (constant key) (call value (local mode))
+            (if (call std::i64-equal (call std::list-length (types std::DataEntry) (local entries)) (i64 0))
+              (variant std::DataExpectation::Missing)
+              (variant std::DataExpectation::Exact
+                (field (call std::list-get (types std::DataEntry) (local entries) (i64 0)) std::DataEntry::revision)))))))))
+    (component create store (visibility private)
+      (requirement create data (interface std::DataStore)
+        (operations std::DataStore::get std::DataStore::put std::DataStore::transaction)
+        (limits (maximum_calls 4 calls)))
+      (port create replace (type (task-function (I64) (std::TransactionOutcome Bool)
+        (row (requirement data)))) (function replace))))
+  (target create replace (component fixture::store) (runner command) (port fixture::store::replace)))
+declarations.end

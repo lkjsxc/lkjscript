@@ -6,6 +6,7 @@ intrinsics or automatically maintained application packages.
 
 | Guide | What it demonstrates |
 | --- | --- |
+| [Durable native browser editor](native-editor.md) | Ordinary POST/multiline UI, strict admission, shared authentication, transactional conflict handling, source-free restart and real script-free browser operation; selected for v0.1.46. |
 | [Strict native form codec](native-forms.md) | Unreleased byte construction, checked UTF-8, bounded fields, exact transport, detached commands and a stateless POST receiver. |
 | [Typed UI without browser-code authoring](native-ui.md) | Ordinary layouts, palettes and GET forms, exact response-library composition, and detached public-v0.1.44 execution. |
 | [Paged native HTTP list](native-list.md) | Native bounded-decimal input, reusable list/text operations, exact HTML/response imports and detached HTTP execution on development v0.1.45. |

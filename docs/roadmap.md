@@ -16,10 +16,12 @@ The next unreleased increment supplies general byte construction and checked
 UTF-8 results, used by the [ordinary strict form library](guides/native-forms.md).
 Its dependency-wide fresh source acceptance and normal mainline integration are
 complete; the [campaign](campaigns/202609250926.md) retains the actual proof and failures.
-The next publication trigger is a useful durable native UI editor using this
-library, with validation, honest failure behavior and detached use; do not reserve
-or publish a replacement v0.1.45. A separate reviewed versioned candidate must
-accept the actual distributable before any successor publication.
+The [durable native editor](guides/native-editor.md) now consumes that library with
+validation, shared access, completed conditional transactions, retained conflicts
+and detached restart. Real script-free browser use has also passed. This fires the
+successor publication trigger and selects v0.1.46 after observing its tag/release
+unoccupied. Complete source and exact finalized-candidate acceptance before promotion;
+do not replace v0.1.45 or relabel development execution as public-binary proof.
 
 This milestone should make the implemented language easier to acquire and use.
 Native application development and native contributor-tool adoption are distinct
@@ -31,15 +33,22 @@ Prefer the shortest complete route from an ordinary native program to useful
 behavior. Choose the next change by observing a real user's public authoring,
 editing, testing, composition or execution workload, not by expanding a feature list.
 
-The [native UI workload](guides/native-ui.md) now demonstrates ordinary typed page
-composition with no application-authored HTML/CSS/JavaScript. The next useful product
-boundary is a small server-owned durable editor: explicit POST inputs, strict
-validation, trusted-origin admission, visible errors, conflict-aware saving and
-restart persistence. Investigate and reuse existing data/transaction facilities;
-no new framework intrinsic or browser backend is assumed. Strict byte/form input
-and a stateless POST receiver are implemented; native UI actions and durable storage
-integration remain uncompleted. A form is not authorization,
-and a failed HTTP response does not establish that a committed save was rolled back.
+The [native editor](guides/native-editor.md) demonstrates ordinary typed page
+composition, explicit POST actions, configured Host/Origin admission, independent
+shared authentication, visible conflicts and durable storage without application
+HTML/CSS/JavaScript. Existing transactions were sufficient; no framework intrinsic
+or browser backend was needed. Its browser-discovered referrer-policy defect shows
+why raw HTTP observations and actual user-agent behavior are distinct obligations.
+
+The next useful question is authoring and setup friction: this small app still needs
+verbose native declarations, exact library import steps and an explicit descriptor.
+Use a second small real application or an identity-preserving editor change to
+measure that friction and identify genuinely reusable admission/form/persistence
+helpers. Prefer ordinary packages or public scaffolding over a special-purpose
+compiler subsystem. Do not hide grants, transaction completion or recovery policy
+behind a convenient API. Multiple notes or richer actions should justify their
+shared mechanism; completing this particular note app is not the language's purpose.
+A form is not authorization, and a failed response does not establish rollback.
 
 Do not migrate native consumers solely to remove a small helper. The measured UI
 text-join consolidation increased identical-test-suite instruction counts despite

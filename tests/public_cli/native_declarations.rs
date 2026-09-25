@@ -1622,3 +1622,6 @@ mod native_byte_conversion;
 
 #[path = "native_forms.rs"]
 mod native_forms;
+
+#[path = "native_editor.rs"]
+mod native_editor;

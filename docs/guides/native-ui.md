@@ -1,8 +1,16 @@
 # Build a page without authoring browser markup
 
-The [UI library](examples/ui.lkjc), its [native tests](examples/ui-tests.lkjc),
-and the separate [application](examples/ui-site.lkjc) run on the published Linux
-x86-64 **v0.1.44** executable. The application describes headings, paragraphs,
+This page records the original GET-only public-v0.1.44 witness. Its exact tested
+literals remain in the [original source snapshot](https://github.com/lkjsxc/lkjscript/tree/ca3ef4d672addc612275eca52da7534fd408a1b6/docs/guides/examples).
+The current UI literal additionally supports typed POST forms, hidden inputs,
+multiline fields and text blocks for the [durable editor](native-editor.md).
+Use that guide for current stateful composition and its actual runtime/tests;
+the historical counts and browser restrictions below are not new-source evidence.
+
+The original UI library, its native tests and separate application were tested
+on the published Linux x86-64 **v0.1.44** executable; use the frozen snapshot above
+for those exact inputs. Current files are the [UI library](examples/ui.lkjc), its
+[native tests](examples/ui-tests.lkjc) and [application](examples/ui-site.lkjc). The application describes headings, paragraphs,
 cards, stacks, labeled inputs, submit buttons and a light/dark theme in ordinary
 lkjscript. It contains no HTML, CSS or JavaScript source. The ordinary library
 owns the fixed HTML/CSS rendering; the browser still receives HTML and CSS.
@@ -16,8 +24,11 @@ editable authority. Existing exact package selections are not silently upgraded.
 ## What the library owns
 
 `ui::theme` and `ui::spacing` are closed variants. `ui::node` composes text,
-cards, stacks and query forms. A form contains only `ui::input` and `ui::button`
-records, not child nodes, so nested forms are not representable through this API.
+cards, stacks and query forms. A query form contains only `ui::input` and
+`ui::button` records. The current `ui::action-form` adds a fixed POST method,
+`ui::hidden-input` values and labeled multiline `ui::input` values. Neither form
+accepts child nodes, so nested forms are not representable through this API.
+`ui::node::text-block` preserves line breaks for read-only note display.
 There is no raw-markup node, arbitrary attribute, script, URL or CSS-string input.
 The private renderer helper cannot be imported by an application.
 

@@ -1,0 +1,86 @@
+{
+  "artifact": "editor.lkja",
+  "target": "editor",
+  "listen": "127.0.0.1:8080",
+  "runtime": {
+    "maximum_concurrent_tasks": 16,
+    "maximum_queued_tasks": 64,
+    "request_deadline_milliseconds": 90000,
+    "shutdown_grace_milliseconds": 30000,
+    "cancellation_grace_milliseconds": 5000
+  },
+  "execution": {
+    "instruction_fuel": null,
+    "maximum_call_depth": 4096,
+    "maximum_value_stack": 1000000,
+    "maximum_allocated_bytes": null,
+    "maximum_collection_items": null,
+    "maximum_capability_calls": null
+  },
+  "http": {
+    "maximum_request_body_bytes": 16384,
+    "maximum_response_body_bytes": 131072,
+    "maximum_header_bytes": 32768,
+    "maximum_headers": 128
+  },
+  "session": null,
+  "worker": null,
+  "streams": {
+    "maximum_chunk_bytes": 65536,
+    "maximum_buffered_chunks": 8,
+    "maximum_total_bytes": 67108864,
+    "maximum_live_streams": 1024
+  },
+  "configuration": {
+    "origin": { "kind": "text", "value": "http://127.0.0.1:8080" }
+  },
+  "secrets": [
+    { "name": "editor-authorization", "variable": "LKJSCRIPT_EDITOR_AUTHORIZATION" }
+  ],
+  "grants": [
+    {
+      "requirement": "config",
+      "sharing_domain": "editor-config",
+      "authority_revision": "2222222222222222222222222222222222222222222222222222222222222222",
+      "adapter": { "kind": "configuration" }
+    },
+    {
+      "requirement": "auth",
+      "sharing_domain": "editor-auth",
+      "authority_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "adapter": {
+        "kind": "secret_verifier",
+        "secret": "editor-authorization",
+        "maximum_candidate_bytes": 4096
+      }
+    },
+    {
+      "requirement": "streams",
+      "sharing_domain": "editor-streams",
+      "authority_revision": "9999999999999999999999999999999999999999999999999999999999999999",
+      "adapter": { "kind": "byte_stream" }
+    },
+    {
+      "requirement": "data",
+      "sharing_domain": "editor-data",
+      "authority_revision": "3333333333333333333333333333333333333333333333333333333333333333",
+      "adapter": {
+        "kind": "data",
+        "root": "data",
+        "namespace": "native-editor",
+        "limits": {
+          "maximum_space_name_bytes": 128,
+          "maximum_key_parts": 16,
+          "maximum_key_bytes": 4096,
+          "maximum_value_bytes": 8192,
+          "maximum_transaction_mutations": 4,
+          "maximum_transaction_bytes": 32768,
+          "maximum_scan_items": 16,
+          "maximum_scan_bytes": 32768,
+          "maximum_scan_work": 64,
+          "maximum_live_transactions": 16
+        }
+      }
+    }
+  ]
+}
