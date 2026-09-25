@@ -1,6 +1,6 @@
 # An editable web app from one binary
 
-**Runtime boundary:** development v0.1.47. `lkjscript capabilities new` must
+**Creation boundary:** development v0.1.47. `lkjscript capabilities new` must
 advertise `web`. This is not a retroactive addition to the immutable public
 v0.1.46 executable. [Current status](../status.md) owns publication
 state; the [campaign](../campaigns/202609251450.md) owns exact evidence.
@@ -81,14 +81,31 @@ commands. In `title.lkjc`, change the text in the `page-title` function body, th
 lkjscript change plan --input-file title.lkjc
 lkjscript change apply --input-file title.lkjc --plan PLAN_TOKEN
 lkjscript check
-lkjscript build --output generated/application.lkja
-lkjscript serve --deployment service.deployment.json
+lkjscript build --output generated/application-edited.lkja
 ```
 
-Review the plan and use its returned token. Stop the earlier server before
-restarting; rebuilding a file does not replace a running process's loaded program.
-A changed title preserves the existing declaration identity and its callers. A
-body with the wrong return type is rejected without advancing the accepted head.
+Review the plan and use its returned token. Every build output must be absent:
+`build` deliberately rejects an existing file with `output_conflict`, even when
+its bytes would be identical. Choose a new unused output name for each build;
+do not delete the retained working bundle to make a command succeed.
+
+Make a new copy of `service.deployment.json` named
+`service-edited.deployment.json`, choosing an unused name. In that copy, change
+only `artifact` to `generated/application-edited.lkja`. Leave the original
+bundle and descriptor intact. Stop the earlier server, then explicitly select
+the new deployment:
+
+```sh
+lkjscript serve --deployment service-edited.deployment.json
+```
+
+The artifact path is relative to its descriptor. Building a new bundle or changing
+a descriptor does not hot-reload a running process. The retained original pair
+can be selected again with its original serve command; this example has no
+persistent application data to migrate. Other stateful applications need their
+own recovery policy. A changed title preserves the declaration identity and its
+callers. A body with the wrong return type is rejected without advancing the
+accepted head.
 An unchanged draft plans as unchanged.
 
 To change the layout, draft `web::screen` using the same module/declaration lookup.
@@ -113,6 +130,15 @@ path edits when the directory moves. Execute the copied binary's `serve` command
 with that descriptor. The authoring graph, original native files, compiler checkout
 and package transports are unnecessary at runtime. A bundle is not itself a native
 executable; it still needs a compatible lkjscript runtime.
+
+A bounded independent observation created this template with development v0.1.47,
+removed the authoring graph and served its unchanged bundle with the anonymously
+acquired public v0.1.46 musl executable. Ordinary GET, Unicode text, escaping and
+dark-theme responses passed, followed by joined shutdown. That older executable
+still rejects `new --template web`: runtime compatibility does not add a creation
+recipe to an already published binary. The [campaign](../campaigns/202609251450.md)
+retains the exact binary relationship and does not generalize it to arbitrary
+future bundles.
 
 The deployment grants only the HTTP request-stream interface. Its listener is
 plaintext and loopback-only; it does not acquire host filesystem, outbound network,

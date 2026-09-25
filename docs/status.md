@@ -160,8 +160,10 @@ restart after removing the authoring graph. Chromium 153 with page JavaScript
 disabled passes actual form submission, Unicode/markup-as-data input, keyboard
 submission, refresh and a 360px viewport without horizontal overflow. The
 [campaign](campaigns/202609251450.md) retains original evidence and the earlier
-incorrect local-test-count assertion. Complete source acceptance and publication
-are separate delivery boundaries, not implied by these focused observations.
+incorrect local-test-count assertion. Corrected source
+`511f48c41bc45374492051181e5334fa018b0d71` now passes all 20 release-source gates
+freshly, with stable inputs and zero reuse. This is not standalone full-26 or
+finalized-archive acceptance; the v0.1.47 candidate remains a separate boundary.
 
 This template is not part of the immutable public v0.1.46 executable. It has no
 saved state, authentication, POST mutation, account system, client-side event

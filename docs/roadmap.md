@@ -22,8 +22,9 @@ and detached restart. Real script-free browser use has also passed. This fires t
 successor publication trigger. Original candidate 36097087012/1 and promotion
 36193525561/1 now complete immutable public v0.1.46, including anonymous installed
 verification. Keep its b25bde2d product source and original assets unchanged.
-The separately implemented web starter selects v0.1.47; finish its fresh source
-acceptance and normal mainline integration before dispatching its own candidate.
+The separately implemented web starter selects v0.1.47. Source 511f48c4 completes
+its 20-gate fresh source tier; finish normal mainline delivery and its own finalized
+candidate before promotion. Keep the source and candidate identities distinct.
 
 This milestone should make the implemented language easier to acquire and use.
 Native application development and native contributor-tool adoption are distinct
@@ -48,8 +49,8 @@ downloads. Native UI code is vendored as editable local modules, not moved into 
 privileged renderer or a hidden registry. The application can be edited through the
 same identity-preserving native draft workflow and deployed without its authoring
 graph. Its focused public and script-free browser results belong to the
-[campaign](campaigns/202609251450.md); complete source/release acceptance remain
-separate obligations.
+[campaign](campaigns/202609251450.md). The fresh source tier is now complete;
+finalized-candidate and public distribution remain separate obligations.
 
 The next useful question is the recurring development loop, rather than another
 large closed starter. Use a second small real application or an identity-preserving
@@ -58,7 +59,11 @@ measure discovery, review and restart friction. Prefer ordinary packages or smal
 public authoring mechanisms over a special-purpose compiler subsystem. Preserve
 explicit dependency updates: vendoring is convenient creation, not a silent upgrade
 policy. Do not hide grants, transaction completion or recovery behind a convenient
-API. Multiple notes or richer actions should justify their shared mechanism;
+API. The observed rebuild loop also requires a new output filename and explicit
+deployment selection; the corrected guide preserves the old working pair instead
+of silently overwriting it. A later development-loop improvement should shorten
+that path without conflating accepted meaning, built bundles and running processes.
+Multiple notes or richer actions should justify their shared mechanism;
 completing this particular note app is not the language's purpose. A form is not
 authorization, and a failed response does not establish rollback.
 
