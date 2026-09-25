@@ -17,6 +17,7 @@ const CURRENT_FILES: &[&str] = &[
     "applications/lkjournal/service.deployment.json",
     "applications/lkjournal/worker.deployment.json",
     "docs/architecture.md",
+    "docs/guides/examples/editor.deployment.json",
     "docs/release.md",
     "docs/roadmap.md",
     "docs/security.md",
@@ -210,7 +211,9 @@ fn inspect_files(repository: &Path) -> Result<(Vec<Violation>, usize), DevError>
             {
                 continue;
             }
-            if !file_name.ends_with(extension) {
+            // An explicitly owned file may have another suffix, but still receives
+            // the same bounded regular-file read and content audit below.
+            if !file_name.ends_with(extension) && !CURRENT_FILES.contains(&relative.as_str()) {
                 return Err(DevError::infrastructure(format!(
                     "product-surface directory '{}' contains unexpected file '{file_name}'",
                     absolute.display()
@@ -542,13 +545,63 @@ mod tests {
     }
 
     #[test]
+    fn explicit_example_descriptor_is_audited_once_without_a_suffix_exemption() {
+        let root = surface_fixture();
+        let (violations, scanned) = inspect_files(root.path()).unwrap();
+        assert!(violations.is_empty());
+        assert_eq!(scanned, CURRENT_FILES.len());
+        let relative = "docs/guides/examples/editor.deployment.json";
+        fs::write(root.path().join(relative), "Graph 5\n").unwrap();
+        let (violations, scanned) = inspect_files(root.path()).unwrap();
+        assert_eq!(scanned, CURRENT_FILES.len());
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].path, relative);
+        assert_eq!(violations[0].kind, ViolationKind::TextLeak);
+    }
+
+    #[test]
+    fn explicit_example_descriptor_still_requires_a_regular_file() {
+        let root = surface_fixture();
+        let descriptor = root
+            .path()
+            .join("docs/guides/examples/editor.deployment.json");
+        fs::remove_file(&descriptor).unwrap();
+        assert!(
+            inspect_files(root.path()).is_err(),
+            "required file is absent"
+        );
+        fs::create_dir(&descriptor).unwrap();
+        assert!(
+            inspect_files(root.path()).is_err(),
+            "directory is not a descriptor"
+        );
+        fs::remove_dir(&descriptor).unwrap();
+        #[cfg(unix)]
+        {
+            let target = root.path().join("original.json");
+            fs::write(&target, "current product guidance\n").unwrap();
+            std::os::unix::fs::symlink(&target, &descriptor).unwrap();
+            assert!(
+                inspect_files(root.path()).is_err(),
+                "explicit file cannot be a symlink"
+            );
+        }
+    }
+
+    #[test]
     fn native_examples_reject_unowned_entries_and_symlinks() {
         let root = surface_fixture();
         let examples = root.path().join("docs/guides/examples");
-        let unexpected = examples.join("unexpected.txt");
-        fs::write(&unexpected, "not a native request").unwrap();
-        assert!(inspect_files(root.path()).is_err());
-        fs::remove_file(unexpected).unwrap();
+        for name in [
+            "unexpected.txt",
+            "unexpected.json",
+            "unexpected.deployment.json",
+        ] {
+            let unexpected = examples.join(name);
+            fs::write(&unexpected, "not an owned native request or descriptor").unwrap();
+            assert!(inspect_files(root.path()).is_err());
+            fs::remove_file(unexpected).unwrap();
+        }
         let nested = examples.join("unowned");
         fs::create_dir(&nested).unwrap();
         assert!(inspect_files(root.path()).is_err());
@@ -561,6 +614,7 @@ mod tests {
             std::os::unix::fs::symlink(&target, &alias).unwrap();
             assert!(inspect_files(root.path()).is_err());
             fs::remove_file(alias).unwrap();
+            fs::remove_file(examples.join("editor.deployment.json")).unwrap();
             fs::remove_dir(&examples).unwrap();
             let foreign = root.path().join("foreign-examples");
             fs::create_dir(&foreign).unwrap();
