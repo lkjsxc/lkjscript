@@ -144,11 +144,20 @@ Corrected editor source `b25bde2d92c1882470fc4444c94319a68fe9a10c` passes all 20
 fresh source-tier gates with stable inputs, zero reuse, and confirmed normal
 mainline integration. One candidate [36097087012/1](https://github.com/lkjsxc/lkjscript/actions/runs/36097087012)
 was created at that exact product/controller source on 2026-09-25T05:05:20Z.
-It is in progress; finalized candidate, installation/userland, original-reader and
-terminal acceptance have not yet been confirmed. No v0.1.46 tag or scoped-selection
-write has occurred. Reuse this producer if healthy and follow the selection and
-promotion procedure below only after its actual acceptance. Later reporting-only
-source does not replace its event SHA or the accepted source-tier receipt.
+It completed successfully, including finalized-candidate, installation/userland,
+original-reader and terminal acceptance. The continuation independently confirmed
+its completed jobs on 2026-09-26. At that observation no v0.1.46 tag or scoped-selection
+write had occurred. Use that original accepted producer for the selection/promotion
+procedure below; do not rebuild it or replace its source with later web-starter work.
+Later reporting-only source does not replace its event SHA or original receipt.
+
+The [web starter continuation](campaigns/202609251450.md) selects development v0.1.47
+for the separately implemented native `web` creation recipe. Its
+[release notes](releases/v0.1.47.md) describe the additive template, local editable UI
+ownership and stateless scope. Complete fresh source acceptance and normal mainline
+integration before dispatching its own candidate. Neither source nor candidate
+acceptance for v0.1.46 certifies this later executable. Keep public promotion
+serialized and preserve all earlier immutable releases.
 
 ## Content and compatibility
 

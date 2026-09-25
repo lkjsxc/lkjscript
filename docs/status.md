@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-09-25 Asia/Tokyo. This page describes current capabilities,
+Status date: 2026-09-26 Asia/Tokyo. This page describes current capabilities,
 release state and limits. [Specifications](spec/) own semantics,
 [generated guides](generated/operations.md) own discovery, and
 [campaigns](campaigns/) retain exact implementation and verification history.
@@ -62,9 +62,9 @@ The durable-editor source `b25bde2d92c1882470fc4444c94319a68fe9a10c` additionall
 passes all 20 release-source gates freshly with stable inputs and no result reuse,
 and is integrated into remote main. This is not standalone full-26 acceptance.
 Its selected v0.1.46 candidate [36097087012/1](https://github.com/lkjsxc/lkjscript/actions/runs/36097087012)
-is in progress at that exact product/controller source; final-archive acceptance
-and publication remain unconfirmed. Immutable v0.1.45 is still the separately
-accepted public release. The [editor campaign](campaigns/202609251211.md) owns
+completed successfully at that exact product/controller source, including final-archive
+acceptance and the candidate terminal. Publication remains a separate uncompleted
+boundary. Immutable v0.1.45 is still the separately accepted public release. The [editor campaign](campaigns/202609251211.md) owns
 original receipts, prior failures, integration and the next delivery boundary.
 
 | Capability | Actual implementation and evidence owner |

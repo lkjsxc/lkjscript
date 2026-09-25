@@ -111,9 +111,7 @@ fn later_native_failures_remove_the_entire_owned_lowering_stage() {
         let temporary = tempfile::TempDir::new().unwrap();
         let unrelated = temporary.path().join("unrelated");
         std::fs::write(&unrelated, b"not recipe-owned").unwrap();
-        let error = lower(temporary.path(), inputs)
-            .err()
-            .expect("invalid later input must reject");
+        let error = lower(temporary.path(), inputs).expect_err("invalid later input must reject");
         assert_eq!(error.code, expected_code, "{name}");
         assert_eq!(std::fs::read(&unrelated).unwrap(), b"not recipe-owned");
         assert_eq!(
