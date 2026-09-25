@@ -118,6 +118,18 @@ this release. The [record](campaigns/202609222330.md#v0144-public-metadata-bound
 retains original identities, failures and the separate controller proof. The user's
 release authorization remains valid without waiving acceptance or immutability.
 
+The native-development successor v0.1.45 has completed finalized-candidate and
+terminal acceptance in [36064706830/1](https://github.com/lkjsxc/lkjscript/actions/runs/36064706830)
+at exact source 4d64abc70f88dcfd6d31b0e800f23ca8bfb1459d. The
+[continuation](campaigns/202609250903.md) established annotated object
+d20cc8b1b141fca0de5f6f37e82ee0719630af4f and the read-back scoped selection,
+then dispatched [36075872648/1](https://github.com/lkjsxc/lkjscript/actions/runs/36075872648)
+from controller ca3ef4d672addc612275eca52da7534fd408a1b6. At the recorded boundary
+authenticated selection, publication-authority admission and the transferred
+installed lifecycle have succeeded. The immutable publication job is running;
+publication completion and anonymous public verification are still pending. No replacement producer or product build
+was requested. A tag and an accepted candidate do not establish publication.
+
 ## Content and compatibility
 
 The canonical manifest discriminator is `format: "lkjscript-release-content-1"`. It binds the product

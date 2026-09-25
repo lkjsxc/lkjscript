@@ -9,9 +9,12 @@ failed experiments and exact evidence. This page selects direction, not history.
 Finish [v0.1.45](campaigns/202609250650.md): native guide/policy tooling, reusable
 text/byte operations, explicit optional resident quotas and contributor process
 reliability. The combined implementation is mainline and fully verified; the
-versioned producer must still accept its finalized distribution, then pass immutable
-publication and anonymous installed use. Do not rebuild or mutate an accepted
-candidate merely to update documentation. Public v0.1.44 remains unchanged.
+versioned producer has now accepted its finalized distribution. Its existing
+[authorized promotion](campaigns/202609250903.md) must complete immutable publication
+and anonymous installed use. Reuse original producer 36064706830/1; do not rebuild
+or mutate accepted assets merely to update documentation. Public v0.1.44 remains
+unchanged. Do not describe the successor as public before its real public boundary
+completes.
 
 This milestone should make the implemented language easier to acquire and use.
 Native application development and native contributor-tool adoption are distinct
@@ -23,7 +26,22 @@ Prefer the shortest complete route from an ordinary native program to useful
 behavior. Choose the next change by observing a real user's public authoring,
 editing, testing, composition or execution workload, not by expanding a feature list.
 
-The [paged-list workload](guides/native-list.md) now exercises fresh library-backed
+The [native UI workload](guides/native-ui.md) now demonstrates ordinary typed page
+composition with no application-authored HTML/CSS/JavaScript. The next useful product
+boundary is a small server-owned durable editor: explicit POST inputs, strict
+validation, trusted-origin admission, visible errors, conflict-aware saving and
+restart persistence. Investigate and reuse existing data/transaction facilities;
+no new framework intrinsic or browser backend is assumed. The native action and
+storage boundary investigation is not yet complete. A form is not authorization,
+and a failed HTTP response does not establish that a committed save was rolled back.
+
+Do not migrate native consumers solely to remove a small helper. The measured UI
+text-join consolidation increased identical-test-suite instruction counts despite
+smaller transports. It remains unselected with its originals retained, and the
+existing public-v0.1.44 UI path remains intact. Require complete affected-consumer
+proof and an explicit maintenance/performance decision before replacing it.
+
+The [paged-list workload](guides/native-list.md) separately exercises fresh library-backed
 HTTP composition, strict native query-number parsing, detached use and a reviewed
 edit. No additional kernel or framework primitive was needed. It leaves a concrete
 next question about edit/review scale: at the same revision and intended small edit,

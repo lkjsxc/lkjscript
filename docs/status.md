@@ -18,9 +18,15 @@ Those failures are not relabeled and no old immutable assets are replaced.
 **Selected successor:** [v0.1.45](releases/v0.1.45.md), candidate source
 `4d64abc70f88dcfd6d31b0e800f23ca8bfb1459d`, integrated on main.
 Producer [36064706830/1](https://github.com/lkjsxc/lkjscript/actions/runs/36064706830)
-was dispatched once at that exact source. Candidate acceptance and publication
-are not yet complete. The [delivery campaign](campaigns/202609250650.md) owns
-its observed state and resumption. A prepared version or running CI is not a release.
+has completed finalized-candidate acceptance and its terminal successfully.
+The matching annotated tag and scoped selection are established. Promotion
+[36075872648/1](https://github.com/lkjsxc/lkjscript/actions/runs/36075872648), from
+controller ca3ef4d672addc612275eca52da7534fd408a1b6, selects those same accepted
+assets without a product rebuild. Authenticated selection, publication-authority
+admission and the transferred installed lifecycle have now succeeded. The immutable
+publication job is running; publication completion and anonymous installed
+verification remain pending. The [continuation](campaigns/202609250903.md) retains
+the exact lineage and failures. An accepted candidate or tag is not a release.
 
 The supported binary target remains static `x86_64-unknown-linux-musl`, admitted
 in the maintained pinned Alpine and Debian userlands. Immutable installation
@@ -76,6 +82,15 @@ are ordinary native composition experiments. They do not add a framework intrins
 replace a maintained application, or imply that new development defaults applied
 to those older executions. Their literal inputs and actual tested runtimes remain
 at their own guide and campaign owners.
+
+The [native UI library](guides/native-ui.md) and separate application also run on
+public v0.1.44. Applications describe typed cards, stacks, labeled inputs, submit
+buttons and light/dark themes without directly authoring HTML/CSS/JavaScript.
+The library owns fixed HTML/CSS; no JavaScript is emitted or required. This is a
+GET-only, stateless example, not durable actions, accounts or a complete framework.
+Its original HTTP and offline-browser proofs remain distinct from unavailable live
+browser end-to-end proof. Its compatibility and renderer are unchanged by the
+[unselected consolidation experiment](campaigns/202609250903.md).
 
 A development-v0.1.45 [paged-list workload](guides/native-list.md) combines those
 libraries with byte inspection, ordinary text joining and list windows. Its native
