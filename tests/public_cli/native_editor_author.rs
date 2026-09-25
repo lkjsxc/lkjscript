@@ -19,7 +19,9 @@ fn supplier(name: &str, source: &str, tests: Option<&str>) -> Native {
 }
 
 fn import(public: &Native, library: &Native, prefix: &str, source: &mut String) {
-    let transport = library.root.path().join("library.lkjp");
+    // Each independent consumer owns its export destination. A supplier may serve
+    // both the editor and its compatibility witness without overwriting a prior export.
+    let transport = public.root.path().join(format!("{prefix}.lkjp"));
     let exported = library.cli(
         &[
             "package",
@@ -45,6 +47,7 @@ fn import(public: &Native, library: &Native, prefix: &str, source: &mut String) 
         ],
         true,
     );
+    std::fs::remove_file(&transport).unwrap();
     // Bind only metadata from the public export, longest placeholder first.
     for (suffix, field) in [
         ("PACKAGE_REVISION", "package-revision"),
