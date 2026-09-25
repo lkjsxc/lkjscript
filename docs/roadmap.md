@@ -15,7 +15,7 @@ Keep producer 36064706830/1 and all public assets unchanged.
 The next unreleased increment supplies general byte construction and checked
 UTF-8 results, used by the [ordinary strict form library](guides/native-forms.md).
 Complete its dependency-wide source acceptance and mainline integration first.
-The next publication trigger is a verified native POST application using this
+The next publication trigger is a useful durable native UI editor using this
 library, with validation, honest failure behavior and detached use; do not reserve
 or publish a replacement v0.1.45. A separate reviewed versioned candidate must
 accept the actual distributable before any successor publication.
@@ -36,7 +36,8 @@ boundary is a small server-owned durable editor: explicit POST inputs, strict
 validation, trusted-origin admission, visible errors, conflict-aware saving and
 restart persistence. Investigate and reuse existing data/transaction facilities;
 no new framework intrinsic or browser backend is assumed. Strict byte/form input
-is now implemented; the native action and storage integration remains uncompleted. A form is not authorization,
+and a stateless POST receiver are implemented; native UI actions and durable storage
+integration remain uncompleted. A form is not authorization,
 and a failed HTTP response does not establish that a committed save was rolled back.
 
 Do not migrate native consumers solely to remove a small helper. The measured UI

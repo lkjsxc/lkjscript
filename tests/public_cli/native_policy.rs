@@ -199,7 +199,7 @@ fn maintained_native_policy_rebuilds_exactly_from_copied_accepted_meaning() {
 fn native_policy_authors_edits_and_runs_detached_without_host_tools() {
     let tool = PolicyTool::new();
     let input = tool.author();
-    tool.check("74");
+    tool.check("86"); // Current standard 75 + 11 native policy tests.
     let old_artifact = tool.build("old");
     let bytes = std::fs::read(&old_artifact).unwrap();
     let control = ExecutionControl::uncancelled();
@@ -272,7 +272,7 @@ fn native_policy_authors_edits_and_runs_detached_without_host_tools() {
     assert!(original.contains("(text \"py\")"));
     std::fs::write(&draft, original.replace("(text \"py\")", "(text \"rb\")")).unwrap();
     tool.accept(&draft, "edit.logical-plan");
-    tool.check("74");
+    tool.check("86"); // Current standard 75 + 11 native policy tests.
     tool.build("new");
     std::fs::remove_dir_all(&tool.project).unwrap();
     for path in [input, draft, tool.root.path().join("standard.lkjp")] {

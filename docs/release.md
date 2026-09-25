@@ -134,7 +134,7 @@ confirms the completed jobs without relabeling earlier pending observations.
 
 The byte-conversion and strict-form increment after that source is unreleased.
 Its new closed intrinsics are not available in immutable v0.1.45. A successor
-publication is deferred until a verified native POST application consumes them;
+publication is deferred until a useful durable native UI editor consumes them;
 normal source integration does not require rewriting the completed release.
 
 ## Content and compatibility

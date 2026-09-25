@@ -6,13 +6,13 @@ intrinsics or automatically maintained application packages.
 
 | Guide | What it demonstrates |
 | --- | --- |
-| [Strict native form codec](native-forms.md) | Unreleased general byte construction, checked UTF-8, bounded ordered fields, exact transport and detached native consumer. |
+| [Strict native form codec](native-forms.md) | Unreleased byte construction, checked UTF-8, bounded fields, exact transport, detached commands and a stateless POST receiver. |
 | [Typed UI without browser-code authoring](native-ui.md) | Ordinary layouts, palettes and GET forms, exact response-library composition, and detached public-v0.1.44 execution. |
 | [Paged native HTTP list](native-list.md) | Native bounded-decimal input, reusable list/text operations, exact HTML/response imports and detached HTTP execution on development v0.1.45. |
 | [First native command](native-command.md) | A literal function/test/target, reviewed publication, canonical re-entry and detached execution on public v0.1.44 and development v0.1.45. |
 | [Native text composition](native-text.md) | Development-standard text-join, exact separators and caller-owned escaping. |
 | [HTML over HTTP](native-html-http.md) | Compose the separate typed HTML and HTTP libraries in a detached public-v0.1.44 service. |
-| [Resident execution policy](resident-policy.md) | Development-only nullable cumulative quotas, preserved legacy limits and independent deadline/grant controls. |
+| [Resident execution policy](resident-policy.md) | Nullable cumulative quotas available in v0.1.45, preserved legacy limits and independent deadline/grant controls. |
 | [Typed HTML composition](native-html.md) | Ordinary recursive inline/block types, exact library transport and a separately authored article consumer on public v0.1.44. |
 | [HTTP service and response library](native-http.md) | Public v0.1.44 library transport, typed routes, query input, bounded byte-stream echo, detached serving and reviewed route edits. |
 | [Native library](native-library.md) | Generic library creation, exact imports, application-owned types and standalone command execution. |

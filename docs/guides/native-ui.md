@@ -31,8 +31,8 @@ sanitizer, validation of arbitrary field names, or an accessibility certificatio
 `ui::document(language, title, theme, nodes)` returns a complete document with
 UTF-8 metadata, viewport, one page heading and the fixed stylesheet. The library's
 small private balanced text join preserves public-v0.1.44 compatibility. A future
-exact dependency update can adopt standard `text-join`; the pending v0.1.45
-publication is not required to use this example.
+exact dependency update can adopt standard `text-join`, now available in v0.1.45.
+That later release is not required to use this recorded v0.1.44 example.
 
 ## Create and export the library
 

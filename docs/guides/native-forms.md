@@ -116,3 +116,61 @@ Persistent actions additionally need exact-base conditional updates, a completed
 transaction outcome and explicit conflict/error responses. This codec does not
 claim those application properties, accounts, multipart uploads, browser end-to-end
 coverage or a finished stateful framework.
+
+## Compose a stateless POST receiver
+
+The [HTTP receiver literal](examples/form-http.lkjc) imports the accepted consumer's
+public `report` function. It is ordinary lkjscript and uses only the existing HTTP
+runner and bounded byte-stream capability. Export the accepted consumer transport:
+
+```sh
+lkjscript --project consumer package current export \
+  --kind transport --output consumer.lkjp
+lkjscript new receiver --template http --name form-receiver
+lkjscript --project receiver status
+lkjscript --project receiver package dependency stage \
+  --transport CONSUMER_TRANSPORT --input-file consumer.lkjp
+```
+
+Bind the literal's `SITE_BASE`, `CONSUMER_PACKAGE_REVISION`, `CONSUMER_PACKAGE` and
+`CONSUMER_REVISION` to those observed values, replacing longer placeholders first.
+Plan/review/apply the unchanged bound proposal, then check and build:
+
+```sh
+lkjscript --project receiver change plan \
+  --input-file form-http-bound.lkjc --output form-http.plan
+# Review the complete proposal and plan, then use the returned plan token.
+lkjscript --project receiver change apply \
+  --input-file form-http-bound.lkjc --plan PLAN_TOKEN
+lkjscript --project receiver check
+lkjscript --project receiver build --output application.lkja
+```
+
+Copy the generated service descriptor beside the executable and bundle. Set its
+artifact to `application.lkja`, target to `form-http`, and
+`http.maximum_request_body_bytes` to 8192. Keep the generated `127.0.0.1:0`
+listener, stream grant and independent runtime policies. Invoke
+`lkjscript serve --deployment service.deployment.json` and use the reported local
+address. No public listener or external service configuration is required.
+
+POST `/decode` returns a JSON report, HTTP 200 for valid input and 400 for malformed
+form data. The transport rejects a body over 8192 bytes with 413. This diagnostic
+receiver admits exactly one Content-Type header with the literal value
+`application/x-www-form-urlencoded` or
+`application/x-www-form-urlencoded; charset=UTF-8`; other spellings, missing values
+and duplicate headers return 415. That narrow fixture policy is not a general MIME
+parser. Other methods/paths return 404. Query fields do not replace body fields.
+
+The accepted receiver closure passes 111 graph tests, including three new header
+policy tests; shared standard/library tests are not counted as new tests. The
+separate live observation covers 35 requests across two detached lifecycles,
+including eight concurrent clients, an exact-bundle restart and joined SIGINT
+shutdown. Its HTTP statuses are twenty 200, six 400, four 404, one 413 and four 415.
+Both shutdowns leave no active/queued tasks or cleanup failures. The same retained
+executable also passes a separate 688-case detached command oracle. These are
+execution observations, not throughput, accessibility or live-browser claims.
+
+This receiver merely reports supplied values and saves nothing. It has no account,
+session, origin authorization or durable action. It does not make a POST endpoint
+safe for a later effectful application. The next product workload remains a native
+UI editor with explicit access/origin policy and conflict-aware durable saves.

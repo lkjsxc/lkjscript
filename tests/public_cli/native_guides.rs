@@ -115,7 +115,8 @@ fn maintained_native_guides_regenerate_the_exact_embedded_artifact() {
     let tests = tool.project(&["check"]);
     assert_eq!(
         compact_field(compact_record(&tests, "tests"), "passed"),
-        Some("91")
+        // The maintained graph retains 63 standard tests plus 16 guide tests.
+        Some("79")
     );
     assert_eq!(
         compact_field(compact_record(&tests, "tests"), "differential"),
@@ -185,8 +186,8 @@ fn native_guides_author_edit_and_run_without_compiler_checkout_or_host_tools() {
         "create.lkjc",
         SOURCE
             .replacen("base=BASE", &format!("base={revision}"), 1)
-            // Fresh authorship chooses the actually exported exact supplier. The
-            // maintained guide graph also selects this standard for text-join.
+            // Fresh authorship chooses the newly exported exact supplier. The
+            // maintained graph above keeps its own earlier exact standard.
             .replacen(
                 SOURCE
                     .lines()

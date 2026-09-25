@@ -1,6 +1,7 @@
 # Choose resident cumulative quotas explicitly
 
-This guide describes development deployment contract 5, not immutable public v0.1.44.
+This guide describes deployment contract 5, now available in immutable public
+v0.1.45. It does not change the older immutable v0.1.44 executable.
 It changes deployment policy, not the authored program, artifact or capability grants.
 Use an executable that advertises nullable fields through:
 
