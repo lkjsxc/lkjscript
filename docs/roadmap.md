@@ -14,7 +14,8 @@ Keep producer 36064706830/1 and all public assets unchanged.
 
 The next unreleased increment supplies general byte construction and checked
 UTF-8 results, used by the [ordinary strict form library](guides/native-forms.md).
-Complete its dependency-wide source acceptance and mainline integration first.
+Its dependency-wide fresh source acceptance and normal mainline integration are
+complete; the [campaign](campaigns/202609250926.md) retains the actual proof and failures.
 The next publication trigger is a useful durable native UI editor using this
 library, with validation, honest failure behavior and detached use; do not reserve
 or publish a replacement v0.1.45. A separate reviewed versioned candidate must

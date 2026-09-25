@@ -50,11 +50,16 @@ inspection is not an accepted-graph writer.
 
 ## Accepted development increments
 
-The combined implementation at `8242f3a71e71eab49c70857f76716c8cc30a72dd` passes
-all 26 full-profile gates freshly, with zero reuse, in 740.134 seconds, and is on
-remote main. The version-preparation descendant `4d64abc7` has its own successful
-focused product lifecycle and generated-guide checks. Hosted source/finalized-target
-acceptance belongs to that versioned candidate, not to a renamed predecessor receipt.
+The byte-conversion and ordinary form source at
+`0ce651cad480e4d62668da45fb273d2539441233` passes all **26 full-profile gates freshly**,
+with zero result reuse, stable inputs and 1397.481 seconds elapsed. Normal mainline
+integration and an independent GitHub branch read confirm that exact accepted
+source. The [campaign](campaigns/202609250926.md) preserves the earlier interrupted
+run, the genuine 25-of-26 failed attempt and its exact-supplier assertion repairs.
+Subsequent reporting changes do not relabel that full acceptance with another SHA.
+
+The existing v0.1.45 binary remains the separately accepted and published release;
+new byte construction and strict form decoding are unreleased mainline source.
 
 | Capability | Actual implementation and evidence owner |
 | --- | --- |

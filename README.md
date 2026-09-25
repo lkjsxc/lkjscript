@@ -172,6 +172,10 @@ cargo run --release --locked -p lkjscript-dev -- check changed --machine
 cargo run --release --locked -p lkjscript-dev -- check full --fresh --machine
 ```
 
+On a memory-constrained contributor host, set `CARGO_BUILD_JOBS=1` and pass
+`--jobs 1` to the checker. These independently bound compiler and gate concurrency;
+all 26 gates remain required. Other hosts may select an appropriate higher concurrency.
+
 `changed` reads Git-status paths; a clean-tree invocation does not test a committed
 change. `full` requires all 26 gates fresh. [Release acceptance](docs/release.md#coverage-and-admission)
 uses its separate source/finalized-target mapping, pinned userlands and installation
