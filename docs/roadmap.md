@@ -23,8 +23,10 @@ successor publication trigger. Original candidate 36097087012/1 and promotion
 36193525561/1 now complete immutable public v0.1.46, including anonymous installed
 verification. Keep its b25bde2d product source and original assets unchanged.
 The separately implemented web starter selects v0.1.47. Source 511f48c4 completes
-its 20-gate fresh source tier; finish normal mainline delivery and its own finalized
-candidate before promotion. Keep the source and candidate identities distinct.
+its 20-gate fresh source tier, and normal mainline delivery is complete through
+18e04bc0. Original candidate 36198402289/1 is in progress at that exact descendant;
+finish its acceptance before promotion. Keep source, candidate and reporting
+identities distinct.
 
 This milestone should make the implemented language easier to acquire and use.
 Native application development and native contributor-tool adoption are distinct

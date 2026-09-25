@@ -162,8 +162,12 @@ submission, refresh and a 360px viewport without horizontal overflow. The
 [campaign](campaigns/202609251450.md) retains original evidence and the earlier
 incorrect local-test-count assertion. Corrected source
 `511f48c41bc45374492051181e5334fa018b0d71` now passes all 20 release-source gates
-freshly, with stable inputs and zero reuse. This is not standalone full-26 or
-finalized-archive acceptance; the v0.1.47 candidate remains a separate boundary.
+freshly, with stable inputs and zero reuse. Normal mainline integration is complete
+through documentation descendant `18e04bc0e6611ff0b79a49da1e5ce5da3632da35`.
+This is not standalone full-26 or finalized-archive acceptance. The selected
+v0.1.47 candidate [36198402289/1](https://github.com/lkjsxc/lkjscript/actions/runs/36198402289)
+is in progress at that exact 18e04bc0 product/controller source; candidate acceptance
+and public v0.1.47 publication remain unconfirmed.
 
 This template is not part of the immutable public v0.1.46 executable. It has no
 saved state, authentication, POST mutation, account system, client-side event

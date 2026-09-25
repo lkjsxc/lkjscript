@@ -158,10 +158,17 @@ no replacement candidate, old-asset rewrite or product-source substitution occur
 The [web starter continuation](campaigns/202609251450.md) selects development v0.1.47
 for the separately implemented native `web` creation recipe. Its
 [release notes](releases/v0.1.47.md) describe the additive template, local editable UI
-ownership and stateless scope. Complete fresh source acceptance and normal mainline
-integration before dispatching its own candidate. Neither source nor candidate
-acceptance for v0.1.46 certifies this later executable. Keep public promotion
-serialized and preserve all earlier immutable releases.
+ownership and stateless scope. Exact source `511f48c41bc45374492051181e5334fa018b0d71`
+passes all 20 fresh source gates with stable inputs and zero reuse. Normal mainline
+integration is complete through documentation descendant
+`18e04bc0e6611ff0b79a49da1e5ce5da3632da35`. One non-publishing candidate
+[36198402289/1](https://github.com/lkjsxc/lkjscript/actions/runs/36198402289) was dispatched
+from that exact 18e04bc0 product/controller source at 2026-09-25T22:48:09Z.
+It is in progress; final candidate and terminal acceptance have not yet been
+confirmed. No v0.1.47 tag or scoped-selection change occurred. Reuse this producer
+if healthy, then select/promote only after acceptance. Neither source nor candidate
+acceptance for v0.1.46 certifies this later executable. Preserve all earlier
+immutable assets, and do not replace the event SHA with a later reporting commit.
 
 ## Content and compatibility
 
