@@ -124,11 +124,18 @@ at exact source 4d64abc70f88dcfd6d31b0e800f23ca8bfb1459d. The
 [continuation](campaigns/202609250903.md) established annotated object
 d20cc8b1b141fca0de5f6f37e82ee0719630af4f and the read-back scoped selection,
 then dispatched [36075872648/1](https://github.com/lkjsxc/lkjscript/actions/runs/36075872648)
-from controller ca3ef4d672addc612275eca52da7534fd408a1b6. At the recorded boundary
-authenticated selection, publication-authority admission and the transferred
-installed lifecycle have succeeded. The immutable publication job is running;
-publication completion and anonymous public verification are still pending. No replacement producer or product build
-was requested. A tag and an accepted candidate do not establish publication.
+from controller ca3ef4d672addc612275eca52da7534fd408a1b6. That original promotion
+completed successfully: authenticated selection, publication-authority admission,
+transferred installed lifecycle, immutable publication, anonymous public acquisition
+and installed verification, and the release terminal. Release 396174945 was
+published at 2026-09-25T00:11:48Z and observed as latest. No replacement producer or
+product rebuild was requested. The [resumption record](campaigns/202609250926.md)
+confirms the completed jobs without relabeling earlier pending observations.
+
+The byte-conversion and strict-form increment after that source is unreleased.
+Its new closed intrinsics are not available in immutable v0.1.45. A successor
+publication is deferred until a verified native POST application consumes them;
+normal source integration does not require rewriting the completed release.
 
 ## Content and compatibility
 

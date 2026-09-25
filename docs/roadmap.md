@@ -6,15 +6,19 @@ failed experiments and exact evidence. This page selects direction, not history.
 
 ## Selected delivery
 
-Finish [v0.1.45](campaigns/202609250650.md): native guide/policy tooling, reusable
-text/byte operations, explicit optional resident quotas and contributor process
-reliability. The combined implementation is mainline and fully verified; the
-versioned producer has now accepted its finalized distribution. Its existing
-[authorized promotion](campaigns/202609250903.md) must complete immutable publication
-and anonymous installed use. Reuse original producer 36064706830/1; do not rebuild
-or mutate accepted assets merely to update documentation. Public v0.1.44 remains
-unchanged. Do not describe the successor as public before its real public boundary
-completes.
+[v0.1.45](campaigns/202609250650.md) is published: native guide/policy tooling,
+reusable text/byte operations, explicit optional resident quotas and contributor
+process reliability. Original promotion 36075872648/1 completed authenticated
+selection, immutable publication, anonymous installed use and its terminal.
+Keep producer 36064706830/1 and all public assets unchanged.
+
+The next unreleased increment supplies general byte construction and checked
+UTF-8 results, used by the [ordinary strict form library](guides/native-forms.md).
+Complete its dependency-wide source acceptance and mainline integration first.
+The next publication trigger is a verified native POST application using this
+library, with validation, honest failure behavior and detached use; do not reserve
+or publish a replacement v0.1.45. A separate reviewed versioned candidate must
+accept the actual distributable before any successor publication.
 
 This milestone should make the implemented language easier to acquire and use.
 Native application development and native contributor-tool adoption are distinct
@@ -31,8 +35,8 @@ composition with no application-authored HTML/CSS/JavaScript. The next useful pr
 boundary is a small server-owned durable editor: explicit POST inputs, strict
 validation, trusted-origin admission, visible errors, conflict-aware saving and
 restart persistence. Investigate and reuse existing data/transaction facilities;
-no new framework intrinsic or browser backend is assumed. The native action and
-storage boundary investigation is not yet complete. A form is not authorization,
+no new framework intrinsic or browser backend is assumed. Strict byte/form input
+is now implemented; the native action and storage integration remains uncompleted. A form is not authorization,
 and a failed HTTP response does not establish that a committed save was rolled back.
 
 Do not migrate native consumers solely to remove a small helper. The measured UI

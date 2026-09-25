@@ -291,3 +291,218 @@ fn bytes_conversion_explicit_core_hosts_agree_with_checked_paths() {
         assert_eq!(reference, expected);
     }
 }
+
+// Record the reached boundary even when invocation fails. A tiny global allowance
+// can fail during argument admission and does not prove intrinsic reservation.
+fn observed_conversion(
+    snapshot: &crate::platform::kernel::KernelSnapshot,
+    name: &str,
+    input: NormalizedValue,
+    maximum_bytes: Option<u64>,
+    control: &ExecutionControl,
+    reference: bool,
+) -> (Result<NormalizedValue, ExecutionError>, u64, u64) {
+    let program = prepare_snapshot(snapshot);
+    let declaration = declaration_named(snapshot, name);
+    let mut policy = NormalizedRunPolicy::foreground();
+    policy.maximum_allocated_bytes = maximum_bytes;
+    if reference {
+        let observer = std::sync::Mutex::new(None);
+        let result = NormalizedReferenceInterpreter::new(snapshot, &program, policy)
+            .observing_checked(&observer)
+            .invoke(declaration, vec![input], None, control)
+            .map(|pair| pair.0);
+        let Some(observation) = observer.into_inner().unwrap() else {
+            // Initial cancellation can precede creation of the execution state.
+            assert!(result.is_err());
+            return (result, 0, 0);
+        };
+        assert_eq!(observation.live_call_frames_after, 0);
+        assert_eq!(observation.live_transactions_after, 0);
+        assert_eq!(observation.live_handles_after, 0);
+        (
+            result,
+            observation.allocated_bytes,
+            observation.external_calls,
+        )
+    } else {
+        let observer = std::sync::Mutex::new(None);
+        let result = NormalizedVm::new(&program, policy)
+            .observing_checked(&observer)
+            .invoke(declaration, vec![input], None, control)
+            .map(|pair| pair.0);
+        let Some(observation) = observer.into_inner().unwrap() else {
+            // Initial cancellation can precede creation of the execution state.
+            assert!(result.is_err());
+            return (result, 0, 0);
+        };
+        assert_eq!(observation.live_call_frames_after, 0);
+        assert_eq!(observation.live_transactions_after, 0);
+        assert_eq!(observation.live_handles_after, 0);
+        (
+            result,
+            observation.allocated_bytes,
+            observation.external_calls,
+        )
+    }
+}
+
+#[test]
+fn byte_conversions_reserve_scratch_and_retained_bytes_at_the_intrinsic() {
+    let snapshot = fixture();
+    let length = 2048_u64;
+    let input = NormalizedValue::list(vec![NormalizedValue::I64(65); length as usize]).unwrap();
+    let control = ExecutionControl::uncancelled();
+    for reference in [false, true] {
+        let (result, total, calls) = observed_conversion(
+            &snapshot,
+            "construct",
+            input.clone(),
+            None,
+            &control,
+            reference,
+        );
+        assert_eq!(
+            result.unwrap(),
+            NormalizedValue::bytes(vec![65; length as usize])
+        );
+        assert_eq!(calls, 1);
+        // An invalid first octet has the same input shape and stops just after
+        // scratch allocation, before retained output or final result bookkeeping.
+        let mut invalid = vec![NormalizedValue::I64(65); length as usize];
+        invalid[0] = NormalizedValue::I64(-1);
+        let (error, scratch_end, error_calls) = observed_conversion(
+            &snapshot,
+            "construct",
+            NormalizedValue::list(invalid).unwrap(),
+            None,
+            &control,
+            reference,
+        );
+        assert!(error.unwrap_err().code.contains("bytes_octet"));
+        assert_eq!(error_calls, 1);
+        assert!(total >= scratch_end + length);
+        // Fixed buffer sizes locate both reservations independently of any
+        // successful-return bookkeeping after the intrinsic.
+        for (maximum, expected_charged) in [
+            (scratch_end - 1, scratch_end - length),
+            (scratch_end + length - 1, scratch_end),
+        ] {
+            let (result, charged, calls) = observed_conversion(
+                &snapshot,
+                "construct",
+                input.clone(),
+                Some(maximum),
+                &control,
+                reference,
+            );
+            assert!(result.unwrap_err().code.contains("allocation"));
+            assert_eq!(
+                calls, 1,
+                "must reach the intrinsic before refusing its reservation"
+            );
+            assert_eq!(
+                charged, expected_charged,
+                "a refused reservation changes no ledger"
+            );
+        }
+        let (result, charged, calls) = observed_conversion(
+            &snapshot,
+            "construct",
+            input.clone(),
+            Some(total),
+            &control,
+            reference,
+        );
+        assert!(result.is_ok());
+        assert_eq!((charged, calls), (total, 1));
+    }
+}
+
+#[test]
+fn byte_conversions_utf8_output_allocation_is_not_a_decoding_failure() {
+    let snapshot = fixture();
+    let length = 2048_u64;
+    let control = ExecutionControl::uncancelled();
+    for reference in [false, true] {
+        let (valid, total, _) = observed_conversion(
+            &snapshot,
+            "decode",
+            NormalizedValue::bytes(vec![65; length as usize]),
+            None,
+            &control,
+            reference,
+        );
+        let (invalid, invalid_total, _) = observed_conversion(
+            &snapshot,
+            "decode",
+            NormalizedValue::bytes(vec![255; length as usize]),
+            None,
+            &control,
+            reference,
+        );
+        assert_eq!(valid.unwrap(), decoded(true, &"A".repeat(length as usize)));
+        assert_eq!(invalid.unwrap(), decoded(false, ""));
+        assert_eq!(
+            total - invalid_total,
+            length,
+            "only successful text owns this output buffer"
+        );
+        for maximum in [total - length - 1, total - 1] {
+            let (result, _, calls) = observed_conversion(
+                &snapshot,
+                "decode",
+                NormalizedValue::bytes(vec![65; length as usize]),
+                Some(maximum),
+                &control,
+                reference,
+            );
+            assert!(result.unwrap_err().code.contains("allocation"));
+            assert_eq!(calls, 1, "allocation failure must occur inside the decoder");
+        }
+    }
+}
+
+#[test]
+fn byte_conversions_cancel_after_scratch_reservation_without_installing_output() {
+    let snapshot = fixture();
+    let length = 2048_u64;
+    let input = NormalizedValue::list(vec![NormalizedValue::I64(65); length as usize]).unwrap();
+    for reference in [false, true] {
+        let mut invalid = vec![NormalizedValue::I64(65); length as usize];
+        invalid[0] = NormalizedValue::I64(-1);
+        let (error, scratch_end, error_calls) = observed_conversion(
+            &snapshot,
+            "construct",
+            NormalizedValue::list(invalid).unwrap(),
+            None,
+            &ExecutionControl::uncancelled(),
+            reference,
+        );
+        assert!(error.unwrap_err().code.contains("bytes_octet"));
+        assert_eq!(error_calls, 1);
+        let mut reached_traversal = false;
+        for count in (0..65_536).step_by(257) {
+            let (result, charged, calls) = observed_conversion(
+                &snapshot,
+                "construct",
+                input.clone(),
+                None,
+                &ExecutionControl::cancel_after_checks(count),
+                reference,
+            );
+            if calls == 1 && charged == scratch_end {
+                assert!(result.unwrap_err().code.contains("cancel"));
+                reached_traversal = true;
+                break;
+            }
+            if result.is_ok() {
+                break;
+            }
+        }
+        assert!(
+            reached_traversal,
+            "cancellation must interrupt traversal after scratch reservation"
+        );
+    }
+}

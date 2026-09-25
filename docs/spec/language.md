@@ -23,6 +23,33 @@ A runtime lacking this intrinsic rejects its external declaration during ordinar
 closure admission; unchanged old exact closures retain their previous behavior.
 
 
+### Raw byte construction and checked text decoding
+
+The pure closed external `core.bytes.from-list` has exactly
+`(List<I64>) -> Bytes`, exposed as `bytes-from-list`. It preserves the complete
+input order and every unsigned octet, including zero and 255. An empty list produces
+empty Bytes. An element outside 0 through 255 traps; it is not clamped, wrapped,
+converted to Unicode or partially returned. The input and its aliases remain unchanged.
+Checked execution reserves the temporary octet buffer and retained byte buffer
+before each allocation and checks cancellation during traversal and before installing
+the result. These work charges do not imply equivalent process resident memory.
+
+The pure closed external `core.bytes.to-text-result` has exactly
+`(Bytes) -> {valid: Bool, value: Text}`, exposed as `bytes-to-text-result`.
+A complete valid UTF-8 encoding returns true and the exact text, preserving NUL,
+BOM, line endings and supplementary scalar values without normalization. Invalid
+UTF-8 returns false and empty text: no valid prefix, replacement character or
+partially decoded output is returned. Empty valid input returns true and empty text.
+Cancellation and allocation failures remain operational errors, never false results.
+The existing trapping `bytes-to-text` is unchanged. The result allocates text only
+on successful decoding, plus its ordinary structural-record storage.
+
+Both operations preserve current value bounds, effect/grant rules, type identities
+and persisted encodings. A runtime missing either external name rejects a closure
+that contains it, even when the unsupported declaration is not invoked. Existing
+exact suppliers are not implicitly upgraded. These general representation operations
+do not introduce form parsing, HTTP effects, browser code or storage authority.
+
 Runtime lists are immutable flat logical sequences. Their private carrier is a bounded 32-way
 index trie with a tail of at most 32 elements. Length and handle sharing are O(1); indexing is
 O(log_32(N+1)); ordered traversal is O(N). Append copies the changed branch spine and a bounded
