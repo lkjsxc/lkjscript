@@ -145,11 +145,15 @@ fresh source-tier gates with stable inputs, zero reuse, and confirmed normal
 mainline integration. One candidate [36097087012/1](https://github.com/lkjsxc/lkjscript/actions/runs/36097087012)
 was created at that exact product/controller source on 2026-09-25T05:05:20Z.
 It completed successfully, including finalized-candidate, installation/userland,
-original-reader and terminal acceptance. The continuation independently confirmed
-its completed jobs on 2026-09-26. At that observation no v0.1.46 tag or scoped-selection
-write had occurred. Use that original accepted producer for the selection/promotion
-procedure below; do not rebuild it or replace its source with later web-starter work.
-Later reporting-only source does not replace its event SHA or original receipt.
+original-reader and terminal acceptance. Annotated tag object
+`1551a2da98c120c98d69c2ccd88d4de940073457` selects that source. Promotion
+[36193525561/1](https://github.com/lkjsxc/lkjscript/actions/runs/36193525561), from controller
+`11e54ce170050c7b6022cafc77cc84f9d34336aa`, completed authenticated selection,
+immutable publication, anonymous installed verification and the terminal.
+Release [v0.1.46](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.46), ID 396948669,
+published the original three assets at 2026-09-25T21:54:08Z and was independently
+observed as latest. The continuation's initial pending observation remains historical;
+no replacement candidate, old-asset rewrite or product-source substitution occurred.
 
 The [web starter continuation](campaigns/202609251450.md) selects development v0.1.47
 for the separately implemented native `web` creation recipe. Its

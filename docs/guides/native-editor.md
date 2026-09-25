@@ -8,11 +8,12 @@ application contains no HTML, CSS or JavaScript source. The UI library renders
 HTML/CSS; the browser runs no application script. There is no Node.js server,
 external database, app-specific intrinsic or compiler rewrite.
 
-This milestone selects **v0.1.46**; the [release record](../release.md) owns its
-actual publication state. The immutable v0.1.45 executable lacks the general byte
-operations used by the form codec and correctly rejects this closure. Use a
-compatible executable. The development observations below do not certify an
-older public binary or an unaccepted release candidate.
+This milestone is supported by public **v0.1.46**; the [release record](../release.md)
+owns its completed publication and anonymous installed verification. The immutable
+v0.1.45 executable lacks the general byte operations used by the form codec and
+correctly rejects this closure. Use a compatible executable. The development
+observations below retain their original tested binaries and are not relabeled
+as independent public-binary observations.
 
 ## Create the exact libraries
 

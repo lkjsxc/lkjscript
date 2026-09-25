@@ -12,16 +12,18 @@ process reliability. Original promotion 36075872648/1 completed authenticated
 selection, immutable publication, anonymous installed use and its terminal.
 Keep producer 36064706830/1 and all public assets unchanged.
 
-The next unreleased increment supplies general byte construction and checked
+The subsequent increment supplies general byte construction and checked
 UTF-8 results, used by the [ordinary strict form library](guides/native-forms.md).
 Its dependency-wide fresh source acceptance and normal mainline integration are
 complete; the [campaign](campaigns/202609250926.md) retains the actual proof and failures.
 The [durable native editor](guides/native-editor.md) now consumes that library with
 validation, shared access, completed conditional transactions, retained conflicts
 and detached restart. Real script-free browser use has also passed. This fires the
-successor publication trigger and selects v0.1.46 after observing its tag/release
-unoccupied. Complete source and exact finalized-candidate acceptance before promotion;
-do not replace v0.1.45 or relabel development execution as public-binary proof.
+successor publication trigger. Original candidate 36097087012/1 and promotion
+36193525561/1 now complete immutable public v0.1.46, including anonymous installed
+verification. Keep its b25bde2d product source and original assets unchanged.
+The separately implemented web starter selects v0.1.47; finish its fresh source
+acceptance and normal mainline integration before dispatching its own candidate.
 
 This milestone should make the implemented language easier to acquire and use.
 Native application development and native contributor-tool adoption are distinct

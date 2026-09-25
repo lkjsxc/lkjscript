@@ -1,4 +1,7 @@
 mod executable;
+#[cfg(test)]
+#[path = "snapshot/tests.rs"]
+mod selection_tests;
 
 use super::model::{
     ExecutableProof, InputEntry, InputSnapshot, InputSource, PlatformIdentity, RuntimeIdentity,
@@ -237,6 +240,9 @@ pub(crate) fn changed_profile(repository: &Path) -> Result<Vec<String>, DevError
             || path == "Cargo.lock"
             || path.starts_with("src/")
             || path.starts_with("tests/")
+            // Native examples include embedded recipes and executable test/deployment inputs.
+            // Their directory name must not classify program changes as documentation-only.
+            || path.starts_with("docs/guides/examples/")
         {
             widen_full = true;
         } else if path.starts_with("applications/") || path.starts_with("packages/") {

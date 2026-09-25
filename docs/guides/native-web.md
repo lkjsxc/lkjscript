@@ -1,8 +1,8 @@
 # An editable web app from one binary
 
 **Runtime boundary:** development v0.1.47. `lkjscript capabilities new` must
-advertise `web`. This is not a retroactive addition to immutable v0.1.45 or the
-separately frozen v0.1.46 candidate. [Current status](../status.md) owns publication
+advertise `web`. This is not a retroactive addition to the immutable public
+v0.1.46 executable. [Current status](../status.md) owns publication
 state; the [campaign](../campaigns/202609251450.md) owns exact evidence.
 
 The `web` starter is an ordinary native application plus editable local UI

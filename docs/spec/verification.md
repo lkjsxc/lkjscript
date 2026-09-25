@@ -879,6 +879,16 @@ it excludes only the six external application owners moved to final candidate ad
 ordinary focused default tests remain available, while release-source retains the existing default
 release lifecycle and all-feature workspace proof without adding duplicate source test suites.
 
+The maintained `docs/guides/examples/` directory contains executable native programs,
+embedded creation recipes and tested deployment inputs, not documentation-only text.
+Any changed path within that directory selects the complete `full` profile, including
+untracked additions, staged/unstaged edits, deletion and either side of a rename.
+Unknown file types there still require the surface audit rather than being ignored.
+Ordinary prose outside that directory keeps the lightweight documentation selection;
+similar names such as `docs/guides/examples.md` do not match the directory boundary.
+Input fingerprints already bind the complete tracked/relevant-untracked snapshot;
+this selection rule adds no separate hash inventory or receipt format.
+
 The harness owns gate dependencies, exact fingerprints, bounded child logs, required outputs,
 timeouts, and fresh/reused/skipped/unavailable/failed classification. Reuse is valid only when the
 harness proves every semantic and operational input identical and the profile permits it. Final

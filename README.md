@@ -10,12 +10,13 @@ The graph is the sole editable authority. Stable identities preserve declaration
 through edits, while names remain useful, changeable locators. Pure functions,
 tasks, exact libraries and standalone application bundles share this model.
 
-**Public:** [v0.1.45](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.45),
-with native authoring and tooling, offline libraries, standard text/byte inspection,
-and optional resident cumulative quotas. Publication and the original promotion
-[36075872648/1](https://github.com/lkjsxc/lkjscript/actions/runs/36075872648) are complete.
-The [strict native form codec](docs/guides/native-forms.md) requires newer,
-**unreleased development source**, not the immutable v0.1.45 executable.
+**Public:** [v0.1.46](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.46),
+with native authoring, offline libraries, general byte conversion and the facilities
+used by the ordinary [form codec](docs/guides/native-forms.md) and
+[durable browser editor](docs/guides/native-editor.md). Promotion
+[36193525561/1](https://github.com/lkjsxc/lkjscript/actions/runs/36193525561) completed
+immutable publication and anonymous installed verification. Older v0.1.45 does not
+contain the byte operations required by these examples.
 [Current status](docs/status.md) separates available releases, development source
 and unproved properties.
 
@@ -28,10 +29,10 @@ executing it. The exact URL below remains pinned even when a newer release appea
 ```sh
 curl -q --fail --location --proto '=https' --proto-redir '=https' \
   --connect-timeout 15 --max-time 180 --max-filesize 16384 \
-  --output install-v0.1.45.sh \
-  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.45/install.sh
-cat install-v0.1.45.sh
-sh install-v0.1.45.sh --prefix "$HOME/.local"
+  --output install-v0.1.46.sh \
+  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.46/install.sh
+cat install-v0.1.46.sh
+sh install-v0.1.46.sh --prefix "$HOME/.local"
 export PATH="$HOME/.local/bin:$PATH"
 lkjscript --version
 lkjscript runtime list
@@ -97,8 +98,8 @@ function-level editing. Its required standard is now available in v0.1.45.
 The [web starter](docs/guides/native-web.md) reduces initial setup to `new --template web`,
 `check`, `build` and `serve`. It includes editable ordinary UI modules and a GET-form
 application without manual library imports or application-authored HTML/CSS/JavaScript.
-This new template is not part of the public v0.1.45 binary or frozen v0.1.46 candidate;
-check the selected executable's `capabilities new` and [current status](docs/status.md).
+This new template is not part of the public v0.1.46 binary; check the selected
+executable's `capabilities new` and [current status](docs/status.md).
 
 ### Nostr relay information from the public binary
 

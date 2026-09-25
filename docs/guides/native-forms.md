@@ -1,12 +1,13 @@
 # Strict native form input
 
-This guide requires **unreleased development source after v0.1.45**. The official
-immutable v0.1.45 binary does not recognize `core.bytes.from-list` or
+This guide requires **v0.1.46 or a compatible successor**. The official immutable
+v0.1.45 binary does not recognize `core.bytes.from-list` or
 `core.bytes.to-text-result` and correctly rejects the new closure. Application
 use requires a compatible executable, not Cargo or a compiler checkout at runtime.
-The [campaign](../campaigns/202609250926.md) owns this increment's acceptance.
+The [campaign](../campaigns/202609250926.md) owns this increment's source observations.
 The [durable editor](native-editor.md) consumes it for authenticated, conditional
-saves and selects successor v0.1.46; [release status](../release.md) remains separate.
+saves. Public v0.1.46 now supplies the required operations; the
+[release record](../release.md) retains its distinct distribution evidence.
 
 ## A library, not a form-specific runtime primitive
 

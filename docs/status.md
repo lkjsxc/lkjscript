@@ -7,16 +7,16 @@ release state and limits. [Specifications](spec/) own semantics,
 
 ## Public binary release
 
-**Available:** immutable [v0.1.45](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.45),
-release 396174945, published on 2026-09-25 at 09:11:48 Asia/Tokyo and independently
-observed as latest. Candidate source remains
-`4d64abc70f88dcfd6d31b0e800f23ca8bfb1459d`; original producer
-[36064706830/1](https://github.com/lkjsxc/lkjscript/actions/runs/36064706830) supplied the
-same accepted assets without a product rebuild. Promotion
-[36075872648/1](https://github.com/lkjsxc/lkjscript/actions/runs/36075872648), controlled
-by ca3ef4d672addc612275eca52da7534fd408a1b6, is completed successfully.
-The current [campaign](campaigns/202609250926.md) independently downloaded the
-anonymous official archive and verified it against release metadata.
+**Available:** immutable [v0.1.46](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.46),
+release 396948669, published on 2026-09-26 at 06:54:08 Asia/Tokyo and independently
+observed as latest. Original producer
+[36097087012/1](https://github.com/lkjsxc/lkjscript/actions/runs/36097087012) accepted exact
+product source `b25bde2d92c1882470fc4444c94319a68fe9a10c`. Promotion
+[36193525561/1](https://github.com/lkjsxc/lkjscript/actions/runs/36193525561), controlled
+by `11e54ce170050c7b6022cafc77cc84f9d34336aa`, completed authenticated selection,
+immutable publication, anonymous installed verification and its terminal. Its three
+original assets are unchanged; the release does not include the later web starter.
+The [continuation](campaigns/202609251450.md) records the independent state readback.
 
 The [v0.1.44 record](campaigns/202609222330.md#accepted-v0144-and-the-requested-release-stopping-point)
 and [v0.1.45 promotion history](campaigns/202609250903.md) retain their actual earlier
@@ -63,9 +63,9 @@ passes all 20 release-source gates freshly with stable inputs and no result reus
 and is integrated into remote main. This is not standalone full-26 acceptance.
 Its selected v0.1.46 candidate [36097087012/1](https://github.com/lkjsxc/lkjscript/actions/runs/36097087012)
 completed successfully at that exact product/controller source, including final-archive
-acceptance and the candidate terminal. Publication remains a separate uncompleted
-boundary. Immutable v0.1.45 is still the separately accepted public release. The [editor campaign](campaigns/202609251211.md) owns
-original receipts, prior failures, integration and the next delivery boundary.
+acceptance and the candidate terminal. Its separate promotion now completes public
+v0.1.46 as recorded above. The [editor campaign](campaigns/202609251211.md) retains
+original receipts, prior failures and integration; later reporting does not relabel them.
 
 | Capability | Actual implementation and evidence owner |
 | --- | --- |
@@ -104,9 +104,9 @@ parser rejects ambiguous/overflowing pagination before arithmetic; 98 graph test
 executable example, not a new runtime primitive or part of the frozen candidate
 source. The [delivery campaign](campaigns/202609250650.md) records its distinct proof.
 
-## Unreleased native form boundary
+## Native form boundary in v0.1.46
 
-Development source after v0.1.45 adds general byte construction and a checked UTF-8
+Public v0.1.46 adds general byte construction and a checked UTF-8
 result. An ordinary [strict form library and separate consumer](guides/native-forms.md)
 use those primitives for bounded URL-encoded inputs while preserving duplicate order.
 Its source, public authoring and acceptance boundaries belong to the
@@ -163,9 +163,9 @@ submission, refresh and a 360px viewport without horizontal overflow. The
 incorrect local-test-count assertion. Complete source acceptance and publication
 are separate delivery boundaries, not implied by these focused observations.
 
-This template is not part of immutable v0.1.45 or the separately frozen v0.1.46
-candidate. It has no saved state, authentication, POST mutation, account system,
-client-side event framework or Wasm backend. GET values appear in URLs and are not
+This template is not part of the immutable public v0.1.46 executable. It has no
+saved state, authentication, POST mutation, account system, client-side event
+framework or Wasm backend. GET values appear in URLs and are not
 secret storage. The existing durable-editor example remains a separate demonstration
 of explicit admission and completed transactions.
 
