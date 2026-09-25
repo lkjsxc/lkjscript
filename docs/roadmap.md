@@ -40,15 +40,25 @@ HTML/CSS/JavaScript. Existing transactions were sufficient; no framework intrins
 or browser backend was needed. Its browser-discovered referrer-policy defect shows
 why raw HTTP observations and actual user-agent behavior are distinct obligations.
 
-The next useful question is authoring and setup friction: this small app still needs
-verbose native declarations, exact library import steps and an explicit descriptor.
-Use a second small real application or an identity-preserving editor change to
-measure that friction and identify genuinely reusable admission/form/persistence
-helpers. Prefer ordinary packages or public scaffolding over a special-purpose
-compiler subsystem. Do not hide grants, transaction completion or recovery policy
-behind a convenient API. Multiple notes or richer actions should justify their
-shared mechanism; completing this particular note app is not the language's purpose.
-A form is not authorization, and a failed response does not establish rollback.
+The [development web starter](guides/native-web.md) addresses the first setup barrier:
+`new --template web`, check, build and serve require no manual UI imports or source
+downloads. Native UI code is vendored as editable local modules, not moved into a
+privileged renderer or a hidden registry. The application can be edited through the
+same identity-preserving native draft workflow and deployed without its authoring
+graph. Its focused public and script-free browser results belong to the
+[campaign](campaigns/202609251450.md); complete source/release acceptance remain
+separate obligations.
+
+The next useful question is the recurring development loop, rather than another
+large closed starter. Use a second small real application or an identity-preserving
+editor change to identify genuinely reusable admission/form/persistence helpers and
+measure discovery, review and restart friction. Prefer ordinary packages or small
+public authoring mechanisms over a special-purpose compiler subsystem. Preserve
+explicit dependency updates: vendoring is convenient creation, not a silent upgrade
+policy. Do not hide grants, transaction completion or recovery behind a convenient
+API. Multiple notes or richer actions should justify their shared mechanism;
+completing this particular note app is not the language's purpose. A form is not
+authorization, and a failed response does not establish rollback.
 
 Do not migrate native consumers solely to remove a small helper. The measured UI
 text-join consolidation increased identical-test-suite instruction counts despite

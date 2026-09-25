@@ -51,7 +51,7 @@ runtime, and adapter boundaries.
 ## Project creation
 
 ```text
-new DEST [--template minimal|command|http|nostr-relay-info] [--name NAME] [--relay-url URL]
+new DEST [--template minimal|command|http|web|nostr-relay-info] [--name NAME] [--relay-url URL]
 ```
 
 The parent must be an ordinary existing directory. The destination must be absent and may not
@@ -86,6 +86,21 @@ mutable operator authority and is not part of semantic state. Creation returns i
 recommended artifact output, target, runner, listener, and ordered next-action records. Command
 creation reports `listener=none`; minimal creation reports no deployment.
 
+`web` creates one exact-standard-dependent browser application using embedded ordinary native
+requests. The maintained UI renderer and its 19 tests become editable local `ui` and `ui-tests`
+modules; `web` owns a stateless GET page, labeled name input, light/dark submit controls, response
+headers and 13 application tests. The UI library owns the fixed HTML/CSS and escapes text. No
+browser script is emitted. This is creation-time vendoring, not a separately selected UI dependency,
+a mutable registry or a new privileged renderer. Existing projects do not silently inherit later
+recipe edits. Independent exact package imports retain their separate authority.
+
+The web recipe uses the same HTTP deployment layout and loopback listener above, with one stream
+grant and no data, filesystem, outgoing-network or secret authority. It accepts `GET /`; query
+values remain read-only URL input, not saved state or secret storage. Only exact `dark` selects
+the dark theme. The first duplicate value wins, including an empty string; an absent or empty
+value list selects the application fallback. Other methods and routes retain normal routing
+behavior. Authentication, mutation, Origin policy and persistent state are not implied.
+
 `nostr-relay-info` creates an exact-standard-dependent HTTP application with the existing inbound
 byte-stream requirement and one `HttpClient` requirement. Its graph-owned `GET /relay-info` route
 sends one `Accept: application/nostr+json` GET through that capability and returns the exact bounded
@@ -101,11 +116,16 @@ Authority, explicit port, and path are preserved; user information, query, fragm
 authority, malformed port, noncanonical escape, and unsupported scheme reject before the
 destination is visible. This normalization does not implement WebSocket.
 
-All four recipes are executable-owned typed operation lists, not source templates or a general
-template language. Internal recipe construction avoids a pointless text round trip but may use only
-operations owned by the public compact grammar. Unknown template spellings, including `web`,
-`server`, and `service`, reject through `cli_usage` and are not aliases. Invalid template/option
-combinations fail before any project destination becomes visible.
+The closed five-recipe set is executable-owned, not a general template language. Existing typed
+operation lists and embedded native requests both lower through the public change machinery.
+For a native input, only its exact first-line request base is bound to the preceding private
+accepted revision; declaration text is neither substituted nor generated. Subsequent native
+inputs can resolve prior accepted local declarations. All intermediate revisions remain inside
+an owned private lowering repository; the visible destination still has one initial acceptance.
+Malformed native syntax, invalid types or conflicting declarations fail rather than bypassing
+validation or exposing a partial project. Unknown spellings, including `Web`, `server` and
+`service`, reject through `cli_usage` and are not aliases. Invalid template/option combinations
+fail before any project destination becomes visible.
 
 Creation through a copied candidate binary requires no Cargo, checkout-relative asset, network,
 source file, database, container, or helper command. Release availability is current distribution

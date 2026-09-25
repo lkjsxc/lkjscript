@@ -1625,3 +1625,9 @@ mod native_forms;
 
 #[path = "native_editor.rs"]
 mod native_editor;
+
+#[path = "native_http.rs"]
+mod native_http;
+
+#[path = "web_starter.rs"]
+mod web_starter;

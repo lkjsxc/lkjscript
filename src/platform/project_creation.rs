@@ -1,12 +1,18 @@
 //! Atomic typed creation of the executable's closed normalized project recipe set.
 
+mod native;
 #[cfg(test)]
 mod projection_tests;
 mod recipes;
 
-use self::recipes::{command_recipe, http_recipe, minimal_recipe, nostr_relay_info_recipe};
+use self::recipes::{
+    command_recipe, http_recipe, minimal_recipe, nostr_relay_info_recipe, web_recipe,
+};
 use super::change::{AuthoredChange, AuthoredChangeSet, ChangeBudget};
-use super::control::{LogicalChangePlan, encode_logical_change_plan, normalize_change_request};
+use super::control::{
+    LogicalChangePlan, NormalizedChangeRequest, encode_logical_change_plan,
+    normalize_change_request,
+};
 use super::deployment::{
     STARTER_COMMAND_DESCRIPTOR_PATH, STARTER_COMMAND_TARGET, STARTER_HTTP_ARTIFACT_DIRECTORY,
     STARTER_HTTP_ARTIFACT_PATH, STARTER_HTTP_DESCRIPTOR_PATH, STARTER_HTTP_LISTENER,
@@ -28,22 +34,24 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 
-pub const PROJECT_CREATION_CONTRACT_IDENTITY: &str = "lkjscript-project-creation-5";
-pub const PROJECT_CREATION_CONTRACT_VERSION: u16 = 5;
+pub const PROJECT_CREATION_CONTRACT_IDENTITY: &str = "lkjscript-project-creation-6";
+pub const PROJECT_CREATION_CONTRACT_VERSION: u16 = 6;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum ProjectTemplate {
     Minimal,
     Command,
     Http,
+    Web,
     NostrRelayInfo,
 }
 
 impl ProjectTemplate {
-    pub(crate) const ALL: [Self; 4] = [
+    pub(crate) const ALL: [Self; 5] = [
         Self::Minimal,
         Self::Command,
         Self::Http,
+        Self::Web,
         Self::NostrRelayInfo,
     ];
 
@@ -58,6 +66,7 @@ impl ProjectTemplate {
             Self::Minimal => "minimal",
             Self::Command => "command",
             Self::Http => "http",
+            Self::Web => "web",
             Self::NostrRelayInfo => "nostr-relay-info",
         }
     }
@@ -71,6 +80,9 @@ impl ProjectTemplate {
             Self::Http => {
                 "Create an editable tested HTTP application and loopback starter deployment."
             }
+            Self::Web => {
+                "Create an editable native browser app with vendored UI modules and a loopback deployment."
+            }
             Self::NostrRelayInfo => {
                 "Create a tested NIP-11 relay-information proxy with one deployment-bound endpoint."
             }
@@ -81,17 +93,22 @@ impl ProjectTemplate {
         match self {
             Self::Minimal => "none",
             Self::Command => "command",
-            Self::Http | Self::NostrRelayInfo => "http",
+            Self::Http | Self::Web | Self::NostrRelayInfo => "http",
         }
     }
 
     pub(crate) const fn emits_deployment(self) -> bool {
-        matches!(self, Self::Command | Self::Http | Self::NostrRelayInfo)
+        matches!(
+            self,
+            Self::Command | Self::Http | Self::Web | Self::NostrRelayInfo
+        )
     }
 
     pub(crate) const fn recommended_artifact_output(self) -> Option<&'static str> {
         match self {
-            Self::Command | Self::Http | Self::NostrRelayInfo => Some(STARTER_HTTP_ARTIFACT_PATH),
+            Self::Command | Self::Http | Self::Web | Self::NostrRelayInfo => {
+                Some(STARTER_HTTP_ARTIFACT_PATH)
+            }
             Self::Minimal => None,
         }
     }
@@ -149,6 +166,7 @@ pub(crate) fn create_project_with_relay(
 
 struct ProjectRecipe {
     changes: Vec<AuthoredChange>,
+    native_inputs: &'static [native::Input],
     transports: Vec<InitialPackageTransport>,
     template: ProjectTemplate,
     auxiliary: Option<ProjectAuxiliary>,
@@ -205,6 +223,7 @@ where
         ProjectTemplate::Minimal => Ok(minimal_recipe()),
         ProjectTemplate::Command => command_recipe(),
         ProjectTemplate::Http => http_recipe(),
+        ProjectTemplate::Web => web_recipe(),
         ProjectTemplate::NostrRelayInfo => nostr_relay_info_recipe(relay_url.ok_or_else(|| {
             creation_error(
                 DiagnosticClass::Source,
@@ -328,7 +347,7 @@ fn lower_recipe(
     recipe: &ProjectRecipe,
 ) -> Result<KernelSnapshot, Diagnostic> {
     let empty = empty_snapshot(repository, package, package_name);
-    if recipe.changes.is_empty() {
+    if recipe.changes.is_empty() && recipe.native_inputs.is_empty() {
         return Ok(empty);
     }
     let lowering = parent.join(format!(".lkjscript-recipe-lowering-{repository}"));
@@ -343,45 +362,26 @@ fn lower_recipe(
             )),
             &recipe.transports,
         )?;
-        let semantic = AuthoredChangeSet {
-            base: created.current.head.revision,
-            preconditions: Vec::new(),
-            changes: recipe.changes.clone(),
-            budget: ChangeBudget::default(),
-        };
-        let normalized = normalize_change_request(
-            semantic,
-            PublicationOptions {
-                intent: Some(format!(
-                    "{} recipe authored lowering",
-                    recipe.template.name()
-                )),
-                ..PublicationOptions::default()
-            },
-        )?;
-        let prepared = created
-            .repository
-            .prepare_authored_change(&normalized.semantic, normalized.options)
-            .map_err(first_diagnostic)?;
-        let plan = LogicalChangePlan::new(normalized.request_commitment, &prepared)?;
-        let _ = encode_logical_change_plan(&plan, |_| Ok(()))?;
-        match created.repository.publish(&prepared.publication)? {
-            PublicationOutcome::Accepted { .. } => {}
-            PublicationOutcome::AlreadyAccepted { .. } => {
-                return Err(creation_error(
-                    DiagnosticClass::Corrupt,
-                    "new_recipe_publication_already_accepted",
-                    "fresh recipe lowering unexpectedly resolved to an existing publication",
-                ));
-            }
-            PublicationOutcome::Stale { .. } => {
-                return Err(creation_error(
-                    DiagnosticClass::Corrupt,
-                    "new_recipe_publication_stale",
-                    "fresh recipe lowering became stale before private publication",
-                ));
-            }
+        if !recipe.changes.is_empty() {
+            let semantic = AuthoredChangeSet {
+                base: created.current.head.revision,
+                preconditions: Vec::new(),
+                changes: recipe.changes.clone(),
+                budget: ChangeBudget::default(),
+            };
+            let normalized = normalize_change_request(
+                semantic,
+                PublicationOptions {
+                    intent: Some(format!(
+                        "{} recipe authored lowering",
+                        recipe.template.name()
+                    )),
+                    ..PublicationOptions::default()
+                },
+            )?;
+            publish_recipe_request(&created.repository, normalized)?;
         }
+        native::apply_inputs(&created.repository, recipe.native_inputs)?;
         let read = created
             .repository
             .view_current()?
@@ -391,6 +391,30 @@ fn lower_recipe(
     })();
     cleanup_owned_directory(&lowering, result.as_ref().err())?;
     result
+}
+
+fn publish_recipe_request(
+    repository: &GraphRepository,
+    normalized: NormalizedChangeRequest,
+) -> Result<(), Diagnostic> {
+    let prepared = repository
+        .prepare_authored_change(&normalized.semantic, normalized.options)
+        .map_err(first_diagnostic)?;
+    let plan = LogicalChangePlan::new(normalized.request_commitment, &prepared)?;
+    let _ = encode_logical_change_plan(&plan, |_| Ok(()))?;
+    match repository.publish(&prepared.publication)? {
+        PublicationOutcome::Accepted { .. } => Ok(()),
+        PublicationOutcome::AlreadyAccepted { .. } => Err(creation_error(
+            DiagnosticClass::Corrupt,
+            "new_recipe_publication_already_accepted",
+            "fresh recipe lowering unexpectedly resolved to an existing publication",
+        )),
+        PublicationOutcome::Stale { .. } => Err(creation_error(
+            DiagnosticClass::Corrupt,
+            "new_recipe_publication_stale",
+            "fresh recipe lowering became stale before private publication",
+        )),
+    }
 }
 
 fn first_diagnostic(diagnostics: Vec<Diagnostic>) -> Diagnostic {
@@ -852,6 +876,7 @@ mod tests {
             minimal_recipe(),
             command_recipe().expect("command intent"),
             http_recipe().expect("HTTP intent"),
+            web_recipe().expect("native web intent"),
             nostr_relay_info_recipe("ws://127.0.0.1:7447/nostr").expect("Nostr intent"),
         ];
         for recipe in recipes {
@@ -970,7 +995,11 @@ mod tests {
 
     #[test]
     fn auxiliary_failure_removes_every_owned_private_path() {
-        for template in [ProjectTemplate::Http, ProjectTemplate::Command] {
+        for template in [
+            ProjectTemplate::Http,
+            ProjectTemplate::Command,
+            ProjectTemplate::Web,
+        ] {
             for failure_point in [
                 CreationPoint::GraphPublished,
                 CreationPoint::BeforeDescriptor,

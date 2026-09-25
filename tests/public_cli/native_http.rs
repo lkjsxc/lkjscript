@@ -27,7 +27,12 @@ fn events(path: &Path) -> Vec<Value> {
 }
 
 impl Server {
-    pub fn start(public: &Native, label: &str, descriptor: &Value, authorization: &str) -> Self {
+    pub fn start(
+        public: &Native,
+        label: &str,
+        descriptor: &Value,
+        environment: &[(&str, &str)],
+    ) -> Self {
         let deployment = public.input(&format!("{label}.json"), &descriptor.to_string());
         let output = public.root.path().join(format!("{label}.stdout"));
         let errors = public.root.path().join(format!("{label}.stderr"));
@@ -37,7 +42,7 @@ impl Server {
                 .current_dir(public.root.path())
                 .env_clear()
                 .env("PATH", "")
-                .env("LKJSCRIPT_EDITOR_AUTHORIZATION", authorization)
+                .envs(environment.iter().copied())
                 .stdin(Stdio::null())
                 .stdout(File::create(&output).unwrap())
                 .stderr(File::create(&errors).unwrap()),
@@ -59,11 +64,11 @@ impl Server {
             }
             assert!(
                 child.try_wait().unwrap().is_none(),
-                "editor failed before readiness: {} / {}",
+                "native HTTP server failed before readiness: {} / {}",
                 String::from_utf8_lossy(&std::fs::read(&output).unwrap()),
                 String::from_utf8_lossy(&std::fs::read(&errors).unwrap())
             );
-            assert!(Instant::now() < until, "editor readiness deadline");
+            assert!(Instant::now() < until, "native HTTP readiness deadline");
             std::thread::sleep(Duration::from_millis(10));
         }
     }
@@ -74,10 +79,13 @@ impl Server {
         let until = Instant::now() + Duration::from_secs(15);
         loop {
             if let Some(status) = self.child.try_wait().unwrap() {
-                assert!(status.success(), "editor failed to join: {status}");
+                assert!(
+                    status.success(),
+                    "native HTTP server failed to join: {status}"
+                );
                 break;
             }
-            assert!(Instant::now() < until, "editor shutdown deadline");
+            assert!(Instant::now() < until, "native HTTP shutdown deadline");
             std::thread::sleep(Duration::from_millis(10));
         }
         assert!(self.child.wait_with_output().unwrap().status.success());
@@ -110,7 +118,7 @@ pub(super) fn send(
     write!(stream, "Content-Length: {}\r\n\r\n{body}", body.len()).unwrap();
     let mut bytes = Vec::new();
     stream.take(262145).read_to_end(&mut bytes).unwrap();
-    assert!(bytes.len() <= 262144, "bounded editor HTTP response");
+    assert!(bytes.len() <= 262144, "bounded native HTTP response");
     let text = String::from_utf8(bytes).unwrap();
     let (headers, body) = text.split_once("\r\n\r\n").expect("complete HTTP response");
     let status = headers.split_whitespace().nth(1).unwrap().parse().unwrap();

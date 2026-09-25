@@ -92,6 +92,14 @@ The [paged-list guide](docs/guides/native-list.md) adds native bounded
 query-number parsing, list windows, exact text/HTML composition and reviewed
 function-level editing. Its required standard is now available in v0.1.45.
 
+### Native web starter in development v0.1.47
+
+The [web starter](docs/guides/native-web.md) reduces initial setup to `new --template web`,
+`check`, `build` and `serve`. It includes editable ordinary UI modules and a GET-form
+application without manual library imports or application-authored HTML/CSS/JavaScript.
+This new template is not part of the public v0.1.45 binary or frozen v0.1.46 candidate;
+check the selected executable's `capabilities new` and [current status](docs/status.md).
+
 ### Nostr relay information from the public binary
 
 The [relay-information recipe](docs/generated/nostr-relay-info-authoring.md)

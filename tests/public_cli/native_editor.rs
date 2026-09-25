@@ -4,11 +4,11 @@ use serde_json::json;
 
 #[path = "native_editor_author.rs"]
 mod author;
-#[path = "native_editor_http.rs"]
-mod http;
+use super::native_http as http;
 
 // Public, disposable local fixture data, never a deployment default or real credential.
 const AUTH: &str = "Basic Zml4dHVyZTpuYXRpdmUtZWRpdG9yLW9ubHk=";
+const AUTH_ENVIRONMENT: &[(&str, &str)] = &[("LKJSCRIPT_EDITOR_AUTHORIZATION", AUTH)];
 
 fn headers() -> Vec<(&'static str, &'static str)> {
     vec![
@@ -54,7 +54,7 @@ fn native_editor_public_composition_rejects_untrusted_inputs_and_preserves_condi
     let (public, descriptor) = author::author();
     assert!(!public.project.exists());
     let head = || std::fs::read(public.root.path().join("data/HEAD")).unwrap();
-    let first = http::Server::start(&public, "first", &descriptor, AUTH);
+    let first = http::Server::start(&public, "first", &descriptor, AUTH_ENVIRONMENT);
     let initial = head();
     let get = http::send(first.address, "GET", "/", &headers(), "");
     assert_eq!(get.status, 200);
@@ -72,7 +72,7 @@ fn native_editor_public_composition_rejects_untrusted_inputs_and_preserves_condi
     // An operational put failure is neither a saved note nor an invalid form.
     let mut constrained = descriptor.clone();
     constrained["grants"][3]["adapter"]["limits"]["maximum_value_bytes"] = json!(1);
-    let constrained = http::Server::start(&public, "constrained", &constrained, AUTH);
+    let constrained = http::Server::start(&public, "constrained", &constrained, AUTH_ENVIRONMENT);
     assert_eq!(
         http::send(
             constrained.address,
@@ -190,7 +190,7 @@ fn native_editor_public_composition_rejects_untrusted_inputs_and_preserves_condi
     assert_eq!(revision(&get.body), "1");
     assert_eq!(draft(&get.body), "\n日本語 🌱\nsecond\nthird\ttab &amp;+");
 
-    let second = http::Server::start(&public, "second", &descriptor, AUTH);
+    let second = http::Server::start(&public, "second", &descriptor, AUTH_ENVIRONMENT);
     let barrier = std::sync::Barrier::new(8);
     let races = std::thread::scope(|scope| {
         let handles = (0..8)
@@ -260,7 +260,7 @@ fn native_editor_public_composition_rejects_untrusted_inputs_and_preserves_condi
     assert_eq!(head(), accepted);
     first.stop();
     second.stop();
-    let restarted = http::Server::start(&public, "restart", &descriptor, AUTH);
+    let restarted = http::Server::start(&public, "restart", &descriptor, AUTH_ENVIRONMENT);
     let get = http::send(restarted.address, "GET", "/", &headers(), "");
     assert_eq!(get.status, 200);
     assert_eq!(revision(&get.body), "3");

@@ -34,6 +34,7 @@ pub(super) fn minimal_recipe() -> ProjectRecipe {
     ProjectRecipe {
         changes: Vec::new(),
         transports: Vec::new(),
+        native_inputs: &[],
         template: ProjectTemplate::Minimal,
         auxiliary: None,
     }
@@ -102,10 +103,25 @@ pub(super) fn command_recipe() -> Result<ProjectRecipe, Diagnostic> {
             },
         ],
         transports: vec![standard.transport()],
+        native_inputs: &[],
         template: ProjectTemplate::Command,
         auxiliary: Some(ProjectAuxiliary {
             descriptor: encode_deployment(&starter_command_deployment())?,
             descriptor_path: super::STARTER_COMMAND_DESCRIPTOR_PATH,
+        }),
+    })
+}
+
+pub(super) fn web_recipe() -> Result<ProjectRecipe, Diagnostic> {
+    let standard = BuiltinStandard::load()?;
+    Ok(ProjectRecipe {
+        changes: vec![builtin_dependency(standard)],
+        native_inputs: super::native::WEB_INPUTS,
+        transports: vec![standard.transport()],
+        template: ProjectTemplate::Web,
+        auxiliary: Some(ProjectAuxiliary {
+            descriptor: encode_deployment(&starter_http_deployment()?)?,
+            descriptor_path: super::STARTER_HTTP_DESCRIPTOR_PATH,
         }),
     })
 }
@@ -225,6 +241,7 @@ pub(super) fn http_recipe() -> Result<ProjectRecipe, Diagnostic> {
             },
         ],
         transports: vec![standard.transport()],
+        native_inputs: &[],
         template: ProjectTemplate::Http,
         auxiliary: Some(ProjectAuxiliary {
             descriptor,
@@ -442,6 +459,7 @@ pub(super) fn nostr_relay_info_recipe(relay_url: &str) -> Result<ProjectRecipe, 
             http_route("GET", "/relay-info")?,
         ],
         transports: vec![standard.transport()],
+        native_inputs: &[],
         template: ProjectTemplate::NostrRelayInfo,
         auxiliary: Some(ProjectAuxiliary {
             descriptor,

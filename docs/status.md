@@ -143,6 +143,32 @@ package update; exhaustive consumers of its closed node variant need the new cas
 The reference runtime remains Rust, and native application composition is not compiler
 self-hosting or a Wasm/browser backend.
 
+## Native web starter
+
+Development v0.1.47 adds [`new --template web`](guides/native-web.md). One copied
+executable creates the ordinary UI modules, shared tests, a stateless GET application
+and its loopback deployment without downloaded sources or manual import identities.
+The application composes typed controls; the shared native library owns HTML/CSS
+and emits no browser script. Vendored UI declarations remain locally editable and
+do not silently update with another installed runtime. Separate exact library
+imports retain their own authority.
+
+Focused public-CLI verification passes 107 graph tests (19 UI, 13 application and
+75 built-in standard tests), title editing with stable declaration identity,
+wrong-type rejection without publication, standalone HTTP behavior, shutdown and
+restart after removing the authoring graph. Chromium 153 with page JavaScript
+disabled passes actual form submission, Unicode/markup-as-data input, keyboard
+submission, refresh and a 360px viewport without horizontal overflow. The
+[campaign](campaigns/202609251450.md) retains original evidence and the earlier
+incorrect local-test-count assertion. Complete source acceptance and publication
+are separate delivery boundaries, not implied by these focused observations.
+
+This template is not part of immutable v0.1.45 or the separately frozen v0.1.46
+candidate. It has no saved state, authentication, POST mutation, account system,
+client-side event framework or Wasm backend. GET values appear in URLs and are not
+secret storage. The existing durable-editor example remains a separate demonstration
+of explicit admission and completed transactions.
+
 ## Language and runtime boundary
 
 The language supports explicit generic records/variants, finite recursive nominal

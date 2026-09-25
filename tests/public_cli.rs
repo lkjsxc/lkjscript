@@ -1737,7 +1737,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     assert_eq!(
         compact_field(new_operation, "usage"),
         Some(
-            "new DEST [--template minimal|command|http|nostr-relay-info] [--name NAME] [--relay-url URL]"
+            "new DEST [--template minimal|command|http|web|nostr-relay-info] [--name NAME] [--relay-url URL]"
         )
     );
     assert_eq!(
@@ -1746,7 +1746,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .filter(|record| record.operation == "template")
             .filter_map(|record| compact_field(record, "name"))
             .collect::<Vec<_>>(),
-        vec!["minimal", "command", "http", "nostr-relay-info"]
+        vec!["minimal", "command", "http", "web", "nostr-relay-info"]
     );
     let status_help = compact_success(&["capabilities", "status"]);
     let status_operation = compact_record(&status_help, "operation");
@@ -1762,7 +1762,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .filter(|record| record.operation == "template")
             .filter_map(|record| compact_field(record, "name"))
             .collect::<Vec<_>>(),
-        vec!["minimal", "command", "http", "nostr-relay-info"]
+        vec!["minimal", "command", "http", "web", "nostr-relay-info"]
     );
     let http_template = templates
         .iter()
@@ -9953,7 +9953,7 @@ fn copied_binary_creates_normalized_minimal_projects_and_rejects_unsafe_destinat
         Some("new_destination_not_empty")
     );
 
-    for alias in ["web", "server", "service"] {
+    for alias in ["Web", "server", "service"] {
         let destination = temporary.path().join(format!("rejected-{alias}"));
         let output = compact_failure_output(command_at(
             &copied_binary,

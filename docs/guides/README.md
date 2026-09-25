@@ -6,6 +6,7 @@ intrinsics or automatically maintained application packages.
 
 | Guide | What it demonstrates |
 | --- | --- |
+| [Web app from one binary](native-web.md) | Development v0.1.47 `new --template web`: editable local UI modules, no manual imports, native title edits and a standalone loopback deployment. |
 | [Durable native browser editor](native-editor.md) | Ordinary POST/multiline UI, strict admission, shared authentication, transactional conflict handling, source-free restart and real script-free browser operation; selected for v0.1.46. |
 | [Strict native form codec](native-forms.md) | Unreleased byte construction, checked UTF-8, bounded fields, exact transport, detached commands and a stateless POST receiver. |
 | [Typed UI without browser-code authoring](native-ui.md) | Ordinary layouts, palettes and GET forms, exact response-library composition, and detached public-v0.1.44 execution. |

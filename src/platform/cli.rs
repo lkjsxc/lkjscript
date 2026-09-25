@@ -379,7 +379,7 @@ pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
         option_value(&arguments[1..], "--template")?.unwrap_or_else(|| "minimal".to_owned());
     let template = ProjectTemplate::parse(&template_name).ok_or_else(|| {
         usage_error(format!(
-            "unknown normalized project template '{template_name}'; expected minimal, command, http, or nostr-relay-info"
+            "unknown normalized project template '{template_name}'; expected minimal, command, http, web, or nostr-relay-info"
         ))
     })?;
     let package_name = option_value(&arguments[1..], "--name")?.unwrap_or_else(|| {
