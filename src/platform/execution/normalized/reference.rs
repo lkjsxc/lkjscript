@@ -3420,6 +3420,61 @@ fn reference_intrinsic(
                 "media-type predicate received foreign values",
             )),
         },
+        "core.bytes.from-list" => {
+            let [NormalizedValue::List(items)] = arguments.as_slice() else {
+                return Err(reference_type_error(
+                    "byte construction requires one integer list",
+                ));
+            };
+            if items.len() as u64 > super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
+                return Err(reference_resource(
+                    "normalized_reference_allocation",
+                    "byte output exceeds finite value storage",
+                ));
+            }
+            let mut output = vec![0_u8; items.len()];
+            for (index, item) in items.iter().enumerate() {
+                control.check()?;
+                match item {
+                    NormalizedValue::I64(value) if (0..=255).contains(value) => {
+                        output[index] = *value as u8
+                    }
+                    NormalizedValue::I64(_) => {
+                        return Err(reference_trap(
+                            "reference_bytes_octet",
+                            "byte value is outside 0 through 255",
+                        ));
+                    }
+                    _ => {
+                        return Err(reference_type_error(
+                            "byte construction requires integer elements",
+                        ));
+                    }
+                }
+            }
+            control.check()?;
+            Ok(NormalizedValue::Bytes(output.into()))
+        }
+        "core.bytes.to-text-result" => {
+            let [NormalizedValue::Bytes(bytes)] = arguments.as_slice() else {
+                return Err(reference_type_error("UTF-8 decoding requires bytes"));
+            };
+            if bytes.len() as u64 > super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
+                return Err(reference_resource(
+                    "normalized_reference_allocation",
+                    "UTF-8 input exceeds finite value storage",
+                ));
+            }
+            let (valid, text) = match std::str::from_utf8(bytes) {
+                Ok(text) => (true, text),
+                Err(_) => (false, ""),
+            };
+            control.check()?;
+            reference_structural_record(vec![
+                ("valid", NormalizedValue::Bool(valid)),
+                ("value", NormalizedValue::text(text)),
+            ])
+        }
         "core.bytes.from-text" => match arguments.as_slice() {
             [NormalizedValue::Text(value)] => Ok(NormalizedValue::bytes(value.as_bytes())),
             _ => Err(reference_type_error(

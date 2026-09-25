@@ -2,7 +2,7 @@
 
 # Built-in standard package public interface
 
-Package <code>pkg_10000000000000000000000000000001</code> at exact package revision <code>package_revision_4e0c38c3a20c3ddda1f108009c926cc7343eaeffdeb231309f8fb780e5d1a839</code>.
+Package <code>pkg_10000000000000000000000000000001</code> at exact package revision <code>package_revision_a8d6160bb925675424d86c12e7f3eb39df513b414b2116a615cc10ee21811b6b</code>.
 
 The records below are implementation-free public interface projections. Exact `reference` values are accepted by compact change records.
 
@@ -634,6 +634,13 @@ owner kind=parameter id=param_f73b5658135ed7f3ca19ebce1b195f40 name=right parent
 parameter index=1 name=right use=unrestricted type-path=parameter.right
 type path=parameter.right digest=type_object_4872f33f8c53c3dbf43ad114824e6c18f4537f45cb609d7d2a82c1d479e23062 form=i64
 type path=result digest=type_object_4872f33f8c53c3dbf43ad114824e6c18f4537f45cb609d7d2a82c1d479e23062 form=i64
+owner kind=external id=decl_53e54989788b94ba5555f4688281d7da name=bytes-from-list parent=package reference=pkg_10000000000000000000000000000001/decl_53e54989788b94ba5555f4688281d7da
+declaration kind=external name=bytes-from-list children=1 effect=pure
+owner kind=parameter id=param_0e0a060248e03d3d47a12359a9a83116 name=octets parent=decl_53e54989788b94ba5555f4688281d7da reference=pkg_10000000000000000000000000000001/param_0e0a060248e03d3d47a12359a9a83116
+parameter index=0 name=octets use=unrestricted type-path=parameter.octets
+type path=parameter.octets digest=type_object_2adf385547c1013ac105eea555353715d5e2207881759f33056bbc4159aa740f form=list
+type path=parameter.octets.item digest=type_object_4872f33f8c53c3dbf43ad114824e6c18f4537f45cb609d7d2a82c1d479e23062 form=i64
+type path=result digest=type_object_d0c1482fe2c3b3a0e43655b8203f2db9390c9db928d141c15b85eebaa9b56d90 form=bytes
 owner kind=record id=decl_5743b1f5767767410b5def08f635d1db name=pair parent=package reference=pkg_10000000000000000000000000000001/decl_5743b1f5767767410b5def08f635d1db
 owner kind=type_parameter id=typeparam_2c26e74b1bc0d96e042718a3d936a162 name=First parent=decl_5743b1f5767767410b5def08f635d1db reference=pkg_10000000000000000000000000000001/typeparam_2c26e74b1bc0d96e042718a3d936a162 constraint=none
 type-parameter index=0 name=First constraint=none
@@ -911,6 +918,16 @@ owner kind=parameter id=param_53fed94484ea4b81ba10561734116da7 name=value parent
 parameter index=0 name=value use=unrestricted type-path=parameter.value
 type path=parameter.value digest=type_object_d8907b140f33643f5e02a15377e67645703815b56e0440c1ccd68f838e2829e3 form=text
 type path=result digest=type_object_d8907b140f33643f5e02a15377e67645703815b56e0440c1ccd68f838e2829e3 form=text
+owner kind=external id=decl_6fadc248d8eb364ae2472780c40c8f6f name=bytes-to-text-result parent=package reference=pkg_10000000000000000000000000000001/decl_6fadc248d8eb364ae2472780c40c8f6f
+declaration kind=external name=bytes-to-text-result children=1 effect=pure
+owner kind=parameter id=param_8c275aeb84710d8ca818154411dccf25 name=bytes parent=decl_6fadc248d8eb364ae2472780c40c8f6f reference=pkg_10000000000000000000000000000001/param_8c275aeb84710d8ca818154411dccf25
+parameter index=0 name=bytes use=unrestricted type-path=parameter.bytes
+type path=parameter.bytes digest=type_object_d0c1482fe2c3b3a0e43655b8203f2db9390c9db928d141c15b85eebaa9b56d90 form=bytes
+type path=result digest=type_object_3e45d23799e89ca17b42ec1d03c5c2635e91e2b2b97419431ea409ca8bd30909 form=structural-record fields=2
+type.field parent=result index=0 name=valid type-path=result.valid
+type path=result.valid digest=type_object_f32823898c8d778d2f8edf1629baf0a7b23c884d2ba5509e44550fdbd5bf9044 form=bool
+type.field parent=result index=1 name=value type-path=result.value
+type path=result.value digest=type_object_d8907b140f33643f5e02a15377e67645703815b56e0440c1ccd68f838e2829e3 form=text
 owner kind=external id=decl_6fce40b629ef278a1c614e38e7baa9a4 name=bool-not parent=package reference=pkg_10000000000000000000000000000001/decl_6fce40b629ef278a1c614e38e7baa9a4
 declaration kind=external name=bool-not children=1 effect=pure
 owner kind=parameter id=param_ea70cd09d95a932d063f11fc5d64dbc3 name=value parent=decl_6fce40b629ef278a1c614e38e7baa9a4 reference=pkg_10000000000000000000000000000001/param_ea70cd09d95a932d063f11fc5d64dbc3

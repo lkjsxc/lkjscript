@@ -7,26 +7,21 @@ release state and limits. [Specifications](spec/) own semantics,
 
 ## Public binary release
 
-**Available:** immutable [v0.1.44](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.44),
-source `9ea93419f1c5e76126548ac5460752fe4cc4511b`. Its candidate acceptance,
-publication and anonymous exact/latest installed verification are complete.
-The [release procedure and history](release.md) and
-[original release record](campaigns/202609222330.md#accepted-v0144-and-the-requested-release-stopping-point)
-retain the real producer, corrected public lookup and earlier failed boundaries.
-Those failures are not relabeled and no old immutable assets are replaced.
+**Available:** immutable [v0.1.45](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.45),
+release 396174945, published on 2026-09-25 at 09:11:48 Asia/Tokyo and independently
+observed as latest. Candidate source remains
+`4d64abc70f88dcfd6d31b0e800f23ca8bfb1459d`; original producer
+[36064706830/1](https://github.com/lkjsxc/lkjscript/actions/runs/36064706830) supplied the
+same accepted assets without a product rebuild. Promotion
+[36075872648/1](https://github.com/lkjsxc/lkjscript/actions/runs/36075872648), controlled
+by ca3ef4d672addc612275eca52da7534fd408a1b6, is completed successfully.
+The current [campaign](campaigns/202609250926.md) independently downloaded the
+anonymous official archive and verified it against release metadata.
 
-**Selected successor:** [v0.1.45](releases/v0.1.45.md), candidate source
-`4d64abc70f88dcfd6d31b0e800f23ca8bfb1459d`, integrated on main.
-Producer [36064706830/1](https://github.com/lkjsxc/lkjscript/actions/runs/36064706830)
-has completed finalized-candidate acceptance and its terminal successfully.
-The matching annotated tag and scoped selection are established. Promotion
-[36075872648/1](https://github.com/lkjsxc/lkjscript/actions/runs/36075872648), from
-controller ca3ef4d672addc612275eca52da7534fd408a1b6, selects those same accepted
-assets without a product rebuild. Authenticated selection, publication-authority
-admission and the transferred installed lifecycle have now succeeded. The immutable
-publication job is running; publication completion and anonymous installed
-verification remain pending. The [continuation](campaigns/202609250903.md) retains
-the exact lineage and failures. An accepted candidate or tag is not a release.
+The [v0.1.44 record](campaigns/202609222330.md#accepted-v0144-and-the-requested-release-stopping-point)
+and [v0.1.45 promotion history](campaigns/202609250903.md) retain their actual earlier
+failures and then-pending observations. They are historical evidence, not current
+release status, and no frozen assets are replaced.
 
 The supported binary target remains static `x86_64-unknown-linux-musl`, admitted
 in the maintained pinned Alpine and Debian userlands. Immutable installation
@@ -70,8 +65,8 @@ acceptance belongs to that versioned candidate, not to a renamed predecessor rec
 | Native repository policy | Native extension/shebang decisions, required no-Python gate retained, and one shared pure embedding boundary. [Owner](../tools/native-policy/README.md) and [campaign](campaigns/202609240414.md). |
 | Joined contributor processes | Deadlines, output bounds and cancellation survive direct-child exit; final group signaling precedes reaping. Sampled descendants and executable identity retain honest limits. [Campaign](campaigns/202609242248.md). |
 
-These are development-source capabilities, not additions to the frozen v0.1.44
-executable. Native tool adoption is not compiler self-hosting. Rust remains the
+These capabilities shipped in v0.1.45; they are not retroactive additions to the
+frozen v0.1.44 executable. Native tool adoption is not compiler self-hosting. Rust remains the
 supported kernel, parser, platform and contributor/release orchestration boundary.
 [Performance evidence](performance.md) retains measured tool costs and slower cases;
 none of these milestones establishes an application speedup or model-token savings.
@@ -98,6 +93,16 @@ parser rejects ambiguous/overflowing pagination before arithmetic; 98 graph test
 1,860 independent number cases and 72 detached HTTP requests pass. This is an
 executable example, not a new runtime primitive or part of the frozen candidate
 source. The [delivery campaign](campaigns/202609250650.md) records its distinct proof.
+
+## Unreleased native form boundary
+
+Development source after v0.1.45 adds general byte construction and a checked UTF-8
+result. An ordinary [strict form library and separate consumer](guides/native-forms.md)
+use those primitives for bounded URL-encoded inputs while preserving duplicate order.
+Its source, public authoring and acceptance boundaries belong to the
+[campaign](campaigns/202609250926.md). This is not another released v0.1.45 binary.
+The codec does not itself supply authentication, CSRF policy, persistent mutation,
+file uploads or a complete stateful UI framework.
 
 ## Language and runtime boundary
 

@@ -118,6 +118,64 @@ impl ReferenceState<'_> {
                     ),
                 ])
             }
+            "core.bytes.from-list" => {
+                let [list] = arguments.as_slice() else {
+                    return Err(reference_type_error("byte construction requires one list"));
+                };
+                let NormalizedValue::List(items) = list.raw() else {
+                    return Err(reference_type_error(
+                        "byte construction requires an integer list",
+                    ));
+                };
+                self.charge_allocation(items.len() as u64)?;
+                let mut output = vec![0_u8; items.len()];
+                for (index, item) in items.iter().enumerate() {
+                    self.control.check()?;
+                    match item {
+                        NormalizedValue::I64(value) if (0..=255).contains(value) => {
+                            output[index] = *value as u8
+                        }
+                        NormalizedValue::I64(_) => {
+                            return Err(reference_trap(
+                                "reference_bytes_octet",
+                                "byte value is outside 0 through 255",
+                            ));
+                        }
+                        _ => {
+                            return Err(reference_type_error(
+                                "byte construction requires integer elements",
+                            ));
+                        }
+                    }
+                }
+                self.control.check()?;
+                self.charge_allocation(items.len() as u64)?;
+                CheckedValue::primitive(&self.schema, NormalizedValue::Bytes(output.into()))
+            }
+            "core.bytes.to-text-result" => {
+                let [source] = arguments.as_slice() else {
+                    return Err(reference_type_error("UTF-8 decoder requires one argument"));
+                };
+                let NormalizedValue::Bytes(bytes) = source.raw() else {
+                    return Err(reference_type_error("UTF-8 decoder requires bytes"));
+                };
+                let (valid, text) = match std::str::from_utf8(bytes) {
+                    Ok(text) => (true, text),
+                    Err(_) => (false, ""),
+                };
+                self.control.check()?;
+                self.charge_allocation(text.len() as u64)?;
+                self.result_record([
+                    (
+                        "valid",
+                        CheckedValue::primitive(&self.schema, NormalizedValue::Bool(valid))?,
+                    ),
+                    (
+                        "value",
+                        CheckedValue::primitive(&self.schema, NormalizedValue::text(text))?,
+                    ),
+                ])
+            }
             "core.list.get" => match arguments.as_slice() {
                 [list, index] => match index.raw() {
                     NormalizedValue::I64(index) => {

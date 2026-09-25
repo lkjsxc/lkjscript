@@ -1616,3 +1616,9 @@ mod native_text;
 #[cfg(target_os = "linux")]
 #[path = "resident_policy.rs"]
 mod resident_policy;
+
+#[path = "native_byte_conversion.rs"]
+mod native_byte_conversion;
+
+#[path = "native_forms.rs"]
+mod native_forms;

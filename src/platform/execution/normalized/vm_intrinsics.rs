@@ -311,6 +311,54 @@ impl Machine<'_> {
                     .ok_or_else(|| type_error("identity arity changed")),
                 _ => Err(type_error("identity host received a foreign arity")),
             },
+            "core.bytes.from-list" => {
+                let [value] = arguments.as_slice() else {
+                    return Err(type_error("byte construction received a foreign arity"));
+                };
+                let NormalizedValue::List(items) = value.raw() else {
+                    return Err(type_error("byte construction requires an integer list"));
+                };
+                // Reserve the result before allocation. Never clamp or wrap an octet.
+                self.charge_allocation(items.len() as u64)?;
+                let mut bytes = Vec::with_capacity(items.len());
+                for item in items.iter() {
+                    self.control.check()?;
+                    let NormalizedValue::I64(value) = item else {
+                        return Err(type_error("byte construction requires integer elements"));
+                    };
+                    bytes.push(u8::try_from(*value).map_err(|_| {
+                        trap_error(
+                            "normalized_bytes_octet",
+                            "byte value is outside 0 through 255",
+                        )
+                    })?);
+                }
+                self.control.check()?;
+                self.charge_allocation(items.len() as u64)?;
+                CheckedValue::scalar(self.program, NormalizedValue::Bytes(bytes.into()))
+            }
+            "core.bytes.to-text-result" => {
+                let [value] = arguments.as_slice() else {
+                    return Err(type_error("UTF-8 decoding received a foreign arity"));
+                };
+                let NormalizedValue::Bytes(bytes) = value.raw() else {
+                    return Err(type_error("UTF-8 decoding requires bytes"));
+                };
+                let decoded = std::str::from_utf8(bytes);
+                self.control.check()?;
+                let text = decoded.unwrap_or_default();
+                self.charge_allocation(text.len() as u64)?;
+                self.intrinsic_record([
+                    (
+                        "valid",
+                        CheckedValue::scalar(self.program, NormalizedValue::Bool(decoded.is_ok()))?,
+                    ),
+                    (
+                        "value",
+                        CheckedValue::scalar(self.program, NormalizedValue::text(text))?,
+                    ),
+                ])
+            }
             "core.list.get" => {
                 let [list, index] = arguments.as_slice() else {
                     return Err(type_error("list lookup received a foreign arity"));

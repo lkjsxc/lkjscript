@@ -10,13 +10,14 @@ The graph is the sole editable authority. Stable identities preserve declaration
 through edits, while names remain useful, changeable locators. Pure functions,
 tasks, exact libraries and standalone application bundles share this model.
 
-**Public:** [v0.1.44](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.44),
-with native authoring, offline libraries, command and resident runtimes.
-**Selected successor:** [v0.1.45](docs/releases/v0.1.45.md), adding native tooling,
-standard text/byte operations and optional resident cumulative quotas. Its
-[candidate acceptance](https://github.com/lkjsxc/lkjscript/actions/runs/36064706830)
-is a separate stage, not a published binary. [Current status](docs/status.md)
-separates available releases, accepted development source and unproved properties.
+**Public:** [v0.1.45](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.45),
+with native authoring and tooling, offline libraries, standard text/byte inspection,
+and optional resident cumulative quotas. Publication and the original promotion
+[36075872648/1](https://github.com/lkjsxc/lkjscript/actions/runs/36075872648) are complete.
+The [strict native form codec](docs/guides/native-forms.md) requires newer,
+**unreleased development source**, not the immutable v0.1.45 executable.
+[Current status](docs/status.md) separates available releases, development source
+and unproved properties.
 
 ## Download and install
 
@@ -27,10 +28,10 @@ executing it. The exact URL below remains pinned even when a newer release appea
 ```sh
 curl -q --fail --location --proto '=https' --proto-redir '=https' \
   --connect-timeout 15 --max-time 180 --max-filesize 16384 \
-  --output install-v0.1.44.sh \
-  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.44/install.sh
-cat install-v0.1.44.sh
-sh install-v0.1.44.sh --prefix "$HOME/.local"
+  --output install-v0.1.45.sh \
+  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.45/install.sh
+cat install-v0.1.45.sh
+sh install-v0.1.45.sh --prefix "$HOME/.local"
 export PATH="$HOME/.local/bin:$PATH"
 lkjscript --version
 lkjscript runtime list
@@ -87,9 +88,9 @@ and [HTML over HTTP](docs/guides/native-html-http.md) are ordinary composable
 libraries and programs, not a compiler-owned web framework. These guides retain
 their actual public-v0.1.44 experiments.
 
-The development [paged-list guide](docs/guides/native-list.md) adds native bounded
+The [paged-list guide](docs/guides/native-list.md) adds native bounded
 query-number parsing, list windows, exact text/HTML composition and reviewed
-function-level editing. It needs the newer standard rather than public v0.1.44.
+function-level editing. Its required standard is now available in v0.1.45.
 
 ### Nostr relay information from the public binary
 

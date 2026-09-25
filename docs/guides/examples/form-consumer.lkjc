@@ -1,0 +1,38 @@
+request base=CONSUMER_BASE
+add.dependency package=LIBRARY_PACKAGE semantic-revision=LIBRARY_REVISION package-revision=LIBRARY_PACKAGE_REVISION
+
+declarations.begin
+(units
+  (use std builtin)
+  (use forms LIBRARY_PACKAGE LIBRARY_PACKAGE_REVISION)
+  (type-alias Field (record (name Text) (value Text)))
+  (type-alias Report (record (valid Bool) (fields (list Field)) (error Text)))
+  (module create consumer
+    (function create plain-field (visibility private)
+      (parameter create field (type forms::field)) (returns Field) (effect pure)
+      (body (record structural (field name (field (local field) forms::field::name))
+        (field value (field (local field) forms::field::value)))))
+    (function create report (visibility public)
+      (parameter create body (type Bytes)) (parameter create maximum-bytes (type I64))
+      (parameter create maximum-fields (type I64)) (returns Report) (effect pure)
+      (body (match (call forms::decode (local body) (local maximum-bytes) (local maximum-fields))
+        (arm forms::result::valid (payload fields (list forms::field))
+          (record structural (field valid (bool true))
+            (field fields (call std::list-map (types forms::field Field)
+              (local fields) (function-value plain-field)))
+            (field error (text ""))))
+        (arm forms::result::invalid (payload error Text)
+          (record structural (field valid (bool false)) (field fields (list Field))
+            (field error (local error)))))))
+    (function create one (visibility private)
+      (parameter create body (type Bytes)) (returns Report) (effect pure)
+      (body (call report (local body) (i64 8192) (i64 64))))
+    (function create batch (visibility public)
+      (parameter create bodies (type (list Bytes))) (returns (list Report)) (effect pure)
+      (body (call std::list-map (types Bytes Report) (local bodies) (function-value one))))
+    (component create console (visibility private)
+      (port create report (type (function (Bytes I64 I64) Report)) (function report))
+      (port create batch (type (function ((list Bytes)) (list Report))) (function batch))))
+  (target create report (component consumer::console) (runner command) (port consumer::console::report))
+  (target create batch (component consumer::console) (runner command) (port consumer::console::batch)))
+declarations.end

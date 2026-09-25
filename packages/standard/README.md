@@ -54,12 +54,12 @@ Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_321acc95265487d1cb77d5d54daabdab3cf3b887d53cab7ae04d2c50cb08d6b3`;
-- package revision: `package_revision_4e0c38c3a20c3ddda1f108009c926cc7343eaeffdeb231309f8fb780e5d1a839`;
-- package transport: `package_transport_f519a2638ccfab14417d046824c6ea9bdbe0117e979777bfa867453755d1f9d9`;
-- artifact manifest: `artifact_manifest_bbd7486d5afa2922f641212e3d94f4601dead3366eed2c8072f549031e31970a`;
-- artifact bundle: `artifact_bundle_6ff3ea56a563fea2e5281590515ef2551b8a0992d12f04e8f732430b2a7f1059`;
-- 1,357 live semantic owners, 196 compiler units, and 63 graph tests.
+- semantic revision: `rev_1499261f258acf77f2580733bfe193230c955512aa79fb68222bd53fb008e00a`;
+- package revision: `package_revision_a8d6160bb925675424d86c12e7f3eb39df513b414b2116a615cc10ee21811b6b`;
+- package transport: `package_transport_e541794cfa0f183ed87a74351bab9d87eeff0f6881181c7789cf2a7d8b7e49f1`;
+- artifact manifest: `artifact_manifest_03eb512a4d24ef869d27737592ab32d22c252bcd343b657098a822314fcdc3bd`;
+- artifact bundle: `artifact_bundle_e40292b3a4b37f0f9a2c4d1d4cee6dfb9a541199be06e4796c79cd6dad45950d`;
+- 1,454 live semantic owners, 210 compiler units, and 75 graph tests.
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose
 ordinary parametric records with pure functions. Mapping invokes the first callback then the second,
@@ -185,3 +185,26 @@ the [native text guide](../../docs/guides/native-text.md) demonstrates ordinary 
 caller-owned HTML escaping and detached execution. The maintained reference-page tool
 now uses this function instead of its own range implementation. Other exact consumers
 are unchanged. This function is development source after the frozen v0.1.44 release.
+
+## Unreleased byte construction and UTF-8 results
+
+These additions require development source after v0.1.45. The immutable v0.1.45
+executable does not support their closed intrinsic names. Old exact suppliers and
+unchanged application artifacts are not upgraded implicitly.
+
+`bytes-from-list(octets: List<I64>) -> Bytes` constructs the exact unsigned byte
+sequence. Empty input is valid. Values outside 0 through 255 trap; they are never
+clamped, wrapped or interpreted as Unicode scalar values. The input list and its
+aliases are unchanged. Checked execution reserves scratch and retained output before
+each allocation and checks cancellation during traversal.
+
+`bytes-to-text-result(bytes: Bytes) -> {valid: Bool, value: Text}` accepts only
+complete valid UTF-8. Success preserves text exactly, including BOM, NUL, line endings
+and supplementary scalars. Invalid encoding returns false and empty text, never a
+valid prefix or replacement characters. Empty valid text returns true and empty text.
+Allocation, cancellation and other operational failures remain errors, not false.
+The existing trapping `bytes-to-text` is unchanged.
+
+The closed primitives are `core.bytes.from-list` and `core.bytes.to-text-result`.
+The [literal public request](requests/20260925-byte-conversion.lkjc) adds two exact
+externals and twelve fixed graph tests, without changing graph or data encodings.

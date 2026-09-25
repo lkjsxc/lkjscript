@@ -36,6 +36,9 @@ mod transaction_participation_tests;
 #[path = "bytes_tests.rs"]
 mod bytes_tests;
 
+#[path = "bytes_conversion_tests.rs"]
+mod bytes_conversion_tests;
+
 #[path = "f64_tests.rs"]
 mod f64_tests;
 

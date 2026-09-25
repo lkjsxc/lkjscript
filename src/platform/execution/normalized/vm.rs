@@ -2740,6 +2740,49 @@ fn call_core_intrinsic(
                 crate::platform::http_client::media_type_matches(value, expected),
             ))
         }
+        "core.bytes.from-list" => {
+            let [NormalizedValue::List(items)] = arguments.as_slice() else {
+                return Err(type_error("byte construction requires one integer list"));
+            };
+            if items.len() as u64 > super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
+                return Err(resource_error(
+                    "normalized_allocation",
+                    "byte output exceeds finite value storage",
+                ));
+            }
+            let mut bytes = Vec::with_capacity(items.len());
+            for item in items.iter() {
+                control.check()?;
+                let NormalizedValue::I64(value) = item else {
+                    return Err(type_error("byte construction requires integer elements"));
+                };
+                bytes.push(u8::try_from(*value).map_err(|_| {
+                    trap_error(
+                        "normalized_bytes_octet",
+                        "byte value is outside 0 through 255",
+                    )
+                })?);
+            }
+            control.check()?;
+            Ok(NormalizedValue::Bytes(bytes.into()))
+        }
+        "core.bytes.to-text-result" => {
+            let [NormalizedValue::Bytes(bytes)] = arguments.as_slice() else {
+                return Err(type_error("UTF-8 decoding requires bytes"));
+            };
+            if bytes.len() as u64 > super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
+                return Err(resource_error(
+                    "normalized_allocation",
+                    "UTF-8 input exceeds finite value storage",
+                ));
+            }
+            let decoded = std::str::from_utf8(bytes);
+            control.check()?;
+            normalized_structural_record([
+                ("valid", NormalizedValue::Bool(decoded.is_ok())),
+                ("value", NormalizedValue::text(decoded.unwrap_or_default())),
+            ])
+        }
         "core.bytes.from-text" => {
             let [NormalizedValue::Text(value)] = arguments.as_slice() else {
                 return Err(type_error("text-to-bytes received a foreign value"));

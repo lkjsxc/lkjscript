@@ -175,6 +175,25 @@ fn validate_shape(
         ),
         "core.bytes.from-text" => exact(signature, &[IntrinsicType::Text], &IntrinsicType::Bytes),
         "core.bytes.to-text" => exact(signature, &[IntrinsicType::Bytes], &IntrinsicType::Text),
+        "core.bytes.from-list" => exact(
+            signature,
+            &[IntrinsicType::List(Box::new(IntrinsicType::I64))],
+            &IntrinsicType::Bytes,
+        ),
+        "core.bytes.to-text-result" => exact(
+            signature,
+            &[IntrinsicType::Bytes],
+            &record(vec![
+                IntrinsicField {
+                    name: "valid".to_owned(),
+                    ty: IntrinsicType::Bool,
+                },
+                IntrinsicField {
+                    name: "value".to_owned(),
+                    ty: IntrinsicType::Text,
+                },
+            ]),
+        ),
         "core.bytes.concat" => exact(
             signature,
             &[IntrinsicType::Bytes, IntrinsicType::Bytes],
@@ -640,5 +659,78 @@ mod byte_contract_tests {
             )
             .is_err()
         );
+    }
+    #[test]
+    fn byte_conversion_signatures_are_exact_and_pure() {
+        let list = IntrinsicType::List(Box::new(IntrinsicType::I64));
+        for parameters in [
+            vec![list.clone()],
+            vec![IntrinsicType::Bytes],
+            vec![IntrinsicType::List(Box::new(IntrinsicType::Bool))],
+            vec![],
+            vec![list.clone(), IntrinsicType::I64],
+        ] {
+            for result in [
+                IntrinsicType::Bytes,
+                IntrinsicType::Text,
+                IntrinsicType::I64,
+            ] {
+                for effectful in [false, true] {
+                    let expected = parameters == [list.clone()]
+                        && result == IntrinsicType::Bytes
+                        && !effectful;
+                    let signature = IntrinsicSignature {
+                        parameters: parameters.clone(),
+                        result: result.clone(),
+                        effectful,
+                    };
+                    assert_eq!(
+                        validate_shape("core.bytes.from-list", &signature).is_ok(),
+                        expected
+                    );
+                }
+            }
+        }
+        let result = record(vec![
+            IntrinsicField {
+                name: "valid".to_owned(),
+                ty: IntrinsicType::Bool,
+            },
+            IntrinsicField {
+                name: "value".to_owned(),
+                ty: IntrinsicType::Text,
+            },
+        ]);
+        for parameters in [
+            vec![IntrinsicType::Bytes],
+            vec![IntrinsicType::Text],
+            vec![],
+            vec![IntrinsicType::Bytes, IntrinsicType::Bytes],
+        ] {
+            for actual_result in [
+                result.clone(),
+                IntrinsicType::Text,
+                parse_i64_result_type(),
+                record(vec![IntrinsicField {
+                    name: "valid".to_owned(),
+                    ty: IntrinsicType::Bool,
+                }]),
+            ] {
+                for effectful in [false, true] {
+                    let expected = parameters == [IntrinsicType::Bytes]
+                        && actual_result == result
+                        && !effectful;
+                    let signature = IntrinsicSignature {
+                        parameters: parameters.clone(),
+                        result: actual_result.clone(),
+                        effectful,
+                    };
+                    assert_eq!(
+                        validate_shape("core.bytes.to-text-result", &signature).is_ok(),
+                        expected
+                    );
+                }
+            }
+        }
     }
 }

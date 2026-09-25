@@ -6,6 +6,7 @@ intrinsics or automatically maintained application packages.
 
 | Guide | What it demonstrates |
 | --- | --- |
+| [Strict native form codec](native-forms.md) | Unreleased general byte construction, checked UTF-8, bounded ordered fields, exact transport and detached native consumer. |
 | [Typed UI without browser-code authoring](native-ui.md) | Ordinary layouts, palettes and GET forms, exact response-library composition, and detached public-v0.1.44 execution. |
 | [Paged native HTTP list](native-list.md) | Native bounded-decimal input, reusable list/text operations, exact HTML/response imports and detached HTTP execution on development v0.1.45. |
 | [First native command](native-command.md) | A literal function/test/target, reviewed publication, canonical re-entry and detached execution on public v0.1.44 and development v0.1.45. |
