@@ -58,10 +58,14 @@ source. The [campaign](campaigns/202609250926.md) preserves the earlier interrup
 run, the genuine 25-of-26 failed attempt and its exact-supplier assertion repairs.
 Subsequent reporting changes do not relabel that full acceptance with another SHA.
 
-The existing v0.1.45 binary remains the separately accepted and published release.
-The native durable-editor milestone selects successor v0.1.46, including the prior
-byte/form increment; candidate acceptance and publication are not inferred from
-its version label. The [editor campaign](campaigns/202609251211.md) owns current delivery.
+The durable-editor source `b25bde2d92c1882470fc4444c94319a68fe9a10c` additionally
+passes all 20 release-source gates freshly with stable inputs and no result reuse,
+and is integrated into remote main. This is not standalone full-26 acceptance.
+Its selected v0.1.46 candidate [36097087012/1](https://github.com/lkjsxc/lkjscript/actions/runs/36097087012)
+is in progress at that exact product/controller source; final-archive acceptance
+and publication remain unconfirmed. Immutable v0.1.45 is still the separately
+accepted public release. The [editor campaign](campaigns/202609251211.md) owns
+original receipts, prior failures, integration and the next delivery boundary.
 
 | Capability | Actual implementation and evidence owner |
 | --- | --- |

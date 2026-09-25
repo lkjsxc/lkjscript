@@ -140,6 +140,16 @@ selects v0.1.46 after observing the tag/release unoccupied and prior publication
 complete. Source, candidate and public acceptance remain distinct; selection alone
 is not publication, and the completed v0.1.45 assets are not rewritten.
 
+Corrected editor source `b25bde2d92c1882470fc4444c94319a68fe9a10c` passes all 20
+fresh source-tier gates with stable inputs, zero reuse, and confirmed normal
+mainline integration. One candidate [36097087012/1](https://github.com/lkjsxc/lkjscript/actions/runs/36097087012)
+was created at that exact product/controller source on 2026-09-25T05:05:20Z.
+It is in progress; finalized candidate, installation/userland, original-reader and
+terminal acceptance have not yet been confirmed. No v0.1.46 tag or scoped-selection
+write has occurred. Reuse this producer if healthy and follow the selection and
+promotion procedure below only after its actual acceptance. Later reporting-only
+source does not replace its event SHA or the accepted source-tier receipt.
+
 ## Content and compatibility
 
 The canonical manifest discriminator is `format: "lkjscript-release-content-1"`. It binds the product
