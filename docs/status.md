@@ -140,12 +140,12 @@ The eight new regressions also pass in the focused eleven-test runtime suite.
 Separate copied-runtime observations preserve HTTP disconnect cleanup and a saved
 note/revision through v0.1.49 -> v0.1.50 -> v0.1.49, including a stale-save 409.
 
-The v0.1.50 candidate-dispatch tool call was blocked by a safety check; a subsequent
-independent Actions query found no run for the exact source. No finalized candidate
-or public v0.1.50 release is claimed. The withheld v0.1.49 selector was restored to
+The earlier candidate-dispatch attempt at cf705260 was blocked by a safety check;
+no run was created for that source. The withheld v0.1.49 selector was restored to
 the existing immutable v0.1.48 tag and read back; its frozen tag/history stay intact.
-The [campaign](campaigns/202609262000.md) records completed source delivery and this
-separate unexecuted release boundary.
+The [campaign](campaigns/202609262000.md) retains that historical boundary. The
+corrected-source candidate selected below supersedes that unexecuted attempt,
+not the immutable public v0.1.48 assets.
 
 The [termination continuation](campaigns/202609262313.md) additionally repairs the
 public process boundary. Linux `serve` and `worker` own SIGINT and SIGTERM before
@@ -161,12 +161,23 @@ with that drain, and parent scopes are joined after callback cancellation. A
 cancelled callback remains failed application work even when process cleanup joins
 successfully. Normal terminal callbacks and post-cancellation parent cleanup have
 separate configured phase allowances, not an aggregate process-stop deadline.
-The earlier exact source 7391491b completed all 26 full gates freshly with stable
-inputs, but does not prove this later correction. Renewed full acceptance and
-mainline integration are recorded at the same campaign. Existing program/data
-formats and authority remain unchanged; public v0.1.48 does not include these fixes.
 Kernel and session idle waiting also share notification-before-observation ordering,
 with a deterministic regression for completion between the count read and wait.
+Corrected source `866e0ed0ad89f0cb6ced88e604dceb7fd1744cb3` passes all 26 full gates
+freshly, with zero reuse, stable inputs and 1059.160051424 seconds elapsed. Its exact
+three-commit lineage reached remote main by normal fast-forward, independently
+confirmed through GitHub. The earlier 7391491b receipt remains separate evidence.
+Fourteen final copied-process cases, the copied-editor persistence test and fifteen
+kernel unit cases pass; the full suite also includes the five retained-stop cases.
+Existing program/data formats and authority remain unchanged.
+
+One nonpublishing v0.1.50 candidate
+[36262586297/1](https://github.com/lkjsxc/lkjscript/actions/runs/36262586297) now selects
+that exact corrected product/controller source. It was created on 2026-09-27 at
+03:27:08 Asia/Tokyo. Candidate acceptance and public delivery are not yet claimed;
+public latest remains v0.1.48, which does not include these fixes. The
+[continuation](campaigns/202609262313.md) retains exact source acceptance, focused
+and browser observations, preserved failures and the selected release handoff.
 
 ## Ordinary form serialization
 

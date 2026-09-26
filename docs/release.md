@@ -218,12 +218,18 @@ object `da0ac737ddd546653eac676ed1220674eeeee908`, with compared prior state and
 readback, so the withheld v0.1.49 candidate is no longer selected. Its original
 history and all public assets remain unchanged.
 
-The attempted v0.1.50 candidate dispatch was blocked by the tool safety check.
-An independent Actions query returned no run for cf705260. There is no v0.1.50
-producer/run/attempt or finalized-asset acceptance to promote. Mainline source
-acceptance is complete, not public distribution. A later permitted candidate
-execution must verify its own exact current source and complete the maintained
-acceptance before any new release-scoped selection; do not resume v0.1.49.
+The earlier attempted v0.1.50 candidate dispatch was blocked by the tool safety
+check; an independent Actions query returned no run for cf705260. The
+[termination continuation](campaigns/202609262313.md) subsequently corrects process
+signals, transport/cancellation ordering, parent-session joining and idle wakeups.
+Exact corrected source `866e0ed0ad89f0cb6ced88e604dceb7fd1744cb3` passes all 26 full
+gates freshly with stable inputs and zero reuse, and is integrated into remote main.
+One new nonpublishing candidate
+[36262586297/1](https://github.com/lkjsxc/lkjscript/actions/runs/36262586297) was created
+at that exact product/controller source on 2026-09-26T18:27:08Z. Its actual
+source/finalized-target/installation acceptance and terminal must complete before
+normal promotion. No release selector or tag has been changed for this producer;
+public latest remains immutable v0.1.48. Do not resume or retag withheld v0.1.49.
 
 ## Content and compatibility
 
