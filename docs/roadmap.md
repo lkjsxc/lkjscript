@@ -87,6 +87,16 @@ SIGTERM bypass, transport-before-cancellation ordering and late-session notifica
 gaps. Keep the actual-process and retained-state regressions as prerequisites for
 any convenience layer; a successful PID exit alone cannot own readiness, preserve
 operational data or prove completed cleanup.
+The [named-draft continuation](campaigns/202609270517.md) then removes two preliminary
+queries when the exact local declaration name is already known. Selection and
+complete reconstruction share one immutable view and cumulative read admission;
+this is not a shell wrapper around independent current-head queries. Names choose
+read-only output, while reviewed mutation still binds exact owners and a base.
+The unchanged public v0.1.50 reader can consume the resulting proposal. This
+addresses known-name discovery, not unknown-name search, review quality or live
+switching. Measure those remaining costs before adding another convenience layer;
+a lower command count alone does not establish token, latency or monetary savings.
+
 Multiple notes or richer actions should justify their shared mechanism;
 completing this particular note app is not the language's purpose. A form is not
 authorization, and a failed response does not establish rollback.

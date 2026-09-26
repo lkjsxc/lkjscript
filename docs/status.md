@@ -45,7 +45,12 @@ The shared reader charges namespace and canonical work together; names never
 become a second mutation authority. Review/apply and explicit build/restart remain.
 See the [notes](releases/v0.1.51.md), [native web guide](guides/native-web.md) and
 [campaign](campaigns/202609270517.md) for scope and exact verification state.
-This source addition is not advertised as a published v0.1.51 binary.
+Implementation `3d1cf3d1b558cc2f208656532eb3bd0abb16f7f9` passed all 26 full gates
+freshly with stable inputs and zero reuse, then reached main by normal fast-forward.
+The unchanged public v0.1.50 executable also independently planned, applied and
+executed a new named-route draft. That compatibility observation does not add the
+new CLI flags to the old executable. This source addition is not a published
+v0.1.51 binary, and no v0.1.51 candidate or tag has been created.
 
 ## Immutable deployment builds in public v0.1.48
 
