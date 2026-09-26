@@ -85,7 +85,7 @@ lkjscript build --deployment service.deployment.json
 ```
 
 Review the plan and use its returned token. The deployment-build selector requires
-development v0.1.48 or later; discover it with `lkjscript capabilities build`.
+public v0.1.48 or later; discover it with `lkjscript capabilities build`.
 It removes the manual artifact-name and copied-descriptor edits from repeated builds.
 The `output.path` record names the complete content-addressed bundle in `generated/`;
 `deployment.path` names a complete descriptor beside `service.deployment.json`.
@@ -130,8 +130,8 @@ before applying it with a runtime that normalizes the edit differently.
 
 This is an authoring improvement, not live reload: running old deployments and their artifacts
 remain unchanged. The [literal-edit campaign](../campaigns/202609261118.md) owns the measured
-comparison, negative tests and exact source/publication boundary. It is absent from the separately
-frozen v0.1.48 candidate.
+comparison, negative tests and exact source/publication boundary. It is not part of the separately
+published v0.1.48 executable.
 
 To change the layout, draft `web::screen` using the same module/declaration lookup.
 Its nodes are ordinary `ui::node` values. To change a reusable control or styling,

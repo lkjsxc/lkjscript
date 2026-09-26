@@ -7,17 +7,19 @@ release state and limits. [Specifications](spec/) own semantics,
 
 ## Public binary release
 
-**Available:** immutable [v0.1.47](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.47),
-release 396991797, published on 2026-09-26 at 09:04:57 Asia/Tokyo and independently
+**Available:** immutable [v0.1.48](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.48),
+release 397062403, published on 2026-09-26 at 12:33:55 Asia/Tokyo and independently
 observed as latest. Original producer
-[36198402289/1](https://github.com/lkjsxc/lkjscript/actions/runs/36198402289) accepted exact
-product source `18e04bc0e6611ff0b79a49da1e5ce5da3632da35`. Promotion
-[36203046819/1](https://github.com/lkjsxc/lkjscript/actions/runs/36203046819), controlled
-by `3a34c305119ca7c1dc34ee7326ebe5b960d2a0b2`, completed authenticated selection,
-immutable publication, anonymous installed verification and its terminal. Its three
-original assets are unchanged. This release includes the editable native web starter;
-immutable deployment builds below are a separate development increment.
-The [continuation](campaigns/202609260831.md) records exact publication lineage.
+[36210073260/1](https://github.com/lkjsxc/lkjscript/actions/runs/36210073260) accepted exact
+product source `e2c0d1f58ed0b347c7956d2af248b944ccf422b9`. Promotion
+[36214860067/1](https://github.com/lkjsxc/lkjscript/actions/runs/36214860067), controlled
+by `0e9160930217ae24e4034ddd9afa7ed408ef467a`, completed authenticated selection,
+immutable publication, anonymous installed verification and its successful terminal.
+The three original assets were not rebuilt. This release adds immutable deployment
+builds to the editable native web starter. The [delivery campaign](campaigns/202609261118.md)
+records exact publication lineage and keeps later v0.1.49 source acceptance separate.
+Earlier v0.1.47 remains unchanged; its [continuation](campaigns/202609260831.md) retains
+that release's original evidence rather than being rewritten as v0.1.48 proof.
 
 The [v0.1.44 record](campaigns/202609222330.md#accepted-v0144-and-the-requested-release-stopping-point)
 and [v0.1.45 promotion history](campaigns/202609250903.md) retain their actual earlier
@@ -29,7 +31,7 @@ in the maintained pinned Alpine and Debian userlands. Immutable installation
 slots retain exact runtimes; selecting another version neither changes running
 processes nor migrates application data. Bundles require a compatible executable.
 
-## Immutable deployment builds in development v0.1.48
+## Immutable deployment builds in public v0.1.48
 
 `build --deployment PATH` derives an unselected content-addressed artifact and a
 sibling descriptor from current accepted meaning and one strict operator template.
@@ -41,7 +43,7 @@ Static target/grant admission opens no adapters,
 secrets or listeners; output paths inside declared local data/object/queue roots
 reject. Ordinary `build --output` still requires an absent file.
 
-The initial prototype is withheld after an independent permissions counterexample.
+The initial prototype was withheld after an independent permissions counterexample.
 Combined corrected source `e5847f1e568ad823325dd3a1e56c7a6fd64fa3fa` also rejects
 ambiguous configuration-map keys, including equal values and escaped duplicates,
 through the shared descriptor reader. Valid signed/unsigned 64-bit values remain supported.
@@ -67,10 +69,13 @@ Together with the distinct relocation supplement, these changes reached remote
 main at `e2c0d1f58ed0b347c7956d2af248b944ccf422b9` through a normal fast-forward;
 an independent GitHub read confirmed delivery.
 
-One v0.1.48 candidate [36210073260/1](https://github.com/lkjsxc/lkjscript/actions/runs/36210073260)
-was selected from that exact main source at 10:56:21 Asia/Tokyo. Finalized-candidate
-acceptance and immutable publication are not inferred from source acceptance.
-The ordinary form-library increment below is separate from that producer's source.
+The original v0.1.48 candidate [36210073260/1](https://github.com/lkjsxc/lkjscript/actions/runs/36210073260)
+was selected from that exact main source at 10:56:21 Asia/Tokyo and completed its twenty
+source gates, six finalized-target owners and two pinned userlands. Its successful
+promotion above then verified anonymous public acquisition and the installed lifecycle.
+These are distinct actual results, not publication inferred from source acceptance.
+The ordinary form-library increment below and v0.1.49 editing behavior remain separate
+from that frozen producer's source.
 Original failures remain in the [original campaign](campaigns/202609260831.md),
 relocation evidence in its [continuation](campaigns/202609261015.md), and current
 integration/candidate state in the [delivery record](campaigns/202609261045.md).
@@ -101,10 +106,15 @@ intent comparison and independent live-ownership admission. Expression and bindi
 survive; structural edits retain ordinary replacement. In the unchanged web-starter workload,
 one button label reduces the complete plan from 80,402 to 8,613 bytes: one updated expression,
 no recreated or retired owners, and all review evidence retained. This measures graph/proof churn,
-not runtime speed, model tokens or monetary cost. Focused unit and copied-binary web proof,
-including old/new detached snapshots, passes; source-wide acceptance is recorded separately in
-the [campaign](campaigns/202609261118.md). The new runtime behavior is not in public v0.1.47 or
-the frozen v0.1.48 candidate. No graph, artifact or application-data format migration is introduced.
+not runtime speed, model tokens or monetary cost. Repeated exact owner selections in complete
+native declarations reject before normalization, even across different scopes or blocks; they
+cannot combine two complete proposals into an unrequested mixture. Eleven new unit tests and
+three copied-binary workflows cover exact values, review, ownership, overlap rejection and old/new
+detached snapshots. Corrected source `e6688adc14151b8ca9a2271e3305b72a8f3e3ea8` passes all 26
+full-profile gates freshly with zero reuse and stable inputs in 1062.324654199 seconds.
+The [campaign](campaigns/202609261118.md) retains the earlier failed counterexample and exact
+receipt. This new runtime behavior is not in public v0.1.48; no v0.1.49 finalized archive or public
+release is claimed. No graph, artifact or application-data format migration is introduced.
 
 ## Current authority and maintained consumers
 

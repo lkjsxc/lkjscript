@@ -10,13 +10,13 @@ The graph is the sole editable authority. Stable identities preserve declaration
 through edits, while names remain useful, changeable locators. Pure functions,
 tasks, exact libraries and standalone application bundles share this model.
 
-**Public:** [v0.1.47](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.47),
-with the editable native [web starter](docs/guides/native-web.md), native authoring,
-offline libraries, general byte conversion and the facilities used by the ordinary
+**Public:** [v0.1.48](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.48),
+with immutable deployment rebuilds, the editable native [web starter](docs/guides/native-web.md),
+native authoring, offline libraries, general byte conversion and the facilities used by the ordinary
 [form codec](docs/guides/native-forms.md) and [durable browser editor](docs/guides/native-editor.md).
-Promotion [36203046819/1](https://github.com/lkjsxc/lkjscript/actions/runs/36203046819) completed
-immutable publication and anonymous installed verification. Older v0.1.45 does not
-contain the byte operations required by these examples.
+Promotion [36214860067/1](https://github.com/lkjsxc/lkjscript/actions/runs/36214860067) completed
+immutable publication and anonymous installed verification using the original accepted bytes.
+Older v0.1.45 does not contain the byte operations required by these examples.
 [Current status](docs/status.md) separates available releases, development source
 and unproved properties.
 
@@ -29,10 +29,10 @@ executing it. The exact URL below remains pinned even when a newer release appea
 ```sh
 curl -q --fail --location --proto '=https' --proto-redir '=https' \
   --connect-timeout 15 --max-time 180 --max-filesize 16384 \
-  --output install-v0.1.47.sh \
-  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.47/install.sh
-cat install-v0.1.47.sh
-sh install-v0.1.47.sh --prefix "$HOME/.local"
+  --output install-v0.1.48.sh \
+  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.48/install.sh
+cat install-v0.1.48.sh
+sh install-v0.1.48.sh --prefix "$HOME/.local"
 export PATH="$HOME/.local/bin:$PATH"
 lkjscript --version
 lkjscript runtime list
@@ -93,15 +93,15 @@ The [paged-list guide](docs/guides/native-list.md) adds native bounded
 query-number parsing, list windows, exact text/HTML composition and reviewed
 function-level editing. Its required standard is now available in v0.1.45.
 
-### Native web starter in public v0.1.47
+### Native web starter
 
 The [web starter](docs/guides/native-web.md) reduces initial setup to `new --template web`,
 `check`, `build` and `serve`. It includes editable ordinary UI modules and a GET-form
 application without manual library imports or application-authored HTML/CSS/JavaScript.
-This template is now part of the public v0.1.47 binary, not older frozen releases.
+This template has been available since public v0.1.47, not in older frozen releases.
 Check the selected executable's `capabilities new` and [current status](docs/status.md).
 
-### Immutable rebuilds in development v0.1.48
+### Immutable rebuilds in public v0.1.48
 
 After a reviewed edit and `check`, use `build --deployment service.deployment.json`.
 It derives a content-addressed bundle and a sibling deployment descriptor, or verifies
