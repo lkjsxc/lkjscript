@@ -41,14 +41,20 @@ Static target/grant admission opens no adapters,
 secrets or listeners; output paths inside declared local data/object/queue roots
 reject. Ordinary `build --output` still requires an absent file.
 
-The initial focused working-tree proof passes eight file-boundary unit tests and
-four copied-binary workflows: concurrent publication/reuse and conflicts, durable
-state across native edits, invalid static authority, and independent old/new web
-processes plus detached restart. An independent permissions counterexample
-subsequently withheld that prototype;
-the private-publication correction has additional regressions and requires renewed
-source-wide acceptance before delivery. Public distribution is a separate boundary
-in the [campaign](campaigns/202609260831.md).
+The initial prototype is withheld after an independent permissions counterexample.
+Combined corrected source `e5847f1e568ad823325dd3a1e56c7a6fd64fa3fa` also rejects
+ambiguous configuration-map keys, including equal values and escaped duplicates,
+through the shared descriptor reader. Valid signed/unsigned 64-bit values remain supported.
+It passes 24 local deployment unit tests and six copied-executable public workflows
+in an unoptimized focused profile, plus unchanged independent permission and
+JSON-ambiguity oracles and a late-publication/recovery trial. These observations
+are not finalized-archive or source-wide acceptance.
+
+One [hosted full verification](https://github.com/lkjsxc/lkjscript/actions/runs/36206083541)
+is selected for that exact corrected source. It was last observed in progress;
+a later state read was refused by the tool. Mainline delivery and v0.1.48
+candidate/publication remain incomplete. Original failures, precise profile bounds,
+retained source lineage and the next gate are in the [campaign](campaigns/202609260831.md).
 See the [editing guide](guides/native-web.md) and [build contract](spec/semantic-cli.md#build).
 
 ## Current authority and maintained consumers

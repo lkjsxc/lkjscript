@@ -179,8 +179,12 @@ The same continuation selects development v0.1.48 for immutable deployment build
 Its [release notes](releases/v0.1.48.md) describe exact reuse, static admission,
 unchanged running processes/data roots and private descriptor publication. An
 initial local implementation is withheld after an independently reproduced
-permissions defect; the corrected source requires renewed source acceptance before
-mainline delivery and candidate dispatch. Public v0.1.47 is complete and unchanged.
+permissions defect. Combined correction `e5847f1e568ad823325dd3a1e56c7a6fd64fa3fa`
+also rejects ambiguous configuration keys and passes its local focused regressions
+and independent oracles. Its single [Verify 36206083541/1](https://github.com/lkjsxc/lkjscript/actions/runs/36206083541)
+is last observed in progress. Complete fresh acceptance and normal mainline delivery
+are still required before candidate dispatch; no v0.1.48 publication is claimed.
+Public v0.1.47 is complete and unchanged.
 
 ## Content and compatibility
 
