@@ -321,8 +321,7 @@ impl ResidentKernel {
         let admission = AdmissionPermitGuard::new(self.inner.clone(), admission);
 
         self.inner.counters.admitted.fetch_add(1, Ordering::AcqRel);
-        let queued = self.inner.queued.fetch_add(1, Ordering::AcqRel) + 1;
-        update_maximum(&self.inner.counters.maximum_queued, queued);
+        let queued = QueuedInvocation::new(self.inner.clone(), operation);
         let queue_started = Instant::now();
         let mut shutdown = self.inner.shutdown.subscribe();
         let workers = self.inner.workers.clone();
@@ -334,8 +333,6 @@ impl ResidentKernel {
             }
             permit = workers.acquire_owned() => permit.ok(),
         };
-        self.inner.queued.fetch_sub(1, Ordering::AcqRel);
-        self.inner.idle.notify_waiters();
         let Some(worker) = worker else {
             drop(admission);
             self.inner
@@ -392,6 +389,9 @@ impl ResidentKernel {
             _worker: worker,
             _admission: admission,
         };
+        // Establish active ownership before releasing queued ownership: shutdown
+        // must never observe an idle gap while this invocation is starting.
+        let operation = queued.into_operation();
         let mut task = tokio::task::spawn_blocking(move || {
             let _guard = guard;
             let outcome = operation(closure_control);
@@ -517,6 +517,39 @@ impl ResidentKernelInner {
                 self.counters.cancelled.fetch_add(1, Ordering::AcqRel);
             }
         }
+    }
+}
+
+struct QueuedInvocation<F> {
+    // Fields drop in declaration order. Cancelled work must release its captured
+    // resources before queue accounting reports that it has finished.
+    operation: F,
+    _guard: QueuedGuard,
+}
+
+impl<F> QueuedInvocation<F> {
+    fn new(inner: Arc<ResidentKernelInner>, operation: F) -> Self {
+        let queued = inner.queued.fetch_add(1, Ordering::AcqRel) + 1;
+        update_maximum(&inner.counters.maximum_queued, queued);
+        Self {
+            operation,
+            _guard: QueuedGuard { inner },
+        }
+    }
+
+    fn into_operation(self) -> F {
+        self.operation
+    }
+}
+
+struct QueuedGuard {
+    inner: Arc<ResidentKernelInner>,
+}
+
+impl Drop for QueuedGuard {
+    fn drop(&mut self) {
+        self.inner.queued.fetch_sub(1, Ordering::AcqRel);
+        self.inner.idle.notify_waiters();
     }
 }
 
@@ -657,6 +690,11 @@ fn runtime_diagnostic(code: &str, message: impl Into<String>) -> Diagnostic {
 }
 
 #[cfg(test)]
+mod abort_tests;
+#[cfg(test)]
+mod queue_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -717,6 +755,55 @@ mod tests {
         assert_eq!(permits.admission_permits, 0);
         assert_eq!(permits.worker_permits, 0);
         assert_eq!(kernel.shutdown(Vec::new).await.remaining_tasks, 0);
+    }
+
+    #[tokio::test]
+    async fn dropping_queued_invocation_releases_observation_and_capacity() {
+        use std::future::Future;
+        use std::task::{Context, Waker};
+
+        let kernel = ResidentKernel::new(ResidentLimits {
+            maximum_concurrent_tasks: 1,
+            maximum_queued_tasks: 1,
+            shutdown_grace_milliseconds: 50,
+            cancellation_grace_milliseconds: 50,
+            ..ResidentLimits::default()
+        })
+        .expect("kernel");
+        let occupied = kernel
+            .inner
+            .workers
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("worker");
+        let called = Arc::new(AtomicBool::new(false));
+        let observed = called.clone();
+        let mut queued = Box::pin(kernel.invoke(move |_| {
+            observed.store(true, Ordering::Release);
+            Ok(())
+        }));
+        let mut context = Context::from_waker(Waker::noop());
+        assert!(queued.as_mut().poll(&mut context).is_pending());
+        assert_eq!(kernel.observe().queued, 1);
+        assert_eq!(kernel.observe_permits().admission_permits, 1);
+        drop(queued);
+        drop(occupied);
+        let observation = kernel.observe();
+        let permits = kernel.observe_permits();
+        let shutdown = kernel.shutdown(Vec::new).await;
+        assert!(
+            !called.load(Ordering::Acquire),
+            "a cancelled waiter must not execute"
+        );
+        assert_eq!(permits.admission_permits, 0);
+        assert_eq!(
+            observation.queued, 0,
+            "cancelled queue accounting leaked: {shutdown:?}"
+        );
+        assert_eq!(observation.active, 0);
+        assert_eq!(shutdown.remaining_tasks, 0);
+        assert!(shutdown.drained_before_cancellation);
     }
 
     #[test]

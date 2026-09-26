@@ -77,6 +77,11 @@ review/discovery and explicit restart ergonomics, not another renaming wrapper.
 Measure those costs on actual edits before choosing a development server or reload
 protocol. A future switch must own readiness, failure and joined
 shutdown without conflating accepted meaning, built bundles and running processes.
+The [resident cancellation correction](campaigns/202609262000.md) first closes a
+concrete lifecycle defect: cancelled waiters retained phantom queue accounting,
+and the queued-to-active handoff could notify a false idle state. Keep these
+regressions before introducing a restart/reload supervisor; convenience must not
+hide incomplete cleanup or replay effects.
 Multiple notes or richer actions should justify their shared mechanism;
 completing this particular note app is not the language's purpose. A form is not
 authorization, and a failed response does not establish rollback.

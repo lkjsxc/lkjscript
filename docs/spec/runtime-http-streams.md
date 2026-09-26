@@ -13,7 +13,7 @@ tasks, 0 through 65,536 queued tasks, and positive request, shutdown, and cancel
 greater than one hour. Admission capacity is active plus queued. A nonblocking acquire rejects excess
 as `resident_overloaded`; it never forms another hidden queue.
 
-Each admitted call receives a nonreused process-local u64 task identity, fresh capability counters,
+Each call admitted to execution receives a nonreused process-local u64 task identity, fresh capability counters,
 an operational deadline, parent deployment cancellation, one worker permit, and one active guard.
 Scheduler order and worker count are not language values. Independent calls may overlap; external
 authority ordering remains the adapter/data/object/queue contract. Pure results must agree with
@@ -22,6 +22,15 @@ serial execution.
 Runtime observations include current queued/active and admitted, completed, failed, cancelled,
 overloaded, post-shutdown rejection, and maximum queue/active counts. They are disposable
 operational evidence, not application state.
+
+A pending invocation owns its queue accounting and captured resources until it either
+starts execution or is rejected/cancelled. Dropping its future before execution must
+release those captures, queue accounting and admission capacity exactly once, and wake
+an already waiting shutdown. Such a waiter does not receive an execution identity or
+count as an executed completion. The queued-to-active handoff establishes active
+ownership before releasing queued ownership; shutdown must not observe an idle gap
+between those states. These obligations do not make cancellation of already running
+work a rollback, and do not permit detaching its cleanup.
 
 Shutdown atomically stops admission, closes admission/worker semaphores, wakes queued tasks, and
 waits the declared drain grace. If work remains, it requests cooperative cancellation and waits the

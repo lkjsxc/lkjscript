@@ -7,10 +7,12 @@ No application-authored HTML/CSS/JavaScript, Node.js, database server, downloade
 template or host-language application generator is required. The shared native UI
 library owns the rendered HTML/CSS; the browser runs no application script.
 
-This starter is introduced in development **v0.1.49**. Check
-[release availability](../status.md) and `lkjscript capabilities new`: the selected
-executable must list `web-editor`. Frozen public v0.1.48 does not include this
-template. The older manual editor composition remains a separate supported path.
+This starter was introduced in the **v0.1.49 candidate**, whose publication was
+withheld for a shared resident-runtime correction. The additive successor is
+**v0.1.50**. Check [release availability](../status.md) and
+`lkjscript capabilities new`: the selected executable must list `web-editor`.
+Frozen public v0.1.48 does not include this template. The older manual editor
+composition remains a separate supported path.
 
 ## Create, inspect and build
 

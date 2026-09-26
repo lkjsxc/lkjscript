@@ -81,7 +81,7 @@ relocation evidence in its [continuation](campaigns/202609261015.md), and curren
 integration/candidate state in the [delivery record](campaigns/202609261045.md).
 See the [editing guide](guides/native-web.md) and [build contract](spec/semantic-cli.md#build).
 
-## Durable web starter in development v0.1.49
+## Durable web starter introduced in the withheld v0.1.49 candidate
 
 `new --template web-editor` creates a locally editable authenticated note app from
 one executable. It vendors the maintained ordinary UI, form codec, editor and tests,
@@ -107,9 +107,33 @@ by normal fast-forward and an independent GitHub read confirmed delivery. The
 [campaign](campaigns/202609261600.md) retains the original receipt, failed prototype
 expectations and separate browser evidence. One nonpublishing v0.1.49 candidate,
 [36227761390/1](https://github.com/lkjsxc/lkjscript/actions/runs/36227761390), selects that
-exact source and was observed in progress. Finalized-asset acceptance and publication
-are not yet confirmed. This new template is not in immutable public v0.1.48; existing
-public assets, tags and release-selection controls remain unchanged.
+exact source and completed finalized-candidate acceptance. The subsequent promotion
+36237509998/1 was cancelled before publication after an additional shared-runtime
+regression reproduced phantom queued work. No v0.1.49 release or draft was observed;
+its successful candidate, annotated tag and cancelled promotion remain preserved.
+The [correction campaign](campaigns/202609262000.md) selects additive v0.1.50 rather
+than resuming that producer or retagging it. This template is not in public v0.1.48.
+
+## Cancellation-safe resident ownership in development v0.1.50
+
+A queued invocation now owns its captured resources and accounting until rejection,
+cancellation or handoff to an active worker. Dropping a waiting future releases
+captures before reporting idle, restores admission capacity and wakes shutdown.
+Active ownership is established before queued ownership ends; there is no false-idle
+handoff. A cancelled waiter neither executes nor receives an execution identity.
+Existing running effects still require cancellation and joined cleanup, not replay.
+
+The predecessor regression leaves one phantom task and spends both configured grace
+periods despite no operation running. A separate intentionally early-handoff mutation
+is detected by an independent notification observer. Both genuine failures are retained
+in the [campaign](campaigns/202609262000.md). The original runtime file is identical
+in the v0.1.48 and v0.1.49 tags: the issue is not new to the starter. These kernel
+observations do not establish data corruption or every HTTP disconnect path.
+
+The [v0.1.50 successor notes](releases/v0.1.50.md) describe the correction and unchanged
+program/data formats. Focused tests, full source acceptance, mainline integration,
+finalized candidate and public distribution remain separately recorded at the campaign.
+No v0.1.50 public release is claimed at this implementation checkpoint.
 
 ## Ordinary form serialization
 
@@ -129,7 +153,7 @@ authorship and source-free execution for 642 cases against an independent
 `URLSearchParams` oracle; no compiler rebuild or new runtime dependency is required.
 The [campaign](campaigns/202609261045.md) owns exact proof and scope.
 
-## Identity-preserving native edits in development v0.1.49
+## Identity-preserving native edits introduced in the withheld v0.1.49 candidate
 
 Same-structure function edits now update only changed scalar values after a complete canonical
 intent comparison and independent live-ownership admission. Expression and binding identities
@@ -143,8 +167,9 @@ three copied-binary workflows cover exact values, review, ownership, overlap rej
 detached snapshots. Corrected source `e6688adc14151b8ca9a2271e3305b72a8f3e3ea8` passes all 26
 full-profile gates freshly with zero reuse and stable inputs in 1062.324654199 seconds.
 The [campaign](campaigns/202609261118.md) retains the earlier failed counterexample and exact
-receipt. This new runtime behavior is not in public v0.1.48; no v0.1.49 finalized archive or public
-release is claimed. No graph, artifact or application-data format migration is introduced.
+receipt. This new runtime behavior is not in public v0.1.48. The finalized v0.1.49 candidate
+was accepted, but subsequently withheld for the independently reproduced resident defect above;
+there is no public v0.1.49 release. No graph, artifact or application-data format migration is introduced.
 
 ## Current authority and maintained consumers
 

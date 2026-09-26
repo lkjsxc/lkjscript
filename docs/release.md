@@ -194,6 +194,23 @@ v0.1.48 publication is inferred from source acceptance. The
 The later ordinary form-library extension is not part of this candidate source
 and is independently usable with public v0.1.47, which remains complete and unchanged.
 
+## Withheld v0.1.49 and the v0.1.50 successor
+
+Original candidate [36227761390/1](https://github.com/lkjsxc/lkjscript/actions/runs/36227761390)
+completed at source `6536fea15635933d8d91eef5ca5e2d930ae5c3f6`. Annotated v0.1.49
+object `87434ee244bff305104bf12f2822cb7861b50210` and the read-back scoped selection
+bind that source. Promotion [36237509998/1](https://github.com/lkjsxc/lkjscript/actions/runs/36237509998)
+was cancelled before publication when a new resident queue-cancellation regression
+reproduced a product defect. Its terminal correctly does not claim release completion.
+No v0.1.49 release or draft was observed; immutable v0.1.48 remains public/latest.
+Preserve the original accepted evidence, annotation and cancelled history. Do not
+resume that producer or rewrite the tag. The [correction campaign](campaigns/202609262000.md)
+selects additive v0.1.50, with [notes](releases/v0.1.50.md); corrected source and
+finalized candidate need their own acceptance before any later scoped selection.
+The runtime defect also exists in the inspected v0.1.48 source; its published
+assets are not rewritten, and this new finding is not relabelled as an earlier
+acceptance failure.
+
 ## Content and compatibility
 
 The canonical manifest discriminator is `format: "lkjscript-release-content-1"`. It binds the product
