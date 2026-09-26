@@ -10,11 +10,11 @@ The graph is the sole editable authority. Stable identities preserve declaration
 through edits, while names remain useful, changeable locators. Pure functions,
 tasks, exact libraries and standalone application bundles share this model.
 
-**Public:** [v0.1.46](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.46),
-with native authoring, offline libraries, general byte conversion and the facilities
-used by the ordinary [form codec](docs/guides/native-forms.md) and
-[durable browser editor](docs/guides/native-editor.md). Promotion
-[36193525561/1](https://github.com/lkjsxc/lkjscript/actions/runs/36193525561) completed
+**Public:** [v0.1.47](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.47),
+with the editable native [web starter](docs/guides/native-web.md), native authoring,
+offline libraries, general byte conversion and the facilities used by the ordinary
+[form codec](docs/guides/native-forms.md) and [durable browser editor](docs/guides/native-editor.md).
+Promotion [36203046819/1](https://github.com/lkjsxc/lkjscript/actions/runs/36203046819) completed
 immutable publication and anonymous installed verification. Older v0.1.45 does not
 contain the byte operations required by these examples.
 [Current status](docs/status.md) separates available releases, development source
@@ -29,10 +29,10 @@ executing it. The exact URL below remains pinned even when a newer release appea
 ```sh
 curl -q --fail --location --proto '=https' --proto-redir '=https' \
   --connect-timeout 15 --max-time 180 --max-filesize 16384 \
-  --output install-v0.1.46.sh \
-  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.46/install.sh
-cat install-v0.1.46.sh
-sh install-v0.1.46.sh --prefix "$HOME/.local"
+  --output install-v0.1.47.sh \
+  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.47/install.sh
+cat install-v0.1.47.sh
+sh install-v0.1.47.sh --prefix "$HOME/.local"
 export PATH="$HOME/.local/bin:$PATH"
 lkjscript --version
 lkjscript runtime list
@@ -93,13 +93,13 @@ The [paged-list guide](docs/guides/native-list.md) adds native bounded
 query-number parsing, list windows, exact text/HTML composition and reviewed
 function-level editing. Its required standard is now available in v0.1.45.
 
-### Native web starter in development v0.1.47
+### Native web starter in public v0.1.47
 
 The [web starter](docs/guides/native-web.md) reduces initial setup to `new --template web`,
 `check`, `build` and `serve`. It includes editable ordinary UI modules and a GET-form
 application without manual library imports or application-authored HTML/CSS/JavaScript.
-This new template is not part of the public v0.1.46 binary; check the selected
-executable's `capabilities new` and [current status](docs/status.md).
+This template is now part of the public v0.1.47 binary, not older frozen releases.
+Check the selected executable's `capabilities new` and [current status](docs/status.md).
 
 ### Immutable rebuilds in development v0.1.48
 

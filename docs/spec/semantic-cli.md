@@ -869,7 +869,7 @@ beside the observed descriptor. Only the `artifact` JSON value changes; other va
 fields are preserved, although JSON formatting/key order need not be. The descriptor stays beside
 its template so relative data, local-object and durable-queue roots retain their original meaning.
 Reject output paths inside those declared local roots. Existing ordinary output parents are
-required; build creates no directories and never rewrites the operator template.
+required; snapshot publication creates no output directories and never rewrites the operator template.
 
 New deployment descriptors use an owner-only POSIX stage (`0600`, further restricted by the
 process umask) before any bytes are written. Reusing a descriptor also requires that its effective
