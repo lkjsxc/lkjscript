@@ -44,7 +44,8 @@ reject. Ordinary `build --output` still requires an absent file.
 The initial focused working-tree proof passes eight file-boundary unit tests and
 four copied-binary workflows: concurrent publication/reuse and conflicts, durable
 state across native edits, invalid static authority, and independent old/new web
-processes plus detached restart. An independent permissions counterexample subsequently withheld that prototype;
+processes plus detached restart. An independent permissions counterexample
+subsequently withheld that prototype;
 the private-publication correction has additional regressions and requires renewed
 source-wide acceptance before delivery. Public distribution is a separate boundary
 in the [campaign](campaigns/202609260831.md).
@@ -167,7 +168,7 @@ self-hosting or a Wasm/browser backend.
 
 ## Native web starter
 
-Development v0.1.47 adds [`new --template web`](guides/native-web.md). One copied
+Public v0.1.47 adds [`new --template web`](guides/native-web.md). One copied
 executable creates the ordinary UI modules, shared tests, a stateless GET application
 and its loopback deployment without downloaded sources or manual import identities.
 The application composes typed controls; the shared native library owns HTML/CSS
@@ -186,10 +187,11 @@ incorrect local-test-count assertion. Corrected source
 `511f48c41bc45374492051181e5334fa018b0d71` now passes all 20 release-source gates
 freshly, with stable inputs and zero reuse. Normal mainline integration is complete
 through documentation descendant `18e04bc0e6611ff0b79a49da1e5ce5da3632da35`.
-This is not standalone full-26 or finalized-archive acceptance. The selected
-v0.1.47 candidate [36198402289/1](https://github.com/lkjsxc/lkjscript/actions/runs/36198402289)
-is in progress at that exact 18e04bc0 product/controller source; candidate acceptance
-and public v0.1.47 publication remain unconfirmed.
+That source profile is not standalone full-26 or finalized-archive acceptance. The
+selected v0.1.47 candidate [36198402289/1](https://github.com/lkjsxc/lkjscript/actions/runs/36198402289)
+subsequently completed finalized-archive and terminal acceptance at that exact
+18e04bc0 product/controller source. Its unchanged assets are now publicly available
+through the completed promotion recorded above.
 
 This template is not part of the immutable public v0.1.46 executable. It has no
 saved state, authentication, POST mutation, account system, client-side event
