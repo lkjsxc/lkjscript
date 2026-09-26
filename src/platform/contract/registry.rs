@@ -1485,7 +1485,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         ),
         new_operation(
             "Create fresh normalized semantic authority atomically at one absent safe destination.",
-            "new DEST [--template minimal|command|http|web|nostr-relay-info] [--name NAME] [--relay-url URL]",
+            "new DEST [--template minimal|command|http|web|web-editor|nostr-relay-info] [--name NAME] [--relay-url URL]",
         ),
         status_operation(
             "Report the exact current semantic authority and its durable acceptance evidence.",

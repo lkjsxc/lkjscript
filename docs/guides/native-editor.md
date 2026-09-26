@@ -15,6 +15,12 @@ correctly rejects this closure. Use a compatible executable. The development
 observations below retain their original tested binaries and are not relabeled
 as independent public-binary observations.
 
+For an executable-owned local starter in development v0.1.49, use
+[`new --template web-editor`](native-web-editor.md). It reuses this editor's native
+body and operator policy without manually exporting and staging UI/form packages.
+This guide retains the independent exact-library composition and its older-runtime
+compatibility boundary.
+
 ## Create the exact libraries
 
 Use a fresh directory on supported Linux x86-64. Put a compatible executable and

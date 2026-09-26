@@ -51,7 +51,7 @@ runtime, and adapter boundaries.
 ## Project creation
 
 ```text
-new DEST [--template minimal|command|http|web|nostr-relay-info] [--name NAME] [--relay-url URL]
+new DEST [--template minimal|command|http|web|web-editor|nostr-relay-info] [--name NAME] [--relay-url URL]
 ```
 
 The parent must be an ordinary existing directory. The destination must be absent and may not
@@ -101,6 +101,23 @@ the dark theme. The first duplicate value wins, including an empty string; an ab
 value list selects the application fallback. Other methods and routes retain normal routing
 behavior. Authentication, mutation, Origin policy and persistent state are not implied.
 
+`web-editor` creates an exact-standard-dependent durable browser editor. The maintained ordinary
+UI, form codec, editor and their tests become local editable modules. The editor owns `GET /`
+and explicit `POST /` routes, shared Basic authentication, exact Host/Origin admission, bounded
+forms and transactional conditional saves. A stale save returns a visible conflict with the
+submitted draft; it is not automatically retried. The [editor guide](../guides/native-editor.md)
+owns the example's application limits and operator policy, not a new language primitive.
+
+Its `service.deployment.json` selects target `editor` from `generated/application.lkja`, listens
+on `127.0.0.1:8080`, and configures the matching exact origin. Configuration, secret verification,
+byte-stream and data grants remain explicit operator authority. The data root is `notes.lkjdata`,
+a directory using the existing data-store format, resolved relative to the descriptor. Creation
+does not initialize that directory, read a secret, start a listener or compile an artifact.
+Ordered next actions include an explicit `data initialize` for a new owned store, an
+`operator-required` secret-environment step naming `LKJSCRIPT_EDITOR_AUTHORIZATION`, and `serve`.
+The secret step is not a CLI operation and supplies no credential. Existing data paths are never
+renamed or migrated. The stateless `web` template retains its original behavior and grants.
+
 `nostr-relay-info` creates an exact-standard-dependent HTTP application with the existing inbound
 byte-stream requirement and one `HttpClient` requirement. Its graph-owned `GET /relay-info` route
 sends one `Accept: application/nostr+json` GET through that capability and returns the exact bounded
@@ -116,10 +133,13 @@ Authority, explicit port, and path are preserved; user information, query, fragm
 authority, malformed port, noncanonical escape, and unsupported scheme reject before the
 destination is visible. This normalization does not implement WebSocket.
 
-The closed five-recipe set is executable-owned, not a general template language. Existing typed
+The closed six-recipe set is executable-owned, not a general template language. Existing typed
 operation lists and embedded native requests both lower through the public change machinery.
-For a native input, only its exact first-line request base is bound to the preceding private
-accepted revision; declaration text is neither substituted nor generated. Subsequent native
+For a native input, its exact first-line request base is bound to the preceding private accepted
+revision. An explicitly selected executable-owned linkage adapter may replace an exact anchored
+package-import preamble with the corresponding local-module preamble. A mismatched preamble
+rejects; the remaining native declaration body is copied byte-for-byte, never searched or
+substituted. No caller-supplied mapping or second application source is introduced. Subsequent native
 inputs can resolve prior accepted local declarations. All intermediate revisions remain inside
 an owned private lowering repository; the visible destination still has one initial acceptance.
 Malformed native syntax, invalid types or conflicting declarations fail rather than bypassing

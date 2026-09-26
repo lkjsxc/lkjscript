@@ -10,6 +10,11 @@ modules. It does not require Node.js, a Rust toolchain, downloaded library sourc
 manual dependency identities or an application-written HTML/CSS/JavaScript file.
 The Rust runtime remains the reference implementation; this is not a Wasm backend.
 
+For an authenticated POST editor with persistent notes instead of this stateless
+GET starter, see [Durable web app from one executable](native-web-editor.md).
+That opt-in development v0.1.49 template has explicit data and secret setup;
+this `web` template retains its original requirements and behavior.
+
 ## Create, check, build and serve
 
 From an owned working directory with the selected binary on `PATH`:

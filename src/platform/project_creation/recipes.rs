@@ -126,6 +126,20 @@ pub(super) fn web_recipe() -> Result<ProjectRecipe, Diagnostic> {
     })
 }
 
+pub(super) fn web_editor_recipe() -> Result<ProjectRecipe, Diagnostic> {
+    let standard = BuiltinStandard::load()?;
+    Ok(ProjectRecipe {
+        changes: vec![builtin_dependency(standard)],
+        native_inputs: super::editor::INPUTS,
+        transports: vec![standard.transport()],
+        template: ProjectTemplate::WebEditor,
+        auxiliary: Some(ProjectAuxiliary {
+            descriptor: super::editor::descriptor()?,
+            descriptor_path: super::STARTER_HTTP_DESCRIPTOR_PATH,
+        }),
+    })
+}
+
 pub(super) fn http_recipe() -> Result<ProjectRecipe, Diagnostic> {
     let standard = BuiltinStandard::load()?;
     let contract = standard.http_recipe_contract()?;

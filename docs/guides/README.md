@@ -7,6 +7,7 @@ intrinsics or automatically maintained application packages.
 | Guide | What it demonstrates |
 | --- | --- |
 | [Web app from one binary](native-web.md) | Public v0.1.47 `new --template web`: editable local UI modules, no manual imports, native title edits and a standalone loopback deployment. |
+| [Durable web app from one executable](native-web-editor.md) | Development v0.1.49 `new --template web-editor`: local UI/forms/editor modules, explicit `.lkjdata` initialization and secret setup, reviewed edits and immutable deployment builds. |
 | [Durable native browser editor](native-editor.md) | Ordinary POST/multiline UI, strict admission, shared authentication, transactional conflict handling, source-free restart and real script-free browser operation, supported by public v0.1.46. |
 | [Bounded native form codec](native-forms.md) | Strict UTF-8 input and canonical output, ordered fields, exact transport, detached commands and POST composition; encoding independently runs on public v0.1.47. |
 | [Typed UI without browser-code authoring](native-ui.md) | Ordinary layouts, palettes and GET forms, exact response-library composition, and detached public-v0.1.44 execution. |

@@ -81,6 +81,26 @@ relocation evidence in its [continuation](campaigns/202609261015.md), and curren
 integration/candidate state in the [delivery record](campaigns/202609261045.md).
 See the [editing guide](guides/native-web.md) and [build contract](spec/semantic-cli.md#build).
 
+## Durable web starter in development v0.1.49
+
+`new --template web-editor` creates a locally editable authenticated note app from
+one executable. It vendors the maintained ordinary UI, form codec, editor and tests,
+not a second application implementation. Creation reports explicit operator steps
+for `notes.lkjdata` initialization and `LKJSCRIPT_EDITOR_AUTHORIZATION`; it opens no
+adapters, reads no secrets and initializes no data. The `.lkjdata` path is a directory
+using the existing store format. Existing paths and the stateless `web` template
+remain unchanged. The [starter guide](guides/native-web-editor.md) covers native
+editing, immutable builds, safe data placement and private loopback operation.
+
+Focused evidence includes 15 creation unit tests, copied-executable old/new editor
+workflows, unchanged stateless web behavior, ordinary/immutable artifact equality,
+180 graph tests before and after editing, concurrent conditional saves, source-free
+restart and rejection of untrusted requests and corrupt storage. Workspace/all-targets
+Clippy and generated discovery checks pass. The [campaign](campaigns/202609261600.md)
+retains exact commands, rejected trial expectations and the pending full-source
+acceptance boundary. This new template is not included in immutable public v0.1.48;
+source acceptance and finalized-candidate/public delivery remain distinct.
+
 ## Ordinary form serialization
 
 The [native form library](guides/native-forms.md) now supplies bounded UTF-8 encoding

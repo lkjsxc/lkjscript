@@ -550,7 +550,10 @@ pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
         } else {
             "3"
         };
-        let serve_order = if created.template == ProjectTemplate::Http {
+        let serve_order = if matches!(
+            created.template,
+            ProjectTemplate::Http | ProjectTemplate::WebEditor
+        ) {
             "6"
         } else {
             "4"
@@ -569,6 +572,34 @@ pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
                 ),
             ],
         )?;
+        if let Some(root) = &deployment.required_data_root {
+            append_compact_record(
+                &mut output,
+                "next",
+                &[
+                    ("order", "4".to_owned()),
+                    ("kind", "data-initialize".to_owned()),
+                    ("operation", "data".to_owned()),
+                    ("mode", "initialize".to_owned()),
+                    ("root", root.display().to_string()),
+                    ("when", "new-owned-store-only".to_owned()),
+                ],
+            )?;
+        }
+        if let Some(variable) = deployment.required_secret_variable {
+            append_compact_record(
+                &mut output,
+                "next",
+                &[
+                    ("order", "5".to_owned()),
+                    ("kind", "secret-environment".to_owned()),
+                    ("variable", variable.to_owned()),
+                    ("status", "operator-required".to_owned()),
+                    ("scope", "serve-process".to_owned()),
+                    ("value-format", "http-basic-authorization".to_owned()),
+                ],
+            )?;
+        }
         append_compact_record(
             &mut output,
             "next",

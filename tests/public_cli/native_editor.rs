@@ -4,6 +4,8 @@ use serde_json::json;
 
 #[path = "native_editor_author.rs"]
 mod author;
+#[path = "web_editor_starter.rs"]
+mod starter;
 use super::native_http as http;
 
 // Public, disposable local fixture data, never a deployment default or real credential.
@@ -52,8 +54,16 @@ fn draft(body: &str) -> &str {
 #[test]
 fn native_editor_public_composition_rejects_untrusted_inputs_and_preserves_conditional_saves() {
     let (public, descriptor) = author::author();
+    exercise_editor(public, descriptor);
+}
+
+fn exercise_editor(public: Native, descriptor: Value) {
     assert!(!public.project.exists());
-    let head = || std::fs::read(public.root.path().join("data/HEAD")).unwrap();
+    let data_root = public
+        .root
+        .path()
+        .join(descriptor["grants"][3]["adapter"]["root"].as_str().unwrap());
+    let head = || std::fs::read(data_root.join("HEAD")).unwrap();
     let first = http::Server::start(&public, "first", &descriptor, AUTH_ENVIRONMENT);
     let initial = head();
     let get = http::send(first.address, "GET", "/", &headers(), "");

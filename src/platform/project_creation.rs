@@ -1,12 +1,14 @@
 //! Atomic typed creation of the executable's closed normalized project recipe set.
 
+mod editor;
 mod native;
 #[cfg(test)]
 mod projection_tests;
 mod recipes;
 
 use self::recipes::{
-    command_recipe, http_recipe, minimal_recipe, nostr_relay_info_recipe, web_recipe,
+    command_recipe, http_recipe, minimal_recipe, nostr_relay_info_recipe, web_editor_recipe,
+    web_recipe,
 };
 use super::change::{AuthoredChange, AuthoredChangeSet, ChangeBudget};
 use super::control::{
@@ -34,8 +36,8 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 
-pub const PROJECT_CREATION_CONTRACT_IDENTITY: &str = "lkjscript-project-creation-6";
-pub const PROJECT_CREATION_CONTRACT_VERSION: u16 = 6;
+pub const PROJECT_CREATION_CONTRACT_IDENTITY: &str = "lkjscript-project-creation-7";
+pub const PROJECT_CREATION_CONTRACT_VERSION: u16 = 7;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum ProjectTemplate {
@@ -43,15 +45,17 @@ pub(crate) enum ProjectTemplate {
     Command,
     Http,
     Web,
+    WebEditor,
     NostrRelayInfo,
 }
 
 impl ProjectTemplate {
-    pub(crate) const ALL: [Self; 5] = [
+    pub(crate) const ALL: [Self; 6] = [
         Self::Minimal,
         Self::Command,
         Self::Http,
         Self::Web,
+        Self::WebEditor,
         Self::NostrRelayInfo,
     ];
 
@@ -67,6 +71,7 @@ impl ProjectTemplate {
             Self::Command => "command",
             Self::Http => "http",
             Self::Web => "web",
+            Self::WebEditor => "web-editor",
             Self::NostrRelayInfo => "nostr-relay-info",
         }
     }
@@ -83,6 +88,9 @@ impl ProjectTemplate {
             Self::Web => {
                 "Create an editable native browser app with vendored UI modules and a loopback deployment."
             }
+            Self::WebEditor => {
+                "Create a native durable note editor; explicitly initialize notes.lkjdata and supply LKJSCRIPT_EDITOR_AUTHORIZATION before serving."
+            }
             Self::NostrRelayInfo => {
                 "Create a tested NIP-11 relay-information proxy with one deployment-bound endpoint."
             }
@@ -93,20 +101,20 @@ impl ProjectTemplate {
         match self {
             Self::Minimal => "none",
             Self::Command => "command",
-            Self::Http | Self::Web | Self::NostrRelayInfo => "http",
+            Self::Http | Self::Web | Self::WebEditor | Self::NostrRelayInfo => "http",
         }
     }
 
     pub(crate) const fn emits_deployment(self) -> bool {
         matches!(
             self,
-            Self::Command | Self::Http | Self::Web | Self::NostrRelayInfo
+            Self::Command | Self::Http | Self::Web | Self::WebEditor | Self::NostrRelayInfo
         )
     }
 
     pub(crate) const fn recommended_artifact_output(self) -> Option<&'static str> {
         match self {
-            Self::Command | Self::Http | Self::Web | Self::NostrRelayInfo => {
+            Self::Command | Self::Http | Self::Web | Self::WebEditor | Self::NostrRelayInfo => {
                 Some(STARTER_HTTP_ARTIFACT_PATH)
             }
             Self::Minimal => None,
@@ -121,6 +129,8 @@ pub struct CreatedDeployment {
     pub target: &'static str,
     pub runner: &'static str,
     pub configured_listener: Option<&'static str>,
+    pub required_data_root: Option<PathBuf>,
+    pub required_secret_variable: Option<&'static str>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -224,6 +234,7 @@ where
         ProjectTemplate::Command => command_recipe(),
         ProjectTemplate::Http => http_recipe(),
         ProjectTemplate::Web => web_recipe(),
+        ProjectTemplate::WebEditor => web_editor_recipe(),
         ProjectTemplate::NostrRelayInfo => nostr_relay_info_recipe(relay_url.ok_or_else(|| {
             creation_error(
                 DiagnosticClass::Source,
@@ -304,17 +315,21 @@ where
         .map(|auxiliary| CreatedDeployment {
             descriptor: destination.join(auxiliary.descriptor_path),
             recommended_artifact_output: destination.join(STARTER_HTTP_ARTIFACT_PATH),
-            target: if template == ProjectTemplate::Command {
-                STARTER_COMMAND_TARGET
-            } else {
-                STARTER_HTTP_TARGET
+            target: match template {
+                ProjectTemplate::Command => STARTER_COMMAND_TARGET,
+                ProjectTemplate::WebEditor => editor::TARGET,
+                _ => STARTER_HTTP_TARGET,
             },
             runner: template.runner(),
-            configured_listener: if template == ProjectTemplate::Command {
-                None
-            } else {
-                Some(STARTER_HTTP_LISTENER)
+            configured_listener: match template {
+                ProjectTemplate::Command => None,
+                ProjectTemplate::WebEditor => Some(editor::LISTENER),
+                _ => Some(STARTER_HTTP_LISTENER),
             },
+            required_data_root: (template == ProjectTemplate::WebEditor)
+                .then(|| destination.join(editor::DATA_ROOT)),
+            required_secret_variable: (template == ProjectTemplate::WebEditor)
+                .then_some(editor::SECRET_VARIABLE),
         });
     Ok(ProjectCreation {
         project: destination,
@@ -999,6 +1014,7 @@ mod tests {
             ProjectTemplate::Http,
             ProjectTemplate::Command,
             ProjectTemplate::Web,
+            ProjectTemplate::WebEditor,
         ] {
             for failure_point in [
                 CreationPoint::GraphPublished,

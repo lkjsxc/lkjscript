@@ -188,7 +188,12 @@ pub(super) fn write_fixture(public: &Native, descriptor: &Value, mode: i64) {
             .collect::<Vec<_>>()
     );
     let deployment = public.input("fixture.json", &command.to_string());
-    let before = std::fs::read(public.root.path().join("data/HEAD")).unwrap();
+    let head = public
+        .root
+        .path()
+        .join(descriptor["grants"][3]["adapter"]["root"].as_str().unwrap())
+        .join("HEAD");
+    let before = std::fs::read(&head).unwrap();
     public.cli(
         &[
             "run",
@@ -199,8 +204,5 @@ pub(super) fn write_fixture(public: &Native, descriptor: &Value, mode: i64) {
         ],
         true,
     );
-    assert_ne!(
-        std::fs::read(public.root.path().join("data/HEAD")).unwrap(),
-        before
-    );
+    assert_ne!(std::fs::read(&head).unwrap(), before);
 }
