@@ -642,16 +642,35 @@ pub fn execute_build(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
     if arguments.first().map(String::as_str) != Some("build") {
         return Err(usage_error("build requires the build operation name"));
     }
-    ensure_options(&arguments[1..], &["--output"], &[])?;
-    let output_path = required_option(&arguments[1..], "--output")?;
+    ensure_options(&arguments[1..], &["--output", "--deployment"], &[])?;
+    let output_path = option_value(&arguments[1..], "--output")?;
+    let deployment_path = option_value(&arguments[1..], "--deployment")?;
+    if output_path.is_some() == deployment_path.is_some() {
+        return Err(usage_error(
+            "build requires exactly one of --output or --deployment",
+        ));
+    }
+    let template = deployment_path
+        .as_deref()
+        .map(|path| super::deployment::build::BuildTemplate::read(Path::new(path)))
+        .transpose()?;
     let repository = open_normalized_repository(project)?;
     let prepared = prepare_repository(repository)?;
-    let publication = publish_create_new(
-        Path::new(&output_path),
-        &prepared.artifact_bytes,
-        maximum_artifact_output_bytes()?,
-        "normalized graph artifact",
-    )?;
+    let (publication, snapshot) = if let Some(template) = template {
+        let snapshot = template.publish(&prepared, maximum_artifact_output_bytes()?)?;
+        (snapshot.artifact.clone(), Some(snapshot))
+    } else {
+        let output_path = output_path.ok_or_else(|| usage_error("build requires --output"))?;
+        (
+            publish_create_new(
+                Path::new(&output_path),
+                &prepared.artifact_bytes,
+                maximum_artifact_output_bytes()?,
+                "normalized graph artifact",
+            )?,
+            None,
+        )
+    };
     let mut output = compact_response_writer()?;
     append_compact_record(
         &mut output,
@@ -673,6 +692,26 @@ pub fn execute_build(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
             ("stage-cleanup", publication.stage_cleanup.to_owned()),
         ],
     )?;
+    if let Some(snapshot) = snapshot {
+        append_compact_record(
+            &mut output,
+            "deployment",
+            &[
+                ("path", snapshot.deployment.path.display().to_string()),
+                ("source", snapshot.source.display().to_string()),
+                ("bytes", snapshot.deployment.bytes.to_string()),
+                ("visibility", snapshot.deployment.visibility.to_owned()),
+                ("durability", snapshot.deployment.durability.to_owned()),
+                (
+                    "stage-cleanup",
+                    snapshot.deployment.stage_cleanup.to_owned(),
+                ),
+                ("admission", "static-only".to_owned()),
+                ("selection", "unchanged".to_owned()),
+                ("application-data", "untouched".to_owned()),
+            ],
+        )?;
+    }
     Ok(output.finish())
 }
 

@@ -61,10 +61,16 @@ measure discovery, review and restart friction. Prefer ordinary packages or smal
 public authoring mechanisms over a special-purpose compiler subsystem. Preserve
 explicit dependency updates: vendoring is convenient creation, not a silent upgrade
 policy. Do not hide grants, transaction completion or recovery behind a convenient
-API. The observed rebuild loop also requires a new output filename and explicit
-deployment selection; the corrected guide preserves the old working pair instead
-of silently overwriting it. A later development-loop improvement should shorten
-that path without conflating accepted meaning, built bundles and running processes.
+API. The observed manual rebuild-name/descriptor friction is addressed by
+`build --deployment` in development v0.1.48: derive an unselected content-addressed
+pair, preserve the operator template and local data roots, and reuse only exact
+bytes. The [campaign](campaigns/202609260831.md) retains copied-binary command,
+concurrent build, native edit, persistent-data and old/new HTTP witnesses.
+Source acceptance and distribution are recorded separately there. The next
+question is now review/discovery and explicit restart ergonomics, not another
+renaming wrapper. Measure those costs on actual edits before choosing a development
+server or reload protocol. A future switch must own readiness, failure and joined
+shutdown without conflating accepted meaning, built bundles and running processes.
 Multiple notes or richer actions should justify their shared mechanism;
 completing this particular note app is not the language's purpose. A form is not
 authorization, and a failed response does not establish rollback.

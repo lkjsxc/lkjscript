@@ -81,30 +81,38 @@ commands. In `title.lkjc`, change the text in the `page-title` function body, th
 lkjscript change plan --input-file title.lkjc
 lkjscript change apply --input-file title.lkjc --plan PLAN_TOKEN
 lkjscript check
-lkjscript build --output generated/application-edited.lkja
+lkjscript build --deployment service.deployment.json
 ```
 
-Review the plan and use its returned token. Every build output must be absent:
-`build` deliberately rejects an existing file with `output_conflict`, even when
-its bytes would be identical. Choose a new unused output name for each build;
-do not delete the retained working bundle to make a command succeed.
-
-Make a new copy of `service.deployment.json` named
-`service-edited.deployment.json`, choosing an unused name. In that copy, change
-only `artifact` to `generated/application-edited.lkja`. Leave the original
-bundle and descriptor intact. Stop the earlier server, then explicitly select
-the new deployment:
+Review the plan and use its returned token. The deployment-build selector requires
+development v0.1.48 or later; discover it with `lkjscript capabilities build`.
+It removes the manual artifact-name and copied-descriptor edits from repeated builds.
+The `output.path` record names the complete content-addressed bundle in `generated/`;
+`deployment.path` names a complete descriptor beside `service.deployment.json`.
+Copy that returned deployment path into the next command:
 
 ```sh
-lkjscript serve --deployment service-edited.deployment.json
+lkjscript serve --deployment DEPLOYMENT_PATH
 ```
 
-The artifact path is relative to its descriptor. Building a new bundle or changing
-a descriptor does not hot-reload a running process. The retained original pair
-can be selected again with its original serve command; this example has no
-persistent application data to migrate. Other stateful applications need their
-own recovery policy. A changed title preserves the declaration identity and its
-callers. A body with the wrong return type is rejected without advancing the
+Building never replaces the original descriptor, deletes a working bundle or changes
+a running server. An unchanged rebuild verifies and reuses the same exact pair;
+changed code or configuration produces the required new immutable outputs. Stop an
+earlier server first when the configured fixed listener cannot be shared. This
+starter's port-zero listener also permits independently observed old/new processes.
+
+The descriptor stays beside its template, preserving the meaning of relative
+persistent-data paths in stateful applications. Building neither opens nor migrates
+that data. The retained original pair can be selected again with its original serve
+command, but choosing an old program never rolls back application data. This stateless
+example needs no migration; other applications need their own recovery policy.
+Older runtimes without this selector still support `build --output` to an unused name
+and an explicitly copied/repointed descriptor. That route remains create-new and
+rejects even identical existing bytes. Do not delete retained working files simply
+to make a build succeed. See the [build contract](../spec/semantic-cli.md#build)
+for bounds, exact reuse, failure states and explicit retention.
+
+A changed title preserves the declaration identity and its callers. A body with the wrong return type is rejected without advancing the
 accepted head.
 An unchanged draft plans as unchanged.
 

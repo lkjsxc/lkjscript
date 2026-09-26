@@ -34,11 +34,20 @@ impl Server {
         environment: &[(&str, &str)],
     ) -> Self {
         let deployment = public.input(&format!("{label}.json"), &descriptor.to_string());
+        Self::start_file(public, label, &deployment, environment)
+    }
+
+    pub fn start_file(
+        public: &Native,
+        label: &str,
+        deployment: &Path,
+        environment: &[(&str, &str)],
+    ) -> Self {
         let output = public.root.path().join(format!("{label}.stdout"));
         let errors = public.root.path().join(format!("{label}.stderr"));
         let mut child = support::spawn(
             Command::new(&public.executable)
-                .args(["serve", "--deployment", path(&deployment)])
+                .args(["serve", "--deployment", path(deployment)])
                 .current_dir(public.root.path())
                 .env_clear()
                 .env("PATH", "")

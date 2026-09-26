@@ -101,6 +101,16 @@ application without manual library imports or application-authored HTML/CSS/Java
 This new template is not part of the public v0.1.46 binary; check the selected
 executable's `capabilities new` and [current status](docs/status.md).
 
+### Immutable rebuilds in development v0.1.48
+
+After a reviewed edit and `check`, use `build --deployment service.deployment.json`.
+It derives a content-addressed bundle and a sibling deployment descriptor, or verifies
+and reuses their exact bytes. Run the returned `deployment.path` explicitly. No manual
+artifact-name edits, original-file overwrite, process switch or data migration occurs.
+The [web editing loop](docs/guides/native-web.md) and [build contract](docs/spec/semantic-cli.md#build)
+cover retained old versions, independent data roots and failures. Check the selected
+binary's `capabilities build`; this command is not retroactively added to older releases.
+
 ### Nostr relay information from the public binary
 
 The [relay-information recipe](docs/generated/nostr-relay-info-authoring.md)

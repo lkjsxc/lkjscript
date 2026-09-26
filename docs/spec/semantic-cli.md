@@ -837,18 +837,64 @@ reported through `cache=clean-recovery`, rebuilt, and cannot cause wrong semanti
 ## Build
 
 ```text
-build --output PATH
+build (--output PATH | --deployment PATH)
 ```
 
-Build uses the same preparation and exact dependency closure as check and run. It emits only an
-artifact bundle. Equal authority, dependencies, compiler compatibility, and options yield
-identical bytes.
+Exactly one selector is required, once only. `--output` retains the existing artifact-only
+create-new behavior. `--deployment` derives an immutable deployment snapshot from one observed
+operator descriptor and does not select or run it.
 
-Output publication is create-new: validate a bounded absent path and ordinary parent, write and
+Both selectors use the same artifact preparation and exact dependency closure as check and run.
+Equal authority, dependencies, compiler compatibility, and options yield identical artifact bytes.
+The deployment selector additionally emits the descriptor described below.
+
+With `--output`, publication is create-new: validate a bounded absent path and ordinary parent, write and
 synchronize an owned sibling stage, create the visible file without overwrite, synchronize the
 parent, and remove only the owned stage. Existing file/directory/symlink, symlinked parent, missing
 or invalid parent, byte exhaustion, interruption, or publication failure leaves no partial new
 artifact and preserves existing data. Build does not alter accepted authority.
+
+With `--deployment`, relative input paths use the invocation directory, independently of the
+selected project. Input and resolved output paths are bounded to 4096 UTF-8 bytes. Read one
+ordinary non-symlink descriptor under the existing 1 MiB descriptor limit, reject linked parent
+components and `..`, and strictly reject unknown/duplicate fields before project preparation.
+The old `artifact` file need not exist and is not read. Prepare the current accepted graph using
+the ordinary lifecycle, then statically admit the exact target, runner policy and grants against
+that program. This does not run graph tests; use `check` explicitly before delivery. It does not
+read secret values, open adapters, initialize data, bind listeners or probe runtime availability.
+
+The artifact is `build-<BLAKE3 of complete artifact bytes>.lkja` in the original artifact's parent
+directory. The new descriptor is `build-<BLAKE3 of complete emitted descriptor bytes>.deployment.json`
+beside the observed descriptor. Only the `artifact` JSON value changes; other values and omitted
+fields are preserved, although JSON formatting/key order need not be. The descriptor stays beside
+its template so relative data, local-object and durable-queue roots retain their original meaning.
+Reject output paths inside those declared local roots. Existing ordinary output parents are
+required; build creates no directories and never rewrites the operator template.
+
+Preflight both destinations before publishing either. An existing ordinary file is reusable only
+after bounded exact-byte comparison; a matching digest-shaped filename alone is insufficient.
+Different bytes, directories, links and invalid parents reject without overwrite. Publish the
+complete artifact first, then the descriptor, using the existing create-new owner. Identical
+cooperating builders can converge on the same exact pair. A late conflict or write failure can
+retain a complete inert artifact; it never exposes a partial new descriptor or removes another
+writer's file. Local owner mutation, deletion or hostile concurrent filesystem changes are not
+prevented by the content-addressed naming contract. Rebuild detects observed conflicting bytes;
+this is not a filesystem immutability or hostile-writer sandbox claim.
+
+The existing `output` record describes the artifact. A `deployment` record reports the new
+absolute `path`, observed `source`, bytes, visibility, durability and stage-cleanup, with
+`admission=static-only`, `selection=unchanged` and `application-data=untouched`. Newly published
+files report `visibility=created`; exact reuse reports `visibility=reused-exact` and
+`stage-cleanup=none-retained`. Durability is observed independently for each file. A failed
+owned-stage cleanup is not hidden behind successful reuse. Output delivery failure does not undo
+visible files; rerunning unchanged input can reuse the complete pair.
+
+Explicitly pass the returned descriptor path to `serve --deployment` or `run --deployment`.
+No running process, default deployment or accepted graph is selected or changed by the build.
+A snapshot can itself be a template; unchanged inputs converge on the same pair. Keep older pairs
+for deliberate selection. Selecting an earlier program does not roll back or migrate operational
+data. Retention is explicit: build never garbage-collects older outputs, and disk exhaustion does
+not authorize deletion or overwrite. `--output` still rejects even an identical existing file.
 
 ## Run
 

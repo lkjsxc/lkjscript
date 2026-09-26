@@ -164,7 +164,7 @@ pub fn inspect_create_new(path: &Path) -> Result<PathBuf, Diagnostic> {
     Ok(output)
 }
 
-fn reject_symlinked_path(path: &Path) -> Result<(), Diagnostic> {
+pub(crate) fn reject_symlinked_path(path: &Path) -> Result<(), Diagnostic> {
     let absolute = if path.is_absolute() {
         path.to_path_buf()
     } else {

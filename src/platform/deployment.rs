@@ -1,5 +1,7 @@
 //! Strict standalone Artifact 15 deployment and normalized resident execution.
 
+pub(crate) mod build;
+
 use super::compiler::{MAXIMUM_ARTIFACT_BUNDLE_BYTES, load_artifact};
 use super::configuration::{
     ConfigurationObservation, ConfigurationStore, ConfigurationValue, MAXIMUM_CONFIGURATION_FIELDS,

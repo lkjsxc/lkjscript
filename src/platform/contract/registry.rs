@@ -1528,8 +1528,8 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         ),
         operation(
             PublicOperation::Build,
-            "Build a deterministic graph-native artifact.",
-            "build --output PATH",
+            "Build a deterministic artifact or an unselected immutable deployment snapshot.",
+            "build (--output PATH | --deployment PATH)",
             (ControlModel::BuildRequest, ControlModel::BuildResult),
             AuthorityEffect::ExternalOutput,
             ProjectRequirement::Required,

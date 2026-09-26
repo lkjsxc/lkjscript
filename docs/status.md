@@ -28,6 +28,23 @@ in the maintained pinned Alpine and Debian userlands. Immutable installation
 slots retain exact runtimes; selecting another version neither changes running
 processes nor migrates application data. Bundles require a compatible executable.
 
+## Immutable deployment builds in development v0.1.48
+
+`build --deployment PATH` derives an unselected content-addressed artifact and a
+sibling descriptor from current accepted meaning and one strict operator template.
+Only the artifact value changes. Original files and running processes remain
+unchanged, relative local data roots retain their meaning, and matching files are
+reused only after exact-byte checks. Static target/grant admission opens no adapters,
+secrets or listeners; output paths inside declared local data/object/queue roots
+reject. Ordinary `build --output` still requires an absent file.
+
+The initial focused working-tree proof passes eight file-boundary unit tests and
+four copied-binary workflows: concurrent publication/reuse and conflicts, durable
+state across native edits, invalid static authority, and independent old/new web
+processes plus detached restart. Source-wide acceptance and public distribution
+are separate pending boundaries in the [campaign](campaigns/202609260831.md).
+See the [editing guide](guides/native-web.md) and [build contract](spec/semantic-cli.md#build).
+
 ## Current authority and maintained consumers
 
 The accepted typed meaning graph is the sole editable program authority. Native
