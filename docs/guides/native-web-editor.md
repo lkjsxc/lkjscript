@@ -7,9 +7,9 @@ No application-authored HTML/CSS/JavaScript, Node.js, database server, downloade
 template or host-language application generator is required. The shared native UI
 library owns the rendered HTML/CSS; the browser runs no application script.
 
-This starter was introduced in the **v0.1.49 candidate**, whose publication was
-withheld for a shared resident-runtime correction. The additive successor is
-**v0.1.50**. Check [release availability](../status.md) and
+This starter is available in **public v0.1.50**, including the corrected shared
+resident lifecycle. Its earlier v0.1.49 candidate was withheld and was not a
+public release. Check [release availability](../status.md) and
 `lkjscript capabilities new`: the selected executable must list `web-editor`.
 Frozen public v0.1.48 does not include this template. The older manual editor
 composition remains a separate supported path.
@@ -116,11 +116,21 @@ base and owner references. Plan, inspect and apply that proposal's own review:
 
 ```sh
 "$LKJ" --project notes change plan --input-file page.lkjc --output page.logical-plan
-# Review the complete logical plan; set PLAN to its own returned token.
+# Review the edited draft against its retained original and the complete logical plan.
+# Set PLAN to this proposal's own returned token.
 "$LKJ" --project notes change apply --input-file page.lkjc --plan "$PLAN"
 "$LKJ" --project notes check
 "$LKJ" --project notes build --deployment notes/service.deployment.json
 ```
+
+The compact plan summary is not a before/after text diff. The complete plan binds
+owner-object identities and validation evidence, but does not reproduce literal
+values. Preserve an unchanged copy of the exported draft before editing and compare
+it with the proposed text as well as reviewing the logical plan. Never approve a
+change merely because it updates one owner or passes tests. Review tokens also bind the
+executable's capabilities. After an executable upgrade, re-plan the original proposal;
+do not modify its base to reuse an old token. A selected-test count in the plan is
+not proof that those tests ran or passed; run `check` as shown.
 
 This last build publishes an unselected immutable artifact and sibling deployment
 descriptor. Use the exact returned deployment path when explicitly starting the
@@ -145,8 +155,8 @@ explicitly save the reviewed draft; there is no automatic overwrite or merge.
 Missing secret configuration or data prevents normal startup. Malformed stored
 data and exhausted revisions are not silently replaced.
 
-On the corrected Linux runtime, stop with Ctrl+C (SIGINT), or have the process
-owner send SIGTERM to its exact child. Wait for successful process exit and the
+On public v0.1.50 or a compatible corrected Linux runtime, stop with Ctrl+C (SIGINT),
+or have the process owner send SIGTERM to its exact child. Wait for successful process exit and the
 `stopped` receipt with no remaining tasks or cleanup failures before replacing
 that process. Restart the explicitly selected deployment and the same store
 without another initialization. Do not select processes by a broad name match.

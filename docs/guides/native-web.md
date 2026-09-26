@@ -12,8 +12,8 @@ The Rust runtime remains the reference implementation; this is not a Wasm backen
 
 For an authenticated POST editor with persistent notes instead of this stateless
 GET starter, see [Durable web app from one executable](native-web-editor.md).
-That opt-in development v0.1.49 template has explicit data and secret setup;
-this `web` template retains its original requirements and behavior.
+That opt-in template is available in public v0.1.50 and has explicit data and
+secret setup; this `web` template retains its original requirements and behavior.
 
 ## Create, check, build and serve
 
@@ -138,10 +138,10 @@ for bounds, exact reuse, failure states and explicit retention.
 A changed title preserves the declaration identity and its callers. A body with the wrong return
 type is rejected without advancing the accepted head. An unchanged draft plans as unchanged.
 
-Development v0.1.49 also preserves the function's internal expression and binding identities for
+Public v0.1.50 also preserves the function's internal expression and binding identities for
 proved same-structure literal edits. For example, draft `web::controls` and change only the label
 `Apply dark theme` to `Use the dark theme`. The reviewed change updates one existing expression,
-not all sixteen expressions in that function. Complete before/after evidence remains available
+not all sixteen expressions in that function. Complete before/after identity and impact evidence remains available
 with `change plan --input-file controls.lkjc --output controls.lkjplan`; it is not hidden to make
 the summary look smaller. Edits to control structure, referenced declarations, bindings or scalar
 kinds use ordinary complete body replacement and validation. Re-plan an older reviewed input
@@ -149,8 +149,18 @@ before applying it with a runtime that normalizes the edit differently.
 
 This is an authoring improvement, not live reload: running old deployments and their artifacts
 remain unchanged. The [literal-edit campaign](../campaigns/202609261118.md) owns the measured
-comparison, negative tests and exact source/publication boundary. It is not part of the separately
-published v0.1.48 executable.
+comparison and negative tests. The feature was first included in the withheld v0.1.49 candidate,
+then published with the corrected shared runtime in v0.1.50; it is not in v0.1.48.
+
+The normal plan summary reports counts and commitments, not a literal before/after diff.
+The complete `.lkjplan` records exact owner-object digests, validation and impact evidence;
+it is not a copy of the old and new function text. Preserve the freshly exported unchanged
+draft separately before editing, compare that proposal with the edited draft, and review both
+the intended text change and its exact plan. A small owner count alone is not approval.
+An altered input or a changed base requires a new plan; do not replace the draft's base to
+make an old review appear current. Review also binds executable capabilities: after upgrading
+`lkjscript`, plan the original proposal again rather than reusing an incompatible review token.
+The plan's selected-test count is not a passing-test count; `check` supplies execution evidence.
 
 To change the layout, draft `web::screen` using the same module/declaration lookup.
 Its nodes are ordinary `ui::node` values. To change a reusable control or styling,
