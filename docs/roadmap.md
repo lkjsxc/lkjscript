@@ -81,7 +81,12 @@ The [resident cancellation correction](campaigns/202609262000.md) first closes a
 concrete lifecycle defect: cancelled waiters retained phantom queue accounting,
 and the queued-to-active handoff could notify a false idle state. Keep these
 regressions before introducing a restart/reload supervisor; convenience must not
-hide incomplete cleanup or replay effects.
+hide incomplete cleanup or replay effects. The
+[process termination continuation](campaigns/202609262313.md) then closes actual
+SIGTERM bypass, transport-before-cancellation ordering and late-session notification
+gaps. Keep the actual-process and retained-state regressions as prerequisites for
+any convenience layer; a successful PID exit alone cannot own readiness, preserve
+operational data or prove completed cleanup.
 Multiple notes or richer actions should justify their shared mechanism;
 completing this particular note app is not the language's purpose. A form is not
 authorization, and a failed response does not establish rollback.

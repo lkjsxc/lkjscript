@@ -2367,6 +2367,12 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Correct the process environment before invocation; no live adapters have been prepared.",
         ),
         diagnostic(
+            "resident_signal",
+            DiagnosticClass::Infrastructure,
+            "The process could not register its resident termination owner.",
+            "Correct the process environment before serving or running workers; no deployment adapters, secrets or listeners have been opened.",
+        ),
+        diagnostic(
             "foreground_preparation_join",
             DiagnosticClass::Infrastructure,
             "Foreground preparation could not join its owning runtime task.",

@@ -133,9 +133,17 @@ explicitly save the reviewed draft; there is no automatic overwrite or merge.
 Missing secret configuration or data prevents normal startup. Malformed stored
 data and exhausted revisions are not silently replaced.
 
-Stop with Ctrl+C and restart the same deployment and store without another
-initialization. A missing response does not prove that a submitted save rolled
-back; copy the draft and read the saved state before deciding to submit again.
+On the corrected Linux runtime, stop with Ctrl+C (SIGINT), or have the process
+owner send SIGTERM to its exact child. Wait for successful process exit and the
+`stopped` receipt with no remaining tasks or cleanup failures before replacing
+that process. Restart the explicitly selected deployment and the same store
+without another initialization. Do not select processes by a broad name match.
+The [resident termination contract](../spec/runtime-http-streams.md#process-owned-termination)
+and [current availability](../status.md) distinguish corrected source from older
+published executables. SIGKILL and a vanished PID do not establish graceful cleanup.
+
+A missing response does not prove that a submitted save rolled back; copy the draft
+and read the saved state before deciding to submit again.
 The [editor contract and limits](native-editor.md#save-conflict-and-failure-semantics)
 cover UTF-8 bounds, line endings, authentication, Origin, failure and corruption.
 

@@ -114,7 +114,7 @@ its successful candidate, annotated tag and cancelled promotion remain preserved
 The [correction campaign](campaigns/202609262000.md) selects additive v0.1.50 rather
 than resuming that producer or retagging it. This template is not in public v0.1.48.
 
-## Cancellation-safe resident ownership in development v0.1.50
+## Joined resident lifecycle in development v0.1.50
 
 A queued invocation now owns its captured resources and accounting until rejection,
 cancellation or handoff to an active worker. Dropping a waiting future releases
@@ -146,6 +146,18 @@ or public v0.1.50 release is claimed. The withheld v0.1.49 selector was restored
 the existing immutable v0.1.48 tag and read back; its frozen tag/history stay intact.
 The [campaign](campaigns/202609262000.md) records completed source delivery and this
 separate unexecuted release boundary.
+
+The [termination continuation](campaigns/202609262313.md) additionally repairs the
+public process boundary. Linux `serve` and `worker` own SIGINT and SIGTERM before
+preparing a deployment or emitting readiness. HTTP transport drain progresses
+alongside resident cancellation rather than waiting for the requests it must cancel.
+Structured sessions retain stop state for drivers arriving during an upgrade.
+Eleven copied-executable process cases and five deterministic state-owner tests
+pass; two removed-fix controls fail as expected. The native editor preserves saved
+revisions and stale-write rejection through SIGTERM restarts without its source.
+These changes retain existing formats, limits and authority. Full acceptance and
+integration of this additional source are pending in its campaign; earlier source
+receipts and the public v0.1.48 assets are not evidence for these new corrections.
 
 ## Ordinary form serialization
 

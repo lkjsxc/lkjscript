@@ -82,9 +82,13 @@ impl Server {
         }
     }
 
-    pub fn stop(mut self) {
+    pub fn stop(self) {
+        self.stop_with_signal(rustix::process::Signal::INT);
+    }
+
+    pub fn stop_with_signal(mut self, signal: rustix::process::Signal) {
         let pid = rustix::process::Pid::from_raw(i32::try_from(self.child.id()).unwrap()).unwrap();
-        rustix::process::kill_process(pid, rustix::process::Signal::INT).unwrap();
+        rustix::process::kill_process(pid, signal).unwrap();
         let until = Instant::now() + Duration::from_secs(15);
         loop {
             if let Some(status) = self.child.try_wait().unwrap() {
@@ -103,7 +107,14 @@ impl Server {
             .into_iter()
             .find(|event| event["event"] == "stopped")
             .unwrap();
+        assert_eq!(stopped["receipt"]["shutdown"]["admission_stopped"], true);
         assert_eq!(stopped["receipt"]["shutdown"]["remaining_tasks"], 0);
+        assert_eq!(
+            stopped["receipt"]["shutdown"]["cleanup_failures"],
+            serde_json::json!([])
+        );
+        assert_eq!(stopped["receipt"]["runtime"]["admission_permits"], 0);
+        assert_eq!(stopped["receipt"]["runtime"]["worker_permits"], 0);
         assert_eq!(stopped["receipt"]["runtime"]["resident"]["active"], 0);
         assert_eq!(stopped["receipt"]["runtime"]["resident"]["queued"], 0);
     }

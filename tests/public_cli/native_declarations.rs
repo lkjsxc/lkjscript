@@ -1617,6 +1617,10 @@ mod native_text;
 #[path = "resident_policy.rs"]
 mod resident_policy;
 
+#[cfg(unix)]
+#[path = "resident_termination.rs"]
+mod resident_termination;
+
 #[path = "native_byte_conversion.rs"]
 mod native_byte_conversion;
 

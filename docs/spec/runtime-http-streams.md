@@ -40,6 +40,41 @@ preceded cancellation, cancellation count, remaining tasks, cleanup failures, an
 stalled blocking task is infrastructure failure; possibly visible work is not replayed. Process
 restart reloads artifact and durable adapters and discards tasks/queues/caches.
 
+## Process-owned termination
+
+On the supported Linux executable, public `serve` (HTTP or interactive) and `worker`
+register both SIGINT and SIGTERM before loading a deployment, reading its secrets,
+opening adapters, binding a listener or publishing `ready`. Registration failure
+is `resident_signal`, with no prepared deployment authority. Foreground `run` uses
+the same signal owner and retains its existing `foreground_signal` diagnostic.
+A `ready` event therefore cannot precede installation of its termination owner.
+This does not make synchronous preparation preemptible.
+
+Either signal selects the existing owned shutdown path: stop transport/admission,
+drain or cancel within the configured graces, join owned work, close adapters and
+report the final outcome. HTTP transport drain and resident shutdown progress
+concurrently under one joined scope; waiting for all HTTP responses before starting
+resident cancellation would prevent a busy request from being cancelled on time.
+Early transport completion also initiates resident cleanup. A successful resident
+command emits one `stopped` receipt and exits successfully. Registration, serving
+or cleanup failure must not become a successful stopped event. Operators must
+inspect both the receipt and process exit; a vanished process alone is not evidence
+of joined cleanup. SIGKILL, crashes and
+external forced termination cannot provide this contract.
+
+Interactive service shutdown is a monotonic retained state, not a transient event.
+A parent session that subscribes after the request, including during an upgrade or
+initial writer setup, must observe the same requested shutdown. A cancelled wait,
+a completed older subscriber or another stop request cannot clear that state.
+Session callbacks, reader/writer children and admission permits remain owned by
+the existing parent scope; the correction does not widen grace periods or relax
+phase validation.
+
+Stopping and restarting reloads a selected immutable bundle and the explicitly
+configured durable adapters. It neither retries interrupted operations nor rolls
+back already committed effects, restores older data, switches bundles, migrates a
+store or starts a replacement process automatically.
+
 ## Cumulative work policy
 
 Resident and foreground execution share the same quota conversion and VM counters.

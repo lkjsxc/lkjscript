@@ -6,6 +6,9 @@ use serde_json::json;
 mod author;
 #[path = "web_editor_starter.rs"]
 mod starter;
+#[cfg(unix)]
+#[path = "native_editor_termination.rs"]
+mod termination;
 use super::native_http as http;
 
 // Public, disposable local fixture data, never a deployment default or real credential.

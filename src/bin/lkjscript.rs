@@ -346,7 +346,7 @@ fn foreground_run(arguments: &[String]) -> ExitCode {
         }
     };
     let outcome = runtime.block_on(async {
-        let mut signals = ForegroundTermination::register()?;
+        let mut signals = ProcessTermination::register("foreground_signal")?;
         execute_foreground_run(options, signals.wait()).await
     });
     match outcome {
@@ -370,19 +370,21 @@ fn foreground_run(arguments: &[String]) -> ExitCode {
 }
 
 #[cfg(unix)]
-struct ForegroundTermination {
+struct ProcessTermination {
     interrupt: tokio::signal::unix::Signal,
     terminate: tokio::signal::unix::Signal,
 }
 
 #[cfg(unix)]
-impl ForegroundTermination {
-    fn register() -> Result<Self, Diagnostic> {
+impl ProcessTermination {
+    // Register eagerly before deployment preparation and readiness publication. A
+    // lazily polled ctrl_c future leaves both a readiness race and SIGTERM unowned.
+    fn register(code: &'static str) -> Result<Self, Diagnostic> {
         use tokio::signal::unix::{SignalKind, signal};
         let failure = |error| {
             Diagnostic::new(
                 lkjscript::platform::DiagnosticClass::Infrastructure,
-                "foreground_signal",
+                code,
                 format!("termination handling could not be registered: {error}"),
             )
         };
@@ -401,13 +403,15 @@ impl ForegroundTermination {
 }
 
 #[cfg(not(unix))]
-struct ForegroundTermination;
+struct ProcessTermination;
 
 #[cfg(not(unix))]
-impl ForegroundTermination {
-    fn register() -> Result<Self, Diagnostic> {
-        Err(cli_error(
-            "foreground termination handling is not admitted on this platform",
+impl ProcessTermination {
+    fn register(code: &'static str) -> Result<Self, Diagnostic> {
+        Err(Diagnostic::new(
+            lkjscript::platform::DiagnosticClass::Infrastructure,
+            code,
+            "process termination handling is not admitted on this platform",
         ))
     }
     async fn wait(&mut self) {}
@@ -574,6 +578,7 @@ async fn worker(arguments: &[String]) -> Result<(), Diagnostic> {
             "worker requires exactly --deployment <descriptor.json>",
         ));
     }
+    let mut signals = ProcessTermination::register("resident_signal")?;
     let prepared =
         PreparedDeployment::load(Path::new(&arguments[1]), tokio::runtime::Handle::current())?;
     let application = prepared.worker_application()?;
@@ -585,11 +590,7 @@ async fn worker(arguments: &[String]) -> Result<(), Diagnostic> {
         append_shutdown_evidence(&mut error, &application.shutdown().await);
         return Err(error);
     }
-    let receipt = application
-        .run(async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
-        .await?;
+    let receipt = application.run(signals.wait()).await?;
     write_json(&json!({
         "ok": true,
         "event": "stopped",
@@ -603,6 +604,7 @@ async fn serve(arguments: &[String]) -> Result<(), Diagnostic> {
             "serve requires exactly --deployment <descriptor.json>",
         ));
     }
+    let signals = ProcessTermination::register("resident_signal")?;
     let prepared =
         PreparedDeployment::load(Path::new(&arguments[1]), tokio::runtime::Handle::current())?;
     let address = prepared
@@ -610,15 +612,19 @@ async fn serve(arguments: &[String]) -> Result<(), Diagnostic> {
         .ok_or_else(|| cli_error("service deployment requires a concrete listen address"))?
         .to_owned();
     match prepared.observe_redacted().runner.as_str() {
-        "http" => serve_http(prepared, &address).await,
-        "interactive" => serve_interactive(prepared, &address).await,
+        "http" => serve_http(prepared, &address, signals).await,
+        "interactive" => serve_interactive(prepared, &address, signals).await,
         _ => Err(cli_error(
             "serve requires an http or interactive resident target",
         )),
     }
 }
 
-async fn serve_http(prepared: PreparedDeployment, address: &str) -> Result<(), Diagnostic> {
+async fn serve_http(
+    prepared: PreparedDeployment,
+    address: &str,
+    mut signals: ProcessTermination,
+) -> Result<(), Diagnostic> {
     let application = prepared.http_application()?;
     let listener = match TcpListener::bind(address).await {
         Ok(listener) => listener,
@@ -654,9 +660,7 @@ async fn serve_http(prepared: PreparedDeployment, address: &str) -> Result<(), D
         return Err(error);
     }
     let receipt = application
-        .serve(listener, async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
+        .serve(listener, async move { signals.wait().await })
         .await?;
     write_json(&json!({
         "ok": true,
@@ -665,7 +669,11 @@ async fn serve_http(prepared: PreparedDeployment, address: &str) -> Result<(), D
     }))
 }
 
-async fn serve_interactive(prepared: PreparedDeployment, address: &str) -> Result<(), Diagnostic> {
+async fn serve_interactive(
+    prepared: PreparedDeployment,
+    address: &str,
+    mut signals: ProcessTermination,
+) -> Result<(), Diagnostic> {
     let application = prepared.session_application()?;
     let listener = match TcpListener::bind(address).await {
         Ok(listener) => listener,
@@ -701,9 +709,7 @@ async fn serve_interactive(prepared: PreparedDeployment, address: &str) -> Resul
         return Err(error);
     }
     let receipt = application
-        .serve(listener, async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
+        .serve(listener, async move { signals.wait().await })
         .await?;
     write_json(&json!({
         "ok": true,

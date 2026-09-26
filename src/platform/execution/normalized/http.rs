@@ -599,16 +599,33 @@ impl NormalizedHttpApplication {
         })?;
         let resident = self.resident.clone();
         let matcher_nodes = self.matcher.nodes;
-        let serving = axum::serve(listener, self.router())
-            .with_graceful_shutdown(shutdown)
-            .await
-            .map_err(|error| {
+        let (stop_transport, transport_stop) = tokio::sync::oneshot::channel::<()>();
+        let (transport_finished, finished) = tokio::sync::oneshot::channel::<()>();
+        let serving = async move {
+            let result = axum::serve(listener, self.router())
+                .with_graceful_shutdown(async move {
+                    let _ = transport_stop.await;
+                })
+                .await;
+            let _ = transport_finished.send(());
+            result.map_err(|error| {
                 http_io(
                     "normalized_http_serve",
                     format!("normalized HTTP server failed: {error}"),
                 )
-            });
-        let shutdown = resident.shutdown().await;
+            })
+        };
+        let stopping = async {
+            tokio::select! {
+                () = shutdown => {},
+                _ = finished => {},
+            }
+            let _ = stop_transport.send(());
+            resident.shutdown().await
+        };
+        // Transport drain must not precede the operation that can cancel its
+        // active requests. Join both owners, including an early transport failure.
+        let (serving, shutdown) = tokio::join!(serving, stopping);
         let resident_observation = resident.observe();
         let permit_observation = resident.observe_permits();
         let runtime = HttpRuntimeObservation {

@@ -39,6 +39,10 @@ use std::time::{Duration, Instant};
 use tokio::net::TcpListener;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc, oneshot, watch};
 
+#[path = "session_stop.rs"]
+mod stop;
+use stop::SessionStop;
+
 const MAXIMUM_SESSION_TARGET_BYTES: usize = 16 * 1024;
 const SESSION_PROTOCOL_CLOSE: u16 = 1002;
 const SESSION_RESOURCE_CLOSE: u16 = 1009;
@@ -52,7 +56,7 @@ pub(crate) struct NormalizedSessionApplication {
     contract: SessionRuntimeContract,
     stream_requirement: RequirementReference,
     admission: Arc<SessionAdmission>,
-    shutdown: watch::Sender<bool>,
+    shutdown: SessionStop,
 }
 
 impl NormalizedSessionApplication {
@@ -101,7 +105,7 @@ impl NormalizedSessionApplication {
             ));
         }
         let admission = Arc::new(SessionAdmission::new(&limits)?);
-        let (shutdown, _) = watch::channel(false);
+        let shutdown = SessionStop::new();
         Ok(Self {
             resident,
             limits,
@@ -136,7 +140,7 @@ impl NormalizedSessionApplication {
         let serving = axum::serve(listener, self.router())
             .with_graceful_shutdown(async move {
                 shutdown.await;
-                let _ = shutdown_signal.send(true);
+                shutdown_signal.request();
             })
             .await
             .map_err(|error| {
@@ -196,7 +200,7 @@ impl NormalizedSessionApplication {
     }
 
     pub(crate) async fn shutdown(&self) -> crate::platform::runtime::ShutdownReceipt {
-        let _ = self.shutdown.send(true);
+        self.shutdown.request();
         let grace = Duration::from_millis(self.limits.cancellation_grace_milliseconds);
         let _ = self.admission.wait_idle(grace).await;
         self.resident.shutdown().await
@@ -538,17 +542,10 @@ async fn session_driver(
     tokio::pin!(lifetime_sleep);
     tokio::pin!(idle_sleep);
     tokio::pin!(tick_sleep);
-    let mut shutdown = application.shutdown.subscribe();
     loop {
         let input = tokio::select! {
             biased;
-            changed = shutdown.changed() => {
-                if changed.is_err() || *shutdown.borrow() {
-                    DriverInput::Shutdown
-                } else {
-                    continue;
-                }
-            }
+            () = application.shutdown.requested() => DriverInput::Shutdown,
             inbound = inbound.recv() => match inbound {
                 Some(InboundEvent::Message { kind, body, permit }) => {
                     idle_sleep.as_mut().reset(tokio::time::Instant::now() + idle);
