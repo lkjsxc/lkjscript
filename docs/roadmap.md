@@ -4,33 +4,27 @@
 [Specifications](spec/) own contracts; [campaigns](campaigns/) retain decisions,
 failed experiments and exact evidence. This page selects direction, not history.
 
-## Selected delivery
+## Selected product direction
 
-[v0.1.45](campaigns/202609250650.md) is published: native guide/policy tooling,
-reusable text/byte operations, explicit optional resident quotas and contributor
-process reliability. Original promotion 36075872648/1 completed authenticated
-selection, immutable publication, anonymous installed use and its terminal.
-Keep producer 36064706830/1 and all public assets unchanged.
+Make an ordinary native application easy to create, edit, check, compose, build,
+run and recover with one compatible executable. The [web starter](guides/native-web.md),
+[strict form library](guides/native-forms.md) and [durable editor](guides/native-editor.md)
+are concrete consumers, not a mandate to make every web concern a compiler feature.
+The next coherent boundary is the recurring edit/build/run loop: retain accepted
+program identity, separate deployment choices from meaning, preserve saved data and
+make failure recovery explicit.
 
-The subsequent increment supplies general byte construction and checked
-UTF-8 results, used by the [ordinary strict form library](guides/native-forms.md).
-Its dependency-wide fresh source acceptance and normal mainline integration are
-complete; the [campaign](campaigns/202609250926.md) retains the actual proof and failures.
-The [durable native editor](guides/native-editor.md) now consumes that library with
-validation, shared access, completed conditional transactions, retained conflicts
-and detached restart. Real script-free browser use has also passed. This fires the
-successor publication trigger. Original candidate 36097087012/1 and promotion
-36193525561/1 now complete immutable public v0.1.46, including anonymous installed
-verification. Keep its b25bde2d product source and original assets unchanged.
-The separately implemented web starter selects v0.1.47. Source 511f48c4 completes
-its 20-gate fresh source tier, and normal mainline delivery is complete through
-18e04bc0. Original candidate 36198402289/1 is in progress at that exact descendant;
-finish its acceptance before promotion. Keep source, candidate and reporting
-identities distinct.
+[Current status](status.md) owns which increments are integrated and published.
+[Release procedures](release.md) and the linked campaigns own exact source,
+candidate, publication and acquisition evidence. Do not duplicate moving workflow
+states here or turn a historical pending run into a perpetual development task.
+Published assets and their original evidence remain immutable.
 
-This milestone should make the implemented language easier to acquire and use.
 Native application development and native contributor-tool adoption are distinct
 from a self-hosted compiler. Raising a language-percentage metric is not a goal.
+Keep the Rust kernel where it is the better owner; add ordinary native libraries
+where a complete consumer demonstrates the need. A broad rewrite is appropriate
+only when its complete transition is better than improving that boundary.
 
 ## Next workload and decision criteria
 
@@ -45,14 +39,14 @@ HTML/CSS/JavaScript. Existing transactions were sufficient; no framework intrins
 or browser backend was needed. Its browser-discovered referrer-policy defect shows
 why raw HTTP observations and actual user-agent behavior are distinct obligations.
 
-The [development web starter](guides/native-web.md) addresses the first setup barrier:
+The [web starter](guides/native-web.md) addresses the first setup barrier:
 `new --template web`, check, build and serve require no manual UI imports or source
 downloads. Native UI code is vendored as editable local modules, not moved into a
 privileged renderer or a hidden registry. The application can be edited through the
 same identity-preserving native draft workflow and deployed without its authoring
 graph. Its focused public and script-free browser results belong to the
-[campaign](campaigns/202609251450.md). The fresh source tier is now complete;
-finalized-candidate and public distribution remain separate obligations.
+[campaign](campaigns/202609251450.md); exact public acquisition is tracked separately
+from source tests rather than inferred from a development executable.
 
 The next useful question is the recurring development loop, rather than another
 large closed starter. Use a second small real application or an identity-preserving
@@ -62,14 +56,17 @@ public authoring mechanisms over a special-purpose compiler subsystem. Preserve
 explicit dependency updates: vendoring is convenient creation, not a silent upgrade
 policy. Do not hide grants, transaction completion or recovery behind a convenient
 API. The observed manual rebuild-name/descriptor friction is addressed by
-`build --deployment` in development v0.1.48: derive an unselected content-addressed
+`build --deployment`: derive an unselected content-addressed
 pair, preserve the operator template and local data roots, and reuse only exact
 bytes. The [campaign](campaigns/202609260831.md) retains copied-binary command,
 concurrent build, native edit, persistent-data and old/new HTTP witnesses.
-Source acceptance and distribution are recorded separately there. The next
-question is now review/discovery and explicit restart ergonomics, not another
-renaming wrapper. Measure those costs on actual edits before choosing a development
-server or reload protocol. A future switch must own readiness, failure and joined
+Source acceptance and distribution are recorded separately there. The
+[relocation continuation](campaigns/202609261015.md) adds complete-directory moves,
+source-free execution from an unrelated working directory and refusal to initialize
+missing transferred data. This is not a live-backup protocol. The next question is
+review/discovery and explicit restart ergonomics, not another renaming wrapper.
+Measure those costs on actual edits before choosing a development server or reload
+protocol. A future switch must own readiness, failure and joined
 shutdown without conflating accepted meaning, built bundles and running processes.
 Multiple notes or richer actions should justify their shared mechanism;
 completing this particular note app is not the language's purpose. A form is not

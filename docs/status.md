@@ -50,11 +50,21 @@ in an unoptimized focused profile, plus unchanged independent permission and
 JSON-ambiguity oracles and a late-publication/recovery trial. These observations
 are not finalized-archive or source-wide acceptance.
 
+The [relocation continuation](campaigns/202609261015.md) adds a seventh public workflow:
+complete-directory relocation retains exact snapshots and store identity; source-free
+execution from an unrelated working directory succeeds, while a transfer missing its
+data directory rejects without initializing a substitute. All seven focused workflows
+and Clippy pass at test/docs descendant `8da50e4ea6d7bf5e9a96f68d413dd7d84128d5d4`.
+An independent script-free Chromium session also passes against moved old/new web
+snapshots, with ordinary form interaction and joined shutdown. Product source is unchanged.
+
 One [hosted full verification](https://github.com/lkjsxc/lkjscript/actions/runs/36206083541)
-is selected for that exact corrected source. It was last observed in progress;
-a later state read was refused by the tool. Mainline delivery and v0.1.48
-candidate/publication remain incomplete. Original failures, precise profile bounds,
-retained source lineage and the next gate are in the [campaign](campaigns/202609260831.md).
+is selected for exact corrected source e5847f1e, attempt 1. It was last observed
+in progress at 2026-09-26 10:30 Asia/Tokyo; the authenticated Home Coder connection
+now permits status reads. Mainline delivery and v0.1.48 candidate/publication remain
+incomplete. Original failures and exact profile bounds remain in the
+[original campaign](campaigns/202609260831.md); new evidence and resumption state
+belong to its [continuation](campaigns/202609261015.md).
 See the [editing guide](guides/native-web.md) and [build contract](spec/semantic-cli.md#build).
 
 ## Current authority and maintained consumers

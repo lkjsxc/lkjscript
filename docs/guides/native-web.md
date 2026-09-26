@@ -158,6 +158,14 @@ workflow tests complete-directory relocation, retained store identity and subseq
 transactions; it does not establish a live cross-filesystem backup or migration
 protocol. This web starter remains stateless and creates no data directory.
 
+The [deployment continuation](../campaigns/202609261015.md) also tests an actual
+script-free Chromium session against moved old/new snapshot deployments. A reviewed
+title edit preserves its declaration identity; the old server remains unchanged,
+and after both snapshots move, the browser observes their independently selected
+titles. Unicode form input, themes, keyboard submission and reload pass without the
+authoring graph. This observation uses the development executable; finalized
+release-archive acceptance is a separate claim at the release evidence owner.
+
 A bounded independent observation created this template with development v0.1.47,
 removed the authoring graph and served its unchanged bundle with the anonymously
 acquired public v0.1.46 musl executable. Ordinary GET, Unicode text, escaping and
