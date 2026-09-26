@@ -96,10 +96,20 @@ Focused evidence includes 15 creation unit tests, copied-executable old/new edit
 workflows, unchanged stateless web behavior, ordinary/immutable artifact equality,
 180 graph tests before and after editing, concurrent conditional saves, source-free
 restart and rejection of untrusted requests and corrupt storage. Workspace/all-targets
-Clippy and generated discovery checks pass. The [campaign](campaigns/202609261600.md)
-retains exact commands, rejected trial expectations and the pending full-source
-acceptance boundary. This new template is not included in immutable public v0.1.48;
-source acceptance and finalized-candidate/public delivery remain distinct.
+Clippy and generated discovery checks pass. Independent JavaScript-disabled Chromium
+also passes real two-tab saves/conflicts, keyboard review, a 360-pixel layout check
+and source-free restart after moving the whole deployment and data directory.
+These browser observations use the unoptimized source-built executable.
+
+Exact source `6536fea15635933d8d91eef5ca5e2d930ae5c3f6` completes full verification:
+26 fresh gates, zero reused, stable inputs and 1124.976458823 seconds. It reached main
+by normal fast-forward and an independent GitHub read confirmed delivery. The
+[campaign](campaigns/202609261600.md) retains the original receipt, failed prototype
+expectations and separate browser evidence. One nonpublishing v0.1.49 candidate,
+[36227761390/1](https://github.com/lkjsxc/lkjscript/actions/runs/36227761390), selects that
+exact source and was observed in progress. Finalized-asset acceptance and publication
+are not yet confirmed. This new template is not in immutable public v0.1.48; existing
+public assets, tags and release-selection controls remain unchanged.
 
 ## Ordinary form serialization
 
