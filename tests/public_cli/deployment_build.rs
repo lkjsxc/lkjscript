@@ -523,6 +523,164 @@ fn duplicate_configuration_rejects_before_build_publication_or_runtime_loading()
 }
 
 #[test]
+fn relocated_snapshots_reuse_exact_bytes_and_keep_data_independent_of_working_directory() {
+    let public = Native::template("command");
+    let source = include_str!("../fixtures/native-editor-data.lkjc")
+        .replace("FIXTURE_BASE", &public.revision());
+    let input = public.input("relocation.lkjc", &source);
+    public.apply(&input, &public.plan(&input, true), true);
+    let original = public.root.path().join("original deployment 日本語");
+    std::fs::create_dir(&original).unwrap();
+    std::fs::create_dir(original.join("generated")).unwrap();
+    let command_template = original.join("command.json");
+    let command_bytes = std::fs::read(public.project.join("command.deployment.json")).unwrap();
+    std::fs::write(&command_template, &command_bytes).unwrap();
+    let mut descriptor: Value = serde_json::from_slice(&command_bytes).unwrap();
+    let editor: Value = serde_json::from_str(include_str!(
+        "../../docs/guides/examples/editor.deployment.json"
+    ))
+    .unwrap();
+    let mut grant = editor["grants"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|grant| grant["requirement"] == "data")
+        .unwrap()
+        .clone();
+    grant["adapter"]["root"] = serde_json::json!("state.lkjdata");
+    descriptor["target"] = serde_json::json!("replace");
+    descriptor["grants"] = serde_json::json!([grant]);
+    let data_template = original.join("stateful.json");
+    std::fs::write(&data_template, descriptor.to_string()).unwrap();
+    let (artifact, command, _) = snapshot(&public, &command_template);
+    let (same_artifact, stateful, _) = snapshot(&public, &data_template);
+    assert_eq!(same_artifact, artifact);
+    assert_ne!(
+        command, stateful,
+        "target and authority remain independently selected"
+    );
+    let data = original.join("state.lkjdata");
+    compact_success_at(
+        &public.executable,
+        public.root.path(),
+        &["data", "initialize", "--root", path(&data)],
+    );
+    public.cli(
+        &["run", "--deployment", path(&stateful), "--arguments", "[5]"],
+        true,
+    );
+    let head = std::fs::read(data.join("HEAD")).unwrap();
+    let verified = compact_success_at(
+        &public.executable,
+        public.root.path(),
+        &["data", "verify", "--root", path(&data)],
+    );
+    let store = compact_field(compact_record(&verified, "data"), "store").to_owned();
+    let retained = [
+        &command_template,
+        &data_template,
+        &artifact,
+        &command,
+        &stateful,
+    ]
+    .into_iter()
+    .map(|file| {
+        (
+            file.strip_prefix(&original).unwrap().to_path_buf(),
+            std::fs::read(file).unwrap(),
+        )
+    })
+    .collect::<Vec<_>>();
+    let relocated = public.root.path().join("relocated deployment 日本語");
+    std::fs::rename(&original, &relocated).unwrap();
+    let moved = |file: &Path| relocated.join(file.strip_prefix(&original).unwrap());
+    for (template, expected) in [(&command_template, &command), (&data_template, &stateful)] {
+        let (observed_artifact, observed_deployment, records) = snapshot(&public, &moved(template));
+        assert_eq!(observed_artifact, moved(&artifact));
+        assert_eq!(observed_deployment, moved(expected));
+        for record in ["output", "deployment"] {
+            assert_eq!(
+                compact_field(compact_record(&records, record), "visibility"),
+                "reused-exact"
+            );
+        }
+    }
+    assert_eq!(std::fs::read(moved(&data).join("HEAD")).unwrap(), head);
+    std::fs::remove_dir_all(&public.project).unwrap();
+    std::fs::remove_file(input).unwrap();
+    let unrelated = public.root.path().join("unrelated working directory");
+    std::fs::create_dir(&unrelated).unwrap();
+    let sentinel = b"unrelated data path must not be opened";
+    std::fs::write(unrelated.join("state.lkjdata"), sentinel).unwrap();
+    std::fs::write(unrelated.join("HEAD"), b"not an authoring graph").unwrap();
+    let result = compact_success_at(
+        &public.executable,
+        &unrelated,
+        &["run", "--deployment", path(&moved(&command))],
+    );
+    assert_eq!(
+        compact_field(compact_record(&result, "execution"), "value"),
+        "\"hello\""
+    );
+    // Moving only configuration and code must not silently create a replacement store.
+    let incomplete = unrelated.join("incomplete deployment");
+    std::fs::create_dir(&incomplete).unwrap();
+    std::fs::create_dir(incomplete.join("generated")).unwrap();
+    std::fs::copy(
+        moved(&artifact),
+        incomplete.join(artifact.strip_prefix(&original).unwrap()),
+    )
+    .unwrap();
+    let incomplete_descriptor = incomplete.join("stateful.json");
+    std::fs::copy(moved(&stateful), &incomplete_descriptor).unwrap();
+    public.cli(
+        &[
+            "run",
+            "--deployment",
+            path(&incomplete_descriptor),
+            "--arguments",
+            "[5]",
+        ],
+        false,
+    );
+    assert!(!incomplete.join("state.lkjdata").exists());
+    assert_eq!(std::fs::read(moved(&data).join("HEAD")).unwrap(), head);
+    compact_success_at(
+        &public.executable,
+        &unrelated,
+        &[
+            "run",
+            "--deployment",
+            path(&moved(&stateful)),
+            "--arguments",
+            "[5]",
+        ],
+    );
+    assert_ne!(std::fs::read(moved(&data).join("HEAD")).unwrap(), head);
+    let verified = compact_success_at(
+        &public.executable,
+        &unrelated,
+        &["data", "verify", "--root", path(&moved(&data))],
+    );
+    assert_eq!(
+        compact_field(compact_record(&verified, "data"), "store"),
+        store
+    );
+    for (relative, bytes) in retained {
+        assert_eq!(std::fs::read(relocated.join(relative)).unwrap(), bytes);
+    }
+    assert_eq!(
+        std::fs::read(unrelated.join("state.lkjdata")).unwrap(),
+        sentinel
+    );
+    assert!(
+        !original.exists(),
+        "neither rebuild nor execution recreates the old location"
+    );
+    assert!(!public.project.exists());
+}
+
+#[test]
 fn static_admission_rejects_mismatched_authority_without_publishing() {
     let public = Native::template("http");
     let (template, original) = fixture(&public, "service.deployment.json");

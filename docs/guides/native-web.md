@@ -143,6 +143,21 @@ with that descriptor. The authoring graph, original native files, compiler check
 and package transports are unnecessary at runtime. A bundle is not itself a native
 executable; it still needs a compatible lkjscript runtime.
 
+For `build --deployment`, retain the returned `build-….deployment.json` and its
+referenced `generated/build-….lkja` instead of renaming them to the example names.
+Move the containing directory as a unit, preserving that relative layout and the
+owner-only descriptor permissions. Invocation from a different working directory
+does not rebase its artifact or local-data paths. An unchanged rebuild at the new
+location reuses the same filenames and bytes; the location is not program identity.
+
+A stateful application's declared data directory, such as `state.lkjdata/`, is a
+separate required resource. Moving only configuration and code does not migrate,
+restore or initialize it. Stop its writers and follow that application's storage
+transfer/recovery procedure before moving data. A same-filesystem, stopped command
+workflow tests complete-directory relocation, retained store identity and subsequent
+transactions; it does not establish a live cross-filesystem backup or migration
+protocol. This web starter remains stateless and creates no data directory.
+
 A bounded independent observation created this template with development v0.1.47,
 removed the authoring graph and served its unchanged bundle with the anonymously
 acquired public v0.1.46 musl executable. Ordinary GET, Unicode text, escaping and
