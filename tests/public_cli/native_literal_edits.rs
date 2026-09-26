@@ -1,4 +1,6 @@
 //! Literal-only native edits retain graph identity and exact review in a real detached web app.
+#[path = "native_literal_overlap.rs"]
+mod overlap;
 #[path = "native_literal_list.rs"]
 mod paged_list;
 use super::native_http as http;

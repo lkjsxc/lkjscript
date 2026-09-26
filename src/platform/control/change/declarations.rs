@@ -91,6 +91,15 @@ pub(super) fn lower(
                         e.location = Some(syntax.location.clone());
                         e
                     })?;
+                if existing.contains_key(&owner) {
+                    return Err(block.error(
+                        id,
+                        "change_unit_duplicate",
+                        format!(
+                            "exact owner {owner} is selected by more than one complete edit unit"
+                        ),
+                    ));
+                }
                 let reader = reader.as_deref_mut().ok_or_else(|| {
                     block.error(
                         id,

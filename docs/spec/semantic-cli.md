@@ -192,6 +192,11 @@ replacements retain declaration and unchanged signature owners while following e
 expression/binding replacement and retirement rules. Constant, test and port body updates are not
 implicitly converted into function scalar updates.
 
+A complete native declaration collection may select each existing owner only once, even through
+different lexical scopes or separate declaration blocks. Repeated exact selections reject before
+normalization: complete definitions are not overlapping base-relative patches or procedural
+assignments. Explicit precise operations retain their ordered intent semantics.
+
 All edits lower into the shared typed authored request and existing review/publication lock.
 Stale bases, missing repairs and altered reviewed meaning reject before publication. Accepted
 idempotent retries keep their immutable original result. Authored codec 18 adds complete constant,

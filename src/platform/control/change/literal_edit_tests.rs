@@ -6,6 +6,8 @@ use crate::platform::publication::{GraphRepository, RepositoryView};
 
 #[path = "literal_edit_more_tests.rs"]
 mod additional;
+#[path = "literal_edit_overlap_tests.rs"]
+mod overlap;
 
 const SOURCE: &str = r#"declarations.begin
 (units
@@ -25,6 +27,7 @@ declarations.end
 struct Fixture {
     _temporary: tempfile::TempDir,
     repository: GraphRepository,
+    module: crate::platform::semantic_id::ModuleId,
     function: DeclarationId,
     neighbor: DeclarationId,
     marker: DeclarationId,
@@ -54,6 +57,10 @@ impl Fixture {
         Self {
             _temporary: temporary,
             repository: created.repository,
+            module: match prepared.allocated["$module"] {
+                OwnerKey::Module(id) => id,
+                _ => panic!("fixture module"),
+            },
             function: declaration("$function"),
             neighbor: declaration("$neighbor"),
             marker: declaration("$marker"),
