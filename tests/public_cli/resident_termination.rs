@@ -119,10 +119,14 @@ impl Resident {
 }
 
 fn author(runner: &str) -> (Native, Value) {
+    author_source(runner, SOURCE)
+}
+
+fn author_source(runner: &str, source: &str) -> (Native, Value) {
     let public = Native::template("http");
     let input = public.input(
         "termination.lkjc",
-        &SOURCE.replacen("base=BASE", &format!("base={}", public.revision()), 1),
+        &source.replacen("base=BASE", &format!("base={}", public.revision()), 1),
     );
     let plan = public.plan(&input, true);
     public.apply(&input, &plan, true);
@@ -265,9 +269,7 @@ fn resident_http_sigint_cancels_active_work() {
     busy_http(Signal::INT);
 }
 
-fn connected_session(signal: Signal) {
-    let (public, descriptor) = author("live");
-    let resident = Resident::start(&public, "serve", &descriptor);
+fn connect_peer(resident: &Resident) -> TcpStream {
     let mut connection =
         TcpStream::connect_timeout(&resident.address(), Duration::from_secs(5)).unwrap();
     connection
@@ -294,6 +296,13 @@ fn connected_session(signal: Signal) {
             .to_ascii_lowercase()
             .contains("sec-websocket-accept: s3pplmbitxaq9kygzzhzrbk+xoo=")
     );
+    connection
+}
+
+fn connected_session(signal: Signal) {
+    let (public, descriptor) = author("live");
+    let resident = Resident::start(&public, "serve", &descriptor);
+    let connection = connect_peer(&resident);
     // Keep the peer connected: shutdown, not client EOF, must close and join the session.
     let receipt = resident.stop(signal);
     assert_eq!(receipt["sessions"]["admitted_sessions"], 1);
@@ -309,4 +318,130 @@ fn resident_session_sigterm_joins_connected_peer() {
 #[test]
 fn resident_session_sigint_joins_connected_peer() {
     connected_session(Signal::INT);
+}
+
+fn pending_open(signal: Signal) {
+    // The literal public proposal deliberately never completes its open callback.
+    let accept = "(variant std::SessionDecisionKind::accept)";
+    assert_eq!(SOURCE.matches(accept).count(), 1);
+    let source = SOURCE.replacen(
+        accept,
+        &format!("(if (call std::i64-equal (call spin) (i64 0)) {accept} {accept})"),
+        1,
+    );
+    let (public, mut descriptor) = author_source("live", &source);
+    descriptor["session"]["maximum_pending_handshakes"] = json!(1);
+    let resident = Resident::start(&public, "serve", &descriptor);
+    let request = b"GET / HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n";
+    let mut pending =
+        TcpStream::connect_timeout(&resident.address(), Duration::from_secs(5)).unwrap();
+    pending
+        .set_write_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    pending.write_all(request).unwrap();
+    pending
+        .set_read_timeout(Some(Duration::from_millis(100)))
+        .unwrap();
+    let mut byte = [0];
+    assert!(
+        matches!(pending.read(&mut byte), Err(error) if matches!(error.kind(),
+        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut))
+    );
+    // A second valid upgrade independently witnesses the occupied handshake slot.
+    let mut probe =
+        TcpStream::connect_timeout(&resident.address(), Duration::from_secs(5)).unwrap();
+    probe
+        .set_write_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    probe
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    probe.write_all(request).unwrap();
+    let mut line = String::new();
+    BufReader::new(&mut probe).read_line(&mut line).unwrap();
+    assert!(line.starts_with("HTTP/1.1 503 "), "{line}");
+    drop(probe);
+    let receipt = resident.stop(signal);
+    assert_eq!(receipt["sessions"]["admitted_sessions"], 0);
+    assert_eq!(receipt["sessions"]["rejected_handshakes"], 1);
+    assert_eq!(receipt["sessions"]["active_sessions"], 0);
+    assert_eq!(receipt["sessions"]["pending_handshakes"], 0);
+    drop(pending);
+}
+
+#[test]
+fn resident_session_sigterm_cancels_pending_open() {
+    pending_open(Signal::TERM);
+}
+
+#[test]
+fn resident_session_sigint_cancels_pending_open() {
+    pending_open(Signal::INT);
+}
+
+fn active_callback(signal: Signal) {
+    let message = "(arm std::SessionEvent::message (payload message Message)\n          (call decision (variant std::SessionDecisionKind::continue) (local state)))";
+    assert_eq!(SOURCE.matches(message).count(), 1);
+    let source = SOURCE.replacen(message,
+        "(arm std::SessionEvent::message (payload message Message)\n          (call transition (local state) (local event)))", 1);
+    let (public, descriptor) = author_source("live", &source);
+    let resident = Resident::start(&public, "serve", &descriptor);
+    let mut connection = connect_peer(&resident);
+    // One valid masked text frame containing 'a', independently of production codecs.
+    connection
+        .write_all(&[0x81, 0x81, 1, 2, 3, 4, b'a' ^ 1])
+        .unwrap();
+    connection
+        .set_read_timeout(Some(Duration::from_millis(100)))
+        .unwrap();
+    assert!(
+        matches!(connection.read(&mut [0]), Err(error) if matches!(error.kind(),
+        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut))
+    );
+    let mut probe =
+        TcpStream::connect_timeout(&resident.address(), Duration::from_secs(5)).unwrap();
+    probe
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    probe
+        .set_write_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    probe.write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n").unwrap();
+    let mut reader = BufReader::new(&mut probe);
+    let mut response = String::new();
+    loop {
+        let mut line = String::new();
+        assert_ne!(reader.read_line(&mut line).unwrap(), 0);
+        response.push_str(&line);
+        assert!(response.len() < 8192);
+        if line == "\r\n" {
+            break;
+        }
+    }
+    assert!(response.starts_with("HTTP/1.1 500 "), "{response}");
+    assert!(
+        response
+            .to_ascii_lowercase()
+            .contains("x-lkjscript-failure-code: resident_overloaded"),
+        "{response}"
+    );
+    drop(probe);
+    // Callback cancellation must be followed by the parent's actual joined teardown.
+    let receipt = resident.stop(signal);
+    assert_eq!(receipt["shutdown"]["cancellation_requested"], 1);
+    assert_eq!(receipt["sessions"]["inbound_messages"], 1);
+    assert_eq!(receipt["sessions"]["admitted_sessions"], 1);
+    assert_eq!(receipt["sessions"]["completed_sessions"], 0);
+    assert_eq!(receipt["sessions"]["failed_sessions"], 1);
+    drop(connection);
+}
+
+#[test]
+fn resident_session_sigterm_joins_cancelled_callback_parent() {
+    active_callback(Signal::TERM);
+}
+
+#[test]
+fn resident_session_sigint_joins_cancelled_callback_parent() {
+    active_callback(Signal::INT);
 }

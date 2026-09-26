@@ -133,24 +133,35 @@ impl NormalizedSessionApplication {
                 format!("structured-session listener address failed: {error}"),
             )
         })?;
-        let resident = self.resident.clone();
         let admission = Arc::clone(&self.admission);
-        let cancellation_grace = Duration::from_millis(self.limits.cancellation_grace_milliseconds);
-        let shutdown_signal = self.shutdown.clone();
-        let serving = axum::serve(listener, self.router())
-            .with_graceful_shutdown(async move {
-                shutdown.await;
-                shutdown_signal.request();
-            })
-            .await
-            .map_err(|error| {
+        let application = self.clone();
+        let (stop_transport, transport_stop) = oneshot::channel::<()>();
+        let (transport_finished, finished) = oneshot::channel::<()>();
+        let serving = async move {
+            let result = axum::serve(listener, self.router())
+                .with_graceful_shutdown(async move {
+                    let _ = transport_stop.await;
+                })
+                .await;
+            let _ = transport_finished.send(());
+            result.map_err(|error| {
                 session_infrastructure(
                     "normalized_session_serve",
                     format!("structured-session server failed: {error}"),
                 )
-            });
-        let drained = admission.wait_idle(cancellation_grace).await;
-        let resident_shutdown = resident.shutdown().await;
+            })
+        };
+        let stopping = async {
+            tokio::select! {
+                () = shutdown => {},
+                _ = finished => {},
+            }
+            let _ = stop_transport.send(());
+            application.shutdown_scopes().await
+        };
+        // Pending open callbacks are HTTP handlers. Their cancellation cannot wait
+        // for transport drain, and parent scopes must be joined after cancellation.
+        let (serving, (drained, resident_shutdown)) = tokio::join!(serving, stopping);
         if !drained {
             return Err(session_infrastructure(
                 "normalized_session_shutdown_incomplete",
@@ -200,10 +211,27 @@ impl NormalizedSessionApplication {
     }
 
     pub(crate) async fn shutdown(&self) -> crate::platform::runtime::ShutdownReceipt {
+        let (drained, mut receipt) = self.shutdown_scopes().await;
+        if !drained {
+            receipt.cleanup_failures.push(ExecutionError::new(
+                ExecutionFailureClass::Infrastructure,
+                "normalized_session_shutdown_incomplete",
+                "one or more parent session scopes remained after cancellation grace",
+            ));
+        }
+        receipt
+    }
+
+    async fn shutdown_scopes(&self) -> (bool, crate::platform::runtime::ShutdownReceipt) {
         self.shutdown.request();
         let grace = Duration::from_millis(self.limits.cancellation_grace_milliseconds);
+        // Give ordinary terminal callbacks a chance to finish while admission is open.
         let _ = self.admission.wait_idle(grace).await;
-        self.resident.shutdown().await
+        let receipt = self.resident.shutdown().await;
+        // Cancelling a callback wakes its parent; it does not itself join the parent
+        // or that parent's reader/writer. Observe completion after cancellation too.
+        let drained = self.admission.wait_idle(grace).await;
+        (drained, receipt)
     }
 
     /// Contributor observation of installed state from real callbacks. No reference evaluator

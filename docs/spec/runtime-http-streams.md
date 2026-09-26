@@ -67,8 +67,20 @@ A parent session that subscribes after the request, including during an upgrade 
 initial writer setup, must observe the same requested shutdown. A cancelled wait,
 a completed older subscriber or another stop request cannot clear that state.
 Session callbacks, reader/writer children and admission permits remain owned by
-the existing parent scope; the correction does not widen grace periods or relax
-phase validation.
+the existing parent scope; phase validation is unchanged. Pending open callbacks
+are HTTP handlers, so interactive transport drain must also progress concurrently
+with the shutdown that can cancel them.
+
+Interactive shutdown first requests normal termination and permits callbacks to
+finish within the configured session cancellation grace. It then drains/cancels
+the resident kernel under its own configured graces, and waits again for parent
+scopes and their reader/writer children using the session cancellation grace.
+These are distinct consecutive phase allowances, not one aggregate wall-clock
+deadline. The shutdown receipt's elapsed field remains the resident-kernel timing,
+not total process-stop latency. Remaining parents are cleanup failure, including
+when shutdown is requested directly rather than through the serving loop.
+A cancelled callback may yield a failed session with fully joined process cleanup;
+that failure must not be reported as a completed application session.
 
 Stopping and restarting reloads a selected immutable bundle and the explicitly
 configured durable adapters. It neither retries interrupted operations nor rolls

@@ -155,9 +155,16 @@ Structured sessions retain stop state for drivers arriving during an upgrade.
 Eleven copied-executable process cases and five deterministic state-owner tests
 pass; two removed-fix controls fail as expected. The native editor preserves saved
 revisions and stale-write rejection through SIGTERM restarts without its source.
-These changes retain existing formats, limits and authority. Full acceptance and
-integration of this additional source are pending in its campaign; earlier source
-receipts and the public v0.1.48 assets are not evidence for these new corrections.
+A further public counterexample keeps the session-open callback running while
+termination awaits transport drain. Interactive cancellation now runs concurrently
+with that drain, and parent scopes are joined after callback cancellation. A
+cancelled callback remains failed application work even when process cleanup joins
+successfully. Normal terminal callbacks and post-cancellation parent cleanup have
+separate configured phase allowances, not an aggregate process-stop deadline.
+The earlier exact source 7391491b completed all 26 full gates freshly with stable
+inputs, but does not prove this later correction. Renewed full acceptance and
+mainline integration are recorded at the same campaign. Existing program/data
+formats and authority remain unchanged; public v0.1.48 does not include these fixes.
 
 ## Ordinary form serialization
 
