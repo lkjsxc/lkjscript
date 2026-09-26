@@ -69,7 +69,7 @@ declarations.end
     let module = b.allocated["$m"];
     let draft = render_native_draft(
         &view,
-        &[module],
+        &[module.into()],
         4 * 1_048_576,
         crate::platform::execution::ExecutionControl::uncancelled(),
     )
@@ -156,7 +156,7 @@ declarations.end
         let view = created.repository.view_current().unwrap();
         let draft = render_native_draft(
             &view,
-            &[prepared.allocated["$t"]],
+            &[prepared.allocated["$t"].into()],
             4 * 1_048_576,
             crate::platform::execution::ExecutionControl::uncancelled(),
         )
@@ -248,6 +248,7 @@ fn draft_cancellation_is_read_only_and_complete() {
         .keys()
         .filter(|o| matches!(o, OwnerKey::Module(_) | OwnerKey::Target(_)))
         .copied()
+        .map(NativeDraftSelection::from)
         .collect();
     let control = crate::platform::execution::ExecutionControl::uncancelled();
     control.cancel();

@@ -1502,7 +1502,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         operation(
             PublicOperation::Change,
             "Draft exact accepted declarations, prepare a reviewed change, or atomically apply its complete candidate.",
-            "change draft --owner OWNER [--owner OWNER]... --output PATH [--bytes N] | change plan ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] | extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT]) [--output PATH] | change apply ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] | extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT]) --plan TOKEN",
+            "change draft (--owner OWNER | --module NAME | --declaration MODULE::NAME | --target NAME)... --output PATH [--bytes N] | change plan ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] | extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT]) [--output PATH] | change apply ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] | extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT]) --plan TOKEN",
             (ControlModel::ChangeRequest, ControlModel::CompactResult),
             AuthorityEffect::AcceptedOnCommit,
             ProjectRequirement::Required,
@@ -2729,6 +2729,12 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Source,
             "A selected canonical definition cannot be represented completely.",
             "Retain the exact selection and diagnostic; no truncated draft is successful.",
+        ),
+        diagnostic(
+            "change_draft_selection",
+            DiagnosticClass::Source,
+            "A named draft selector is malformed or absent at the selected local revision.",
+            "Use an exact local module or target name, or MODULE::NAME for a declaration; inspect current names with query find.",
         ),
         diagnostic(
             "change_draft_capacity",
@@ -7751,8 +7757,8 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         ),
         (
             "draft",
-            "change draft --owner MODULE_OR_DECLARATION_OR_TARGET [--owner OWNER]... --output ABSENT_PATH [--bytes N]",
-            "Read-only canonical reconstruction at one base. Module selection expands actual ownership only. External definitions remain exact references. Output is complete, bounded, deterministic and atomically created without overwrite.",
+            "change draft (--owner MODULE_OR_DECLARATION_OR_TARGET | --module NAME | --declaration MODULE::NAME | --target NAME)... --output ABSENT_PATH [--bytes N]",
+            "Read-only canonical reconstruction at one base. Up to 10000 mixed selectors resolve exact local namespaces and recheck canonical owners under shared read admission. Names select only the draft; output binds exact identities. Module selection expands actual ownership only. External definitions remain exact references. Output is complete, bounded, deterministic and atomically created without overwrite.",
         ),
         (
             "editing",

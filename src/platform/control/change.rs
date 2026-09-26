@@ -3,9 +3,11 @@
 mod canonical;
 mod declarations;
 mod draft;
+mod draft_selection;
 mod input;
 mod literal_edit;
 pub(crate) use draft::render as render_native_draft;
+pub(crate) use draft_selection::NativeDraftSelection;
 #[cfg(test)]
 mod declaration_tests;
 #[cfg(test)]

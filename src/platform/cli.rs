@@ -2254,7 +2254,12 @@ fn execute_change_draft(
             .get(cursor + 1)
             .ok_or_else(|| single_diagnostic(usage_error("change draft options require values")))?;
         match key.as_str() {
-            "--owner" => selected.push(value.parse::<KernelOwnerKey>().map_err(single_diagnostic)?),
+            "--owner" | "--module" | "--declaration" | "--target" => {
+                selected.push(
+                    super::control::NativeDraftSelection::parse(key, value)
+                        .map_err(single_diagnostic)?,
+                );
+            }
             "--output" if destination.is_none() => destination = Some(PathBuf::from(value)),
             "--bytes" if !maximum_seen => {
                 maximum = value.parse::<usize>().map_err(|_| {
@@ -2264,7 +2269,7 @@ fn execute_change_draft(
             }
             _ => {
                 return Err(single_diagnostic(usage_error(
-                    "change draft accepts --owner OWNER (repeatable), --output PATH, and --bytes N",
+                    "change draft accepts repeatable --owner ID, --module NAME, --declaration MODULE::NAME, --target NAME, plus --output PATH and --bytes N",
                 )));
             }
         }

@@ -190,10 +190,10 @@ impl RepositoryDefinitionAdmission {
     }
 }
 
-/// One aggregate point-reader admission for a complete function-definition projection.
+/// One aggregate point-reader admission for complete definitions and their local selectors.
 ///
-/// The reader pins the existing immutable view, shares one physical admission across canonical
-/// owners, ownership facts, and bound summaries, and retains exact work for the public receipt.
+/// The reader pins the existing immutable view, shares one physical admission across namespaces,
+/// canonical owners, ownership facts, and bound summaries, and retains exact work for receipts.
 /// It has no cursor, cache, or write capability.
 pub(crate) struct RepositoryDefinitionReader<'a> {
     view: &'a RepositoryView,
@@ -3188,6 +3188,12 @@ impl<'a> RepositoryDefinitionReader<'a> {
             ownership_records: 0,
             summary_records: 0,
         }
+    }
+
+    pub(crate) fn namespace(&mut self, key: &NamespaceKey) -> Result<Option<OwnerKey>, Diagnostic> {
+        let read = self.view.namespace_admitted(key, &mut self.admission)?;
+        self.work.add(read.work);
+        Ok(read.value)
     }
 
     pub(crate) fn owner(&mut self, owner: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic> {

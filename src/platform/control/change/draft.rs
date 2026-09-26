@@ -8,7 +8,7 @@ use crate::platform::publication::RepositoryView;
 
 pub(crate) fn render(
     view: &RepositoryView,
-    selected: &[OwnerKey],
+    selected: &[NativeDraftSelection],
     maximum: usize,
     control: ExecutionControl,
 ) -> Result<Vec<u8>, Diagnostic> {
@@ -28,7 +28,18 @@ pub(crate) fn render(
             "draft requires at least one explicit owner selection",
         ));
     }
-    for owner in selected {
+    if selected.len() > crate::platform::change::MAXIMUM_AUTHORED_CHANGES {
+        return Err(Diagnostic::new(
+            DiagnosticClass::Resource,
+            "change_draft_capacity",
+            "draft selection count exceeds complete change admission",
+        ));
+    }
+    let selected = selected
+        .iter()
+        .map(|selection| selection.resolve(&mut writer.reader))
+        .collect::<Result<Vec<_>, _>>()?;
+    for owner in &selected {
         match writer.reader.owner(*owner)? {
             O::Module(_) => {
                 let OwnerKey::Module(module) = owner else {

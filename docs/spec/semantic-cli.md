@@ -173,8 +173,23 @@ existing canonical identity ordering; the language adds no stored source-order d
 Rename, move, deletion and exact dependency changes use the existing precise operations and
 complete-candidate validation. A supplied repository/package binding must agree with the base.
 
-`change draft --owner OWNER [--owner OWNER]... --output PATH [--bytes N]` reads one accepted
-revision. Selectors are exact local module, declaration or target IDs. Module selection expands
+`change draft (--owner OWNER | --module NAME | --declaration MODULE::NAME | --target NAME)...
+--output PATH [--bytes N]` reads one accepted revision. At least one and at most 10,000
+selectors are admitted, sharing the complete authored-change count bound. `--owner` retains
+strict exact local module, declaration or target IDs. Named selectors use the exact local
+module/target namespace, or exactly one module and declaration name separated by `::`.
+Names are case-sensitive and must satisfy ordinary name admission; no fuzzy search, dependency
+namespace, implicit fallback or contract-child path is accepted. Module and target names remain
+distinct namespaces even when spelled identically. Selections may repeat and mix; canonical
+output deduplicates overlapping owners independently of selector order.
+
+All names resolve at the same immutable view used to render the complete draft, not through
+separate current-head queries. Namespace witnesses are checked against the canonical owner's
+class, parent and name under the shared aggregate definition-read admission and cancellation.
+Every selector must resolve before any output is published. A missing or malformed named
+selector reports `change_draft_selection`; it never creates a partial draft. Names choose the
+read-only export, not a later mutation target. The proposal still binds exact IDs and revision;
+a later rename cannot silently retarget it. Module selection expands
 only actual owned declarations; selected declarations include their complete contracts and
 bodies, and selected targets include their routes. References outside the selection remain
 exact typed locators. Canonical reads use the maintained aggregate definition admission, share

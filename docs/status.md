@@ -7,19 +7,22 @@ release state and limits. [Specifications](spec/) own semantics,
 
 ## Public binary release
 
-**Available:** immutable [v0.1.48](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.48),
-release 397062403, published on 2026-09-26 at 12:33:55 Asia/Tokyo and independently
+**Available:** immutable [v0.1.50](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.50),
+release 397383599, published on 2026-09-27 at 05:23:56 Asia/Tokyo and independently
 observed as latest. Original producer
-[36210073260/1](https://github.com/lkjsxc/lkjscript/actions/runs/36210073260) accepted exact
-product source `e2c0d1f58ed0b347c7956d2af248b944ccf422b9`. Promotion
-[36214860067/1](https://github.com/lkjsxc/lkjscript/actions/runs/36214860067), controlled
-by `0e9160930217ae24e4034ddd9afa7ed408ef467a`, completed authenticated selection,
-immutable publication, anonymous installed verification and its successful terminal.
-The three original assets were not rebuilt. This release adds immutable deployment
-builds to the editable native web starter. The [delivery campaign](campaigns/202609261118.md)
-records exact publication lineage and keeps later v0.1.49 source acceptance separate.
-Earlier v0.1.47 remains unchanged; its [continuation](campaigns/202609260831.md) retains
-that release's original evidence rather than being rewritten as v0.1.48 proof.
+[36262586297/1](https://github.com/lkjsxc/lkjscript/actions/runs/36262586297) accepted exact
+product source `866e0ed0ad89f0cb6ced88e604dceb7fd1744cb3`. Promotion
+[36268996460/1](https://github.com/lkjsxc/lkjscript/actions/runs/36268996460), controlled
+by `bfae3c944f27b85e5c58f7a4fd45f503fc32887b`, completed authenticated selection,
+immutable publication and anonymous installed verification. Its terminal is
+`immutable_published_and_public_verified`; all three original assets were reused.
+This release includes the previously withheld native editing/web-editor additions
+and corrected joined resident/process/session shutdown. The
+[delivery continuation](campaigns/202609270517.md) records exact public lineage;
+new development v0.1.51 named draft selectors are separate and not in this binary.
+Older public assets and the withheld v0.1.49 tag remain unchanged. Their original
+[v0.1.48](campaigns/202609261118.md) and [v0.1.47](campaigns/202609260831.md) evidence
+is retained rather than relabelled as successor proof.
 
 The [v0.1.44 record](campaigns/202609222330.md#accepted-v0144-and-the-requested-release-stopping-point)
 and [v0.1.45 promotion history](campaigns/202609250903.md) retain their actual earlier
@@ -30,6 +33,19 @@ The supported binary target remains static `x86_64-unknown-linux-musl`, admitted
 in the maintained pinned Alpine and Debian userlands. Immutable installation
 slots retain exact runtimes; selecting another version neither changes running
 processes nor migrates application data. Bundles require a compatible executable.
+
+## Named canonical drafts in development v0.1.51
+
+`change draft --declaration MODULE::NAME --output PATH` starts a known local edit
+without two preliminary ID-discovery commands. Repeatable `--module NAME`,
+`--target NAME` and strict `--owner ID` may mix. One pinned view resolves exact local
+names, rechecks canonical ownership and emits the same complete ID-bound proposal.
+Missing names, wrong scopes, output overwrite and stale review remain failures.
+The shared reader charges namespace and canonical work together; names never
+become a second mutation authority. Review/apply and explicit build/restart remain.
+See the [notes](releases/v0.1.51.md), [native web guide](guides/native-web.md) and
+[campaign](campaigns/202609270517.md) for scope and exact verification state.
+This source addition is not advertised as a published v0.1.51 binary.
 
 ## Immutable deployment builds in public v0.1.48
 
@@ -171,13 +187,13 @@ Fourteen final copied-process cases, the copied-editor persistence test and fift
 kernel unit cases pass; the full suite also includes the five retained-stop cases.
 Existing program/data formats and authority remain unchanged.
 
-One nonpublishing v0.1.50 candidate
-[36262586297/1](https://github.com/lkjsxc/lkjscript/actions/runs/36262586297) now selects
-that exact corrected product/controller source. It was created on 2026-09-27 at
-03:27:08 Asia/Tokyo. Candidate acceptance and public delivery are not yet claimed;
-public latest remains v0.1.48, which does not include these fixes. The
-[continuation](campaigns/202609262313.md) retains exact source acceptance, focused
-and browser observations, preserved failures and the selected release handoff.
+The nonpublishing v0.1.50 candidate
+[36262586297/1](https://github.com/lkjsxc/lkjscript/actions/runs/36262586297) completed
+at that exact corrected product/controller source. Its unchanged accepted assets
+are now immutable public/latest v0.1.50 through promotion 36268996460/1. The
+[termination continuation](campaigns/202609262313.md) retains source acceptance,
+focused/browser observations and preserved failures; the
+[delivery continuation](campaigns/202609270517.md) owns actual publication proof.
 
 ## Ordinary form serialization
 

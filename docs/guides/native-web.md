@@ -80,7 +80,21 @@ lkjscript change draft --owner TITLE_ID --output title.lkjc
 ```
 
 Copy the returned module and declaration identities into the corresponding
-commands. In `title.lkjc`, change the text in the `page-title` function body, then:
+commands. Development v0.1.51 additionally provides a one-command route when
+`lkjscript capabilities change` advertises `--declaration`:
+
+```sh
+lkjscript change draft --declaration web::page-title --output title.lkjc
+```
+
+Choose one route, not both: drafts do not overwrite an existing file. The named
+route resolves the exact local name at one accepted revision and emits the same
+ID-bound canonical draft as `--owner`. It is not in the v0.1.50 executable. Use
+`--module web` for the whole local module or `--target serve` for this starter's
+target; inspect actual target names rather than assuming a different app has `serve`.
+Names do not weaken plan review or silently rebase stale drafts after a rename.
+
+In `title.lkjc`, change the text in the `page-title` function body, then:
 
 ```sh
 lkjscript change plan --input-file title.lkjc

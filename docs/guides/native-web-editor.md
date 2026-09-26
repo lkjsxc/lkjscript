@@ -99,6 +99,18 @@ Find the exact module, then its `page` declaration:
 "$LKJ" --project notes change draft --owner "$PAGE" --output page.lkjc
 ```
 
+Development v0.1.51 adds a shorter alternative when `capabilities change`
+advertises the named selector (v0.1.50 does not):
+
+```sh
+"$LKJ" --project notes change draft --declaration editor::page --output page.lkjc
+```
+
+Use either route with a new output path. The named route produces the same exact
+owner-bound proposal and does not create a second editable source of truth.
+`--module editor` selects the entire local module; missing names reject without
+creating any output. Existing names and a later rename are not mutation authority.
+
 Change a native text literal such as the page title in `page.lkjc`, preserving its
 base and owner references. Plan, inspect and apply that proposal's own review:
 

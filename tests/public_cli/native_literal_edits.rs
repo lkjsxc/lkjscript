@@ -26,8 +26,8 @@ fn native_literal_edit_keeps_review_identity_and_old_and_new_detached_web_snapsh
         &[
             "change",
             "draft",
-            "--owner",
-            &function,
+            "--declaration",
+            "web::controls",
             "--output",
             path(&draft),
         ],

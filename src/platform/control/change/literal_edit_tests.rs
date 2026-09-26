@@ -75,7 +75,7 @@ impl Fixture {
         String::from_utf8(
             render_native_draft(
                 &self.view(),
-                &[OwnerKey::Declaration(self.function)],
+                &[OwnerKey::Declaration(self.function).into()],
                 4 * 1_048_576,
                 crate::platform::execution::ExecutionControl::uncancelled(),
             )
