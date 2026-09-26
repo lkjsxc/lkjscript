@@ -1631,5 +1631,7 @@ mod native_http;
 
 #[path = "deployment_build.rs"]
 mod deployment_build;
+#[path = "native_literal_edits.rs"]
+mod native_literal_edits;
 #[path = "web_starter.rs"]
 mod web_starter;

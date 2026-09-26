@@ -1558,19 +1558,15 @@ pub(super) fn finish(
                     return Err(canonical::error("expected function payload"));
                 };
                 let previous = reader.expression(old.body)?;
-                let encode = |body| {
-                    crate::platform::change::canonical_authored_intent_bytes(&AuthoredChangeSet {
-                        base: request.semantic.base,
-                        preconditions: Vec::new(),
-                        changes: vec![AuthoredChange::ReplaceFunctionBody {
-                            function: function.clone(),
-                            body,
-                        }],
-                        budget: request.semantic.budget,
-                    })
-                };
-                if encode(body.clone()).ok() != Some(encode(previous)?) {
-                    changes.push(AuthoredChange::ReplaceFunctionBody { function, body });
+                if let Some(change) = super::literal_edit::function_body(
+                    reader,
+                    function,
+                    body,
+                    previous,
+                    request.semantic.base,
+                    request.semantic.budget,
+                )? {
+                    changes.push(change);
                 }
             }
             AuthoredChange::CreateExternal {

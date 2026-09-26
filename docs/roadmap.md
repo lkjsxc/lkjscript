@@ -93,11 +93,17 @@ edit. No additional kernel or framework primitive was needed. It leaves a concre
 next question about edit/review scale: at the same revision and intended small edit,
 function-only drafting reduces the proposal from 18,732 to 3,066 bytes, but both
 complete logical plans remain 155,246 bytes with 34 recreated internal owners.
-These are one workload's byte/owner counts, not model-token, monetary or latency
-claims. Prefer the existing targeted draft immediately; investigate finer edits or
-review presentation only against a demonstrated workflow, preserving full validation,
-identity continuity and review binding. Do not mistake a large optional proof file
-for compulsory model input or remove correctness evidence merely to shrink it.
+Those counts belong to that historical workload and source, not model-token, monetary or
+latency claims. The [literal-edit continuation](campaigns/202609261118.md) addresses its narrow
+scalar-update case: complete canonical-intent equivalence and independent live-ownership
+admission retain function-body identities instead of retiring an unchanged structure. The
+same-base web-button comparison reduces full proof bytes from 80,402 to 8,613; a freshly
+composed two-library paged-list regression separately confirms one-owner numeric edits and
+old/new detached behavior. Structural edits deliberately retain full replacement. Prefer
+targeted drafts and prove the next finer-edit or restart mechanism on an actual workload;
+do not expand this into heuristic matching or silently discarded proposal changes. Do not
+mistake a large optional proof file for compulsory model input or remove correctness evidence
+merely to shrink it.
 
 Continue selecting common improvements from ordinary native applications, not a
 particular experimental game's completion. A browser/Wasm backend is not a

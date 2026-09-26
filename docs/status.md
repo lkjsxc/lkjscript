@@ -94,6 +94,18 @@ authorship and source-free execution for 642 cases against an independent
 `URLSearchParams` oracle; no compiler rebuild or new runtime dependency is required.
 The [campaign](campaigns/202609261045.md) owns exact proof and scope.
 
+## Identity-preserving native edits in development v0.1.49
+
+Same-structure function edits now update only changed scalar values after a complete canonical
+intent comparison and independent live-ownership admission. Expression and binding identities
+survive; structural edits retain ordinary replacement. In the unchanged web-starter workload,
+one button label reduces the complete plan from 80,402 to 8,613 bytes: one updated expression,
+no recreated or retired owners, and all review evidence retained. This measures graph/proof churn,
+not runtime speed, model tokens or monetary cost. Focused unit and copied-binary web proof,
+including old/new detached snapshots, passes; source-wide acceptance is recorded separately in
+the [campaign](campaigns/202609261118.md). The new runtime behavior is not in public v0.1.47 or
+the frozen v0.1.48 candidate. No graph, artifact or application-data format migration is introduced.
+
 ## Current authority and maintained consumers
 
 The accepted typed meaning graph is the sole editable program authority. Native

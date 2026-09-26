@@ -172,15 +172,37 @@ Original comments, formatting and alias spellings are not recoverable because th
 canonical meaning. Draft files are disposable proposals and introduce no synchronization owner.
 An untouched plan reports `outcome=unchanged`, no semantic change, no owner recreation and no
 publication token. Such a request has no exportable plan; no-op apply retains the existing
-publication rejection policy. Real body replacements retain declaration and unchanged signature
-owners while following existing expression/binding replacement and retirement rules.
+publication rejection policy. A complete native function edit retains existing expression and
+binding identities when normalization proves that its entire authored intent differs only in
+same-kind `Bool`, `I64`, `F64`, `Text` or `StaticText` literal values. The proof substitutes proposed
+literal values into the accepted body and compares the complete canonical authored intent, including
+types, exact references, binding scope and ordered child positions. Matching traversal counts,
+displayed names or masked shapes alone are insufficient. Equal-valued occurrences remain distinct
+owned positions. If complete correspondence cannot be proved, the normalizer retains whole-body
+replacement; it never silently drops another proposed change.
+
+The typed scalar-update operation binds one exact function and a nonempty unique list of exact
+expression identities and typed values. Lowering independently traverses the live current candidate
+body, admits its canonical reads and ownership work, and requires existing accepted identities and
+unchanged scalar kinds before mutating any selected literal. Foreign, missing, duplicate, nonliteral
+or already replaced selections reject. Contract edits and the complete candidate still pass ordinary
+validation, impact analysis, resource admission and atomic publication. The optimization adds no
+raw-storage editing path or runtime authority. Explicit `replace.body` and actual structural body
+replacements retain declaration and unchanged signature owners while following existing
+expression/binding replacement and retirement rules. Constant, test and port body updates are not
+implicitly converted into function scalar updates.
 
 All edits lower into the shared typed authored request and existing review/publication lock.
 Stale bases, missing repairs and altered reviewed meaning reject before publication. Accepted
 idempotent retries keep their immutable original result. Authored codec 18 adds complete constant,
-test and expression-backed port updates to existing graph meanings; requests using only earlier
-intent retain their original codec identity and commitment. Graph, artifact, transport, application
-data, deployment grants and runtime semantics have no format migration for this notation.
+test and expression-backed port updates to existing graph meanings. Authored codec 19 adds
+identity-preserving function scalar updates, committing to the exact function, ordered expression
+identities, scalar kinds and values; binary64 commitments distinguish signed zero and infinities
+and retain the canonical NaN representation. Requests using only earlier intent retain their
+original codec identity and commitment. A previously reviewed native body edit whose normalized
+intent now changes requires a new plan, not reinterpretation of the old token. Graph, artifact,
+transport, application data, deployment grants and runtime semantics have no format migration
+for this notation.
 
 See the generated [creation and re-entry example](../generated/change-grammar.md) for public
 commands, exact supplier staging and the complete native grammar.

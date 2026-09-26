@@ -118,6 +118,7 @@ struct Writer {
     outcome_extension: bool,
     f64_extension: bool,
     declaration_body_extension: bool,
+    literal_extension: bool,
 }
 
 impl Writer {
@@ -129,11 +130,14 @@ impl Writer {
             outcome_extension: false,
             f64_extension: false,
             declaration_body_extension: false,
+            literal_extension: false,
         }
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.declaration_body_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+        if self.literal_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR19");
+        } else if self.declaration_body_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR18");
         } else if self.f64_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR17");
@@ -876,6 +880,36 @@ impl Writer {
                 self.tag(34)?;
                 self.declaration_selector(declaration, definitions)?;
                 self.module_selector(module, definitions)
+            }
+            AuthoredChange::SetFunctionLiterals { function, literals } => {
+                self.literal_extension = true;
+                self.tag(47)?;
+                self.declaration_selector(function, definitions)?;
+                self.list(literals, |writer, literal| {
+                    writer.raw(&literal.expression.bytes())?;
+                    match &literal.value {
+                        AuthoredLiteralValue::Bool { value } => {
+                            writer.tag(0)?;
+                            writer.boolean(*value)
+                        }
+                        AuthoredLiteralValue::I64 { value } => {
+                            writer.tag(1)?;
+                            writer.i64(*value)
+                        }
+                        AuthoredLiteralValue::F64 { value } => {
+                            writer.tag(2)?;
+                            writer.u64(value.bits())
+                        }
+                        AuthoredLiteralValue::Text { value } => {
+                            writer.tag(3)?;
+                            writer.string(value)
+                        }
+                        AuthoredLiteralValue::StaticText { value } => {
+                            writer.tag(4)?;
+                            writer.string(value)
+                        }
+                    }
+                })
             }
             AuthoredChange::ReplaceFunctionBody { function, body } => {
                 self.tag(35)?;

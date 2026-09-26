@@ -4,8 +4,11 @@ mod codec;
 mod creation;
 mod deletion;
 mod extraction;
+mod literal;
 mod precondition;
 mod references;
+
+pub use literal::{AuthoredLiteralUpdate, AuthoredLiteralValue};
 
 pub use references::{
     AuthoredOwnerReferenceSelection, AuthoredOwnerReferenceSelector, AuthoredReference,
@@ -297,6 +300,10 @@ pub enum AuthoredChange {
     ReplaceFunctionBody {
         function: DeclarationSelector,
         body: AuthoredExpression,
+    },
+    SetFunctionLiterals {
+        function: DeclarationSelector,
+        literals: Vec<AuthoredLiteralUpdate>,
     },
     SetConstant {
         constant: DeclarationSelector,
@@ -1005,6 +1012,9 @@ pub(crate) fn lower_authored_changes_with_source_owners<
                     deletion::retire_replaced_expression_tree(&mut lowerer, root)?;
                 }
             }
+            AuthoredChange::SetFunctionLiterals { function, literals } => {
+                literal::lower(&mut lowerer, function, literals)?;
+            }
             AuthoredChange::ReplaceFunctionBody { function, body } => {
                 let function = lowerer.resolve_declaration(function)?;
                 let previous_body = {
@@ -1179,6 +1189,7 @@ fn collect_symbol_definitions(
             AuthoredChange::DeleteOwner { .. }
             | AuthoredChange::RenameOwner { .. }
             | AuthoredChange::MoveDeclaration { .. } => {}
+            AuthoredChange::SetFunctionLiterals { .. } => {}
             AuthoredChange::ReplaceFunctionBody { body, .. } => {
                 creation::collect_expression_symbols(body, &mut definitions)?
             }

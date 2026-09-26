@@ -4,9 +4,12 @@ mod canonical;
 mod declarations;
 mod draft;
 mod input;
+mod literal_edit;
 pub(crate) use draft::render as render_native_draft;
 #[cfg(test)]
 mod declaration_tests;
+#[cfg(test)]
+mod literal_edit_tests;
 mod origins;
 #[cfg(test)]
 mod parameter_tests;
@@ -49,8 +52,8 @@ use std::str::FromStr;
 
 pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-24";
 pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 24;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-18";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 18;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-19";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 19;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[

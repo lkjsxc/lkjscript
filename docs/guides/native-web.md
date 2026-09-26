@@ -116,9 +116,22 @@ rejects even identical existing bytes. Do not delete retained working files simp
 to make a build succeed. See the [build contract](../spec/semantic-cli.md#build)
 for bounds, exact reuse, failure states and explicit retention.
 
-A changed title preserves the declaration identity and its callers. A body with the wrong return type is rejected without advancing the
-accepted head.
-An unchanged draft plans as unchanged.
+A changed title preserves the declaration identity and its callers. A body with the wrong return
+type is rejected without advancing the accepted head. An unchanged draft plans as unchanged.
+
+Development v0.1.49 also preserves the function's internal expression and binding identities for
+proved same-structure literal edits. For example, draft `web::controls` and change only the label
+`Apply dark theme` to `Use the dark theme`. The reviewed change updates one existing expression,
+not all sixteen expressions in that function. Complete before/after evidence remains available
+with `change plan --input-file controls.lkjc --output controls.lkjplan`; it is not hidden to make
+the summary look smaller. Edits to control structure, referenced declarations, bindings or scalar
+kinds use ordinary complete body replacement and validation. Re-plan an older reviewed input
+before applying it with a runtime that normalizes the edit differently.
+
+This is an authoring improvement, not live reload: running old deployments and their artifacts
+remain unchanged. The [literal-edit campaign](../campaigns/202609261118.md) owns the measured
+comparison, negative tests and exact source/publication boundary. It is absent from the separately
+frozen v0.1.48 candidate.
 
 To change the layout, draft `web::screen` using the same module/declaration lookup.
 Its nodes are ordinary `ui::node` values. To change a reusable control or styling,
