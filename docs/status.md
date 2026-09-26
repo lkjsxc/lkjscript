@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-09-26 Asia/Tokyo. This page describes current capabilities,
+Status date: 2026-09-27 Asia/Tokyo. This page describes current capabilities,
 release state and limits. [Specifications](spec/) own semantics,
 [generated guides](generated/operations.md) own discovery, and
 [campaigns](campaigns/) retain exact implementation and verification history.
@@ -165,6 +165,8 @@ The earlier exact source 7391491b completed all 26 full gates freshly with stabl
 inputs, but does not prove this later correction. Renewed full acceptance and
 mainline integration are recorded at the same campaign. Existing program/data
 formats and authority remain unchanged; public v0.1.48 does not include these fixes.
+Kernel and session idle waiting also share notification-before-observation ordering,
+with a deterministic regression for completion between the count read and wait.
 
 ## Ordinary form serialization
 

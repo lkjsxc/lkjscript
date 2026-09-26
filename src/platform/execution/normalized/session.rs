@@ -1935,11 +1935,9 @@ impl SessionAdmission {
     }
 
     async fn wait_idle(&self, grace: Duration) -> bool {
-        let wait = async {
-            while self.counters.active_sessions.load(Ordering::Acquire) != 0 {
-                self.idle.notified().await;
-            }
-        };
+        let wait = crate::platform::runtime::idle::wait_until_idle(&self.idle, || {
+            self.counters.active_sessions.load(Ordering::Acquire) == 0
+        });
         tokio::time::timeout(grace, wait).await.is_ok()
     }
 }

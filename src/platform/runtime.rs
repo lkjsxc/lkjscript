@@ -9,6 +9,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore, watch};
 
+pub(crate) mod idle;
+
 pub const RESIDENT_RUNTIME_CONTRACT_VERSION: u16 = 3;
 pub const MAXIMUM_CONCURRENT_TASKS: usize = 4_096;
 pub const MAXIMUM_QUEUED_TASKS: usize = 65_536;
@@ -499,14 +501,10 @@ impl ResidentKernel {
 
 impl ResidentKernelInner {
     async fn wait_idle(&self) {
-        loop {
-            let notified = self.idle.notified();
-            if self.queued.load(Ordering::Acquire) == 0 && self.active.load(Ordering::Acquire) == 0
-            {
-                return;
-            }
-            notified.await;
-        }
+        idle::wait_until_idle(&self.idle, || {
+            self.queued.load(Ordering::Acquire) == 0 && self.active.load(Ordering::Acquire) == 0
+        })
+        .await;
     }
 
     fn record_outcome<T>(&self, outcome: &Result<T, ExecutionError>) {

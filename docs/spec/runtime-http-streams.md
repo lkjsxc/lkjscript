@@ -81,6 +81,9 @@ not total process-stop latency. Remaining parents are cleanup failure, including
 when shutdown is requested directly rather than through the serving loop.
 A cancelled callback may yield a failed session with fully joined process cleanup;
 that failure must not be reported as a completed application session.
+Kernel and session idle waiters register for completion notification before reading
+their remaining-work predicate; a completion between that read and suspension must
+not be lost. The predicate, rather than a notification alone, establishes idleness.
 
 Stopping and restarting reloads a selected immutable bundle and the explicitly
 configured durable adapters. It neither retries interrupted operations nor rolls
