@@ -133,7 +133,19 @@ observations do not establish data corruption or every HTTP disconnect path.
 The [v0.1.50 successor notes](releases/v0.1.50.md) describe the correction and unchanged
 program/data formats. Focused tests, full source acceptance, mainline integration,
 finalized candidate and public distribution remain separately recorded at the campaign.
-No v0.1.50 public release is claimed at this implementation checkpoint.
+Exact source `cf705260118f5a62dff2b73801ee9357d90f700d` now passes all 26 full gates
+freshly, with zero reuse, stable inputs and 1051.466363711 seconds elapsed. It reached
+remote main by normal fast-forward and an independent ref read confirmed delivery.
+The eight new regressions also pass in the focused eleven-test runtime suite.
+Separate copied-runtime observations preserve HTTP disconnect cleanup and a saved
+note/revision through v0.1.49 -> v0.1.50 -> v0.1.49, including a stale-save 409.
+
+The v0.1.50 candidate-dispatch tool call was blocked by a safety check; a subsequent
+independent Actions query found no run for the exact source. No finalized candidate
+or public v0.1.50 release is claimed. The withheld v0.1.49 selector was restored to
+the existing immutable v0.1.48 tag and read back; its frozen tag/history stay intact.
+The [campaign](campaigns/202609262000.md) records completed source delivery and this
+separate unexecuted release boundary.
 
 ## Ordinary form serialization
 

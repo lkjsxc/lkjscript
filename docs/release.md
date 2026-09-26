@@ -211,6 +211,20 @@ The runtime defect also exists in the inspected v0.1.48 source; its published
 assets are not rewritten, and this new finding is not relabelled as an earlier
 acceptance failure.
 
+Corrected source `cf705260118f5a62dff2b73801ee9357d90f700d` passes the full 26-gate
+fresh profile with stable inputs and reached remote main through normal delivery.
+The scoped release selector was subsequently restored to the existing v0.1.48
+object `da0ac737ddd546653eac676ed1220674eeeee908`, with compared prior state and
+readback, so the withheld v0.1.49 candidate is no longer selected. Its original
+history and all public assets remain unchanged.
+
+The attempted v0.1.50 candidate dispatch was blocked by the tool safety check.
+An independent Actions query returned no run for cf705260. There is no v0.1.50
+producer/run/attempt or finalized-asset acceptance to promote. Mainline source
+acceptance is complete, not public distribution. A later permitted candidate
+execution must verify its own exact current source and complete the maintained
+acceptance before any new release-scoped selection; do not resume v0.1.49.
+
 ## Content and compatibility
 
 The canonical manifest discriminator is `format: "lkjscript-release-content-1"`. It binds the product
