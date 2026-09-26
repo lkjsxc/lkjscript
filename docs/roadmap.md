@@ -48,6 +48,15 @@ graph. Its focused public and script-free browser results belong to the
 [campaign](campaigns/202609251450.md); exact public acquisition is tracked separately
 from source tests rather than inferred from a development executable.
 
+The [form library](guides/native-forms.md) now closes a concrete input/output gap:
+ordinary native code can both parse form data and construct bounded canonical
+UTF-8 bodies or queries. Ordered pairs and duplicate fields remain explicit;
+transport, escaping for markup and authorization are separate owners. A structural
+consumer, independent byte expectations and a detached POST receiver test this
+composition without creating a privileged framework serializer. Aggregate runtime
+quotas still bound batches even when every individual form satisfies its own limit.
+Keep exact dependency updates explicit rather than silently replacing old suppliers.
+
 The next useful question is the recurring development loop, rather than another
 large closed starter. Use a second small real application or an identity-preserving
 editor change to identify genuinely reusable admission/form/persistence helpers and

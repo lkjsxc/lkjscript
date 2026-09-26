@@ -58,14 +58,41 @@ and Clippy pass at test/docs descendant `8da50e4ea6d7bf5e9a96f68d413dd7d84128d5d
 An independent script-free Chromium session also passes against moved old/new web
 snapshots, with ordinary form interaction and joined shutdown. Product source is unchanged.
 
-One [hosted full verification](https://github.com/lkjsxc/lkjscript/actions/runs/36206083541)
-is selected for exact corrected source e5847f1e, attempt 1. It was last observed
-in progress at 2026-09-26 10:30 Asia/Tokyo; the authenticated Home Coder connection
-now permits status reads. Mainline delivery and v0.1.48 candidate/publication remain
-incomplete. Original failures and exact profile bounds remain in the
-[original campaign](campaigns/202609260831.md); new evidence and resumption state
-belong to its [continuation](campaigns/202609261015.md).
+The original [hosted full verification](https://github.com/lkjsxc/lkjscript/actions/runs/36206083541),
+at exact corrected source e5847f1e and attempt 1, completed successfully on
+2026-09-26 at 10:50:22 Asia/Tokyo. All 26 gates passed freshly, zero were reused,
+inputs remained stable and elapsed execution was 3334.373119559 seconds.
+The original receipt and artifact were downloaded and their identity checked.
+Together with the distinct relocation supplement, these changes reached remote
+main at `e2c0d1f58ed0b347c7956d2af248b944ccf422b9` through a normal fast-forward;
+an independent GitHub read confirmed delivery.
+
+One v0.1.48 candidate [36210073260/1](https://github.com/lkjsxc/lkjscript/actions/runs/36210073260)
+was selected from that exact main source at 10:56:21 Asia/Tokyo. Finalized-candidate
+acceptance and immutable publication are not inferred from source acceptance.
+The ordinary form-library increment below is separate from that producer's source.
+Original failures remain in the [original campaign](campaigns/202609260831.md),
+relocation evidence in its [continuation](campaigns/202609261015.md), and current
+integration/candidate state in the [delivery record](campaigns/202609261045.md).
 See the [editing guide](guides/native-web.md) and [build contract](spec/semantic-cli.md#build).
+
+## Ordinary form serialization
+
+The [native form library](guides/native-forms.md) now supplies bounded UTF-8 encoding
+as well as strict decoding, without adding a form-specific runtime primitive.
+It preserves ordered duplicate names, charges escaped output and separators before
+growth, and distinguishes invalid input from an execution-resource failure.
+The separate structural consumer exposes individual and batch command targets.
+
+Focused public workflows compare 674 independent cases through both project and
+source-free paths, then 205 detached roundtrips. Twelve live encoder/receiver
+requests, malformed input, review-token binding, a deliberate encoding mutation
+and the unchanged durable editor are checked separately. These library/test
+observations do not relabel the deployment full receipt or the v0.1.48 binary
+candidate. The unchanged official v0.1.47 binary also completes fresh native
+authorship and source-free execution for 642 cases against an independent
+`URLSearchParams` oracle; no compiler rebuild or new runtime dependency is required.
+The [campaign](campaigns/202609261045.md) owns exact proof and scope.
 
 ## Current authority and maintained consumers
 

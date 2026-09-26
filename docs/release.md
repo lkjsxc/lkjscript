@@ -181,10 +181,18 @@ unchanged running processes/data roots and private descriptor publication. An
 initial local implementation is withheld after an independently reproduced
 permissions defect. Combined correction `e5847f1e568ad823325dd3a1e56c7a6fd64fa3fa`
 also rejects ambiguous configuration keys and passes its local focused regressions
-and independent oracles. Its single [Verify 36206083541/1](https://github.com/lkjsxc/lkjscript/actions/runs/36206083541)
-is last observed in progress. Complete fresh acceptance and normal mainline delivery
-are still required before candidate dispatch; no v0.1.48 publication is claimed.
-Public v0.1.47 is complete and unchanged.
+and independent oracles. Its original [Verify 36206083541/1](https://github.com/lkjsxc/lkjscript/actions/runs/36206083541)
+completed all 26 gates freshly, without reuse and with stable inputs, at
+2026-09-26T01:50:22Z. The distinct seven-workflow relocation supplement retains its
+own source. Normal mainline delivery was independently confirmed at
+`e2c0d1f58ed0b347c7956d2af248b944ccf422b9`. One candidate
+[36210073260/1](https://github.com/lkjsxc/lkjscript/actions/runs/36210073260) was dispatched
+at that exact product/controller source on 2026-09-26T01:56:21Z.
+Its finalized archive, target acceptance and promotion remain separate gates; no
+v0.1.48 publication is inferred from source acceptance. The
+[delivery record](campaigns/202609261045.md) owns current evidence and resumption.
+The later ordinary form-library extension is not part of this candidate source
+and is independently usable with public v0.1.47, which remains complete and unchanged.
 
 ## Content and compatibility
 

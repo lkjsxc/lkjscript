@@ -6,9 +6,9 @@ intrinsics or automatically maintained application packages.
 
 | Guide | What it demonstrates |
 | --- | --- |
-| [Web app from one binary](native-web.md) | Development v0.1.47 `new --template web`: editable local UI modules, no manual imports, native title edits and a standalone loopback deployment. |
+| [Web app from one binary](native-web.md) | Public v0.1.47 `new --template web`: editable local UI modules, no manual imports, native title edits and a standalone loopback deployment. |
 | [Durable native browser editor](native-editor.md) | Ordinary POST/multiline UI, strict admission, shared authentication, transactional conflict handling, source-free restart and real script-free browser operation, supported by public v0.1.46. |
-| [Strict native form codec](native-forms.md) | Public-v0.1.46 byte construction, checked UTF-8, bounded fields, exact transport, detached commands and a stateless POST receiver. |
+| [Bounded native form codec](native-forms.md) | Strict UTF-8 input and canonical output, ordered fields, exact transport, detached commands and POST composition; encoding independently runs on public v0.1.47. |
 | [Typed UI without browser-code authoring](native-ui.md) | Ordinary layouts, palettes and GET forms, exact response-library composition, and detached public-v0.1.44 execution. |
 | [Paged native HTTP list](native-list.md) | Native bounded-decimal input, reusable list/text operations, exact HTML/response imports and detached HTTP execution on development v0.1.45. |
 | [First native command](native-command.md) | A literal function/test/target, reviewed publication, canonical re-entry and detached execution on public v0.1.44 and development v0.1.45. |
