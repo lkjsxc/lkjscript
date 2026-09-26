@@ -34,6 +34,56 @@ fn explicit() -> Value {
 }
 
 #[test]
+fn duplicate_configuration_keys_reject_instead_of_selecting_a_value() {
+    let mut value = descriptor(explicit());
+    value["configuration"] = json!("CONFIGURATION_FIXTURE");
+    let raw = serde_json::to_string(&value).unwrap();
+    for key in ["alpha", r"\u0061lpha", r"a\u006cpha"] {
+        for second in ["first", "second"] {
+            let configuration = format!(
+                r#"{{"alpha":{{"kind":"text","value":"first"}},"{key}":{{"kind":"text","value":"{second}"}}}}"#
+            );
+            let input = raw.replace("\"CONFIGURATION_FIXTURE\"", &configuration);
+            let error = decode_deployment(input.as_bytes()).unwrap_err();
+            assert_eq!(error.code, "deployment_json", "{key}: {second}");
+            assert!(error.message.contains("duplicate JSON object field"));
+        }
+    }
+}
+
+#[test]
+fn strict_descriptor_projection_retains_integer_extremes_and_string_contents() {
+    let mut value = descriptor(explicit());
+    value["execution"]["instruction_fuel"] = json!(u64::MAX);
+    let quoted = r#"{"alpha":1,"alpha":2} 18446744073709551616 1.25"#;
+    value["configuration"] = json!({
+        "minimum": {"kind":"i64","value":i64::MIN},
+        "maximum": {"kind":"i64","value":i64::MAX},
+        "quoted": {"kind":"text","value":quoted},
+        "enabled": {"kind":"bool","value":true}
+    });
+    let decoded = decode(&value).unwrap();
+    assert_eq!(decoded.execution.unwrap().instruction_fuel, Some(u64::MAX));
+    assert_eq!(
+        decoded.configuration["minimum"],
+        ConfigurationValue::I64(i64::MIN)
+    );
+    assert_eq!(
+        decoded.configuration["maximum"],
+        ConfigurationValue::I64(i64::MAX)
+    );
+    assert_eq!(
+        decoded.configuration["quoted"],
+        ConfigurationValue::Text(quoted.to_owned())
+    );
+    assert_eq!(
+        decoded.configuration["enabled"],
+        ConfigurationValue::Bool(true)
+    );
+    assert_eq!(decoded.configuration.len(), 4);
+}
+
+#[test]
 fn legacy_numeric_descriptors_keep_the_previously_implicit_quotas() {
     let value = descriptor(json!({"instruction_fuel": 123, "maximum_call_depth": 19,
         "maximum_value_stack": 43}));

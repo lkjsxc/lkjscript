@@ -465,6 +465,64 @@ fn web_snapshot_rebuild_does_not_replace_running_old_program_or_require_its_grap
 }
 
 #[test]
+fn duplicate_configuration_rejects_before_build_publication_or_runtime_loading() {
+    let public = Native::template("command");
+    let (template, original) = fixture(&public, "command.deployment.json");
+    let head = std::fs::read(public.project.join("HEAD")).unwrap();
+    let mut base: Value = serde_json::from_slice(&original).unwrap();
+    base["configuration"] = serde_json::json!("CONFIGURATION_FIXTURE");
+    let raw = base.to_string();
+    for key in ["alpha", r"\u0061lpha", r"a\u006cpha"] {
+        for second in ["first", "second"] {
+            let configuration = format!(
+                r#"{{"alpha":{{"kind":"text","value":"first"}},"{key}":{{"kind":"text","value":"{second}"}}}}"#
+            );
+            let input = raw.replace("\"CONFIGURATION_FIXTURE\"", &configuration);
+            std::fs::write(&template, &input).unwrap();
+            for operation in ["build", "run"] {
+                let rejected = public.cli(&[operation, "--deployment", path(&template)], false);
+                assert_eq!(
+                    compact_field(compact_record(&rejected, "diagnostic"), "code"),
+                    "deployment_json",
+                    "{operation}: {key}: {second}"
+                );
+            }
+            // Resident commands have a standalone JSON envelope, not project compact records.
+            let served = support::output(
+                Command::new(&public.executable)
+                    .args(["serve", "--deployment", path(&template)])
+                    .current_dir(public.root.path())
+                    .env_clear()
+                    .env("PATH", ""),
+            )
+            .unwrap();
+            assert!(!served.status.success());
+            let failure: Value = serde_json::from_slice(&served.stdout).unwrap();
+            assert_eq!(failure["error"]["code"], "deployment_json");
+            assert_eq!(std::fs::read_to_string(&template).unwrap(), input);
+            assert_eq!(std::fs::read(public.project.join("HEAD")).unwrap(), head);
+            assert_eq!(
+                std::fs::read_dir(public.root.path().join("generated"))
+                    .unwrap()
+                    .count(),
+                0
+            );
+            assert!(
+                !std::fs::read_dir(public.root.path()).unwrap().any(|entry| {
+                    entry
+                        .unwrap()
+                        .file_name()
+                        .to_string_lossy()
+                        .starts_with("build-")
+                })
+            );
+        }
+    }
+    std::fs::write(&template, original).unwrap();
+    snapshot(&public, &template);
+}
+
+#[test]
 fn static_admission_rejects_mismatched_authority_without_publishing() {
     let public = Native::template("http");
     let (template, original) = fixture(&public, "service.deployment.json");

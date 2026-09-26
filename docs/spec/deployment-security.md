@@ -17,6 +17,15 @@ absolute, backslash, empty, `.` and `..` components. Artifact paths and local ob
 symbolic-link components; artifacts must be regular files and local roots must be existing real
 directories. The deployment directory is a trusted operator boundary.
 
+All JSON objects require unique decoded keys, including the configuration map.
+Repeated identical values are still ambiguous and reject; an escaped spelling of
+the same key is not distinct. There is no first-wins or last-wins policy. Admission
+uses the shared bounded strict JSON reader and retains the full signed/unsigned
+64-bit range required by configuration and execution limits. Duplicate keys fail
+before artifact access, secret reads, adapter creation or snapshot publication.
+Previously accepted duplicate-key descriptors require an explicit operator choice
+of one value, not automatic rewriting. Valid descriptor encodings are unchanged.
+
 Preparation bounds and decodes the descriptor and artifact bundle, validates the bundle digest
 and exact root target/component/runner/requirement closure, then loads named secrets, constructs
 and preflights adapters, computes redacted descriptor digests, and only then permits readiness or
@@ -91,7 +100,7 @@ publishes no application work.
 
 ## Configuration and secrets
 
-Configuration values are closed bool, i64, text, or bytes with at most 4,096 fields and 1 MiB per
+Configuration values are closed bool, i64, or text with at most 4,096 fields and 1 MiB per
 value. Applications may request only accepted-source `StaticText` names through typed exists/bool/
 i64/text operations; wrong/missing type is capability failure. The current boundary has one descriptor source
 and no ambient merge, watch, or mutable precedence.

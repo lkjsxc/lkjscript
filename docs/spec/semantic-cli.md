@@ -858,6 +858,8 @@ With `--deployment`, relative input paths use the invocation directory, independ
 selected project. Input and resolved output paths are bounded to 4096 UTF-8 bytes. Read one
 ordinary non-symlink descriptor under the existing 1 MiB descriptor limit, reject linked parent
 components and `..`, and strictly reject unknown/duplicate fields before project preparation.
+Duplicate configuration-map keys also reject, including identical values and escaped spellings
+of the same decoded key. The build must not silently select a value when copying a descriptor.
 The old `artifact` file need not exist and is not read. Prepare the current accepted graph using
 the ordinary lifecycle, then statically admit the exact target, runner policy and grants against
 that program. This does not run graph tests; use `check` explicitly before delivery. It does not

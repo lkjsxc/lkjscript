@@ -2004,10 +2004,26 @@ pub fn decode_deployment(bytes: &[u8]) -> Result<DeploymentDescriptor, Diagnosti
 }
 
 fn validate_raw_adapter_fields(bytes: &[u8]) -> Result<(), Diagnostic> {
-    let value: serde_json::Value = serde_json::from_slice(bytes).map_err(|error| {
+    // Typed maps would otherwise silently keep the last duplicate configuration key.
+    // Reuse the strict reader before projecting fields; preserve the full u64 policy
+    // range. These structural budgets cannot further restrict a valid 1 MiB descriptor.
+    let value = super::json::decode_strict_with_integer_policy(
+        bytes,
+        super::json::JsonLimits {
+            maximum_bytes: MAXIMUM_DEPLOYMENT_BYTES,
+            maximum_depth: super::json::MAXIMUM_JSON_CONTAINER_NESTING,
+            maximum_items: MAXIMUM_DEPLOYMENT_BYTES,
+            maximum_string_bytes: MAXIMUM_DEPLOYMENT_BYTES,
+        },
+        super::json::JsonIntegerPolicy::SignedOrUnsigned64,
+    )
+    .map_err(|error| {
         deployment_error(
             "deployment_json",
-            format!("deployment descriptor is not strict JSON: {error}"),
+            format!(
+                "deployment descriptor is not strict JSON: {}",
+                error.message
+            ),
         )
     })?;
     let root = value.as_object().ok_or_else(|| {
