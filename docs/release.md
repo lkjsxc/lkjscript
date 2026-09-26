@@ -164,11 +164,23 @@ integration is complete through documentation descendant
 `18e04bc0e6611ff0b79a49da1e5ce5da3632da35`. One non-publishing candidate
 [36198402289/1](https://github.com/lkjsxc/lkjscript/actions/runs/36198402289) was dispatched
 from that exact 18e04bc0 product/controller source at 2026-09-25T22:48:09Z.
-It is in progress; final candidate and terminal acceptance have not yet been
-confirmed. No v0.1.47 tag or scoped-selection change occurred. Reuse this producer
-if healthy, then select/promote only after acceptance. Neither source nor candidate
-acceptance for v0.1.46 certifies this later executable. Preserve all earlier
-immutable assets, and do not replace the event SHA with a later reporting commit.
+It completed source/finalized-candidate, installation/userland, original-reader and
+terminal acceptance at that exact product/controller source. The [continuation](campaigns/202609260831.md)
+created annotated tag object `79a87148d7d5ccb2b1b6960a0a26d0afd832c588`, checked and
+updated the existing scoped selection, and promoted original producer `36198402289/1`.
+Promotion [36203046819/1](https://github.com/lkjsxc/lkjscript/actions/runs/36203046819),
+from controller `3a34c305119ca7c1dc34ee7326ebe5b960d2a0b2`, completed authenticated
+selection, immutable publication, anonymous exact/latest installed smoke and its
+terminal. Release [v0.1.47](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.47),
+ID `396991797`, published the same three assets at 2026-09-26T00:04:57Z and was
+independently observed as latest. No product rebuild or previous-asset rewrite occurred.
+
+The same continuation selects development v0.1.48 for immutable deployment builds.
+Its [release notes](releases/v0.1.48.md) describe exact reuse, static admission,
+unchanged running processes/data roots and private descriptor publication. An
+initial local implementation is withheld after an independently reproduced
+permissions defect; the corrected source requires renewed source acceptance before
+mainline delivery and candidate dispatch. Public v0.1.47 is complete and unchanged.
 
 ## Content and compatibility
 

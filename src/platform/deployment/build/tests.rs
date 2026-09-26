@@ -1,6 +1,55 @@
 use super::*;
 use std::sync::{Arc, Barrier};
 
+#[cfg(unix)]
+#[test]
+fn private_publication_checks_access_without_changing_existing_files() {
+    use std::os::unix::fs::PermissionsExt;
+    let temporary = tempfile::tempdir().unwrap();
+    let path = temporary.path().join("private.json");
+    output::inspect_private_exact(&path, b"private", 7).unwrap();
+    let created = output::publish_private_exact(&path, b"private", 7).unwrap();
+    assert_eq!(created.visibility, "created");
+    assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o077, 0);
+    assert_eq!(
+        output::publish_private_exact(&path, b"private", 7)
+            .unwrap()
+            .visibility,
+        "reused-exact"
+    );
+    for mode in [0o640, 0o604, 0o620, 0o601] {
+        fs::set_permissions(&path, fs::Permissions::from_mode(mode)).unwrap();
+        assert_eq!(
+            output::inspect_private_exact(&path, b"private", 7)
+                .unwrap_err()
+                .code,
+            "deployment_build_permissions"
+        );
+        assert_eq!(
+            output::publish_private_exact(&path, b"private", 7)
+                .unwrap_err()
+                .code,
+            "deployment_build_permissions"
+        );
+        assert_eq!(
+            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            mode
+        );
+        assert_eq!(fs::read(&path).unwrap(), b"private");
+        output::inspect_exact(&path, b"private", 7).unwrap();
+    }
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+    output::publish_private_exact(&path, b"private", 7).unwrap();
+    assert_eq!(
+        output::publish_private_exact(&path, b"changed", 7)
+            .unwrap_err()
+            .code,
+        "deployment_build_conflict"
+    );
+    assert_eq!(fs::read(&path).unwrap(), b"private");
+    assert_eq!(fs::read_dir(temporary.path()).unwrap().count(), 1);
+}
+
 #[test]
 fn output_and_data_roots_are_separate_by_path_components() {
     let root = Path::new("/owned/data");
@@ -135,6 +184,8 @@ fn nonregular_and_symlink_outputs_are_not_reused_or_followed() {
         assert!(output::read_regular(path, 4).is_err());
         assert!(output::inspect_exact(path, b"same", 4).is_err());
         assert!(output::publish_exact(path, b"same", 4).is_err());
+        assert!(output::inspect_private_exact(path, b"same", 4).is_err());
+        assert!(output::publish_private_exact(path, b"same", 4).is_err());
     }
     assert_eq!(fs::read(&target).unwrap(), b"same");
     assert_eq!(fs::read_dir(temporary.path()).unwrap().count(), 5);

@@ -871,6 +871,14 @@ its template so relative data, local-object and durable-queue roots retain their
 Reject output paths inside those declared local roots. Existing ordinary output parents are
 required; build creates no directories and never rewrites the operator template.
 
+New deployment descriptors use an owner-only POSIX stage (`0600`, further restricted by the
+process umask) before any bytes are written. Reusing a descriptor also requires that its effective
+owner is the current user and that no group/other permission bits are set. Reject broader or
+foreign-owned existing descriptors before publishing the artifact, without chmod, chown or
+rewriting them. Deliberate access by another runtime account requires separate operator action;
+build never broadens access automatically. Artifact-only publication retains its existing mode
+policy. These POSIX permissions are not protection against the same user or a privileged process.
+
 Preflight both destinations before publishing either. An existing ordinary file is reusable only
 after bounded exact-byte comparison; a matching digest-shaped filename alone is insufficient.
 Different bytes, directories, links and invalid parents reject without overwrite. Publish the
@@ -883,8 +891,8 @@ this is not a filesystem immutability or hostile-writer sandbox claim.
 
 The existing `output` record describes the artifact. A `deployment` record reports the new
 absolute `path`, observed `source`, bytes, visibility, durability and stage-cleanup, with
-`admission=static-only`, `selection=unchanged` and `application-data=untouched`. Newly published
-files report `visibility=created`; exact reuse reports `visibility=reused-exact` and
+`admission=static-only`, `selection=unchanged`, `application-data=untouched` and `access=owner-only`.
+Newly published files report `visibility=created`; exact reuse reports `visibility=reused-exact` and
 `stage-cleanup=none-retained`. Durability is observed independently for each file. A failed
 owned-stage cleanup is not hidden behind successful reuse. Output delivery failure does not undo
 visible files; rerunning unchanged input can reuse the complete pair.

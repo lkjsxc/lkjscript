@@ -709,6 +709,7 @@ pub fn execute_build(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
                 ("admission", "static-only".to_owned()),
                 ("selection", "unchanged".to_owned()),
                 ("application-data", "untouched".to_owned()),
+                ("access", "owner-only".to_owned()),
             ],
         )?;
     }

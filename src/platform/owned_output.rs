@@ -21,6 +21,27 @@ pub fn publish_create_new(
     maximum_bytes: usize,
     label: &str,
 ) -> Result<OwnedOutputReceipt, Diagnostic> {
+    publish_with_access(path, bytes, maximum_bytes, label, false)
+}
+
+/// Create the private stage with owner-only access before writing any bytes.
+/// Never broaden, chmod or take ownership of an existing destination.
+pub(crate) fn publish_private_create_new(
+    path: &Path,
+    bytes: &[u8],
+    maximum_bytes: usize,
+    label: &str,
+) -> Result<OwnedOutputReceipt, Diagnostic> {
+    publish_with_access(path, bytes, maximum_bytes, label, true)
+}
+
+fn publish_with_access(
+    path: &Path,
+    bytes: &[u8],
+    maximum_bytes: usize,
+    label: &str,
+    owner_only: bool,
+) -> Result<OwnedOutputReceipt, Diagnostic> {
     if bytes.len() > maximum_bytes {
         return Err(output_error(
             DiagnosticClass::Resource,
@@ -44,9 +65,24 @@ pub fn publish_create_new(
     ));
     let mut stage_created = false;
     let staged = (|| {
-        let mut file = OpenOptions::new()
-            .create_new(true)
-            .write(true)
+        let mut options = OpenOptions::new();
+        options.create_new(true).write(true);
+        if owner_only {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            #[cfg(not(unix))]
+            {
+                return Err(output_error(
+                    DiagnosticClass::Source,
+                    "output_private_access",
+                    "owner-only output publication requires POSIX file permissions",
+                ));
+            }
+        }
+        let mut file = options
             .open(&stage)
             .map_err(|error| io_error("output_stage_create", &stage, error))?;
         stage_created = true;

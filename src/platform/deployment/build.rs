@@ -108,18 +108,18 @@ impl BuildTemplate {
             &prepared.artifact_bytes,
             maximum_artifact_bytes,
         )?;
-        output::inspect_exact(&deployment_path, &bytes, MAXIMUM_DEPLOYMENT_BYTES)?;
+        output::inspect_private_exact(&deployment_path, &bytes, MAXIMUM_DEPLOYMENT_BYTES)?;
         let artifact = output::publish_exact(
             &artifact_path,
             &prepared.artifact_bytes,
             maximum_artifact_bytes,
         )?;
-        let deployment = output::publish_exact(
+        let deployment = output::publish_private_exact(
             &deployment_path, &bytes, MAXIMUM_DEPLOYMENT_BYTES,
         ).map_err(|mut error| {
             error.notes.push(format!(
-                "complete build artifact retained at '{}'; original deployment and running processes are unchanged",
-                artifact.path.display()
+                "complete build artifact retained at '{}' (visibility={}, durability={}, stage-cleanup={}); original deployment and running processes are unchanged",
+                artifact.path.display(), artifact.visibility, artifact.durability, artifact.stage_cleanup
             ));
             error
         })?;

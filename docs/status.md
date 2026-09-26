@@ -7,16 +7,17 @@ release state and limits. [Specifications](spec/) own semantics,
 
 ## Public binary release
 
-**Available:** immutable [v0.1.46](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.46),
-release 396948669, published on 2026-09-26 at 06:54:08 Asia/Tokyo and independently
+**Available:** immutable [v0.1.47](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.47),
+release 396991797, published on 2026-09-26 at 09:04:57 Asia/Tokyo and independently
 observed as latest. Original producer
-[36097087012/1](https://github.com/lkjsxc/lkjscript/actions/runs/36097087012) accepted exact
-product source `b25bde2d92c1882470fc4444c94319a68fe9a10c`. Promotion
-[36193525561/1](https://github.com/lkjsxc/lkjscript/actions/runs/36193525561), controlled
-by `11e54ce170050c7b6022cafc77cc84f9d34336aa`, completed authenticated selection,
+[36198402289/1](https://github.com/lkjsxc/lkjscript/actions/runs/36198402289) accepted exact
+product source `18e04bc0e6611ff0b79a49da1e5ce5da3632da35`. Promotion
+[36203046819/1](https://github.com/lkjsxc/lkjscript/actions/runs/36203046819), controlled
+by `3a34c305119ca7c1dc34ee7326ebe5b960d2a0b2`, completed authenticated selection,
 immutable publication, anonymous installed verification and its terminal. Its three
-original assets are unchanged; the release does not include the later web starter.
-The [continuation](campaigns/202609251450.md) records the independent state readback.
+original assets are unchanged. This release includes the editable native web starter;
+immutable deployment builds below are a separate development increment.
+The [continuation](campaigns/202609260831.md) records exact publication lineage.
 
 The [v0.1.44 record](campaigns/202609222330.md#accepted-v0144-and-the-requested-release-stopping-point)
 and [v0.1.45 promotion history](campaigns/202609250903.md) retain their actual earlier
@@ -34,15 +35,19 @@ processes nor migrates application data. Bundles require a compatible executable
 sibling descriptor from current accepted meaning and one strict operator template.
 Only the artifact value changes. Original files and running processes remain
 unchanged, relative local data roots retain their meaning, and matching files are
-reused only after exact-byte checks. Static target/grant admission opens no adapters,
+reused only after exact-byte checks. New descriptors are owner-only from their first
+staged byte; broader existing permissions reject without chmod or overwrite.
+Static target/grant admission opens no adapters,
 secrets or listeners; output paths inside declared local data/object/queue roots
 reject. Ordinary `build --output` still requires an absent file.
 
 The initial focused working-tree proof passes eight file-boundary unit tests and
 four copied-binary workflows: concurrent publication/reuse and conflicts, durable
 state across native edits, invalid static authority, and independent old/new web
-processes plus detached restart. Source-wide acceptance and public distribution
-are separate pending boundaries in the [campaign](campaigns/202609260831.md).
+processes plus detached restart. An independent permissions counterexample subsequently withheld that prototype;
+the private-publication correction has additional regressions and requires renewed
+source-wide acceptance before delivery. Public distribution is a separate boundary
+in the [campaign](campaigns/202609260831.md).
 See the [editing guide](guides/native-web.md) and [build contract](spec/semantic-cli.md#build).
 
 ## Current authority and maintained consumers

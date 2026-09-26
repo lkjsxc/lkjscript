@@ -95,6 +95,10 @@ Copy that returned deployment path into the next command:
 lkjscript serve --deployment DEPLOYMENT_PATH
 ```
 
+New deployment descriptors are owner-only. Sharing one with another runtime account
+requires an explicit access decision; build never broadens its permissions or changes
+an existing file's owner or mode.
+
 Building never replaces the original descriptor, deletes a working bundle or changes
 a running server. An unchanged rebuild verifies and reuses the same exact pair;
 changed code or configuration produces the required new immutable outputs. Stop an

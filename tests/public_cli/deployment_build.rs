@@ -9,11 +9,100 @@ fn snapshot(public: &Native, template: &Path) -> (PathBuf, PathBuf, Vec<CompactR
     assert_eq!(compact_field(deployment, "admission"), "static-only");
     assert_eq!(compact_field(deployment, "selection"), "unchanged");
     assert_eq!(compact_field(deployment, "application-data"), "untouched");
+    assert_eq!(compact_field(deployment, "access"), "owner-only");
     (
         artifact,
         PathBuf::from(compact_field(deployment, "path")),
         records,
     )
+}
+
+#[cfg(unix)]
+#[test]
+fn deployment_snapshots_are_private_even_under_open_umask_and_reject_broad_reuse() {
+    use std::os::unix::fs::PermissionsExt;
+    let public = Native::template("command");
+    let (template, original) = fixture(&public, "command.deployment.json");
+    std::fs::set_permissions(&template, std::fs::Permissions::from_mode(0o600)).unwrap();
+    // Set umask only in a child test driver; never mutate this parallel test process.
+    let open_umask = |arguments: &[&str]| {
+        let output = std::process::Command::new("/bin/sh")
+            .args(["-c", "umask 000; exec \"$@\"", "build-permissions"])
+            .arg(&public.executable)
+            .args(["--project", path(&public.project)])
+            .args(arguments)
+            .current_dir(public.root.path())
+            .env_clear()
+            .env("PATH", "")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        output
+    };
+    let first = open_umask(&["build", "--deployment", path(&template)]);
+    assert!(String::from_utf8_lossy(&first.stdout).contains(" access=owner-only"));
+    let paths = std::fs::read_dir(public.root.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("build-")
+                && path
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .ends_with(".deployment.json")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(paths.len(), 1);
+    let deployment = &paths[0];
+    let mode = |path: &Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode(deployment), 0o600);
+    let contents = std::fs::read(deployment).unwrap();
+    let (artifact, selected, reused) = snapshot(&public, &template);
+    assert_eq!(&selected, deployment);
+    assert_eq!(
+        compact_field(compact_record(&reused, "deployment"), "visibility"),
+        "reused-exact"
+    );
+    std::fs::remove_file(&artifact).unwrap();
+    for exposed in [0o640, 0o604, 0o620, 0o601] {
+        std::fs::set_permissions(deployment, std::fs::Permissions::from_mode(exposed)).unwrap();
+        let rejected = public.cli(&["build", "--deployment", path(&template)], false);
+        assert_eq!(
+            compact_field(compact_record(&rejected, "diagnostic"), "code"),
+            "deployment_build_permissions"
+        );
+        assert!(
+            !artifact.exists(),
+            "privacy rejection must precede artifact publication"
+        );
+        assert_eq!(
+            mode(deployment),
+            exposed,
+            "build must not chmod an existing file"
+        );
+        assert_eq!(std::fs::read(deployment).unwrap(), contents);
+    }
+    std::fs::set_permissions(deployment, std::fs::Permissions::from_mode(0o600)).unwrap();
+    assert_eq!(snapshot(&public, &template).1, *deployment);
+    assert_eq!(mode(deployment), 0o600);
+    let raw = public.root.path().join("ordinary.lkja");
+    open_umask(&["build", "--output", path(&raw)]);
+    assert_eq!(
+        mode(&raw),
+        0o666,
+        "ordinary output policy remains unchanged"
+    );
+    assert_eq!(mode(&template), 0o600);
+    assert_eq!(std::fs::read(&template).unwrap(), original);
 }
 
 fn value(path: &Path) -> Value {
