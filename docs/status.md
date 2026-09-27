@@ -31,10 +31,13 @@ Implementation `3d1cf3d1` passed all 26 fresh full-profile gates with stable inp
 and zero reuse. The [source record](campaigns/202609270517.md) retains that exact
 identity and the unchanged public-v0.1.50 reader comparison. One non-publishing
 [candidate, 36273488566/1](https://github.com/lkjsxc/lkjscript/actions/runs/36273488566),
-was dispatched from main `55dc4722`. Its acceptance and publication are separate
-from source acceptance. **These selectors are not in public v0.1.50.**
-See the [v0.1.51 notes](releases/v0.1.51.md) and
-[current continuation](campaigns/202609270625.md) for actual delivery state.
+was dispatched from main `55dc4722` and failed: 19 source gates passed, but the
+all-target/all-feature workspace test gate exceeded its unchanged one-hour limit.
+No finalized distributable was built or accepted. The
+[delivery continuation](campaigns/202609271910.md) measures checked test-profile
+optimization without reducing the test inventory, debug checks or target acceptance.
+Its source and hosted outcomes remain distinct. **These selectors are not in public v0.1.50.**
+See the [v0.1.51 notes](releases/v0.1.51.md) and the continuation for delivery state.
 
 ## Current authority and maintained consumers
 

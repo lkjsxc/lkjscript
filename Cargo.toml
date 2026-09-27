@@ -47,6 +47,13 @@ unwrap_used = "deny"
 [lints.rust]
 unsafe_code = "forbid"
 
+# Whole-program source tests keep debug validation without interpreter-scale
+# unoptimized overhead. The ordinary dev and distribution profiles stay separate.
+[profile.test]
+opt-level = 1
+debug-assertions = true
+overflow-checks = true
+
 [profile.release]
 codegen-units = 1
 lto = true
