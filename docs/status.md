@@ -1,15 +1,15 @@
 # Status
 
-Current snapshot: 2026-09-27 (Asia/Tokyo). This page describes current availability
+Current snapshot: 2026-09-28 (Asia/Tokyo). This page describes current availability
 and boundaries; historical measurements and failed attempts stay with their
 [campaign owners](campaigns/) and [release records](release.md).
 
 ## Public binary release
 
-**Public/latest is immutable [v0.1.50](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.50).**
-It includes the native web/editor workflows, identity-preserving scalar edits,
+**Public/latest is immutable [v0.1.51](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.51).**
+It adds named canonical drafts and retains native web/editor workflows, identity-preserving scalar edits,
 immutable deployment builds and corrected joined resident lifecycle. The
-[delivery record](campaigns/202609270517.md) identifies the original producer,
+[delivery record](campaigns/202609280123.md) identifies the original producer,
 unchanged assets, promotion and anonymous exact/latest verification. The withheld
 v0.1.49 candidate was never a public release; its tag and original failures remain
 unchanged.
@@ -18,7 +18,7 @@ Inspect the actual installed executable with `lkjscript capabilities`. Installin
 a newer runtime does not silently replace accepted application definitions,
 exact dependency selections, running processes or operational data.
 
-## Named canonical drafts in development v0.1.51
+## Named canonical drafts in public v0.1.51
 
 Main adds `change draft --module NAME`, `--declaration MODULE::NAME` and
 `--target NAME`, alongside the existing `--owner ID`. A known declaration can be
@@ -45,10 +45,19 @@ The [cold-repository correction](campaigns/202609272130.md) separates checked re
 from unchanged steady-state observation and makes the cold fixture deterministic.
 Integrated correction `42dd2035` passes all 26 fresh gates with stable inputs and
 zero reuse, including the previously failing lifecycle and 1,195 top-level workspace
-tests. One new [candidate, 36321176400/1](https://github.com/lkjsxc/lkjscript/actions/runs/36321176400),
-uses that exact source and is in progress at this checkpoint. Final candidate admission
-and publication have not been observed. **These selectors are not in public v0.1.50.**
+tests. The original [candidate, 36321176400/1](https://github.com/lkjsxc/lkjscript/actions/runs/36321176400),
+accepted that exact source. Promotion `36333238917/1` passed selection, immutable
+publication, anonymous exact/latest installed smoke and its terminal. Release
+`397724184` became public at 2026-09-27T16:33:14Z (September 28, 01:33 JST), with
+all three original assets unchanged. **These selectors are now in public v0.1.51.**
 See the [v0.1.51 notes](releases/v0.1.51.md) and the two continuations for retained evidence.
+
+A recent-history prototype was developed but is **not integrated or released**.
+Its four internal tests passed, while the copied-public test group has two passes
+and one failed discovery invocation. A corrective edit was blocked by the tool
+safety check; the unaccepted work is preserved separately, not substituted for main.
+The [current campaign](campaigns/202609280123.md#unintegrated-prototype--not-main-or-a-release)
+records that exact boundary. Public and main remain v0.1.51 without `inspect history`.
 
 ## Current authority and maintained consumers
 

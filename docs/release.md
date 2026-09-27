@@ -237,7 +237,17 @@ the existing release-only selection. Promotion
 `immutable_published_and_public_verified`, including anonymous installed smoke.
 Immutable release 397383599 became public at 2026-09-26T20:23:56Z, and exact/latest
 reads agree on v0.1.50/source 866e0ed0. Do not resume or retag withheld v0.1.49.
-New v0.1.51 authoring source is separate from this finished producer.
+The [next delivery](campaigns/202609280123.md) completes v0.1.51 without changing
+that finished v0.1.50 producer. Original producer `36321176400/1` accepted source
+`42dd20353158895183793ac67d429925d6695836`; annotated tag object
+`083a486e237291245bc8b6e64f03ef2e806adbd6` binds that exact product and reviewed notes.
+Promotion `36333238917/1`, controller `c7dbbfafd25f8ca3b1e58bc89f0a0ec1d7828c43`,
+completed selection, immutable publication, anonymous exact/latest smoke and its
+terminal. Immutable release `397724184` became public at 2026-09-27T16:33:14Z,
+with the original archive, checksum and bootstrap bytes unchanged. The earlier
+failed v0.1.51 producers and withheld v0.1.49 remain recorded and unchanged.
+The proposed v0.1.52 history prototype remains unintegrated and is not part of this
+finished producer. Main and public product versions remain v0.1.51.
 
 ## Content and compatibility
 
