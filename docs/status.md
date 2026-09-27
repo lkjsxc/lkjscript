@@ -29,15 +29,23 @@ binds exact owner and base identities. Names are not mutation authority.
 
 Implementation `3d1cf3d1` passed all 26 fresh full-profile gates with stable inputs
 and zero reuse. The [source record](campaigns/202609270517.md) retains that exact
-identity and the unchanged public-v0.1.50 reader comparison. One non-publishing
-[candidate, 36273488566/1](https://github.com/lkjsxc/lkjscript/actions/runs/36273488566),
-was dispatched from main `55dc4722` and failed: 19 source gates passed, but the
-all-target/all-feature workspace test gate exceeded its unchanged one-hour limit.
-No finalized distributable was built or accepted. The
-[delivery continuation](campaigns/202609271910.md) measures checked test-profile
-optimization without reducing the test inventory, debug checks or target acceptance.
-Its source and hosted outcomes remain distinct. **These selectors are not in public v0.1.50.**
-See the [v0.1.51 notes](releases/v0.1.51.md) and the continuation for delivery state.
+identity and the unchanged public-v0.1.50 reader comparison. The first candidate
+`36273488566/1` subsequently failed its workspace-test deadline before building assets.
+
+The [delivery continuation](campaigns/202609271910.md) adds checked test-profile
+optimization without changing the test inventory, debug checks, deadlines or release
+profile. Integrated source `aa24c759` passed all 26 fresh gates with stable inputs and
+zero reuse. Its matched warm workspace runs both passed the same 1193 top-level Rust
+tests; elapsed time fell from 857.594 to 307.898 seconds on the shared local host.
+That is not a cold-build, hosted-runner or distributed-runtime performance claim.
+The replacement [candidate, 36315061925/1](https://github.com/lkjsxc/lkjscript/actions/runs/36315061925)
+failed a different source boundary: the copied lifecycle froze its inventory before
+first-open recovery of the disposable lock/catalog. It built no finalized assets.
+The [cold-repository correction](campaigns/202609272130.md) separates checked recovery
+from unchanged steady-state observation and makes the cold fixture deterministic.
+Focused tests are in progress; final source/candidate admission and publication
+must be recorded separately. **These selectors are not in public v0.1.50.** See the
+[v0.1.51 notes](releases/v0.1.51.md) and the two continuations for retained evidence.
 
 ## Current authority and maintained consumers
 

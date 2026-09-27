@@ -530,6 +530,16 @@ The environment must not supply Cargo, a checkout-relative asset, network depend
 template, or predecessor repository. The recipe must contain an exact standard dependency and
 graph-owned test.
 
+The maintained-project observation must start from an explicitly cold copy, omitting only the
+root's disposable `LOCK` and `catalog` rather than inheriting the developer checkout's cache state.
+First open may reconstruct those operational files, but must preserve every preexisting file's
+bytes, including `HEAD`, packs, transport selections and application-owned files. New files at this
+boundary are restricted to the empty regular lock, current catalog manifest and correctly named
+catalog segments. After that checked recovery, the complete regular-file inventory, including the
+new operational files, must remain unchanged through status, inspection, context pagination and
+rejected queries. Separate copied-command coverage starts status, query and inspection directly
+from cold state. Moving the steady-state snapshot must not waive the first-open authority check.
+
 Verification must prove:
 
 - check, build, run, query, and every failure path leave semantic `HEAD` unchanged;

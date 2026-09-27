@@ -14,6 +14,8 @@ mod native_guides;
 mod native_policy;
 #[path = "public_cli/parameter_type.rs"]
 mod parameter_type;
+#[path = "public_cli/repository_recovery.rs"]
+mod repository_recovery;
 
 use lkjscript::platform::contract::MAXIMUM_CLI_RESPONSE_BYTES;
 use lkjscript::platform::control::{CompactRecord, decode_logical_change_plan, parse_records};
@@ -616,6 +618,10 @@ fn content_inventory_digest(inventory: &BTreeMap<String, [u8; 32]>) -> String {
 }
 
 fn copy_regular_tree(source: &Path, destination: &Path) {
+    copy_regular_tree_excluding(source, destination, &[]);
+}
+
+fn copy_regular_tree_excluding(source: &Path, destination: &Path, excluded: &[&str]) {
     let source_metadata = std::fs::symlink_metadata(source).expect("inspect copied tree source");
     assert!(
         source_metadata.is_dir() && !source_metadata.file_type().is_symlink(),
@@ -628,6 +634,9 @@ fn copy_regular_tree(source: &Path, destination: &Path) {
         .expect("read copied tree entries");
     entries.sort_by_key(|entry| entry.file_name());
     for entry in entries {
+        if excluded.iter().any(|name| entry.file_name() == *name) {
+            continue;
+        }
         let source_path = entry.path();
         let destination_path = destination.join(entry.file_name());
         let metadata = std::fs::symlink_metadata(&source_path).expect("inspect copied tree entry");
@@ -3305,9 +3314,10 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
 
     let maintained_source = Path::new(env!("CARGO_MANIFEST_DIR")).join(APPLICATION);
     let maintained = temporary.path().join("isolated-lkjournal");
-    copy_regular_tree(&maintained_source, &maintained);
+    repository_recovery::copy_cold_repository(&maintained_source, &maintained);
+    let maintained_revision =
+        repository_recovery::first_status(&copied_binary, temporary.path(), &maintained);
     let maintained_before = content_inventory(&maintained);
-    let maintained_revision = current_revision_at(&copied_binary, temporary.path(), &maintained);
     let service = compact_success_at(
         &copied_binary,
         temporary.path(),
@@ -3424,11 +3434,11 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
             Some(expected_code)
         );
     }
-    assert_eq!(content_inventory(&maintained), maintained_before);
     assert_eq!(
         current_revision_at(&copied_binary, temporary.path(), &maintained),
         maintained_revision
     );
+    assert_eq!(content_inventory(&maintained), maintained_before);
 }
 
 #[test]
