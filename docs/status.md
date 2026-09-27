@@ -43,9 +43,12 @@ failed a different source boundary: the copied lifecycle froze its inventory bef
 first-open recovery of the disposable lock/catalog. It built no finalized assets.
 The [cold-repository correction](campaigns/202609272130.md) separates checked recovery
 from unchanged steady-state observation and makes the cold fixture deterministic.
-Focused tests are in progress; final source/candidate admission and publication
-must be recorded separately. **These selectors are not in public v0.1.50.** See the
-[v0.1.51 notes](releases/v0.1.51.md) and the two continuations for retained evidence.
+Integrated correction `42dd2035` passes all 26 fresh gates with stable inputs and
+zero reuse, including the previously failing lifecycle and 1,195 top-level workspace
+tests. One new [candidate, 36321176400/1](https://github.com/lkjsxc/lkjscript/actions/runs/36321176400),
+uses that exact source and is in progress at this checkpoint. Final candidate admission
+and publication have not been observed. **These selectors are not in public v0.1.50.**
+See the [v0.1.51 notes](releases/v0.1.51.md) and the two continuations for retained evidence.
 
 ## Current authority and maintained consumers
 
