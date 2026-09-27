@@ -1,5 +1,9 @@
 //! Exact Graph 10 repository reads and one locked, atomic accepted-HEAD publication point.
 
+#[cfg(test)]
+#[path = "recovery_lock_tests.rs"]
+mod recovery_lock_tests;
+
 use super::contract::{HEAD_MAGIC, MAXIMUM_HEAD_BYTES, REVISION_CONTRACT_VERSION};
 use super::idempotency::{
     IdempotencyBinding, advance_idempotency_history, empty_idempotency_history,
@@ -940,9 +944,10 @@ fn recover_validated_store(
     Ok(store)
 }
 
-/// Opens and validates one catalog snapshot while the caller holds the shared repository lock.
-/// A failed healthy observation is rechecked and, if still failing, rebuilt exactly once under
-/// the exclusive lock before atomically downgrading to a shared observation.
+/// Opens and validates a catalog snapshot under the caller's shared repository lock.
+/// A failed observation is rechecked and, if still failing, rebuilt exactly once under
+/// exclusive ownership. Keep that stronger lock through the caller's HEAD observation:
+/// flock conversion is not atomic and could otherwise pair this store with a newer HEAD.
 fn open_store_shared(
     root_directory: &File,
     root: &Path,
@@ -968,8 +973,8 @@ fn open_store_shared(
             })?
         }
     };
-    FileExt::lock_shared(lock)
-        .map_err(|error| io_diagnostic("publication_catalog_recovery_downgrade", root, error))?;
+    // The caller's existing lock handle releases ownership on completion or error.
+    // Healthy opens returned above with their original shared lock unchanged.
     Ok(store)
 }
 

@@ -57,7 +57,18 @@ Its four internal tests passed, while the copied-public test group has two passe
 and one failed discovery invocation. A corrective edit was blocked by the tool
 safety check; the unaccepted work is preserved separately, not substituted for main.
 The [current campaign](campaigns/202609280123.md#unintegrated-prototype--not-main-or-a-release)
-records that exact boundary. Public and main remain v0.1.51 without `inspect history`.
+records that exact boundary. Neither public v0.1.51 nor the selected successor adds
+`inspect history`.
+
+## Development v0.1.52
+
+The selected successor combines [typed form selection](guides/native-forms.md)
+with coherent catalog/HEAD observation after recovery. Healthy reads remain shared;
+recovery retains exclusive ownership until the caller finishes its observation,
+rather than relying on atomic lock conversion. No storage schema changes or automatic
+application upgrades are introduced. The [v0.1.52 notes](releases/v0.1.52.md) and
+[recovery record](campaigns/202609280350.md) distinguish regression proof, complete
+source acceptance and delivery. Selection alone is not public availability.
 
 ## Current authority and maintained consumers
 

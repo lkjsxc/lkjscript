@@ -104,6 +104,13 @@ atomically publishes only contract 2, then retries current-closure validation. P
 object corruption rejects with `HEAD` unchanged. Contract 1 has no healthy reader or writer; its
 bytes are merely one disposable recovery trigger.
 
+A healthy read retains its shared publication lock through the catalog/HEAD observation.
+If recovery required exclusive ownership, that stronger lock remains owned until the caller
+finishes the observation and releases its handle, including on errors. It is not downgraded
+between capturing the catalog and reading HEAD: lock-mode conversion is not an atomic
+observation boundary. The exceptional recovery path can temporarily exclude other readers;
+healthy shared-read concurrency, the one-reconstruction bound and all object checks remain.
+
 Current decoder and resource bounds are 8,000,000 entries, 100,000 packs, 32 segments and levels
 0–31, 125,000 blocks, 64 entries and 128 filter bytes per block, 64 KiB per manifest, 64 MiB of
 metadata and 1 GiB per segment, and 128 classified derived leftovers. Counts, lengths, offsets,

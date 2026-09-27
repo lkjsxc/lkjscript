@@ -247,7 +247,15 @@ terminal. Immutable release `397724184` became public at 2026-09-27T16:33:14Z,
 with the original archive, checksum and bootstrap bytes unchanged. The earlier
 failed v0.1.51 producers and withheld v0.1.49 remain recorded and unchanged.
 The proposed v0.1.52 history prototype remains unintegrated and is not part of this
-finished producer. Main and public product versions remain v0.1.51.
+finished producer. At that completion, main and the public product both named v0.1.51.
+
+The [coherent-recovery continuation](campaigns/202609280350.md) selects development
+v0.1.52 after observing its tag and release unoccupied and the v0.1.51 promotion
+complete. It combines ordinary typed form selection and maintained editor adoption
+with a correction to recovery-time catalog/HEAD observation. Its
+[notes](releases/v0.1.52.md) preserve the unchanged formats and explicit-upgrade
+boundary. Source, finalized-candidate and public acceptance remain separate; no
+history command or replacement of the immutable v0.1.51 assets is selected.
 
 ## Content and compatibility
 
