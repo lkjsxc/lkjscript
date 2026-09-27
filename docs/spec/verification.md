@@ -889,6 +889,14 @@ than treating it as an identical build. Ordinary source acceptance uses the chec
 The [delivery continuation](../campaigns/202609271910.md) retains the motivating timeout, matched
 workload results, interrupted attempts and the distinct hosted acceptance boundary.
 
+Persistent workspaces need build-cache housekeeping independently of source verification. Global
+`df` availability does not establish a user or project quota's remaining allocation. After confirming
+that no build, test or deployment uses the selected debug outputs, Cargo can reclaim regenerable
+workspace-package outputs with `cargo clean --profile dev --package lkjscript --package lkjscript-dev`.
+Do not use that operation on a live build. Preserve deployed executables, release outputs, application
+data, unrelated worktrees and retained acceptance evidence. A quota failure that prevents a final
+receipt remains incomplete; cache cleanup does not turn it into an accepted result.
+
 The maintained `docs/guides/examples/` directory contains executable native programs,
 embedded creation recipes and tested deployment inputs, not documentation-only text.
 Any changed path within that directory selects the complete `full` profile, including
