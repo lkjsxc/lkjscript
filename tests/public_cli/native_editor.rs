@@ -152,6 +152,12 @@ fn exercise_editor(public: Native, descriptor: Value) {
     for body in [
         "base=0&text=a&text=b&intent=save",
         "base=0&base=1&intent=save",
+        "base=0&%62ase=0&intent=save",
+        "text=a&te%78t=a&intent=save",
+        "base=0&intent=save&%69ntent=save",
+        "base=0&Text=a&intent=save",
+        "base=0&%2574ext=a&intent=save",
+        "base=0&unknown=a&intent=save",
         "base=0&text=a&intent=save&unknown=x",
         "base=0&text=a",
         "base=0&text=a&intent=other",

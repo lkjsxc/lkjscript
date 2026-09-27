@@ -78,7 +78,7 @@ fn durable_starter_has_local_editable_modules_and_no_initialized_data() {
     .unwrap();
     assert_eq!(created.dependencies, 1);
     assert_eq!(created.targets, 1);
-    assert_eq!(created.tests, 105); // 19 UI + 48 forms + 38 editor.
+    assert_eq!(created.tests, 121); // 19 UI + 64 forms + 38 editor.
     let snapshot = GraphRepository::open(&destination)
         .unwrap()
         .view_current()

@@ -19,8 +19,10 @@ The [literal library](examples/form-codec.lkjc) exports ordinary nominal data:
 field { name: Text, value: Text }
 result = valid(List<field>) | invalid(Text)
 encoding = valid(Bytes) | invalid(Text)
+selection = missing | present(Text) | repeated
 decode(body: Bytes, maximum-bytes: I64, maximum-fields: I64) -> result
 encode(fields: List<field>, maximum-bytes: I64, maximum-fields: I64) -> encoding
+lookup(fields: List<field>, name: Text) -> selection
 ```
 
 Its state machine, percent decoding/encoding, limits and error policy are ordinary
@@ -112,6 +114,57 @@ Operational allocation/cancellation failures remain failures; they are not conve
 into malformed-input results. The general `bytes-from-list` traps on any I64 outside
 0 through 255. `bytes-to-text-result` distinguishes valid empty text from invalid
 encoding; the old trapping `bytes-to-text` remains unchanged.
+
+## Select one field without silently choosing a duplicate
+
+`lookup` operates on decoded `field` values, not raw form bytes or HTTP headers.
+It returns `missing` when the exact name is absent, `present(value)` when it occurs
+once, and `repeated` when it occurs at least twice, even with identical values.
+An explicitly submitted empty value is `present("")`, never `missing`.
+
+```text
+(match (call forms::lookup (local fields) (text "title"))
+  (arm forms::selection::missing (text "Title was not supplied"))
+  (arm forms::selection::present (payload title Text) (local title))
+  (arm forms::selection::repeated (text "Supply exactly one title")))
+```
+
+Names compare exactly and case-sensitively. Lookup performs no percent decoding,
+Unicode normalization, BOM removal or value conversion. After successful decoding,
+`a=one&%61=two` has a repeated `a`; `%2561=one` has the literal name `%61`, not `a`.
+Unrelated repeated names do not invalidate the requested name. The original ordered
+list remains available to applications that intentionally accept multiple values.
+
+Finish bounded decoding before selecting fields. A malformed later field must not
+be hidden by an earlier match or repetition. `lookup` also accepts caller-created
+field lists; its scan stops at the second matching name or the end. Ordinary
+execution, allocation and cancellation policies still apply, and it does not impose
+an unrelated HTTP body limit on an already constructed list.
+
+The durable editor now uses this native operation instead of converting form fields
+to byte-valued HTTP headers and back. It still requires exactly one `base`, `text`
+and `intent`, rejects unknown fields, validates its domain values and performs the
+same conditional transaction. Actual HTTP-header admission remains a separate owner.
+This operation supplies neither authorization nor an automatic action schema.
+
+The consumer exposes `lookup(List<Field>, Text)` and
+`select-batch(List<SelectionInput>)`, where each `SelectionInput` has `body: Bytes`
+and `name: Text`. Its application-owned report uses `state` and `value`; malformed
+bodies have state `invalid` with the decoding error, distinct from `missing`.
+The public library itself returns the typed `selection` variant above.
+
+For example, run the consumer with these direct argument records:
+
+```sh
+lkjscript --project consumer run lookup \
+  --arguments '[[{"name":"title","value":""}],"title"]'
+```
+
+This returns `{"state":"present","value":""}`. No Bytes adaptation, network grant
+or secret is needed. Existing exact suppliers do not automatically acquire `lookup`:
+review and stage the new ordinary library before accepting consumers that use it.
+The [selection continuation](../campaigns/202609280200.md) owns source acceptance and
+published-runtime interoperability separately from the earlier codec evidence.
 
 ## Author and import through the public product
 
@@ -253,8 +306,8 @@ decoder observations remain at the
 [original campaign](../campaigns/202609250926.md); they are not reattributed to a later
 library revision, nor are they throughput, accessibility or live-browser claims.
 
-The encoding extension adds 18 literal native tests. Its current library, consumer
-and receiver closures pass 124, 125 and 129 graph tests respectively, with pure
+The encoding extension added 18 literal native tests. At that revision, its library,
+consumer and receiver closures passed 124, 125 and 129 graph tests respectively, with pure
 reference/VM agreement. The [maintained encoding workflows](../../tests/public_cli/native_form_encoding.rs)
 compare 674 independent expected cases through both project and source-free command
 paths, then check 205 detached encode/decode roundtrips. Exact bytes are checked
@@ -271,8 +324,8 @@ original library producer nor an application authoring graph is present. The enc
 and receiver are ordinary native programs; the test's independent Rust client
 transports their bytes. This
 is not a claim of a native outbound HTTP client or browser end-to-end coverage.
-The unchanged durable editor is also checked against the newly authored exact
-supplier. [Current evidence](../campaigns/202609261045.md) retains the actual runtime,
+The then-unchanged durable editor was also checked against that newly authored exact
+supplier. [Encoding evidence](../campaigns/202609261045.md) retains the actual runtime,
 source identities, operational batch-boundary failure and corrected test scope.
 
 An additional observation uses the unchanged official v0.1.47 executable to create

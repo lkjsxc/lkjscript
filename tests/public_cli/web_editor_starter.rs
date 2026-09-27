@@ -33,7 +33,7 @@ fn find(public: &Native, class: &str, name: &str, parent: Option<&str>) -> Strin
 fn check(public: &Native) {
     let result = public.cli(&["check"], true);
     let tests = compact_record(&result, "tests");
-    assert_eq!(compact_field(tests, "passed"), "180"); // 105 local + 75 standard.
+    assert_eq!(compact_field(tests, "passed"), "196"); // 121 local + 75 standard.
     assert_eq!(compact_field(tests, "failed"), "0");
     assert_eq!(compact_field(tests, "differential"), "equal");
 }

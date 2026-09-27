@@ -93,6 +93,22 @@ identities as well as declaration identity; structural edits use ordinary replac
 and explicit review. The [editing guide](guides/native-web.md) and
 [original evidence](campaigns/202609261118.md) retain that distinction.
 
+## Native form selection
+
+The ordinary form library adds `lookup(fields, name)` with typed `missing`,
+`present(Text)` and `repeated` outcomes. Empty values remain present; decoded names
+compare exactly, and even equal repeated values cannot silently select a winner.
+The maintained editor uses it without adapting form values into HTTP headers.
+Body decoding, actual header admission, domain validation and conditional saves
+retain their separate responsibilities. The
+[selection record](campaigns/202609280200.md) distinguishes source verification,
+existing-runtime use and publication. Existing accepted suppliers and applications
+are not silently upgraded. Public/latest remains the unchanged v0.1.51 binary;
+its embedded starter does not change with the current source examples.
+The corrected source passed all 26 fresh full-profile gates. The resumed changed
+profile independently selected and passed all 26 gates with zero reuse and stable
+inputs; the detailed record retains both observations and the earlier failure.
+
 ## Native durable editor
 
 [`new --template web-editor`](guides/native-web-editor.md), available in public

@@ -1,6 +1,8 @@
 //! Ordinary form library transported to an independent, source-free consumer.
 #[path = "native_form_encoding.rs"]
 mod encoding;
+#[path = "native_form_selection.rs"]
+mod selection;
 use super::*;
 use base64::Engine;
 use serde_json::json;
@@ -19,7 +21,7 @@ fn author_library() -> Native {
     let checked = library.cli(&["check"], true);
     assert_eq!(
         compact_field(compact_record(&checked, "tests"), "passed"),
-        "124"
+        "140"
     );
     library
 }
@@ -66,7 +68,7 @@ fn import_consumer(library: &Native) -> Native {
     let checked = consumer.cli(&["check"], true);
     assert_eq!(
         compact_field(compact_record(&checked, "tests"), "passed"),
-        "125"
+        "141"
     );
     consumer
 }

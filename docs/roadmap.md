@@ -56,6 +56,12 @@ consumer, independent byte expectations and a detached POST receiver test this
 composition without creating a privileged framework serializer. Aggregate runtime
 quotas still bound batches even when every individual form satisfies its own limit.
 Keep exact dependency updates explicit rather than silently replacing old suppliers.
+The [field-selection continuation](campaigns/202609280200.md) moves decoded-name
+multiplicity into the ordinary form library. Its typed missing/present/repeated
+result lets the durable editor remove an artificial HTTP-header conversion while
+retaining explicit domain validation, unknown-field rejection and transactions.
+This is a reusable data operation, not an automatic form schema or authentication
+framework; exact existing suppliers remain unchanged until explicitly updated.
 
 The next useful question is the recurring development loop, rather than another
 large closed starter. Use a second small real application or an identity-preserving

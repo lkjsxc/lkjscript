@@ -287,7 +287,7 @@ fn receiver(consumer: &Native) -> (Native, Value) {
     let checked = public.cli(&["check"], true);
     assert_eq!(
         compact_field(compact_record(&checked, "tests"), "passed"),
-        "129"
+        "145"
     );
     public.cli(
         &[
