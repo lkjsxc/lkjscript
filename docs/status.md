@@ -20,45 +20,23 @@ exact dependency selections, running processes or operational data.
 
 ## Named canonical drafts in public v0.1.51
 
-Main adds `change draft --module NAME`, `--declaration MODULE::NAME` and
+The public executable supports `change draft --module NAME`, `--declaration MODULE::NAME` and
 `--target NAME`, alongside the existing `--owner ID`. A known declaration can be
 drafted in one command instead of two namespace queries followed by an ID-selected
 draft. Mixed/repeated selectors are bounded and deduplicated; names resolve and
 are rechecked at one immutable revision under shared admission. The output still
 binds exact owner and base identities. Names are not mutation authority.
 
-Implementation `3d1cf3d1` passed all 26 fresh full-profile gates with stable inputs
-and zero reuse. The [source record](campaigns/202609270517.md) retains that exact
-identity and the unchanged public-v0.1.50 reader comparison. The first candidate
-`36273488566/1` subsequently failed its workspace-test deadline before building assets.
+The [source record](campaigns/202609270517.md) retains the named-selector evidence
+and compatible-reader comparison. [v0.1.51 notes](releases/v0.1.51.md) and the
+[completed delivery](campaigns/202609280123.md) own its accepted producer, original
+assets and public verification. The linked [test-profile](campaigns/202609271910.md)
+and [cold-lifecycle](campaigns/202609272130.md) continuations retain their earlier
+failures and measured corrections; they are not pending delivery obligations.
 
-The [delivery continuation](campaigns/202609271910.md) adds checked test-profile
-optimization without changing the test inventory, debug checks, deadlines or release
-profile. Integrated source `aa24c759` passed all 26 fresh gates with stable inputs and
-zero reuse. Its matched warm workspace runs both passed the same 1193 top-level Rust
-tests; elapsed time fell from 857.594 to 307.898 seconds on the shared local host.
-That is not a cold-build, hosted-runner or distributed-runtime performance claim.
-The replacement [candidate, 36315061925/1](https://github.com/lkjsxc/lkjscript/actions/runs/36315061925)
-failed a different source boundary: the copied lifecycle froze its inventory before
-first-open recovery of the disposable lock/catalog. It built no finalized assets.
-The [cold-repository correction](campaigns/202609272130.md) separates checked recovery
-from unchanged steady-state observation and makes the cold fixture deterministic.
-Integrated correction `42dd2035` passes all 26 fresh gates with stable inputs and
-zero reuse, including the previously failing lifecycle and 1,195 top-level workspace
-tests. The original [candidate, 36321176400/1](https://github.com/lkjsxc/lkjscript/actions/runs/36321176400),
-accepted that exact source. Promotion `36333238917/1` passed selection, immutable
-publication, anonymous exact/latest installed smoke and its terminal. Release
-`397724184` became public at 2026-09-27T16:33:14Z (September 28, 01:33 JST), with
-all three original assets unchanged. **These selectors are now in public v0.1.51.**
-See the [v0.1.51 notes](releases/v0.1.51.md) and the two continuations for retained evidence.
-
-A recent-history prototype was developed but is **not integrated or released**.
-Its four internal tests passed, while the copied-public test group has two passes
-and one failed discovery invocation. A corrective edit was blocked by the tool
-safety check; the unaccepted work is preserved separately, not substituted for main.
-The [current campaign](campaigns/202609280123.md#unintegrated-prototype--not-main-or-a-release)
-records that exact boundary. Neither public v0.1.51 nor the selected successor adds
-`inspect history`.
+A [recent-history prototype](campaigns/202609280123.md#unintegrated-prototype--not-main-or-a-release)
+remains preserved but **not integrated or released**. Neither public v0.1.51 nor
+the selected successor includes `inspect history`.
 
 ## Development v0.1.52
 
@@ -68,7 +46,14 @@ recovery retains exclusive ownership until the caller finishes its observation,
 rather than relying on atomic lock conversion. No storage schema changes or automatic
 application upgrades are introduced. The [v0.1.52 notes](releases/v0.1.52.md) and
 [recovery record](campaigns/202609280350.md) distinguish regression proof, complete
-source acceptance and delivery. Selection alone is not public availability.
+source acceptance and delivery.
+
+Implementation `60f793eb` is integrated on main and passed all 26 full-profile
+gates freshly, with zero reuse and stable inputs. Candidate
+[`36344022937/1`](https://github.com/lkjsxc/lkjscript/actions/runs/36344022937)
+uses that exact source and was dispatched once; its first observation is in progress,
+before final candidate acceptance. No v0.1.52 tag or promotion has been selected.
+This is verified mainline source, **not a published v0.1.52 binary**.
 
 ## Current authority and maintained consumers
 
@@ -116,9 +101,9 @@ retain their separate responsibilities. The
 existing-runtime use and publication. Existing accepted suppliers and applications
 are not silently upgraded. Public/latest remains the unchanged v0.1.51 binary;
 its embedded starter does not change with the current source examples.
-The corrected source passed all 26 fresh full-profile gates. The resumed changed
-profile independently selected and passed all 26 gates with zero reuse and stable
-inputs; the detailed record retains both observations and the earlier failure.
+The selection record retains its original failure, corrected source acceptance
+and existing-runtime observations; the v0.1.52 record above owns combined-source
+acceptance and candidate progress.
 
 ## Native durable editor
 
@@ -224,6 +209,6 @@ source tests or an uploaded artifact do not establish publication.
 
 Campaigns preserve actual fresh, reused, failed, cancelled, skipped and pending
 results. Reporting-only descendants never relabel an earlier tested source.
-The [previous detailed snapshot](https://github.com/lkjsxc/lkjscript/blob/55dc472269213ef685515c1257147144c002ab6f/docs/status.md)
+The [previous detailed snapshot](https://github.com/lkjsxc/lkjscript/blob/60f793eb2eaa38c7dc87adabcbe82d33342e06d8/docs/status.md)
 retains the older milestone chronology; current instructions live in the linked
 guides rather than being duplicated here.
