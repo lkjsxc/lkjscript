@@ -127,8 +127,10 @@ queue leases are lexical/task-owned.
 
 The compiler records borrow/consume on local loads and retains the exact requirement on a resource
 parameter. Strict artifact loading and normalized preparation recheck the private task signature,
-exact requirement/interface, immediate final local load matching the parameter's use mode, direct call, and acyclic resource-call
-graph. Each VM and reference call frame revalidates the same live task scope, kind, requirement,
+exact requirement/interface, immediate final local load matching the parameter's use mode, and
+same-package direct call. Each independently validated task body applies its declared use contract;
+direct and mutual synchronous recursion do not waive it or establish termination. Each VM and
+reference call frame revalidates the same live task scope, kind, requirement,
 interface, and slot, so hostile derived input cannot copy, rebind, revive, or indirectly invoke a
 transition right. Resource-bearing variants move as one outer value; matching transfers the direct
 payload only to the selected arm. Task cleanup drops local handles without implicitly completing,

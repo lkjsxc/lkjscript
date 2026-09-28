@@ -7,7 +7,8 @@ and boundaries; historical measurements and failed attempts stay with their
 The owner-selected [language-first direction](direction.md) now prioritizes advanced
 type/ownership/effect composition, region-based memory research and a shared runtime.
 The exact-code shared service host and scoped capability borrowing are public.
-Ordinary generic composition is the v0.1.55 development capability below.
+Ordinary generic composition and recursive resource helpers are the development
+capabilities below; neither is supplied by public v0.1.54.
 Advanced ownership/trait and region-memory work remains a research selection,
 not a capability conferred by a roadmap or by sharing existing prepared code.
 
@@ -148,6 +149,22 @@ retains the original failed check and its scoped test correction. Candidate
 `36419055364/1` selects that exact source and is in progress, not yet accepted or
 published. Final-archive cases and publication remain separate; ordinary generic
 resource helpers are not provided by public v0.1.54.
+
+## Development v0.1.56: recursive resource contracts
+
+[v0.1.56](releases/v0.1.56.md) admits direct and mutual synchronous recursion for
+private same-package helpers with one final exact borrow/consume parameter.
+Every body retains independent affine admission; cycles do not permit consuming
+borrowed views, using moved owners, or escaping resources. Validator feature 5
+separates this contract from earlier validation evidence.
+
+The [continuation](campaigns/202609282124.md) records the old explicit cycle
+rejection, its bounded implementation, independent execution/cleanup cases, and
+literal native countdown and mutual-consumption cases. Focused gates pass,
+including 100 VM/reference resource invocations and seven native public cases.
+Full-source acceptance and distribution are pending at this implementation
+checkpoint. The selected v0.1.55 producer remains separate and its frozen source
+is unchanged.
 
 ## Current authority and maintained consumers
 

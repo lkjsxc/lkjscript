@@ -474,7 +474,7 @@ impl NormalizedProgram {
             &mut text_cache,
             &mut work,
         )?;
-        validate_resource_call_graph(&functions)?;
+        validate_resource_calls(&functions)?;
         let (components, ports) = prepare_components(
             &artifact,
             &units,
@@ -1702,7 +1702,7 @@ fn normalized_type_contains_resource(
     Ok(result)
 }
 
-fn validate_resource_call_graph(functions: &[NormalizedFunction]) -> Result<(), Diagnostic> {
+fn validate_resource_calls(functions: &[NormalizedFunction]) -> Result<(), Diagnostic> {
     let resource_functions = functions
         .iter()
         .enumerate()
@@ -1714,13 +1714,7 @@ fn validate_resource_call_graph(functions: &[NormalizedFunction]) -> Result<(), 
                 .then_some(index)
         })
         .collect::<BTreeSet<_>>();
-    let mut edges = BTreeMap::<usize, BTreeSet<usize>>::new();
-    let mut incoming = resource_functions
-        .iter()
-        .copied()
-        .map(|index| (index, 0_usize))
-        .collect::<BTreeMap<_, _>>();
-    for (caller_index, function) in functions.iter().enumerate() {
+    for function in functions {
         let NormalizedFunctionBody::Code(code) = &function.body else {
             continue;
         };
@@ -1761,48 +1755,13 @@ fn validate_resource_call_graph(functions: &[NormalizedFunction]) -> Result<(), 
                             "prepared resource call is not one same-package final local use matching its parameter",
                         ));
                     }
-                    if resource_functions.contains(&caller_index)
-                        && edges.entry(caller_index).or_default().insert(callee_index)
-                    {
-                        let Some(count) = incoming.get_mut(&callee_index) else {
-                            return Err(runtime_corrupt(
-                                "normalized_resource_call_graph",
-                                "resource call graph target is absent from its exact node set",
-                            ));
-                        };
-                        *count = count.saturating_add(1);
-                    }
                 }
                 _ => {}
             }
         }
     }
-    let mut ready = incoming
-        .iter()
-        .filter_map(|(index, count)| (*count == 0).then_some(*index))
-        .collect::<BTreeSet<_>>();
-    let mut visited = 0_usize;
-    while let Some(index) = ready.pop_first() {
-        visited = visited.saturating_add(1);
-        for target in edges.get(&index).into_iter().flatten() {
-            let Some(count) = incoming.get_mut(target) else {
-                return Err(runtime_corrupt(
-                    "normalized_resource_call_graph",
-                    "resource call graph target is absent from its exact node set",
-                ));
-            };
-            *count = count.saturating_sub(1);
-            if *count == 0 {
-                ready.insert(*target);
-            }
-        }
-    }
-    if visited != resource_functions.len() {
-        return Err(runtime_corrupt(
-            "normalized_resource_call_cycle",
-            "prepared resource-bearing direct-call graph is cyclic",
-        ));
-    }
+    // Cycles do not relax any call boundary: canonical affine admission proves
+    // every body, and each activation independently admits its exact resource.
     Ok(())
 }
 

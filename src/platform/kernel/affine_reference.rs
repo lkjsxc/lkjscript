@@ -56,7 +56,7 @@ struct Reference<'a> {
 
 impl Reference<'_> {
     fn accepts(&self) -> bool {
-        if !self.shapes_are_legal() || !self.resource_calls_are_acyclic() {
+        if !self.shapes_are_legal() {
             return false;
         }
         self.snapshot.owners.iter().all(|(owner, record)| {
@@ -610,105 +610,6 @@ impl Reference<'_> {
             return Err(());
         }
         Ok(Some(resource))
-    }
-
-    fn resource_calls_are_acyclic(&self) -> bool {
-        let mut nodes = BTreeSet::new();
-        for (owner, record) in &self.snapshot.owners {
-            let (OwnerKey::Declaration(declaration), OwnerRecord::Declaration(record)) =
-                (owner, record)
-            else {
-                continue;
-            };
-            if !matches!(record.payload, DeclarationPayload::Function(_)) {
-                continue;
-            }
-            match self.resource_signature(DeclarationReference {
-                package: self.snapshot.root.package_id,
-                declaration: *declaration,
-            }) {
-                Ok(Some(_)) => {
-                    nodes.insert(*declaration);
-                }
-                Ok(None) => {}
-                Err(()) => return false,
-            }
-        }
-        let mut edges = BTreeMap::<DeclarationId, BTreeSet<DeclarationId>>::new();
-        let mut incoming = nodes
-            .iter()
-            .copied()
-            .map(|node| (node, 0_usize))
-            .collect::<BTreeMap<_, _>>();
-        for node in &nodes {
-            let Some(OwnerRecord::Declaration(record)) =
-                self.snapshot.owners.get(&OwnerKey::Declaration(*node))
-            else {
-                return false;
-            };
-            let DeclarationPayload::Function(function) = &record.payload else {
-                return false;
-            };
-            let Some(callees) = self.resource_callees(function.body) else {
-                return false;
-            };
-            for callee in callees {
-                if !nodes.contains(&callee) {
-                    return false;
-                }
-                if edges.entry(*node).or_default().insert(callee) {
-                    let Some(count) = incoming.get_mut(&callee) else {
-                        return false;
-                    };
-                    *count = count.saturating_add(1);
-                }
-            }
-        }
-        let mut ready = incoming
-            .iter()
-            .filter_map(|(node, count)| (*count == 0).then_some(*node))
-            .collect::<BTreeSet<_>>();
-        let mut visited = 0_usize;
-        while let Some(node) = ready.pop_first() {
-            visited = visited.saturating_add(1);
-            for callee in edges.get(&node).into_iter().flatten() {
-                let Some(count) = incoming.get_mut(callee) else {
-                    return false;
-                };
-                *count = count.saturating_sub(1);
-                if *count == 0 {
-                    ready.insert(*callee);
-                }
-            }
-        }
-        visited == nodes.len()
-    }
-
-    fn resource_callees(&self, body: ExpressionId) -> Option<BTreeSet<DeclarationId>> {
-        let mut pending = vec![body];
-        let mut visited = BTreeSet::new();
-        let mut callees = BTreeSet::new();
-        while let Some(expression) = pending.pop() {
-            if !visited.insert(expression) {
-                continue;
-            }
-            let Some(OwnerRecord::Expression(record)) =
-                self.snapshot.owners.get(&OwnerKey::Expression(expression))
-            else {
-                return None;
-            };
-            if let ExpressionOperation::Call { function, .. } = &record.operation {
-                match self.resource_signature(*function) {
-                    Ok(Some(_)) if function.package == self.snapshot.root.package_id => {
-                        callees.insert(function.declaration);
-                    }
-                    Ok(Some(_)) | Err(()) => return None,
-                    Ok(None) => {}
-                }
-            }
-            pending.extend(record.children().into_iter().map(|child| child.expression));
-        }
-        Some(callees)
     }
 
     fn plain(&self, expression: ExpressionId, live: &mut Live) -> Result<(), ()> {
@@ -1489,6 +1390,95 @@ fn mutate_resource_self_recursion(snapshot: &mut KernelSnapshot) {
     function.body = call;
 }
 
+fn mutate_recursive_duplicate_handoff(snapshot: &mut KernelSnapshot) {
+    mutate_resource_self_recursion(snapshot);
+    let (helper, _, _) = maintained_resource_helper(snapshot);
+    let OwnerRecord::Declaration(record) = &snapshot.owners[&OwnerKey::Declaration(helper)] else {
+        panic!("helper declaration");
+    };
+    let DeclarationPayload::Function(function) = &record.payload else {
+        panic!("helper function");
+    };
+    let call = function.body;
+    let OwnerRecord::Expression(record) = &snapshot.owners[&OwnerKey::Expression(call)] else {
+        panic!("recursive call");
+    };
+    let copy = ExpressionId::migrate(b"affine-recursive-double-handoff", 0);
+    let second = ExpressionId::migrate(b"affine-recursive-double-handoff", 1);
+    let operation = record.operation.clone();
+    let mut repeated = operation.clone();
+    let ExpressionOperation::Call { arguments, .. } = &mut repeated else {
+        panic!("recursive direct call");
+    };
+    for (index, argument) in arguments.iter_mut().enumerate() {
+        let OwnerRecord::Expression(local) = &snapshot.owners[&OwnerKey::Expression(*argument)]
+        else {
+            panic!("recursive argument");
+        };
+        // The fixture has an ordinary literal prefix and a final resource local.
+        // Give both calls distinct expression leaves without changing their values.
+        assert!(local.children().is_empty());
+        let local_operation = local.operation.clone();
+        *argument = ExpressionId::migrate(b"affine-recursive-double-handoff", index as u64 + 2);
+        snapshot.owners.insert(
+            OwnerKey::Expression(*argument),
+            OwnerRecord::Expression(
+                super::ExpressionRecord::new(*argument, local_operation).unwrap(),
+            ),
+        );
+    }
+    snapshot.owners.insert(
+        OwnerKey::Expression(copy),
+        OwnerRecord::Expression(super::ExpressionRecord::new(copy, operation).unwrap()),
+    );
+    snapshot.owners.insert(
+        OwnerKey::Expression(second),
+        OwnerRecord::Expression(super::ExpressionRecord::new(second, repeated).unwrap()),
+    );
+    snapshot.owners.insert(
+        OwnerKey::Expression(call),
+        OwnerRecord::Expression(
+            super::ExpressionRecord::new(
+                call,
+                ExpressionOperation::Sequence {
+                    items: vec![copy, second],
+                },
+            )
+            .unwrap(),
+        ),
+    );
+}
+
+#[test]
+fn recursive_resource_contract_is_compositional_not_a_termination_claim() {
+    let mut snapshot = maintained_snapshot("applications/lkjournal");
+    mutate_resource_self_recursion(&mut snapshot);
+    assert!(production_accepts(&snapshot));
+    assert!(
+        Reference {
+            snapshot: &snapshot
+        }
+        .accepts()
+    );
+}
+
+#[test]
+fn recursive_generic_resource_contracts_have_independent_affine_admission() {
+    for mode in ["borrow", "consume", "mutual", "consume-mutual"] {
+        for tail in [false, true] {
+            let snapshot = crate::platform::execution::normalized::tests::iteration_resource_tests::recursive_resource_tests::snapshot(mode, tail);
+            assert!(production_accepts(&snapshot), "production: {mode}/{tail}");
+            assert!(
+                Reference {
+                    snapshot: &snapshot
+                }
+                .accepts(),
+                "reference: {mode}/{tail}"
+            );
+        }
+    }
+}
+
 fn mutate_resource_function_value(snapshot: &mut KernelSnapshot) {
     let (helper, _, _) = maintained_resource_helper(snapshot);
     let call = snapshot.owners.iter().find_map(|(owner, record)| {
@@ -1590,7 +1580,10 @@ fn independent_reference_agrees_on_maintained_graphs_and_finite_negative_corpus(
             "generic resource transfer",
             mutate_requirement_generic_resource_helper,
         ),
-        ("resource self recursion", mutate_resource_self_recursion),
+        (
+            "recursive duplicate handoff",
+            mutate_recursive_duplicate_handoff,
+        ),
         ("resource function value", mutate_resource_function_value),
         ("duplicate handoff", mutate_duplicate_handoff),
     ];

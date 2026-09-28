@@ -34,11 +34,11 @@ fn witness_contract_domains_are_closed_and_unique() {
         RelationKind::ALL.len()
     );
     assert_ne!(contract::validator_contract_digest().bytes(), [0_u8; 32]);
-    // Affine feature 4 adds ordinary type-generic resource helpers. Its evidence
-    // identity must not reuse the feature-3 borrowing-only validation contract.
+    // Affine feature 5 admits recursive exact-resource contracts. Its evidence
+    // identity must not reuse feature-4 evidence that rejects those call cycles.
     assert_eq!(
         contract::validator_contract_digest().to_string(),
-        "validator_contract_67be0fb759234744723cde9d533f98109c2fd999f6400a9a57dcac9a1a3b803d"
+        "validator_contract_8aa23d03c510ffb1d0b6accffc3b2b379b1a8e1f8d6835e9dd6a1c834ded9d8f"
     );
 }
 

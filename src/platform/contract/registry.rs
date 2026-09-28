@@ -4218,12 +4218,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Keep transfer inside a directly named private task function.",
         ),
         diagnostic(
-            "kernel_affine_resource_call_cycle",
-            DiagnosticClass::Semantic,
-            "The resource-bearing direct-call graph is cyclic.",
-            "Keep resource handoff helpers acyclic.",
-        ),
-        diagnostic(
             "kernel_affine_function_result",
             DiagnosticClass::Semantic,
             "A function result contains a capability resource.",

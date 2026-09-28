@@ -747,77 +747,17 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 "transferred resource has a foreign exact interface",
             ));
         }
-        let current = self.current_function.ok_or_else(|| {
-            affine_error(
+        if self.current_function.is_none() {
+            return Err(affine_error(
                 "kernel_affine_resource_call_scope",
                 expression,
                 "resource transfer is outside one exact task function",
-            )
-        })?;
-        if function.declaration == current
-            || self.resource_call_reaches(function.declaration, current)?
-        {
-            return Err(affine_error(
-                "kernel_affine_resource_call_cycle",
-                expression,
-                "resource-bearing direct-call graph is cyclic",
             ));
         }
+        // Each task body proves its own parameter-use contract. Applying that
+        // contract preserves ownership on every call, including recursive edges;
+        // termination and live activation limits are separate execution concerns.
         Ok(EvaluatedValue::Unrestricted)
-    }
-
-    fn resource_call_reaches(
-        &mut self,
-        start: DeclarationId,
-        target: DeclarationId,
-    ) -> Result<bool, Diagnostic> {
-        let mut pending = vec![start];
-        let mut visited = BTreeSet::new();
-        while let Some(declaration) = pending.pop() {
-            if !visited.insert(declaration) {
-                continue;
-            }
-            let function = self.local_function(declaration)?;
-            for callee in self.resource_callees(function.body)? {
-                if callee == target {
-                    return Ok(true);
-                }
-                pending.push(callee);
-            }
-        }
-        Ok(false)
-    }
-
-    fn resource_callees(&mut self, body: ExpressionId) -> Result<Vec<DeclarationId>, Diagnostic> {
-        let mut callees = BTreeSet::new();
-        let mut pending = vec![(body, 0_usize)];
-        let mut visited = BTreeSet::new();
-        while let Some((expression, depth)) = pending.pop() {
-            if !visited.insert(expression) {
-                continue;
-            }
-            self.step(expression, depth)?;
-            let record = self.expression(expression)?;
-            if let ExpressionOperation::Call { function, .. } = &record.operation
-                && self.resource_function_parameter(*function)?.is_some()
-            {
-                if function.package != self.read.package_id() {
-                    return Err(affine_error(
-                        "kernel_affine_resource_call_package",
-                        expression,
-                        "resource transfer requires a private same-package task function",
-                    ));
-                }
-                callees.insert(function.declaration);
-            }
-            pending.extend(
-                record
-                    .children()
-                    .into_iter()
-                    .map(|child| (child.expression, depth.saturating_add(1))),
-            );
-        }
-        Ok(callees.into_iter().collect())
     }
 
     fn evaluate_capability_call(

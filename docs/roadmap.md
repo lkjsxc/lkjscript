@@ -28,6 +28,9 @@ and failure boundaries, then extend its language contracts.
 The first scoped capability borrowing boundary is public in v0.1.54. The
 [type-generic continuation](campaigns/202609281735.md) composes ordinary type
 parameters, data callbacks and results with exact concrete borrowing/consumption.
+The [recursive continuation](campaigns/202609282124.md) admits direct and mutual
+synchronous helpers by checking their declared use contracts compositionally,
+without adding a parallel ownership mechanism or treating termination as safety.
 It deliberately leaves effect/requirement-polymorphic resource transfer,
 cross-package ownership, resource returns and general memory references open.
 These are implementation increments toward the coordinated slice, not substitutes

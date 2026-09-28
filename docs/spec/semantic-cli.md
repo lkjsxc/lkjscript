@@ -751,7 +751,9 @@ binding for an ordinary nonresource parameter. Resource operation parameters req
 borrow or consume and no binding. One private same-package task function may instead
 have one final direct resource parameter with `use=borrow` or `use=consume` and `requirement` naming the same exact
 requirement in its effect and interface in its resource type. Its preceding parameters and result
-must be resource-free, and only a direct named acyclic call may borrow or transfer the final resource owner.
+must be resource-free, and only a direct named call may borrow or transfer the final resource owner.
+Direct and mutual synchronous recursion apply the same per-body use contracts and execution
+limits; an accepted recursive call does not prove termination.
 Borrow preserves caller ownership and permits nested reborrows. Consuming a borrowed parameter,
 forwarding it to a consuming helper, or escaping it through a result/container/closure rejects.
 Ordinary `(type-parameter create T)` and explicit `(types T)` call arguments compose with this
@@ -760,7 +762,7 @@ requirement remain concrete; effect/requirement-polymorphic resource helpers sti
 Automatic `extract.function` retains its existing nongeneric, consume-only extraction boundary.
 Direct and input-file records lower to identical intent. Missing, extra, foreign, interface-
 mismatched, unrestricted, multiple, nonfinal, public, package, effect/requirement-generic, pure,
-cross-package, recursive, indirect, resource-result, and post-consume caller-reuse forms reject before plan
+cross-package, indirect, resource-result, and post-consume caller-reuse forms reject before plan
 publication. Unknown predecessor type/use spellings also reject.
 
 The higher-order slice uses these public spellings: `add.type-parameter` adds one ordered

@@ -322,10 +322,11 @@ compiler and artifact are derived carriers. A normalized resource entry is the s
 right; ordinary values cannot recreate it. The queue engine may retain private job, attempt, and
 worker fields because operational queue state is a separate authority, but those fields never
 re-enter graph values or public adapter signatures. A resource-bearing nominal variant moves as a
-whole and transfers its one direct payload only to the selected match arm. One final consume
-parameter may bind the exact task requirement on a private same-package helper; direct call frames
-share the task scope, recheck the handle, and form an acyclic resource-call graph. No host frame or
-function value becomes parallel authority.
+whole and transfers its one direct payload only to the selected match arm. One final borrow or
+consume parameter may bind the exact task requirement on a private same-package helper; direct
+call frames share the task scope and recheck the handle. Direct and mutual recursive calls apply
+the same independently validated body contracts. Borrow preserves the owner, consume transfers
+it, and neither recursion nor a host frame creates parallel authority.
 
 Claim and heartbeat reserve scope capacity before performing a possibly visible queue effect.
 Empty, stale, failed, or cancelled outcomes release the reservation; success commits a live handle.

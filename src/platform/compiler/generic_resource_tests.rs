@@ -1,9 +1,21 @@
 use super::*;
-use crate::platform::kernel::DeclarationPayload;
+use crate::platform::kernel::{DeclarationPayload, KernelSnapshot};
 
 #[test]
 fn type_generic_resource_artifact_preserves_exact_signature_and_authority() {
     let snapshot = crate::platform::execution::normalized::tests::iteration_resource_tests::type_generic_borrowed_snapshot(true);
+    check_resource_artifact(snapshot);
+}
+
+#[test]
+fn recursive_generic_resource_artifact_keeps_exact_metadata_after_rehashing() {
+    for tail in [false, true] {
+        let snapshot = crate::platform::execution::normalized::tests::iteration_resource_tests::recursive_resource_tests::snapshot("mutual", tail);
+        check_resource_artifact(snapshot);
+    }
+}
+
+fn check_resource_artifact(snapshot: KernelSnapshot) {
     let temporary = tempfile::tempdir().unwrap();
     let created =
         GraphRepository::create(&temporary.path().join("generic-resource"), &snapshot, None)

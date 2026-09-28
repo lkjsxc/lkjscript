@@ -333,7 +333,7 @@ oracle does not supply a production predecessor reader or an operational-data mi
 
 Affine resource acceptance additionally uses a finite implementation-disjoint flow oracle. It may
 share bounded snapshot decoding but cannot share production provenance, transfer, consume,
-resource-call graph, or branch-merge logic or encoded expected results. It must agree on both
+callee-contract, or branch-merge logic or encoded expected results. It must agree on both
 maintained graphs and on fabrication, unrestricted resource parameters, borrow/consume, duplicate
 and post-consume use, exact requirement/interface binding, one-level and nested direct handoff,
 left-to-right argument commitment, caller reuse, branch mismatch, function escape, self/mutual
@@ -350,6 +350,18 @@ type arguments or function values. A decoder failure inside a nested borrow must
 already committed claim observable without inventing completion or rollback; an independent
 ready job must remain executable without rewriting that claim. Extraction's narrower eligibility
 is tested separately.
+
+Recursive resource helpers additionally require accepted direct and mutual call
+cycles with both borrowed and consumed final owners. Legal cyclic contracts must
+be distinguished from cyclic bodies that duplicate a moved owner, consume a view,
+or retain a resource-bearing callable. The VM and independent interpreter must
+agree with a separately scripted effect sequence for tail and pending-return
+activations, including call-depth exhaustion, grant exhaustion, cancellation,
+adapter failure and resource exhaustion. Failure must leave no invocation-owned
+resource and cleanup must not replay an external effect. A literal native long
+countdown and mutual borrow/consume consumer must preserve ordinary generic
+results and detached durable state. Strict loading must still reject rehashed
+artifacts with erased or foreign generic metadata on cyclic helpers.
 
 Function-definition projection acceptance uses complete typed reconstruction as a disjoint oracle.
 The oracle may decode the same canonical authority, but it cannot call production point traversal,

@@ -5884,25 +5884,37 @@ effect.requirement parent=$bad_function index=0 requirement=$other_requirement"#
             "kernel_affine_function_resource_interface",
         ),
         (
-            "resource-self-recursion",
+            "resource-self-recursive-duplicate-consume",
             format!(
                 r#"type.capability-resource as=@bad_lease interface={lease_interface}
 expression.local as=$bad_local value=$bad_parameter
-expression.call as=$bad_body function=$bad_function
-expression.argument parent=$bad_body index=0 expression=$bad_local
+expression.call as=$bad_call function=$bad_function
+expression.argument parent=$bad_call index=0 expression=$bad_local
+expression.local as=$bad_local_again value=$bad_parameter
+expression.call as=$bad_call_again function=$bad_function
+expression.argument parent=$bad_call_again index=0 expression=$bad_local_again
+expression.sequence as=$bad_body
+expression.argument parent=$bad_body index=0 expression=$bad_call
+expression.argument parent=$bad_body index=1 expression=$bad_call_again
 create.function as=$bad_function module={application} name=resource-self-recursion visibility=private result=unit effect=task body=$bad_body
 add.parameter as=$bad_parameter function=$bad_function name=lease type=@bad_lease use=consume requirement={requirement}
 effect.requirement parent=$bad_function index=0 requirement={requirement}"#
             ),
-            "kernel_affine_resource_call_cycle",
+            "kernel_affine_use_after_consume",
         ),
         (
-            "resource-mutual-recursion",
+            "resource-mutual-recursive-duplicate-consume",
             format!(
                 r#"type.capability-resource as=@bad_lease interface={lease_interface}
 expression.local as=$bad_left_local value=$bad_left_parameter
-expression.call as=$bad_left_body function=$bad_right
-expression.argument parent=$bad_left_body index=0 expression=$bad_left_local
+expression.call as=$bad_left_call function=$bad_right
+expression.argument parent=$bad_left_call index=0 expression=$bad_left_local
+expression.local as=$bad_left_local_again value=$bad_left_parameter
+expression.call as=$bad_left_call_again function=$bad_right
+expression.argument parent=$bad_left_call_again index=0 expression=$bad_left_local_again
+expression.sequence as=$bad_left_body
+expression.argument parent=$bad_left_body index=0 expression=$bad_left_call
+expression.argument parent=$bad_left_body index=1 expression=$bad_left_call_again
 create.function as=$bad_left module={application} name=resource-mutual-left visibility=private result=unit effect=task body=$bad_left_body
 add.parameter as=$bad_left_parameter function=$bad_left name=lease type=@bad_lease use=consume requirement={requirement}
 effect.requirement parent=$bad_left index=0 requirement={requirement}
@@ -5913,7 +5925,7 @@ create.function as=$bad_right module={application} name=resource-mutual-right vi
 add.parameter as=$bad_right_parameter function=$bad_right name=lease type=@bad_lease use=consume requirement={requirement}
 effect.requirement parent=$bad_right index=0 requirement={requirement}"#
             ),
-            "kernel_affine_resource_call_cycle",
+            "kernel_affine_use_after_consume",
         ),
     ];
     for (name, body, code) in handoff_flow_rejections {

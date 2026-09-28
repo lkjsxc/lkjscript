@@ -196,7 +196,7 @@ may transfer while that exact ancestor retains transaction ownership. An unused 
 does not prevent a task transfer: dropping its descriptor neither releases the invocation's
 table entry/admission capacity nor performs any queue completion, failure or stream operation.
 The admitted final-consume helper protocol still transfers the exact right once, after ordinary
-arguments finish, without changing private/same-package/acyclic signature restrictions.
+arguments finish, without changing private/same-package signature restrictions.
 
 Tail eligibility is derived from accepted meaning and strict loaded code, never stored meaning
 or an authoring option. Transfers check cancellation and consume execution work without resetting
@@ -348,10 +348,14 @@ owner and preserves it. A consume moves that owner; every later use on a reachab
 before publication. For an admitted consuming resource-bearing call, all unrestricted arguments
 finish first and evaluation of the final argument commits transfer of one exact live owner. The
 consuming callee may borrow it, consume it through the bound requirement, drop it, or forward it through
-another admitted direct call. Caller and callee must use the same exact requirement identity, and
-the resource-bearing direct-call graph must be acyclic. A call failure, cancellation, or resource
-exhaustion after transfer does not restore caller ownership; unwinding drops remaining task-local
-authority without an implicit external queue transition.
+another admitted direct call. Caller and callee must use the same exact requirement identity.
+Direct and mutual synchronous recursion are admitted: each body is independently checked under
+its declared parameter-use contract, and every recursive call applies that same contract rather
+than unfolding another body during affine validation. This does not prove termination. Existing
+execution control, live call-depth and resource limits still apply; tail transfers do not consume
+an additional live activation. A call failure, cancellation, or resource exhaustion after transfer
+does not restore caller ownership; unwinding drops remaining task-local authority without an
+implicit external queue transition.
 
 A `borrow` function parameter instead receives a non-owning view. All ordinary arguments finish
 before its final local read; the synchronous call preserves the caller's owner. A borrowing helper
@@ -374,7 +378,7 @@ payload: matching consumes the outer owner and makes the payload live only in th
 join retains an owner only when every reachable arm retains the same provenance. Records,
 structural records, lists, maps, options, results, streams, function values, constants, tests, and
 nested nominal values cannot contain a resource. Multiple, nonfinal, public,
-package-visible, cross-package, effect/requirement-generic, indirect, recursive, captured, or result-bearing resource
+package-visible, cross-package, effect/requirement-generic, indirect, captured, or result-bearing resource
 function forms reject. Partial moves, affine containers, resource polymorphism, resource-capturing closures, async or
 detached tasks, and general linear must-use semantics are absent.
 

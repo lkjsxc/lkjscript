@@ -6,15 +6,21 @@ const PROGRAM: &str = include_str!("../fixtures/type-generic-resources.lkjc");
 
 #[path = "native_generic_resources_failure.rs"]
 mod failure;
+#[path = "native_recursive_resources.rs"]
+mod recursion;
 #[path = "native_generic_resources_rejections.rs"]
 mod rejections;
 
 #[test]
 fn native_type_generic_resources_survive_drafting_and_detached_queue_execution() {
+    check_program(PROGRAM);
+}
+
+fn check_program(program: &str) {
     let public = Native::template("command");
     let input = public.input(
         "generic.lkjc",
-        &format!("request base={}\n{PROGRAM}", public.revision()),
+        &format!("request base={}\n{program}", public.revision()),
     );
     let applied = public.apply(&input, &public.plan(&input, true), true);
     public.cli(&["check"], true);

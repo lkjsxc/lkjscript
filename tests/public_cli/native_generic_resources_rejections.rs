@@ -49,10 +49,10 @@ fn native_type_generic_resources_reject_escaping_or_rebound_authority_without_pu
             "kernel_affine_resource_function_value",
         ),
         (
-            "recursive",
+            "recursive-borrow-consumption",
             "(body (call read-lease (types U) (local decode) (local lease)))",
-            "(body (call relay (types U) (local decode) (local lease)))",
-            "kernel_affine_resource_call_cycle",
+            "(body (sequence (call relay (types U) (local decode) (local lease)) (capability-call queue::jobs std::DurableQueue::complete (local lease) (i64 0) (call std::data-encode (types Text) (text \"done\"))) (call read-lease (types U) (local decode) (local lease))))",
+            "kernel_affine_borrow_consumed",
         ),
     ] {
         assert!(PROGRAM.contains(old), "literal edit anchor: {name}");

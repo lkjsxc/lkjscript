@@ -1,6 +1,6 @@
 # Ordinary generics with scoped capability resources
 
-This guide describes development **v0.1.55**. Check [current availability](../status.md)
+This guide describes development **v0.1.56**. Check [current availability](../status.md)
 before selecting an executable; an older public runtime does not gain these
 semantics by reading this document.
 
@@ -55,10 +55,33 @@ requires a runtime error, a still-leased durable job without a completion result
 and successful processing of a different ready job. Local resource cleanup cannot
 undo an already committed queue claim and does not authorize blind replay.
 
+## Recursive helpers
+
+A direct or mutually recursive helper can now retain the same exact borrow or
+consume contract. There is no new loop primitive or unchecked transfer. Each
+function body is checked once under its declared use modes; every recursive edge
+borrows a view or moves the owner in the same way as an ordinary direct call.
+
+The [recursive native input](../../tests/fixtures/recursive-resources.lkjc) adds an
+ordinary `remaining: I64` before the decoder and final lease. `read-lease<T>`
+counts down through 4,097 tail calls; `relay<U>` and `alternate<U>` mutually
+reborrow, then read the caller's still-live lease after the recursive return.
+`finish<V>` moves the owner recursively and completes the durable job only at its
+base case. Its ordinary result returns through pending non-tail activations.
+The [public cases](../../tests/public_cli/native_recursive_resources.rs) also
+exercise mutual consuming helpers, recursive decoder failure, detached execution,
+and rejected post-transfer reuse and borrow escalation.
+
+Recursion is not a termination proof. Pending non-tail calls remain subject to
+the existing live-depth limit, and tail transfers still charge execution work and
+check cancellation. Failure unwinds invocation-owned resources without completing
+or retrying a durable job. The capability borrow is not a general memory reference
+and does not promise payload copies have been eliminated.
+
 ## Deliberate limits
 
 There is one final direct resource parameter, exact concrete authority, and a
-private same-package acyclic direct call. Ordinary arguments, callbacks and results
+private same-package direct call. Ordinary arguments, callbacks and results
 must remain resource-free. Effect/requirement-polymorphic resource signatures,
 escaping views, indirect resource calls, cross-package resource transfer and
 asynchronous borrowing are not supported. Automatic function extraction retains

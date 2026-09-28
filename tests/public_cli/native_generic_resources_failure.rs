@@ -3,11 +3,15 @@ use super::*;
 
 #[test]
 fn native_type_generic_resources_preserve_failed_lease_without_blocking_other_jobs() {
+    check_failed_decoder(PROGRAM);
+}
+
+pub(super) fn check_failed_decoder(program: &str) {
     let public = Native::template("command");
     let original =
         "(body (call std::data-decode-or (types (list I64)) (local payload) (list I64))))";
-    assert_eq!(PROGRAM.matches(original).count(), 1);
-    let source = PROGRAM.replacen(
+    assert_eq!(program.matches(original).count(), 1);
+    let source = program.replacen(
         original,
         "(body (list I64 (call std::divide (i64 1) (i64 0)))))",
         1,
