@@ -1646,103 +1646,128 @@ fn type_generic_borrow_reference_preserves_the_independent_rejection_boundary() 
 
 fn check_scoped_borrow_reference(generic: bool) {
     for nested in [false, true] {
-        let snapshot = if generic {
-            crate::platform::execution::normalized::tests::iteration_resource_tests::type_generic_borrowed_snapshot(nested)
-        } else {
-            crate::platform::execution::normalized::tests::iteration_resource_tests::borrowed_snapshot(nested)
-        };
-        assert!(production_accepts(&snapshot));
-        assert!(
-            Reference {
-                snapshot: &snapshot
-            }
-            .accepts()
-        );
-        let parameter = snapshot
-            .owners
-            .iter()
-            .find_map(|(key, record)| match record {
-                OwnerRecord::Parameter(record)
-                    if record.use_mode == ParameterUse::Borrow
-                        && record.resource_requirement.is_some() =>
-                {
-                    Some(*key)
-                }
-                _ => None,
-            })
-            .unwrap();
-        let operation_parameter = snapshot
-            .owners
-            .iter()
-            .find_map(|(key, record)| match record {
-                OwnerRecord::Parameter(record)
-                    if record.use_mode == ParameterUse::Borrow
-                        && record.resource_requirement.is_none() =>
-                {
-                    Some(*key)
-                }
-                _ => None,
-            })
-            .unwrap();
-        for variant in [
-            "consume-in-borrow",
-            "consume-caller",
-            "unrestricted",
-            "missing-binding",
-            "public",
-            "result",
+        for visibility in [
+            DeclarationVisibility::Private,
+            DeclarationVisibility::Package,
+            DeclarationVisibility::Public,
         ] {
-            let mut candidate = snapshot.clone();
-            let OwnerRecord::Parameter(record) = candidate.owners.get_mut(&parameter).unwrap()
-            else {
-                panic!("parameter");
-            };
-            let super::ParameterParent::Function(function) = record.parent else {
-                panic!("function parameter");
-            };
-            let resource_type = record.ty;
-            match variant {
-                "consume-caller" => record.use_mode = ParameterUse::Consume,
-                "unrestricted" => record.use_mode = ParameterUse::Unrestricted,
-                "missing-binding" => record.resource_requirement = None,
-                _ => {}
+            check_scoped_borrow_visibility(generic, nested, visibility);
+        }
+    }
+}
+
+fn check_scoped_borrow_visibility(generic: bool, nested: bool, visibility: DeclarationVisibility) {
+    let mut snapshot = if generic {
+        crate::platform::execution::normalized::tests::iteration_resource_tests::type_generic_borrowed_snapshot(nested)
+    } else {
+        crate::platform::execution::normalized::tests::iteration_resource_tests::borrowed_snapshot(
+            nested,
+        )
+    };
+    let parameter = snapshot
+        .owners
+        .iter()
+        .find_map(|(key, record)| match record {
+            OwnerRecord::Parameter(record)
+                if record.use_mode == ParameterUse::Borrow
+                    && record.resource_requirement.is_some() =>
+            {
+                Some(*key)
             }
-            if variant == "consume-in-borrow" {
-                let OwnerRecord::Parameter(record) =
-                    candidate.owners.get_mut(&operation_parameter).unwrap()
-                else {
-                    panic!("operation parameter");
-                };
-                record.use_mode = ParameterUse::Consume;
+            _ => None,
+        })
+        .unwrap();
+    let operation_parameter = snapshot
+        .owners
+        .iter()
+        .find_map(|(key, record)| match record {
+            OwnerRecord::Parameter(record)
+                if record.use_mode == ParameterUse::Borrow
+                    && record.resource_requirement.is_none() =>
+            {
+                Some(*key)
             }
-            let OwnerRecord::Declaration(record) = candidate
-                .owners
-                .get_mut(&OwnerKey::Declaration(function))
-                .unwrap()
+            _ => None,
+        })
+        .unwrap();
+    let OwnerRecord::Parameter(record) = &snapshot.owners[&parameter] else {
+        panic!("resource parameter");
+    };
+    let super::ParameterParent::Function(function) = record.parent else {
+        panic!("resource function parameter");
+    };
+    let OwnerRecord::Declaration(record) = snapshot
+        .owners
+        .get_mut(&OwnerKey::Declaration(function))
+        .unwrap()
+    else {
+        panic!("resource function");
+    };
+    record.visibility = visibility;
+    assert!(
+        production_accepts(&snapshot),
+        "production accepts {visibility:?}, generic={generic}, nested={nested}"
+    );
+    assert!(
+        Reference {
+            snapshot: &snapshot
+        }
+        .accepts(),
+        "reference accepts {visibility:?}, generic={generic}, nested={nested}"
+    );
+    for variant in [
+        "consume-in-borrow",
+        "consume-caller",
+        "unrestricted",
+        "missing-binding",
+        "result",
+    ] {
+        let mut candidate = snapshot.clone();
+        let OwnerRecord::Parameter(record) = candidate.owners.get_mut(&parameter).unwrap() else {
+            panic!("parameter");
+        };
+        let super::ParameterParent::Function(function) = record.parent else {
+            panic!("function parameter");
+        };
+        let resource_type = record.ty;
+        match variant {
+            "consume-caller" => record.use_mode = ParameterUse::Consume,
+            "unrestricted" => record.use_mode = ParameterUse::Unrestricted,
+            "missing-binding" => record.resource_requirement = None,
+            _ => {}
+        }
+        if variant == "consume-in-borrow" {
+            let OwnerRecord::Parameter(record) =
+                candidate.owners.get_mut(&operation_parameter).unwrap()
             else {
+                panic!("operation parameter");
+            };
+            record.use_mode = ParameterUse::Consume;
+        }
+        let OwnerRecord::Declaration(record) = candidate
+            .owners
+            .get_mut(&OwnerKey::Declaration(function))
+            .unwrap()
+        else {
+            panic!("function");
+        };
+        if variant == "result" {
+            let DeclarationPayload::Function(function) = &mut record.payload else {
                 panic!("function");
             };
-            if variant == "public" {
-                record.visibility = DeclarationVisibility::Public;
-            }
-            if variant == "result" {
-                let DeclarationPayload::Function(function) = &mut record.payload else {
-                    panic!("function");
-                };
-                function.result = resource_type;
-            }
-            assert!(
-                !production_accepts(&candidate),
-                "production rejects {variant}"
-            );
-            assert!(
-                !Reference {
-                    snapshot: &candidate
-                }
-                .accepts(),
-                "reference rejects {variant}"
-            );
+            function.result = resource_type;
         }
+        assert!(
+            !production_accepts(&candidate),
+            "production rejects {variant} at {visibility:?}, generic={generic}, nested={nested}"
+        );
+        assert!(
+            !Reference {
+                snapshot: &candidate
+            }
+            .accepts(),
+            "reference rejects {variant} at {visibility:?}, generic={generic}, nested={nested}"
+        );
     }
 }
 
