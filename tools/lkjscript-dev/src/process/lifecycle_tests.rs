@@ -185,11 +185,15 @@ fn silent_sampled_survivor_is_not_a_clean_success() {
 fn closed_stdout_is_closed_before_even_an_immediate_write() {
     let root = tempfile::tempdir().unwrap();
     for attempt in 0..24 {
-        let spec = fixture(
+        let mut spec = fixture(
             root.path(),
             &format!("closed-{attempt}"),
             "trap '' PIPE; if printf x; then exit 99; else exit 0; fi",
         );
+        // This witnesses pipe closure before spawn, not an 80 ms scheduling SLO.
+        // Keep timeout/descendant tests on their original tight deadlines. A loaded
+        // runner must still execute all 24 immediate writes, never retry or skip one.
+        spec.timeout = Duration::from_secs(2);
         let result = run_closed_stdout(&spec, root.path());
         assert_eq!(
             result.status,
