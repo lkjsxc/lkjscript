@@ -15,6 +15,9 @@ use crate::platform::semantic_id::{DeclarationId, ExpressionId, OperationId, Par
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+#[path = "affine_package_reference.rs"]
+mod packages;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Shape {
     Direct,
@@ -477,9 +480,7 @@ impl Reference<'_> {
             }
             return Ok(Value::Plain);
         };
-        if function.package != self.snapshot.root.package_id
-            || arguments.len() != signature.parameter_count
-        {
+        if arguments.len() != signature.parameter_count {
             return Err(());
         }
         let (resource, ordinary) = arguments.split_last().ok_or(())?;
@@ -497,58 +498,56 @@ impl Reference<'_> {
         &self,
         reference: DeclarationReference,
     ) -> Result<Option<ResourceSignature>, ()> {
-        if reference.package != self.snapshot.root.package_id {
-            let Some(PackageInterfaceRecord::Declaration(declaration)) = self.foreign_owner(
-                reference.package,
-                OwnerKey::Declaration(reference.declaration),
-            ) else {
-                return Ok(None);
-            };
-            let parameters = match &declaration.payload {
-                PackageInterfaceDeclarationPayload::Function(signature) => &signature.parameters,
-                PackageInterfaceDeclarationPayload::External(signature) => &signature.parameters,
-                _ => return Ok(None),
-            };
-            if parameters.iter().any(|parameter| {
-                self.parameter(reference.package, *parameter)
-                    .is_none_or(|parameter| {
-                        self.contains_resource(parameter.ty, &mut BTreeSet::new())
-                            || parameter.use_mode != ParameterUse::Unrestricted
-                            || parameter.resource_requirement.is_some()
-                    })
-            }) {
-                return Err(());
-            }
-            return Ok(None);
-        }
-
-        let Some(OwnerRecord::Declaration(declaration)) = self
-            .snapshot
-            .owners
-            .get(&OwnerKey::Declaration(reference.declaration))
-        else {
-            return Err(());
-        };
-        let function = match &declaration.payload {
-            DeclarationPayload::Function(function) => function,
-            DeclarationPayload::External(signature) => {
-                if signature.parameters.iter().any(|parameter| {
-                    self.parameter(reference.package, *parameter)
-                        .is_none_or(|parameter| {
-                            self.contains_resource(parameter.ty, &mut BTreeSet::new())
-                                || parameter.use_mode != ParameterUse::Unrestricted
-                                || parameter.resource_requirement.is_some()
-                        })
-                }) {
+        // This flow oracle reads interface fields directly; it does not use the
+        // production signature projection or its affine transfer implementation.
+        let (parameters, result, effect, authority_generic) =
+            if reference.package == self.snapshot.root.package_id {
+                let Some(OwnerRecord::Declaration(declaration)) = self
+                    .snapshot
+                    .owners
+                    .get(&OwnerKey::Declaration(reference.declaration))
+                else {
                     return Err(());
+                };
+                match &declaration.payload {
+                    DeclarationPayload::Function(function) => (
+                        &function.parameters,
+                        function.result,
+                        &function.effect,
+                        !function.effect_parameters.is_empty()
+                            || !function.requirement_parameters.is_empty(),
+                    ),
+                    DeclarationPayload::External(signature) => {
+                        self.external_parameters(reference.package, &signature.parameters)?;
+                        return Ok(None);
+                    }
+                    _ => return Ok(None),
                 }
-                return Ok(None);
-            }
-            _ => return Ok(None),
-        };
+            } else {
+                let Some(PackageInterfaceRecord::Declaration(declaration)) = self.foreign_owner(
+                    reference.package,
+                    OwnerKey::Declaration(reference.declaration),
+                ) else {
+                    return Err(());
+                };
+                match &declaration.payload {
+                    PackageInterfaceDeclarationPayload::Function(signature) => (
+                        &signature.parameters,
+                        signature.result,
+                        &signature.effect,
+                        !signature.effect_parameters.is_empty()
+                            || !signature.requirement_parameters.is_empty(),
+                    ),
+                    PackageInterfaceDeclarationPayload::External(signature) => {
+                        self.external_parameters(reference.package, &signature.parameters)?;
+                        return Ok(None);
+                    }
+                    _ => return Ok(None),
+                }
+            };
 
         let mut resource = None;
-        for (index, parameter) in function.parameters.iter().copied().enumerate() {
+        for (index, parameter) in parameters.iter().copied().enumerate() {
             let record = self.parameter(reference.package, parameter).ok_or(())?;
             if record.parent != super::ParameterParent::Function(reference.declaration) {
                 return Err(());
@@ -556,7 +555,7 @@ impl Reference<'_> {
             match self.resource_type(record.ty, &mut BTreeSet::new()) {
                 Some((Shape::Direct, interface)) => {
                     if resource.is_some()
-                        || index.saturating_add(1) != function.parameters.len()
+                        || index.saturating_add(1) != parameters.len()
                         || record.use_mode == ParameterUse::Unrestricted
                     {
                         return Err(());
@@ -564,7 +563,7 @@ impl Reference<'_> {
                     let requirement = record.resource_requirement.ok_or(())?;
                     resource = Some(ResourceSignature {
                         parameter,
-                        parameter_count: function.parameters.len(),
+                        parameter_count: parameters.len(),
                         use_mode: record.use_mode,
                         right: Right {
                             shape: Shape::Direct,
@@ -587,22 +586,17 @@ impl Reference<'_> {
         let Some(resource) = resource else {
             return Ok(None);
         };
-        if declaration.visibility != DeclarationVisibility::Private
-            || !function.effect_parameters.is_empty()
-            || !function.requirement_parameters.is_empty()
-            || self.contains_resource(function.result, &mut BTreeSet::new())
-        {
+        if authority_generic || self.contains_resource(result, &mut BTreeSet::new()) {
             return Err(());
         }
         let FunctionEffect::Task {
             effect_parameters: _,
             requirements,
-        } = &function.effect
+        } = effect
         else {
             return Err(());
         };
-        if resource.right.requirement.package() != self.snapshot.root.package_id
-            || !requirements.contains(&resource.right.requirement)
+        if !requirements.contains(&resource.right.requirement)
             || self
                 .requirement(resource.right.requirement)
                 .is_none_or(|requirement| requirement.0 != resource.right.interface)
@@ -610,6 +604,24 @@ impl Reference<'_> {
             return Err(());
         }
         Ok(Some(resource))
+    }
+
+    fn external_parameters(
+        &self,
+        package: PackageId,
+        parameters: &[ParameterId],
+    ) -> Result<(), ()> {
+        if parameters.iter().any(|parameter| {
+            self.parameter(package, *parameter).is_none_or(|parameter| {
+                self.contains_resource(parameter.ty, &mut BTreeSet::new())
+                    || parameter.use_mode != ParameterUse::Unrestricted
+                    || parameter.resource_requirement.is_some()
+            })
+        }) {
+            Err(())
+        } else {
+            Ok(())
+        }
     }
 
     fn plain(&self, expression: ExpressionId, live: &mut Live) -> Result<(), ()> {
@@ -1565,7 +1577,12 @@ fn independent_reference_agrees_on_maintained_graphs_and_finite_negative_corpus(
         assert!(Reference { snapshot }.accepts(), "reference accepts {name}");
     }
 
-    let journal_mutations: [SnapshotMutation; 14] = [
+    let mut public = journal.clone();
+    mutate_public_resource_helper(&mut public);
+    assert!(production_accepts(&public));
+    assert!(Reference { snapshot: &public }.accepts());
+
+    let journal_mutations: [SnapshotMutation; 13] = [
         ("fabricated resource", mutate_fabricated_resource),
         ("post-consume escape", mutate_post_consume_escape),
         ("duplicate consume", mutate_duplicate_consume),
@@ -1575,7 +1592,6 @@ fn independent_reference_agrees_on_maintained_graphs_and_finite_negative_corpus(
         ("function escape", mutate_function_escape),
         ("missing function binding", mutate_missing_function_binding),
         ("wrong function binding", mutate_wrong_function_binding),
-        ("public resource helper", mutate_public_resource_helper),
         (
             "generic resource transfer",
             mutate_requirement_generic_resource_helper,

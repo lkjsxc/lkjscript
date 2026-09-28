@@ -15,8 +15,8 @@ use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH;
 use crate::platform::kernel::{
     BlobObjectDigest, CaseReference, ComparisonPolicy, DeclarationPayload, DeclarationReference,
-    DeclarationVisibility, EncodedOwnerKey, ExternalVisibility, FieldReference, FunctionEffect,
-    Idempotency, ImplementationName, Name, OperationReference, OwnerKey, OwnerRecord, PackageId,
+    EncodedOwnerKey, ExternalVisibility, FieldReference, FunctionEffect, Idempotency,
+    ImplementationName, Name, OperationReference, OwnerKey, OwnerRecord, PackageId,
     ParameterParent, ParameterUse, PortReference, RequirementReference, ResourceLimit,
     SemanticStateDigest, StructuralTypeField, TypeForm, TypeObject, TypeObjectDigest,
     TypeObjectInterner, decode_type_object, encode_type_object,
@@ -480,6 +480,7 @@ impl NormalizedProgram {
             &units,
             &indexes,
             &runtime_owners,
+            &types,
             &mut text_cache,
             &mut work,
         )?;
@@ -1530,10 +1531,10 @@ fn validate_normalized_resource_signature(
                 "resource parameter requirement escaped the prepared table",
             )
         })?;
-    if requirement.reference.package != declaration.package || requirement.interface != interface {
+    if requirement.interface != interface {
         return Err(runtime_corrupt(
             "normalized_function_resource_authority",
-            "resource parameter is not bound to the same-package exact requirement and interface",
+            "resource parameter is not bound to its exact requirement interface",
         ));
     }
     let OwnerRecord::Declaration(record) = exact_runtime_owner(
@@ -1572,8 +1573,7 @@ fn validate_normalized_resource_signature(
                 "task requirement escaped the prepared table",
             )
         })?;
-    if record.visibility != DeclarationVisibility::Private
-        || function.type_parameters != type_parameters
+    if function.type_parameters != type_parameters
         || function.parameters != parameter_ids
         || function.result != result
         || !matches!(
@@ -1585,7 +1585,7 @@ fn validate_normalized_resource_signature(
     {
         return Err(runtime_corrupt(
             "normalized_function_resource_binding",
-            "prepared resource signature disagrees with its private canonical task declaration",
+            "prepared resource signature disagrees with its exact canonical task declaration",
         ));
     }
     let OwnerRecord::Parameter(canonical_parameter) = exact_runtime_owner(
@@ -1740,8 +1740,7 @@ fn validate_resource_calls(functions: &[NormalizedFunction]) -> Result<(), Diagn
                             "resource call target escaped the prepared function table",
                         )
                     })?;
-                    if function.declaration.package != callee.declaration.package
-                        || *arguments != callee.parameter_count
+                    if *arguments != callee.parameter_count
                         || !matches!(
                             instruction_index
                                 .checked_sub(1)
@@ -1752,7 +1751,7 @@ fn validate_resource_calls(functions: &[NormalizedFunction]) -> Result<(), Diagn
                     {
                         return Err(runtime_corrupt(
                             "normalized_resource_call_transfer",
-                            "prepared resource call is not one same-package final local use matching its parameter",
+                            "prepared resource call is not one final local use matching its exact parameter",
                         ));
                     }
                 }
@@ -1770,6 +1769,7 @@ fn prepare_components(
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
     indexes: &RuntimeIndexes,
     runtime_owners: &RuntimeOwnerMap,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
     text_cache: &mut BTreeMap<BlobObjectDigest, Arc<str>>,
     work: &mut NormalizedPreparationWork,
 ) -> Result<(Vec<NormalizedComponent>, Vec<NormalizedPort>), Diagnostic> {
@@ -1787,7 +1787,7 @@ fn prepare_components(
                 "component dense index names another compiler payload",
             ));
         };
-        let requirements = compiled_requirements
+        let mut requirements = compiled_requirements
             .iter()
             .map(|requirement| {
                 let reference = index_copy(
@@ -1814,6 +1814,37 @@ fn prepare_components(
                     "component port runtime metadata has another owner kind",
                 ));
             };
+            // Only the port's declared top-level task row contributes imported
+            // obligations. Do not discover authority from implementation calls.
+            let port_type = types.get(&record.function_type).ok_or_else(|| {
+                runtime_corrupt(
+                    "normalized_port_type_missing",
+                    "component port type is absent from the exact type closure",
+                )
+            })?;
+            if let TypeForm::TaskFunction { effect, .. } = &port_type.form {
+                if !effect.is_closed() {
+                    return Err(runtime_corrupt(
+                        "normalized_port_effect_scope",
+                        "component port requires a closed exact task row",
+                    ));
+                }
+                for requirement in &effect.requirements {
+                    let reference = requirement.concrete().ok_or_else(|| {
+                        runtime_corrupt(
+                            "normalized_port_effect_scope",
+                            "component port contains an unresolved requirement parameter",
+                        )
+                    })?;
+                    if reference.package != declaration.package {
+                        requirements.push(required_index(
+                            &indexes.requirements,
+                            reference,
+                            "imported port requirement",
+                        )?);
+                    }
+                }
+            }
             let entry = match &port.implementation {
                 CompiledPortImplementation::Function(function) => {
                     let declaration = index_copy(
@@ -1851,6 +1882,8 @@ fn prepare_components(
             }
             component_ports.push(port_index);
         }
+        requirements.sort_unstable();
+        requirements.dedup();
         components[component_index.0 as usize] = Some(NormalizedComponent {
             declaration: *declaration,
             requirements: requirements.into(),

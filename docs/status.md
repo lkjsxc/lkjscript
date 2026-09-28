@@ -1,26 +1,27 @@
 # Status
 
-Current snapshot: 2026-09-28 (Asia/Tokyo). This page describes current availability
+Current snapshot: 2026-09-29 (Asia/Tokyo). This page describes current availability
 and boundaries; historical measurements and failed attempts stay with their
 [campaign owners](campaigns/) and [release records](release.md).
 
 The owner-selected [language-first direction](direction.md) now prioritizes advanced
 type/ownership/effect composition, region-based memory research and a shared runtime.
 The exact-code shared service host and scoped capability borrowing are public.
-Ordinary generic composition and recursive resource helpers are the development
-capabilities below; neither is supplied by public v0.1.54.
+Ordinary generic composition is public in v0.1.55. Recursive helpers and exact
+cross-package resource contracts are development capabilities below; neither is
+supplied by that public executable.
 Advanced ownership/trait and region-memory work remains a research selection,
 not a capability conferred by a roadmap or by sharing existing prepared code.
 
 ## Public binary release
 
-**Public/latest is immutable [v0.1.54](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.54).**
-It adds scoped capability-resource borrowing and nested reborrowing, retaining
-recorded history, the shared service host, typed forms and native web/editor workflows.
-Release `398115115` was published on 2026-09-28 at 18:40:53 JST. The
-[delivery observation](campaigns/202609281735.md#completed-v0154-publication)
-identifies accepted producer `36395986112/1`, unchanged source `7e6101f8`,
-promotion `36404343395/1` and successful anonymous acquisition/installed smoke.
+**Public/latest is immutable [v0.1.55](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.55).**
+It adds ordinary type-generic scoped borrowing and consumption, retaining recorded
+history, the shared service host, typed forms and native web/editor workflows.
+Release `398379899` was published on 2026-09-29 at 00:26:30 JST. The
+[delivery observation](campaigns/202609290026.md#completed-v0155-publication)
+identifies accepted producer `36419055364/1`, unchanged source `320dacc0`,
+promotion `36442849973/1` and successful anonymous acquisition/installed smoke.
 The earlier immutable releases and genuinely failed/withheld candidates remain unchanged.
 
 Inspect the actual installed executable with `lkjscript capabilities`. Installing
@@ -135,7 +136,7 @@ preserve caller ownership; a borrowed helper cannot consume or retain the view.
 Its accepted source `7e6101f8` passed 26 fresh gates. Producer `36395986112/1`
 was accepted and subsequently promoted unchanged as the immutable public release.
 
-## Development v0.1.55: ordinary type-generic resource helpers
+## Public v0.1.55: ordinary type-generic resource helpers
 
 [v0.1.55](releases/v0.1.55.md) composes ordinary type parameters with both borrow
 and consume helpers. A native queue consumer decodes through an ordinary callback,
@@ -146,9 +147,9 @@ gates freshly, with zero reuse and stable inputs, and reached main normally.
 The three public generic-resource cases also passed against a copied optimized
 executable. The [campaign](campaigns/202609281735.md#accepted-corrected-source-and-mainline-delivery)
 retains the original failed check and its scoped test correction. Candidate
-`36419055364/1` selects that exact source and is in progress, not yet accepted or
-published. Final-archive cases and publication remain separate; ordinary generic
-resource helpers are not provided by public v0.1.54.
+`36419055364/1` was accepted. All three native cases passed against its final
+archive executable before promotion. The same three assets are now immutable
+public v0.1.55; no development v0.1.56/v0.1.57 source was substituted.
 
 ## Development v0.1.56: recursive resource contracts
 
@@ -166,9 +167,25 @@ Implementation `d61dafaf3e1fc5d12cee6aaf11fdc4c239a961f3` passed all 26 full
 source gates fresh, with zero reuse and stable inputs, in 815.368798381 seconds.
 The same optimized development executable separately passed all seven native
 public cases. Distribution remains pending: this is not public v0.1.56.
-The original v0.1.55 producer `36419055364/1` has passed source acceptance and
-constructed final assets, but final-candidate acceptance is still in progress.
-Its frozen source and the public immutable v0.1.54 assets are unchanged.
+The original v0.1.55 producer `36419055364/1` subsequently passed final acceptance
+and was promoted unchanged. The development recursion increment remains separate.
+
+## Development v0.1.57: exact resource contracts across packages
+
+[v0.1.57](releases/v0.1.57.md) admits public resource helpers and exported
+forwarders with one final borrow/consume parameter bound to exact concrete
+authority. Ordinary type parameters and recursive implementations compose across
+package boundaries. The consumer's port explicitly declares imported requirements;
+implementation bodies and unused supplier requirements never imply deployment grants.
+Private/package members remain hidden, and same-name requirements are not aliases.
+
+The [campaign](campaigns/202609290026.md) owns source acceptance, copied native
+execution and delivery evidence. The literal library/consumer workloads exercise
+transport staging, canonical drafts, detached two/three-package execution, failed
+borrows, HTTP serving and pre-effect grant rejection. Affine feature 6 and qualified
+task feature 2 invalidate predecessor validation evidence. General resource returns,
+requirement/effect-polymorphic transfer and asynchronous borrowing remain unsupported.
+This is a development increment, not a public v0.1.57 binary.
 
 ## Current authority and maintained consumers
 
@@ -295,10 +312,12 @@ establish hostile-code containment or multi-tenant isolation.
   exact plan. A selected-test count is not proof of a passing test. Review tokens
   bind executable capabilities too; after an upgrade, re-plan the original request
   rather than modifying its base or reusing an incompatible token.
-- Affine resources remain lexical and task-local, with the supported private,
-  requirement-bound borrow/consume helpers, including ordinary type parameters in
-  development v0.1.55. General resource results, effect/requirement-polymorphic
-  resource transfer, cross-package transfer and asynchronous ownership remain unproved.
+- Affine resources remain lexical and task-local, with requirement-bound
+  borrow/consume helpers and ordinary type parameters in public v0.1.55.
+  Development v0.1.57 adds public cross-package contracts with exact authority.
+  General resource results, effect/requirement-polymorphic transfer and asynchronous
+  ownership remain unproved. Name-based deployment cannot address two distinct
+  obligations with the same name; one grant is never shared implicitly.
 - Anonymous closures, automatic capture, generic inference, expanding nominal
   instantiation, JIT/AOT specialization, SIMD and a browser/Wasm backend are absent.
 - Arbitrary outbound URLs/methods, outbound WebSockets, Nostr event signing and

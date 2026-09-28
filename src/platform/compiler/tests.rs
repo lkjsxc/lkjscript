@@ -2603,8 +2603,17 @@ fn assert_resource_function_metadata(loaded: &LoadedArtifact) {
     let OwnerRecord::Declaration(function) = &mut record else {
         panic!("resource function owner kind")
     };
-    function.visibility = crate::platform::kernel::DeclarationVisibility::Public;
-    let (digest, bytes) = encode_owner(&record).expect("encode public resource function");
+    let crate::platform::kernel::DeclarationPayload::Function(signature) = &mut function.payload
+    else {
+        panic!("resource function signature")
+    };
+    let crate::platform::kernel::FunctionEffect::Task { requirements, .. } = &mut signature.effect
+    else {
+        panic!("resource function task effect")
+    };
+    assert!(!requirements.is_empty());
+    requirements.clear();
+    let (digest, bytes) = encode_owner(&record).expect("encode rebound resource function");
     binding.object = digest;
     assert!(
         wrong_function_objects
@@ -2620,7 +2629,7 @@ fn assert_resource_function_metadata(loaded: &LoadedArtifact) {
     wrong_function_manifest.object_bytes = bytes;
     assert_eq!(
         super::artifact::encode_artifact(wrong_function_manifest, &wrong_function_objects)
-            .expect_err("public resource function metadata must reject")
+            .expect_err("resource function effect mismatch must reject")
             .code,
         "artifact_runtime_owner_semantics"
     );

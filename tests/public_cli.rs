@@ -5699,10 +5699,10 @@ effect.requirement parent=$bad_function index=0 requirement={requirement}"#
                 r#"type.capability-resource as=@bad_lease interface={lease_interface}
 expression.unit as=$bad_body
 create.function as=$bad_function module={application} name=public-resource-signature visibility=public result=unit effect=task body=$bad_body
-add.parameter as=$bad_parameter function=$bad_function name=lease type=@bad_lease use=consume requirement={requirement}
+add.parameter as=$bad_parameter function=$bad_function name=lease type=@bad_lease use=consume
 effect.requirement parent=$bad_function index=0 requirement={requirement}"#
             ),
-            "kernel_affine_function_resource_visibility",
+            "kernel_affine_function_resource_requirement",
         ),
         (
             "package-resource-signature",
@@ -5710,10 +5710,10 @@ effect.requirement parent=$bad_function index=0 requirement={requirement}"#
                 r#"type.capability-resource as=@bad_lease interface={lease_interface}
 expression.unit as=$bad_body
 create.function as=$bad_function module={application} name=package-resource-signature visibility=package result=unit effect=task body=$bad_body
-add.parameter as=$bad_parameter function=$bad_function name=lease type=@bad_lease use=consume requirement={requirement}
+add.parameter as=$bad_parameter function=$bad_function name=lease type=@bad_lease use=consume
 effect.requirement parent=$bad_function index=0 requirement={requirement}"#
             ),
-            "kernel_affine_function_resource_visibility",
+            "kernel_affine_function_resource_requirement",
         ),
         (
             "pure-resource-signature",

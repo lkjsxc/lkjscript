@@ -19,12 +19,6 @@ fn native_type_generic_resources_reject_escaping_or_rebound_authority_without_pu
             "kernel_affine_function_resource_generic",
         ),
         (
-            "public",
-            "(function create read-lease (as $reader) (visibility private)",
-            "(function create read-lease (as $reader) (visibility public)",
-            "kernel_affine_function_resource_visibility",
-        ),
-        (
             "consume-borrow",
             "(body (call read-lease (types U) (local decode) (local lease)))",
             "(body (sequence (capability-call queue::jobs std::DurableQueue::complete (local lease) (i64 0) (call std::data-encode (types Text) (text \"done\"))) (call read-lease (types U) (local decode) (local lease))))",

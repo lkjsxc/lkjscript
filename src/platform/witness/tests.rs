@@ -34,11 +34,11 @@ fn witness_contract_domains_are_closed_and_unique() {
         RelationKind::ALL.len()
     );
     assert_ne!(contract::validator_contract_digest().bytes(), [0_u8; 32]);
-    // Affine feature 5 admits recursive exact-resource contracts. Its evidence
-    // identity must not reuse feature-4 evidence that rejects those call cycles.
+    // Affine feature 6 and qualified-task feature 2 admit exact public resource
+    // contracts and explicit imported port obligations, not predecessor evidence.
     assert_eq!(
         contract::validator_contract_digest().to_string(),
-        "validator_contract_8aa23d03c510ffb1d0b6accffc3b2b379b1a8e1f8d6835e9dd6a1c834ded9d8f"
+        "validator_contract_2bf742fb0f1d14e45f17e9e20777400c9014c222e1cfab9e21419b58288b68fd"
     );
 }
 

@@ -31,8 +31,12 @@ parameters, data callbacks and results with exact concrete borrowing/consumption
 The [recursive continuation](campaigns/202609282124.md) admits direct and mutual
 synchronous helpers by checking their declared use contracts compositionally,
 without adding a parallel ownership mechanism or treating termination as safety.
-It deliberately leaves effect/requirement-polymorphic resource transfer,
-cross-package ownership, resource returns and general memory references open.
+The [package continuation](campaigns/202609290026.md) extends the exact resource
+contract to public libraries and forwarders, with imported authority explicitly
+named by entry ports and still granted at deployment. Ordinary generic borrowing,
+recursive implementation and final consumption compose across three packages.
+It leaves effect/requirement-polymorphic resource transfer, resource returns,
+general memory references and same-name deployment obligation selection open.
 These are implementation increments toward the coordinated slice, not substitutes
 for its region/trait/ownership design or evidence of zero-copy payload processing.
 

@@ -140,11 +140,11 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 27] = [
     },
     ValidatorFeatureDescriptor {
         name: "qualified_task_requirements",
-        version: 1,
+        version: 2,
     },
     ValidatorFeatureDescriptor {
         name: "affine_capability_resources",
-        version: 5,
+        version: 6,
     },
     ValidatorFeatureDescriptor {
         name: "structured_session_relations",

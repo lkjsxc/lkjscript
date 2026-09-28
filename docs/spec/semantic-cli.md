@@ -748,7 +748,7 @@ conversion of an accepted request to a new supplier.
 `add.parameter ... use=unrestricted|borrow|consume [requirement=REQUIREMENT]` authors canonical
 parameter use and the optional exact function-resource binding. Omission means unrestricted and no
 binding for an ordinary nonresource parameter. Resource operation parameters require explicit
-borrow or consume and no binding. One private same-package task function may instead
+borrow or consume and no binding. A directly named graph-authored task function may instead
 have one final direct resource parameter with `use=borrow` or `use=consume` and `requirement` naming the same exact
 requirement in its effect and interface in its resource type. Its preceding parameters and result
 must be resource-free, and only a direct named call may borrow or transfer the final resource owner.
@@ -760,10 +760,13 @@ Ordinary `(type-parameter create T)` and explicit `(types T)` call arguments com
 boundary, including ordinary callbacks/results and nested reborrowing. The final resource and its
 requirement remain concrete; effect/requirement-polymorphic resource helpers still reject.
 Automatic `extract.function` retains its existing nongeneric, consume-only extraction boundary.
-Direct and input-file records lower to identical intent. Missing, extra, foreign, interface-
-mismatched, unrestricted, multiple, nonfinal, public, package, effect/requirement-generic, pure,
-cross-package, indirect, resource-result, and post-consume caller-reuse forms reject before plan
-publication. Unknown predecessor type/use spellings also reject.
+Public helpers can cross exact package boundaries; private/package-visible dependency members
+remain hidden. A forwarding parameter may name the original imported requirement, not a new
+same-name local slot. The consumer port must explicitly include imported authority in its closed
+top-level task row, and deployment must grant it. No authority is inferred from helper bodies.
+Direct and input-file records lower to identical intent. Missing, extra, rebound, interface-
+mismatched, unrestricted, multiple, nonfinal, effect/requirement-generic, pure,
+indirect, resource-result, and post-consume caller-reuse forms reject before plan publication. Unknown predecessor type/use spellings also reject.
 
 The higher-order slice uses these public spellings: `add.type-parameter` adds one ordered
 stable parameter to a pure or task function; `expression.function-value` names one exact function and

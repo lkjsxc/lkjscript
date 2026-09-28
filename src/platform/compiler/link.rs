@@ -262,6 +262,15 @@ pub(super) fn link_prepared(
     let mut runtime_records = BTreeMap::new();
     for ((package, owner), expectation) in runtime_owner_expectations(&local_units)? {
         if package != view.package_id() {
+            // Imported task rows reference authority owned by a dependency.
+            // Its already validated artifact contributes that canonical owner;
+            // the final strict loader still checks the complete exact closure.
+            if matches!(
+                expectation,
+                super::artifact::RuntimeOwnerExpectation::TaskRequirement
+            ) {
+                continue;
+            }
             return Err(link_error(
                 DiagnosticClass::Corrupt,
                 "artifact_link_runtime_owner_package",

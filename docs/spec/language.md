@@ -196,7 +196,7 @@ may transfer while that exact ancestor retains transaction ownership. An unused 
 does not prevent a task transfer: dropping its descriptor neither releases the invocation's
 table entry/admission capacity nor performs any queue completion, failure or stream operation.
 The admitted final-consume helper protocol still transfers the exact right once, after ordinary
-arguments finish, without changing private/same-package signature restrictions.
+arguments finish, while retaining the exact resource signature and authority restrictions.
 
 Tail eligibility is derived from accepted meaning and strict loaded code, never stored meaning
 or an authoring option. Transfers check cancellation and consume execution work without resetting
@@ -328,7 +328,7 @@ value retains that acquiring requirement as authority.
 
 Every parameter has canonical use meaning: `unrestricted`, `borrow`, or `consume`. Nonresource
 parameters must be unrestricted. A direct capability-resource operation parameter must be an
-explicit borrow or consume. One private, same-package task function may instead have
+explicit borrow or consume. A directly named graph-authored task function may instead have
 exactly one final direct capability-resource parameter with `borrow` or `consume` use. That parameter carries
 one canonical `resource_requirement` reference to a requirement in the function effect whose exact
 interface matches the resource type. The binding is graph meaning and is never inferred from a
@@ -377,10 +377,26 @@ Dropping an unconsumed resource is allowed. A nominal variant may contain one di
 payload: matching consumes the outer owner and makes the payload live only in the selected arm. A
 join retains an owner only when every reachable arm retains the same provenance. Records,
 structural records, lists, maps, options, results, streams, function values, constants, tests, and
-nested nominal values cannot contain a resource. Multiple, nonfinal, public,
-package-visible, cross-package, effect/requirement-generic, indirect, captured, or result-bearing resource
+nested nominal values cannot contain a resource. Multiple, nonfinal,
+effect/requirement-generic, indirect, captured, or result-bearing resource
 function forms reject. Partial moves, affine containers, resource polymorphism, resource-capturing closures, async or
 detached tasks, and general linear must-use semantics are absent.
+
+Public resource helpers can be imported and called across exact package boundaries. Their
+parameter use, type and concrete requirement binding are exported signature meaning, not caller
+choices. Package/private visibility is still enforced; making a helper public does not make
+hidden dependency helpers callable. Forwarders may bind the original dependency requirement,
+including through another public package, without inventing a local authority alias. A resource
+acquired from a different requirement cannot satisfy the signature even when both requirements
+have the same name, interface, operations and limits.
+
+A component port may explicitly name an imported concrete requirement in its closed top-level
+task row. Such references join the component's deployment obligations; implementation calls,
+nested callback types and unused dependency requirements do not implicitly add authority.
+The selected deployment must grant each exact obligation. The current descriptor matches grants
+by requirement name; two different obligations with the same name cannot share one grant and
+cannot both be addressed by this descriptor format. Use distinct requirement names. Declaring a
+port effect does not itself provide a grant. Command and HTTP entries retain the same rule.
 
 ## Declarations, effects, and capabilities
 

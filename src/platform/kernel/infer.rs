@@ -412,18 +412,12 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     _ => {}
                 },
                 OwnerRecord::Port(port) => {
-                    let requirements = match self.component_requirements(port.declaration) {
+                    let mut requirements = match self.component_requirements(port.declaration) {
                         Ok(requirements) => requirements,
                         Err(diagnostic) => {
                             self.push_diagnostic(diagnostic);
                             continue;
                         }
-                    };
-                    let component_context = ExecutionContext {
-                        declaration: None,
-                        pure: false,
-                        requirements,
-                        effect_parameters: BTreeSet::new(),
                     };
                     let signature = match self.callable_signature(port.function_type) {
                         Ok(signature) => signature,
@@ -439,6 +433,22 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         );
                         continue;
                     }
+                    // An imported concrete effect named by the public port type
+                    // is an explicit deployment obligation, not an inferred grant
+                    // for every requirement in a dependency's implementation.
+                    requirements.extend(signature.requirements.iter().copied().filter(
+                        |requirement| {
+                            requirement.concrete().is_some_and(|reference| {
+                                reference.package != self.read.package_id()
+                            })
+                        },
+                    ));
+                    let component_context = ExecutionContext {
+                        declaration: None,
+                        pure: false,
+                        requirements,
+                        effect_parameters: BTreeSet::new(),
+                    };
                     if let Err(diagnostic) =
                         self.validate_call_effect(&signature, &component_context)
                     {

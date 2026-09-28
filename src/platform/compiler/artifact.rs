@@ -10,14 +10,14 @@ use super::unit::{
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    CaseReference, DeclarationPayload, DeclarationReference, DeclarationVisibility,
-    EncodedOwnerKey, ExpressionOperation, ExternalVisibility, FieldReference, FunctionEffect,
-    Idempotency, LocalValueReference, Name, OperationReference, OwnerKey, OwnerKind,
-    OwnerObjectDigest, OwnerRecord, PackageId, PackageInterfaceDeclarationPayload,
-    PackageInterfaceDigest, PackageInterfaceRecord, PackageRevisionDigest, ParameterParent,
-    PortImplementation, PortReference, RequirementRecord, RequirementReference, ResourceLimit,
-    SemanticStateDigest, TypeForm, TypeObject, TypeObjectDigest, decode_owner,
-    decode_owner_binding, decode_type_object, encode_type_object, requirement_is_covered_by,
+    CaseReference, DeclarationPayload, DeclarationReference, EncodedOwnerKey, ExpressionOperation,
+    ExternalVisibility, FieldReference, FunctionEffect, Idempotency, LocalValueReference, Name,
+    OperationReference, OwnerKey, OwnerKind, OwnerObjectDigest, OwnerRecord, PackageId,
+    PackageInterfaceDeclarationPayload, PackageInterfaceDigest, PackageInterfaceRecord,
+    PackageRevisionDigest, ParameterParent, PortImplementation, PortReference, RequirementRecord,
+    RequirementReference, ResourceLimit, SemanticStateDigest, TypeForm, TypeObject,
+    TypeObjectDigest, decode_owner, decode_owner_binding, decode_type_object, encode_type_object,
+    requirement_is_covered_by,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::package_interface::{
@@ -1335,11 +1335,9 @@ impl RuntimeOwnerExpectation {
                 OwnerRecord::Declaration(record),
             ) => {
                 matches!(
-                    (&record.visibility, &record.payload),
-                    (
-                        DeclarationVisibility::Private,
-                        DeclarationPayload::Function(function),
-                    ) if function.type_parameters == *type_parameters && function.effect_parameters.is_empty() && function.requirement_parameters.is_empty()
+                    &record.payload,
+                    DeclarationPayload::Function(function)
+                    if function.type_parameters == *type_parameters && function.effect_parameters.is_empty() && function.requirement_parameters.is_empty()
                         && function.parameters == *parameters
                         && function.result == *result
                         && matches!(
@@ -2095,10 +2093,12 @@ fn insert_signature_expectations(
             *requirement,
             "task signature requirement reference",
         )?;
-        require_local_reference(package, reference.package, "task signature requirement")?;
         insert_runtime_expectation(
             expected,
-            (package, OwnerKey::Requirement(reference.requirement)),
+            (
+                reference.package,
+                OwnerKey::Requirement(reference.requirement),
+            ),
             RuntimeOwnerExpectation::TaskRequirement,
         )?;
     }
@@ -2486,6 +2486,7 @@ fn trace_object_closure(
         type_roots.extend(object.child_types());
         types.insert(digest, object);
     }
+    validate_loaded_http_route_requirement_closure(&units, &runtime_owners, &types)?;
     validate_predecessor_type_closure(predecessor_type_roots, &types)?;
     validate_artifact_nominal_meaning(
         manifest,
@@ -3741,13 +3742,13 @@ fn validate_runtime_owners(
             "artifact runtime metadata omitted one exact compiler-unit boundary owner",
         ));
     }
-    validate_loaded_http_route_requirement_closure(units, &records)?;
     Ok(records)
 }
 
 fn validate_loaded_http_route_requirement_closure(
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
     records: &BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
 ) -> Result<(), Diagnostic> {
     for ((package, _), unit) in units {
         let CompilationPayload::Target {
@@ -3807,6 +3808,18 @@ fn validate_loaded_http_route_requirement_closure(
                     ));
                 }
             };
+            let imported = match types
+                .get(&port_record.function_type)
+                .map(|object| &object.form)
+            {
+                Some(TypeForm::TaskFunction { effect, .. }) if effect.is_closed() => effect
+                    .requirements
+                    .iter()
+                    .filter_map(|requirement| requirement.concrete())
+                    .filter(|requirement| requirement.package != component.package)
+                    .collect::<BTreeSet<_>>(),
+                _ => BTreeSet::new(),
+            };
             let function = match port_record.implementation {
                 PortImplementation::Function(function) => function,
                 PortImplementation::Expression(_) => continue,
@@ -3837,6 +3850,9 @@ fn validate_loaded_http_route_requirement_closure(
                     "HTTP function requirement",
                 )?;
                 let candidate = exact_requirement_record(records, reference)?;
+                if imported.contains(&reference) {
+                    continue;
+                }
                 let matches = component_requirements
                     .iter()
                     .filter(|(component_reference, component)| {

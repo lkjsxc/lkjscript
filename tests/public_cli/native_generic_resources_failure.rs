@@ -40,7 +40,7 @@ pub(super) fn check_failed_decoder(program: &str) {
                 && compact_field(record, "code") == "normalized_integer_division")
     );
     let failed_job = read_job(&data, "numbers");
-    assert_leased_job(&failed_job);
+    assert_leased_job(&failed_job, b"generic-worker");
 
     // The earlier claim remains committed; it is neither a completion nor a rollback.
     // A separate invocation can nevertheless claim and complete its own ready job.
@@ -53,7 +53,7 @@ pub(super) fn check_failed_decoder(program: &str) {
     assert_eq!(read_job(&data, "numbers"), failed_job);
 }
 
-fn assert_leased_job(bytes: &[u8]) {
+pub(super) fn assert_leased_job(bytes: &[u8], worker: &[u8]) {
     let mut cursor = job_payload(bytes);
     assert_eq!(take(&mut cursor, 8), b"LKJQJOB1");
     assert_eq!(blob(&mut cursor), b"numbers");
@@ -65,7 +65,7 @@ fn assert_leased_job(bytes: &[u8]) {
     assert_eq!(take(&mut cursor, 1), [1]); // attempt present
     assert_eq!(blob(&mut cursor), b"numbers:1");
     assert_eq!(take(&mut cursor, 1), [1]); // worker present
-    assert_eq!(blob(&mut cursor), b"generic-worker");
+    assert_eq!(blob(&mut cursor), worker);
     assert_eq!(take(&mut cursor, 1), [1]); // lease present
     assert_eq!(take(&mut cursor, 8), 1000_i64.to_be_bytes());
     assert_eq!(take(&mut cursor, 2), [0, 0]); // no completion result or queue error

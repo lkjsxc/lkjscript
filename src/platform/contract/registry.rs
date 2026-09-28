@@ -4152,12 +4152,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Move the resource parameter after all unrestricted parameters.",
         ),
         diagnostic(
-            "kernel_affine_function_resource_visibility",
-            DiagnosticClass::Semantic,
-            "A resource-bearing function is not private.",
-            "Keep the resource-bearing helper private to its package.",
-        ),
-        diagnostic(
             "kernel_affine_function_resource_generic",
             DiagnosticClass::Semantic,
             "A resource-bearing function has effect or requirement parameters.",
@@ -4170,12 +4164,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Use a task effect containing the exact bound requirement.",
         ),
         diagnostic(
-            "kernel_affine_function_resource_package",
-            DiagnosticClass::Semantic,
-            "A resource parameter binds a requirement outside its owning package.",
-            "Bind a requirement owned by the same package and task function.",
-        ),
-        diagnostic(
             "kernel_affine_function_resource_interface",
             DiagnosticClass::Semantic,
             "A resource parameter type disagrees with its exact bound requirement interface.",
@@ -4185,25 +4173,19 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_affine_external_parameter",
             DiagnosticClass::Semantic,
             "An external function parameter contains capability authority.",
-            "Keep resource transfer on private graph-authored task functions.",
+            "Keep resource transfer on directly named graph-authored task functions.",
         ),
         diagnostic(
             "kernel_affine_resource_function_value",
             DiagnosticClass::Semantic,
             "A resource-bearing function is used as a function value.",
-            "Call the private helper directly by its exact declaration reference.",
+            "Call the helper directly by its exact declaration reference.",
         ),
         diagnostic(
             "kernel_affine_resource_call_arguments",
             DiagnosticClass::Semantic,
             "A resource-bearing direct call has an unsupported argument shape.",
             "Pass unrestricted arguments first and one direct live owner as the final argument.",
-        ),
-        diagnostic(
-            "kernel_affine_resource_call_package",
-            DiagnosticClass::Semantic,
-            "A resource-bearing call crosses a package boundary.",
-            "Call a private helper in the caller's package.",
         ),
         diagnostic(
             "kernel_affine_resource_call_interface",
@@ -4215,7 +4197,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_affine_resource_call_scope",
             DiagnosticClass::Semantic,
             "A resource transfer appears outside one exact task-function validation scope.",
-            "Keep transfer inside a directly named private task function.",
+            "Keep transfer inside a directly named task function with exact authority.",
         ),
         diagnostic(
             "kernel_affine_function_result",

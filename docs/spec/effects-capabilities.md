@@ -126,9 +126,10 @@ payloads, objects, or logs. Streams use bounded chunks and backpressure. Data tr
 queue leases are lexical/task-owned.
 
 The compiler records borrow/consume on local loads and retains the exact requirement on a resource
-parameter. Strict artifact loading and normalized preparation recheck the private task signature,
+parameter. Strict artifact loading and normalized preparation recheck the exact task signature,
 exact requirement/interface, immediate final local load matching the parameter's use mode, and
-same-package direct call. Each independently validated task body applies its declared use contract;
+direct call, including an imported public function. The dependency owns its canonical authority
+metadata; a caller cannot redefine it. Each independently validated task body applies its declared use contract;
 direct and mutual synchronous recursion do not waive it or establish termination. Each VM and
 reference call frame revalidates the same live task scope, kind, requirement,
 interface, and slot, so hostile derived input cannot copy, rebind, revive, or indirectly invoke a

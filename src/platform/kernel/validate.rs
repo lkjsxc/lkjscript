@@ -9,8 +9,8 @@ use super::expression::{ExpressionOperation, FieldSelector, LocalValueReference,
 use super::id::{OwnerKey, OwnerKind, PackageId};
 use super::infer::validate_expression_meaning;
 use super::owner::{
-    BindingKind, DeclarationPayload, DeclarationVisibility, FunctionEffect, OwnerRecord,
-    ParameterParent, ParameterRecord, ParameterUse, PortImplementation, PortRecord,
+    BindingKind, DeclarationPayload, FunctionEffect, OwnerRecord, ParameterParent, ParameterRecord,
+    ParameterUse, PortImplementation, PortRecord,
 };
 use super::owner_namespace;
 use super::relation::{RelationEdge, extract_relations};
@@ -975,6 +975,27 @@ impl FullValidator<'_> {
                     .map(|record| (reference, record))
             })
             .collect::<Vec<_>>();
+        // Imported authority is admitted only by the selected port's explicit
+        // closed row. It is not an alias of a similarly named local slot.
+        let imported = match self.snapshot.owners.get(&OwnerKey::Port(route.port.port)) {
+            Some(OwnerRecord::Port(port)) => self
+                .snapshot
+                .types
+                .get(&port.function_type)
+                .and_then(|object| match &object.form {
+                    TypeForm::TaskFunction { effect, .. } => Some(
+                        effect
+                            .requirements
+                            .iter()
+                            .filter_map(|requirement| requirement.concrete())
+                            .filter(|requirement| requirement.package != component.package)
+                            .collect::<BTreeSet<_>>(),
+                    ),
+                    _ => None,
+                })
+                .unwrap_or_default(),
+            _ => BTreeSet::new(),
+        };
         for requirement in requirements {
             if !self.consume_work() {
                 return;
@@ -982,6 +1003,9 @@ impl FullValidator<'_> {
             let Some(candidate) = self.http_route_requirement(*requirement) else {
                 continue;
             };
+            if imported.contains(requirement) {
+                continue;
+            }
             let matches = component_requirements
                 .iter()
                 .filter(|(reference, component)| {
@@ -1658,14 +1682,6 @@ impl FullValidator<'_> {
                                     ),
                                 );
                             }
-                            if declaration.visibility != DeclarationVisibility::Private {
-                                self.error(
-                                    "kernel_affine_function_resource_visibility",
-                                    format!(
-                                        "resource-bearing function declaration {owner:?} must be private"
-                                    ),
-                                );
-                            }
                             if !function.effect_parameters.is_empty()
                                 || !function.requirement_parameters.is_empty()
                             {
@@ -1692,14 +1708,6 @@ impl FullValidator<'_> {
                             let Some(requirement) = record.resource_requirement else {
                                 continue;
                             };
-                            if requirement.package != self.snapshot.root.package_id {
-                                self.error(
-                                    "kernel_affine_function_resource_package",
-                                    format!(
-                                        "resource parameter {parameter} must bind a same-package requirement"
-                                    ),
-                                );
-                            }
                             if !requirements.contains(&requirement.into()) {
                                 self.error(
                                     "kernel_affine_function_resource_effect",
@@ -1713,21 +1721,43 @@ impl FullValidator<'_> {
                             else {
                                 continue;
                             };
-                            match self
-                                .snapshot
-                                .owners
-                                .get(&OwnerKey::Requirement(requirement.requirement))
+                            let key = OwnerKey::Requirement(requirement.requirement);
+                            let bound_interface = if requirement.package
+                                == self.snapshot.root.package_id
                             {
-                                Some(OwnerRecord::Requirement(bound))
-                                    if requirement.package == self.snapshot.root.package_id
-                                        && bound.interface == interface => {}
-                                Some(OwnerRecord::Requirement(_)) => self.error(
+                                match self.snapshot.owners.get(&key) {
+                                    Some(OwnerRecord::Requirement(bound)) => Some(bound.interface),
+                                    _ => None,
+                                }
+                            } else {
+                                self.snapshot
+                                    .dependencies
+                                    .get(&requirement.package)
+                                    .and_then(|dependency| {
+                                        self.snapshot
+                                            .dependency_interfaces
+                                            .get(&dependency.package_revision)
+                                    })
+                                    .and_then(|owners| owners.get(&key))
+                                    .and_then(|record| match record {
+                                        PackageInterfaceRecord::Requirement(bound) => {
+                                            Some(bound.interface)
+                                        }
+                                        _ => None,
+                                    })
+                            };
+                            match bound_interface {
+                                Some(bound) if bound == interface => {}
+                                Some(_) => self.error(
                                     "kernel_affine_function_resource_interface",
                                     format!(
                                         "resource parameter {parameter} type disagrees with its exact requirement interface"
                                     ),
                                 ),
-                                _ => {}
+                                None => self.error(
+                                    "kernel_affine_function_resource_requirement",
+                                    format!("resource parameter {parameter} binds an unavailable exact requirement"),
+                                ),
                             }
                         }
                     }

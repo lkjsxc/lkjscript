@@ -4,10 +4,9 @@ use super::contract::MAXIMUM_EXPRESSION_DEPTH;
 use super::infer::{ExpressionRead, ExpressionValidationExhaustion, ExpressionValidationLimits};
 use super::{
     BindingKind, BindingRecord, CaseRecord, DeclarationPayload, DeclarationReference,
-    DeclarationVisibility, ExpressionOperation, FunctionDeclaration, FunctionEffect,
-    LocalValueReference, OperationRecord, OwnerKey, OwnerRecord, PackageId,
-    PackageInterfaceDeclarationPayload, PackageInterfaceRecord, ParameterRecord, ParameterUse,
-    RequirementReference, TypeForm, TypeObjectDigest,
+    ExpressionOperation, FunctionDeclaration, FunctionEffect, LocalValueReference, OperationRecord,
+    OwnerKey, OwnerRecord, PackageId, PackageInterfaceDeclarationPayload, PackageInterfaceRecord,
+    ParameterRecord, ParameterUse, RequirementReference, TypeForm, TypeObjectDigest,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::{BindingId, DeclarationId, ExpressionId, ParameterId};
@@ -710,13 +709,6 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
             }
             return Ok(EvaluatedValue::Unrestricted);
         };
-        if function.package != self.read.package_id() {
-            return Err(affine_error(
-                "kernel_affine_resource_call_package",
-                expression,
-                "resource transfer requires a private same-package task function",
-            ));
-        }
         if arguments.len() != parameter.parameter_count {
             return Err(affine_error(
                 "kernel_affine_resource_call_arguments",
@@ -1384,44 +1376,49 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
         reference: DeclarationReference,
     ) -> Result<Option<ResourceFunctionParameter>, Diagnostic> {
         let owner = OwnerKey::Declaration(reference.declaration);
-        if reference.package != self.read.package_id() {
-            let Some(PackageInterfaceRecord::Declaration(declaration)) = self
-                .read
-                .package_interface_owner(reference.package, owner)?
-            else {
-                return Ok(None);
-            };
-            let parameters = match declaration.payload {
-                PackageInterfaceDeclarationPayload::Function(signature) => signature.parameters,
-                PackageInterfaceDeclarationPayload::External(signature) => signature.parameters,
-                _ => return Ok(None),
-            };
-            for parameter in parameters {
-                let record = self.parameter(reference.package, parameter)?;
-                if self.type_contains_resource(record.ty)?
-                    || record.use_mode != ParameterUse::Unrestricted
-                    || record.resource_requirement.is_some()
-                {
-                    return Err(owner_affine_error(
-                        "kernel_affine_resource_call_package",
-                        owner,
-                        "dependency function signatures cannot transfer capability resources",
-                    ));
+        // Inspect the same exact signature fields for local and imported calls.
+        // Visibility is admitted by name/reference resolution, not by affine use.
+        let payload = match self.exact_owner(reference.package, owner)? {
+            Some(ExactRecord::Local(OwnerRecord::Declaration(declaration))) => {
+                match declaration.payload {
+                    DeclarationPayload::Function(function) => {
+                        PackageInterfaceDeclarationPayload::Function(
+                            super::PackageFunctionSignature {
+                                requirement_parameters: function.requirement_parameters,
+                                effect_parameters: function.effect_parameters,
+                                type_parameters: function.type_parameters,
+                                parameters: function.parameters,
+                                result: function.result,
+                                effect: function.effect,
+                            },
+                        )
+                    }
+                    DeclarationPayload::External(signature) => {
+                        PackageInterfaceDeclarationPayload::External(
+                            super::PackageExternalSignature {
+                                type_parameters: signature.type_parameters,
+                                parameters: signature.parameters,
+                                result: signature.result,
+                            },
+                        )
+                    }
+                    _ => return Ok(None),
                 }
             }
-            return Ok(None);
-        }
-
-        let Some(OwnerRecord::Declaration(declaration)) = self.read.owner(owner)? else {
-            return Err(owner_affine_error(
-                "kernel_affine_function_missing",
-                owner,
-                "resource signature names a missing declaration",
-            ));
+            Some(ExactRecord::Foreign(PackageInterfaceRecord::Declaration(declaration))) => {
+                declaration.payload
+            }
+            _ => {
+                return Err(owner_affine_error(
+                    "kernel_affine_function_missing",
+                    owner,
+                    "resource signature names a missing exact declaration",
+                ));
+            }
         };
-        let function = match declaration.payload {
-            DeclarationPayload::Function(function) => function,
-            DeclarationPayload::External(signature) => {
+        let function = match payload {
+            PackageInterfaceDeclarationPayload::Function(function) => function,
+            PackageInterfaceDeclarationPayload::External(signature) => {
                 for parameter in signature.parameters {
                     let record = self.parameter(reference.package, parameter)?;
                     if self.type_contains_resource(record.ty)?
@@ -1524,13 +1521,6 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
         let Some(resource) = resource else {
             return Ok(None);
         };
-        if declaration.visibility != DeclarationVisibility::Private {
-            return Err(owner_affine_error(
-                "kernel_affine_function_resource_visibility",
-                owner,
-                "resource-bearing task function must be private",
-            ));
-        }
         if !function.effect_parameters.is_empty() || !function.requirement_parameters.is_empty() {
             return Err(owner_affine_error(
                 "kernel_affine_function_resource_generic",
@@ -1556,13 +1546,6 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 "resource-bearing function must be a task",
             ));
         };
-        if resource.requirement.package != self.read.package_id() {
-            return Err(owner_affine_error(
-                "kernel_affine_function_resource_package",
-                OwnerKey::Parameter(resource.parameter),
-                "resource parameter must bind a same-package requirement",
-            ));
-        }
         if !requirements.contains(&resource.requirement.into()) {
             return Err(owner_affine_error(
                 "kernel_affine_function_resource_effect",

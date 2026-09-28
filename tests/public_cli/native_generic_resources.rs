@@ -6,6 +6,8 @@ const PROGRAM: &str = include_str!("../fixtures/type-generic-resources.lkjc");
 
 #[path = "native_generic_resources_failure.rs"]
 mod failure;
+#[path = "native_package_resources.rs"]
+mod packages;
 #[path = "native_recursive_resources.rs"]
 mod recursion;
 #[path = "native_generic_resources_rejections.rs"]
