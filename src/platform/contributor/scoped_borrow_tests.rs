@@ -100,6 +100,10 @@ fn scoped_borrow_adoption_preserves_every_unrelated_owner_type_and_retirement() 
     let (old_record, old_function) = declaration(&old, owner);
     let (new_record, new_function) = declaration(&current, owner);
     let mut restored = new_record.clone();
+    // Editing this one declaration promotes its historical record envelope, not its signature.
+    assert_eq!(old_record.header.contract_version, 14);
+    assert_eq!(new_record.header.contract_version, 17);
+    restored.header.contract_version = old_record.header.contract_version;
     let DeclarationPayload::Function(ref mut function) = restored.payload else {
         panic!("function");
     };
