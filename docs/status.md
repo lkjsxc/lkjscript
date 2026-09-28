@@ -4,6 +4,11 @@ Current snapshot: 2026-09-28 (Asia/Tokyo). This page describes current availabil
 and boundaries; historical measurements and failed attempts stay with their
 [campaign owners](campaigns/) and [release records](release.md).
 
+The owner-selected [language-first direction](direction.md) now prioritizes advanced
+type/ownership/effect composition, region-based memory research and a shared runtime.
+These are development selections, not capabilities conferred by this documentation
+update. The runtime, language and release boundaries below remain unchanged.
+
 ## Public binary release
 
 **Public/latest is immutable [v0.1.52](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.52).**

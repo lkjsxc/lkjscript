@@ -1,201 +1,168 @@
 # Evidence-gated roadmap
 
-[Current status](status.md) describes available behavior and release state.
-[Specifications](spec/) own contracts; [campaigns](campaigns/) retain decisions,
-failed experiments and exact evidence. This page selects direction, not history.
+[Project direction](direction.md) records the owner's current choices.
+[Status](status.md) owns availability; [specifications](spec/) own implemented
+contracts; [campaigns](campaigns/) retain attempts and evidence. A roadmap entry
+does not add a capability to an existing executable.
 
-## Selected product direction
+## Selected priority: language core and shared execution
 
-Make an ordinary native application easy to create, edit, check, compose, build,
-run and recover with one compatible executable. The [web starter](guides/native-web.md),
-[strict form library](guides/native-forms.md) and [durable editor](guides/native-editor.md)
-are concrete consumers, not a mandate to make every web concern a compiler feature.
-The next coherent boundary is the recurring edit/build/run loop: retain accepted
-program identity, separate deployment choices from meaning, preserve saved data and
-make failure recovery explicit.
+The 2026-09-28 [owner mandate](campaigns/202609281300.md) supersedes the previous
+application-editing-first priority. Preserve meaning-graph primacy and strengthen
+generics, traits, ownership, lifetimes, effects and scalable concurrency.
+Human comprehension and manual participation are not admission criteria.
+Memory safety and avoidance of unnecessary copying are baseline requirements.
+Immediate Rust benchmark superiority, extreme memory minimization, compatibility
+migration and external adoption are not prerequisites for this research phase.
 
-[Current status](status.md) owns which increments are integrated and published.
-[Release procedures](release.md) and the linked campaigns own exact source,
-candidate, publication and acquisition evidence. Do not duplicate moving workflow
-states here or turn a historical pending run into a perpetual development task.
-Published assets and their original evidence remain immutable.
+A genuine shared runtime is a central requirement. Do not defer it behind a complete
+new type system, collector, JIT, AOT backend or web framework. Conversely, do not
+call a process launcher, shared installation or unverified shared mutable heap a
+solution. Develop a small end-to-end shared-execution slice with explicit ownership
+and failure boundaries, then extend its language contracts.
 
-Native application development and native contributor-tool adoption are distinct
-from a self-hosted compiler. Raising a language-percentage metric is not a goal.
-Keep the Rust kernel where it is the better owner; add ordinary native libraries
-where a complete consumer demonstrates the need. A broad rewrite is appropriate
-only when its complete transition is better than improving that boundary.
+## First coordinated slice
 
-## Next workload and decision criteria
+### Semantic boundary
 
-Prefer the shortest complete route from an ordinary native program to useful
-behavior. Choose the next change by observing a real user's public authoring,
-editing, testing, composition or execution workload, not by expanding a feature list.
+Choose a compact contract for a transferable owned region/buffer, a scoped read
+view and a typed callable or trait implementation. Specify creation, borrowing,
+move, result return and cleanup, including failure and cancellation. Keep declared
+ownership/effect meaning separate from physical placement and recomputable analyses.
 
-The [native editor](guides/native-editor.md) demonstrates ordinary typed page
-composition, explicit POST actions, configured Host/Origin admission, independent
-shared authentication, visible conflicts and durable storage without application
-HTML/CSS/JavaScript. Existing transactions were sufficient; no framework intrinsic
-or browser backend was needed. Its browser-discovered referrer-policy defect shows
-why raw HTTP observations and actual user-agent behavior are distinct obligations.
+Exercise a generic producer/transformer/consumer across a package boundary.
+Require independent negative cases for duplicate consumption, escaping a borrow,
+wrong implementation witness, effect/grant mismatch and invalid retained capture.
+Do not force every advanced generic feature into the first increment. Preserve
+a coherent extension path for associated type families, higher-ranked borrowing,
+effect polymorphism and region-aware traits.
 
-The [web starter](guides/native-web.md) addresses the first setup barrier:
-`new --template web`, check, build and serve require no manual UI imports or source
-downloads. Native UI code is vendored as editable local modules, not moved into a
-privileged renderer or a hidden registry. The application can be edited through the
-same identity-preserving native draft workflow and deployed without its authoring
-graph. Its focused public and script-free browser results belong to the
-[campaign](campaigns/202609251450.md); exact public acquisition is tracked separately
-from source tests rather than inferred from a development executable.
+The first boundary must be useful from ordinary graph authoring, query, package,
+check and execution paths. A privileged Rust helper or new declaration name alone
+does not establish a language feature. A proof-search limit is reported separately
+from invalid meaning.
 
-The [form library](guides/native-forms.md) now closes a concrete input/output gap:
-ordinary native code can both parse form data and construct bounded canonical
-UTF-8 bodies or queries. Ordered pairs and duplicate fields remain explicit;
-transport, escaping for markup and authorization are separate owners. A structural
-consumer, independent byte expectations and a detached POST receiver test this
-composition without creating a privileged framework serializer. Aggregate runtime
-quotas still bound batches even when every individual form satisfies its own limit.
-Keep exact dependency updates explicit rather than silently replacing old suppliers.
-The [field-selection continuation](campaigns/202609280200.md) moves decoded-name
-multiplicity into the ordinary form library. Its typed missing/present/repeated
-result lets the durable editor remove an artificial HTTP-header conversion while
-retaining explicit domain validation, unknown-field rejection and transactions.
-This is a reusable data operation, not an automatic form schema or authentication
-framework; exact existing suppliers remain unchanged until explicitly updated.
+### Small shared host, early
 
-The next useful question is the recurring development loop, rather than another
-large closed starter. Use a second small real application or an identity-preserving
-editor change to identify genuinely reusable admission/form/persistence helpers and
-measure discovery, review and restart friction. Prefer ordinary packages or small
-public authoring mechanisms over a special-purpose compiler subsystem. Preserve
-explicit dependency updates: vendoring is convenient creation, not a silent upgrade
-policy. Do not hide grants, transaction completion or recovery behind a convenient
-API. The observed manual rebuild-name/descriptor friction is addressed by
-`build --deployment`: derive an unselected content-addressed
-pair, preserve the operator template and local data roots, and reuse only exact
-bytes. The [campaign](campaigns/202609260831.md) retains copied-binary command,
-concurrent build, native edit, persistent-data and old/new HTTP witnesses.
-Source acceptance and distribution are recorded separately there. The
-[relocation continuation](campaigns/202609261015.md) adds complete-directory moves,
-source-free execution from an unrelated working directory and refusal to initialize
-missing transferred data. This is not a live-backup protocol. The next question is
-review/discovery and explicit restart ergonomics, not another renaming wrapper.
-Measure those costs on actual edits before choosing a development server or reload
-protocol. A future switch must own readiness, failure and joined
-shutdown without conflating accepted meaning, built bundles and running processes.
-The [resident cancellation correction](campaigns/202609262000.md) first closes a
-concrete lifecycle defect: cancelled waiters retained phantom queue accounting,
-and the queued-to-active handoff could notify a false idle state. Keep these
-regressions before introducing a restart/reload supervisor; convenience must not
-hide incomplete cleanup or replay effects. The
-[process termination continuation](campaigns/202609262313.md) then closes actual
-SIGTERM bypass, transport-before-cancellation ordering and late-session notification
-gaps. Keep the actual-process and retained-state regressions as prerequisites for
-any convenience layer; a successful PID exit alone cannot own readiness, preserve
-operational data or prove completed cleanup.
-The [named-draft continuation](campaigns/202609270517.md) then removes two preliminary
-queries when the exact local declaration name is already known. Selection and
-complete reconstruction share one immutable view and cumulative read admission;
-this is not a shell wrapper around independent current-head queries. Names choose
-read-only output, while reviewed mutation still binds exact owners and a base.
-The unchanged public v0.1.50 reader can consume the resulting proposal. This
-addresses known-name discovery, not unknown-name search, review quality or live
-switching. Measure those remaining costs before adding another convenience layer;
-a lower command count alone does not establish token, latency or monetary savings.
+Build the smallest in-process host for multiple admitted program instances with
+shared immutable preparation/code and independent instance state, grants and tasks.
+An initial host may use current execution machinery; advanced region GC and native
+code are not prerequisites. Do not bypass current type/origin/resource admission
+to make code sharing possible.
 
-The [recorded-history continuation](campaigns/202609281010.md) makes recent accepted
-changes inspectable through existing revision/receipt objects. One captured view,
-cumulative admission and explicit unread truncation avoid an unbounded log scan or
-another database. Recorded test selection/execution/pass counts are distinct from
-current validation. Its value is understanding a completed edit, not automatic
-rollback, historical graph execution or proof of a whole repository's health.
-Keep general historical queries and project recovery separate. The continuation's
-native web exercise now distinguishes a recorded greeting change, the current
-function literal and two retained deployments serving old/new wording. It also
-preserves the intermediate failing test expectation: accepting an edit did not
-silently certify its behavior. No history or selection changed merely by checking,
-building or serving. This validates that separation on one small workload, not
-complete editing ergonomics. Next reduce the effort of understanding an intended
-edit and its exact validation state before adding arbitrary historical navigation.
-Add pagination, literal review or restart ergonomics only where such a workload
-demonstrates the missing boundary.
+At minimum, prove two instances of one exact program share the intended immutable
+runtime object while retaining different private state, and prove two distinct
+programs can coexist. Bind each instance to its selected version. Cover separate
+arguments/results/captures, authority isolation, handled failure, stop/drain/unload,
+and continued operation of the other instance. Account shared and private storage.
+The public operation must not require opening the author's mutable project.
 
-Multiple notes or richer actions should justify their shared mechanism;
-completing this particular note app is not the language's purpose. A form is not
-authorization, and a failed response does not establish rollback.
+Single-process hosting does not prove CPU parallelism, hostile-code containment,
+a universal pause bound or survival of a host crash. Never install a second global
+authority for application state or deployment selection.
 
-Do not migrate native consumers solely to remove a small helper. The measured UI
-text-join consolidation increased identical-test-suite instruction counts despite
-smaller transports. It remains unselected with its originals retained, and the
-existing public-v0.1.44 UI path remains intact. Require complete affected-consumer
-proof and an explicit maintenance/performance decision before replacing it.
+### Shared-host lifecycle
 
-The [paged-list workload](guides/native-list.md) separately exercises fresh library-backed
-HTTP composition, strict native query-number parsing, detached use and a reviewed
-edit. No additional kernel or framework primitive was needed. It leaves a concrete
-next question about edit/review scale: at the same revision and intended small edit,
-function-only drafting reduces the proposal from 18,732 to 3,066 bytes, but both
-complete logical plans remain 155,246 bytes with 34 recreated internal owners.
-Those counts belong to that historical workload and source, not model-token, monetary or
-latency claims. The [literal-edit continuation](campaigns/202609261118.md) addresses its narrow
-scalar-update case: complete canonical-intent equivalence and independent live-ownership
-admission retain function-body identities instead of retiring an unchanged structure. The
-same-base web-button comparison reduces full proof bytes from 80,402 to 8,613; a freshly
-composed two-library paged-list regression separately confirms one-owner numeric edits and
-old/new detached behavior. Structural edits deliberately retain full replacement. Prefer
-targeted drafts and prove the next finer-edit or restart mechanism on an actual workload;
-do not expand this into heuristic matching or silently discarded proposal changes. Do not
-mistake a large optional proof file for compulsory model input or remove correctness evidence
-merely to shrink it.
+Define a compatibility/pooling key, instance admission, readiness and joined stop.
+Keep code installation, instance activation and data migration separate. Bind
+secrets and operational handles to an instance, not to reusable code metadata.
+Test version coexistence and cancellation during admission as well as normal stop.
 
-Continue selecting common improvements from ordinary native applications, not a
-particular experimental game's completion. A browser/Wasm backend is not a
-prerequisite for useful server-side development. The existing [HTTP](guides/native-http.md),
-[typed HTML](guides/native-html.md) and [HTML-over-HTTP](guides/native-html-http.md)
-programs remain useful separate composition witnesses with their own runtime bounds.
+Reserve queue and destination capacity before transferring ownership. Queue-full,
+cancelled-send and failed-receiver cases must leave exactly one valid owner or a
+defined cleanup owner. Message acceptance is not application completion or exactly-once
+delivery. A cancelled blocking native call needs an explicit lifecycle solution.
 
-Keep the public path small: discover, author, review, check, build and run.
-Retire a replaced implementation when a native library/tool actually assumes its
-responsibility with equivalent correctness, failure recovery and maintainability.
-A host wrapper or generated string emitter does not remove an external dependency.
-The supported Rust kernel/platform boundary may remain where it is the better owner.
+## Following increments, not a waterfall prerequisite
 
-## Conditions for larger changes
+### Ownership and memory-management regions
 
-| Direction | Evidence required before selecting it |
-| --- | --- |
-| Native tooling and libraries | A concrete maintained consumer or blocked public witness, a real removed duplicate, public reproducibility and honest measured costs. Keep unaffected exact suppliers. |
-| Faster preparation and execution | Matched behavior/workloads, source/reference correctness, clean/incremental equality and separate preparation, I/O, allocation and execution measurements. Retain regressions. |
-| Additional authoring operations | A demonstrated edit workflow, typed intent, identity continuity, review binding, complete discovery, independent negative cases and a complete consumer transition. |
-| Richer abstraction/resource ownership | A public composition need fixing the lifetime/failure protocol, type/effect/capture safety, producer/consumer admission and retirement of a superseded path. |
-| Worker recipes and network capabilities | A standalone consumer fixing topology, exact endpoint/grant authority, cancellation, owned resources and an implementation-disjoint live oracle. |
-| Browser/Wasm or another binary target | A useful program and precise host/ABI boundary, compatible transport, effect/grant policy, hosted execution oracle, distribution identity and measured costs. Do not create a speculative target matrix. |
-| External package distribution | Named consumer, exact publication/resolution authority, immutable content, recovery/revocation and explicit mutable-name policy. No ambient network resolver. |
-| Million-owner compilation or long history | Select compilation, graph history and operational-data scale separately. Require independent correctness/reachability, interruption recovery and exact resource observations before deletion or compaction. |
-| Broader CI, signing or distribution integrations | A distinct operating need, source/trust ownership, retention, revocation/recovery and maintenance responsibility. Existing release automation is not a blanket mandate. |
+Compare unique/scoped storage, region-local aliases, local tracing and frozen
+shared segments. Support cyclic data without making universal Arc-style ownership
+or a global tracing heap the language's only answer. Connect borrow lifetime,
+region escape, transitive freezing, moving-collector roots and native safepoints.
+Keep externally visible resource completion distinct from GC.
 
-None of these rows is an automatic implementation queue. A large architectural
-revision is appropriate when evidence favors it; continuity with an old campaign
-is not a reason to retain a bad design. Conversely, a proposed improvement must not
-weaken current authority, admission, atomic publication or verification to appear
-simpler. Keep semantics, operational policy, derived caches and deployment data as
-different responsibilities.
+First require semantic and failure correctness, then compare allocation, copying,
+retained memory, pauses, throughput and preparation costs on identical workloads.
+A region's ability to grow without a small toy bound is not a scalability proof.
+Keep a no-collector/no-allocation path for future freestanding use where its effect
+contract permits it; not every hosted application must satisfy that profile.
 
-## Reversal and completion
+### Parallel execution within and across applications
 
-For each selected increment, retain a literal public workload, an exact intended
-contract, independent failure/success expectations and a concrete delivery point.
-Measure competing implementations where performance is the claim. Finish affected
-consumers, generated assets, documentation and migration or explicit rejection.
-A partial prototype, local commit or open PR is not mainline completion.
+Use structured task ownership, typed bounded channels and disjoint-region work.
+Do not equate an isolate with one permanent OS thread or serialize every application
+through one event loop. Start with a real CPU-parallel transform/reduction and an
+independent I/O-heavy instance, then test fairness under a saturated neighbor.
 
-Preserve accepted history and old runtime/artifact pairs when compatibility requires
-it. Use digests only where an identity, integrity or compatibility contract needs
-them; do not add redundant inventories or receipt systems. Failed experiments
-remain failed even when a later design succeeds. The [release owner](release.md)
-separates source acceptance, exact distributable bytes and public acquisition.
+Evaluate work-stealing, local queues, bounded batching and locality-aware placement
+after the semantic contracts exist. Preserve explicit external-effect ordering.
+Cooperative safepoints, native blocking work and fatal host errors need distinct
+claims. Multi-machine transport, durable messaging and distributed consistency are
+separate work; in-process zero-copy observations do not prove them.
 
-Do not make a particular experimental application the language's purpose.
-Ordinary native users and their reusable mechanisms are the long-term product.
-Inbound TLS, encrypted local storage and hostile multi-tenant sandboxing remain
-separate unselected systems; current limits do not imply those guarantees.
+### Concurrent AI modification
+
+Make immutable reads and private preparation parallel, with exact-base publication
+and semantic conflict validation. Exercise disjoint edits and hidden dependencies:
+a changed trait implementation, type contract or effect can invalidate a candidate
+even when edited owners differ. A short serialized commit point is acceptable.
+Do not claim concurrent editing merely because two agents can run shell commands.
+
+Select conventional revision/branch/tag/difference/merge and retained-root history
+semantics without retaining every derived analysis forever. Stable identities should
+help exact changes, not force heuristic identity matching or an immutable storage
+layout. History deletion/compaction requires its own reachability and interruption
+proof; it is not ordinary cache eviction.
+
+### Execution and storage horizon
+
+Derive both native executables and dedicated-runtime programs from the same accepted
+meaning. Hosted native executables may embed scheduler/collector services. Later
+freestanding profiles reject unavailable services. Keep Linux x86-64 first; expand
+targets with actual execution and distribution evidence. Wasm remains optional.
+
+Own the persistence engine. Keep durable transactions separate from heap collection
+and program revision history. Study SSD locality, paging/prefetch, batching and
+bounded caches on concrete data workloads rather than promising disk-backed RAM.
+Do not introduce an external database as the required engine.
+
+Advance native libraries/tooling, then compiler/runtime self-hosting toward eventual
+Rust removal. This is a genuine horizon, not a language-percentage acceptance metric.
+Other-language compatibility and external user acquisition remain low priorities.
+
+## Acceptance and measurement
+
+Each selected increment needs a written semantic boundary, normal public consumption,
+independent success/failure expectations and a complete mainline delivery point.
+Ambition changes which problem is selected; it does not turn prototypes into proofs.
+Keep current verification owners until a deliberate replacement assumes their duty.
+Do not waive a relevant failing gate or add duplicate proof inventories for appearance.
+
+For shared runtime experiments, record actual process topology, code/preparation
+sharing, instance count and workload. Separate cold/warm admission, latency tails,
+CPU throughput, task fairness, compiler preparation, copying, live memory and
+total RSS/PSS. Include a matched separate-process baseline; OS-shared code pages
+already present in that baseline must not be counted as a new runtime saving.
+Include repeated start/stop cycles and a resource-heavy neighbor. Scaling numbers
+require observations, not extrapolation from a two-instance demonstration.
+
+A documentation-only direction change runs relevant documentation/policy checks,
+not a synthetic new runtime acceptance campaign. Later product changes still need
+their dependency-complete source and affected target evidence. No new release is
+required merely to publish these direction choices.
+
+## Prior work and reversal
+
+The previous application-first roadmap remains available at its
+[original revision](https://github.com/lkjsxc/lkjscript/blob/1f63d1197d047012c61e63eb9eb93098e9d7f02b/docs/roadmap.md).
+Native web/editor, form codecs, named drafts, history and deployment lifecycles remain
+useful implemented consumers and regression witnesses, not a compulsory sequence
+of further convenience features. Their failures and release records remain intact.
+
+Keep the graph-first constraint fixed. Revise concrete mechanisms when evidence
+favors a better complete design. The owner permits compatibility cuts without a
+migration promise and resets of owner-authorized experimental data; this does not
+authorize unrelated destruction or changes to historical evidence. State actual
+behavior, unfinished work, retained resources and measured regressions accurately.
