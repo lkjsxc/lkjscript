@@ -128,8 +128,10 @@ fn execute(qualified: bool) {
                 observed[grant["requirement"].as_str().unwrap()],
                 match grant["adapter"]["kind"].as_str().unwrap() {
                     "durable_queue_data" => "durable-queue-data",
-                    "byte_stream" => "byte-stream",
-                    kind => panic!("unexpected fixture adapter: {kind}"),
+                    kind => {
+                        assert_eq!(kind, "byte_stream", "closed fixture adapter set");
+                        "byte-stream"
+                    }
                 }
             );
         }
