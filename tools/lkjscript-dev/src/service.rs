@@ -5868,7 +5868,9 @@ fn run_maintained_definition_pages(
     oracle: &FunctionDefinitionOracle,
     label: &str,
 ) -> Result<MaintainedDefinitionAssembly, ServiceFailure> {
-    const LIMITS: [u64; 4] = [31, 47, 19, 61];
+    // A tiny helper must exercise continuation too, not fit in the initial page.
+    // Keep the later changing budgets and all independent assembly checks.
+    const LIMITS: [u64; 4] = [1, 47, 19, 61];
     const BYTES: [u64; 2] = [65_536, 32_768];
     let mut continuation: Option<String> = None;
     let mut expected_start = 0_u64;

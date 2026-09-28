@@ -255,7 +255,7 @@ remain different provenance even if one concrete application aliases them. Match
 consuming and dropping require the same operand under existing local rules; runtime provenance
 resolves to the original concrete requirement, canonical grant and task scope. This does not admit
 generic resource-bearing function parameters/results, capture, aggregate escape or cross-function
-transfer. The private concrete consume-helper exception remains unchanged.
+transfer. Concrete task helpers follow the separate borrow/consume boundary above.
 
 Typed-cell libraries use the existing typed-data encoder and decoder, not JSON. Decode-or may use
 a supplied default on absence or incompatible encoding/layout, but does not swallow cancellation,
