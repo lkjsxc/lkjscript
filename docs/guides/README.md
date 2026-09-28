@@ -12,6 +12,7 @@ intrinsics or automatically maintained application packages.
 | [Bounded native form codec](native-forms.md) | Strict UTF-8 input and canonical output, ordered fields, exact transport, detached commands and POST composition; encoding independently runs on public v0.1.47. |
 | [Typed UI without browser-code authoring](native-ui.md) | Ordinary layouts, palettes and GET forms, exact response-library composition, and detached public-v0.1.44 execution. |
 | [Paged native HTTP list](native-list.md) | Native bounded-decimal input, reusable list/text operations, exact HTML/response imports and detached HTTP execution on development v0.1.45. |
+| [Recent accepted changes](native-history.md) | Development v0.1.53: bounded read-only revision/receipt history, recorded intent and separate test counts, explicit truncation without replay or rollback. |
 | [First native command](native-command.md) | A literal function/test/target, reviewed publication, canonical re-entry and detached execution on public v0.1.44 and development v0.1.45. |
 | [Native text composition](native-text.md) | Development-standard text-join, exact separators and caller-owned escaping. |
 | [HTML over HTTP](native-html-http.md) | Compose the separate typed HTML and HTTP libraries in a detached public-v0.1.44 service. |

@@ -8,6 +8,7 @@
 pub(crate) mod contract;
 mod diff;
 mod digest;
+mod history;
 mod idempotency;
 mod prepare;
 mod read_view;
@@ -24,6 +25,10 @@ pub use diff::{
 };
 pub use digest::{
     ReceiptObjectDigest, RevisionObjectDigest, SemanticDiffDigest, TransactionDigest,
+};
+pub use history::{
+    DEFAULT_HISTORY_ITEMS, HistoryEntry, MAXIMUM_HISTORY_ITEMS, MAXIMUM_HISTORY_STORE_BYTES,
+    MAXIMUM_HISTORY_STORE_OBJECTS, RepositoryHistory,
 };
 pub use idempotency::IdempotencyBinding;
 pub(crate) use idempotency::idempotency_key_is_valid;

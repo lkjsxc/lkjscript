@@ -150,6 +150,84 @@ fn recovery_lock_downgrade_gap_can_pair_a_new_head_with_a_stale_catalog() {
 }
 
 #[test]
+fn history_pinned_snapshot_survives_intervening_publication_after_healthy_or_recovered_open() {
+    use crate::platform::execution::ExecutionControl;
+    use crate::platform::publication::history::{history_read_limits, read_history};
+
+    for recover in [false, true] {
+        let (_temporary, created, owner) = fixture();
+        let root = created.repository.root();
+        let prepared = created
+            .repository
+            .prepare_authored_change(
+                &AuthoredChangeSet {
+                    base: created.current.head.revision,
+                    preconditions: Vec::new(),
+                    budget: ChangeBudget::default(),
+                    changes: vec![AuthoredChange::RenameOwner {
+                        owner: OwnerSelector::Exact { owner },
+                        name: Name::new("after-snapshot").unwrap(),
+                    }],
+                },
+                PublicationOptions::default(),
+            )
+            .unwrap();
+        if recover {
+            stale_catalog(root);
+        }
+        let directory = open_directory(root).unwrap();
+        let lock = open_lock(&directory).unwrap();
+        FileExt::lock_shared(&lock).unwrap();
+        let captured = open_store_shared(&directory, root, &lock).unwrap();
+        let head = read_current_optional(&directory, &captured)
+            .unwrap()
+            .unwrap()
+            .head;
+        assert_eq!(head, created.current.head);
+        assert_eq!(
+            captured.catalog_observation().history.full_rebuilds,
+            u64::from(recover)
+        );
+        drop(lock);
+
+        // Advance HEAD at a deterministic boundary, not a scheduler-dependent race.
+        let publisher = created.repository.clone();
+        let after =
+            std::thread::spawn(
+                move || match publisher.publish(&prepared.publication).unwrap() {
+                    PublicationOutcome::Accepted { current, .. } => current.head,
+                    other => panic!("expected accepted intervening change: {other:?}"),
+                },
+            )
+            .join()
+            .unwrap();
+        assert_ne!(after, head);
+        let before_read = fs::read(root.join("HEAD")).unwrap();
+        let old = read_history(
+            &captured,
+            head,
+            100,
+            history_read_limits(),
+            &ExecutionControl::uncancelled(),
+        )
+        .unwrap();
+        assert_eq!(old.head, head);
+        assert_eq!(old.entries.len(), 1);
+        assert_eq!(old.entries[0].revision.revision, head.revision);
+        assert!(old.next.is_none());
+        let fresh = created.repository.history(100).unwrap();
+        assert_eq!(fresh.head, after);
+        assert_eq!(fresh.entries.len(), 2);
+        assert_eq!(fresh.entries[1].revision.revision, head.revision);
+        assert_eq!(
+            fresh.entries[0].revision.publication.parents[0].record,
+            head.record
+        );
+        assert_eq!(fs::read(root.join("HEAD")).unwrap(), before_read);
+    }
+}
+
+#[test]
 fn recovery_lock_failed_open_releases_ownership_without_repairing_accepted_head() {
     let (_temporary, created, _) = fixture();
     let root = created.repository.root();

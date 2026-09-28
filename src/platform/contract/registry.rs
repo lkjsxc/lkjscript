@@ -1492,8 +1492,8 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             "status",
         ),
         inspect_operation(
-            "Inspect a compact summary of one exact owner or page one complete accepted local-function definition at the observed accepted revision.",
-            "inspect owner KIND ID [--package PACKAGE] [--detail definition [--limit N] [--bytes N] [--continuation TOKEN]]",
+            "Inspect exact owners, complete local-function definitions, or bounded recent recorded publication history without replay or rollback.",
+            "inspect owner KIND ID [--package PACKAGE] [--detail definition [--limit N] [--bytes N] [--continuation TOKEN]] | inspect history [--limit N]",
         ),
         query_operation(
             "Enumerate live owners, resolve one exact namespace, inspect one relation prefix, or traverse one bounded local context at the current normalized revision.",
@@ -2233,6 +2233,36 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Semantic,
             "An authenticated accepted request cannot be revalidated under the current validator; its original result and idempotency binding remain intact.",
             "Inspect the historical result and repair the current canonical program through a new reviewed request. Re-plan old prepared tokens; the existing key cannot publish a second result.",
+        ),
+        diagnostic(
+            "publication_history_limit",
+            DiagnosticClass::Resource,
+            "The requested recent-history item count is outside the advertised finite range.",
+            "Use inspect history --limit with an integer from 1 through the advertised maximum; truncation is explicit.",
+        ),
+        diagnostic(
+            "publication_history_missing",
+            DiagnosticClass::Corrupt,
+            "A visited history link names a missing immutable revision or receipt.",
+            "Preserve the repository and report the missing object; do not interpret it as the end of history or silently restore data.",
+        ),
+        diagnostic(
+            "publication_history_binding",
+            DiagnosticClass::Corrupt,
+            "Visited HEAD, parent, revision and receipt identities disagree.",
+            "Preserve the repository and diagnose the exact binding; no history entry or current-validation claim was published.",
+        ),
+        diagnostic(
+            "publication_history_cycle",
+            DiagnosticClass::Corrupt,
+            "The visited publication chain repeats a revision identity.",
+            "Preserve the repository and diagnose the chain; do not treat a cycle as successful truncation.",
+        ),
+        diagnostic(
+            "publication_history_merge",
+            DiagnosticClass::Source,
+            "Two-parent history remains reserved and cannot be projected as a single-parent chain.",
+            "Use a compatible explicitly supported history reader; no parent is silently selected.",
         ),
         diagnostic(
             "publication_current_validation",
@@ -6634,6 +6664,98 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             }
         }
         RegistrySection::Inspection => {
+            records.push(compact_record(
+                "inspection.history",
+                &[
+                    ("contract", "lkjscript-recent-history-1".to_owned()),
+                    ("usage", "inspect history [--limit N]".to_owned()),
+                    (
+                        "authority",
+                        "pinned-head-record-receipt-bindings-read-only".to_owned(),
+                    ),
+                    ("ordering", "newest-first".to_owned()),
+                    (
+                        "default-items",
+                        crate::platform::publication::DEFAULT_HISTORY_ITEMS.to_string(),
+                    ),
+                    (
+                        "maximum-items",
+                        crate::platform::publication::MAXIMUM_HISTORY_ITEMS.to_string(),
+                    ),
+                    (
+                        "maximum-objects",
+                        crate::platform::publication::MAXIMUM_HISTORY_STORE_OBJECTS.to_string(),
+                    ),
+                    (
+                        "maximum-store-bytes",
+                        crate::platform::publication::MAXIMUM_HISTORY_STORE_BYTES.to_string(),
+                    ),
+                    (
+                        "maximum-catalog-lookups",
+                        crate::platform::publication::MAXIMUM_HISTORY_STORE_OBJECTS.to_string(),
+                    ),
+                    (
+                        "read-work-scope",
+                        "record-receipt-traversal-excludes-open".to_owned(),
+                    ),
+                    ("truncation", "explicit-unread-parent-binding".to_owned()),
+                    ("continuation", "none".to_owned()),
+                    (
+                        "validation",
+                        "recorded-evidence-not-current-revalidation".to_owned(),
+                    ),
+                    ("mutation", "none".to_owned()),
+                ],
+            )?);
+            for (record, fields) in [
+                (
+                    "history",
+                    &[
+                        "contract",
+                        "repository",
+                        "observed",
+                        "record",
+                        "ordering",
+                        "items",
+                        "limit",
+                        "truncated",
+                        "next-revision",
+                        "next-record",
+                        "evidence",
+                        "current-validation",
+                        "read-work-scope",
+                        "objects-read",
+                        "bytes-read",
+                    ][..],
+                ),
+                (
+                    "history.entry",
+                    &[
+                        "ordinal",
+                        "revision",
+                        "record",
+                        "parent",
+                        "parent-record",
+                        "status",
+                        "intent-present",
+                        "intent",
+                        "owners-created",
+                        "owners-updated",
+                        "owners-deleted",
+                        "dependencies-changed",
+                        "tests-selected",
+                        "tests-executed",
+                        "tests-passed",
+                    ][..],
+                ),
+            ] {
+                for field in fields {
+                    records.push(compact_record(
+                        "inspection.history-response-field",
+                        &[("record", record.to_owned()), ("name", (*field).to_owned())],
+                    )?);
+                }
+            }
             records.push(compact_record(
                 "inspection.definition",
                 &[

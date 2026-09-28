@@ -4,6 +4,14 @@ GitHub Releases are the public binary distribution path. Accept one finalized ca
 its exact producer run and attempt, and promote its unchanged archive, checksum and bootstrap.
 Content identity, behavioral acceptance and publication authority are separate decisions.
 
+Current delivery observation (2026-09-28): v0.1.52 producer `36344022937/1` is
+accepted, but the existing release-selection variable cannot currently be read
+(HTTP 404). Public/latest remains v0.1.51. The
+[continuation](campaigns/202609281010.md#already-accepted-v0152-publication-blocked)
+records preserved originals and the exact blocked boundary; no tag, replacement
+variable, permission change or promotion was made. Development v0.1.53 adds recent
+recorded history separately and does not modify those accepted v0.1.52 assets.
+
 Immutable [v0.1.38](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.38) already publishes source
 `7083f9a6d56ed702017942e100c3696fc6f35308`. Publisher
 [35117655769/1](https://github.com/lkjsxc/lkjscript/actions/runs/35117655769) passed all four hosted

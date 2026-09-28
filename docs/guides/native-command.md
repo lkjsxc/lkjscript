@@ -87,6 +87,16 @@ Edit that proposal, review a new plan and apply its exact token to change the
 program. The draft is reconstructed from accepted meaning, not from the saved
 `squares.lkjc` file. There is no second synchronized source authority.
 
+With a v0.1.53 development executable, [recent history](native-history.md) shows
+which changes were actually accepted, separately from a current check:
+
+```sh
+lkjscript --project hello inspect history --limit 5
+```
+
+This reads existing revision and receipt records, not the original proposal files.
+The history command is absent from the older public executables used above.
+
 ## Run independently of the authoring project
 
 Create a new runtime directory and build the accepted bundle there:

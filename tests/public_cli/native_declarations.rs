@@ -1635,6 +1635,8 @@ mod native_http;
 
 #[path = "deployment_build.rs"]
 mod deployment_build;
+#[path = "native_history.rs"]
+mod native_history;
 #[path = "native_literal_edits.rs"]
 mod native_literal_edits;
 #[path = "native_named_drafts.rs"]

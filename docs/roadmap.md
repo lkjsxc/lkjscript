@@ -103,6 +103,18 @@ addresses known-name discovery, not unknown-name search, review quality or live
 switching. Measure those remaining costs before adding another convenience layer;
 a lower command count alone does not establish token, latency or monetary savings.
 
+The [recorded-history continuation](campaigns/202609281010.md) makes recent accepted
+changes inspectable through existing revision/receipt objects. One captured view,
+cumulative admission and explicit unread truncation avoid an unbounded log scan or
+another database. Recorded test selection/execution/pass counts are distinct from
+current validation. Its value is understanding a completed edit, not automatic
+rollback, historical graph execution or proof of a whole repository's health.
+Keep general historical queries and project recovery separate. The next measurement
+should ask whether a real editing session can identify the accepted change, inspect
+the current declaration and select the intended built deployment without confusing
+those three identities. Add pagination, literal review or restart ergonomics only
+where that workload demonstrates the missing boundary.
+
 Multiple notes or richer actions should justify their shared mechanism;
 completing this particular note app is not the language's purpose. A form is not
 authorization, and a failed response does not establish rollback.

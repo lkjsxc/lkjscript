@@ -570,6 +570,54 @@ impl GraphRepository {
         Ok((seal, work))
     }
 
+    /// Read recent recorded acceptances without replaying changes or validating old programs.
+    pub fn history(&self, limit: usize) -> Result<super::RepositoryHistory, Diagnostic> {
+        self.history_with_control(
+            limit,
+            &crate::platform::execution::ExecutionControl::uncancelled(),
+        )
+    }
+
+    pub(crate) fn history_with_control(
+        &self,
+        limit: usize,
+        control: &crate::platform::execution::ExecutionControl,
+    ) -> Result<super::RepositoryHistory, Diagnostic> {
+        super::history::validate_limit(limit)?;
+        super::history::checkpoint(control)?;
+        let (head, store) = {
+            let root_directory = open_directory(&self.root)?;
+            let lock = open_lock(&root_directory)?;
+            FileExt::lock_shared(&lock).map_err(|error| {
+                io_diagnostic("publication_repository_read_lock", &self.root, error)
+            })?;
+            let store = open_store_shared(&root_directory, &self.root, &lock)?;
+            let bytes = read_optional_regular_at(
+                &root_directory,
+                HEAD_FILE,
+                MAXIMUM_HEAD_BYTES,
+                "publication_repository_head_read",
+            )?
+            .ok_or_else(|| {
+                repository_error(
+                    DiagnosticClass::Source,
+                    "publication_repository_unpublished",
+                    "Graph 10 repository has no accepted HEAD",
+                )
+            })?;
+            (HeadRecord::decode(&bytes)?, store)
+        };
+        // The repository lock pins the HEAD/catalog pair, not the entire traversal. Immutable
+        // append-only packs preserve that view even when another writer advances HEAD.
+        super::history::read_history(
+            &store,
+            head,
+            limit,
+            super::history::history_read_limits(),
+            control,
+        )
+    }
+
     pub fn current(&self) -> Result<CurrentPublication, Diagnostic> {
         let root_directory = open_directory(&self.root)?;
         let lock = open_lock(&root_directory)?;
@@ -2544,7 +2592,7 @@ fn collapse_diagnostics(mut diagnostics: Vec<Diagnostic>) -> Diagnostic {
     first
 }
 
-fn store_diagnostic(error: StoreError) -> Diagnostic {
+pub(super) fn store_diagnostic(error: StoreError) -> Diagnostic {
     let class = match error.class {
         StoreErrorClass::Input => DiagnosticClass::Source,
         StoreErrorClass::Resource => DiagnosticClass::Resource,

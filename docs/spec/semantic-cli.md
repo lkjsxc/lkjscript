@@ -385,6 +385,43 @@ Query work reports map/store/canonical/witness/output dimensions separately. Gen
 search, historical query, predecessor JSON requests, and old callers/callees aliases are
 unavailable.
 
+## Recent recorded project history
+
+`inspect history [--limit N]` emits a finite `lkjscript-recent-history-1` projection
+of the existing immutable revision and publication-receipt chain. It observes one
+HEAD/catalog pair under one repository lock, releases that lock, then visits newest
+first. Healthy opening is shared; recovery retains exclusive ownership until the
+observation completes. Append-only packs preserve the captured view when another
+publication advances HEAD.
+The default is 20 items; the range is 1 through 100. No `--at`, `--bytes`, continuation,
+merge selection, historical owner editing, replay or rollback is accepted.
+
+The traversal shares pre-consumption admission for at most 200 catalog lookups,
+200 objects and 8 MiB of payload, in addition to the codecs' per-object limits.
+An item limit does not override the byte bound. Reported read work covers this
+record/receipt traversal, not ordinary repository opening or disposable lock/catalog
+recovery. Cancellation and invalid bounds fail before a successful response is
+published. Missing, corrupt or inconsistent visited objects are errors, not a
+silent end-of-history or a successful partial prefix.
+
+One `history` record reports the observed revision and record, item count, order,
+limit and `truncated`. Its `next-revision`/`next-record` are the last returned record's
+committed but **unread** parent binding, or `none`. They are not an authenticated
+cursor or proof of the unvisited suffix. The response has no continuation route.
+Each `history.entry` retains exact revision/record/parent identities, recorded status,
+optional nonsemantic intent (including explicit presence), owner/dependency counts,
+and separate selected/executed/passed test counts. Compact escaping retains quotes,
+Unicode, newlines and control characters as content, never extra records.
+
+Canonical revision and receipt decoders and their exact repository, graph contract,
+result, parent, transaction and semantic-diff bindings are checked. This is recorded
+acceptance evidence, **not current semantic revalidation or full historical graph
+verification**. The command reads no old executable graph, runs no old test, changes
+no accepted meaning or application data and creates no additional history store.
+A new accepted edit appears; failed/stale requests and exact idempotent retries do not
+create extra revisions. `check`, reviewed changes and artifact execution retain their
+separate current-admission requirements. The legacy top-level `history` stays removed.
+
 ## Reviewed change
 
 Record input uses:

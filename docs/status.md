@@ -34,9 +34,10 @@ assets and public verification. The linked [test-profile](campaigns/202609271910
 and [cold-lifecycle](campaigns/202609272130.md) continuations retain their earlier
 failures and measured corrections; they are not pending delivery obligations.
 
-A [recent-history prototype](campaigns/202609280123.md#unintegrated-prototype--not-main-or-a-release)
-remains preserved but **not integrated or released**. Neither public v0.1.51 nor
-the selected successor includes `inspect history`.
+The original [recent-history prototype](campaigns/202609280123.md#unintegrated-prototype--not-main-or-a-release)
+remains preserved as an unaccepted historical attempt. The separate v0.1.53
+continuation below corrects and extends it; neither v0.1.51 nor v0.1.52 includes
+`inspect history`.
 
 ## Development v0.1.52
 
@@ -51,9 +52,31 @@ source acceptance and delivery.
 Implementation `60f793eb` is integrated on main and passed all 26 full-profile
 gates freshly, with zero reuse and stable inputs. Candidate
 [`36344022937/1`](https://github.com/lkjsxc/lkjscript/actions/runs/36344022937)
-uses that exact source and was dispatched once; its first observation is in progress,
-before final candidate acceptance. No v0.1.52 tag or promotion has been selected.
-This is verified mainline source, **not a published v0.1.52 binary**.
+uses that exact source and completed with `candidate_accepted`; its original
+acceptance and terminal artifacts are unexpired. Publication is blocked at reading
+the existing release-only selection variable: the current connection returns HTTP
+404, which does not distinguish absence from unavailable permission. No variable
+was created, no permissions changed, and no v0.1.52 tag or promotion selected.
+The [continuation](campaigns/202609281010.md) owns this observation and exact
+resumption boundary. This is **not a published v0.1.52 binary**.
+
+## Development v0.1.53: recorded recent history
+
+[`inspect history [--limit N]`](guides/native-history.md) projects existing accepted
+revision and receipt records without a second history database, old-code execution,
+rollback or application-data access. It captures one coherent HEAD/catalog view,
+then releases the lock before bounded traversal. The default is 20 entries and
+the maximum is 100; cumulative record/receipt admission also limits reads to 200
+objects and 8 MiB. Truncation identifies an explicitly unread parent, not a cursor
+or proof that the unvisited suffix is intact.
+
+Each entry distinguishes recorded change intent, changed-owner counts and
+selected/executed/passed tests. `current-validation=not-run` prevents old acceptance
+from masquerading as a fresh check. Missing or inconsistent visited links fail the
+complete response. Graph, artifact, package and operational-data encodings are
+unchanged. Discover this capability with `capabilities --section inspection`.
+Source acceptance and integration are tracked at the [continuation](campaigns/202609281010.md);
+this development feature is absent from the public v0.1.51 executable.
 
 ## Current authority and maintained consumers
 
@@ -171,8 +194,9 @@ establish hostile-code containment or multi-tenant isolation.
 
 - Package dependencies are exact offline closures, not a network registry,
   mutable-name resolver or automatic upgrade service.
-- Canonical drafting is available. Project history, project backup/restore/doctor,
-  arbitrary source queries and general move/inline remain separate unimplemented
+- Canonical drafting and development recent-history inspection are available.
+  General historical queries, paging beyond the recent 100 entries, project
+  backup/restore/doctor and general move/inline remain separate unimplemented
   facilities; operational `data backup|restore` does not provide them.
 - Plan summaries and complete logical plans do not show literal before/after text.
   Retain and compare the unchanged draft with the edited proposal as well as its

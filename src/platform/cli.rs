@@ -1,5 +1,7 @@
 //! Strict, bounded public graph-native command projection.
 
+mod history;
+
 use super::builtin_discovery::{
     BUILTIN_QUERY_DEFAULT_BYTES, BUILTIN_QUERY_DEFAULT_ITEMS, BUILTIN_QUERY_ORDERING,
     BuiltinOwnerSelector, inspect_builtin_owner, parse_interface_owner_kind, query_builtin_owners,
@@ -3469,7 +3471,7 @@ pub fn execute_query(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
 }
 
 /// Dispatches the complete released inspect family without falling back to predecessor JSON.
-/// Only exact coarse-owner summaries are current while other inspect actions remain removed.
+/// Exact owner summaries, function definitions and recorded recent history are current.
 pub fn execute_inspect(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
     let (filtered, _) = extract_global_project(arguments.clone())?;
     if filtered.first().map(String::as_str) != Some("inspect") {
@@ -3477,6 +3479,7 @@ pub fn execute_inspect(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
     }
     match filtered.get(1).map(String::as_str) {
         Some("owner") => execute_inspect_owner(arguments),
+        Some("history") => history::execute(arguments),
         Some(
             action @ ("status" | "project" | "targets" | "revision" | "artifact" | "deployment"),
         ) => Err(owner_inspection_error(
