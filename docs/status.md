@@ -44,6 +44,13 @@ The [continuation record](campaigns/202609290337.md) owns actual test/source res
 the selection rules. No v0.1.58 distribution is claimed by this development section.
 The independently selected v0.1.57 source and candidate remain unchanged.
 
+Exact source `a571dc01` completed all 26 full gates freshly, with zero reused
+results and stable inputs, in 836.675248583 seconds. The retained optimized
+executable then passed all 20 generic/recursive/package-resource native tests
+from an unrelated working directory in 57.10 seconds. The campaign records the
+source/tree, raw receipts, four new public cases and trial corrections separately
+from this evidence-only status update and any future distribution acceptance.
+
 ## Named canonical drafts in public v0.1.51
 
 The public executable supports `change draft --module NAME`, `--declaration MODULE::NAME` and
