@@ -116,6 +116,15 @@ There is no dynamic CLI load/reload/individual stop, cross-instance ownership
 transfer or hostile-tenant sandbox. Encoded object-byte counts are not RSS, complete
 private-memory accounting or measured speedup. Public v0.1.52 is unchanged.
 
+Corrected source `7c6fec6b` is integrated on main and passed all 26 full-profile
+gates freshly, with zero reuse and stable inputs. It also fixes a demonstrated
+resident admission/stop race: accepted captures are counted before shutdown may
+observe idle. All 16 focused runtime tests and five shared-service public tests
+against a copied optimized executable passed. The [campaign](campaigns/202609281356.md)
+retains both the original failure and exact-source proof. New candidate
+`36386561026/1` selects that source and was observed in progress, not accepted or
+published. Final-archive shared-service proof and normal promotion remain pending.
+
 ## Current authority and maintained consumers
 
 The accepted typed meaning graph is the sole editable program authority. Native

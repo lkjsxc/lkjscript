@@ -22,7 +22,11 @@ closed-stdout witness. Nineteen other source gates passed. The
 [shared-host continuation](campaigns/202609281356.md) retains the original failure,
 the scoped test correction and the successor's distinct source evidence. The failed
 history-only candidate is not promotable and cannot certify the changed host.
-No v0.1.53 tag or promotion has been selected at this boundary.
+Corrected shared-host source `7c6fec6b` subsequently passed all 26 fresh full gates
+with stable inputs and reached main unchanged. One new candidate `36386561026/1`
+was dispatched from that exact source; its observed in-progress state is not
+acceptance. The continuation records the remaining final-archive shared-service
+cases and ordinary promotion boundary. No v0.1.53 tag or promotion has been selected.
 
 Immutable [v0.1.38](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.38) already publishes source
 `7083f9a6d56ed702017942e100c3696fc6f35308`. Publisher
