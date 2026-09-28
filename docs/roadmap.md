@@ -25,6 +25,14 @@ and failure boundaries, then extend its language contracts.
 
 ### Semantic boundary
 
+The first scoped capability borrowing boundary is implemented in v0.1.54. The
+[type-generic continuation](campaigns/202609281735.md) composes ordinary type
+parameters, data callbacks and results with exact concrete borrowing/consumption.
+It deliberately leaves effect/requirement-polymorphic resource transfer,
+cross-package ownership, resource returns and general memory references open.
+These are implementation increments toward the coordinated slice, not substitutes
+for its region/trait/ownership design or evidence of zero-copy payload processing.
+
 Choose a compact contract for a transferable owned region/buffer, a scoped read
 view and a typed callable or trait implementation. Specify creation, borrowing,
 move, result return and cleanup, including failure and cancellation. Keep declared
@@ -44,8 +52,8 @@ from invalid meaning.
 
 ### Small shared host, early
 
-The first [shared host](spec/shared-runtime.md) is implemented in development
-v0.1.53: repeated `serve --deployment` arguments, exact whole-artifact preparation
+The first [shared host](spec/shared-runtime.md) is public in v0.1.53:
+repeated `serve --deployment` arguments, exact whole-artifact preparation
 sharing, private instance state/grants/tasks and joined fixed-group termination.
 The [implementation campaign](campaigns/202609281356.md) owns its verification.
 This completes the initial hosting slice, not the coordinated ownership/type slice.

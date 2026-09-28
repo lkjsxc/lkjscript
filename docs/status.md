@@ -6,20 +6,21 @@ and boundaries; historical measurements and failed attempts stay with their
 
 The owner-selected [language-first direction](direction.md) now prioritizes advanced
 type/ownership/effect composition, region-based memory research and a shared runtime.
-The first exact-code shared service host is now a development capability described
+The first exact-code shared service host is public in v0.1.53. Scoped resource
+borrowing and ordinary generic composition are successor development capabilities
 below. Advanced ownership/trait and region-memory work remains a research selection,
 not a capability conferred by a roadmap or by sharing existing prepared code.
 
 ## Public binary release
 
-**Public/latest is immutable [v0.1.52](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.52).**
-It adds typed form-field selection and coherent catalog/HEAD observation after
-recovery, while retaining named drafts, native web/editor workflows and immutable
-deployment builds. The [delivery record](campaigns/202609281010.md) identifies
-original producer `36344022937/1`, unchanged assets, promotion `36367325740/1`
-and successful anonymous exact/latest acquisition and installed smoke. Release
-`397895945` was published on 2026-09-28 at 10:52:46 JST. The withheld v0.1.49
-candidate was never a public release; its tag and original failures remain unchanged.
+**Public/latest is immutable [v0.1.53](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.53).**
+It adds bounded recorded history and the shared service host, retaining typed forms,
+coherent catalog/HEAD recovery, named drafts and native web/editor workflows.
+Release `398046212` was published on 2026-09-28 at 16:57:46 JST. The
+[completed delivery](campaigns/202609281356.md#completed-v0153-publication) identifies
+accepted producer `36386561026/1`, unchanged assets, promotion `36393934427/1`,
+final-archive shared-service tests and anonymous exact/latest installed verification.
+The earlier immutable releases and genuinely failed/withheld candidates remain unchanged.
 
 Inspect the actual installed executable with `lkjscript capabilities`. Installing
 a newer runtime does not silently replace accepted application definitions,
@@ -72,7 +73,7 @@ from controller `8c00123f` and completed successfully. Its retained terminal is
 The [continuation](campaigns/202609281010.md) retains the original mistake and
 corrected delivery evidence rather than treating a tag alone as publication.
 
-## Development v0.1.53: recorded recent history
+## Public v0.1.53: recorded recent history
 
 [`inspect history [--limit N]`](guides/native-history.md) projects existing accepted
 revision and receipt records without a second history database, old-code execution,
@@ -95,10 +96,10 @@ without changing either immutable deployment. Candidate `36368771474/1` was
 selected once from that exact implementation. It later failed the source profile:
 19 gates passed; the closed-stdout fixture did not complete successfully within
 its inherited 80 ms deadline. The [shared-host continuation](campaigns/202609281356.md)
-retains that original failure and the scoped test correction. No v0.1.53 tag or
-promotion has been selected. This development feature is absent from public v0.1.52.
+retains that original failure and the scoped test correction. Its accepted successor
+was published as v0.1.53; the earlier failed producer was not promoted.
 
-## Development v0.1.53: shared service runtime
+## Public v0.1.53: shared service runtime
 
 `serve --deployment A --deployment B` hosts a finite group of HTTP and interactive
 services in one process. Exact complete artifacts share immutable prepared code;
@@ -121,9 +122,25 @@ gates freshly, with zero reuse and stable inputs. It also fixes a demonstrated
 resident admission/stop race: accepted captures are counted before shutdown may
 observe idle. All 16 focused runtime tests and five shared-service public tests
 against a copied optimized executable passed. The [campaign](campaigns/202609281356.md)
-retains both the original failure and exact-source proof. New candidate
-`36386561026/1` selects that source and was observed in progress, not accepted or
-published. Final-archive shared-service proof and normal promotion remain pending.
+retains both the original failure and exact-source proof. Producer `36386561026/1`
+subsequently passed and its unchanged archive was promoted as immutable v0.1.53.
+Final-archive shared-service proof and normal public verification are complete.
+
+## Development: scoped borrowing and ordinary generics
+
+[v0.1.54](releases/v0.1.54.md) adds one private, same-package, exact-requirement
+borrow parameter in the final argument position. Borrowing and nested reborrowing
+preserve caller ownership; a borrowed helper cannot consume or retain the view.
+Its accepted source `7e6101f8` passed 26 fresh gates. The original candidate
+`36395986112/1` remains separate from mainline development and is not publication.
+
+[v0.1.55](releases/v0.1.55.md) composes ordinary type parameters with both borrow
+and consume helpers. A native queue consumer decodes through an ordinary callback,
+forwards the type through nested borrowing and returns ordinary data after final
+consumption. Concrete resource interfaces/requirements, direct-call and escape
+rules remain unchanged. The [campaign](campaigns/202609281735.md) owns original
+failures, exact-source verification and the delivery boundary; no v0.1.55 public
+binary has been selected. Neither increment is provided by public v0.1.53.
 
 ## Current authority and maintained consumers
 
@@ -251,8 +268,9 @@ establish hostile-code containment or multi-tenant isolation.
   bind executable capabilities too; after an upgrade, re-plan the original request
   rather than modifying its base or reusing an incompatible token.
 - Affine resources remain lexical and task-local, with the supported private,
-  requirement-bound consume handoff. General resource results, borrowing signatures,
-  cross-package transfer and asynchronous ownership remain unproved.
+  requirement-bound borrow/consume helpers, including ordinary type parameters in
+  development v0.1.55. General resource results, effect/requirement-polymorphic
+  resource transfer, cross-package transfer and asynchronous ownership remain unproved.
 - Anonymous closures, automatic capture, generic inference, expanding nominal
   instantiation, JIT/AOT specialization, SIMD and a browser/Wasm backend are absent.
 - Arbitrary outbound URLs/methods, outbound WebSockets, Nostr event signing and

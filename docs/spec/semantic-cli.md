@@ -748,15 +748,18 @@ conversion of an accepted request to a new supplier.
 `add.parameter ... use=unrestricted|borrow|consume [requirement=REQUIREMENT]` authors canonical
 parameter use and the optional exact function-resource binding. Omission means unrestricted and no
 binding for an ordinary nonresource parameter. Resource operation parameters require explicit
-borrow or consume and no binding. One private same-package nongeneric task function may instead
+borrow or consume and no binding. One private same-package task function may instead
 have one final direct resource parameter with `use=borrow` or `use=consume` and `requirement` naming the same exact
 requirement in its effect and interface in its resource type. Its preceding parameters and result
 must be resource-free, and only a direct named acyclic call may borrow or transfer the final resource owner.
 Borrow preserves caller ownership and permits nested reborrows. Consuming a borrowed parameter,
 forwarding it to a consuming helper, or escaping it through a result/container/closure rejects.
-Automatic `extract.function` retains its existing consume-only extraction boundary.
+Ordinary `(type-parameter create T)` and explicit `(types T)` call arguments compose with this
+boundary, including ordinary callbacks/results and nested reborrowing. The final resource and its
+requirement remain concrete; effect/requirement-polymorphic resource helpers still reject.
+Automatic `extract.function` retains its existing nongeneric, consume-only extraction boundary.
 Direct and input-file records lower to identical intent. Missing, extra, foreign, interface-
-mismatched, unrestricted, multiple, nonfinal, public, package, generic, pure,
+mismatched, unrestricted, multiple, nonfinal, public, package, effect/requirement-generic, pure,
 cross-package, recursive, indirect, resource-result, and post-consume caller-reuse forms reject before plan
 publication. Unknown predecessor type/use spellings also reject.
 

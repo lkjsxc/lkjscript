@@ -3,7 +3,12 @@ use super::*;
 use crate::platform::kernel::{BindingKind, BindingRecord, OperationReference, ParameterUse};
 use crate::platform::semantic_id::BindingId;
 
+#[path = "generic_resource_fixture.rs"]
+mod generic_resource_fixture;
+
 fn fixture(mode: &str) -> (crate::platform::kernel::KernelSnapshot, NormalizedProgram) {
+    let generic = mode.starts_with("generic:");
+    let mode = mode.strip_prefix("generic:").unwrap_or(mode);
     let borrowed = mode.starts_with("borrow");
     let handoff = mode.starts_with("handoff") || borrowed;
     let mut snapshot = crate::platform::kernel::tests::witness_snapshot();
@@ -394,6 +399,9 @@ fn fixture(mode: &str) -> (crate::platform::kernel::KernelSnapshot, NormalizedPr
         panic!("function")
     };
     function.body = body;
+    if generic {
+        generic_resource_fixture::generalize(&mut snapshot);
+    }
     let mut reachable = BTreeSet::new();
     let mut pending = snapshot
         .owners
@@ -520,8 +528,16 @@ impl NormalizedCapabilityAdapter for ResourceScript {
 
 #[test]
 fn task_tail_transfer_preserves_unused_consumed_and_final_handoff_resource_lifetimes() {
-    for mode in ["unused", "consumed", "handoff", "handoff-failure"] {
-        let (snapshot, program) = fixture(mode);
+    for selected in [
+        "unused",
+        "consumed",
+        "handoff",
+        "handoff-failure",
+        "generic:handoff",
+        "generic:handoff-failure",
+    ] {
+        let (snapshot, program) = fixture(selected);
+        let mode = selected.strip_prefix("generic:").unwrap_or(selected);
         for reference in [false, true] {
             for exhaust in [false, true] {
                 let target = program.root_target(&Name::new("command").unwrap()).unwrap();
@@ -635,15 +651,40 @@ pub(crate) fn borrowed_snapshot(nested: bool) -> crate::platform::kernel::Kernel
     fixture(if nested { "borrow-reborrow" } else { "borrow" }).0
 }
 
+pub(crate) fn type_generic_borrowed_snapshot(
+    nested: bool,
+) -> crate::platform::kernel::KernelSnapshot {
+    fixture(if nested {
+        "generic:borrow-reborrow"
+    } else {
+        "generic:borrow"
+    })
+    .0
+}
+
 #[test]
 fn scoped_borrow_preserves_caller_ownership_and_joins_failure_cleanup() {
+    check_scoped_borrow(false);
+}
+
+#[test]
+fn type_generic_scoped_borrow_preserves_values_ownership_and_failure_cleanup() {
+    check_scoped_borrow(true);
+}
+
+fn check_scoped_borrow(generic: bool) {
     for mode in [
         "borrow",
         "borrow-tail",
         "borrow-reborrow",
         "borrow-prefix-failure",
     ] {
-        let (snapshot, program) = fixture(mode);
+        let selected = if generic {
+            format!("generic:{mode}")
+        } else {
+            mode.to_owned()
+        };
+        let (snapshot, program) = fixture(&selected);
         let target = program.root_target(&Name::new("command").unwrap()).unwrap();
         let req = &program.requirements
             [program.components[target.component.0 as usize].requirements[0].0 as usize];

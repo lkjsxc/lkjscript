@@ -4160,8 +4160,8 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "kernel_affine_function_resource_generic",
             DiagnosticClass::Semantic,
-            "A resource-bearing function is generic.",
-            "Remove type parameters from the resource-bearing helper.",
+            "A resource-bearing function has effect or requirement parameters.",
+            "Bind exact concrete authority; ordinary type parameters remain supported.",
         ),
         diagnostic(
             "kernel_affine_function_resource_effect",

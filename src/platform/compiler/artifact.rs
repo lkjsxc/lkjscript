@@ -1201,6 +1201,7 @@ pub(crate) enum RuntimeOwnerExpectation {
         cases: Vec<crate::platform::semantic_id::CaseId>,
     },
     ResourceFunction {
+        type_parameters: Vec<TypeParameterId>,
         parameters: Vec<ParameterId>,
         result: TypeObjectDigest,
         requirements: Vec<RequirementReference>,
@@ -1326,6 +1327,7 @@ impl RuntimeOwnerExpectation {
             }
             (
                 Self::ResourceFunction {
+                    type_parameters,
                     parameters,
                     result,
                     requirements,
@@ -1337,7 +1339,7 @@ impl RuntimeOwnerExpectation {
                     (
                         DeclarationVisibility::Private,
                         DeclarationPayload::Function(function),
-                    ) if function.type_parameters.is_empty() && function.effect_parameters.is_empty() && function.requirement_parameters.is_empty()
+                    ) if function.type_parameters == *type_parameters && function.effect_parameters.is_empty() && function.requirement_parameters.is_empty()
                         && function.parameters == *parameters
                         && function.result == *result
                         && matches!(
@@ -1691,6 +1693,7 @@ pub(crate) fn runtime_owner_expectations(
                         &mut expected,
                         (*package, OwnerKey::Declaration(declaration)),
                         RuntimeOwnerExpectation::ResourceFunction {
+                            type_parameters: signature.type_parameters.clone(),
                             parameters,
                             result,
                             requirements,

@@ -1502,13 +1502,12 @@ fn validate_normalized_resource_signature(
     })?;
     if index.saturating_add(1) != parameters.len()
         || parameter.use_mode == ParameterUse::Unrestricted
-        || !type_parameters.is_empty()
         || !matches!(body, NormalizedFunctionBody::Code(_))
         || !task_requirements.contains(&requirement_index)
     {
         return Err(runtime_corrupt(
             "normalized_function_resource_shape",
-            "resource signature is not one final borrow/consume parameter on a nongeneric task body",
+            "resource signature is not one final borrow/consume parameter on a task body",
         ));
     }
     if normalized_type_contains_resource(

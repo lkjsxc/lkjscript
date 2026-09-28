@@ -30,6 +30,12 @@ selection is not acceptance or publication. The
 owns the exact source, original failed checks, corrected acceptance and remaining
 candidate/promotion boundary. No v0.1.54 tag or release selection has been made.
 
+The separate [v0.1.55 development continuation](campaigns/202609281735.md) composes
+ordinary type parameters with exact resource borrowing/consumption. It does not
+rebind or replace the existing v0.1.54 producer. Select its release candidate only
+after its own source acceptance and reconciliation of that predecessor's publication
+selection; until then it is mainline development, not a claimed public binary.
+
 Immutable [v0.1.38](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.38) already publishes source
 `7083f9a6d56ed702017942e100c3696fc6f35308`. Publisher
 [35117655769/1](https://github.com/lkjsxc/lkjscript/actions/runs/35117655769) passed all four hosted

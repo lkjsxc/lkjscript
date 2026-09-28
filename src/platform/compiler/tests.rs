@@ -5,6 +5,8 @@ mod nominal_session_tests;
 
 #[path = "effect_tests.rs"]
 mod effect_tests;
+#[path = "generic_resource_tests.rs"]
+mod generic_resource_tests;
 
 #[path = "f64_tests.rs"]
 mod f64_tests;
@@ -2486,7 +2488,10 @@ fn resource_function_artifact_rejects_rebound_or_reclassified_authority() {
         .join("applications/lkjournal/generated/lkjournal.lkja");
     let bytes = std::fs::read(path).expect("maintained resource-function artifact");
     let loaded = load_artifact(&bytes).expect("load maintained resource-function artifact");
+    assert_resource_function_metadata(&loaded);
+}
 
+fn assert_resource_function_metadata(loaded: &LoadedArtifact) {
     let resource_parameter = loaded
         .manifest
         .packages

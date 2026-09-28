@@ -588,7 +588,6 @@ impl Reference<'_> {
             return Ok(None);
         };
         if declaration.visibility != DeclarationVisibility::Private
-            || !function.type_parameters.is_empty()
             || !function.effect_parameters.is_empty()
             || !function.requirement_parameters.is_empty()
             || self.contains_resource(function.result, &mut BTreeSet::new())
@@ -1628,8 +1627,21 @@ fn independent_reference_agrees_on_maintained_graphs_and_finite_negative_corpus(
 
 #[test]
 fn scoped_borrow_reference_distinguishes_views_from_owned_transfers() {
+    check_scoped_borrow_reference(false);
+}
+
+#[test]
+fn type_generic_borrow_reference_preserves_the_independent_rejection_boundary() {
+    check_scoped_borrow_reference(true);
+}
+
+fn check_scoped_borrow_reference(generic: bool) {
     for nested in [false, true] {
-        let snapshot = crate::platform::execution::normalized::tests::iteration_resource_tests::borrowed_snapshot(nested);
+        let snapshot = if generic {
+            crate::platform::execution::normalized::tests::iteration_resource_tests::type_generic_borrowed_snapshot(nested)
+        } else {
+            crate::platform::execution::normalized::tests::iteration_resource_tests::borrowed_snapshot(nested)
+        };
         assert!(production_accepts(&snapshot));
         assert!(
             Reference {

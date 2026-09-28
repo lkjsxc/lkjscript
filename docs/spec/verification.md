@@ -339,6 +339,18 @@ and post-consume use, exact requirement/interface binding, one-level and nested 
 left-to-right argument commitment, caller reuse, branch mismatch, function escape, self/mutual
 recursion, and forbidden signature or containment mutations.
 
+Ordinary type-generic resource helpers additionally require live type substitution through
+ordinary parameters, results and nested helper calls, not just an unused type-parameter flag.
+The same finite independent affine and execution oracles cover their borrow, reborrow, consume,
+tail-call, argument-failure, exhaustion and cancellation paths. A literal native consumer must
+instantiate actual ordinary callbacks/results, preserve the draft round trip, run its copied
+artifact without the authoring project, and agree with separately observed durable effects.
+Negative cases retain exact-authority rejection and prevent resource escape through ordinary
+type arguments or function values. A decoder failure inside a nested borrow must leave the
+already committed claim observable without inventing completion or rollback; an independent
+ready job must remain executable without rewriting that claim. Extraction's narrower eligibility
+is tested separately.
+
 Function-definition projection acceptance uses complete typed reconstruction as a disjoint oracle.
 The oracle may decode the same canonical authority, but it cannot call production point traversal,
 structural ordering, rendering, paging, continuation, or expected-result helpers. It independently

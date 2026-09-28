@@ -328,12 +328,20 @@ value retains that acquiring requirement as authority.
 
 Every parameter has canonical use meaning: `unrestricted`, `borrow`, or `consume`. Nonresource
 parameters must be unrestricted. A direct capability-resource operation parameter must be an
-explicit borrow or consume. One private, same-package, nongeneric task function may instead have
+explicit borrow or consume. One private, same-package task function may instead have
 exactly one final direct capability-resource parameter with `borrow` or `consume` use. That parameter carries
 one canonical `resource_requirement` reference to a requirement in the function effect whose exact
 interface matches the resource type. The binding is graph meaning and is never inferred from a
 name, order, deployment grant, or runtime handle. Resource results and every other
 resource-containing function signature reject.
+
+Such a helper may declare ordinary type parameters. They can describe preceding ordinary
+arguments, resource-free callbacks and the ordinary result; direct calls substitute them through
+the existing explicit rank-one rules. Nested helpers may forward those exact type parameters.
+The final resource interface and requirement remain concrete and exact: effect and requirement
+parameters on a resource-bearing helper are not admitted. An ordinary type application never
+turns a live resource into an unrestricted argument, returned value or retained callable.
+Automatic function extraction retains its narrower nongeneric, consume-only boundary.
 
 Affine flow follows ordinary left-to-right evaluation order. A borrow observes one live lexical
 owner and preserves it. A consume moves that owner; every later use on a reachable path rejects
@@ -366,7 +374,7 @@ payload: matching consumes the outer owner and makes the payload live only in th
 join retains an owner only when every reachable arm retains the same provenance. Records,
 structural records, lists, maps, options, results, streams, function values, constants, tests, and
 nested nominal values cannot contain a resource. Multiple, nonfinal, public,
-package-visible, cross-package, generic, indirect, recursive, captured, or result-bearing resource
+package-visible, cross-package, effect/requirement-generic, indirect, recursive, captured, or result-bearing resource
 function forms reject. Partial moves, affine containers, resource polymorphism, resource-capturing closures, async or
 detached tasks, and general linear must-use semantics are absent.
 

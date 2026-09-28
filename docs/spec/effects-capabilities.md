@@ -254,8 +254,11 @@ resource carries the symbolic operand and exact interface during generic validat
 remain different provenance even if one concrete application aliases them. Matching, borrowing,
 consuming and dropping require the same operand under existing local rules; runtime provenance
 resolves to the original concrete requirement, canonical grant and task scope. This does not admit
-generic resource-bearing function parameters/results, capture, aggregate escape or cross-function
-transfer. Concrete task helpers follow the separate borrow/consume boundary above.
+requirement-polymorphic resource-bearing function parameters, resource results, capture,
+aggregate escape or cross-function transfer of a symbolic resource operand. Helpers with a
+concrete exact resource/requirement binding follow the separate borrow/consume boundary above;
+ordinary type parameters for their nonresource data and callbacks do not make that authority
+polymorphic.
 
 Typed-cell libraries use the existing typed-data encoder and decoder, not JSON. Decode-or may use
 a supplied default on absence or incompatible encoding/layout, but does not swallow cancellation,

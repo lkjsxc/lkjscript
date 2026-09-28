@@ -1624,6 +1624,9 @@ mod resident_termination;
 #[path = "shared_runtime.rs"]
 mod shared_runtime;
 
+#[path = "native_generic_resources.rs"]
+mod native_generic_resources;
+
 #[path = "native_byte_conversion.rs"]
 mod native_byte_conversion;
 

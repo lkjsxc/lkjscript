@@ -1591,14 +1591,11 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 "resource-bearing task function must be private",
             ));
         }
-        if !function.type_parameters.is_empty()
-            || !function.effect_parameters.is_empty()
-            || !function.requirement_parameters.is_empty()
-        {
+        if !function.effect_parameters.is_empty() || !function.requirement_parameters.is_empty() {
             return Err(owner_affine_error(
                 "kernel_affine_function_resource_generic",
                 owner,
-                "resource-bearing task function cannot be generic",
+                "resource-bearing task function cannot have effect or requirement parameters",
             ));
         }
         if self.type_contains_resource(function.result)? {
