@@ -11,6 +11,14 @@ use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore, watch};
 
 pub(crate) mod idle;
 
+#[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    reason = "bounded regression assertions"
+)]
+mod admission_tests;
+
 pub const RESIDENT_RUNTIME_CONTRACT_VERSION: u16 = 3;
 pub const MAXIMUM_CONCURRENT_TASKS: usize = 4_096;
 pub const MAXIMUM_QUEUED_TASKS: usize = 65_536;
@@ -150,6 +158,10 @@ pub(crate) enum InvocationTiming {
 
 struct ResidentKernelInner {
     limits: ResidentLimits,
+    // Stop cannot observe idle between successful acceptance and queue registration.
+    registration: Mutex<()>,
+    #[cfg(test)]
+    registration_pause: Mutex<Option<admission_tests::RegistrationPause>>,
     accepting: AtomicBool,
     admission: Arc<Semaphore>,
     workers: Arc<Semaphore>,
@@ -203,6 +215,9 @@ impl ResidentKernel {
         Ok(Self {
             inner: Arc::new(ResidentKernelInner {
                 limits,
+                registration: Mutex::new(()),
+                #[cfg(test)]
+                registration_pause: Mutex::new(None),
                 accepting: AtomicBool::new(true),
                 admission: Arc::new(Semaphore::new(admission_capacity)),
                 workers: Arc::new(Semaphore::new(maximum_concurrent_tasks)),
@@ -285,45 +300,52 @@ impl ResidentKernel {
         T: Send + 'static,
         F: FnOnce(ExecutionControl) -> Result<T, ExecutionError> + Send + 'static,
     {
-        if !self.inner.accepting.load(Ordering::Acquire) {
-            self.inner
-                .counters
-                .rejected_after_shutdown
-                .fetch_add(1, Ordering::AcqRel);
-            return Err(shutdown_error());
-        }
-        let admission = match self.inner.admission.clone().try_acquire_owned() {
-            Ok(permit) => permit,
-            Err(_) if !self.inner.accepting.load(Ordering::Acquire) => {
+        let (admission, queued) = {
+            let _registration = lock_unpoisoned(&self.inner.registration);
+            if !self.inner.accepting.load(Ordering::Acquire) {
                 self.inner
                     .counters
                     .rejected_after_shutdown
                     .fetch_add(1, Ordering::AcqRel);
                 return Err(shutdown_error());
             }
-            Err(_) => {
+            let admission = match self.inner.admission.clone().try_acquire_owned() {
+                Ok(permit) => permit,
+                Err(_) if !self.inner.accepting.load(Ordering::Acquire) => {
+                    self.inner
+                        .counters
+                        .rejected_after_shutdown
+                        .fetch_add(1, Ordering::AcqRel);
+                    return Err(shutdown_error());
+                }
+                Err(_) => {
+                    self.inner
+                        .counters
+                        .overloaded
+                        .fetch_add(1, Ordering::AcqRel);
+                    return Err(ExecutionError::resource(
+                        "resident_overloaded",
+                        "resident deployment admission queue is full",
+                    ));
+                }
+            };
+            if !self.inner.accepting.load(Ordering::Acquire) {
+                drop(admission);
                 self.inner
                     .counters
-                    .overloaded
+                    .rejected_after_shutdown
                     .fetch_add(1, Ordering::AcqRel);
-                return Err(ExecutionError::resource(
-                    "resident_overloaded",
-                    "resident deployment admission queue is full",
-                ));
+                return Err(shutdown_error());
             }
-        };
-        if !self.inner.accepting.load(Ordering::Acquire) {
-            drop(admission);
-            self.inner
-                .counters
-                .rejected_after_shutdown
-                .fetch_add(1, Ordering::AcqRel);
-            return Err(shutdown_error());
-        }
-        let admission = AdmissionPermitGuard::new(self.inner.clone(), admission);
+            #[cfg(test)]
+            admission_tests::pause_before_registration(&self.inner);
+            let admission = AdmissionPermitGuard::new(self.inner.clone(), admission);
 
-        self.inner.counters.admitted.fetch_add(1, Ordering::AcqRel);
-        let queued = QueuedInvocation::new(self.inner.clone(), operation);
+            self.inner.counters.admitted.fetch_add(1, Ordering::AcqRel);
+            let queued = QueuedInvocation::new(self.inner.clone(), operation);
+            (admission, queued)
+        };
+        // No registration lock crosses a wait, user execution or resource cleanup.
         let queue_started = Instant::now();
         let mut shutdown = self.inner.shutdown.subscribe();
         let workers = self.inner.workers.clone();
@@ -442,7 +464,12 @@ impl ResidentKernel {
         cleanup: impl FnOnce() -> Vec<ExecutionError>,
     ) -> ShutdownReceipt {
         let started = Instant::now();
-        self.inner.accepting.store(false, Ordering::Release);
+        {
+            let _registration = lock_unpoisoned(&self.inner.registration);
+            self.inner.accepting.store(false, Ordering::Release);
+        }
+        // Wake waiters outside the registration lock. All accepted captures are now
+        // counted, and any later admission observes the closed state under that lock.
         self.inner.admission.close();
         self.inner.workers.close();
         let _ = self.inner.shutdown.send(true);

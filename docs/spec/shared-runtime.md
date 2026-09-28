@@ -86,6 +86,13 @@ returns the first error while abandoning siblings. Ordinary handled HTTP request
 errors do not terminate the group. Cleanup cannot undo already visible
 application effects.
 
+Within each resident kernel, acceptance and queue registration share a short
+critical section with stopping admission. Stop cannot report idle after accepting
+an invocation but before counting its captured resources. The section contains
+neither an asynchronous wait nor application execution or adapter cleanup;
+semaphore wakeups also happen outside it. Execution remains independently
+scheduled, not serialized behind this registration lock.
+
 The fixed-group CLI has no dynamic load, hot reload, individual-stop command or
 cross-instance messaging operation. The library's independently owned prepared
 applications retain their separate shutdown boundaries. Dropping the preparation

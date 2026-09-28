@@ -14,11 +14,15 @@ the existing release-scoped selection was updated/read back, and promotion
 public/latest v0.1.52, and all three original candidate assets are unchanged. The
 [continuation](campaigns/202609281010.md#already-accepted-v0152-publication-continuation)
 retains the correction and original producer, promotion and public closure.
-Development v0.1.53 adds recent history separately; it does not alter v0.1.52 assets.
-Its exact mainline implementation `8570bfa4` passed all 26 full gates freshly with
-stable inputs. Candidate `36368771474/1` was dispatched once from that source;
-its initial queued state is not candidate acceptance or public availability.
-The continuation owns this new delivery boundary and the earlier failed source run.
+Development v0.1.53 adds recent history and an exact-code shared service host;
+it does not alter v0.1.52 assets. The history-only implementation `8570bfa4` passed
+all 26 local full gates, but its candidate `36368771474/1` later failed
+`workspace_tests` in the source tier: an inherited 80 ms allowance expired in the
+closed-stdout witness. Nineteen other source gates passed. The
+[shared-host continuation](campaigns/202609281356.md) retains the original failure,
+the scoped test correction and the successor's distinct source evidence. The failed
+history-only candidate is not promotable and cannot certify the changed host.
+No v0.1.53 tag or promotion has been selected at this boundary.
 
 Immutable [v0.1.38](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.38) already publishes source
 `7083f9a6d56ed702017942e100c3696fc6f35308`. Publisher
