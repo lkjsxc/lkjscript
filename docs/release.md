@@ -16,9 +16,12 @@ The earlier [v0.1.52 delivery](campaigns/202609281010.md#already-accepted-v0152-
 and [v0.1.53 shared-host delivery](campaigns/202609281356.md#completed-v0153-publication)
 retain their original failures, corrections and successful publications. In
 particular, failed history-only producer `36368771474/1` was never promoted.
-The [v0.1.55 generic-resource continuation](campaigns/202609281735.md) requires
-its own fresh source acceptance, final candidate and final-archive generic-resource
-cases. Its development version is not a public release or acceptance of another tree.
+The [v0.1.55 generic-resource continuation](campaigns/202609281735.md) reached main
+at corrected source `320dacc0` after all 26 full-profile gates passed freshly with
+stable inputs. Selected producer `36419055364/1` is in progress at that exact source;
+its acceptance, final-archive generic-resource cases and unchanged-asset publication
+remain pending. Its development version is not a public release or acceptance of
+another tree.
 
 Immutable [v0.1.38](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.38) already publishes source
 `7083f9a6d56ed702017942e100c3696fc6f35308`. Publisher

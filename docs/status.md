@@ -140,10 +140,13 @@ was accepted and subsequently promoted unchanged as the immutable public release
 and consume helpers. A native queue consumer decodes through an ordinary callback,
 forwards the type through nested borrowing and returns ordinary data after final
 consumption. Concrete resource interfaces/requirements, direct-call and escape
-rules remain unchanged. The [campaign](campaigns/202609281735.md) owns original
-failures, exact-source verification and the delivery boundary. A full run exposed
-a stale fixed validator-contract test value; its correction is under fresh
-validation. No v0.1.55 public binary has been selected; ordinary type-generic
+rules remain unchanged. Corrected source `320dacc0` passed all 26 full-profile
+gates freshly, with zero reuse and stable inputs, and reached main normally.
+The three public generic-resource cases also passed against a copied optimized
+executable. The [campaign](campaigns/202609281735.md#accepted-corrected-source-and-mainline-delivery)
+retains the original failed check and its scoped test correction. Candidate
+`36419055364/1` selects that exact source and is in progress, not yet accepted or
+published. Final-archive cases and publication remain separate; ordinary generic
 resource helpers are not provided by public v0.1.54.
 
 ## Current authority and maintained consumers
