@@ -25,7 +25,7 @@ and failure boundaries, then extend its language contracts.
 
 ### Semantic boundary
 
-The first scoped capability borrowing boundary is implemented in v0.1.54. The
+The first scoped capability borrowing boundary is public in v0.1.54. The
 [type-generic continuation](campaigns/202609281735.md) composes ordinary type
 parameters, data callbacks and results with exact concrete borrowing/consumption.
 It deliberately leaves effect/requirement-polymorphic resource transfer,

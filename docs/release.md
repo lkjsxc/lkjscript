@@ -4,37 +4,21 @@ GitHub Releases are the public binary distribution path. Accept one finalized ca
 its exact producer run and attempt, and promote its unchanged archive, checksum and bootstrap.
 Content identity, behavioral acceptance and publication authority are separate decisions.
 
-Current delivery observation (2026-09-28): immutable release `398046212` is
-public/latest **v0.1.53**, published at 16:57:46 JST. Accepted original producer
-`36386561026/1` selects exact source `7c6fec6b`; annotated tag `8942074f` and the
-existing release-only selector were independently verified. Promotion
-`36393934427/1` completed authenticated transfer, immutable publication, anonymous
-exact/latest acquisition and installed smoke. Its terminal is
-`immutable_published_and_public_verified`. All three original candidate assets
-are unchanged. The five shared-service public cases also passed against the
-executable extracted from that exact final archive, not a rebuilt substitute.
-The [completed delivery](campaigns/202609281356.md#completed-v0153-publication)
-retains producer identities, original failures, final-archive proof and public closure.
+Current delivery observation (2026-09-28): immutable public/latest v0.1.54 is
+release `398115115`, published at 18:40:53 JST. Original producer `36395986112/1`
+was accepted at source `7e6101f8`; promotion `36404343395/1` subsequently completed
+publication, anonymous acquisition/installed smoke and its terminal decision.
+The [publication observation](campaigns/202609281735.md#completed-v0154-publication)
+records the exact producer, annotated tag and unchanged public inventory. This
+continuation did not select a duplicate v0.1.54 producer or rewrite its assets.
 
-The previous immutable v0.1.52 and its
-[completed delivery](campaigns/202609281010.md#already-accepted-v0152-publication-continuation)
-remain unchanged. The earlier history-only v0.1.53 candidate `36368771474/1` failed
-its source tier and was never promoted; the shared-host continuation retains its
-closed-stdout scheduling failure and scoped correction rather than relabeling it.
-
-Development v0.1.54 adds scoped resource borrowing and is not part of v0.1.53.
-Corrected source `7e6101f8` passed all 26 fresh full gates and reached main normally.
-Its separate non-publishing candidate `36395986112/1` has been selected once;
-selection is not acceptance or publication. The
-[borrowing continuation](campaigns/202609281548.md#accepted-source-and-mainline-delivery)
-owns the exact source, original failed checks, corrected acceptance and remaining
-candidate/promotion boundary. No v0.1.54 tag or release selection has been made.
-
-The separate [v0.1.55 development continuation](campaigns/202609281735.md) composes
-ordinary type parameters with exact resource borrowing/consumption. It does not
-rebind or replace the existing v0.1.54 producer. Select its release candidate only
-after its own source acceptance and reconciliation of that predecessor's publication
-selection; until then it is mainline development, not a claimed public binary.
+The earlier [v0.1.52 delivery](campaigns/202609281010.md#already-accepted-v0152-publication-continuation)
+and [v0.1.53 shared-host delivery](campaigns/202609281356.md#completed-v0153-publication)
+retain their original failures, corrections and successful publications. In
+particular, failed history-only producer `36368771474/1` was never promoted.
+The [v0.1.55 generic-resource continuation](campaigns/202609281735.md) requires
+its own fresh source acceptance, final candidate and final-archive generic-resource
+cases. Its development version is not a public release or acceptance of another tree.
 
 Immutable [v0.1.38](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.38) already publishes source
 `7083f9a6d56ed702017942e100c3696fc6f35308`. Publisher

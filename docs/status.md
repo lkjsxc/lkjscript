@@ -6,20 +6,20 @@ and boundaries; historical measurements and failed attempts stay with their
 
 The owner-selected [language-first direction](direction.md) now prioritizes advanced
 type/ownership/effect composition, region-based memory research and a shared runtime.
-The first exact-code shared service host is public in v0.1.53. Scoped resource
-borrowing and ordinary generic composition are successor development capabilities
-below. Advanced ownership/trait and region-memory work remains a research selection,
+The exact-code shared service host and scoped capability borrowing are public.
+Ordinary generic composition is the v0.1.55 development capability below.
+Advanced ownership/trait and region-memory work remains a research selection,
 not a capability conferred by a roadmap or by sharing existing prepared code.
 
 ## Public binary release
 
-**Public/latest is immutable [v0.1.53](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.53).**
-It adds bounded recorded history and the shared service host, retaining typed forms,
-coherent catalog/HEAD recovery, named drafts and native web/editor workflows.
-Release `398046212` was published on 2026-09-28 at 16:57:46 JST. The
-[completed delivery](campaigns/202609281356.md#completed-v0153-publication) identifies
-accepted producer `36386561026/1`, unchanged assets, promotion `36393934427/1`,
-final-archive shared-service tests and anonymous exact/latest installed verification.
+**Public/latest is immutable [v0.1.54](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.54).**
+It adds scoped capability-resource borrowing and nested reborrowing, retaining
+recorded history, the shared service host, typed forms and native web/editor workflows.
+Release `398115115` was published on 2026-09-28 at 18:40:53 JST. The
+[delivery observation](campaigns/202609281735.md#completed-v0154-publication)
+identifies accepted producer `36395986112/1`, unchanged source `7e6101f8`,
+promotion `36404343395/1` and successful anonymous acquisition/installed smoke.
 The earlier immutable releases and genuinely failed/withheld candidates remain unchanged.
 
 Inspect the actual installed executable with `lkjscript capabilities`. Installing
@@ -126,21 +126,25 @@ retains both the original failure and exact-source proof. Producer `36386561026/
 subsequently passed and its unchanged archive was promoted as immutable v0.1.53.
 Final-archive shared-service proof and normal public verification are complete.
 
-## Development: scoped borrowing and ordinary generics
+## Public v0.1.54: scoped resource borrowing
 
 [v0.1.54](releases/v0.1.54.md) adds one private, same-package, exact-requirement
 borrow parameter in the final argument position. Borrowing and nested reborrowing
 preserve caller ownership; a borrowed helper cannot consume or retain the view.
-Its accepted source `7e6101f8` passed 26 fresh gates. The original candidate
-`36395986112/1` remains separate from mainline development and is not publication.
+Its accepted source `7e6101f8` passed 26 fresh gates. Producer `36395986112/1`
+was accepted and subsequently promoted unchanged as the immutable public release.
+
+## Development v0.1.55: ordinary type-generic resource helpers
 
 [v0.1.55](releases/v0.1.55.md) composes ordinary type parameters with both borrow
 and consume helpers. A native queue consumer decodes through an ordinary callback,
 forwards the type through nested borrowing and returns ordinary data after final
 consumption. Concrete resource interfaces/requirements, direct-call and escape
 rules remain unchanged. The [campaign](campaigns/202609281735.md) owns original
-failures, exact-source verification and the delivery boundary; no v0.1.55 public
-binary has been selected. Neither increment is provided by public v0.1.53.
+failures, exact-source verification and the delivery boundary. A full run exposed
+a stale fixed validator-contract test value; its correction is under fresh
+validation. No v0.1.55 public binary has been selected; ordinary type-generic
+resource helpers are not provided by public v0.1.54.
 
 ## Current authority and maintained consumers
 
