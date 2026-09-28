@@ -186,7 +186,15 @@ transport staging, canonical drafts, detached two/three-package execution, faile
 borrows, HTTP serving and pre-effect grant rejection. Affine feature 6 and qualified
 task feature 2 invalidate predecessor validation evidence. General resource returns,
 requirement/effect-polymorphic transfer and asynchronous borrowing remain unsupported.
-This is a development increment, not a public v0.1.57 binary.
+
+Corrected source `3438e2ed` reached main normally after all 26 full-profile gates
+passed freshly, with zero reuse and stable inputs. The same optimized executable
+has passed all 16 generic, recursive and package native cases; its byte identity
+survives the final test-only correction. Static grant matching additionally rejects
+ambiguous imported requirements before secret lookup. The campaign retains the
+original failed full run and the expanded independent visibility/ownership oracle.
+Candidate `36461408308/1` selects this exact source and is in progress. Final-archive
+acceptance and publication remain separate; this is not a public v0.1.57 binary.
 
 ## Current authority and maintained consumers
 

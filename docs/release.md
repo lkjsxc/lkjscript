@@ -22,10 +22,12 @@ at corrected source `320dacc0` after all 26 full-profile gates passed freshly wi
 stable inputs. Its candidate, final-archive cases and unchanged-asset publication
 are complete. The [v0.1.57 package continuation](campaigns/202609290026.md) combines
 the separately accepted v0.1.56 recursion increment with exact public-library
-resource contracts. It is the next selected publication milestone, subject to
-complete source acceptance, normal main integration and final-candidate acceptance.
-No separate v0.1.56 producer or tag is selected; a development version alone is
-neither publication nor acceptance of another tree.
+resource contracts. Corrected source `3438e2ed` has passed all 26 fresh full-profile
+gates with stable inputs and reached main normally. One non-publishing producer
+`36461408308/1` was selected from that exact source and is in progress. Original
+candidate acceptance, the 16 native cases against its final archive and unchanged-
+asset promotion remain pending. No separate v0.1.56 producer or tag is selected;
+a development version alone is neither publication nor acceptance of another tree.
 
 Immutable [v0.1.38](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.38) already publishes source
 `7083f9a6d56ed702017942e100c3696fc6f35308`. Publisher
