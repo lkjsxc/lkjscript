@@ -1,6 +1,8 @@
 use super::*;
 use fixture::Packages;
 
+#[path = "native_package_resource_admission.rs"]
+mod admission;
 #[path = "native_package_resource_failure.rs"]
 mod failure;
 #[path = "native_package_resource_fixture.rs"]

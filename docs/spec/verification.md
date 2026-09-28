@@ -377,7 +377,10 @@ identically named but independently owned requirement. Rejected plans preserve t
 accepted revision and project contents. Port effects must declare imported obligations
 explicitly; implementation calls and unused supplier requirements cannot grant them.
 Missing, extra and colliding name-selected deployment grants must reject before data
-effects. Command and HTTP execution, joined shutdown/restart, and a failed recursive
+effects or secret lookup. An absent test-only environment binding makes lookup
+observable: valid grants reach `secret_missing`, while invalid grants retain their
+grant diagnostic even when extra descriptors pad the count. Command and HTTP
+execution, joined shutdown/restart, and a failed recursive
 borrow retain separately observed durable state. This does not establish general
 memory borrowing, resource returns or zero-copy execution.
 

@@ -9,10 +9,10 @@ fn native_package_resources_never_share_one_named_grant_between_distinct_require
     let data = packages.detach();
     let inventory = content_inventory(&data);
     let deployment = packages.consumer.root.path().join("collision.json");
-    // Initial admission rejects the count mismatch; preparation also consumes
-    // each named grant once. Padding the count cannot grant both exact owners.
+    // Static admission and preparation both consume each named grant once.
+    // Padding the count cannot grant both exact owners or defer rejection.
     for (mode, code) in [
-        ("single", "deployment_grant_foreign"),
+        ("single", "deployment_grant_missing"),
         ("duplicate", "deployment_grant_duplicate"),
         ("padded", "deployment_grant_missing"),
     ] {

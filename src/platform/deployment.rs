@@ -2367,7 +2367,7 @@ fn validate_program_descriptor(
                 "selected target component escaped the exact artifact table",
             )
         })?;
-    let supplied = descriptor
+    let mut supplied = descriptor
         .grants
         .iter()
         .map(|grant| (grant.requirement.as_str(), grant))
@@ -2393,7 +2393,10 @@ fn validate_program_descriptor(
                     "component requirement escaped the exact artifact table",
                 )
             })?;
-        let grant = supplied.get(requirement.name.as_str()).ok_or_else(|| {
+        // Match each descriptor once during static admission, just as preparation
+        // does. Distinct imported obligations can share a name, not a grant;
+        // reject that ambiguity before any secret lookup or live preparation.
+        let grant = supplied.remove(requirement.name.as_str()).ok_or_else(|| {
             deployment_error(
                 "deployment_grant_missing",
                 format!(
@@ -2409,18 +2412,7 @@ fn validate_program_descriptor(
             &stream_requirements,
         )?;
     }
-    if supplied.len() != component.requirements.len() {
-        let required = component
-            .requirements
-            .iter()
-            .filter_map(|index| program.requirements.get(index.0 as usize))
-            .map(|requirement| requirement.name.as_str())
-            .collect::<BTreeSet<_>>();
-        let foreign = supplied
-            .keys()
-            .find(|alias| !required.contains(**alias))
-            .copied()
-            .unwrap_or("<unknown>");
+    if let Some((foreign, _)) = supplied.into_iter().next() {
         return Err(deployment_error(
             "deployment_grant_foreign",
             format!("deployment grants undeclared component requirement '{foreign}'"),
