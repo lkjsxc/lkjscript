@@ -5,12 +5,16 @@ its exact producer run and attempt, and promote its unchanged archive, checksum 
 Content identity, behavioral acceptance and publication authority are separate decisions.
 
 Current delivery observation (2026-09-28): v0.1.52 producer `36344022937/1` is
-accepted, but the existing release-selection variable cannot currently be read
-(HTTP 404). Public/latest remains v0.1.51. The
-[continuation](campaigns/202609281010.md#already-accepted-v0152-publication-blocked)
-records preserved originals and the exact blocked boundary; no tag, replacement
-variable, permission change or promotion was made. Development v0.1.53 adds recent
-recorded history separately and does not modify those accepted v0.1.52 assets.
+accepted. The first apparent variable-read blocker was an operator API-path error:
+the correct `/actions/variables/` read succeeded without changing access. After
+reconciling the previous immutable release, annotated tag `4f324e10` was verified,
+the existing release-scoped selection was updated/read back, and promotion
+`36367325740/1` was dispatched once and completed with
+`immutable_published_and_public_verified`. Immutable release `397895945` is
+public/latest v0.1.52, and all three original candidate assets are unchanged. The
+[continuation](campaigns/202609281010.md#already-accepted-v0152-publication-continuation)
+retains the correction and original producer, promotion and public closure.
+Development v0.1.53 adds recent history separately; it does not alter v0.1.52 assets.
 
 Immutable [v0.1.38](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.38) already publishes source
 `7083f9a6d56ed702017942e100c3696fc6f35308`. Publisher

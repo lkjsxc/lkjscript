@@ -6667,7 +6667,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             records.push(compact_record(
                 "inspection.history",
                 &[
-                    ("contract", "lkjscript-recent-history-1".to_owned()),
+                    ("projection", "lkjscript-recent-history-1".to_owned()),
                     ("usage", "inspect history [--limit N]".to_owned()),
                     (
                         "authority",

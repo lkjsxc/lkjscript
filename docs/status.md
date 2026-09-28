@@ -6,13 +6,14 @@ and boundaries; historical measurements and failed attempts stay with their
 
 ## Public binary release
 
-**Public/latest is immutable [v0.1.51](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.51).**
-It adds named canonical drafts and retains native web/editor workflows, identity-preserving scalar edits,
-immutable deployment builds and corrected joined resident lifecycle. The
-[delivery record](campaigns/202609280123.md) identifies the original producer,
-unchanged assets, promotion and anonymous exact/latest verification. The withheld
-v0.1.49 candidate was never a public release; its tag and original failures remain
-unchanged.
+**Public/latest is immutable [v0.1.52](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.52).**
+It adds typed form-field selection and coherent catalog/HEAD observation after
+recovery, while retaining named drafts, native web/editor workflows and immutable
+deployment builds. The [delivery record](campaigns/202609281010.md) identifies
+original producer `36344022937/1`, unchanged assets, promotion `36367325740/1`
+and successful anonymous exact/latest acquisition and installed smoke. Release
+`397895945` was published on 2026-09-28 at 10:52:46 JST. The withheld v0.1.49
+candidate was never a public release; its tag and original failures remain unchanged.
 
 Inspect the actual installed executable with `lkjscript capabilities`. Installing
 a newer runtime does not silently replace accepted application definitions,
@@ -39,9 +40,9 @@ remains preserved as an unaccepted historical attempt. The separate v0.1.53
 continuation below corrects and extends it; neither v0.1.51 nor v0.1.52 includes
 `inspect history`.
 
-## Development v0.1.52
+## Public v0.1.52
 
-The selected successor combines [typed form selection](guides/native-forms.md)
+The published successor combines [typed form selection](guides/native-forms.md)
 with coherent catalog/HEAD observation after recovery. Healthy reads remain shared;
 recovery retains exclusive ownership until the caller finishes its observation,
 rather than relying on atomic lock conversion. No storage schema changes or automatic
@@ -53,12 +54,17 @@ Implementation `60f793eb` is integrated on main and passed all 26 full-profile
 gates freshly, with zero reuse and stable inputs. Candidate
 [`36344022937/1`](https://github.com/lkjsxc/lkjscript/actions/runs/36344022937)
 uses that exact source and completed with `candidate_accepted`; its original
-acceptance and terminal artifacts are unexpired. Publication is blocked at reading
-the existing release-only selection variable: the current connection returns HTTP
-404, which does not distinguish absence from unavailable permission. No variable
-was created, no permissions changed, and no v0.1.52 tag or promotion selected.
-The [continuation](campaigns/202609281010.md) owns this observation and exact
-resumption boundary. This is **not a published v0.1.52 binary**.
+acceptance and terminal artifacts are unexpired. The initial apparent selection
+read blocker was an operator API-path error (missing `/actions/`), not unavailable
+permission. A correct read reconciled the existing v0.1.51 selection and terminal
+release. Annotated tag `4f324e10` now selects the unchanged accepted product source;
+its verbatim notes and remote object were compared before the existing release-only
+selection was updated and read back. Promotion `36367325740/1` was dispatched once
+from controller `8c00123f` and completed successfully. Its retained terminal is
+`immutable_published_and_public_verified`, with latest selecting exact source
+`60f793eb`. All three published assets match the accepted candidate inventory.
+The [continuation](campaigns/202609281010.md) retains the original mistake and
+corrected delivery evidence rather than treating a tag alone as publication.
 
 ## Development v0.1.53: recorded recent history
 
@@ -76,7 +82,7 @@ from masquerading as a fresh check. Missing or inconsistent visited links fail t
 complete response. Graph, artifact, package and operational-data encodings are
 unchanged. Discover this capability with `capabilities --section inspection`.
 Source acceptance and integration are tracked at the [continuation](campaigns/202609281010.md);
-this development feature is absent from the public v0.1.51 executable.
+this development feature is absent from the public v0.1.52 executable.
 
 ## Current authority and maintained consumers
 
@@ -122,11 +128,11 @@ Body decoding, actual header admission, domain validation and conditional saves
 retain their separate responsibilities. The
 [selection record](campaigns/202609280200.md) distinguishes source verification,
 existing-runtime use and publication. Existing accepted suppliers and applications
-are not silently upgraded. Public/latest remains the unchanged v0.1.51 binary;
-its embedded starter does not change with the current source examples.
+are not silently upgraded. The public v0.1.52 executable embeds the updated
+starter; an already installed older executable does not change with source examples.
 The selection record retains its original failure, corrected source acceptance
 and existing-runtime observations; the v0.1.52 record above owns combined-source
-acceptance and candidate progress.
+acceptance and completed public delivery.
 
 ## Native durable editor
 

@@ -149,6 +149,11 @@ fn history_rejects_invalid_or_foreign_grammar_and_advertises_its_scope() {
     public.cli(&["history"], false); // Removed predecessor spelling stays removed.
     let advertised = public.cli(&["capabilities", "--section", "inspection"], true);
     let contract = compact_record(&advertised, "inspection.history");
+    assert_eq!(
+        compact_field(contract, "projection"),
+        "lkjscript-recent-history-1"
+    );
+    assert!(!contract.fields.iter().any(|field| field.name == "contract"));
     assert_eq!(compact_field(contract, "default-items"), "20");
     assert_eq!(compact_field(contract, "maximum-items"), "100");
     assert_eq!(compact_field(contract, "mutation"), "none");
