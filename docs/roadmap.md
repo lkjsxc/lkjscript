@@ -44,7 +44,13 @@ from invalid meaning.
 
 ### Small shared host, early
 
-Build the smallest in-process host for multiple admitted program instances with
+The first [shared host](spec/shared-runtime.md) is implemented in development
+v0.1.53: repeated `serve --deployment` arguments, exact whole-artifact preparation
+sharing, private instance state/grants/tasks and joined fixed-group termination.
+The [implementation campaign](campaigns/202609281356.md) owns its verification.
+This completes the initial hosting slice, not the coordinated ownership/type slice.
+
+Extend this in-process host for multiple admitted program instances with
 shared immutable preparation/code and independent instance state, grants and tasks.
 An initial host may use current execution machinery; advanced region GC and native
 code are not prerequisites. Do not bypass current type/origin/resource admission
@@ -67,6 +73,12 @@ Define a compatibility/pooling key, instance admission, readiness and joined sto
 Keep code installation, instance activation and data migration separate. Bind
 secrets and operational handles to an instance, not to reusable code metadata.
 Test version coexistence and cancellation during admission as well as normal stop.
+
+Next prioritize the semantic boundary above: an ordinary package-level owned
+producer/transformer/consumer with scoped reads and independent rejection cases.
+Do not turn the initial host into a broad supervisor before the language can express
+its transfer, lifetime and effect contracts. Dynamic CLI admission/removal and
+component-granular pooling remain separate future extensions.
 
 Reserve queue and destination capacity before transferring ownership. Queue-full,
 cancelled-send and failed-receiver cases must leave exactly one valid owner or a

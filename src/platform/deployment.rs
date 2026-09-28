@@ -1,6 +1,7 @@
 //! Strict standalone Artifact 15 deployment and normalized resident execution.
 
 pub(crate) mod build;
+pub mod shared;
 
 use super::compiler::{MAXIMUM_ARTIFACT_BUNDLE_BYTES, load_artifact};
 use super::configuration::{
@@ -1534,6 +1535,14 @@ struct AdmittedDeployment {
 
 impl AdmittedDeployment {
     fn load(path: &Path, control: &ExecutionControl) -> Result<Self, Diagnostic> {
+        Self::load_shared(path, control, &mut BTreeMap::new())
+    }
+
+    fn load_shared(
+        path: &Path,
+        control: &ExecutionControl,
+        programs: &mut BTreeMap<String, Arc<NormalizedProgram>>,
+    ) -> Result<Self, Diagnostic> {
         let checkpoint = || {
             control
                 .check()
@@ -1557,7 +1566,17 @@ impl AdmittedDeployment {
         let artifact = load_artifact(&artifact_bytes)?;
         checkpoint()?;
         let artifact_digest = artifact.bundle_digest.to_string();
-        let program = Arc::new(NormalizedProgram::prepare_with_control(artifact, control)?);
+        // Every supplied path is strictly loaded, even on a hit. Only exact admitted
+        // artifact content, within this executable's ABI, may reuse immutable code.
+        // Descriptors, adapters, grants and cancellation are never cached here.
+        let program = match programs.get(&artifact_digest) {
+            Some(program) => Arc::clone(program),
+            None => {
+                let program = Arc::new(NormalizedProgram::prepare_with_control(artifact, control)?);
+                programs.insert(artifact_digest.clone(), Arc::clone(&program));
+                program
+            }
+        };
         validate_program_descriptor(&descriptor, &program)?;
         checkpoint()?;
         Ok(Self {

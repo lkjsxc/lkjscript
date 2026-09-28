@@ -15,6 +15,9 @@ use lkjscript::platform::{
     execute_inspect, execute_new, execute_package_builtin, execute_query, execute_run,
     execute_status, parse_foreground_run,
 };
+#[path = "lkjscript/shared_serve.rs"]
+mod shared_serve;
+
 use serde::Serialize;
 use serde_json::json;
 use std::io::Write;
@@ -466,6 +469,9 @@ fn write_failure(error: &Diagnostic) -> ExitCode {
         "error": error,
     });
     if write_json(&failure).is_err() {
+        // Preserve the original joined-cleanup diagnostic even when readiness or
+        // failure delivery on stdout is broken. Reporting cannot reverse effects.
+        write_stderr_diagnostic(error);
         ExitCode::from(exit_status_for(
             lkjscript::platform::DiagnosticClass::Infrastructure,
         ))
@@ -599,6 +605,9 @@ async fn worker(arguments: &[String]) -> Result<(), Diagnostic> {
 }
 
 async fn serve(arguments: &[String]) -> Result<(), Diagnostic> {
+    if arguments.len() > 2 {
+        return shared_serve::serve(arguments).await;
+    }
     if arguments.len() != 2 || arguments[0] != "--deployment" {
         return Err(cli_error(
             "serve requires exactly --deployment <descriptor.json>",

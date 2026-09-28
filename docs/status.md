@@ -6,8 +6,9 @@ and boundaries; historical measurements and failed attempts stay with their
 
 The owner-selected [language-first direction](direction.md) now prioritizes advanced
 type/ownership/effect composition, region-based memory research and a shared runtime.
-These are development selections, not capabilities conferred by this documentation
-update. The runtime, language and release boundaries below remain unchanged.
+The first exact-code shared service host is now a development capability described
+below. Advanced ownership/trait and region-memory work remains a research selection,
+not a capability conferred by a roadmap or by sharing existing prepared code.
 
 ## Public binary release
 
@@ -91,9 +92,29 @@ freshly, with zero reuse and stable inputs. The [continuation](campaigns/2026092
 retains the original failed run, corrected acceptance and copied-executable native
 web exercise: 107 passing application tests and distinct old/new HTTP responses
 without changing either immutable deployment. Candidate `36368771474/1` was
-selected once from that exact implementation; its initial observation was queued,
-not final acceptance. No v0.1.53 tag or promotion has been selected. This development
-feature is absent from the public v0.1.52 executable.
+selected once from that exact implementation. It later failed the source profile:
+19 gates passed; the closed-stdout fixture did not complete successfully within
+its inherited 80 ms deadline. The [shared-host continuation](campaigns/202609281356.md)
+retains that original failure and the scoped test correction. No v0.1.53 tag or
+promotion has been selected. This development feature is absent from public v0.1.52.
+
+## Development v0.1.53: shared service runtime
+
+`serve --deployment A --deployment B` hosts a finite group of HTTP and interactive
+services in one process. Exact complete artifacts share immutable prepared code;
+configuration, secrets, grants, adapters, task accounting and cancellation remain
+per instance. Different versions can coexist without a mutable global selector.
+All static admissions precede live preparation, all listeners precede readiness,
+and group termination joins each started service. Single-descriptor serving retains
+its existing interface. This is not a subprocess launcher.
+
+The [contract](spec/shared-runtime.md) defines the 64-instance and summed resident
+capacity bounds, structural observations, code lifetime and failure domains. The
+[campaign](campaigns/202609281356.md) owns pointer/reclamation tests and copied-binary
+editor, version, isolation, busy-peer, WebSocket and startup-failure evidence.
+There is no dynamic CLI load/reload/individual stop, cross-instance ownership
+transfer or hostile-tenant sandbox. Encoded object-byte counts are not RSS, complete
+private-memory accounting or measured speedup. Public v0.1.52 is unchanged.
 
 ## Current authority and maintained consumers
 

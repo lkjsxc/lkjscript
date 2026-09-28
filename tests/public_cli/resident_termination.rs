@@ -118,7 +118,7 @@ impl Resident {
     }
 }
 
-fn author(runner: &str) -> (Native, Value) {
+pub(super) fn author(runner: &str) -> (Native, Value) {
     author_source(runner, SOURCE)
 }
 

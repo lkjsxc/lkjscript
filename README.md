@@ -111,6 +111,16 @@ The [web editing loop](docs/guides/native-web.md) and [build contract](docs/spec
 cover retained old versions, independent data roots and failures. Check the selected
 binary's `capabilities build`; this command is not retroactively added to older releases.
 
+### Shared service host in development
+
+The development v0.1.53 executable accepts repeated `serve --deployment DESCRIPTOR`
+arguments to host HTTP and interactive services in one process. Equal exact bundles
+share immutable prepared code; instance configuration, secrets, grants, data adapters
+and cancellation remain private. Different exact versions can coexist. The
+[shared-runtime contract](docs/spec/shared-runtime.md) defines startup, joined stop,
+limits and nonclaims. This is not in the public v0.1.52 binary and does not introduce
+hot reload, automatic data migration or an OS-process isolation boundary.
+
 ### Nostr relay information from the public binary
 
 The [relay-information recipe](docs/generated/nostr-relay-info-authoring.md)

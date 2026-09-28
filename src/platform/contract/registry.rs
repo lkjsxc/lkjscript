@@ -35,6 +35,9 @@ use super::super::data::{
     MAXIMUM_DATA_STORE_OBJECTS, MAXIMUM_DATA_TRANSACTION_BYTES, MAXIMUM_DATA_TRANSACTION_MUTATIONS,
     MAXIMUM_DATA_VALUE_BYTES,
 };
+use super::super::deployment::shared::{
+    MAXIMUM_SHARED_DEPLOYMENTS, SHARED_RUNTIME_CONTRACT_VERSION,
+};
 use super::super::deployment::{
     DEPLOYMENT_ADAPTER_SCHEMAS, DEPLOYMENT_CONTRACT_VERSION, DEPLOYMENT_SCHEMA_FIELDS,
     MAXIMUM_DEPLOYMENT_BYTES, MAXIMUM_DEPLOYMENT_GRANTS,
@@ -87,7 +90,9 @@ use super::super::publication::contract::{
     TRANSACTION_CONTRACT_VERSION, TRANSACTION_ENVELOPE_DOMAIN,
 };
 use super::super::queue::DURABLE_QUEUE_CONTRACT_VERSION;
-use super::super::runtime::RESIDENT_RUNTIME_CONTRACT_VERSION;
+use super::super::runtime::{
+    MAXIMUM_CONCURRENT_TASKS, MAXIMUM_QUEUED_TASKS, RESIDENT_RUNTIME_CONTRACT_VERSION,
+};
 use super::super::secrets::{SECRET_CATALOG_CONTRACT_VERSION, SECRET_VERIFIER_CONTRACT_VERSION};
 use super::super::security::SECURITY_ADAPTER_CONTRACT_VERSION;
 use super::super::session::{
@@ -507,6 +512,7 @@ pub enum ContractKey {
     CompilerUnit,
     Bytecode,
     Deployment,
+    SharedRuntime,
     DataStore,
     DataBackup,
     ConfigurationAdapter,
@@ -560,6 +566,7 @@ impl ContractKey {
             Self::CompilerUnit => "compiler_unit",
             Self::Bytecode => "bytecode",
             Self::Deployment => "deployment",
+            Self::SharedRuntime => "shared_runtime",
             Self::DataStore => "data_store",
             Self::DataBackup => "data_backup",
             Self::ConfigurationAdapter => "configuration_adapter",
@@ -1095,6 +1102,13 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             DEPLOYMENT_CONTRACT_VERSION,
             ContractAuthority::Deployment,
         ),
+        simple_contract(
+            ContractKey::SharedRuntime,
+            "in-process exact-code service group with private deployment authority",
+            "lkjscript-shared-runtime-1",
+            SHARED_RUNTIME_CONTRACT_VERSION,
+            ContractAuthority::Deployment,
+        ),
         ContractDescriptor {
             key: ContractKey::DataStore,
             name: "first-party ordered application-data store",
@@ -1546,8 +1560,8 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         ),
         runtime_operation(
             PublicOperation::Serve,
-            "Run one plaintext HTTP deployment from a standalone normalized artifact bundle.",
-            "serve --deployment DESCRIPTOR",
+            "Run HTTP or interactive deployments in one process, sharing exact immutable code with private instance authority.",
+            "serve --deployment DESCRIPTOR [--deployment DESCRIPTOR ...]",
             ControlModel::ServeRequest,
         ),
         runtime_operation(
@@ -5650,6 +5664,36 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Retry the read-only query when the owning scope is active.",
         ),
         diagnostic(
+            "shared_serve_limit",
+            DiagnosticClass::Resource,
+            "A service group's instance count or aggregate task capacity exceeds the executable's finite bounds.",
+            "Reduce the group size or its declared per-instance concurrency and queue capacities.",
+        ),
+        diagnostic(
+            "shared_serve_runner",
+            DiagnosticClass::Source,
+            "A shared service member is not an HTTP or interactive target with a listen address.",
+            "Select a service target from that exact admitted artifact and provide its own listen address.",
+        ),
+        diagnostic(
+            "shared_serve_cancelled",
+            DiagnosticClass::Cancelled,
+            "Shared service startup was terminated before any application invocation began.",
+            "Inspect cleanup notes before restarting the explicitly selected group.",
+        ),
+        diagnostic(
+            "shared_serve_prepare",
+            DiagnosticClass::Infrastructure,
+            "The joined native service-group preparation owner failed unexpectedly.",
+            "Preserve the exact executable and deployment inputs; this is not a clean-start or rollback receipt.",
+        ),
+        diagnostic(
+            "shared_serve_receipt",
+            DiagnosticClass::Infrastructure,
+            "An already joined service receipt could not be encoded.",
+            "Preserve diagnostics; do not infer a published successful group receipt.",
+        ),
+        diagnostic(
             "http_client_contract",
             DiagnosticClass::Capability,
             "Outbound HTTP client limits use a predecessor or foreign adapter contract.",
@@ -7628,6 +7672,23 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             }
         }
         RegistrySection::Deployment => {
+            records.push(compact_record("deployment.shared-runtime", &[
+                ("version", SHARED_RUNTIME_CONTRACT_VERSION.to_string()),
+                ("maximum-instances", MAXIMUM_SHARED_DEPLOYMENTS.to_string()),
+                ("maximum-concurrent-tasks-total", MAXIMUM_CONCURRENT_TASKS.to_string()),
+                ("maximum-queued-tasks-total", MAXIMUM_QUEUED_TASKS.to_string()),
+                ("selection", "repeated-serve-deployment-arguments-in-ordinal-order".to_owned()),
+                ("sharing-key", "strictly-loaded-exact-artifact-content-in-current-executable-abi".to_owned()),
+                ("shared", "immutable-program-types-code-constants-and-tokio-scheduler".to_owned()),
+                ("private", "configuration-secrets-grants-adapters-state-cancellation-task-accounting".to_owned()),
+                ("admission", "all-static-before-any-live-adapter".to_owned()),
+                ("readiness", "all-listeners-bound-before-one-group-ready-event".to_owned()),
+                ("shutdown", "signal-or-service-failure-stops-group-and-joins-every-started-service".to_owned()),
+                ("memory-observation", "loader-object-bytes-and-table-counts-not-rss-or-live-heap".to_owned()),
+                ("retention", "no-global-cache-last-owning-service-reference-releases-code".to_owned()),
+                ("isolation", "trusted-runtime-not-process-sandbox-explicit-external-resources-may-be-shared".to_owned()),
+                ("lifecycle", "fixed-group-no-dynamic-cli-load-reload-or-individual-stop".to_owned()),
+            ])?);
             records.push(compact_record("deployment.foreground-policy", &[
                 ("execution-omitted", "trusted-no-cumulative-instruction-allocation-collection-capability-quota".to_owned()),
                 ("runtime-omitted", "no-deadline-default-bounded-cleanup-grace".to_owned()),
@@ -8759,6 +8820,51 @@ mod tests {
                 .expect_err("unadvertised form")
                 .contains("unadvertised form")
         );
+    }
+
+    #[test]
+    fn shared_runtime_discovery_uses_the_executable_group_contract_and_bounds() {
+        let descriptor = contract_descriptors()
+            .iter()
+            .find(|descriptor| descriptor.key == ContractKey::SharedRuntime)
+            .expect("shared runtime contract");
+        assert_eq!(descriptor.version, SHARED_RUNTIME_CONTRACT_VERSION);
+        assert_eq!(descriptor.identity, "lkjscript-shared-runtime-1");
+        let records = section_records(RegistrySection::Deployment).unwrap();
+        let record = records
+            .iter()
+            .find(|record| record.starts_with("deployment.shared-runtime "))
+            .expect("shared service discovery record");
+        for (field, value) in [
+            ("maximum-instances", MAXIMUM_SHARED_DEPLOYMENTS),
+            ("maximum-concurrent-tasks-total", MAXIMUM_CONCURRENT_TASKS),
+            ("maximum-queued-tasks-total", MAXIMUM_QUEUED_TASKS),
+        ] {
+            assert!(record.contains(&format!("{field}={value}")), "{record}");
+        }
+        let serve = operation_descriptors()
+            .iter()
+            .find(|operation| operation.operation == PublicOperation::Serve)
+            .unwrap();
+        assert_eq!(
+            serve.usage,
+            "serve --deployment DESCRIPTOR [--deployment DESCRIPTOR ...]"
+        );
+        for code in [
+            "shared_serve_limit",
+            "shared_serve_runner",
+            "shared_serve_cancelled",
+            "shared_serve_prepare",
+            "shared_serve_receipt",
+        ] {
+            assert_eq!(
+                diagnostic_descriptors()
+                    .iter()
+                    .filter(|item| item.code == code)
+                    .count(),
+                1
+            );
+        }
     }
 
     #[test]

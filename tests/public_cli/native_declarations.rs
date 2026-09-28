@@ -1620,6 +1620,9 @@ mod resident_policy;
 #[cfg(unix)]
 #[path = "resident_termination.rs"]
 mod resident_termination;
+#[cfg(unix)]
+#[path = "shared_runtime.rs"]
+mod shared_runtime;
 
 #[path = "native_byte_conversion.rs"]
 mod native_byte_conversion;
