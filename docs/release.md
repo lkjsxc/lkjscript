@@ -4,29 +4,31 @@ GitHub Releases are the public binary distribution path. Accept one finalized ca
 its exact producer run and attempt, and promote its unchanged archive, checksum and bootstrap.
 Content identity, behavioral acceptance and publication authority are separate decisions.
 
-Current delivery observation (2026-09-28): v0.1.52 producer `36344022937/1` is
-accepted. The first apparent variable-read blocker was an operator API-path error:
-the correct `/actions/variables/` read succeeded without changing access. After
-reconciling the previous immutable release, annotated tag `4f324e10` was verified,
-the existing release-scoped selection was updated/read back, and promotion
-`36367325740/1` was dispatched once and completed with
-`immutable_published_and_public_verified`. Immutable release `397895945` is
-public/latest v0.1.52, and all three original candidate assets are unchanged. The
-[continuation](campaigns/202609281010.md#already-accepted-v0152-publication-continuation)
-retains the correction and original producer, promotion and public closure.
-Development v0.1.53 adds recent history and an exact-code shared service host;
-it does not alter v0.1.52 assets. The history-only implementation `8570bfa4` passed
-all 26 local full gates, but its candidate `36368771474/1` later failed
-`workspace_tests` in the source tier: an inherited 80 ms allowance expired in the
-closed-stdout witness. Nineteen other source gates passed. The
-[shared-host continuation](campaigns/202609281356.md) retains the original failure,
-the scoped test correction and the successor's distinct source evidence. The failed
-history-only candidate is not promotable and cannot certify the changed host.
-Corrected shared-host source `7c6fec6b` subsequently passed all 26 fresh full gates
-with stable inputs and reached main unchanged. One new candidate `36386561026/1`
-was dispatched from that exact source; its observed in-progress state is not
-acceptance. The continuation records the remaining final-archive shared-service
-cases and ordinary promotion boundary. No v0.1.53 tag or promotion has been selected.
+Current delivery observation (2026-09-28): immutable release `398046212` is
+public/latest **v0.1.53**, published at 16:57:46 JST. Accepted original producer
+`36386561026/1` selects exact source `7c6fec6b`; annotated tag `8942074f` and the
+existing release-only selector were independently verified. Promotion
+`36393934427/1` completed authenticated transfer, immutable publication, anonymous
+exact/latest acquisition and installed smoke. Its terminal is
+`immutable_published_and_public_verified`. All three original candidate assets
+are unchanged. The five shared-service public cases also passed against the
+executable extracted from that exact final archive, not a rebuilt substitute.
+The [completed delivery](campaigns/202609281356.md#completed-v0153-publication)
+retains producer identities, original failures, final-archive proof and public closure.
+
+The previous immutable v0.1.52 and its
+[completed delivery](campaigns/202609281010.md#already-accepted-v0152-publication-continuation)
+remain unchanged. The earlier history-only v0.1.53 candidate `36368771474/1` failed
+its source tier and was never promoted; the shared-host continuation retains its
+closed-stdout scheduling failure and scoped correction rather than relabeling it.
+
+Development v0.1.54 adds scoped resource borrowing and is not part of v0.1.53.
+Corrected source `7e6101f8` passed all 26 fresh full gates and reached main normally.
+Its separate non-publishing candidate `36395986112/1` has been selected once;
+selection is not acceptance or publication. The
+[borrowing continuation](campaigns/202609281548.md#accepted-source-and-mainline-delivery)
+owns the exact source, original failed checks, corrected acceptance and remaining
+candidate/promotion boundary. No v0.1.54 tag or release selection has been made.
 
 Immutable [v0.1.38](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.38) already publishes source
 `7083f9a6d56ed702017942e100c3696fc6f35308`. Publisher
