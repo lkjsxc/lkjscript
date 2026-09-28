@@ -166,7 +166,8 @@ including 100 VM/reference resource invocations and seven native public cases.
 Implementation `d61dafaf3e1fc5d12cee6aaf11fdc4c239a961f3` passed all 26 full
 source gates fresh, with zero reuse and stable inputs, in 815.368798381 seconds.
 The same optimized development executable separately passed all seven native
-public cases. Distribution remains pending: this is not public v0.1.56.
+public cases. The v0.1.57 successor below includes this recursion increment; no
+separate v0.1.56 producer or public release is selected.
 The original v0.1.55 producer `36419055364/1` subsequently passed final acceptance
 and was promoted unchanged. The development recursion increment remains separate.
 

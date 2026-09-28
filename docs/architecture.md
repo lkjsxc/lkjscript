@@ -323,10 +323,13 @@ right; ordinary values cannot recreate it. The queue engine may retain private j
 worker fields because operational queue state is a separate authority, but those fields never
 re-enter graph values or public adapter signatures. A resource-bearing nominal variant moves as a
 whole and transfers its one direct payload only to the selected match arm. One final borrow or
-consume parameter may bind the exact task requirement on a private same-package helper; direct
-call frames share the task scope and recheck the handle. Direct and mutual recursive calls apply
-the same independently validated body contracts. Borrow preserves the owner, consume transfers
-it, and neither recursion nor a host frame creates parallel authority.
+consume parameter may bind the exact task requirement on a directly named helper, including
+an imported public function or forwarder. Public signatures retain that original requirement;
+private/package-visible dependency members remain hidden. Direct call frames share the task
+scope and recheck the handle. Direct and mutual recursive calls apply the same independently
+validated body contracts. Borrow preserves the owner, consume transfers it, and neither recursion,
+a package boundary nor a host frame creates parallel authority. Imported entry obligations must
+be explicit in the port's closed task row and separately granted by deployment.
 
 Claim and heartbeat reserve scope capacity before performing a possibly visible queue effect.
 Empty, stale, failed, or cancelled outcomes release the reservation; success commits a live handle.

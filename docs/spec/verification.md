@@ -363,6 +363,24 @@ countdown and mutual borrow/consume consumer must preserve ordinary generic
 results and detached durable state. Strict loading must still reject rehashed
 artifacts with erased or foreign generic metadata on cyclic helpers.
 
+Cross-package resource contracts additionally require literal public suppliers and
+consumers, exact transport staging, canonical draft re-entry, and execution after
+removing every authoring project. A third forwarding package must retain the original
+supplier requirement through ordinary type substitution and recursive borrowing.
+The independent affine oracle reads imported signature fields separately from the
+production callee-contract implementation. Rehashed artifacts must reject changed
+parameter use, parent, exact requirement and generic signature metadata.
+
+Negative public cases cover hidden private/package members, borrowed-owner escalation,
+post-transfer reuse, indirect calls, unsupported requirement polymorphism, and an
+identically named but independently owned requirement. Rejected plans preserve the
+accepted revision and project contents. Port effects must declare imported obligations
+explicitly; implementation calls and unused supplier requirements cannot grant them.
+Missing, extra and colliding name-selected deployment grants must reject before data
+effects. Command and HTTP execution, joined shutdown/restart, and a failed recursive
+borrow retain separately observed durable state. This does not establish general
+memory borrowing, resource returns or zero-copy execution.
+
 Function-definition projection acceptance uses complete typed reconstruction as a disjoint oracle.
 The oracle may decode the same canonical authority, but it cannot call production point traversal,
 structural ordering, rendering, paging, continuation, or expected-result helpers. It independently

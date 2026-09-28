@@ -4,13 +4,14 @@ GitHub Releases are the public binary distribution path. Accept one finalized ca
 its exact producer run and attempt, and promote its unchanged archive, checksum and bootstrap.
 Content identity, behavioral acceptance and publication authority are separate decisions.
 
-Current delivery observation (2026-09-28): immutable public/latest v0.1.54 is
-release `398115115`, published at 18:40:53 JST. Original producer `36395986112/1`
-was accepted at source `7e6101f8`; promotion `36404343395/1` subsequently completed
+Current delivery observation (2026-09-29): immutable public/latest v0.1.55 is
+release `398379899`, published at 00:26:30 JST. Original producer `36419055364/1`
+was accepted at source `320dacc0`; promotion `36442849973/1` subsequently completed
 publication, anonymous acquisition/installed smoke and its terminal decision.
-The [publication observation](campaigns/202609281735.md#completed-v0154-publication)
-records the exact producer, annotated tag and unchanged public inventory. This
-continuation did not select a duplicate v0.1.54 producer or rewrite its assets.
+The [publication observation](campaigns/202609290026.md#completed-v0155-publication)
+records the exact producer, annotated tag and unchanged public inventory. All three
+native generic-resource cases passed against its final archive before promotion.
+No duplicate producer, new build or prior-asset rewrite was used.
 
 The earlier [v0.1.52 delivery](campaigns/202609281010.md#already-accepted-v0152-publication-continuation)
 and [v0.1.53 shared-host delivery](campaigns/202609281356.md#completed-v0153-publication)
@@ -18,10 +19,13 @@ retain their original failures, corrections and successful publications. In
 particular, failed history-only producer `36368771474/1` was never promoted.
 The [v0.1.55 generic-resource continuation](campaigns/202609281735.md) reached main
 at corrected source `320dacc0` after all 26 full-profile gates passed freshly with
-stable inputs. Selected producer `36419055364/1` is in progress at that exact source;
-its acceptance, final-archive generic-resource cases and unchanged-asset publication
-remain pending. Its development version is not a public release or acceptance of
-another tree.
+stable inputs. Its candidate, final-archive cases and unchanged-asset publication
+are complete. The [v0.1.57 package continuation](campaigns/202609290026.md) combines
+the separately accepted v0.1.56 recursion increment with exact public-library
+resource contracts. It is the next selected publication milestone, subject to
+complete source acceptance, normal main integration and final-candidate acceptance.
+No separate v0.1.56 producer or tag is selected; a development version alone is
+neither publication nor acceptance of another tree.
 
 Immutable [v0.1.38](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.38) already publishes source
 `7083f9a6d56ed702017942e100c3696fc6f35308`. Publisher
