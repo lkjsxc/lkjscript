@@ -81,8 +81,14 @@ selected/executed/passed tests. `current-validation=not-run` prevents old accept
 from masquerading as a fresh check. Missing or inconsistent visited links fail the
 complete response. Graph, artifact, package and operational-data encodings are
 unchanged. Discover this capability with `capabilities --section inspection`.
-Source acceptance and integration are tracked at the [continuation](campaigns/202609281010.md);
-this development feature is absent from the public v0.1.52 executable.
+Implementation `8570bfa4` is integrated on main and passed all 26 full-profile gates
+freshly, with zero reuse and stable inputs. The [continuation](campaigns/202609281010.md)
+retains the original failed run, corrected acceptance and copied-executable native
+web exercise: 107 passing application tests and distinct old/new HTTP responses
+without changing either immutable deployment. Candidate `36368771474/1` was
+selected once from that exact implementation; its initial observation was queued,
+not final acceptance. No v0.1.53 tag or promotion has been selected. This development
+feature is absent from the public v0.1.52 executable.
 
 ## Current authority and maintained consumers
 

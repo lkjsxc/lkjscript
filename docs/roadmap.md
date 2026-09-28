@@ -109,11 +109,16 @@ cumulative admission and explicit unread truncation avoid an unbounded log scan 
 another database. Recorded test selection/execution/pass counts are distinct from
 current validation. Its value is understanding a completed edit, not automatic
 rollback, historical graph execution or proof of a whole repository's health.
-Keep general historical queries and project recovery separate. The next measurement
-should ask whether a real editing session can identify the accepted change, inspect
-the current declaration and select the intended built deployment without confusing
-those three identities. Add pagination, literal review or restart ergonomics only
-where that workload demonstrates the missing boundary.
+Keep general historical queries and project recovery separate. The continuation's
+native web exercise now distinguishes a recorded greeting change, the current
+function literal and two retained deployments serving old/new wording. It also
+preserves the intermediate failing test expectation: accepting an edit did not
+silently certify its behavior. No history or selection changed merely by checking,
+building or serving. This validates that separation on one small workload, not
+complete editing ergonomics. Next reduce the effort of understanding an intended
+edit and its exact validation state before adding arbitrary historical navigation.
+Add pagination, literal review or restart ergonomics only where such a workload
+demonstrates the missing boundary.
 
 Multiple notes or richer actions should justify their shared mechanism;
 completing this particular note app is not the language's purpose. A form is not
