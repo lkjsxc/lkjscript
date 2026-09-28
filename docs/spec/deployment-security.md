@@ -70,7 +70,7 @@ body/stream limits and exact per-grant authority remain independently enforced.
 
 New HTTP recipes explicitly set all four cumulative quotas to null. Existing authored
 descriptors keep their previous numeric selections; no configuration file is implicitly
-rewritten. Internal discovery contract 5 describes the expanded choice. Older executables
+rewritten. Internal discovery contract 5 introduced the expanded quota choice. Older executables
 reject null fuel or the new fields; selecting this syntax requires a supporting executable,
 while rollback retains the earlier numeric descriptor and its matching executable.
 No graph, artifact, package or application-data migration is required.
@@ -97,6 +97,40 @@ domain-tagged artifact-bundle digest,
 target, runner, listener, typed configuration observation, secret names, and adapter kinds. Secret
 bytes, data/object authority internals, password inputs, and live handles are omitted. Startup failure
 publishes no application work.
+
+## Exact requirement selection
+
+Each grant's `requirement` string is either a canonical bounded name or
+`pkg_<32 lowercase hex>/req_<32 lowercase hex>`. The latter uses the existing
+nonzero package and requirement identity domains; it is not a path, revision,
+content digest, new owner identity or implicit capability. The already selected
+artifact determines the exact package revisions and component requirement closure.
+
+A name is accepted only when it identifies exactly one requirement in the complete
+selected component, including imported obligations. Resolution never removes an
+exactly selected requirement from the name-ambiguity test. Two same-name obligations
+therefore need two exact selectors, even when one could be guessed by elimination.
+An exact selector outside that component is foreign, including an unused requirement
+from an otherwise imported package. Named and exact selectors of the same requirement
+are duplicate grants, not alternative bindings; there is no precedence rule.
+
+Static admission and runtime preparation use the same exact-reference mapping.
+Missing, foreign, duplicate, ambiguous and malformed selections reject before named
+secret lookup, live adapter preparation, readiness or application effects. Stream
+relationship checks also use exact references. Each accepted adapter retains that
+requirement's own operations, limits, sharing domain and authority revision. The
+redacted adapter observation is keyed by the supplied canonical selector, preserving
+separate entries for same-name requirements without exposing adapter internals.
+
+`capabilities --section deployment` discovery contract 6 identifies this field as
+`requirement-selector`; the JSON object shape remains unchanged. Package identity
+is available through `package current export` output and requirement identity through
+public `change draft` output for its containing module/component. An operator can
+prepare the descriptor before detaching the bundle; deployment needs neither the
+source repository nor a mutable namespace service. Existing valid name-only
+descriptors require no rewrite. Older executables reject the qualified spelling;
+retain the matching executable and descriptor for rollback. This extension requires
+no graph, artifact, package or application-data migration.
 
 ## Configuration and secrets
 

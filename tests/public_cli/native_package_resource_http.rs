@@ -25,7 +25,16 @@ const HTTP_MODULE: &str = r#"
 
 #[test]
 fn native_package_resources_http_requires_declared_foreign_authority_and_joins() {
-    let source = CONSUMER
+    execute(false);
+}
+
+#[test]
+fn native_package_resources_http_selects_exact_streams_and_observes_same_name_grants() {
+    execute(true);
+}
+
+fn execute(qualified: bool) {
+    let mut source = CONSUMER
         .replace("(use std builtin)", HTTP_TYPES)
         .replace("(component create app (visibility private)", HTTP_MODULE)
         .replace(
@@ -35,8 +44,41 @@ fn native_package_resources_http_requires_declared_foreign_authority_and_joins()
     (route create read (method GET) (path "/read") (port resource-consumer::server::respond)))
   (target create numbers"#,
         );
+    if qualified {
+        source = source.replace("(component create server (visibility private)",
+            "(component create server (visibility private) (requirement create jobs (interface std::DurableQueue) (operations std::DurableQueue::initialize) (limits (maximum_calls 4 calls)))");
+    }
     let packages = Packages::stage(LIBRARY);
+    let imported = selectors::library_selector(&packages, "jobs");
     packages.apply(&source);
+    let selected = if qualified {
+        let transport = packages.consumer.root.path().join("selected.lkjp");
+        let exported = packages.consumer.cli(
+            &[
+                "package",
+                "current",
+                "export",
+                "--kind",
+                "transport",
+                "--output",
+                path(&transport),
+            ],
+            true,
+        );
+        let package = compact_field(compact_record(&exported, "package"), "id");
+        Some((
+            format!(
+                "{package}/{}",
+                selectors::draft_requirement(&packages.consumer, "streams")
+            ),
+            format!(
+                "{package}/{}",
+                selectors::draft_requirement(&packages.consumer, "jobs")
+            ),
+        ))
+    } else {
+        None
+    };
     let data = packages.detach();
     let public = &packages.consumer;
     let template = Native::template("http");
@@ -54,8 +96,43 @@ fn native_package_resources_http_requires_declared_foreign_authority_and_joins()
         .as_array_mut()
         .unwrap()
         .push(queue["grants"][0].clone());
+    if let Some((streams, jobs)) = selected {
+        descriptor["grants"][0]["requirement"] = serde_json::json!(streams);
+        descriptor["grants"][1]["requirement"] = serde_json::json!(imported);
+        let mut local = queue["grants"][0].clone();
+        local["requirement"] = serde_json::json!(jobs);
+        local["sharing_domain"] = serde_json::json!("local-resources");
+        local["adapter"]["root"] = serde_json::json!("local-queue");
+        let local_data = public.root.path().join("local-queue");
+        compact_success_at(
+            &public.executable,
+            public.root.path(),
+            &["data", "initialize", "--root", path(&local_data)],
+        );
+        descriptor["grants"].as_array_mut().unwrap().push(local);
+    }
     for (label, expected) in [("first", "日本語 + generic"), ("restart", "absent")] {
+        descriptor["grants"].as_array_mut().unwrap().reverse();
         let server = http::Server::start(public, label, &descriptor, &[]);
+        let output =
+            std::fs::read_to_string(public.root.path().join(format!("{label}.stdout"))).unwrap();
+        let ready = output
+            .lines()
+            .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+            .find(|event| event["event"] == "ready")
+            .unwrap();
+        let observed = ready["deployment"]["grants"].as_object().unwrap();
+        assert_eq!(observed.len(), if qualified { 3 } else { 2 });
+        for grant in descriptor["grants"].as_array().unwrap() {
+            assert_eq!(
+                observed[grant["requirement"].as_str().unwrap()],
+                match grant["adapter"]["kind"].as_str().unwrap() {
+                    "durable_queue_data" => "durable-queue-data",
+                    "byte_stream" => "byte-stream",
+                    kind => panic!("unexpected fixture adapter: {kind}"),
+                }
+            );
+        }
         let reply = http::send(server.address, "GET", "/read", &[("Host", "localhost")], "");
         assert_eq!(reply.status, 200);
         assert_eq!(reply.body, expected);

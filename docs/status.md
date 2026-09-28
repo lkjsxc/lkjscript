@@ -8,8 +8,8 @@ The owner-selected [language-first direction](direction.md) now prioritizes adva
 type/ownership/effect composition, region-based memory research and a shared runtime.
 The exact-code shared service host and scoped capability borrowing are public.
 Ordinary generic composition is public in v0.1.55. Recursive helpers and exact
-cross-package resource contracts are development capabilities below; neither is
-supplied by that public executable.
+cross-package resource contracts and exact deployment grant selectors are development
+capabilities below; none is supplied by that public executable.
 Advanced ownership/trait and region-memory work remains a research selection,
 not a capability conferred by a roadmap or by sharing existing prepared code.
 
@@ -27,6 +27,22 @@ The earlier immutable releases and genuinely failed/withheld candidates remain u
 Inspect the actual installed executable with `lkjscript capabilities`. Installing
 a newer runtime does not silently replace accepted application definitions,
 exact dependency selections, running processes or operational data.
+
+## Development v0.1.58: exact deployment grant selection
+
+A grant may select the existing exact package/requirement identity instead of a
+name. Distinct requirements named `jobs` can consequently retain independent
+adapters, authority and durable roots. A legacy name still works when unique in
+the complete component; name/ID duplicates and ambiguity-by-elimination reject
+before secret lookup or preparation. Redacted observations retain both selectors.
+
+This is a deployment composition extension, not general memory borrowing,
+resource returns, requirement polymorphism or zero-copy payload processing.
+Deployment discovery contract 6 changes no graph, artifact, package or data format.
+The [continuation record](campaigns/202609290337.md) owns actual test/source results;
+[the specification](spec/deployment-security.md#exact-requirement-selection) owns
+the selection rules. No v0.1.58 distribution is claimed by this development section.
+The independently selected v0.1.57 source and candidate remain unchanged.
 
 ## Named canonical drafts in public v0.1.51
 

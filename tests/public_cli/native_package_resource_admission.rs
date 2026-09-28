@@ -12,8 +12,8 @@ fn native_package_resources_reject_ambiguous_grants_before_secret_lookup() {
     packages.apply(&source);
     let data = packages.detach();
     for (mode, code) in [
-        ("padded", "deployment_grant_missing"),
-        ("single", "deployment_grant_missing"),
+        ("padded", "deployment_grant_ambiguous"),
+        ("single", "deployment_grant_ambiguous"),
         ("duplicate", "deployment_grant_duplicate"),
     ] {
         assert_admission(&packages.consumer, &data, mode, code);

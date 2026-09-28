@@ -4,6 +4,25 @@ Status: normative.
 
 ## Independent correctness mechanisms
 
+Deployment grant selection is checked against fixed exact-reference tables with
+both equal requirement IDs in different packages and distinct IDs in one package.
+Permuting descriptor and component order must preserve each selected adapter.
+Names are checked against the complete component, never its unmatched remainder;
+name/ID duplicates, foreign or unused exact requirements, noncanonical coordinates,
+missing grants and incomplete tables reject rather than falling back to names.
+
+Copied native executables obtain identities through public package export and
+canonical drafting, build detached bundles, and run after authoring repositories
+are removed. Two same-name requirements must write to distinct durable roots;
+independent record decoding and cross-root absence establish actual separation,
+not just returned values. Missing test-only environment bindings make secret lookup
+observable without reading real secrets: selector failures must precede that lookup
+and preserve all durable bytes. Named and qualified HTTP grants must retain exact
+stream authority, expose every selector in redacted readiness, survive reversed
+grant order and restart, and join with no live tasks or cleanup failures. These
+checks supplement rather than replace exact resource provenance and use-after-move
+rejections, the generated discovery check and complete fresh source acceptance.
+
 Native declaration authoring extends the existing library, public CLI and offline-package owners.
 Independent flat literals must agree with native authored intent and complete planned canonical
 values when the same authored identities/order are supplied. The maintained resource library

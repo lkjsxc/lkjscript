@@ -35,9 +35,13 @@ The [package continuation](campaigns/202609290026.md) extends the exact resource
 contract to public libraries and forwarders, with imported authority explicitly
 named by entry ports and still granted at deployment. Ordinary generic borrowing,
 recursive implementation and final consumption compose across three packages.
-It leaves effect/requirement-polymorphic resource transfer, resource returns,
-general memory references and same-name deployment obligation selection open.
-These are implementation increments toward the coordinated slice, not substitutes
+The [exact-selector continuation](campaigns/202609290337.md) closes the same-name
+deployment selection gap using existing package/requirement identities and one
+shared preflight/preparation resolver. Name ambiguity never grants authority by
+elimination, and independent durable roots remain distinct.
+Effect/requirement-polymorphic resource transfer, resource returns and general
+memory references remain open. These are implementation increments toward the
+coordinated slice, not substitutes
 for its region/trait/ownership design or evidence of zero-copy payload processing.
 
 Choose a compact contract for a transferable owned region/buffer, a scoped read

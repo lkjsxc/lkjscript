@@ -1,6 +1,7 @@
 //! Strict standalone Artifact 15 deployment and normalized resident execution.
 
 pub(crate) mod build;
+mod grant_selection;
 pub mod shared;
 
 use super::compiler::{MAXIMUM_ARTIFACT_BUNDLE_BYTES, load_artifact};
@@ -72,7 +73,7 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::runtime::Handle;
 
-pub const DEPLOYMENT_CONTRACT_VERSION: u16 = 5;
+pub const DEPLOYMENT_CONTRACT_VERSION: u16 = 6;
 pub const MAXIMUM_DEPLOYMENT_BYTES: usize = 1024 * 1024;
 pub const MAXIMUM_DEPLOYMENT_GRANTS: usize = 1_024;
 pub(crate) const STARTER_HTTP_DESCRIPTOR_PATH: &str = "service.deployment.json";
@@ -710,7 +711,14 @@ pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
         false,
         None,
     ),
-    schema_field("grant.requirement", "name", Some(1), Some(128), false, None),
+    schema_field(
+        "grant.requirement",
+        "requirement-selector",
+        Some(1),
+        Some(128),
+        false,
+        None,
+    ),
     schema_field(
         "grant.sharing_domain",
         "name",
@@ -1700,11 +1708,15 @@ impl PreparedDeployment {
                 )
             })?;
         let configuration = ConfigurationStore::observe_values(&descriptor.configuration)?;
-        let mut supplied = descriptor
-            .grants
-            .iter()
-            .map(|grant| (grant.requirement.as_str(), grant))
-            .collect::<BTreeMap<_, _>>();
+        let mut supplied = grant_selection::resolve(
+            &descriptor.grants,
+            component.requirements.iter().map(|index| {
+                program
+                    .requirements
+                    .get(index.0 as usize)
+                    .map(|requirement| (requirement.reference, requirement.name.as_str()))
+            }),
+        )?;
         let mut grants = Vec::with_capacity(component.requirements.len());
         let mut observed_grants = BTreeMap::new();
         for requirement_index in component.requirements.iter().copied() {
@@ -1718,7 +1730,7 @@ impl PreparedDeployment {
                     )
                 })?;
             let alias = requirement.name.as_str();
-            let declared = supplied.remove(alias).ok_or_else(|| {
+            let declared = supplied.remove(&requirement.reference).ok_or_else(|| {
                 deployment_error(
                     "deployment_grant_missing",
                     format!("component requirement '{alias}' has no deployment grant"),
@@ -1745,12 +1757,18 @@ impl PreparedDeployment {
                     .collect(),
                 adapter: normalized_adapter(&declared.adapter, &descriptor.configuration),
             });
-            observed_grants.insert(alias.to_owned(), declared.adapter.kind().to_owned());
+            observed_grants.insert(
+                declared.requirement.clone(),
+                declared.adapter.kind().to_owned(),
+            );
         }
         if let Some((alias, _)) = supplied.into_iter().next() {
             return Err(deployment_error(
                 "deployment_grant_foreign",
-                format!("deployment grants undeclared component requirement '{alias}'"),
+                format!(
+                    "deployment grants undeclared component requirement '{}'",
+                    grant_selection::exact(alias)
+                ),
             ));
         }
         let deployment = NormalizedPreparedDeployment::prepare_with_host(
@@ -2201,7 +2219,7 @@ fn validate_descriptor(descriptor: &DeploymentDescriptor) -> Result<(), Diagnost
     SecretCatalog::validate_bindings(&descriptor.secrets)?;
     let mut requirements = BTreeSet::new();
     for grant in &descriptor.grants {
-        validate_name(&grant.requirement, "requirement")?;
+        grant_selection::validate(&grant.requirement)?;
         validate_name(&grant.sharing_domain, "sharing domain")?;
         validate_digest(&grant.authority_revision, "authority revision")?;
         if !requirements.insert(grant.requirement.as_str()) {
@@ -2367,18 +2385,22 @@ fn validate_program_descriptor(
                 "selected target component escaped the exact artifact table",
             )
         })?;
-    let mut supplied = descriptor
-        .grants
-        .iter()
-        .map(|grant| (grant.requirement.as_str(), grant))
-        .collect::<BTreeMap<_, _>>();
+    let mut supplied = grant_selection::resolve(
+        &descriptor.grants,
+        component.requirements.iter().map(|index| {
+            program
+                .requirements
+                .get(index.0 as usize)
+                .map(|requirement| (requirement.reference, requirement.name.as_str()))
+        }),
+    )?;
     let stream_requirements = component
         .requirements
         .iter()
         .filter_map(|index| program.requirements.get(index.0 as usize))
         .filter(|requirement| {
             supplied
-                .get(requirement.name.as_str())
+                .get(&requirement.reference)
                 .is_some_and(|grant| matches!(grant.adapter, AdapterDescriptor::ByteStream))
         })
         .map(|requirement| requirement.reference)
@@ -2393,10 +2415,8 @@ fn validate_program_descriptor(
                     "component requirement escaped the exact artifact table",
                 )
             })?;
-        // Match each descriptor once during static admission, just as preparation
-        // does. Distinct imported obligations can share a name, not a grant;
-        // reject that ambiguity before any secret lookup or live preparation.
-        let grant = supplied.remove(requirement.name.as_str()).ok_or_else(|| {
+        // Static admission and preparation share exact-reference resolution.
+        let grant = supplied.remove(&requirement.reference).ok_or_else(|| {
             deployment_error(
                 "deployment_grant_missing",
                 format!(
@@ -2415,7 +2435,10 @@ fn validate_program_descriptor(
     if let Some((foreign, _)) = supplied.into_iter().next() {
         return Err(deployment_error(
             "deployment_grant_foreign",
-            format!("deployment grants undeclared component requirement '{foreign}'"),
+            format!(
+                "deployment grants undeclared component requirement '{}'",
+                grant_selection::exact(foreign)
+            ),
         ));
     }
     Ok(())

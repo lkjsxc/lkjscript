@@ -11,6 +11,8 @@ mod fixture;
 mod http;
 #[path = "native_package_resource_rejections.rs"]
 mod rejections;
+#[path = "native_package_resource_selectors.rs"]
+mod selectors;
 
 const LIBRARY: &str = include_str!("../fixtures/package-resources-library.lkjc");
 const CONSUMER: &str = include_str!("../fixtures/package-resources-consumer.lkjc");

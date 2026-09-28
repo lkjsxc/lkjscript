@@ -9,12 +9,12 @@ fn native_package_resources_never_share_one_named_grant_between_distinct_require
     let data = packages.detach();
     let inventory = content_inventory(&data);
     let deployment = packages.consumer.root.path().join("collision.json");
-    // Static admission and preparation both consume each named grant once.
-    // Padding the count cannot grant both exact owners or defer rejection.
+    // Both routes resolve names against the complete exact requirement set.
+    // Padding the count cannot disambiguate a name or defer rejection.
     for (mode, code) in [
-        ("single", "deployment_grant_missing"),
+        ("single", "deployment_grant_ambiguous"),
         ("duplicate", "deployment_grant_duplicate"),
-        ("padded", "deployment_grant_missing"),
+        ("padded", "deployment_grant_ambiguous"),
     ] {
         write_deployment(&deployment, "numbers");
         if mode != "single" {
