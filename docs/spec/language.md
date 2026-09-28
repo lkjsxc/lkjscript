@@ -329,7 +329,7 @@ value retains that acquiring requirement as authority.
 Every parameter has canonical use meaning: `unrestricted`, `borrow`, or `consume`. Nonresource
 parameters must be unrestricted. A direct capability-resource operation parameter must be an
 explicit borrow or consume. One private, same-package, nongeneric task function may instead have
-exactly one final direct capability-resource parameter with `consume` use. That parameter carries
+exactly one final direct capability-resource parameter with `borrow` or `consume` use. That parameter carries
 one canonical `resource_requirement` reference to a requirement in the function effect whose exact
 interface matches the resource type. The binding is graph meaning and is never inferred from a
 name, order, deployment grant, or runtime handle. Resource results and every other
@@ -337,19 +337,35 @@ resource-containing function signature reject.
 
 Affine flow follows ordinary left-to-right evaluation order. A borrow observes one live lexical
 owner and preserves it. A consume moves that owner; every later use on a reachable path rejects
-before publication. For an admitted direct resource-bearing call, all unrestricted arguments
+before publication. For an admitted consuming resource-bearing call, all unrestricted arguments
 finish first and evaluation of the final argument commits transfer of one exact live owner. The
-callee may borrow it, consume it through the bound requirement, drop it, or forward it through
+consuming callee may borrow it, consume it through the bound requirement, drop it, or forward it through
 another admitted direct call. Caller and callee must use the same exact requirement identity, and
 the resource-bearing direct-call graph must be acyclic. A call failure, cancellation, or resource
 exhaustion after transfer does not restore caller ownership; unwinding drops remaining task-local
 authority without an implicit external queue transition.
 
+A `borrow` function parameter instead receives a non-owning view. All ordinary arguments finish
+before its final local read; the synchronous call preserves the caller's owner. A borrowing helper
+may pass the view to an exact borrow operation or reborrow it through another admitted helper.
+It cannot consume it, forward it to a consuming helper, wrap it in a variant, return it, or retain
+it in a callable or container. A borrowed parameter grants no additional effects or deployment
+authority. Borrow means non-consuming capability access, not purity or a general immutable-memory
+reference. Normal returns allow the caller to borrow again or consume its original owner.
+Failure and cancellation propagate through the existing task boundary without restoring consumed
+owners, replaying effects, or implicitly completing an external queue job.
+
+The runtime attenuates each borrow to a non-owning opaque handle, including reborrows; checked
+local loads and consuming adapters reject ownership transfer from it. The task resource scope
+retains the underlying resource, including through a tail call, until normal consumption or task
+cleanup. No resource result/capture can escape the statically checked call scope. This is not a
+runtime lifetime-token system, general references, asynchronous borrowing, or cross-instance transfer.
+
 Dropping an unconsumed resource is allowed. A nominal variant may contain one direct resource
 payload: matching consumes the outer owner and makes the payload live only in the selected arm. A
 join retains an owner only when every reachable arm retains the same provenance. Records,
 structural records, lists, maps, options, results, streams, function values, constants, tests, and
-nested nominal values cannot contain a resource. Multiple, borrowed, nonfinal, public,
+nested nominal values cannot contain a resource. Multiple, nonfinal, public,
 package-visible, cross-package, generic, indirect, recursive, captured, or result-bearing resource
 function forms reject. Partial moves, affine containers, resource polymorphism, resource-capturing closures, async or
 detached tasks, and general linear must-use semantics are absent.

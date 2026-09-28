@@ -1077,12 +1077,12 @@ impl CompiledSignature {
         if let Some((index, parameter, requirement)) = bound.first().copied()
             && (kind != OwnerKind::TaskFunction
                 || index.saturating_add(1) != self.parameters.len()
-                || parameter.use_mode != ParameterUse::Consume
+                || parameter.use_mode == ParameterUse::Unrestricted
                 || !self.task_requirements.contains(&requirement))
         {
             return Err(unit_corrupt(
                 "compiler_unit_resource_parameter_shape",
-                "compiled resource parameter is not one final consume parameter bound to its task requirement",
+                "compiled resource parameter is not one final borrow/consume parameter bound to its task requirement",
             ));
         }
         if self.parameters.iter().any(|parameter| {

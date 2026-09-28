@@ -1,0 +1,54 @@
+request idempotency=lkjournal-scoped-borrow-20260928 intent=scoped-borrow-lease-payload base=rev_cd5d4b1e18db3e1fe795489d67ecc83130ea7fd19b1c69c360cd08d12b8f510f repository=repo_95f988c5423fe3eb823c329ef0832d51 package=pkg_20000000000000000000000000000001
+
+declarations.begin
+(units
+  ; Reconstructed from canonical meaning. Original comments, formatting and type aliases are not stored.
+  (reference ref_live_4 case pkg_10000000000000000000000000000001/case_0b0406f622b1485d4c953bd8ecace443)
+  (reference ref_absent_12 case pkg_10000000000000000000000000000001/case_c7df32c88ec2dbc4740aa710fa938f72)
+  (reference ref_DurableQueue_5 declaration pkg_10000000000000000000000000000001/decl_20a0ef729beda0abf0e743cd7e1126de)
+  (reference ref_i64-equal_8 declaration pkg_10000000000000000000000000000001/decl_222d72e76ff0ecd3763618cf1815c6f8)
+  (reference ref_add_10 declaration pkg_10000000000000000000000000000001/decl_72b38e6cd864cb4239b329b7e337577f)
+  (reference ref_QueueLeaseState_3 declaration pkg_10000000000000000000000000000001/decl_e0ddc2780a132a75163537fa45d7473d)
+  (reference ref_bytes-length_7 declaration pkg_10000000000000000000000000000001/decl_f842908b9e3aa2074da9a763dccca542)
+  (reference ref_payload_6 field pkg_10000000000000000000000000000001/field_c7e0432c125817f1d4c783ac50cfe71a)
+  (reference ref_lease-info_1 operation pkg_10000000000000000000000000000001/op_1a5491eb1c3ef3d15ec28268b6f04afc)
+  (reference ref_complete_11 operation pkg_10000000000000000000000000000001/op_242e065f9738b454e2328ed0e558e6a0)
+  (reference ref_fail_9 operation pkg_10000000000000000000000000000001/op_679b43bb7dc0b298a7706d4e8a7bef23)
+  (reference ref_heartbeat_2 operation pkg_10000000000000000000000000000001/op_f593ba236055aa1afa6c02eaf0db6a64)
+  (reference ref_jobs_0 requirement pkg_20000000000000000000000000000001/req_0cebded5cb056cda5484e39aa40594ad)
+  (type-alias type_0 ref_QueueLeaseState_3)
+  (type-alias type_1 (resource ref_DurableQueue_5))
+  (module edit mod_0510586a801c429b7a4a49a217de7fab worker
+    (function create lease-payload
+      (visibility private)
+      (returns Bytes)
+      (effect (task (requirement ref_jobs_0)))
+      (body (field (capability-call ref_jobs_0 ref_lease-info_1 (local lease)) ref_payload_6))
+      (parameter create lease
+        (type type_1)
+        (use borrow)
+        (requirement ref_jobs_0)))
+    (function edit decl_7f443401f4946c55fa239c5430e8ad93 process-lease
+      (visibility private)
+      (returns Bool)
+      (effect (task (requirement ref_jobs_0)))
+      (body (let (binding borrowed-payload (as $b_bind_aa5dba7193b67314c84d4debc4cf86d8) (call lease-payload
+              (local lease))) (binding renewed-state (as $b_bind_445dd0ba33aa14fd30c4c809d7cc979a) (type type_0)
+            (capability-call ref_jobs_0 ref_heartbeat_2 (local lease) (local now) (i64 30000))) (in (match
+              (local renewed-state) (arm ref_live_4 (payload renewed-lease type_1 (as $b_bind_62697d50612e6d073e27f6b0ccdcfa02))
+                (let (binding payload (as $b_bind_b91389bbe59065dd6d07d3ec9c47905a) (local borrowed-payload))
+                  (binding payload-length (as $b_bind_dbe070155a0f29db239c41754a1edd99) (call ref_bytes-length_7
+                      (local payload))) (in (if (call ref_i64-equal_8 (local payload-length) (i64 0))
+                      (capability-call ref_jobs_0 ref_fail_9 (local renewed-lease) (local now) (bool true)
+                        (call ref_add_10 (local now) (i64 1000)) (text "empty-payload")) (capability-call ref_jobs_0 ref_complete_11
+                        (local renewed-lease) (local now) (local payload)))))) (arm ref_absent_12 (bool false))))))
+      (parameter edit param_6e6033f02a47a1402a9022292c606211 now
+        (type I64)
+        (use unrestricted))
+      (parameter edit param_9ea74b106f9947a483a78569e7cde01f lease
+        (type type_1)
+        (use consume)
+        (requirement ref_jobs_0)))
+  )
+)
+declarations.end

@@ -51,6 +51,7 @@ struct ResourceFunctionParameter {
     requirement: RequirementReference,
     interface: DeclarationReference,
     parameter_count: usize,
+    use_mode: ParameterUse,
 }
 
 pub(super) fn validate_affine_meaning(
@@ -190,11 +191,11 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 match parameter.parent {
                     super::ParameterParent::Function(declaration) => {
                         if matches!(resource, Some((ResourceShape::Direct, _))) {
-                            if parameter.use_mode != ParameterUse::Consume {
+                            if parameter.use_mode == ParameterUse::Unrestricted {
                                 return Err(owner_affine_error(
                                     "kernel_affine_function_resource_use",
                                     owner,
-                                    "direct resource function parameter must consume",
+                                    "direct resource function parameter must borrow or consume",
                                 ));
                             }
                             if parameter.resource_requirement.is_none() {
@@ -727,7 +728,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
             return Err(affine_error(
                 "kernel_affine_resource_call_arguments",
                 expression,
-                "resource-bearing call omits its final consume argument",
+                "resource-bearing call omits its final borrow/consume argument",
             ));
         };
         for argument in ordinary_arguments {
@@ -736,7 +737,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
         let resource = self.take_local_resource(
             *resource_argument,
             state,
-            ParameterUse::Consume,
+            parameter.use_mode,
             Some(parameter.requirement.into()),
         )?;
         if resource.provenance.interface != parameter.interface {
@@ -935,6 +936,16 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 "resource argument does not name a function parameter, lexical, or match-payload owner",
             )
         })?;
+        if use_mode == ParameterUse::Consume
+            && let LocalValueReference::FunctionParameter(parameter) = owner
+            && self.parameter(self.read.package_id(), parameter)?.use_mode == ParameterUse::Borrow
+        {
+            return Err(affine_error(
+                "kernel_affine_borrow_consumed",
+                expression,
+                "a borrowed function parameter cannot transfer ownership",
+            ));
+        }
         let label = resource_owner_label(owner);
         let slot = state.get_mut(&owner).ok_or_else(|| {
             affine_error(
@@ -1515,11 +1526,11 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                             "resource parameter must be final in its function signature",
                         ));
                     }
-                    if record.use_mode != ParameterUse::Consume {
+                    if record.use_mode == ParameterUse::Unrestricted {
                         return Err(owner_affine_error(
                             "kernel_affine_function_resource_use",
                             OwnerKey::Parameter(parameter),
-                            "direct resource function parameter must consume",
+                            "direct resource function parameter must borrow or consume",
                         ));
                     }
                     let requirement = record.resource_requirement.ok_or_else(|| {
@@ -1534,6 +1545,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                         requirement,
                         interface,
                         parameter_count: function.parameters.len(),
+                        use_mode: record.use_mode,
                     });
                 }
                 Some((ResourceShape::Variant, _)) => {

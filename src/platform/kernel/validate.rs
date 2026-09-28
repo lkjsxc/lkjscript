@@ -1467,11 +1467,11 @@ impl FullValidator<'_> {
                     match parameter.parent {
                         ParameterParent::Function(_) => {
                             if direct {
-                                if parameter.use_mode != ParameterUse::Consume {
+                                if parameter.use_mode == ParameterUse::Unrestricted {
                                     self.error(
                                         "kernel_affine_function_resource_use",
                                         format!(
-                                            "direct resource function parameter {owner:?} must consume"
+                                            "direct resource function parameter {owner:?} must borrow or consume"
                                         ),
                                     );
                                 }

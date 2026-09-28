@@ -4113,19 +4113,25 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_affine_function_parameter_use",
             DiagnosticClass::Semantic,
             "A function parameter uses an unsupported affine mode.",
-            "Use unrestricted for ordinary values and consume for the one direct final resource parameter.",
+            "Use unrestricted for ordinary values and borrow or consume for the one direct final resource parameter.",
         ),
         diagnostic(
             "kernel_affine_parameter_requirement_extra",
             DiagnosticClass::Semantic,
             "A nonresource or operation parameter declares a resource requirement binding.",
-            "Omit requirement except on one direct consume resource parameter of a private task function.",
+            "Omit requirement except on one direct borrow/consume resource parameter of a private task function.",
         ),
         diagnostic(
             "kernel_affine_function_resource_use",
             DiagnosticClass::Semantic,
-            "A direct function resource parameter is not consume-only.",
-            "Set use=consume on the one final resource parameter.",
+            "A direct function resource parameter has no explicit borrow or consume mode.",
+            "Set use=borrow or use=consume on the one final resource parameter.",
+        ),
+        diagnostic(
+            "kernel_affine_borrow_consumed",
+            DiagnosticClass::Semantic,
+            "A borrowed task parameter is used as an owned resource.",
+            "Borrow or reborrow inside the helper; consume only from an owning caller after the borrow returns.",
         ),
         diagnostic(
             "kernel_affine_function_resource_requirement",
@@ -4137,7 +4143,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_affine_function_resource_count",
             DiagnosticClass::Semantic,
             "A function signature contains more than one direct resource parameter.",
-            "Keep exactly one direct consume resource parameter.",
+            "Keep exactly one direct borrow/consume resource parameter.",
         ),
         diagnostic(
             "kernel_affine_function_resource_order",

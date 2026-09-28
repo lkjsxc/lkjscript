@@ -1501,14 +1501,14 @@ fn validate_normalized_resource_signature(
         )
     })?;
     if index.saturating_add(1) != parameters.len()
-        || parameter.use_mode != ParameterUse::Consume
+        || parameter.use_mode == ParameterUse::Unrestricted
         || !type_parameters.is_empty()
         || !matches!(body, NormalizedFunctionBody::Code(_))
         || !task_requirements.contains(&requirement_index)
     {
         return Err(runtime_corrupt(
             "normalized_function_resource_shape",
-            "resource signature is not one final consume parameter on a nongeneric task body",
+            "resource signature is not one final borrow/consume parameter on a nongeneric task body",
         ));
     }
     if normalized_type_contains_resource(
@@ -1602,6 +1602,7 @@ fn validate_normalized_resource_signature(
         ));
     };
     if canonical_parameter.parent != ParameterParent::Function(declaration.declaration)
+        || canonical_parameter.use_mode != parameter.use_mode
         || canonical_parameter.resource_requirement != Some(requirement.reference)
     {
         return Err(runtime_corrupt(
@@ -1752,15 +1753,13 @@ fn validate_resource_call_graph(functions: &[NormalizedFunction]) -> Result<(), 
                             instruction_index
                                 .checked_sub(1)
                                 .and_then(|index| code.instructions.get(index)),
-                            Some(NormalizedInstruction::LoadLocal {
-                                use_mode: ParameterUse::Consume,
-                                ..
-                            })
+                            Some(NormalizedInstruction::LoadLocal { use_mode, .. })
+                                if callee.parameters.last().is_some_and(|p| p.use_mode == *use_mode)
                         )
                     {
                         return Err(runtime_corrupt(
                             "normalized_resource_call_transfer",
-                            "prepared resource call is not one same-package final consume-local transfer",
+                            "prepared resource call is not one same-package final local use matching its parameter",
                         ));
                     }
                     if resource_functions.contains(&caller_index)

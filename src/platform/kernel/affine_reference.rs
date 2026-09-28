@@ -46,6 +46,7 @@ type Live = BTreeMap<LocalValueReference, Slot>;
 struct ResourceSignature {
     parameter: ParameterId,
     parameter_count: usize,
+    use_mode: ParameterUse,
     right: Right,
 }
 
@@ -98,7 +99,7 @@ impl Reference<'_> {
                     let shape = self.resource_type(parameter.ty, &mut BTreeSet::new());
                     match shape {
                         Some((Shape::Direct, _)) => {
-                            parameter.use_mode == ParameterUse::Consume
+                            parameter.use_mode != ParameterUse::Unrestricted
                                 && parameter.resource_requirement.is_some()
                                 && self
                                     .resource_signature(DeclarationReference {
@@ -485,7 +486,7 @@ impl Reference<'_> {
         for argument in ordinary {
             self.plain(*argument, live)?;
         }
-        let right = self.take(*resource, live, ParameterUse::Consume)?;
+        let right = self.take(*resource, live, signature.use_mode)?;
         if right != signature.right {
             return Err(());
         }
@@ -556,7 +557,7 @@ impl Reference<'_> {
                 Some((Shape::Direct, interface)) => {
                     if resource.is_some()
                         || index.saturating_add(1) != function.parameters.len()
-                        || record.use_mode != ParameterUse::Consume
+                        || record.use_mode == ParameterUse::Unrestricted
                     {
                         return Err(());
                     }
@@ -564,6 +565,7 @@ impl Reference<'_> {
                     resource = Some(ResourceSignature {
                         parameter,
                         parameter_count: function.parameters.len(),
+                        use_mode: record.use_mode,
                         right: Right {
                             shape: Shape::Direct,
                             requirement: requirement.into(),
@@ -733,6 +735,16 @@ impl Reference<'_> {
             return Err(());
         };
         let owner = resource_owner(value).ok_or(())?;
+        if mode == ParameterUse::Consume
+            && let LocalValueReference::FunctionParameter(id) = owner
+        {
+            let parameter = self
+                .parameter(self.snapshot.root.package_id, id)
+                .ok_or(())?;
+            if parameter.use_mode == ParameterUse::Borrow {
+                return Err(());
+            }
+        }
         let slot = live.get_mut(&owner).ok_or(())?;
         if !slot.live {
             return Err(());
@@ -1611,6 +1623,105 @@ fn independent_reference_agrees_on_maintained_graphs_and_finite_negative_corpus(
             .accepts(),
             "reference rejects {name}"
         );
+    }
+}
+
+#[test]
+fn scoped_borrow_reference_distinguishes_views_from_owned_transfers() {
+    for nested in [false, true] {
+        let snapshot = crate::platform::execution::normalized::tests::iteration_resource_tests::borrowed_snapshot(nested);
+        assert!(production_accepts(&snapshot));
+        assert!(
+            Reference {
+                snapshot: &snapshot
+            }
+            .accepts()
+        );
+        let parameter = snapshot
+            .owners
+            .iter()
+            .find_map(|(key, record)| match record {
+                OwnerRecord::Parameter(record)
+                    if record.use_mode == ParameterUse::Borrow
+                        && record.resource_requirement.is_some() =>
+                {
+                    Some(*key)
+                }
+                _ => None,
+            })
+            .unwrap();
+        let operation_parameter = snapshot
+            .owners
+            .iter()
+            .find_map(|(key, record)| match record {
+                OwnerRecord::Parameter(record)
+                    if record.use_mode == ParameterUse::Borrow
+                        && record.resource_requirement.is_none() =>
+                {
+                    Some(*key)
+                }
+                _ => None,
+            })
+            .unwrap();
+        for variant in [
+            "consume-in-borrow",
+            "consume-caller",
+            "unrestricted",
+            "missing-binding",
+            "public",
+            "result",
+        ] {
+            let mut candidate = snapshot.clone();
+            let OwnerRecord::Parameter(record) = candidate.owners.get_mut(&parameter).unwrap()
+            else {
+                panic!("parameter");
+            };
+            let super::ParameterParent::Function(function) = record.parent else {
+                panic!("function parameter");
+            };
+            let resource_type = record.ty;
+            match variant {
+                "consume-caller" => record.use_mode = ParameterUse::Consume,
+                "unrestricted" => record.use_mode = ParameterUse::Unrestricted,
+                "missing-binding" => record.resource_requirement = None,
+                _ => {}
+            }
+            if variant == "consume-in-borrow" {
+                let OwnerRecord::Parameter(record) =
+                    candidate.owners.get_mut(&operation_parameter).unwrap()
+                else {
+                    panic!("operation parameter");
+                };
+                record.use_mode = ParameterUse::Consume;
+            }
+            let OwnerRecord::Declaration(record) = candidate
+                .owners
+                .get_mut(&OwnerKey::Declaration(function))
+                .unwrap()
+            else {
+                panic!("function");
+            };
+            if variant == "public" {
+                record.visibility = DeclarationVisibility::Public;
+            }
+            if variant == "result" {
+                let DeclarationPayload::Function(function) = &mut record.payload else {
+                    panic!("function");
+                };
+                function.result = resource_type;
+            }
+            assert!(
+                !production_accepts(&candidate),
+                "production rejects {variant}"
+            );
+            assert!(
+                !Reference {
+                    snapshot: &candidate
+                }
+                .accepts(),
+                "reference rejects {variant}"
+            );
+        }
     }
 }
 

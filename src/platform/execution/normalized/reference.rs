@@ -1425,13 +1425,13 @@ impl ReferenceState<'_> {
             match parameter.resource_requirement {
                 Some(requirement) => {
                     if index.saturating_add(1) != parameters.len()
-                        || parameter.use_mode != ParameterUse::Consume
+                        || parameter.use_mode == ParameterUse::Unrestricted
                         || argument.ownership(&self.schema, &mut self.observation.value_work)?
                             != Ownership::Capability
                     {
                         return Err(reference_error(
                             "normalized_reference_resource_call_shape",
-                            "resource-bearing call does not use one final consume parameter and direct handle",
+                            "resource-bearing call does not use one final borrow/consume parameter and direct handle",
                         ));
                     }
                     let NormalizedValue::Resource(handle) = argument.raw() else {
@@ -1450,11 +1450,26 @@ impl ReferenceState<'_> {
                             "resource parameter requirement is absent from canonical authority",
                         ));
                     };
-                    self.resources.validate_queue_lease_transfer(
-                        requirement,
-                        record.interface,
-                        *handle,
-                    )?;
+                    match parameter.use_mode {
+                        ParameterUse::Borrow => {
+                            if !handle.is_borrowed() {
+                                return Err(reference_error(
+                                    "normalized_reference_resource_call_borrow",
+                                    "reference borrow argument still owns its handle",
+                                ));
+                            }
+                            self.resources.validate_queue_lease_borrow(
+                                requirement,
+                                record.interface,
+                                *handle,
+                            )?;
+                        }
+                        _ => self.resources.validate_queue_lease_transfer(
+                            requirement,
+                            record.interface,
+                            *handle,
+                        )?,
+                    }
                 }
                 None => {
                     if parameter.use_mode != ParameterUse::Unrestricted
@@ -2152,6 +2167,9 @@ impl ReferenceState<'_> {
             ));
         }
         if let NormalizedValue::Resource(handle) = value.raw() {
+            if use_mode == ParameterUse::Consume {
+                handle.require_owned()?;
+            }
             self.resources.validate_admission(*handle, None, None)?;
         }
         Ok(value)

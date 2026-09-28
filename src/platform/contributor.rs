@@ -93,6 +93,9 @@ mod nominal_cutover_tests;
 #[cfg(test)]
 pub(crate) mod effect_cutover_tests;
 
+#[cfg(test)]
+pub(crate) mod scoped_borrow_tests;
+
 /// Neutral canonical type identity for independent contributor byte oracles. This
 /// performs no graph authoring, scope proof, layout derivation or value encoding.
 pub fn canonical_type_object_identity(form_json: &[u8]) -> Result<([u8; 32], String), Diagnostic> {
@@ -3296,14 +3299,14 @@ mod tests {
         assert_eq!(helper.parameters, 2);
         assert_eq!(helper.requirements, 1);
         assert_eq!(helper.contract_owners.len(), 3);
-        assert_eq!(helper.body_preorder.len(), 36);
-        assert_eq!(helper.structural_edges, 39);
+        assert_eq!(helper.body_preorder.len(), 35);
+        assert_eq!(helper.structural_edges, 38);
         assert_eq!(helper.maximum_depth, 6);
         assert!(
             helper
                 .body_preorder
                 .iter()
-                .any(|owner| owner.name.as_deref() == Some("lease-info"))
+                .any(|owner| owner.name.as_deref() == Some("borrowed-payload"))
         );
         assert!(
             helper
@@ -3323,9 +3326,33 @@ mod tests {
             .iter()
             .map(|call| (call.operation.as_str(), call.parameter_uses.as_slice()))
             .collect::<Vec<_>>();
-        assert!(helper_operation_uses.iter().any(|(operation, uses)| {
-            operation.ends_with("op_1a5491eb1c3ef3d15ec28268b6f04afc")
-                && uses.contains(&"borrow".to_owned())
+        assert!(
+            helper_operation_uses.iter().all(|(operation, _)| {
+                !operation.ends_with("op_1a5491eb1c3ef3d15ec28268b6f04afc")
+            })
+        );
+        assert!(helper.relations.iter().any(|relation| {
+            relation.kind == "function_call"
+                && relation
+                    .target
+                    .ends_with("decl_08eec4f6b013dea79cfed578f85b7db9")
+        }));
+        let borrower =
+            function_definition_oracle(&project, "decl_08eec4f6b013dea79cfed578f85b7db9")
+                .expect("maintained borrowing helper oracle");
+        assert_eq!(borrower.kind, "task_function");
+        assert_eq!(borrower.name, "lease-payload");
+        assert_eq!(borrower.parameters, 1);
+        assert_eq!(borrower.requirements, 1);
+        assert_eq!(borrower.contract_owners.len(), 2);
+        assert_eq!(borrower.body_preorder.len(), 3);
+        assert_eq!(borrower.structural_edges, 5);
+        assert_eq!(borrower.maximum_depth, 2);
+        assert_eq!(borrower.capability_calls.len(), 1);
+        assert!(borrower.capability_calls.iter().all(|call| {
+            call.operation
+                .ends_with("op_1a5491eb1c3ef3d15ec28268b6f04afc")
+                && call.parameter_uses == ["borrow".to_owned()]
         }));
         for operation in [
             "op_f593ba236055aa1afa6c02eaf0db6a64",

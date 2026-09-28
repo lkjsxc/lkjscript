@@ -54,7 +54,15 @@ impl Value {
         match (self.ownership, use_mode) {
             (Ownership::Ordinary, ParameterUse::Unrestricted)
             | (Ownership::Capability, ParameterUse::Borrow) => Ok(Self {
-                datum: self.datum.clone(),
+                datum: match use_mode {
+                    ParameterUse::Borrow => match &self.datum {
+                        NormalizedValue::Resource(handle) => {
+                            NormalizedValue::Resource(handle.borrow())
+                        }
+                        _ => return Err(reject("borrowed capability is not an opaque handle")),
+                    },
+                    _ => self.datum.clone(),
+                },
                 preparation: self.preparation,
                 ownership: self.ownership,
             }),

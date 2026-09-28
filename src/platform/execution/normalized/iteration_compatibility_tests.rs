@@ -179,15 +179,8 @@ fn task_iteration_cutover_preserves_unrelated_owners_public_contracts_and_old_su
         "../../../../tests/fixtures/task-iteration-predecessor.json"
     ))
     .unwrap();
-    let application = GraphRepository::open(
-        &Path::new(env!("CARGO_MANIFEST_DIR")).join("applications/lkjournal"),
-    )
-    .unwrap()
-    .view_current()
-    .unwrap()
-    .reconstruct_full_oracle()
-    .unwrap()
-    .value;
+    let application =
+        crate::platform::contributor::scoped_borrow_tests::lkjournal_before_scoped_borrow();
     assert_eq!(
         serde_json::to_value(application.root.owners).unwrap(),
         proof["application_owners"]

@@ -20,12 +20,12 @@ Current normalized identity:
 
 - repository: `repo_95f988c5423fe3eb823c329ef0832d51`;
 - package: `pkg_20000000000000000000000000000001`;
-- semantic revision: `rev_cd5d4b1e18db3e1fe795489d67ecc83130ea7fd19b1c69c360cd08d12b8f510f`;
-- semantic state: `semantic_state_5671def4f8c5ec31a6acdaf31643c003d17871b22ccb0e1cbf26b23973dad397`;
-- package revision: `package_revision_41c2574a5a145ec0c9cd68c52ca180d4f3234fa5ade01716372e2044f3c759a4`;
-- artifact manifest: `artifact_manifest_76096db0555a3159f31c7844e10d293546bde352d37225579100ad109e018742`;
-- artifact bundle: `artifact_bundle_5f2ecd3c84dec0f8adbb0f562855cd76c1aa2b7385ae6475b13cfc021344540f`;
-- 2,040 live root semantic owners and one exact built-in standard dependency.
+- semantic revision: `rev_a1d97c5d7deda1ece8e2e3383bd7a58ae1e267838368ec5b42678e40c9eb1640`;
+- semantic state: `semantic_state_3832cd12c3fee672d0bdfb975cb363cbc457f6ef45f15cb44a62d40ab47f2dee`;
+- package revision: `package_revision_e87e327ed5f4cf9e7ceff3d217c7aaf1897631409fca62f83882bf6d310dbd3f`;
+- artifact manifest: `artifact_manifest_c605f169b71099ac9a05dd0a9fea84ef86da281e2864df2a45ebd47f96a550c1`;
+- artifact bundle: `artifact_bundle_963c8d58546a93bea9865bcaf09c02c3f3e5d1b2df042ad06d225c3f1c58a871`;
+- 2,044 live root semantic owners and one exact built-in standard dependency.
 
 The original Graph 13 materialization preserved all existing application owner identities and behavior.
 Its exact standard dependency includes graph-owned composition, persistent-list mapping and pair;
@@ -62,7 +62,7 @@ target/release/lkjscript build --project applications/lkjournal \
   --output /tmp/lkjournal-current.lkja
 ```
 
-Check compiles and links the exact two-package closure with 90 application and 255 total compiler
+Check compiles and links the exact two-package closure with 91 application and 256 total compiler
 units, then runs 7 application tests plus 37 standard tests. All 44 must agree between normalized
 bytecode and the canonical reference interpreter.
 `generated/lkjournal.lkja` is the deterministic maintained artifact bundle output. Check and build do
@@ -93,9 +93,9 @@ empty 404 and invokes none of them.
 
 ## Current service, interactive, and worker boundary
 
-All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,372,537-byte
+All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,374,493-byte
 artifact bundle above (SHA-256
-`25eb168d432c79b604433a7395faef62c798fd22ed018266ad88472a7706bf89`). The service descriptor
+`b5dac63fd8951d27816add46b9ca19a6b27a9559f0068007bd43f1485daaddc9`). The service descriptor
 resolves `serve`, the worker descriptor resolves `work`, and `live.deployment.json` resolves
 `lkjournal-live-1`. Preparation strictly loads the standalone bundle,
 validates the runner, route-indexed handler and component requirement closure, grants, secrets, and adapters, and emits

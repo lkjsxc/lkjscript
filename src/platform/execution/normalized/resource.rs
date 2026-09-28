@@ -24,9 +24,32 @@ pub(crate) struct NormalizedResourceHandle {
     kind: NormalizedResourceKind,
     authority: RequirementReference,
     interface: DeclarationReference,
+    borrowed: bool,
 }
 
 impl NormalizedResourceHandle {
+    pub(super) const fn borrow(self) -> Self {
+        Self {
+            borrowed: true,
+            ..self
+        }
+    }
+
+    pub(super) const fn is_borrowed(self) -> bool {
+        self.borrowed
+    }
+
+    pub(super) fn require_owned(self) -> Result<(), ExecutionError> {
+        if self.borrowed {
+            return Err(ExecutionError::new(
+                ExecutionFailureClass::Capability,
+                "normalized_resource_borrow_consumed",
+                "a borrowed resource handle cannot transfer or consume ownership",
+            ));
+        }
+        Ok(())
+    }
+
     pub(crate) const fn is_affine_capability(self) -> bool {
         matches!(self.kind, NormalizedResourceKind::QueueLease)
     }
@@ -169,6 +192,7 @@ impl NormalizedResourceScope {
             kind: NormalizedResourceKind::ByteStream,
             authority,
             interface,
+            borrowed: false,
         })
     }
 
@@ -211,6 +235,7 @@ impl NormalizedResourceScope {
                 kind: NormalizedResourceKind::QueueLease,
                 authority,
                 interface,
+                borrowed: false,
             },
             active: true,
         })
@@ -246,6 +271,7 @@ impl NormalizedResourceScope {
         interface: DeclarationReference,
         handle: NormalizedResourceHandle,
     ) -> Result<JobLease, ExecutionError> {
+        handle.require_owned()?;
         self.validate_capability_handle(
             handle,
             NormalizedResourceKind::QueueLease,
@@ -270,6 +296,16 @@ impl NormalizedResourceScope {
     }
 
     pub(crate) fn validate_queue_lease_transfer(
+        &self,
+        authority: RequirementReference,
+        interface: DeclarationReference,
+        handle: NormalizedResourceHandle,
+    ) -> Result<(), ExecutionError> {
+        handle.require_owned()?;
+        self.validate_queue_lease_borrow(authority, interface, handle)
+    }
+
+    pub(crate) fn validate_queue_lease_borrow(
         &self,
         authority: RequirementReference,
         interface: DeclarationReference,
@@ -701,6 +737,63 @@ mod tests {
         );
         drop(reservation);
         assert_eq!(first.live_resources(), 0);
+    }
+
+    #[test]
+    fn scoped_borrow_attenuates_without_copying_or_consuming_the_owner() {
+        let scope = NormalizedResourceScope::with_id(NormalizedResourceScopeId(111));
+        let owner = scope
+            .reserve_queue_lease(authority(0), interface(0))
+            .unwrap()
+            .commit(queue_lease())
+            .unwrap();
+        assert!(!owner.is_borrowed());
+        let borrowed = owner.borrow();
+        assert!(borrowed.is_borrowed());
+        assert_eq!(borrowed.slot, owner.slot);
+        assert_eq!(borrowed.scope, owner.scope);
+        for view in [borrowed, borrowed.borrow()] {
+            scope
+                .validate_queue_lease_borrow(authority(0), interface(0), view)
+                .unwrap();
+            assert_eq!(scope.live_resources(), 1);
+            assert_eq!(
+                scope
+                    .consume_queue_lease(authority(0), interface(0), view)
+                    .unwrap_err()
+                    .code,
+                "normalized_resource_borrow_consumed"
+            );
+            assert_eq!(
+                scope
+                    .validate_queue_lease_transfer(authority(0), interface(0), view)
+                    .unwrap_err()
+                    .code,
+                "normalized_resource_borrow_consumed"
+            );
+            assert_eq!(
+                scope
+                    .validate_queue_lease_borrow(authority(1), interface(0), view)
+                    .unwrap_err()
+                    .code,
+                "normalized_resource_authority"
+            );
+            assert_eq!(scope.live_resources(), 1);
+            scope
+                .borrow_queue_lease(authority(0), interface(0), owner)
+                .unwrap();
+        }
+        scope
+            .consume_queue_lease(authority(0), interface(0), owner)
+            .unwrap();
+        assert_eq!(scope.live_resources(), 0);
+        assert_eq!(
+            scope
+                .validate_queue_lease_borrow(authority(0), interface(0), borrowed)
+                .unwrap_err()
+                .code,
+            "normalized_resource_closed"
+        );
     }
 
     #[test]

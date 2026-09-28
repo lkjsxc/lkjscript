@@ -65,16 +65,10 @@ fn frozen_graph13_cutover_preserves_every_predecessor_owner_type_and_retirement(
         );
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(project);
         let before = std::fs::read(path.join("HEAD")).unwrap();
-        let repository = GraphRepository::open(&path).unwrap();
         let snapshot = if project == "packages/standard" {
             super::effect_cutover_tests::standard_before_task_iteration()
         } else {
-            repository
-                .view_current()
-                .unwrap()
-                .reconstruct_full_oracle()
-                .unwrap()
-                .value
+            super::scoped_borrow_tests::lkjournal_before_scoped_borrow()
         };
         assert_eq!(
             serde_json::to_value(snapshot.root.repository_id).unwrap(),

@@ -179,13 +179,7 @@ fn frozen_effect_transition_preserves_every_owner_and_unchanged_type_byte() {
         let snapshot = if project["project"] == "packages/standard" {
             standard_before_task_iteration()
         } else {
-            GraphRepository::open(&path)
-                .unwrap()
-                .view_current()
-                .unwrap()
-                .reconstruct_full_oracle()
-                .unwrap()
-                .value
+            super::scoped_borrow_tests::lkjournal_before_scoped_borrow()
         };
         assert_eq!(
             serde_json::to_value(snapshot.root.package_id).unwrap(),

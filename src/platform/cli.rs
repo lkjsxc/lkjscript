@@ -8084,11 +8084,11 @@ mod tests {
             parse_records("complete-helper-definition", &helper).expect("helper compact records");
         assert_eq!(
             response_field(&helper_records, "projection", "body-records"),
-            "36"
+            "35"
         );
         assert_eq!(
             response_field(&helper_records, "projection", "fact-records"),
-            "39"
+            "38"
         );
         assert!(helper_records.iter().any(|record| {
             record.operation == "definition.parameter"
@@ -8107,7 +8107,7 @@ mod tests {
                             .ends_with("req_0cebded5cb056cda5484e39aa40594ad")
                 })
         }));
-        for name in ["lease-info", "renewed-lease"] {
+        for name in ["borrowed-payload", "renewed-lease"] {
             assert!(helper_records.iter().any(|record| {
                 record.operation == "definition.binding"
                     && record
@@ -8117,7 +8117,6 @@ mod tests {
             }));
         }
         for operation in [
-            "op_1a5491eb1c3ef3d15ec28268b6f04afc",
             "op_f593ba236055aa1afa6c02eaf0db6a64",
             "op_679b43bb7dc0b298a7706d4e8a7bef23",
             "op_242e065f9738b454e2328ed0e558e6a0",
@@ -8130,6 +8129,52 @@ mod tests {
                         .any(|field| field.name == "operation" && field.value.ends_with(operation))
             }));
         }
+        let mut borrower_arguments = helper_base.clone();
+        borrower_arguments[5] = "decl_08eec4f6b013dea79cfed578f85b7db9".to_owned();
+        borrower_arguments.extend([
+            "--limit".to_owned(),
+            "10000".to_owned(),
+            "--bytes".to_owned(),
+            MAXIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES.to_string(),
+        ]);
+        let borrower =
+            execute_inspect_owner(borrower_arguments).expect("complete borrower projection");
+        let borrower_records = parse_records("complete-borrower-definition", &borrower).unwrap();
+        assert_eq!(
+            response_field(&borrower_records, "projection", "body-records"),
+            "3"
+        );
+        assert_eq!(
+            response_field(&borrower_records, "projection", "fact-records"),
+            "5"
+        );
+        assert!(borrower_records.iter().any(|record| {
+            record.operation == "definition.parameter"
+                && record
+                    .fields
+                    .iter()
+                    .any(|field| field.name == "use" && field.value == "borrow")
+                && record.fields.iter().any(|field| {
+                    field.name == "requirement"
+                        && field
+                            .value
+                            .ends_with("req_0cebded5cb056cda5484e39aa40594ad")
+                })
+        }));
+        assert!(borrower_records.iter().any(|record| {
+            record.operation == "definition.expression"
+                && record.fields.iter().any(|field| {
+                    field.name == "operation"
+                        && field.value.ends_with("op_1a5491eb1c3ef3d15ec28268b6f04afc")
+                })
+        }));
+        assert!(helper_records.iter().all(|record| {
+            record.operation != "definition.expression"
+                || record.fields.iter().all(|field| {
+                    field.name != "operation"
+                        || !field.value.ends_with("op_1a5491eb1c3ef3d15ec28268b6f04afc")
+                })
+        }));
         let complete_items = complete_records
             .iter()
             .filter(|record| record.operation.starts_with("definition."))

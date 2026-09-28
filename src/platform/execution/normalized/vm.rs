@@ -748,6 +748,9 @@ impl Machine<'_> {
                         ));
                     }
                     if let NormalizedValue::Resource(handle) = value.raw() {
+                        if use_mode == ParameterUse::Consume {
+                            handle.require_owned()?;
+                        }
                         self.resources.validate_admission(*handle, None, None)?;
                     }
                     self.push(value)?;
@@ -1697,13 +1700,13 @@ impl Machine<'_> {
             match parameter.resource_requirement {
                 Some(requirement) => {
                     if index.saturating_add(1) != function.parameters.len()
-                        || parameter.use_mode != ParameterUse::Consume
+                        || parameter.use_mode == ParameterUse::Unrestricted
                         || argument.class(self.program, &mut self.observation.value_work)?
                             != Class::Direct
                     {
                         return Err(runtime_error(
                             "normalized_resource_call_shape",
-                            "resource-bearing call does not use one final consume parameter and direct handle",
+                            "resource-bearing call does not use one final borrow/consume parameter and direct handle",
                         ));
                     }
                     let NormalizedValue::Resource(handle) = argument.raw() else {
@@ -1722,11 +1725,25 @@ impl Machine<'_> {
                                 "resource parameter requirement escaped the prepared table",
                             )
                         })?;
-                    self.resources.validate_queue_lease_transfer(
-                        requirement_record.reference,
-                        requirement_record.interface,
-                        *handle,
-                    )?;
+                    if parameter.use_mode == ParameterUse::Borrow {
+                        if !handle.is_borrowed() {
+                            return Err(runtime_error(
+                                "normalized_resource_call_borrow",
+                                "borrow parameter requires a non-owning handle",
+                            ));
+                        }
+                        self.resources.validate_queue_lease_borrow(
+                            requirement_record.reference,
+                            requirement_record.interface,
+                            *handle,
+                        )?;
+                    } else {
+                        self.resources.validate_queue_lease_transfer(
+                            requirement_record.reference,
+                            requirement_record.interface,
+                            *handle,
+                        )?;
+                    }
                 }
                 None => {
                     if parameter.use_mode != ParameterUse::Unrestricted

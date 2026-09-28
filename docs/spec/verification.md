@@ -624,12 +624,17 @@ opened and that canonical typed meaning authority is unchanged before/after. Thi
 product/service gate has no database server, container, connection secret, or host database-library
 prerequisite.
 
-The same copied candidate must project the maintained affine worker entry, its private helper, and
-the independently selected largest maintained function from an isolated full authority copy before
+The same copied candidate must project the maintained affine worker entry, its private consuming
+helper, its private borrowing helper, and the independently selected largest maintained function
+from an isolated full authority copy before
 running live effects. The comparison derives the entry's `jobs` acquisition, absent/live match,
 single consume transfer, and no post-transfer use; then derives the helper's exact parameter-
-requirement relation, `lease-info` borrow, renewed-state match, heartbeat consume, and complete/fail
-consume from generic definition records, exact references, and the disjoint typed oracle. Entry and
+requirement relation, direct borrowing-helper call, renewed-state match, heartbeat consume, and
+complete/fail consume. The borrowing helper must expose its exact non-consuming parameter binding
+and sole `lease-info` borrow operation. Service receipt contract 12 binds this separate helper's
+identity, definition digest, body/fact counts, operations, and caller relation; prior contract 11
+receipts do not attest the new observation. These checks use generic definition records, exact
+references, and the disjoint typed oracle. Entry and
 helper must each remain at or below 40 body records. Small and changed page budgets must cover each
 exact logical inventory once, with matching complete digest/counts and unchanged repository tree,
 semantic `HEAD`, generated application bundle, descriptor, data, queue, and object authority.

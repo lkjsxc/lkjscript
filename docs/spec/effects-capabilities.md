@@ -101,7 +101,7 @@ An interface owns stable operation identities, input parameters, canonical param
 output type, failure contract, and semantic limits. Ordinary parameters are unrestricted. A direct
 `CapabilityResource<Interface>` operation parameter is explicitly borrow or consume, and its
 interface must be the operation's exact owning interface. The one admitted task-helper resource
-parameter is final and consume-only and carries an exact requirement binding in the callee effect.
+parameter is final, explicitly borrow or consume, and carries an exact requirement binding in the callee effect.
 A parameter-requirement relation makes that binding part of summaries, impact, package validation,
 compilation, artifacts, and inspection. A capability relation records the exact use site,
 requirement, interface, and operation. Resource types additionally retain an exact interface
@@ -117,7 +117,9 @@ or forged intrinsic names reject during semantic validation; there is no ambient
 Every live resource has exact acquisition, owner task, interface, acquiring requirement, allowed
 operation, close, cancellation, timeout, and cleanup semantics. Exact-interface capability
 resources are acquired only by a call through that same requirement. Borrow preserves the local
-right; consume removes it before the external operation. A foreign requirement, interface, scope,
+right; consume removes it before the external operation. A borrowing task helper receives a
+non-owning handle and may reborrow but never consume or retain it. The original caller may consume
+after normal return; the existing failure, cancellation, and task cleanup boundaries still apply. A foreign requirement, interface, scope,
 kind, closed slot, duplicate consume, or post-consume use rejects. Handles are runtime-only and
 cannot serialize into accepted literals, graph data, artifacts as values, caches, backups, queue
 payloads, objects, or logs. Streams use bounded chunks and backpressure. Data transactions and
@@ -125,7 +127,7 @@ queue leases are lexical/task-owned.
 
 The compiler records borrow/consume on local loads and retains the exact requirement on a resource
 parameter. Strict artifact loading and normalized preparation recheck the private task signature,
-exact requirement/interface, immediate final consume load, direct call, and acyclic resource-call
+exact requirement/interface, immediate final local load matching the parameter's use mode, direct call, and acyclic resource-call
 graph. Each VM and reference call frame revalidates the same live task scope, kind, requirement,
 interface, and slot, so hostile derived input cannot copy, rebind, revive, or indirectly invoke a
 transition right. Resource-bearing variants move as one outer value; matching transfers the direct

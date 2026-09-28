@@ -4970,7 +4970,38 @@ fn copied_binary_authors_requirement_bound_affine_handoffs_and_rejects_predecess
          create.function as=$ambiguous_task module={application} name=ambiguous-task visibility=private result=unit effect=task body=$ambiguous_body\n\
          effect.requirement parent=$ambiguous_task index=0 requirement=$lease_requirement\n\
          effect.requirement parent=$ambiguous_task index=1 requirement=$lease_requirement_two\n\
-         add.port as=$port component=$component name=run type=@task_port function=$task\n"
+         add.port as=$port component=$component name=run type=@task_port function=$task\n\
+         expression.local as=$reader_local value=$reader_lease\n\
+         expression.capability-call as=$reader_body requirement=$lease_requirement operation=$observe\n\
+         expression.argument parent=$reader_body index=0 expression=$reader_local\n\
+         create.function as=$reader module={application} name=read-lease visibility=private result=unit effect=task body=$reader_body\n\
+         add.parameter as=$reader_lease function=$reader name=lease type=@lease use=borrow requirement=$lease_requirement\n\
+         effect.requirement parent=$reader index=0 requirement=$lease_requirement\n\
+         expression.local as=$reborrow_local value=$reborrow_lease\n\
+         expression.call as=$reborrow_body function=$reader\n\
+         expression.argument parent=$reborrow_body index=0 expression=$reborrow_local\n\
+         create.function as=$reborrow module={application} name=reborrow-lease visibility=private result=unit effect=task body=$reborrow_body\n\
+         add.parameter as=$reborrow_lease function=$reborrow name=lease type=@lease use=borrow requirement=$lease_requirement\n\
+         effect.requirement parent=$reborrow index=0 requirement=$lease_requirement\n\
+         expression.capability-call as=$borrow_acquired requirement=$lease_requirement operation=$acquire\n\
+         expression.local as=$borrow_first_local value=$borrow_binding\n\
+         expression.call as=$borrow_first function=$reborrow\n\
+         expression.argument parent=$borrow_first index=0 expression=$borrow_first_local\n\
+         expression.local as=$borrow_second_local value=$borrow_binding\n\
+         expression.call as=$borrow_second function=$reader\n\
+         expression.argument parent=$borrow_second index=0 expression=$borrow_second_local\n\
+         expression.local as=$borrow_final_local value=$borrow_binding\n\
+         expression.call as=$borrow_final function=$leaf\n\
+         expression.argument parent=$borrow_final index=0 expression=$borrow_final_local\n\
+         expression.sequence as=$borrow_sequence\n\
+         expression.argument parent=$borrow_sequence index=0 expression=$borrow_first\n\
+         expression.argument parent=$borrow_sequence index=1 expression=$borrow_second\n\
+         expression.argument parent=$borrow_sequence index=2 expression=$borrow_final\n\
+         expression.let as=$borrow_body body=$borrow_sequence\n\
+         expression.binding parent=$borrow_body index=0 as=$borrow_binding name=retained-owner value=$borrow_acquired type=@lease\n\
+         create.function as=$borrow_task module={application} name=borrow-task visibility=private result=unit effect=task body=$borrow_body\n\
+         effect.requirement parent=$borrow_task index=0 requirement=$lease_requirement\n\
+         add.port as=$borrow_port component=$component name=borrow-run type=@task_port function=$borrow_task\n"
     );
     let request_path = temporary.path().join("affine-resource.lkjc");
     std::fs::write(&request_path, &request).expect("write affine-resource request");
@@ -5615,15 +5646,17 @@ effect.requirement parent=$bad_function index=0 requirement={requirement}"#
             "kernel_affine_parameter_requirement_extra",
         ),
         (
-            "borrowed-resource-binding",
+            "borrowed-resource-consumed",
             format!(
                 r#"type.capability-resource as=@bad_lease interface={lease_interface}
-expression.unit as=$bad_body
-create.function as=$bad_function module={application} name=borrowed-resource-binding visibility=private result=unit effect=task body=$bad_body
+expression.local as=$borrowed_local value=$bad_parameter
+expression.call as=$bad_body function={leaf}
+expression.argument parent=$bad_body index=0 expression=$borrowed_local
+create.function as=$bad_function module={application} name=borrowed-resource-consumed visibility=private result=unit effect=task body=$bad_body
 add.parameter as=$bad_parameter function=$bad_function name=lease type=@bad_lease use=borrow requirement={requirement}
 effect.requirement parent=$bad_function index=0 requirement={requirement}"#
             ),
-            "kernel_affine_function_resource_use",
+            "kernel_affine_borrow_consumed",
         ),
         (
             "unrestricted-resource-binding",

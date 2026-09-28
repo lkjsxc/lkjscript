@@ -117,6 +117,8 @@ fn graph14_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
     // artifacts and current schemas below still prove the preserved data bytes at execution.
     let inventory_standard =
         crate::platform::contributor::effect_cutover_tests::standard_before_task_iteration();
+    let inventory_application =
+        crate::platform::contributor::scoped_borrow_tests::lkjournal_before_scoped_borrow();
     let mut nominal = 0;
     let mut nested = 0;
     for (project, type_count) in fixture["projects"]
@@ -128,7 +130,7 @@ fn graph14_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
         let snapshot = if project["package"] == "pkg_10000000000000000000000000000001" {
             &inventory_standard
         } else {
-            &application
+            &inventory_application
         };
         assert_eq!(
             snapshot.root.repository_id.to_string(),

@@ -4,7 +4,8 @@ use crate::platform::kernel::{BindingKind, BindingRecord, OperationReference, Pa
 use crate::platform::semantic_id::BindingId;
 
 fn fixture(mode: &str) -> (crate::platform::kernel::KernelSnapshot, NormalizedProgram) {
-    let handoff = mode.starts_with("handoff");
+    let borrowed = mode.starts_with("borrow");
+    let handoff = mode.starts_with("handoff") || borrowed;
     let mut snapshot = crate::platform::kernel::tests::witness_snapshot();
     let package = snapshot.root.package_id;
     let caller = declaration_named(&snapshot, "caller");
@@ -31,16 +32,22 @@ fn fixture(mode: &str) -> (crate::platform::kernel::KernelSnapshot, NormalizedPr
     let final_parameter = ParameterId::migrate(seed, 1);
     let consume_parameter = ParameterId::migrate(seed, 2);
     let prefix_parameter = ParameterId::migrate(seed, 3);
+    let borrow_parameter = ParameterId::migrate(seed, 4);
     let acquire = OperationId::migrate(seed, 1);
     let observe = OperationId::migrate(seed, 2);
     let consume = OperationId::migrate(seed, 3);
     let prefix = OperationId::migrate(seed, 4);
+    let borrow = OperationId::migrate(seed, 5);
     for (operation, name, result, parameters) in [
         (acquire, "acquire", resource, vec![]),
         (observe, "observe", unit, vec![]),
         (consume, "consume", unit, vec![consume_parameter]),
         (prefix, "prefix", unit, vec![]),
-    ] {
+        (borrow, "borrow", unit, vec![borrow_parameter]),
+    ]
+    .into_iter()
+    .filter(|(operation, ..)| borrowed || *operation != borrow)
+    {
         snapshot.owners.insert(
             OwnerKey::Operation(operation),
             OwnerRecord::Operation(OperationRecord {
@@ -65,6 +72,22 @@ fn fixture(mode: &str) -> (crate::platform::kernel::KernelSnapshot, NormalizedPr
             resource_requirement: None,
         }),
     );
+    if borrowed {
+        snapshot.owners.insert(
+            OwnerKey::Parameter(borrow_parameter),
+            OwnerRecord::Parameter(ParameterRecord {
+                header: OwnerHeader::new(
+                    OwnerKey::Parameter(borrow_parameter),
+                    OwnerKind::Parameter,
+                ),
+                parent: ParameterParent::Operation(borrow),
+                name: Name::new("view").unwrap(),
+                ty: resource,
+                use_mode: ParameterUse::Borrow,
+                resource_requirement: None,
+            }),
+        );
+    }
     let OwnerRecord::Declaration(owner) = snapshot
         .owners
         .get_mut(&OwnerKey::Declaration(interface.declaration))
@@ -75,7 +98,11 @@ fn fixture(mode: &str) -> (crate::platform::kernel::KernelSnapshot, NormalizedPr
     let DeclarationPayload::Interface { operations } = &mut owner.payload else {
         panic!("interface payload")
     };
-    operations.extend([acquire, observe, consume, prefix]);
+    operations.extend(
+        [acquire, observe, consume, prefix, borrow]
+            .into_iter()
+            .filter(|operation| borrowed || *operation != borrow),
+    );
     operations.sort();
     let OwnerRecord::Requirement(owner) = snapshot
         .owners
@@ -87,7 +114,9 @@ fn fixture(mode: &str) -> (crate::platform::kernel::KernelSnapshot, NormalizedPr
         panic!("requirement")
     };
     owner.operations.extend(
-        [acquire, observe, consume, prefix]
+        [acquire, observe, consume, prefix, borrow]
+            .into_iter()
+            .filter(|operation| borrowed || *operation != borrow)
             .map(|operation| OperationReference { package, operation }),
     );
     owner.operations.sort();
@@ -146,17 +175,74 @@ fn fixture(mode: &str) -> (crate::platform::kernel::KernelSnapshot, NormalizedPr
                 value: LocalValueReference::FunctionParameter(final_parameter),
             },
         );
-        let consumed = expression(
-            &mut snapshot,
+        let final_use = if mode == "borrow-reborrow" {
+            let nested = DeclarationId::migrate(seed, 2);
+            let nested_parameter = ParameterId::migrate(seed, 5);
+            let nested_local = expression(
+                &mut snapshot,
+                ExpressionOperation::Local {
+                    value: LocalValueReference::FunctionParameter(nested_parameter),
+                },
+            );
+            let nested_body = expression(
+                &mut snapshot,
+                ExpressionOperation::CapabilityCall {
+                    requirement,
+                    operation: OperationReference {
+                        package,
+                        operation: borrow,
+                    },
+                    arguments: vec![nested_local],
+                },
+            );
+            let mut leaf = helper.clone();
+            leaf.header = OwnerHeader::new(OwnerKey::Declaration(nested), OwnerKind::TaskFunction);
+            leaf.name = Name::new("nested-resource-observer").unwrap();
+            leaf.visibility = DeclarationVisibility::Private;
+            let DeclarationPayload::Function(ref mut function) = leaf.payload else {
+                panic!("nested function");
+            };
+            function.body = nested_body;
+            function.parameters = vec![nested_parameter];
+            snapshot.owners.insert(
+                OwnerKey::Declaration(nested),
+                OwnerRecord::Declaration(leaf),
+            );
+            snapshot.owners.insert(
+                OwnerKey::Parameter(nested_parameter),
+                OwnerRecord::Parameter(ParameterRecord {
+                    header: OwnerHeader::new(
+                        OwnerKey::Parameter(nested_parameter),
+                        OwnerKind::Parameter,
+                    ),
+                    parent: ParameterParent::Function(nested),
+                    name: Name::new("view").unwrap(),
+                    ty: resource,
+                    use_mode: ParameterUse::Borrow,
+                    resource_requirement: Some(requirement.concrete().unwrap()),
+                }),
+            );
+            ExpressionOperation::Call {
+                function: DeclarationReference {
+                    package,
+                    declaration: nested,
+                },
+                type_arguments: vec![],
+                effect_arguments: vec![],
+                requirement_arguments: vec![],
+                arguments: vec![handed],
+            }
+        } else {
             ExpressionOperation::CapabilityCall {
                 requirement,
                 operation: OperationReference {
                     package,
-                    operation: consume,
+                    operation: if borrowed { borrow } else { consume },
                 },
                 arguments: vec![handed],
-            },
-        );
+            }
+        };
+        let consumed = expression(&mut snapshot, final_use);
         expression(
             &mut snapshot,
             ExpressionOperation::Sequence {
@@ -207,7 +293,11 @@ fn fixture(mode: &str) -> (crate::platform::kernel::KernelSnapshot, NormalizedPr
                 parent: ParameterParent::Function(relay),
                 name: Name::new("right").unwrap(),
                 ty: resource,
-                use_mode: ParameterUse::Consume,
+                use_mode: if borrowed {
+                    ParameterUse::Borrow
+                } else {
+                    ParameterUse::Consume
+                },
                 resource_requirement: Some(requirement.concrete().unwrap()),
             }),
         );
@@ -241,7 +331,31 @@ fn fixture(mode: &str) -> (crate::platform::kernel::KernelSnapshot, NormalizedPr
             arguments,
         },
     );
-    let body = if mode == "consumed" {
+    let body = if borrowed && mode != "borrow-tail" {
+        let retained = expression(
+            &mut snapshot,
+            ExpressionOperation::Local {
+                value: LocalValueReference::LexicalBinding(binding),
+            },
+        );
+        let completed = expression(
+            &mut snapshot,
+            ExpressionOperation::CapabilityCall {
+                requirement,
+                operation: OperationReference {
+                    package,
+                    operation: consume,
+                },
+                arguments: vec![retained],
+            },
+        );
+        expression(
+            &mut snapshot,
+            ExpressionOperation::Sequence {
+                items: vec![call, completed],
+            },
+        )
+    } else if mode == "consumed" {
         let consumed = expression(
             &mut snapshot,
             ExpressionOperation::CapabilityCall {
@@ -511,6 +625,119 @@ fn task_tail_transfer_preserves_unused_consumed_and_final_handoff_resource_lifet
                     *events.lock().unwrap(),
                     expected,
                     "owner cleanup must not perform a queue completion or failure"
+                );
+            }
+        }
+    }
+}
+
+pub(crate) fn borrowed_snapshot(nested: bool) -> crate::platform::kernel::KernelSnapshot {
+    fixture(if nested { "borrow-reborrow" } else { "borrow" }).0
+}
+
+#[test]
+fn scoped_borrow_preserves_caller_ownership_and_joins_failure_cleanup() {
+    for mode in [
+        "borrow",
+        "borrow-tail",
+        "borrow-reborrow",
+        "borrow-prefix-failure",
+    ] {
+        let (snapshot, program) = fixture(mode);
+        let target = program.root_target(&Name::new("command").unwrap()).unwrap();
+        let req = &program.requirements
+            [program.components[target.component.0 as usize].requirements[0].0 as usize];
+        let operations = req
+            .operations
+            .iter()
+            .map(|op| program.operations[op.0 as usize].reference)
+            .collect::<BTreeSet<_>>();
+        for reference in [false, true] {
+            for (maximum_calls, cancelled) in [(3, false), (4, false), (10, false), (10, true)] {
+                let events = Arc::new(Mutex::new(Vec::new()));
+                let capabilities = NormalizedCapabilities::bind(
+                    &program,
+                    target.component,
+                    vec![NormalizedCapabilityGrant {
+                        requirement: req.reference,
+                        descriptor: exact_grant_descriptor(
+                            req,
+                            operations.clone(),
+                            exact_grant_limits(req, maximum_calls),
+                        ),
+                        adapter: Arc::new(ResourceScript {
+                            interface: req.interface,
+                            operations: operations.clone(),
+                            events: Arc::clone(&events),
+                            exhaust: false,
+                            fail_prefix: mode == "borrow-prefix-failure",
+                            cancel_on_borrow: cancelled,
+                            variant: None,
+                        }),
+                    }],
+                )
+                .unwrap();
+                let resources = NormalizedResourceScope::with_test_limit(1);
+                let control = ExecutionControl::uncancelled();
+                let result = if reference {
+                    NormalizedReferenceInterpreter::new(&snapshot, &program, Default::default())
+                        .invoke_root_target_scoped(
+                            &Name::new("command").unwrap(),
+                            vec![],
+                            Some(&capabilities),
+                            &resources,
+                            &control,
+                        )
+                        .map(|(value, _)| value)
+                } else {
+                    NormalizedVm::new(&program, Default::default())
+                        .invoke_root_target_scoped(
+                            &Name::new("command").unwrap(),
+                            vec![],
+                            Some(&capabilities),
+                            &resources,
+                            &control,
+                        )
+                        .map(|(value, _)| value)
+                };
+                let mut expected = vec![("acquire".into(), 0), ("prefix".into(), 1)];
+                if mode != "borrow-prefix-failure" {
+                    expected.push(("observe".into(), 1));
+                    if maximum_calls >= 4 {
+                        expected.push(("borrow".into(), 1));
+                    }
+                    if maximum_calls >= 5 && !cancelled && mode != "borrow-tail" {
+                        expected.push(("consume".into(), 1));
+                    }
+                }
+                assert_eq!(
+                    *events.lock().unwrap(),
+                    expected,
+                    "{mode}/{reference}/{maximum_calls}/{cancelled}"
+                );
+                let succeeds = mode != "borrow-prefix-failure"
+                    && !cancelled
+                    && (maximum_calls >= 5 || (mode == "borrow-tail" && maximum_calls >= 4));
+                if succeeds {
+                    assert_eq!(result.unwrap(), NormalizedValue::Unit);
+                    assert_eq!(
+                        resources.live_resources(),
+                        usize::from(mode == "borrow-tail")
+                    );
+                } else {
+                    let failure =
+                        result.expect_err("failure must propagate rather than complete the lease");
+                    if mode == "borrow-prefix-failure" {
+                        assert_eq!(failure.code, "iteration_prefix_failure");
+                    }
+                    assert_eq!(resources.live_resources(), 0);
+                }
+                resources.release_all();
+                assert_eq!(resources.live_resources(), 0);
+                assert_eq!(
+                    *events.lock().unwrap(),
+                    expected,
+                    "cleanup must not retry or complete an external effect"
                 );
             }
         }

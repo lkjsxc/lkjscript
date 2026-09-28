@@ -29,7 +29,7 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const SERVICE_CONTRACT_VERSION: u32 = 11;
+const SERVICE_CONTRACT_VERSION: u32 = 12;
 const HTTP_MAXIMUM_CONCURRENT_TASKS: u64 = 16;
 const HTTP_MAXIMUM_QUEUED_TASKS: u64 = 64;
 pub(crate) const DATA_CONTRACT: &str = "lkjscript-data-store-1";
@@ -46,10 +46,11 @@ const ORACLE_RETRY_JOB: &str = "affine-oracle-retry";
 const ORACLE_STALE_JOB: &str = "affine-oracle-stale";
 const WORKER_FUNCTION: &str = "decl_a914bb78de075ff44a857ac028d704f3";
 const WORKER_HELPER_FUNCTION: &str = "decl_7f443401f4946c55fa239c5430e8ad93";
+const WORKER_BORROWER_FUNCTION: &str = "decl_08eec4f6b013dea79cfed578f85b7db9";
 const WORKER_QUEUE_REQUIREMENT: &str = "req_0cebded5cb056cda5484e39aa40594ad";
 const SERVICE_ARTIFACT_RELATIVE: &str = "generated/lkjournal.lkja";
 const SERVICE_ARTIFACT_SHA256: &str =
-    "25eb168d432c79b604433a7395faef62c798fd22ed018266ad88472a7706bf89";
+    "b5dac63fd8951d27816add46b9ca19a6b27a9559f0068007bd43f1485daaddc9";
 const HTTP_REQUEST_TYPE: &str =
     "type_object_b84486b5e78230fd2b9c4bdcedc6f4ee1fb08838bc3b178aab0d3fb5967a6a44";
 const HTTP_RESPONSE_TYPE: &str =
@@ -531,6 +532,12 @@ struct MaintainedDefinitionObservation {
     helper_relation_digest: String,
     helper_capability_calls: Vec<MaintainedCapabilityObservation>,
     helper_matches: u64,
+    borrower_function: String,
+    borrower_digest: String,
+    borrower_body_records: u64,
+    borrower_fact_records: u64,
+    borrower_capability_calls: Vec<MaintainedCapabilityObservation>,
+    borrower_handoff: bool,
     handoff_relation: bool,
     helper_requirement_binding: bool,
     predecessor_bound: bool,
@@ -571,6 +578,7 @@ fn has_capability_observation(
 fn maintained_capability_shape_is_current(
     entry: &[MaintainedCapabilityObservation],
     helper: &[MaintainedCapabilityObservation],
+    borrower: &[MaintainedCapabilityObservation],
 ) -> bool {
     entry.len() == 2
         && has_capability_observation(entry, "op_2f02101a13d5b32d4be5e5ada08f8df4", &[])
@@ -579,8 +587,9 @@ fn maintained_capability_shape_is_current(
             "op_23bc0c498113c09a2ff0a4cf9c0a37ab",
             &["unrestricted", "unrestricted", "unrestricted"],
         )
-        && helper.len() == 4
-        && has_capability_observation(helper, "op_1a5491eb1c3ef3d15ec28268b6f04afc", &["borrow"])
+        && helper.len() == 3
+        && borrower.len() == 1
+        && has_capability_observation(borrower, "op_1a5491eb1c3ef3d15ec28268b6f04afc", &["borrow"])
         && has_capability_observation(
             helper,
             "op_f593ba236055aa1afa6c02eaf0db6a64",
@@ -1132,6 +1141,7 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
         || !maintained_capability_shape_is_current(
             &result.definition_projection.capability_calls,
             &result.definition_projection.helper_capability_calls,
+            &result.definition_projection.borrower_capability_calls,
         )
         || result.definition_projection.matches != 1
         || result.definition_projection.helper_function != WORKER_HELPER_FUNCTION
@@ -1157,6 +1167,11 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
             .helper_relation_digest
             .is_empty()
         || result.definition_projection.helper_matches != 1
+        || result.definition_projection.borrower_function != WORKER_BORROWER_FUNCTION
+        || result.definition_projection.borrower_digest.is_empty()
+        || result.definition_projection.borrower_body_records != 3
+        || result.definition_projection.borrower_fact_records != 5
+        || !result.definition_projection.borrower_handoff
         || !result.definition_projection.handoff_relation
         || !result.definition_projection.helper_requirement_binding
         || !result.definition_projection.predecessor_bound
@@ -5638,6 +5653,51 @@ fn verify_maintained_function_definition(
             "worker-helper",
         )?;
         compare_maintained_definition(&helper_projection, &helper_oracle)?;
+        let borrower_oracle =
+            function_definition_oracle(&copied_application, WORKER_BORROWER_FUNCTION).map_err(
+                |diagnostic| {
+                    ServiceFailure::failed("definition_borrower_oracle", diagnostic.message)
+                },
+            )?;
+        let borrower_projection = run_maintained_definition_pages(
+            context,
+            &copied_binary,
+            &copied_application,
+            &borrower_oracle,
+            "worker-borrower",
+        )?;
+        compare_maintained_definition(&borrower_projection, &borrower_oracle)?;
+        let borrower_handoff = helper_oracle.relations.iter().any(|relation| {
+            relation.kind == "function_call" && relation.target.ends_with(WORKER_BORROWER_FUNCTION)
+        }) && borrower_oracle.relations.iter().any(|relation| {
+            relation.kind == "parameter_requirement"
+                && relation.target.ends_with(WORKER_QUEUE_REQUIREMENT)
+        }) && borrower_projection.records.iter().any(|record| {
+            record.operation == "definition.parameter"
+                && record.fields.get("use").map(String::as_str) == Some("borrow")
+                && record
+                    .fields
+                    .get("requirement")
+                    .is_some_and(|value| value.ends_with(WORKER_QUEUE_REQUIREMENT))
+        });
+        require(
+            borrower_handoff,
+            "definition_borrower_handoff",
+            "borrower omitted its exact handoff, use mode or authority",
+        )?;
+        let borrower_capability_calls = borrower_oracle
+            .capability_calls
+            .iter()
+            .map(|call| MaintainedCapabilityObservation {
+                operation: call.operation.clone(),
+                parameter_uses: call.parameter_uses.clone(),
+            })
+            .collect::<Vec<_>>();
+        require(
+            borrower_projection.body_records == 3 && borrower_projection.fact_records == 5,
+            "definition_borrower_shape",
+            "borrower definition shape drifted",
+        )?;
         let largest_projection = run_maintained_definition_pages(
             context,
             &copied_binary,
@@ -5670,8 +5730,16 @@ fn verify_maintained_function_definition(
                 parameter_uses: call.parameter_uses.clone(),
             })
             .collect::<Vec<_>>();
+        require(
+            has_capability_observation(
+                &borrower_capability_calls,
+                "op_1a5491eb1c3ef3d15ec28268b6f04afc",
+                &["borrow"],
+            ),
+            "definition_borrower_operation",
+            "borrower omitted its exact non-consuming lease access",
+        )?;
         for (operation, mode) in [
-            ("op_1a5491eb1c3ef3d15ec28268b6f04afc", "borrow"),
             ("op_f593ba236055aa1afa6c02eaf0db6a64", "consume"),
             ("op_679b43bb7dc0b298a7706d4e8a7bef23", "consume"),
             ("op_242e065f9738b454e2328ed0e558e6a0", "consume"),
@@ -5757,6 +5825,12 @@ fn verify_maintained_function_definition(
             helper_relation_digest: helper_oracle.relation_digest,
             helper_capability_calls,
             helper_matches: helper_oracle.matches.len() as u64,
+            borrower_function: WORKER_BORROWER_FUNCTION.to_owned(),
+            borrower_digest: borrower_projection.digest,
+            borrower_body_records: borrower_projection.body_records,
+            borrower_fact_records: borrower_projection.fact_records,
+            borrower_capability_calls,
+            borrower_handoff,
             handoff_relation,
             helper_requirement_binding,
             predecessor_bound,
@@ -6170,7 +6244,7 @@ fn compare_maintained_definition(
     if oracle.function == WORKER_HELPER_FUNCTION {
         require(
             oracle.body_preorder.iter().any(|owner| {
-                owner.name.as_deref() == Some("lease-info") && owner.form == "binding:let"
+                owner.name.as_deref() == Some("borrowed-payload") && owner.form == "binding:let"
             }) && oracle.body_preorder.iter().any(|owner| {
                 owner.name.as_deref() == Some("renewed-lease")
                     && owner.form == "binding:match_payload"
@@ -6856,7 +6930,7 @@ mod tests {
     #[test]
     fn data_contract_is_exact_and_versioned() {
         assert_eq!(DATA_CONTRACT, "lkjscript-data-store-1");
-        assert_eq!(SERVICE_CONTRACT_VERSION, 11);
+        assert_eq!(SERVICE_CONTRACT_VERSION, 12);
     }
 
     #[test]
@@ -7109,11 +7183,11 @@ mod tests {
                 parameter_uses: vec!["unrestricted".to_owned(); 3],
             },
         ];
+        let borrower = vec![MaintainedCapabilityObservation {
+            operation: "pkg/op_1a5491eb1c3ef3d15ec28268b6f04afc".to_owned(),
+            parameter_uses: vec!["borrow".to_owned()],
+        }];
         let helper = vec![
-            MaintainedCapabilityObservation {
-                operation: "pkg/op_1a5491eb1c3ef3d15ec28268b6f04afc".to_owned(),
-                parameter_uses: vec!["borrow".to_owned()],
-            },
             MaintainedCapabilityObservation {
                 operation: "pkg/op_f593ba236055aa1afa6c02eaf0db6a64".to_owned(),
                 parameter_uses: vec![
@@ -7141,20 +7215,36 @@ mod tests {
                 ],
             },
         ];
-        assert!(maintained_capability_shape_is_current(&entry, &helper));
+        assert!(maintained_capability_shape_is_current(
+            &entry, &helper, &borrower
+        ));
+        let mut consumed_borrower = borrower.clone();
+        consumed_borrower[0].parameter_uses[0] = "consume".to_owned();
+        assert!(!maintained_capability_shape_is_current(
+            &entry,
+            &helper,
+            &consumed_borrower
+        ));
+        assert!(!maintained_capability_shape_is_current(
+            &entry,
+            &helper,
+            &[]
+        ));
 
         let mut wrong_entry = entry.clone();
         wrong_entry[1].parameter_uses[0] = "borrow".to_owned();
         assert!(!maintained_capability_shape_is_current(
             &wrong_entry,
-            &helper
+            &helper,
+            &borrower
         ));
 
         let mut duplicate_helper = helper.clone();
         duplicate_helper.push(helper[0].clone());
         assert!(!maintained_capability_shape_is_current(
             &entry,
-            &duplicate_helper
+            &duplicate_helper,
+            &borrower
         ));
     }
 

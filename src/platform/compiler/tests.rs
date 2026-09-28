@@ -2519,40 +2519,55 @@ fn resource_function_artifact_rejects_rebound_or_reclassified_authority() {
                 })
         })
         .expect("resource parameter runtime owner");
-    let mut wrong_parameter_manifest = loaded.manifest.clone();
-    let mut wrong_parameter_objects = loaded.objects.clone();
-    let binding = &mut wrong_parameter_manifest.packages[resource_parameter.0].runtime_owners
-        [resource_parameter.1];
-    let old_key = ObjectKey::from_digest(ObjectDomain::Owner, binding.object.bytes());
-    let bytes = wrong_parameter_objects
-        .remove(&old_key)
-        .expect("resource parameter owner bytes");
-    let mut record = decode_owner(&bytes, binding.owner, binding.kind, binding.object)
-        .expect("decode resource parameter owner");
-    let OwnerRecord::Parameter(parameter) = &mut record else {
-        panic!("resource parameter owner kind")
-    };
-    parameter.resource_requirement = None;
-    let (digest, bytes) = encode_owner(&record).expect("encode rebound resource parameter");
-    binding.object = digest;
-    assert!(
-        wrong_parameter_objects
-            .insert(
-                ObjectKey::from_digest(ObjectDomain::Owner, digest.bytes()),
-                bytes
-            )
-            .is_none()
-    );
-    let (closure, count, bytes) = super::artifact::closure_facts(&wrong_parameter_objects).unwrap();
-    wrong_parameter_manifest.closure = closure;
-    wrong_parameter_manifest.object_count = count;
-    wrong_parameter_manifest.object_bytes = bytes;
-    assert_eq!(
-        super::artifact::encode_artifact(wrong_parameter_manifest, &wrong_parameter_objects)
-            .expect_err("resource parameter rebinding must reject")
-            .code,
-        "artifact_runtime_owner_semantics"
-    );
+    for mismatch in ["requirement", "use-mode"] {
+        let mut wrong_parameter_manifest = loaded.manifest.clone();
+        let mut wrong_parameter_objects = loaded.objects.clone();
+        let binding = &mut wrong_parameter_manifest.packages[resource_parameter.0].runtime_owners
+            [resource_parameter.1];
+        let old_key = ObjectKey::from_digest(ObjectDomain::Owner, binding.object.bytes());
+        let bytes = wrong_parameter_objects
+            .remove(&old_key)
+            .expect("resource parameter owner bytes");
+        let mut record = decode_owner(&bytes, binding.owner, binding.kind, binding.object)
+            .expect("decode resource parameter owner");
+        let OwnerRecord::Parameter(parameter) = &mut record else {
+            panic!("resource parameter owner kind")
+        };
+        if mismatch == "requirement" {
+            parameter.resource_requirement = None;
+        } else {
+            use crate::platform::kernel::ParameterUse;
+            parameter.use_mode = match parameter.use_mode {
+                ParameterUse::Borrow => ParameterUse::Consume,
+                ParameterUse::Consume => ParameterUse::Borrow,
+                ParameterUse::Unrestricted => {
+                    panic!("maintained resource helper must have an affine use")
+                }
+            };
+        }
+        let (digest, bytes) = encode_owner(&record).expect("encode rebound resource parameter");
+        binding.object = digest;
+        assert!(
+            wrong_parameter_objects
+                .insert(
+                    ObjectKey::from_digest(ObjectDomain::Owner, digest.bytes()),
+                    bytes
+                )
+                .is_none()
+        );
+        let (closure, count, bytes) =
+            super::artifact::closure_facts(&wrong_parameter_objects).unwrap();
+        wrong_parameter_manifest.closure = closure;
+        wrong_parameter_manifest.object_count = count;
+        wrong_parameter_manifest.object_bytes = bytes;
+        assert_eq!(
+            super::artifact::encode_artifact(wrong_parameter_manifest, &wrong_parameter_objects)
+                .expect_err("resource parameter requirement or use-mode mismatch must reject")
+                .code,
+            "artifact_runtime_owner_semantics",
+            "{mismatch}",
+        );
+    }
 
     let resource_function = loaded
         .manifest

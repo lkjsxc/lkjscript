@@ -68,7 +68,12 @@ impl Value {
             ));
         }
         Ok(Self {
-            raw: self.raw.clone(),
+            raw: match (&self.raw, use_mode) {
+                (NormalizedValue::Resource(handle), ParameterUse::Borrow) => {
+                    NormalizedValue::Resource(handle.borrow())
+                }
+                _ => self.raw.clone(),
+            },
             origin: self.origin,
             class: self.class,
         })
