@@ -149,3 +149,86 @@ The subsequent reporting-only edits affect this campaign, status and the release
 procedure. Generated-reference comparison, no-Python policy and product-surface
 policy passed, with zero policy violations. They do not claim a new full-profile
 run or alter the already-frozen candidate source.
+
+## Candidate acceptance and publication continuation
+
+The later byte-range continuation first completed development v0.1.61 source
+integration on main at `9ca3b15c807ff53f7dd1d7a2af92e7ff432c0814`. That does not change
+the v0.1.60 product source or silently add the new byte-range intrinsics to its archive.
+The separate existing v0.1.60 producer was then reconciled rather than rebuilt.
+
+Producer `36617982924/1` completed successfully at 2026-09-30 05:11:11 JST. The
+GitHub API independently identifies repository and head repository `1307238071`,
+`workflow_dispatch`, workflow `.github/workflows/release.yml`, main and exact source
+`2962c43f0617bda2c5726a96249c8fe53f571747`. The candidate job and each required
+source/build/final-admission/upload step succeeded; the terminal job also succeeded.
+Original terminal and essential acceptance artifacts both report `candidate_accepted`.
+The acceptance handoff binds 20 source gates, six final-target owners, two pinned
+userlands, installation/recovery and original readers, with complete cleanup and
+no failure. This supersedes the earlier pending observation without relabeling
+the failed first producer `36605595167/1`.
+
+The downloaded GitHub service archives match their independently retrieved digests:
+terminal artifact `11058554768`, acceptance artifact `11058984250` and asset artifact
+`11058974165`. Their exact inventories contain one terminal JSON, one acceptance
+JSON and the three ordinary release assets respectively. The release archive,
+checksum file and bootstrap match the acceptance handoff. The archive contains only
+its expected directory, executable, license, third-party notices and manifest.
+The extracted executable is 26,836,352 bytes with SHA-256
+`f0365f4eebf6de18d3730a0c17099f258cc133c9deb20bf537a03a88a50079e2`; its manifest
+matches the accepted manifest digest. No reconstructed or rebuilt asset substitutes
+for these original bytes.
+
+Original API metadata, ZIPs, assets and extracted product are retained under
+`.artifacts/20260930-byte-slices/release-0.1.60/`. All five producer artifacts were
+unexpired when read; the earliest service expiry is 2026-10-13T20:10:43Z. Only the
+three artifacts needed for this supplementary product check were downloaded;
+the large diagnostic and verifier archives remain available at their original owners.
+The promotion controller must still perform its own authenticated original-reader,
+transfer and publication admissions.
+
+The prior release-only selector was read as annotated object
+`033f7563e1bf79a320729368b41259ac7284acb2`, which resolves to v0.1.55/source
+`320dacc051a25e35d99b00852adc1285c8a322a7`. Its promotion `36442849973/1` completed
+successfully, and current public/latest was independently read as immutable release
+`398379899` with its original three assets. The v0.1.60 tag was unoccupied. No
+credential, permission, branch protection or immutability change is part of this
+continuation.
+
+The complete selected final-archive filter set passed **40 tests, zero failed,
+zero ignored**, 131 unrelated tests filtered, in **67.48 seconds**, with process
+exit zero. The filters were `native_generic_resources`, `native_byte_reuse`,
+`native_map_keys`, `native_terminal_values` and `shared_runtime`, exactly as selected
+before candidate production. Eight test threads were used. Execution started in
+`/tmp` with an empty environment/PATH except the explicit candidate selector; no
+publishing credential was supplied. The test executable was copied from Cargo's
+reported public-CLI artifact at source `4a8ac5e5`. Its selected test bodies, native
+fixtures and common helper bodies are unchanged from source `2962c43f`; changes in
+the newer harness are unrelated new byte-range tests and inventory expectations in
+unselected tests. This is supplementary black-box proof, not a relabeling of the
+producer's verifier or source acceptance.
+
+`final-archive-native-joined.log` and `.exit` retain the complete result. The first
+all-filter observation lost its tool connection and has 38 per-case passes but no
+terminal; it is retained as incomplete, not accepted. A separate two-case shared-host
+completion passed in 25.23 seconds. The complete successful rerun redirected output
+to retained logs, avoiding dependence on the tool response connection. No surviving
+candidate-test process was observed before resumption; unrelated running applications
+were left untouched. The completed 40-case result, not the partial log, satisfies the
+supplementary final-archive requirement.
+
+After that complete success, the ordinary annotated v0.1.60 tag was created as
+lkjsxc at accepted source `2962c43f`. Its object is
+`1ed78aaead92e41c053aa735a1e55fee13137953`. `--cleanup=verbatim` preserved the
+selected release notes; both local tag payload and independently fetched remote
+annotation were byte-compared with those unchanged notes. The source remains
+reachable from refreshed main. No existing tag was moved.
+
+The existing release-only `LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA` selector
+was compared with its completed v0.1.55 owner immediately before changing it to
+that exact annotated object, then read back successfully at 2026-09-29T22:35:18Z
+(2026-09-30 07:35:18 JST). This is the scoped selection required by the documented
+promotion procedure, not a change to authentication or repository protection.
+At this checkpoint the tag and selection exist, but no public v0.1.60 release is
+claimed; the ordinary unchanged-asset promotion still owns publication and anonymous
+installed verification.

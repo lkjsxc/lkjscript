@@ -47,10 +47,18 @@ original diagnostics and addresses the verifier defect without raising the bound
 The failed producer cannot be promoted or relabeled under a corrected verifier.
 Corrected source `2962c43f` passed all 26 full-profile gates freshly with stable
 inputs, reached main normally, and is the exact source of successor candidate
-`36617982924/1`, dispatched on 2026-09-30 at 04:15:47 JST. Its pending state is not
-acceptance. Resume that original successor and require the selected final-archive
-cases before promotion. No v0.1.60 tag or promotion is selected, and public/latest
-remains v0.1.55.
+`36617982924/1`, dispatched on 2026-09-30 at 04:15:47 JST. It completed at 05:11:11 JST
+with `candidate_accepted`. The original terminal and essential acceptance artifacts
+were authenticated against GitHub repository/run/attempt and service archive digests;
+they bind source `2962c43f`, 20 source gates, six target owners, two pinned userlands
+and joined installation/recovery. Original asset, archive and extracted executable
+identities agree. All 40 selected supplementary final-archive cases then passed with
+complete termination and no publishing credentials. Annotated object `1ed78aae`
+selects accepted source `2962c43f`; its verbatim notes and remote object were compared,
+and the existing release-only selector was updated and read back. Unchanged-asset
+promotion remains distinct from those completed gates. Public/latest remains v0.1.55;
+see the [delivery continuation](campaigns/20260930-descendant-inventory.md#candidate-acceptance-and-publication-continuation)
+for the latest completed boundary.
 
 Immutable [v0.1.38](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.38) already publishes source
 `7083f9a6d56ed702017942e100c3696fc6f35308`. Publisher

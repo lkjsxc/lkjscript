@@ -79,10 +79,16 @@ during `workspace_tests`. It was neither accepted nor published. The
 historical departures and counts each traversal PID once without raising the existing
 bounds or weakening joined cleanup. Corrected source `2962c43f` passed all 26 full
 profile gates freshly, with stable inputs and zero result reuse, then reached main.
-Its same-source successor candidate `36617982924/1` was dispatched at 04:15:47 JST
-on 2026-09-30; it is pending, not accepted or published. The 32 focused process tests,
-independent traversal probe and 5,000-child serial observation are recorded in the
-continuation. Candidate and final-archive cases remain separate from local proof.
+Its same-source successor candidate `36617982924/1`, dispatched at 04:15:47 JST
+on 2026-09-30, completed with `candidate_accepted` at 05:11:11 JST. Authenticated
+original acceptance and terminal artifacts bind source `2962c43f`, all 20 source
+gates, six target owners, two pinned userlands and joined installation/recovery.
+The selected supplementary final-archive filters passed all 40 cases with a cleared
+environment and complete terminal result. Annotated object `1ed78aae` and the existing
+release-only selector now bind that same accepted source. These are not publication;
+unchanged-asset promotion and anonymous acquisition remain separate. The 32 focused
+process tests, independent traversal probe and 5,000-child serial observation remain
+with the continuation.
 
 ## Development v0.1.60: affine validation admission
 
