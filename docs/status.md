@@ -44,6 +44,13 @@ of universally lower memory use or measured speedup. Production byte-copy counte
 cover this concatenation path only. This is not a new owned type, scoped memory borrow,
 region feature, whole-program zero-copy guarantee or binary publication.
 
+Source `0f0f4d92` reached main normally after all 26 full-profile gates passed freshly,
+with zero reuse, no unrun gates and stable inputs. The retained final optimized product
+also passed both native byte/map tests from an unrelated directory; the campaign
+records the 1,024-concatenation observation without claiming a timing or RSS result.
+A consolidated [v0.1.60 successor](releases/v0.1.60.md) is selected for candidate
+acceptance. This includes the affine-proof correction below; public v0.1.55 is unchanged.
+
 ## Development v0.1.60: affine validation admission
 
 Affine checking now charges metadata reads as well as expression visits before work
@@ -343,8 +350,12 @@ has passed all 16 generic, recursive and package native cases; its byte identity
 survives the final test-only correction. Static grant matching additionally rejects
 ambiguous imported requirements before secret lookup. The campaign retains the
 original failed full run and the expanded independent visibility/ownership oracle.
-Candidate `36461408308/1` selects this exact source and is in progress. Final-archive
-acceptance and publication remain separate; this is not a public v0.1.57 binary.
+Candidate `36461408308/1` completed with `candidate_accepted` at this exact source.
+Its original successful evidence remains intact, but publication is superseded by the
+[consolidated v0.1.60 selection](campaigns/20260930-byte-buffer-reuse.md#revised-publication-selection-consolidate-v0160),
+which includes the later affine-proof correction and subsequent language/storage work.
+The additional 16 final-archive native cases were not run in this resumption; no
+v0.1.57 tag or publication is claimed.
 
 ## Current authority and maintained consumers
 

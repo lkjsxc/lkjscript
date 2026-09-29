@@ -22,12 +22,22 @@ at corrected source `320dacc0` after all 26 full-profile gates passed freshly wi
 stable inputs. Its candidate, final-archive cases and unchanged-asset publication
 are complete. The [v0.1.57 package continuation](campaigns/202609290026.md) combines
 the separately accepted v0.1.56 recursion increment with exact public-library
-resource contracts. Corrected source `3438e2ed` has passed all 26 fresh full-profile
-gates with stable inputs and reached main normally. One non-publishing producer
-`36461408308/1` was selected from that exact source and is in progress. Original
-candidate acceptance, the 16 native cases against its final archive and unchanged-
-asset promotion remain pending. No separate v0.1.56 producer or tag is selected;
-a development version alone is neither publication nor acceptance of another tree.
+resource contracts. Corrected source `3438e2ed` passed all 26 fresh full-profile
+gates with stable inputs and reached main normally. Producer `36461408308/1` has
+completed with `candidate_accepted`; its original successful evidence is retained.
+The separate v0.1.57 publication is now explicitly superseded by the
+[consolidated v0.1.60 selection](campaigns/20260930-byte-buffer-reuse.md#revised-publication-selection-consolidate-v0160).
+The old candidate lacks the later demonstrated affine proof-work correction and
+subsequent composition/storage changes. Its additional 16 final-archive native cases
+are not claimed as executed, and no v0.1.57 tag or promotion is created.
+
+Source `0f0f4d92` integrates reusable byte storage on top of those corrections and
+passed all 26 full-profile gates freshly with stable inputs and zero reuse. Its
+retained final optimized executable also passed the native byte/map cases. The
+[v0.1.60 notes](releases/v0.1.60.md) define the selected successor. A new candidate
+needs its own exact source/final-archive acceptance and the public-case filters
+recorded in the continuation before ordinary unchanged-asset promotion. Public/latest
+remains v0.1.55. Source acceptance is not publication or acceptance of another tree.
 
 Immutable [v0.1.38](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.38) already publishes source
 `7083f9a6d56ed702017942e100c3696fc6f35308`. Publisher

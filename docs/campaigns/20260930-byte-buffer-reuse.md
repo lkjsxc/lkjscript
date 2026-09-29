@@ -139,4 +139,75 @@ work observations, not a timing or RSS comparison against the predecessor.
 
 Exact-source full acceptance, copied final-producer observations and mainline delivery
 are recorded only after their respective results. No binary publication or running
-service replacement is selected by this campaign.
+service replacement is selected at this initial checkpoint.
+
+## Resumption: accepted source and mainline delivery
+
+The owner's next `Continue` resumed the existing local implementation
+`0f0f4d920057bbd5c7536ea3469b09209a48cbe5`, tree
+`eaa3977df4d01ea8dc35cbb174230d8e03f6aeb6`, one commit ahead of remote main
+`301a6586`. No running build owned this checkout. The unrelated untracked files,
+stash, other worktrees and services were preserved. The older conversation's
+shared-runtime publication handoff had already completed; public/latest was
+independently observed as v0.1.55, not the previously reported v0.1.52.
+
+The inherited implementation was reviewed without changing its production code.
+One fresh full-profile run against that frozen source passed all 26 selected gates,
+26 fresh, zero reused, zero unrun, with `input_stable=true`, no failure, and elapsed
+512.455208703 seconds. Both input observations are
+`verification_7481b95b9bf7fd83b3c536e3100b88c64a0bb88c5a138f6663649ffd8ec02178`.
+The authoritative receipt is
+`.artifacts/lkjscript-dev/check/1790702351122236674-2913089-0/receipt.json`.
+The outer logs and exit record are retained under
+`.artifacts/byte-buffer-reuse-20260930/full-final.*`; the verifier was copied and
+kept immutable. Checker concurrency was two gates and Cargo used four build jobs.
+
+The actual Cargo-reported release public-test executable and its product were copied
+to `.artifacts/byte-buffer-reuse-20260930/retained-final/` before later builds could
+replace either path. With a cleared environment and unrelated `/tmp` working directory,
+`native_byte_reuse` and `native_map_keys` passed: two tests, zero failed or ignored,
+166 filtered, 4.77 seconds. The byte test covers eight project/detached routes; the
+map test covers Text/Bytes through both routes. `byte-map.log` and `byte-map.exit`
+retain the original result. After full verification, the copied product was again
+byte-compared with the final release producer and remained identical.
+
+The 1,024 four-byte concatenations observed one empty reuse, one fresh buffer, nine
+growths, 1,013 in-place appends and 8,184 explicit copied/requested-capacity bytes.
+The retained-prefix/closure case observed two fresh buffers and zero in-place appends.
+Expected content, map lookup and round-trip values were independently asserted. These
+are execution-work observations, not elapsed-time comparisons or RSS measurements.
+The authoring path and literal request were absent for detached runs; the renamed
+project was retained and its original HEAD remained unchanged.
+
+After refreshing main, divergence and branch protections, the implementation was
+pushed normally as lkjsxc. Independent GitHub ref reading confirmed main at exact
+`0f0f4d92`. All local verification owned by this resumption completed. The following
+release notes and reporting edits do not replace this tested-source identity.
+
+## Revised publication selection: consolidate v0.1.60
+
+This resumption selects a v0.1.60 successor to public v0.1.55. It deliberately
+supersedes the initial no-publication selection above and the separate v0.1.57
+promotion plan; it does not modify any published release or running service.
+The [notes](../releases/v0.1.60.md) collect the intervening recursive/package resource
+contracts, exact deployment grants, resource suffixes, effectful callbacks, local
+transfers, immutable key sharing, bounded affine proof work and byte storage reuse.
+
+The v0.1.57 producer `36461408308/1` at source `3438e2ed` completed successfully;
+its original terminal records `candidate_accepted` at 2026-09-28T18:52:11Z. All
+five original artifact records were unexpired when read, with the earliest expiry
+2026-10-12T18:51:40Z. That successful evidence is retained, not relabeled as failure.
+Its publication is superseded because it lacks the subsequently demonstrated
+[affine proof-work correction](20260929-affine-validation-work.md), as well as the
+new composition and storage work. No tag or promotion for v0.1.57 is created.
+Its planned additional 16 final-archive cases are not claimed as executed.
+
+A new v0.1.60 candidate must run its own source and finalized-artifact gates. Before
+promotion, use the authenticated final archive executable with the retained public
+test harness and filters `native_generic_resources`, `native_byte_reuse`,
+`native_map_keys`, `native_terminal_values`, and `shared_runtime`. Use a cleared
+environment, retain exact producer/run/attempt and original results, and require
+all selected cases to pass. The locally copied optimized executable is not that
+final archive. Only then use the existing annotated-tag, scoped-selection and
+unchanged-asset promotion procedure. Do not rebuild accepted assets or infer public
+availability from either source acceptance or a successful candidate alone.
