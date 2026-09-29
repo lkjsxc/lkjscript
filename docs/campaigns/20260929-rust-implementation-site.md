@@ -243,3 +243,58 @@ and this real changed-selection repair remain supported current implementation,
 not authority for a permanent Rust-only rewrite. No unrelated service or deployment
 is changed by this continuation. Acceptance and copied-site checks are repeated
 for the corrected merged input before claiming completion below.
+
+## Corrected source acceptance and blocked publication
+
+The corrected merged source is
+`d632c8df13e5e5d26080e4babcf9fe290ff6b94b`, tree
+`7e6868a4efb022f482775eb9cc6a2230463dba0f`. Its own maintained
+`target/release/lkjscript-dev check full --fresh --jobs 2 --machine` completed
+on 2026-09-29 at 04:32:57 UTC: **26 selected, 26 passed fresh, zero reused,
+none unrun**, with `input_stable=true` and no failure. Execution elapsed
+533.811441672 seconds, excluding the preceding release-verifier build.
+This is correctness acceptance, not a controlled speedup comparison with the
+previous run. Original receipt (64,525 bytes), input manifest and gate logs remain
+at `.artifacts/lkjscript-dev/check/1790655843555336503-1110815-0/`.
+The original failing selection test and both previous successful source-specific
+receipts remain distinct; none is relabelled as proof of this corrected source.
+Ignored or opt-in probes are not asserted to have run.
+
+The isolated release-profile site build also passed its eight library tests and
+one CLI test at this exact source. The Rust live harness tested both that labelled
+standalone build and the full-workspace release build: **53 HTTP responses for
+each**, including the corrected lkjscript/lkjstr status wording, all eight embedded
+documents, search byte boundaries and rejection paths, method restrictions, HEAD
+bodies and security headers. Both copies ran outside the authoring checkout with
+an empty environment, matched their selected executable bytes, exited successfully
+after SIGTERM, and left no listener. The standalone source label was exactly
+`d632c8df13e5e5d26080e4babcf9fe290ff6b94b`; the ordinary workspace build correctly
+reported `unversioned`. Labels remain build metadata, not attestations.
+The original artifacts are `site-corrected-tests.log`, `site-corrected-build.log`,
+`live-corrected/live-site-result.txt` and
+`live-corrected-workspace/live-site-result.txt` under
+`.artifacts/20260929-rust-integration/`. The full-workspace tested executable is
+retained as `lkjscript-site-corrected-tested`; its bytes still matched the selected
+release binary after testing.
+
+This closing addition changes only this nonembedded campaign record. Executable
+Rust, the shared publication/input catalog, embedded documents, lockfile, fixtures
+and generated products remain those of the corrected tested source. The retained
+classifier/site work is integrated without discarding the independently developed
+v0.1.59 language core. This continuation adds no new language feature, compiler
+release, custom-domain deployment or new running public service. Existing services,
+the independent worktree, prior evidence and unrelated untracked user files remain
+untouched.
+
+The final command containing the reporting commit and ordinary push was blocked
+by the execution tool's safety check before any completion was reported. It was
+not retried through an alternate tool or command form. A subsequent read-only
+status confirmed local main remains `d632c8df13e5e5d26080e4babcf9fe290ff6b94b`,
+ahead by three commits, with only this closing campaign addition modified and
+the two pre-existing unrelated untracked files preserved. An independent GitHub
+ref read confirmed remote main remains
+`b99555d245d7e0113e903b02fb4135c4b33672a1`. Thus the catalogue repair and corrected
+roadmap are locally committed and verified but NOT published; this closing result
+record is not committed. No remote delivery, synchronized tracking state or
+successful reporting commit is claimed. The safety response supplied no detailed
+cause for its refusal.
