@@ -29,6 +29,25 @@ Inspect the actual installed executable with `lkjscript capabilities`. Installin
 a newer runtime does not silently replace accepted application definitions,
 exact dependency selections, running processes or operational data.
 
+## Development v0.1.60: shared immutable map keys
+
+Byte and text map keys now retain the same immutable payload as ordinary values.
+Conversion, key cloning, replacement and entry projection no longer copy those
+payload buffers. Ordering, retained versions, type admission and serialized bytes
+are unchanged. Raw inputs still count every logical occurrence, including aliases;
+new map nodes, entries and projected records/lists still reserve their own storage.
+
+The [campaign](campaigns/20260929-shared-map-keys.md) records the independent
+pointer-identity, allocation-boundary and copied-binary consumer evidence. This is
+a runtime representation improvement, not a new ownership or region feature, a
+whole-program zero-copy claim, a timing/RSS result or a binary publication.
+
+Source `48237793d718aa8d34338807b54357e35799b2e1` passed all 26 full-profile gates
+freshly, with zero reuse and stable inputs. Its workspace tests passed 1,319 cases
+with 29 existing ignored cases kept separate. The copied release executable passed
+all four Text/Bytes project/detached consumer routes. The map-focused suite passed
+79 tests, and predecessor pointer-identity witnesses demonstrated the removed copies.
+
 ## Development v0.1.60: control-flow local transfers
 
 Ordinary local values can transfer at the final use on each branch, not only at the

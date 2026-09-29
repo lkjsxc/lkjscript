@@ -121,8 +121,8 @@ fn persistent_map_randomized_branches_keep_every_retained_history() {
         let selected = match selection % 4 {
             0 => NormalizedMapKey::Bool(selection & 4 != 0),
             1 => key((selection % 37) as i64 - 18),
-            2 => NormalizedMapKey::Bytes((selection % 41).to_be_bytes().to_vec()),
-            _ => NormalizedMapKey::Text(format!("key-{}", selection % 43)),
+            2 => NormalizedMapKey::Bytes((selection % 41).to_be_bytes().into()),
+            _ => NormalizedMapKey::Text(format!("key-{}", selection % 43).into()),
         };
         let mut expected = oracle.clone();
         let changed = if selection & 8 == 0 {
@@ -150,12 +150,12 @@ fn persistent_map_bulk_order_and_all_key_kinds_are_canonical() {
         (NormalizedMapKey::Bool(true), value(2)),
         (key(i64::MIN), value(3)),
         (key(i64::MAX), value(4)),
-        (NormalizedMapKey::Bytes(vec![]), value(5)),
-        (NormalizedMapKey::Bytes(vec![0, 255]), value(6)),
-        (NormalizedMapKey::Bytes(vec![255]), value(7)),
-        (NormalizedMapKey::Text("".to_owned()), value(8)),
-        (NormalizedMapKey::Text("a".to_owned()), value(9)),
-        (NormalizedMapKey::Text("日本語".to_owned()), value(10)),
+        (NormalizedMapKey::Bytes(Arc::from([])), value(5)),
+        (NormalizedMapKey::Bytes(Arc::from([0, 255])), value(6)),
+        (NormalizedMapKey::Bytes(Arc::from([255])), value(7)),
+        (NormalizedMapKey::Text(Arc::from("")), value(8)),
+        (NormalizedMapKey::Text(Arc::from("a")), value(9)),
+        (NormalizedMapKey::Text(Arc::from("日本語")), value(10)),
     ];
     let entries = ordered.iter().cloned().collect::<BTreeMap<_, _>>();
     let bulk = Map::from_items(entries.clone(), 10, &mut free).unwrap();
@@ -175,7 +175,7 @@ fn persistent_map_bulk_order_and_all_key_kinds_are_canonical() {
     assert_ne!(bulk, Map::default());
     assert_eq!(
         NormalizedMapKey::from_value(NormalizedValue::static_text("a")),
-        Some(NormalizedMapKey::Text("a".to_owned()))
+        Some(NormalizedMapKey::Text(Arc::from("a")))
     );
     assert_eq!(
         Map::from_items(BTreeMap::new(), 0, &mut free).unwrap(),
@@ -303,7 +303,7 @@ fn persistent_map_retained_composites_share_entries_subtrees_and_owned_buffers()
             assert!(!std::ptr::eq(old_box.as_ref(), new_box.as_ref()));
         }
     }
-    let text = String::from("owned key buffer is moved intact");
+    let text: Arc<str> = Arc::from("shared key buffer is moved intact");
     let key_pointer = text.as_ptr();
     let payload = Box::new(value(73));
     let payload_pointer = payload.as_ref() as *const NormalizedValue;
@@ -328,7 +328,7 @@ fn persistent_map_retained_composites_share_entries_subtrees_and_owned_buffers()
 // Derived from the documented layout, independently of node_bytes/entry_bytes:
 // a node owns three pointer handles, height and two reference counters; an entry
 // owns a key/value header and two counters. Owned buffers have another owner.
-fn independent_storage_schedule(nodes: u64, entries: u64, key_buffers: u64) -> Charge {
+fn independent_storage_schedule(nodes: u64, entries: u64) -> Charge {
     let word = std::mem::size_of::<usize>() as u64;
     let node_bytes = 6 * word;
     let entry_bytes = (std::mem::size_of::<NormalizedMapKey>()
@@ -338,7 +338,7 @@ fn independent_storage_schedule(nodes: u64, entries: u64, key_buffers: u64) -> C
     assert_eq!(std::mem::size_of::<Entry>() as u64 + 2 * word, entry_bytes);
     Charge {
         slots: nodes,
-        bytes: nodes * node_bytes + entries * entry_bytes + key_buffers,
+        bytes: nodes * node_bytes + entries * entry_bytes,
     }
 }
 
@@ -357,7 +357,7 @@ fn persistent_map_accounting_matches_independent_exact_fit_schedule() {
     // Sorted insertion 0, 1, 2 produces 1, 2, then 4 new nodes: the rotation's
     // superseded middle path node remains charged. Replacing root 1 needs one.
     for (key_value, expected_nodes) in [(0, 1), (1, 2), (2, 4), (1, 1)] {
-        let expected = independent_storage_schedule(expected_nodes, 1, 0);
+        let expected = independent_storage_schedule(expected_nodes, 1);
         let mut charged = Charge::default();
         map = map
             .insert(
@@ -380,7 +380,7 @@ fn persistent_map_accounting_matches_independent_exact_fit_schedule() {
         assert_eq!(charged, expected);
     }
     let before = map.clone();
-    let expected = independent_storage_schedule(1, 1, 0);
+    let expected = independent_storage_schedule(1, 1);
     for (slot_limit, byte_limit) in [
         (expected.slots - 1, expected.bytes),
         (expected.slots, expected.bytes - 1),
@@ -402,7 +402,7 @@ fn persistent_map_accounting_matches_independent_exact_fit_schedule() {
         );
         // The accepted entry allocation remains cumulative even though the next
         // node reservation refused and no successful map was exposed.
-        assert_eq!(charged, independent_storage_schedule(0, 1, 0));
+        assert_eq!(charged, independent_storage_schedule(0, 1));
         assert_eq!(map, before);
     }
     let mut charges = Vec::new();
@@ -412,7 +412,7 @@ fn persistent_map_accounting_matches_independent_exact_fit_schedule() {
             Ok(())
         })
         .unwrap();
-    assert_eq!(total(&charges), independent_storage_schedule(1, 0, 0));
+    assert_eq!(total(&charges), independent_storage_schedule(1, 0));
     assert_eq!(removed.len(), 2);
     for count in [0, 1, 2, 31, 256] {
         let mut charges = Vec::new();
@@ -427,16 +427,12 @@ fn persistent_map_accounting_matches_independent_exact_fit_schedule() {
         .unwrap();
         assert_eq!(
             total(&charges),
-            independent_storage_schedule(count as u64, count as u64, 0)
+            independent_storage_schedule(count as u64, count as u64)
         );
         let word = std::mem::size_of::<usize>() as u64;
         assert_eq!(bulk.metadata_bytes().unwrap(), count as u64 * 8 * word);
     }
-    let borrowed = NormalizedMapKey::Text("日本語".repeat(73));
-    let bytes = match &borrowed {
-        NormalizedMapKey::Text(text) => text.len() as u64,
-        _ => unreachable!(),
-    };
+    let borrowed = NormalizedMapKey::Text("日本語".repeat(73).into());
     let before = Work::current();
     let mut charges = Vec::new();
     let borrowed_map = Map::default()
@@ -449,8 +445,8 @@ fn persistent_map_accounting_matches_independent_exact_fit_schedule() {
             Ok(())
         })
         .unwrap();
-    assert_eq!(total(&charges), independent_storage_schedule(1, 1, bytes));
-    assert_eq!(before.since().key_bytes_copied, bytes);
+    assert_eq!(total(&charges), independent_storage_schedule(1, 1));
+    assert_eq!(before.since().key_bytes_copied, 0);
     assert_eq!(borrowed_map.get(&borrowed), Some(&value(1)));
 }
 
@@ -734,8 +730,8 @@ fn persistent_map_observation_saturation_neither_authorizes_nor_exhausts_storage
         key_bytes_copied: u64::MAX,
     };
     let _restore = Restore(WORK.replace(saturated));
-    let selected = NormalizedMapKey::Text("probe".to_owned());
-    let expected = independent_storage_schedule(1, 1, 5);
+    let selected = NormalizedMapKey::Text(Arc::from("probe"));
+    let expected = independent_storage_schedule(1, 1);
     let mut accepted = Charge::default();
     let map = Map::default()
         .insert_borrowed(&selected, value(17), 1, &mut |charge| {

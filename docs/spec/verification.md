@@ -271,6 +271,19 @@ iteration, repeated values and artifact execution after removing its owned sourc
 `value_work.local_value_moves` and `local_value_copies` count successful ordinary local
 reads and do not estimate bytes saved or replace allocation/work admission.
 
+Immutable map-key sharing requires payload-pointer evidence independent of copy
+counters: value-to-key conversion, key cloning, persistent replacement and entry
+projection must retain the original byte/text allocation. The predecessor with the
+same pointer witnesses must fail at an actual payload-copy boundary. Both evaluators
+must preserve retained versions and independently allocated equal-content lookups.
+Shared and unshared raw inputs must have equal logical admission charges; keys that
+occur as map contents and lookup arguments still count twice. Exact-fit and
+one-byte-short budgets, fixed predecessor codec bytes, cancellation and raw-host
+cleanup remain required. `value_work.maps.key_bytes_copied` covers physical key
+payload copies in this carrier, not parsing, comparisons, serialization or total
+allocator activity. The `shared-map-keys.lkjc` copied-binary consumer must preserve
+ordered Text/Bytes projections and old versions in project and detached routes.
+
 Production execution uses normalized bytecode and dense indexes. The canonical reference
 interpreter independently reads accepted semantic owners and evaluates their typed structures.
 Its callable identities, signatures, nominal layouts, generic type arguments, targets, tests, and

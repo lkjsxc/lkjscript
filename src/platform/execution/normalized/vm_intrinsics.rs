@@ -43,8 +43,8 @@ impl Machine<'_> {
         &mut self,
         key: CheckedValue,
     ) -> Result<NormalizedMapKey, ExecutionError> {
-        let bytes = super::super::value::map_key_buffer_bytes(key.raw());
-        self.charge_map(super::super::map::Charge { slots: 0, bytes })?;
+        // Moving the immutable key handle allocates no payload; keep cancellation.
+        self.charge_map(super::super::map::Charge::default())?;
         let key = NormalizedMapKey::from_value(key.into_raw()).ok_or_else(|| {
             trap_error("normalized_map_key", "map key is not an ordered primitive")
         })?;
@@ -591,10 +591,7 @@ impl Machine<'_> {
             let mut children = Vec::with_capacity(entries.len());
             for key in entries.keys() {
                 self.control.check()?;
-                self.charge_map(super::super::map::Charge {
-                    slots: 0,
-                    bytes: key.value_storage_bytes()?,
-                })?;
+                // Key projection shares its payload; the entry/list reserve their own storage.
                 let value = map
                     .map_get(key, &mut |charge| self.charge_map(charge))?
                     .ok_or_else(|| type_error("map key disappeared"))?;

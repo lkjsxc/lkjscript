@@ -329,10 +329,7 @@ impl ReferenceState<'_> {
             let mut output = Vec::with_capacity(entries.len());
             for key in entries.keys() {
                 self.control.check()?;
-                self.reserve_map(super::super::map::Charge {
-                    slots: 0,
-                    bytes: key.value_storage_bytes()?,
-                })?;
+                // The projected key shares its existing immutable allocation.
                 let value = map
                     .lookup(key, &mut |charge| self.reserve_map(charge))?
                     .ok_or_else(|| reference_type_error("map entry disappeared"))?;

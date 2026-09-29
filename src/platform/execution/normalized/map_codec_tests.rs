@@ -355,7 +355,7 @@ fn map_codecs_preserve_nested_bytes_across_insertion_removal_and_retained_versio
     ] {
         let mut map = super::super::map::Map::default();
         for index in order {
-            let key = NormalizedMapKey::Text(char::from(b'a' + index).to_string());
+            let key = NormalizedMapKey::Text(char::from(b'a' + index).to_string().into());
             let values = vec![
                 NormalizedValue::I64(i64::from(index) + 1),
                 NormalizedValue::I64(-i64::from(index) - 1),
@@ -372,19 +372,17 @@ fn map_codecs_preserve_nested_bytes_across_insertion_removal_and_retained_versio
         let retained = map.clone();
         map = map
             .insert(
-                NormalizedMapKey::Text("z".to_owned()),
+                NormalizedMapKey::Text("z".into()),
                 NormalizedValue::list(vec![]).unwrap(),
                 MAXIMUM_ADMISSION_ITEMS,
                 &mut |_| Ok(()),
             )
             .unwrap();
         map = map
-            .remove(&NormalizedMapKey::Text("z".to_owned()), &mut |_| Ok(()))
+            .remove(&NormalizedMapKey::Text("z".into()), &mut |_| Ok(()))
             .unwrap();
         map = map
-            .remove(&NormalizedMapKey::Text("missing".to_owned()), &mut |_| {
-                Ok(())
-            })
+            .remove(&NormalizedMapKey::Text("missing".into()), &mut |_| Ok(()))
             .unwrap();
         for map in [map, retained] {
             assert_bytes(
@@ -469,9 +467,9 @@ fn map_key_encoding_checks_exact_types_limits_and_static_text_origin() {
     let mut fixture = fixture();
     for (ty, wrong_key) in fixture.maps.into_iter().zip([
         NormalizedMapKey::I64(0),
-        NormalizedMapKey::Text("not-an-integer".to_owned()),
+        NormalizedMapKey::Text("not-an-integer".into()),
         NormalizedMapKey::Bool(true),
-        NormalizedMapKey::Bytes(vec![0]),
+        NormalizedMapKey::Bytes(vec![0].into()),
     ]) {
         let value =
             NormalizedValue::map(BTreeMap::from([(wrong_key, NormalizedValue::I64(1))])).unwrap();
@@ -500,8 +498,11 @@ fn map_key_encoding_checks_exact_types_limits_and_static_text_origin() {
         );
     }
     for (ty, key) in [
-        (fixture.maps[3], NormalizedMapKey::Text("long".to_owned())),
-        (fixture.maps[2], NormalizedMapKey::Bytes(vec![0, 1, 2])),
+        (fixture.maps[3], NormalizedMapKey::Text("long".into())),
+        (
+            fixture.maps[2],
+            NormalizedMapKey::Bytes(vec![0, 1, 2].into()),
+        ),
     ] {
         let value = NormalizedValue::map(BTreeMap::from([(key, NormalizedValue::I64(1))])).unwrap();
         let limits = JsonLimits {
@@ -530,7 +531,7 @@ fn map_key_encoding_checks_exact_types_limits_and_static_text_origin() {
     fixture.reference.canonical = Arc::new(schema);
     let empty = NormalizedValue::map(BTreeMap::new()).unwrap();
     let text_key = NormalizedValue::map(BTreeMap::from([(
-        NormalizedMapKey::Text("stored-text".to_owned()),
+        NormalizedMapKey::Text("stored-text".into()),
         NormalizedValue::I64(1),
     )]))
     .unwrap();

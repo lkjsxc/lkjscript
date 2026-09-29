@@ -1,0 +1,41 @@
+request base=BASE
+declarations.begin
+(units
+  (use std builtin)
+  (module create map-keys
+    (function create text-versions (visibility private)
+      (parameter create original (type (map Text I64)))
+      (parameter create key (type Text))
+      (returns (list (list (record (key Text) (value I64))))) (effect pure)
+      (body (list (list (record (key Text) (value I64)))
+        (call std::map-entries (types Text I64) (local original))
+        (call std::map-entries (types Text I64)
+          (call std::map-insert (types Text I64) (local original) (local key)
+            (call std::add
+              (call std::map-get-or (types Text I64) (local original) (local key) (i64 -1))
+              (i64 1))))
+        (call std::map-entries (types Text I64)
+          (call std::map-remove (types Text I64) (local original) (local key)))
+        (call std::map-entries (types Text I64) (local original)))))
+    (function create byte-versions (visibility private)
+      (parameter create original (type (map Bytes I64)))
+      (parameter create key (type Bytes))
+      (returns (list (list (record (key Bytes) (value I64))))) (effect pure)
+      (body (list (list (record (key Bytes) (value I64)))
+        (call std::map-entries (types Bytes I64) (local original))
+        (call std::map-entries (types Bytes I64)
+          (call std::map-insert (types Bytes I64) (local original) (local key)
+            (call std::add
+              (call std::map-get-or (types Bytes I64) (local original) (local key) (i64 -1))
+              (i64 1))))
+        (call std::map-entries (types Bytes I64)
+          (call std::map-remove (types Bytes I64) (local original) (local key)))
+        (call std::map-entries (types Bytes I64) (local original)))))
+    (component create console (visibility private)
+      (port create text (type (function ((map Text I64) Text)
+        (list (list (record (key Text) (value I64)))))) (function text-versions))
+      (port create bytes (type (function ((map Bytes I64) Bytes)
+        (list (list (record (key Bytes) (value I64)))))) (function byte-versions))))
+  (target create text (component map-keys::console) (runner command) (port map-keys::console::text))
+  (target create bytes (component map-keys::console) (runner command) (port map-keys::console::bytes)))
+declarations.end

@@ -896,7 +896,7 @@ fn request_value(
         .into_iter()
         .map(|(name, values)| {
             Ok((
-                NormalizedMapKey::Text(name),
+                NormalizedMapKey::Text(name.into()),
                 NormalizedValue::list(values.into_iter().map(NormalizedValue::text).collect())?,
             ))
         })
@@ -1149,7 +1149,7 @@ mod tests {
                         value.as_ref()
                     })
                     .collect::<Vec<_>>();
-                (key.as_str(), values)
+                (key.as_ref(), values)
             })
             .collect::<Vec<_>>();
         assert_eq!(

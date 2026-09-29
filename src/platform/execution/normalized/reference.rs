@@ -3936,15 +3936,7 @@ fn reference_map_intrinsic(
             })?;
             reserve(super::map::Charge {
                 slots: 0,
-                bytes: key
-                    .value_storage_bytes()?
-                    .checked_add(super::value::projected_value_bytes(value)?)
-                    .ok_or_else(|| {
-                        reference_resource(
-                            "normalized_map_storage",
-                            "map projection size overflows",
-                        )
-                    })?,
+                bytes: super::value::projected_value_bytes(value)?,
             })?;
             output.push(reference_structural_record(vec![
                 ("key", key.to_value()),
@@ -3967,10 +3959,7 @@ fn reference_map_intrinsic(
         return Err(reference_type_error("map intrinsic omitted its key"));
     };
     let key_value = super::value::RawValue::new(key_value);
-    reserve(super::map::Charge {
-        slots: 0,
-        bytes: super::value::map_key_buffer_bytes(key_value.raw()),
-    })?;
+    reserve(super::map::Charge::default())?;
     let Some(key) = NormalizedMapKey::from_value(key_value.into_raw()) else {
         return Err(reference_trap(
             "reference_map_key",

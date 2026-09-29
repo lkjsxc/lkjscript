@@ -7,6 +7,10 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[cfg(test)]
+#[path = "map_key_sharing_tests.rs"]
+mod map_key_sharing_tests;
+
 // Current finite value/admission representation, independent of invocation-lifetime quotas.
 pub(crate) const MAXIMUM_VALUE_ALLOCATION_BYTES: u64 = 256 * 1024 * 1024;
 pub(crate) const MAXIMUM_ADMISSION_ITEMS: u64 = 1_000_000;
@@ -213,46 +217,25 @@ impl NormalizedValue {
     }
 }
 
+/// Primitive keys share the same immutable payload as ordinary values. Ordering
+/// and equality compare contents, never allocation identity. Sharing is storage
+/// only: every logical raw-input occurrence still crosses admission independently.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum NormalizedMapKey {
     Bool(bool),
     I64(i64),
-    Bytes(Vec<u8>),
-    Text(String),
+    Bytes(Arc<[u8]>),
+    Text(Arc<str>),
 }
 
 impl NormalizedMapKey {
-    pub(super) fn value_storage_bytes(
-        &self,
-    ) -> Result<u64, crate::platform::execution::ExecutionError> {
-        let length = match self {
-            Self::Bytes(value) => value.len() as u64,
-            Self::Text(value) => value.len() as u64,
-            Self::Bool(_) | Self::I64(_) => return Ok(0),
-        };
-        length
-            .checked_add((2 * std::mem::size_of::<usize>()) as u64)
-            .ok_or_else(|| {
-                crate::platform::execution::ExecutionError::resource(
-                    "normalized_map_storage",
-                    "projected key storage overflows",
-                )
-            })
-    }
-
     pub fn from_value(value: NormalizedValue) -> Option<Self> {
         match value {
             NormalizedValue::Bool(value) => Some(Self::Bool(value)),
             NormalizedValue::I64(value) => Some(Self::I64(value)),
-            NormalizedValue::Bytes(value) => {
-                let key = Self::Bytes(value.to_vec());
-                super::map::key_copied(value.len() as u64);
-                Some(key)
-            }
+            NormalizedValue::Bytes(value) => Some(Self::Bytes(value)),
             NormalizedValue::Text(value) | NormalizedValue::StaticText(value) => {
-                let key = Self::Text(value.to_string());
-                super::map::key_copied(value.len() as u64);
-                Some(key)
+                Some(Self::Text(value))
             }
             value => {
                 release_raw_value(value);
@@ -265,8 +248,8 @@ impl NormalizedMapKey {
         match self {
             Self::Bool(value) => NormalizedValue::Bool(*value),
             Self::I64(value) => NormalizedValue::I64(*value),
-            Self::Bytes(value) => NormalizedValue::Bytes(Arc::from(value.as_slice())),
-            Self::Text(value) => NormalizedValue::Text(Arc::from(value.as_str())),
+            Self::Bytes(value) => NormalizedValue::Bytes(Arc::clone(value)),
+            Self::Text(value) => NormalizedValue::Text(Arc::clone(value)),
         }
     }
 }
@@ -307,15 +290,6 @@ pub(super) fn projected_value_bytes(
     }
 }
 
-/// The one owned key buffer created by `from_value`, before it is allocated.
-pub(super) fn map_key_buffer_bytes(value: &NormalizedValue) -> u64 {
-    match value {
-        NormalizedValue::Bytes(value) => value.len() as u64,
-        NormalizedValue::Text(value) | NormalizedValue::StaticText(value) => value.len() as u64,
-        _ => 0,
-    }
-}
-
 /// Bounded raw-host construction is separate from either evaluator's cumulative
 /// ledger. Raw results still cross that evaluator's complete admission boundary.
 pub(super) fn raw_map_reservation(
@@ -344,9 +318,6 @@ pub(super) struct RawValue(NormalizedValue);
 impl RawValue {
     pub(super) fn new(value: NormalizedValue) -> Self {
         Self(value)
-    }
-    pub(super) fn raw(&self) -> &NormalizedValue {
-        &self.0
     }
     pub(super) fn into_raw(mut self) -> NormalizedValue {
         std::mem::replace(&mut self.0, NormalizedValue::Unit)
