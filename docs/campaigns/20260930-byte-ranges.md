@@ -93,6 +93,31 @@ They are observations, not regenerated historical fixtures.
   original counts and dependencies; the newly expected ten tests are not inferred
   from a passing runtime report.
 
+- **Additional first-full detail:** the separate `release_command_lifecycle` gate
+  also rejected a stale count (actual 86, expected 76). Its failure is preserved
+  alongside the three core-unit failures, not treated as a passed release probe.
+- **Corrected core expectations:** individual reruns of the inventory, validator
+  contract and concurrent dependency tests each passed. Their three `fixed-*.log`
+  files retain the exact outcomes.
+- **Broader native audit:** the public CLI run after the first correction reported
+  163 passed, 7 failed, 1 ignored in 280.90 seconds. Every failure was a remaining
+  pre-addition count: web deployment 117/107, four forms cases 150/140, imported
+  list site 121/111, and fresh guide authoring 101/91. The corresponding exact
+  expectations, downstream form counts and emitted evidence labels were updated.
+  The maintained historical guide graph remains at 79 tests; it was not rewritten.
+  `public-cli-corrected.log` retains this failed intermediate run.
+- **Second full attempt withdrawn:** the final test-only commit overlapped the
+  initial snapshot (the run captured `b2054681` while HEAD advanced to `d0783680`).
+  To avoid using changing-input evidence, only that run's owned release-build
+  process group was interrupted. The harness joined/terminated its owned
+  descendants and returned an infrastructure failure; no running application or
+  unrelated test process was stopped. This is an intentionally abandoned run,
+  not a product failure or acceptance result. It reported 5 fresh passes out of
+  26 selected in 116.301 seconds, receipt
+  `verification_6b1d7e5db9cb8c3484a50e092f8f7e2a7a37cf33b0d38ce8464d093dbfbe1fcf`.
+  The logs and input snapshot remain under
+  `.artifacts/lkjscript-dev/check/1790715235645125868-3318813-0/`.
+
 ## Maintained standard
 
 The request `packages/standard/requests/20260930-byte-ranges.lkjc` was planned and
