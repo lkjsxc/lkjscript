@@ -760,14 +760,17 @@ Borrow preserves caller ownership and permits nested reborrows. Consuming a borr
 forwarding it to a consuming helper, or escaping it through a result/container/closure rejects.
 Ordinary `(type-parameter create T)` and explicit `(types T)` call arguments compose with this
 boundary, including ordinary callbacks/results and nested reborrowing. Every resource and its
-requirement remains concrete; effect/requirement-polymorphic resource helpers still reject.
+requirement remains concrete. `(effect-parameter create E)`, `(parameter E)` in the task
+row, and explicit `(effects (row ...))` applications may describe resource-free task callbacks.
+They cannot replace the explicit resource requirement. Requirement-polymorphic resource
+helpers still reject, as do omitted effect arguments and pure/task callback mismatches.
 Automatic `extract.function` retains its existing nongeneric, consume-only extraction boundary.
 Public helpers can cross exact package boundaries; private/package-visible dependency members
 remain hidden. A forwarding parameter may name the original imported requirement, not a new
 same-name local slot. The consumer port must explicitly include imported authority in its closed
 top-level task row, and deployment must grant it. No authority is inferred from helper bodies.
 Direct and input-file records lower to identical intent. Missing, extra, rebound, interface-
-mismatched, unrestricted, noncontiguous-suffix, consuming-alias, effect/requirement-generic, pure,
+mismatched, unrestricted, noncontiguous-suffix, consuming-alias, requirement-generic, pure,
 indirect, resource-result, and post-consume caller-reuse forms reject before plan publication. Unknown predecessor type/use spellings also reject.
 
 The higher-order slice uses these public spellings: `add.type-parameter` adds one ordered

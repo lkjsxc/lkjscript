@@ -361,9 +361,14 @@ resource-containing function signature reject.
 Such a helper may declare ordinary type parameters. They can describe preceding ordinary
 arguments, resource-free callbacks and the ordinary result; direct calls substitute them through
 the existing explicit rank-one rules. Nested helpers may forward those exact type parameters.
-Every resource interface and requirement remains concrete and exact: effect and requirement
-parameters on a resource-bearing helper are not admitted. An ordinary type application never
-turns a live resource into an unrestricted argument, returned value or retained callable.
+Effect parameters may additionally describe the effects of resource-free task callbacks.
+Every direct application supplies the ordered explicit effect rows, including empty rows;
+nested and recursive helpers may forward in-scope effect parameters. The helper must still
+name each resource's exact concrete requirement explicitly in its task effect. An effect
+argument neither selects nor aliases that resource requirement. Requirement parameters on
+resource-bearing helpers remain unsupported. Ordinary type/effect application never turns a
+live resource into an unrestricted argument, returned value or retained callable. A callback
+with an empty task row remains a task, not an implicit coercion from a pure function.
 Automatic function extraction retains its narrower nongeneric, consume-only boundary.
 
 Affine flow follows ordinary left-to-right evaluation order. A borrow observes one live lexical
@@ -403,9 +408,8 @@ Dropping an unconsumed resource is allowed. A nominal variant may contain one di
 payload: matching consumes the outer owner and makes the payload live only in the selected arm. A
 join retains an owner only when every reachable arm retains the same provenance. Records,
 structural records, lists, maps, options, results, streams, function values, constants, tests, and
-nested nominal values cannot contain a resource. Multiple, nonfinal,
-effect/requirement-generic, indirect, captured, or result-bearing resource
-function forms reject. Partial moves, affine containers, resource polymorphism, resource-capturing closures, async or
+nested nominal values cannot contain a resource. Noncontiguous resource suffixes,
+requirement-generic, indirect, captured, or resource-result-bearing function forms reject. Partial moves, affine containers, resource polymorphism, resource-capturing closures, async or
 detached tasks, and general linear must-use semantics are absent.
 
 Public resource helpers can be imported and called across exact package boundaries. Their

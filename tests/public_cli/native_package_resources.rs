@@ -3,6 +3,8 @@ use fixture::Packages;
 
 #[path = "native_package_resource_admission.rs"]
 mod admission;
+#[path = "native_effect_resources.rs"]
+mod effects;
 #[path = "native_package_resource_failure.rs"]
 mod failure;
 #[path = "native_package_resource_fixture.rs"]
@@ -16,6 +18,67 @@ mod selectors;
 
 const LIBRARY: &str = include_str!("../fixtures/package-resources-library.lkjc");
 const CONSUMER: &str = include_str!("../fixtures/package-resources-consumer.lkjc");
+
+#[test]
+fn native_effect_generic_resources_preserve_detached_callback_authority() {
+    assert_effect_callback_execution(
+        include_str!("../fixtures/effect-resources-library.lkjc"),
+        include_str!("../fixtures/effect-resources-consumer.lkjc"),
+    );
+}
+
+fn assert_effect_callback_execution(library: &str, consumer: &str) {
+    let packages = Packages::stage(library);
+    packages.apply(consumer);
+    let data = packages.detach();
+    let audit = packages.consumer.root.path().join("audit");
+    compact_success_at(
+        &packages.consumer.executable,
+        packages.consumer.root.path(),
+        &["data", "initialize", "--root", path(&audit)],
+    );
+    let deployment = packages
+        .consumer
+        .root
+        .path()
+        .join("generic.deployment.json");
+    for (target, expected) in [
+        ("numbers", serde_json::json!([7, 42, -3])),
+        ("numbers", serde_json::json!([])),
+        ("text", serde_json::json!("日本語 + generic")),
+        ("text", serde_json::json!("absent")),
+    ] {
+        write_deployment(&deployment, target);
+        let mut descriptor: Value =
+            serde_json::from_slice(&std::fs::read(&deployment).unwrap()).unwrap();
+        let mut callback = descriptor["grants"][0].clone();
+        callback["requirement"] = serde_json::json!("audit");
+        callback["adapter"]["root"] = serde_json::json!("audit");
+        descriptor["grants"].as_array_mut().unwrap().push(callback);
+        std::fs::write(&deployment, serde_json::to_vec(&descriptor).unwrap()).unwrap();
+        let result = packages
+            .consumer
+            .cli(&["run", "--deployment", path(&deployment)], true);
+        let execution = compact_record(&result, "execution");
+        assert_eq!(
+            serde_json::from_str::<Value>(compact_field(execution, "value")).unwrap(),
+            expected
+        );
+        let cleanup: Value = serde_json::from_str(compact_field(execution, "cleanup")).unwrap();
+        assert_eq!(cleanup["remaining_tasks"], 0);
+        assert_eq!(cleanup["cleanup_failures"], serde_json::json!([]));
+    }
+    for job in ["numbers", "text"] {
+        assert_completed_job(&read_job(&data, job), job);
+        let bytes = read_job(&audit, job);
+        let mut cursor = job_payload(&bytes);
+        assert_eq!(take(&mut cursor, 8), b"LKJQJOB1");
+        assert_eq!(blob(&mut cursor), job.as_bytes());
+        assert_eq!(blob(&mut cursor), job.as_bytes());
+        assert!(!blob(&mut cursor).is_empty());
+        assert_eq!(take(&mut cursor, 1), [0]); // callback's independent queue remains ready
+    }
+}
 
 #[test]
 fn native_package_resources_preserve_exact_authority_and_detached_execution() {

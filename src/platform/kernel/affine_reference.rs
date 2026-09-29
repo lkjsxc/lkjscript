@@ -540,8 +540,7 @@ impl Reference<'_> {
                         &function.parameters,
                         function.result,
                         &function.effect,
-                        !function.effect_parameters.is_empty()
-                            || !function.requirement_parameters.is_empty(),
+                        !function.requirement_parameters.is_empty(),
                     ),
                     DeclarationPayload::External(signature) => {
                         self.external_parameters(reference.package, &signature.parameters)?;
@@ -561,8 +560,7 @@ impl Reference<'_> {
                         &signature.parameters,
                         signature.result,
                         &signature.effect,
-                        !signature.effect_parameters.is_empty()
-                            || !signature.requirement_parameters.is_empty(),
+                        !signature.requirement_parameters.is_empty(),
                     ),
                     PackageInterfaceDeclarationPayload::External(signature) => {
                         self.external_parameters(reference.package, &signature.parameters)?;
@@ -1713,6 +1711,21 @@ fn type_generic_borrow_reference_preserves_the_independent_rejection_boundary() 
     check_scoped_borrow_reference(true);
 }
 
+#[test]
+fn effect_generic_resource_reference_preserves_independent_rejection_boundaries() {
+    for nonempty in [false, true] {
+        for nested in [false, true] {
+            for visibility in [
+                DeclarationVisibility::Private,
+                DeclarationVisibility::Package,
+                DeclarationVisibility::Public,
+            ] {
+                check_scoped_borrow_visibility(true, nested, visibility, Some(nonempty));
+            }
+        }
+    }
+}
+
 fn check_scoped_borrow_reference(generic: bool) {
     for nested in [false, true] {
         for visibility in [
@@ -1720,12 +1733,17 @@ fn check_scoped_borrow_reference(generic: bool) {
             DeclarationVisibility::Package,
             DeclarationVisibility::Public,
         ] {
-            check_scoped_borrow_visibility(generic, nested, visibility);
+            check_scoped_borrow_visibility(generic, nested, visibility, None);
         }
     }
 }
 
-fn check_scoped_borrow_visibility(generic: bool, nested: bool, visibility: DeclarationVisibility) {
+fn check_scoped_borrow_visibility(
+    generic: bool,
+    nested: bool,
+    visibility: DeclarationVisibility,
+    effects: Option<bool>,
+) {
     let mut snapshot = if generic {
         crate::platform::execution::normalized::tests::iteration_resource_tests::type_generic_borrowed_snapshot(nested)
     } else {
@@ -1733,6 +1751,9 @@ fn check_scoped_borrow_visibility(generic: bool, nested: bool, visibility: Decla
             nested,
         )
     };
+    if let Some(nonempty) = effects {
+        crate::platform::execution::normalized::tests::iteration_resource_tests::effect_resource_tests::generalize(&mut snapshot, nonempty);
+    }
     let parameter = snapshot
         .owners
         .iter()

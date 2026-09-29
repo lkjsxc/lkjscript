@@ -44,10 +44,13 @@ final suffix of borrowed/consumed resources, each retaining exact concrete autho
 Repeated borrows may share an owner; any consuming alias in one helper call rejects.
 Native two-queue and imported-library workloads retain this boundary through
 ordinary generics, recursion, detached execution and independent persisted effects.
-Effect/requirement-polymorphic resource transfer, resource returns and general
-memory references remain open. These are implementation increments toward the
-coordinated slice, not substitutes
-for its region/trait/ownership design or evidence of zero-copy payload processing.
+The [effect-callback continuation](campaigns/20260929-effect-resource-callbacks.md)
+allows resource-free task callbacks to carry explicit effect parameters through exact-resource
+helpers. Callback effects and resource authority remain separate: the resource binding stays
+concrete, including across recursive/package calls and repeated-borrow suffixes. Requirement-
+polymorphic resource transfer, resource returns and general memory references remain open.
+These are implementation increments toward the coordinated slice, not substitutes for its
+region/trait/ownership design or evidence of zero-copy payload processing.
 
 Choose a compact contract for a transferable owned region/buffer, a scoped read
 view and a typed callable or trait implementation. Specify creation, borrowing,

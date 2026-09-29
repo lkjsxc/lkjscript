@@ -7,10 +7,10 @@ fn native_type_generic_resources_reject_escaping_or_rebound_authority_without_pu
     let inventory = content_inventory(&public.project);
     for (name, old, replacement, expected) in [
         (
-            "effect-parameter",
+            "missing-effect-argument",
             "(type-parameter create T)",
             "(type-parameter create T) (effect-parameter create E)",
-            "kernel_affine_function_resource_generic",
+            "kernel_effect_argument_count",
         ),
         (
             "requirement-parameter",

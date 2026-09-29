@@ -1676,13 +1676,11 @@ impl FullValidator<'_> {
                                     ),
                                 );
                             }
-                            if !function.effect_parameters.is_empty()
-                                || !function.requirement_parameters.is_empty()
-                            {
+                            if !function.requirement_parameters.is_empty() {
                                 self.error(
                                     "kernel_affine_function_resource_generic",
                                     format!(
-                                        "resource-bearing function declaration {owner:?} cannot have effect or requirement parameters"
+                                        "resource-bearing function declaration {owner:?} cannot have requirement parameters"
                                     ),
                                 );
                             }

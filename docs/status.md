@@ -9,7 +9,7 @@ type/ownership/effect composition, region-based memory research and a shared run
 The exact-code shared service host and scoped capability borrowing are public.
 Ordinary generic composition is public in v0.1.55. Recursive helpers and exact
 cross-package resource contracts, exact deployment grant selectors and multi-resource
-parameter suffixes are development
+parameter suffixes and effect-generic resource callbacks are development
 capabilities below; none is supplied by that public executable.
 Advanced ownership/trait and region-memory work remains a research selection,
 not a capability conferred by a roadmap or by sharing existing prepared code.
@@ -28,6 +28,22 @@ The earlier immutable releases and genuinely failed/withheld candidates remain u
 Inspect the actual installed executable with `lkjscript capabilities`. Installing
 a newer runtime does not silently replace accepted application definitions,
 exact dependency selections, running processes or operational data.
+
+## Development v0.1.60: effect-generic resource callbacks
+
+Exact-resource helpers may declare effect parameters for resource-free task callbacks,
+while every borrowed/consumed resource retains an explicit concrete requirement. Explicit
+empty and nonempty effect applications compose with ordinary generics, recursive/public
+forwarders and repeated-borrow suffixes. A callback effect cannot replace the resource
+binding; requirement-polymorphic resource signatures and escaping views remain unsupported.
+
+The [literal library](../tests/fixtures/effect-resources-library.lkjc),
+[consumer](../tests/fixtures/effect-resources-consumer.lkjc) and
+[guide](guides/native-resources.md#effectful-callbacks-without-rebinding-resources) describe
+normal authoring and detached execution. The
+[campaign](campaigns/20260929-effect-resource-callbacks.md) separates focused observations,
+complete source acceptance and delivery. This source extension does not publish v0.1.60,
+replace running applications or establish general memory borrowing or zero-copy execution.
 
 ## Development v0.1.59: terminal ordinary-value transfers
 

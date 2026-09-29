@@ -1,6 +1,6 @@
-# Ordinary generics with scoped capability resources
+# Type and effect generics with scoped capability resources
 
-This guide describes development **v0.1.59**. Check [current availability](../status.md)
+This guide describes development **v0.1.60**. Check [current availability](../status.md)
 before selecting an executable; an older public runtime does not gain these
 semantics by reading this document.
 
@@ -131,11 +131,46 @@ The first detached `pair` invocation returns `[7, 42, -3]`, and its repeat retur
 result to equal its original payload. This is synchronous composition, not a
 transaction across queues: failure after one external completion cannot undo it.
 
+## Effectful callbacks without rebinding resources
+
+The [effect-generic library](../../tests/fixtures/effect-resources-library.lkjc)
+accepts a task callback while retaining the concrete queue authority:
+
+```text
+(type-parameter create T)
+(effect-parameter create E)
+(parameter create decode (type (task-function (Bytes) T (row (parameter E)))))
+(parameter create lease (type (resource std::DurableQueue))
+  (use borrow) (requirement queue::jobs))
+(returns T)
+(effect (task (requirement queue::jobs) (parameter E)))
+```
+
+These are signature clauses, not a complete request. The
+[consumer](../../tests/fixtures/effect-resources-consumer.lkjc) explicitly supplies
+`(effects (row (requirement app::audit)))`. Its decoder writes to an independently
+granted audit queue; `lib::queue::jobs` remains the authority of the borrowed or
+consumed job. Recursive and public forwarding helpers pass `(row (parameter E))`
+without inventing a resource alias. Both obligations appear in the entry port and
+need deployment grants. A missing callback grant rejects before either queue changes.
+
+The callbacks and their results remain resource-free. They cannot capture the
+borrowed lease, consume it through E, or turn the resource helper into a function
+value. Empty effect rows are admitted explicitly, but an empty-row task callback
+is not interchangeable with a pure function.
+
+The [native cases](../../tests/public_cli/native_effect_resources.rs) preserve
+canonical draft re-entry, exact package transport, repeated-borrow suffixes and
+detached execution. They distinguish failure during a borrow from failure in a
+callback after the consuming helper has completed the job: the former leaves the
+claim leased, while the latter preserves the completion. A prior audit write stays
+observable in both cases. Cleanup does not roll back or replay external effects.
+
 ## Deliberate limits
 
 Resource parameters form a final suffix with exact concrete authority and a
 direct call admitted by the normal package visibility rules. Ordinary arguments,
-callbacks and results must remain resource-free. Effect/requirement-polymorphic
+callbacks and results must remain resource-free. Requirement-polymorphic
 resource signatures, escaping views, indirect resource calls and asynchronous
 borrowing are not supported. Automatic function extraction retains
 its narrower nongeneric, consume-only eligibility.

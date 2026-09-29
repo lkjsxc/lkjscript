@@ -388,6 +388,20 @@ already committed claim observable without inventing completion or rollback; an 
 ready job must remain executable without rewriting that claim. Extraction's narrower eligibility
 is tested separately.
 
+Effect-generic exact-resource helpers additionally require explicit empty and nonempty
+applications across local, nested and package boundaries. The native witness must invoke a
+real effectful callback with independently granted authority, not only declare an unused
+effect parameter. Ordinary type substitution, repeated shared-borrow suffixes, recursive
+forwarding, final consumption and canonical draft/transport must compose. Missing effect
+arguments, callback type mismatches, implicit/rebound resource requirements, borrowed-owner
+consumption and retained resource callables must reject without publishing a plan. Missing
+callback grants reject before either durable root changes. Borrow-time and post-consumption
+callback failures preserve distinct durable states and prior callback effects; neither permits
+an implicit retry, completion or rollback. VM/reference resource-budget and cancellation checks
+retain a separately scripted effect sequence and joined local cleanup. Rehashed artifacts
+must reject erased/foreign effect parameters, changed symbolic rows and changed concrete
+authority as well as ordinary generic and resource-parameter mutations.
+
 Recursive resource helpers additionally require accepted direct and mutual call
 cycles with both borrowed and consumed final owners. Legal cyclic contracts must
 be distinguished from cyclic bodies that duplicate a moved owner, consume a view,

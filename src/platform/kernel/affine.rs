@@ -1527,11 +1527,14 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
         if resources.is_empty() {
             return Ok(resources);
         }
-        if !function.effect_parameters.is_empty() || !function.requirement_parameters.is_empty() {
+        // Effect variables describe callback authority; they do not rebind the
+        // concrete requirement carried by any resource. Ordinary effect closure
+        // still validates every application and each activation's allowance.
+        if !function.requirement_parameters.is_empty() {
             return Err(owner_affine_error(
                 "kernel_affine_function_resource_generic",
                 owner,
-                "resource-bearing task function cannot have effect or requirement parameters",
+                "resource-bearing task function cannot have requirement parameters",
             ));
         }
         if self.type_contains_resource(function.result)? {

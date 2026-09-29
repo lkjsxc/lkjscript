@@ -1202,6 +1202,8 @@ pub(crate) enum RuntimeOwnerExpectation {
     },
     ResourceFunction {
         type_parameters: Vec<TypeParameterId>,
+        effect_parameters: Vec<crate::platform::semantic_id::EffectParameterId>,
+        effect: FunctionEffect,
         parameters: Vec<ParameterId>,
         result: TypeObjectDigest,
         requirements: Vec<RequirementReference>,
@@ -1328,6 +1330,8 @@ impl RuntimeOwnerExpectation {
             (
                 Self::ResourceFunction {
                     type_parameters,
+                    effect_parameters,
+                    effect,
                     parameters,
                     result,
                     requirements,
@@ -1337,7 +1341,10 @@ impl RuntimeOwnerExpectation {
                 matches!(
                     &record.payload,
                     DeclarationPayload::Function(function)
-                    if function.type_parameters == *type_parameters && function.effect_parameters.is_empty() && function.requirement_parameters.is_empty()
+                    if function.type_parameters == *type_parameters
+                        && function.effect_parameters == *effect_parameters
+                        && function.effect == *effect
+                        && function.requirement_parameters.is_empty()
                         && function.parameters == *parameters
                         && function.result == *result
                         && matches!(
@@ -1692,6 +1699,8 @@ pub(crate) fn runtime_owner_expectations(
                         (*package, OwnerKey::Declaration(declaration)),
                         RuntimeOwnerExpectation::ResourceFunction {
                             type_parameters: signature.type_parameters.clone(),
+                            effect_parameters: signature.effect_parameters.clone(),
+                            effect: signature.effect.clone(),
                             parameters,
                             result,
                             requirements,

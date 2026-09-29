@@ -4107,19 +4107,19 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_affine_function_parameter_container",
             DiagnosticClass::Semantic,
             "A function parameter contains capability authority indirectly.",
-            "Use one direct final capability-resource parameter or remove the resource container.",
+            "Use direct capability-resource parameters in a final suffix or remove the resource container.",
         ),
         diagnostic(
             "kernel_affine_function_parameter_use",
             DiagnosticClass::Semantic,
             "A function parameter uses an unsupported affine mode.",
-            "Use unrestricted for ordinary values and borrow or consume for the one direct final resource parameter.",
+            "Use unrestricted for ordinary values and borrow or consume for each resource parameter in the final suffix.",
         ),
         diagnostic(
             "kernel_affine_parameter_requirement_extra",
             DiagnosticClass::Semantic,
             "A nonresource or operation parameter declares a resource requirement binding.",
-            "Omit requirement except on one direct borrow/consume resource parameter of a private task function.",
+            "Omit requirement except on direct borrow/consume resource parameters of a graph-authored task function.",
         ),
         diagnostic(
             "kernel_affine_function_resource_use",
@@ -4148,8 +4148,8 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "kernel_affine_function_resource_generic",
             DiagnosticClass::Semantic,
-            "A resource-bearing function has effect or requirement parameters.",
-            "Bind exact concrete authority; ordinary type parameters remain supported.",
+            "A resource-bearing function has requirement parameters.",
+            "Bind exact concrete resource authority; ordinary type parameters and explicit callback effect parameters remain supported.",
         ),
         diagnostic(
             "kernel_affine_function_resource_effect",

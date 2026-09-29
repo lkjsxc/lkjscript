@@ -1547,8 +1547,10 @@ fn validate_normalized_resource_signature(
                 "task requirement escaped the prepared table",
             )
         })?;
-    if !function.effect_parameters.is_empty()
-        || !function.requirement_parameters.is_empty()
+    // Effect parameters are admitted by the exact canonical/compiled signature
+    // comparison and existing closed-application preparation. Resource bindings
+    // remain concrete; an effect argument never selects their authority.
+    if !function.requirement_parameters.is_empty()
         || function.type_parameters != type_parameters
         || function.parameters != parameter_ids
         || function.result != result

@@ -3,6 +3,8 @@ use super::*;
 use crate::platform::kernel::{BindingKind, BindingRecord, OperationReference, ParameterUse};
 use crate::platform::semantic_id::BindingId;
 
+#[path = "effect_resource_tests.rs"]
+pub(crate) mod effect_resource_tests;
 #[path = "generic_resource_fixture.rs"]
 mod generic_resource_fixture;
 #[path = "recursive_resource_tests.rs"]
@@ -677,6 +679,10 @@ fn type_generic_scoped_borrow_preserves_values_ownership_and_failure_cleanup() {
 }
 
 fn check_scoped_borrow(generic: bool) {
+    check_scoped_borrow_with_effects(generic, None);
+}
+
+fn check_scoped_borrow_with_effects(generic: bool, effects: Option<bool>) {
     for mode in [
         "borrow",
         "borrow-tail",
@@ -688,7 +694,11 @@ fn check_scoped_borrow(generic: bool) {
         } else {
             mode.to_owned()
         };
-        let (snapshot, program) = fixture(&selected);
+        let (mut snapshot, mut program) = fixture(&selected);
+        if let Some(nonempty) = effects {
+            effect_resource_tests::generalize(&mut snapshot, nonempty);
+            program = prepare_snapshot(&snapshot);
+        }
         let target = program.root_target(&Name::new("command").unwrap()).unwrap();
         let req = &program.requirements
             [program.components[target.component.0 as usize].requirements[0].0 as usize];

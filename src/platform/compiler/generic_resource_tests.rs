@@ -8,6 +8,14 @@ fn resource_suffix_artifact_checks_every_parameter_after_rehashing() {
 }
 
 #[test]
+fn effect_generic_resource_artifact_rechecks_exact_effects_after_rehashing() {
+    for nonempty in [false, true] {
+        let snapshot = crate::platform::execution::normalized::tests::iteration_resource_tests::effect_resource_tests::snapshot(true, nonempty);
+        check_resource_artifact(snapshot);
+    }
+}
+
+#[test]
 fn type_generic_resource_artifact_preserves_exact_signature_and_authority() {
     let snapshot = crate::platform::execution::normalized::tests::iteration_resource_tests::type_generic_borrowed_snapshot(true);
     check_resource_artifact(snapshot);
@@ -80,7 +88,14 @@ fn check_resource_artifact(snapshot: KernelSnapshot) {
         .collect::<Vec<_>>();
     assert_eq!(functions.len(), 2);
     for (package, index) in functions {
-        for fault in ["erased", "foreign"] {
+        for fault in [
+            "erased",
+            "foreign",
+            "effect-erased",
+            "effect-foreign",
+            "effect-row",
+            "effect-authority",
+        ] {
             let mut manifest = loaded.manifest.clone();
             let mut objects = loaded.objects.clone();
             let binding = &mut manifest.packages[package].runtime_owners[index];
@@ -95,7 +110,46 @@ fn check_resource_artifact(snapshot: KernelSnapshot) {
                 panic!("resource function")
             };
             assert_eq!(function.type_parameters.len(), 1);
-            if fault == "erased" {
+            if fault.starts_with("effect-") {
+                if function.effect_parameters.is_empty() {
+                    continue;
+                }
+                match fault {
+                    "effect-erased" => function.effect_parameters.clear(),
+                    "effect-foreign" => {
+                        let own = function.effect_parameters[0];
+                        let foreign = loaded.manifest.packages[package]
+                            .runtime_owners
+                            .iter()
+                            .find_map(|candidate| match candidate.owner {
+                                OwnerKey::EffectParameter(parameter) if parameter != own => {
+                                    Some(parameter)
+                                }
+                                _ => None,
+                            })
+                            .unwrap();
+                        function.effect_parameters = vec![foreign];
+                    }
+                    "effect-row" => {
+                        let crate::platform::kernel::FunctionEffect::Task {
+                            effect_parameters, ..
+                        } = &mut function.effect
+                        else {
+                            unreachable!()
+                        };
+                        effect_parameters.clear();
+                    }
+                    "effect-authority" => {
+                        let crate::platform::kernel::FunctionEffect::Task { requirements, .. } =
+                            &mut function.effect
+                        else {
+                            unreachable!()
+                        };
+                        requirements.clear();
+                    }
+                    _ => unreachable!(),
+                }
+            } else if fault == "erased" {
                 function.type_parameters.clear();
             } else {
                 let own = function.type_parameters[0];

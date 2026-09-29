@@ -144,7 +144,7 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 27] = [
     },
     ValidatorFeatureDescriptor {
         name: "affine_capability_resources",
-        version: 7,
+        version: 8,
     },
     ValidatorFeatureDescriptor {
         name: "structured_session_relations",
