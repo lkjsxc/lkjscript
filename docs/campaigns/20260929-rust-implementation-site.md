@@ -100,3 +100,32 @@ all 8 site library tests plus its CLI test passed. Logs are `selection-after.log
 The first site invocation piped output to a terminal-owned `tee` and retained only
 incomplete compilation output; it is not acceptance evidence. The later direct-log
 invocation above completed. Formatting and staged/unstaged whitespace checks passed.
+
+## Continuation: initial aggregate failure and current-main integration
+
+The first aggregate run did finish, but **failed**: 21 of 26 gates passed fresh,
+with stable source inputs, at source `74bccdef22f587eb0a71e3abb14b0d8e2c1fb0ad`.
+The original receipt is
+`.artifacts/lkjscript-dev/check/1790649836244123742-790315-0/receipt.json`.
+The invoker was mistakenly the `--profile test` verifier at `target/debug`:
+its 609,826,528 bytes exceeded the 402,653,184-byte admission bound. Distributed
+HTTP, outbound HTTP, offline packages, pure-tail and stateful HTTP therefore
+rejected the verifier before exercising their workloads. Workspace tests, Clippy,
+release compilation and the other selected gates passed. Neither the size bound
+nor the failed receipt is changed to convert these failures into successes.
+
+During the interruption, parallel language work advanced main to
+`98b3c1f59701e151a77acf5473ae856a8dffb7aa`, including the accepted v0.1.59
+multiple-resource suffix implementation. A normal merge into this isolated
+worktree incorporated that complete history without conflicts. The new aggregate
+must use the maintained release verifier built for the merged source, not the
+oversized test-profile executable or an old source label. The original shared
+checkout remains separate and no unpublished work there is selected for staging.
+
+## Reconciled verification source
+
+A remote refresh found the independent merge `2e72b478` after the shared-checkout
+merge `fc4661e2` had been prepared. A second ordinary merge retains both histories
+and both append-only observations above. The only conflict was their adjacent
+campaign text; no product implementation conflicted or was discarded. Subsequent
+full verification uses the resulting merged source and its release-profile checker.
