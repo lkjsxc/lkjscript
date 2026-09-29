@@ -123,7 +123,7 @@ fn native_literal_edit_keeps_review_identity_and_old_and_new_detached_web_snapsh
     );
     let check = public.cli(&["check"], true);
     let tests = compact_record(&check, "tests");
-    assert_eq!(compact_field(tests, "passed"), "107");
+    assert_eq!(compact_field(tests, "passed"), "117");
     assert_eq!(compact_field(tests, "failed"), "0");
     assert_eq!(compact_field(tests, "differential"), "equal");
     let after = public.root.path().join("after.lkja");
@@ -158,7 +158,7 @@ fn native_literal_edit_keeps_review_identity_and_old_and_new_detached_web_snapsh
     assert!(!public.project.exists());
     assert_eq!(std::fs::read(&before).unwrap(), before_bytes);
     eprintln!(
-        "native literal web proof: plan_bytes={} created=0 updated=1 deleted=0 retirements=0 graph_tests=107 differential=equal detached_snapshots=2",
+        "native literal web proof: plan_bytes={} created=0 updated=1 deleted=0 retirements=0 graph_tests=117 differential=equal detached_snapshots=2",
         complete_bytes.len()
     );
 }

@@ -67,6 +67,32 @@ They are observations, not regenerated historical fixtures.
 - **Generated reference:** `capabilities --generate-docs docs/generated` completed
   using the rebuilt executable with the new exact embedded standard.
 
+- **Retained optimized executable:** all three native integration tests also passed
+  in 25.05 seconds against the copied release-profile v0.1.61 executable, from
+  `/tmp` with an empty environment/PATH. Its capability digest is
+  `42e79f7e666ec665c523fb265fdd729fca14c425ffe40cfb6710d2e6b75faf04`.
+  `installed-native.log` records the run; a byte comparison confirmed that the
+  retained executable is the release build used for this source.
+- **Two-way predecessor boundary:** the retained entry v0.1.60 executable refused
+  the new standard transport with `intrinsic_unknown` for `core.bytes.copy`, exit 2,
+  without changing the receiving HEAD. Conversely, a command project authored by
+  that v0.1.60 executable passed all 76 tests in the v0.1.61 runtime with equal
+  evaluators and unchanged HEAD; its old exact standard was not implicitly upgraded.
+  See `predecessor-stage.log` and `old-command-new-runtime.log`.
+- **First fresh full run:** source `2b2b5743d2b3fac3bfdd4fb86bdedf04da69d816`,
+  tree `dee6c903a02fd1c1e07d42aa88365a2020c50df6`, failed after 597.586 seconds:
+  6 fresh gates passed of 26 selected. Core tests reported 946 passed, 3 failed,
+  8 ignored. The three failures were fixed pre-addition expectations: standard
+  inventory 1,454 rather than 1,558, tests 75 rather than 85, and the preceding
+  closed-signature validator digest. The exact assertions were updated, not removed.
+  The failed receipt is retained at
+  `.artifacts/lkjscript-dev/check/1790713995944561729-3265302-0/receipt.json`,
+  digest `verification_1e7d9ee8cfbd5b1b9b29794fb5748f080b3ddc79d4ed7d98c293f282da8799f1`.
+  A follow-up audit updated current-standard contributions in fresh native web,
+  policy, command, text and package probes. Fixed historical fixtures retain their
+  original counts and dependencies; the newly expected ten tests are not inferred
+  from a passing runtime report.
+
 ## Maintained standard
 
 The request `packages/standard/requests/20260930-byte-ranges.lkjc` was planned and

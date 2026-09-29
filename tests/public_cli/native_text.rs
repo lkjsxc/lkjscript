@@ -15,8 +15,8 @@ fn author() -> Native {
     let check = public.cli(&["check"], true);
     assert_eq!(
         compact_field(compact_record(&check, "tests"), "passed"),
-        // Current standard 75 + command starter 1 + two native join tests.
-        "78"
+        // Current standard 85 + command starter 1 + two native join tests.
+        "88"
     );
     assert_eq!(
         compact_field(compact_record(&check, "tests"), "differential"),

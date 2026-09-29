@@ -43,14 +43,27 @@ fn witness_contract_domains_are_closed_and_unique() {
             .map(|feature| feature.version),
         Some(9)
     );
+    // Byte range/copy signatures extend the closed contract independently of
+    // affine resource rules. Neither predecessor certificate is reusable.
+    assert_eq!(
+        contract::VALIDATOR_FEATURES
+            .iter()
+            .find(|feature| feature.name == "closed_external_signatures")
+            .map(|feature| feature.version),
+        Some(4)
+    );
     let digest = contract::validator_contract_digest().to_string();
+    assert_ne!(
+        digest,
+        "validator_contract_acb29f7085474c4d7be4f9b74b21c13a52da78973379612f79f56552064938c7"
+    );
     assert_ne!(
         digest,
         "validator_contract_a8f4f286f668895a3c2f2d712352fe1a382e6d602ad6d4e93f0a74c1c9f13d78"
     );
     assert_eq!(
         digest,
-        "validator_contract_acb29f7085474c4d7be4f9b74b21c13a52da78973379612f79f56552064938c7"
+        "validator_contract_23773abace3e7235f6f4dd9917ddc197fee1b60ff4e2733f32da88b330fcf9d3"
     );
 }
 
