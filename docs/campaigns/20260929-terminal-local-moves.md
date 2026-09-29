@@ -118,3 +118,57 @@ costs. Local-read counts and this physical identity witness do not establish a
 throughput percentage. Future work should measure real application allocation and
 retention, then compare broader ownership and memory-region designs without treating
 this optimization as their semantic foundation.
+
+## Observed final source acceptance
+
+Tested implementation source: `30e0455b40bf5cdcc983362f9d80c48a248eac7d`;
+tree: `77065cd6f4f99bf0a0faa7d91c07b9ac530262aa`. All preceding catalog changes
+were included. Tracked inputs were unchanged throughout acceptance; the two
+unrelated untracked files remained untouched.
+
+The final strengthened focused suite passed **8/8**, including all 65 boxed-payload
+identities and the weak-sharing capacity rejection. Workspace/all-target Clippy
+with `-D warnings` passed. The full profile subsequently passed **26/26 fresh**,
+with **0 reused gate results**, no unrun selected gates, `fresh_required=true` and
+`input_stable=true`, in 1066.132403064 seconds. Fresh gate execution does not mean
+turning off the language's existing valid compilation caches.
+
+Original full receipt:
+`.artifacts/lkjscript-dev/check/1790668395069762752-1574060-0/receipt.json`.
+Initial and final worktree input identity both equal
+`verification_be313db016e2e6577b5195c8960e6d4e54e5226bfb89689962b0c35bb6b9fc26`.
+The receipt records this implementation source, each selected gate and its fresh
+execution. The final reporting update changes only this campaign, not product code,
+tests, maintained packages, generated artifacts or the embedded site catalog.
+
+Coverage includes the complete selected workspace gate, copied release command
+lifecycle, distributed/outbound/stateful HTTP, offline packages, pure tail execution,
+service acceptance, native package checks and unchanged artifact/package/transport
+comparisons. Standard native tests passed 75/75 with independent differential equality.
+The workspace's top-level Cargo summaries report 896 library tests, 159 public CLI
+tests, 12 structural CLI tests, 191 developer-tool tests and 8+1 site tests passed,
+plus the data-admission/data-scan/general-service suites (10/7/9), with no failures.
+The existing **29 ignored registrations** were not converted into blanket passes:
+these include controlled subprocess fixtures invoked by their owning tests/gates,
+one-time predecessor/staging tools and opt-in release-scale cases. No blanket
+`--ignored` or historical acquisition campaign was run.
+
+The final optimized product was retained separately at
+`.artifacts/terminal-local-moves-30e0455b/lkjscript`. Its SHA-256 is
+`b9d25b51681114bd10eb8dbe1b6e3b3735c47367197bb6eed55dc693c9b4a705`, matching
+the full profile's distributed/outbound/stateful HTTP candidate and a final bytewise
+comparison with `target/release/lkjscript`. This identifies tested bytes; it is not a
+behavioral proof by itself.
+
+The release-profile test harness `target/release/deps/public_cli-fda763dc88137e48`
+ran the exact new public case with `LKJSCRIPT_RELEASE_CANDIDATE` naming that retained
+absolute binary path. It passed **1/1** (all **16** designed invocations), no failures
+or ignored matching tests, in 5.52 seconds. The original output is
+`/tmp/lkjscript-local-moves-optimized-public.log`. This timing is not a controlled
+throughput comparison. The test again copied the product into its private temporary
+root, cleared its environment/PATH, and exercised canonical authoring plus detached
+artifact execution after owned-source removal.
+
+No release tag, GitHub Actions run, running-service replacement, domain or access
+control change was initiated. Mainline integration uses normal Git history; the
+last branch refresh still reported the expected predecessor and no protection.
