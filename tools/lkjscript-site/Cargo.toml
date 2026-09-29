@@ -1,0 +1,25 @@
+[package]
+name = "lkjscript-site"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio", "query"] }
+pulldown-cmark = { version = "0.13.4", default-features = false, features = ["html"] }
+serde = { version = "1.0.228", default-features = false, features = ["derive", "std"] }
+tokio = { version = "1.53.1", default-features = false, features = ["macros", "net", "rt-multi-thread", "signal"] }
+
+[dev-dependencies]
+tower = { version = "0.5.3", default-features = false, features = ["util"] }
+
+[lints.clippy]
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+unwrap_used = "deny"
+
+[lints.rust]
+unsafe_code = "forbid"

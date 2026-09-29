@@ -2,6 +2,7 @@ mod executable;
 #[cfg(test)]
 #[path = "snapshot/tests.rs"]
 mod selection_tests;
+mod site_inputs;
 
 use super::model::{
     ExecutableProof, InputEntry, InputSnapshot, InputSource, PlatformIdentity, RuntimeIdentity,
@@ -260,6 +261,10 @@ pub(crate) fn changed_profile(repository: &Path) -> Result<Vec<String>, DevError
             || path.starts_with("tools/lkjscript-dev/src/lib")
         {
             widen_full = true;
+        } else if site_inputs::embeds(&path) {
+            // Published Markdown is executable input to the Rust site. Reuse the
+            // existing workspace obligation rather than duplicating its tests.
+            selected.insert("workspace_tests".to_owned());
         } else if path.starts_with("docs/")
             || path.starts_with("prompts/")
             || matches!(path.as_str(), "README.md" | "AGENTS.md")

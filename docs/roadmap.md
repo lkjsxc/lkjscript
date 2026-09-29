@@ -164,9 +164,13 @@ and program revision history. Study SSD locality, paging/prefetch, batching and
 bounded caches on concrete data workloads rather than promising disk-backed RAM.
 Do not introduce an external database as the required engine.
 
-Advance native libraries/tooling, then compiler/runtime self-hosting toward eventual
-Rust removal. This is a genuine horizon, not a language-percentage acceptance metric.
-Other-language compatibility and external user acquisition remain low priorities.
+Advance native libraries as language consumers while implementing the compiler,
+runtime and contributor tools in Rust under the amended [owner direction](direction.md).
+The 2026-09-29 Rust selection supersedes the earlier implementation self-hosting and
+Rust-removal goal. Replace remaining interpreted tool boundaries only when a tested
+Rust owner preserves their behavior; do not delete language fixtures or historical
+evidence to change a language-percentage statistic. Other-language compatibility
+and external user acquisition remain low priorities.
 
 ## Acceptance and measurement
 

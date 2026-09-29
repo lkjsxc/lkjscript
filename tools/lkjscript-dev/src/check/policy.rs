@@ -73,17 +73,17 @@ fn inspect_paths(repository: &Path, paths: &[String]) -> Result<Vec<Violation>, 
                     .unwrap_or_default()
             })
             .collect::<Vec<_>>();
-        let python_files = native::extensions(&extensions)?;
+        let python_files = native::extensions(&extensions);
         let mut prefixes = Vec::with_capacity(batch.len());
         for (path, python_file) in validated.iter().zip(&python_files) {
-            // Native extension decisions retain precedence, even for missing files or links.
+            // Extension decisions retain precedence, even for missing files or links.
             prefixes.push(if *python_file {
                 Vec::new()
             } else {
                 observe_prefix(&repository.join(path))?
             });
         }
-        let python_shebangs = native::shebangs(&prefixes)?;
+        let python_shebangs = native::shebangs(&prefixes);
         for ((relative, python_file), python_shebang) in
             batch.iter().zip(python_files).zip(python_shebangs)
         {

@@ -1,5 +1,5 @@
-//! Changed-profile coverage for ordinary native program inputs.
-use super::{changed_profile, checked_bytes};
+//! Changed-profile coverage for native programs and embedded Rust-site documents.
+use super::{changed_profile, checked_bytes, site_inputs};
 use crate::check::registry;
 use std::collections::BTreeSet;
 use std::fs;
@@ -106,13 +106,73 @@ fn native_example_renames_select_both_source_and_destination() {
 }
 
 #[test]
+fn embedded_document_selects_execution_tests() {
+    let root = tracked("docs/status.md");
+    write(
+        root.path(),
+        "docs/status.md",
+        b"changed embedded document\n",
+    );
+    let selected = changed_profile(root.path()).unwrap();
+    assert!(
+        selected.iter().any(|gate| gate == "workspace_tests"),
+        "embedded document omitted execution coverage: {selected:?}"
+    );
+}
+
+#[test]
+fn every_published_document_selects_execution_for_all_git_states() {
+    assert!(!site_inputs::PATHS.is_empty());
+    for path in site_inputs::PATHS {
+        for state in ["untracked", "modified", "staged", "deleted"] {
+            let root = if state == "untracked" {
+                fixture()
+            } else {
+                tracked(path)
+            };
+            if state == "deleted" {
+                fs::remove_file(root.path().join(path)).unwrap();
+            } else {
+                write(root.path(), path, b"changed embedded document\n");
+                if state == "staged" {
+                    git(root.path(), &["add", "--", path]);
+                }
+            }
+            let selected = changed_profile(root.path()).unwrap();
+            assert!(
+                selected.iter().any(|gate| gate == "workspace_tests"),
+                "{path}: {state}: {selected:?}"
+            );
+            assert_ne!(selected, registry::profile("full").unwrap());
+        }
+    }
+}
+
+#[test]
+fn embedded_document_renames_select_both_source_and_destination() {
+    let document = "docs/status.md";
+    let historical = "docs/campaigns/moved-status.md";
+    for (from, to) in [(document, historical), (historical, document)] {
+        let root = tracked(from);
+        fs::create_dir_all(root.path().join(to).parent().unwrap()).unwrap();
+        git(root.path(), &["mv", "--", from, to]);
+        let selected = changed_profile(root.path()).unwrap();
+        assert!(
+            selected.iter().any(|gate| gate == "workspace_tests"),
+            "{from} -> {to}: {selected:?}"
+        );
+    }
+}
+
+#[test]
 fn prose_and_similar_prefixes_remain_lightweight() {
     let expected = BTreeSet::from(["diff_check".to_owned(), "rust_only_tooling".to_owned()]);
     for path in [
         "README.md",
         "AGENTS.md",
-        "docs/status.md",
-        "docs/guides/native-web.md",
+        "docs/status.md.extra",
+        "docs/guides/native-web.md.extra",
+        "docs/campaigns/20260929-observation.md",
         "docs/guides/examples.md",
         "docs/guides/examples-extra/ui.lkjc",
         "docs/releases/v0.1.47.md",

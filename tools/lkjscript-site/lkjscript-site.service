@@ -1,0 +1,34 @@
+[Unit]
+Description=lkjscript Rust documentation origin
+After=network.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+WorkingDirectory=/
+ExecStart=/opt/lkjscript-site/current/lkjscript-site --listen 127.0.0.1:8798
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=128M
+TasksMax=32
+LimitNOFILE=512
+
+[Install]
+WantedBy=multi-user.target
