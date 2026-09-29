@@ -97,3 +97,43 @@ move before that guard. The prior begin/commit ordering witness is corrected to 
 same VM behavior. Ordinary stores and selected variant payload writes still end the
 old value's lifetime. Final focused, full and copied-release-executable acceptance
 must run on this corrected source, not reuse the first receipt.
+
+## Final corrected-source acceptance
+
+The product/test source is `b6794d9cc4c72f13b377210ded8c54746343b83e`, tree
+`bed3e0485819d8f0ff625744579b5f97c890e8ae`. Tracked input stayed unchanged through
+all of the following observed commands; `corrected-source.txt` retains the identities.
+
+| Witness | Observed result |
+| --- | --- |
+| `cargo test --locked --lib local_moves` | 20 passed, 0 failed, 0 ignored, 899 filtered; 0.36 seconds |
+| `check full --fresh --machine --jobs 2` | 26 selected, 26 fresh passed, 0 reused, no unrun gates, input stable; 1035.605786946 seconds |
+| Full workspace test command | 1,314 passed, 0 failed, 29 existing ignored cases, 0 filtered |
+| Copied release executable, `native_terminal_values` public CLI witness | 1 passed, 0 failed, 0 ignored, 165 filtered; 5.76 seconds |
+
+The exact full receipt is
+`.artifacts/lkjscript-dev/check/1790679127010944511-2128224-0/receipt.json`.
+Its initial and final input digest are identical. Workspace passing counts are
+911 + 10 + 7 + 9 + 165 + 12 + 191 + 8 + 1; ignored counts are 8 + 1 + 1 + 19.
+Ignored cases are not counted as executed successes. The 65,536 original and 234,256
+new control-flow fixtures are contained in the focused tests, not extra test binaries.
+
+The freshly built `target/release/lkjscript` was copied to
+`.artifacts/20260929-flow-local-moves/producer/lkjscript`; `cmp` verified equal bytes.
+`LKJSCRIPT_RELEASE_CANDIDATE` selected that absolute path for the public CLI witness.
+Its Native harness copied the executable again into an independent temporary working
+directory, cleared the child environment and exercised artifacts after project/source
+removal. The test harness used Cargo's test profile; the selected product executable
+used the release profile. This does not publish a binary release or replace an app.
+
+Raw stage logs are `focused-final.log`, `controller-final.log`, `full-final.log` and
+`copied-final.log` under the campaign evidence root. Each stage exited 0, and the
+completed chain recorded exit 0 in `corrected-chain.status`. Both native `choose`
+branches retained all 65 original boxed payload addresses, agreed with canonical
+interpretation, recorded two moving local reads and zero copying local reads, and
+released all frame locals. These observations are not whole-program byte-copy,
+allocation-count, memory-reduction or speedup measurements.
+
+The successor reporting change is restricted to this campaign and `docs/status.md`.
+It is not mislabeled as the fully tested source above. Existing unrelated untracked
+files, stash/worktrees and running applications were not modified by this work.

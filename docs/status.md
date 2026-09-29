@@ -44,6 +44,13 @@ This is an execution optimization, not general memory borrowing, a region type s
 or a whole-program zero-copy claim. It does not publish a binary release or change
 running applications.
 
+Corrected source `b6794d9cc4c72f13b377210ded8c54746343b83e` passed all 26 full-profile
+gates freshly with zero reuse and stable input. Focused transfer tests passed 20/20;
+the copied release executable passed the source-removal public CLI witness. Both
+branches retained all 65 original recursive payload boxes. Precise and fallback
+proofs preserve transaction slot-occupancy checks; the original failing witnesses
+and the first frozen full run are retained separately in the campaign.
+
 ## Development v0.1.60: effect-generic resource callbacks
 
 Exact-resource helpers may declare effect parameters for resource-free task callbacks,
