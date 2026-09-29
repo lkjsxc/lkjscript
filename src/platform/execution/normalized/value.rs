@@ -1,5 +1,6 @@
 //! Runtime-only dense values for normalized Graph 14 execution.
 
+use super::bytes::BytePayload;
 use super::resource::NormalizedResourceHandle;
 use crate::platform::binary64::Binary64;
 use crate::platform::kernel::{Name, TypeObjectDigest};
@@ -47,6 +48,7 @@ pub(crate) struct ValueWork {
     pub local_value_copies: u64,
     pub lists: super::list::Work,
     pub maps: super::map::Work,
+    pub bytes: super::bytes::Work,
 }
 
 impl ValueOrigin {
@@ -95,7 +97,7 @@ pub enum NormalizedValue {
     Bool(bool),
     I64(i64),
     F64(Binary64),
-    Bytes(Arc<[u8]>),
+    Bytes(BytePayload),
     Text(Arc<str>),
     StaticText(Arc<str>),
     Record(NormalizedRecord),
@@ -186,7 +188,7 @@ impl NormalizedValue {
     }
 
     pub fn bytes(value: impl Into<Arc<[u8]>>) -> Self {
-        Self::Bytes(value.into())
+        Self::Bytes(BytePayload::from(value.into()))
     }
 
     #[cfg(test)]
@@ -224,7 +226,7 @@ impl NormalizedValue {
 pub enum NormalizedMapKey {
     Bool(bool),
     I64(i64),
-    Bytes(Arc<[u8]>),
+    Bytes(BytePayload),
     Text(Arc<str>),
 }
 
@@ -248,7 +250,7 @@ impl NormalizedMapKey {
         match self {
             Self::Bool(value) => NormalizedValue::Bool(*value),
             Self::I64(value) => NormalizedValue::I64(*value),
-            Self::Bytes(value) => NormalizedValue::Bytes(Arc::clone(value)),
+            Self::Bytes(value) => NormalizedValue::Bytes(value.clone()),
             Self::Text(value) => NormalizedValue::Text(Arc::clone(value)),
         }
     }

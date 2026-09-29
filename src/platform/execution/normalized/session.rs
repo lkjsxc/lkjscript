@@ -1223,7 +1223,7 @@ impl SessionRuntimeContract {
                     SessionOutbound::Text(Arc::clone(value))
                 }
                 ("binary", Some(NormalizedValue::Bytes(value))) => {
-                    SessionOutbound::Binary(Arc::clone(value))
+                    SessionOutbound::Binary(value.clone())
                 }
                 _ => {
                     return Err(session_protocol(
@@ -2058,7 +2058,7 @@ struct DecodedDecision {
 
 enum SessionOutbound {
     Text(Arc<str>),
-    Binary(Arc<[u8]>),
+    Binary(super::bytes::BytePayload),
 }
 
 impl SessionOutbound {

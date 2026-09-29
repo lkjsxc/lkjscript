@@ -1,6 +1,6 @@
 # Status
 
-Current snapshot: 2026-09-29 (Asia/Tokyo). This page describes current availability
+Current snapshot: 2026-09-30 (Asia/Tokyo). This page describes current availability
 and boundaries; historical measurements and failed attempts stay with their
 [campaign owners](campaigns/) and [release records](release.md).
 
@@ -28,6 +28,21 @@ The earlier immutable releases and genuinely failed/withheld candidates remain u
 Inspect the actual installed executable with `lkjscript capabilities`. Installing
 a newer runtime does not silently replace accepted application definitions,
 exact dependency selections, running processes or operational data.
+
+## Development v0.1.60: unique byte concatenation storage
+
+Ordinary immutable `Bytes` concatenation now reuses a uniquely held vector's spare
+capacity and grows it geometrically when needed. Empty operands retain the other
+payload. Shared prefixes, map keys and captures remain immutable; contents, ordering,
+types and encoded bytes do not depend on the storage representation. New payload
+allocations are admitted before copying, with cancellation checkpoints during copies.
+
+The [campaign](campaigns/20260930-byte-buffer-reuse.md) records physical-identity,
+allocation-boundary, independent-value and native generic/recursive consumer evidence.
+The change may retain spare capacity and adds vector metadata, so it is not a claim
+of universally lower memory use or measured speedup. Production byte-copy counters
+cover this concatenation path only. This is not a new owned type, scoped memory borrow,
+region feature, whole-program zero-copy guarantee or binary publication.
 
 ## Development v0.1.60: affine validation admission
 

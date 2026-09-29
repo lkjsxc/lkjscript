@@ -409,6 +409,18 @@ and post-consume use, exact requirement/interface binding, one-level and nested 
 left-to-right argument commitment, caller reuse, branch mismatch, function escape, self/mutual
 recursion, and forbidden signature or containment mutations.
 
+Byte concatenation storage reuse requires pointer-identity witnesses for empty and
+unique-capacity paths and independent contents for shared prefixes. A retained ordinary
+value, map key or capture must never observe a changed prefix; strong and weak aliases
+must both prevent in-place mutation. Exact/one-short reservation tests must distinguish
+vector metadata, fresh capacity, growth and allocation-free reuse, proving rejected
+admissions copy no payload and that VM failure cleans owned slots. Cancellation during
+chunked copying preserves retained peers. Both copying reference execution and literal
+expected values must agree with production, including native generic/recursive calls,
+closures, maps, typed-data round trips and detached execution. Explicit copied-byte and
+requested-capacity counters complement, not replace, physical/value witnesses; reference
+zeros do not imply no copying, and neither counter is RSS or allocator-internal work.
+
 Affine proof work admits each expression visit and each exact metadata read before it
 occurs, including root/signature/type reads and imported interfaces. The shared caller
 counter must preserve prior work and cannot saturate past an exhausted limit. Zero,

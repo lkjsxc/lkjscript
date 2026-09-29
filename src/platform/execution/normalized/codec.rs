@@ -843,7 +843,7 @@ fn decode_bytes(value: &JsonValue, path: &str) -> Result<NormalizedValue, Diagno
     if base64::engine::general_purpose::STANDARD.encode(&bytes) != encoded {
         return Err(type_error(path, "'$bytes' is not canonical base64 data"));
     }
-    Ok(NormalizedValue::Bytes(Arc::from(bytes)))
+    Ok(NormalizedValue::bytes(bytes))
 }
 
 fn map_key_to_json(

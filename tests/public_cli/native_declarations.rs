@@ -1616,6 +1616,8 @@ mod native_text;
 #[path = "native_terminal_values.rs"]
 mod native_terminal_values;
 
+#[path = "native_byte_reuse.rs"]
+mod native_byte_reuse;
 #[path = "native_map_keys.rs"]
 mod native_map_keys;
 

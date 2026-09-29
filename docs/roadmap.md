@@ -131,8 +131,11 @@ substitute for the region/trait/ownership contract below. The original
 distinguish retained payload identity from local-read counts and from any whole-program
 zero-copy claim. [Immutable map-key sharing](campaigns/20260929-shared-map-keys.md)
 removes another concrete copy boundary without changing logical admission or
-language meaning. These bootstrap storage choices do not make universal atomic
-reference counting the future region model.
+language meaning. [Unique byte concatenation storage](campaigns/20260930-byte-buffer-reuse.md)
+uses terminal ordinary transfers to amortize prefix copying while retaining immutable
+aliases, keys and captures. Its extra metadata and spare capacity remain derived;
+it is not the selected language-level ownership or region contract. These bootstrap
+storage choices do not make universal atomic reference counting the future region model.
 
 Compare unique/scoped storage, region-local aliases, local tracing and frozen
 shared segments. Support cyclic data without making universal Arc-style ownership

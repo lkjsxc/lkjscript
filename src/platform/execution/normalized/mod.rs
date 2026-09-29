@@ -1,6 +1,7 @@
 //! Prepared execution over strict Graph 10 artifacts.
 
 mod byte_stream;
+mod bytes;
 mod capability;
 mod codec;
 mod configuration;

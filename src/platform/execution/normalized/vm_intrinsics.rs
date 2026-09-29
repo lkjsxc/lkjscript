@@ -311,6 +311,28 @@ impl Machine<'_> {
                     .ok_or_else(|| type_error("identity arity changed")),
                 _ => Err(type_error("identity host received a foreign arity")),
             },
+            "core.bytes.concat" => {
+                let [left, right]: [CheckedValue; 2] = arguments
+                    .try_into()
+                    .map_err(|_| type_error("byte concatenation received a foreign arity"))?;
+                let (NormalizedValue::Bytes(left), NormalizedValue::Bytes(right)) =
+                    (left.into_raw(), right.into_raw())
+                else {
+                    return Err(type_error("byte concatenation received foreign values"));
+                };
+                let control = self.control;
+                let mut work = std::mem::take(&mut self.observation.value_work.bytes);
+                let result = left.concat(
+                    right,
+                    super::super::value::MAXIMUM_VALUE_ALLOCATION_BYTES,
+                    control,
+                    &mut |charge| self.charge_allocation(charge),
+                    &mut work,
+                );
+                // Failure preserves the actual attempted/copy work, not a fabricated success.
+                self.observation.value_work.bytes = work;
+                CheckedValue::scalar(self.program, NormalizedValue::Bytes(result?))
+            }
             "core.bytes.from-list" => {
                 let [value] = arguments.as_slice() else {
                     return Err(type_error("byte construction received a foreign arity"));

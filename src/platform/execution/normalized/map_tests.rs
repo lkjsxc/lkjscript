@@ -150,9 +150,9 @@ fn persistent_map_bulk_order_and_all_key_kinds_are_canonical() {
         (NormalizedMapKey::Bool(true), value(2)),
         (key(i64::MIN), value(3)),
         (key(i64::MAX), value(4)),
-        (NormalizedMapKey::Bytes(Arc::from([])), value(5)),
-        (NormalizedMapKey::Bytes(Arc::from([0, 255])), value(6)),
-        (NormalizedMapKey::Bytes(Arc::from([255])), value(7)),
+        (NormalizedMapKey::Bytes([].into()), value(5)),
+        (NormalizedMapKey::Bytes([0, 255].into()), value(6)),
+        (NormalizedMapKey::Bytes([255].into()), value(7)),
         (NormalizedMapKey::Text(Arc::from("")), value(8)),
         (NormalizedMapKey::Text(Arc::from("a")), value(9)),
         (NormalizedMapKey::Text(Arc::from("日本語")), value(10)),
@@ -531,7 +531,7 @@ fn persistent_map_bulk_failure_and_cancellation_release_every_owned_payload() {
     let payload: Arc<[u8]> = Arc::from([17_u8; 64]);
     let make_entries = || {
         (0..31)
-            .map(|n| (key(n), NormalizedValue::Bytes(Arc::clone(&payload))))
+            .map(|n| (key(n), NormalizedValue::Bytes(Arc::clone(&payload).into())))
             .collect()
     };
     let mut charges = Vec::new();
@@ -576,7 +576,7 @@ fn persistent_map_bulk_failure_and_cancellation_release_every_owned_payload() {
 }
 
 fn deep_raw(depth: usize, payload: &Arc<[u8]>) -> NormalizedValue {
-    let mut value = NormalizedValue::Bytes(Arc::clone(payload));
+    let mut value = NormalizedValue::Bytes(Arc::clone(payload).into());
     for n in 0..depth {
         value = match n % 5 {
             0 => NormalizedValue::Option(Some(Box::new(value))),
@@ -837,7 +837,7 @@ fn persistent_map_retirement_uses_inline_or_preexisting_owned_storage() {
             assert_eq!(work.scratch_storage().1, 0);
 
             let payload: Arc<[u8]> = Arc::from([19_u8; 17]);
-            let mut unary = NormalizedValue::Bytes(Arc::clone(&payload));
+            let mut unary = NormalizedValue::Bytes(Arc::clone(&payload).into());
             for _ in 0..20_000 {
                 unary = NormalizedValue::Option(Some(Box::new(unary)));
             }
@@ -919,11 +919,12 @@ fn persistent_map_branching_raw_cleanup_bounds_scratch_by_released_children() {
         .spawn(|| {
             let payload: Arc<[u8]> = Arc::from([31_u8; 17]);
             let build = || {
-                let mut raw = NormalizedValue::Bytes(Arc::clone(&payload));
+                let mut raw = NormalizedValue::Bytes(Arc::clone(&payload).into());
                 for _ in 0..2048 {
-                    let sibling =
-                        NormalizedValue::list(vec![NormalizedValue::Bytes(Arc::clone(&payload))])
-                            .unwrap();
+                    let sibling = NormalizedValue::list(vec![NormalizedValue::Bytes(
+                        Arc::clone(&payload).into(),
+                    )])
+                    .unwrap();
                     raw = NormalizedValue::Map(
                         Map::from_items(
                             BTreeMap::from([(key(0), raw), (key(1), sibling)]),

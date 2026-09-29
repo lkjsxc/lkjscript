@@ -1105,7 +1105,7 @@ struct RawOwnershipProbe {
 
 impl RawOwnershipProbe {
     fn arguments(&self) -> (Vec<NormalizedValue>, ExecutionControl) {
-        let mut deep = NormalizedValue::Bytes(Arc::clone(&self.payload));
+        let mut deep = NormalizedValue::Bytes(Arc::clone(&self.payload).into());
         for _ in 0..20_000 {
             deep = NormalizedValue::Option(Some(Box::new(deep)));
         }
