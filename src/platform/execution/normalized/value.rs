@@ -38,6 +38,9 @@ pub(crate) struct ValueWork {
     pub constructor_child_visits: u64,
     pub internal_guard_descendant_visits: u64,
     pub classification_decisions: u64,
+    /// Successful ordinary local reads, not allocation or byte-copy estimates.
+    pub local_value_moves: u64,
+    pub local_value_copies: u64,
     pub lists: super::list::Work,
     pub maps: super::map::Work,
 }

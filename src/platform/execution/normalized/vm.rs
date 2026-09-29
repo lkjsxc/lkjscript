@@ -715,45 +715,10 @@ impl Machine<'_> {
                     self.push_scalar(NormalizedValue::StaticText(value))?
                 }
                 NormalizedInstruction::LoadLocal { local, use_mode } => {
-                    let value = match use_mode {
-                        ParameterUse::Consume => self
-                            .frames
-                            .last_mut()
-                            .and_then(|frame| frame.locals.get_mut(local as usize))
-                            .and_then(Option::take),
-                        ParameterUse::Unrestricted | ParameterUse::Borrow => self
-                            .frames
-                            .last()
-                            .and_then(|frame| frame.locals.get(local as usize))
-                            .and_then(Option::as_ref)
-                            .map(|value| value.duplicate(use_mode))
-                            .transpose()?,
-                    }
-                    .ok_or_else(|| {
-                        runtime_error(
-                            "normalized_local_uninitialized",
-                            "normalized code read an uninitialized or consumed local",
-                        )
-                    })?;
-                    let class = value.class(self.program, &mut self.observation.value_work)?;
-                    let valid = match use_mode {
-                        ParameterUse::Unrestricted => matches!(class, Class::Free),
-                        ParameterUse::Borrow => class == Class::Direct,
-                        ParameterUse::Consume => class != Class::Free,
-                    };
-                    if !valid {
-                        return Err(runtime_error(
-                            "normalized_local_resource_use",
-                            "normalized local use disagrees with the checked ownership classification",
-                        ));
-                    }
-                    if let NormalizedValue::Resource(handle) = value.raw() {
-                        if use_mode == ParameterUse::Consume {
-                            handle.require_owned()?;
-                        }
-                        self.resources.validate_admission(*handle, None, None)?;
-                    }
-                    self.push(value)?;
+                    self.load_local(local, use_mode, false)?;
+                }
+                NormalizedInstruction::MoveLocal(local) => {
+                    self.load_local(local, ParameterUse::Unrestricted, true)?;
                 }
                 NormalizedInstruction::StoreLocal(local) => {
                     let value = self.pop()?;
@@ -2130,6 +2095,60 @@ impl Machine<'_> {
                 "normalized execution has no active frame",
             )
         })
+    }
+
+    fn load_local(
+        &mut self,
+        local: u32,
+        use_mode: ParameterUse,
+        move_ordinary: bool,
+    ) -> Result<(), ExecutionError> {
+        let value = if move_ordinary || use_mode == ParameterUse::Consume {
+            self.frames
+                .last_mut()
+                .and_then(|frame| frame.locals.get_mut(local as usize))
+                .and_then(Option::take)
+        } else {
+            self.frames
+                .last()
+                .and_then(|frame| frame.locals.get(local as usize))
+                .and_then(Option::as_ref)
+                .map(|value| value.duplicate(use_mode))
+                .transpose()?
+        }
+        .ok_or_else(|| {
+            runtime_error(
+                "normalized_local_uninitialized",
+                "normalized code read an uninitialized or consumed local",
+            )
+        })?;
+        let class = value.class(self.program, &mut self.observation.value_work)?;
+        let valid = match use_mode {
+            ParameterUse::Unrestricted => class == Class::Free,
+            ParameterUse::Borrow => class == Class::Direct,
+            ParameterUse::Consume => class != Class::Free,
+        };
+        if !valid {
+            return Err(runtime_error(
+                "normalized_local_resource_use",
+                "normalized local use disagrees with the checked ownership classification",
+            ));
+        }
+        if let NormalizedValue::Resource(handle) = value.raw() {
+            if use_mode == ParameterUse::Consume {
+                handle.require_owned()?;
+            }
+            self.resources.validate_admission(*handle, None, None)?;
+        }
+        if use_mode == ParameterUse::Unrestricted {
+            let count = if move_ordinary {
+                &mut self.observation.value_work.local_value_moves
+            } else {
+                &mut self.observation.value_work.local_value_copies
+            };
+            *count = count.saturating_add(1);
+        }
+        self.push(value)
     }
 
     fn set_local(&mut self, local: u32, value: Option<CheckedValue>) -> Result<(), ExecutionError> {

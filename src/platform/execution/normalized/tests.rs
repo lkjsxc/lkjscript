@@ -36,6 +36,9 @@ mod transaction_participation_tests;
 #[path = "bytes_tests.rs"]
 mod bytes_tests;
 
+#[path = "local_moves_value_tests.rs"]
+mod local_moves_value_tests;
+
 #[path = "bytes_conversion_tests.rs"]
 mod bytes_conversion_tests;
 

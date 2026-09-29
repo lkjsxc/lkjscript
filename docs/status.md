@@ -29,6 +29,17 @@ Inspect the actual installed executable with `lkjscript capabilities`. Installin
 a newer runtime does not silently replace accepted application definitions,
 exact dependency selections, running processes or operational data.
 
+## Development v0.1.59: terminal ordinary-value transfers
+
+The prepared VM can move an ordinary value out of its local slot at a proved terminal
+read instead of duplicating it. A conservative linear analysis excludes backward-edge
+regions and retains earlier reads; exact resource borrow/consume rules and runtime
+origin/class checks are unchanged. The [campaign](campaigns/20260929-terminal-local-moves.md)
+owns the control-flow, physical-identity, independent-value and copied-binary evidence.
+This changes neither canonical meaning nor package/artifact contracts and does not
+provide general memory borrowing, region ownership or zero-copy payload processing.
+It does not publish a release or replace running applications.
+
 ## Development v0.1.59: composing exact resource parameters
 
 Direct graph-authored task helpers may take a contiguous final suffix of resources,

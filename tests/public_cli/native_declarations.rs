@@ -1613,6 +1613,9 @@ mod native_bytes;
 #[path = "native_text.rs"]
 mod native_text;
 
+#[path = "native_terminal_values.rs"]
+mod native_terminal_values;
+
 #[cfg(target_os = "linux")]
 #[path = "resident_policy.rs"]
 mod resident_policy;

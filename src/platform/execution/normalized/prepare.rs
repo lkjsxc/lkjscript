@@ -99,6 +99,9 @@ pub enum NormalizedInstruction {
         local: u32,
         use_mode: ParameterUse,
     },
+    /// Derived terminal read of an ordinary value; never an artifact instruction
+    /// or an affine consume permission. The VM still checks origin and class.
+    MoveLocal(u32),
     StoreLocal(u32),
     Drop,
     JumpIfFalse(u32),

@@ -233,6 +233,24 @@ repository reads, witness-maintained changes, package interfaces, compiler selec
 must agree with it. Physical pack/catalog layout, persistent-map partitioning, derived cache state,
 and request spelling are normalized away only when they are not semantic.
 
+Terminal ordinary-local transfer derivation requires an independent all-successors
+reachability oracle, including the 65,536 small control-flow fixtures in
+`local_moves_tests.rs`. These are analysis fixtures, not claims that arbitrary bytecode
+is an admitted program. Tests cover backward jumps and variant dispatch, implicit
+transaction reads, unchanged borrow/consume modes, shared-code preservation,
+re-derivation, cancellation and preparation capacity rejection.
+
+`local_moves_value_tests.rs` authors real native recursive data and functions through
+canonical publication. Production and the independent interpreter must return the
+same values. Restoring only copying local reads must preserve value semantics but
+lose the original boxed payload identity. Cancelled recursive transfers must release
+frames, operands and locals; the same prepared program must remain reusable. Foreign
+prepared values must reject before a local move. The copied-binary
+`native_terminal_values` case adds generic forwarding, both branches, bound-callback
+iteration, repeated values and artifact execution after removing its owned source.
+`value_work.local_value_moves` and `local_value_copies` count successful ordinary local
+reads and do not estimate bytes saved or replace allocation/work admission.
+
 Production execution uses normalized bytecode and dense indexes. The canonical reference
 interpreter independently reads accepted semantic owners and evaluates their typed structures.
 Its callable identities, signatures, nominal layouts, generic type arguments, targets, tests, and

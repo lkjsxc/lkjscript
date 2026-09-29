@@ -274,6 +274,7 @@ pub(super) fn complete_controlled(
             .ok_or_else(missing)?;
     }
     work.reserve::<u8>(bytes)?;
+    super::local_moves::derive_program(program, &mut work)?;
     program.capture_proof_bytes = work.bytes;
     program.work.type_derivation_steps = work.steps as u64;
     program.work.type_metadata_bytes = program.capture_proof_bytes as u64;

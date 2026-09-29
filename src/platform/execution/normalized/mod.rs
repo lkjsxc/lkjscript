@@ -14,6 +14,7 @@ pub(crate) mod finite_callable_probe;
 mod http;
 mod http_client;
 mod list;
+mod local_moves;
 mod map;
 mod object;
 mod password;

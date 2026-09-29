@@ -113,6 +113,12 @@ delivery. A cancelled blocking native call needs an explicit lifecycle solution.
 
 ### Ownership and memory-management regions
 
+Terminal ordinary-local transfers now avoid a proved unnecessary duplication without
+changing source meaning or resource authority. Keep this as a disposable execution
+optimization, not a substitute for the region/trait/ownership contract below. Its
+[controlled evidence](campaigns/20260929-terminal-local-moves.md) distinguishes retained
+payload identity from local-read counts and from any whole-program zero-copy claim.
+
 Compare unique/scoped storage, region-local aliases, local tracing and frozen
 shared segments. Support cyclic data without making universal Arc-style ownership
 or a global tracing heap the language's only answer. Connect borrow lifetime,

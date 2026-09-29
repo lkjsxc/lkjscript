@@ -217,6 +217,29 @@ HEAD or changes operational data. Residual operands, mismatched ownership, forge
 control flow or a falsely certified omitted transaction continuation reject at their owning
 boundary. Valid calls with pending work retain that work and remain ordinary calls.
 
+### Terminal reads of ordinary locals
+
+Ordinary values retain immutable value semantics. Prepared execution may transfer an
+ordinary value out of a local slot instead of duplicating it when no subsequent path
+can read that slot. This is a disposable runtime derivation, not an authored move,
+a resource-consume permission, or a new artifact instruction. Canonical meaning,
+package interfaces, type contracts and the independent reference evaluator do not
+change. Repeated reads still produce the same values.
+
+The current conservative proof selects only the last lexical read of a local outside
+all intervals crossed by backward control-flow edges. It accounts for explicit jumps,
+variant dispatch and implicit transaction-token reads; loops and some branch-local
+opportunities deliberately retain copies. Analysis uses linear work in instructions,
+edges and local slots, within the existing preparation cancellation, work and storage
+admission. Shared prepared code is copied before modification, never changed in place
+through another program's handle.
+
+A transferred value still passes the same prepared-origin and ordinary-value checks.
+Resource borrows and consumes keep their exact existing instructions and rules.
+Failure and cancellation release moved values with the rest of the invocation's
+owned state. Diagnostic move/copy counters count local reads, not payload bytes,
+allocator operations, general uniqueness, memory regions, or zero-copy IO.
+
 ## Types and values
 
 The closed current type surface is:
