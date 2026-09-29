@@ -41,11 +41,15 @@ requirements even when their interfaces match.
 The [literal two-queue workload](../tests/fixtures/resource-suffix.lkjc) and
 [resource guide](guides/native-resources.md#multiple-resources-in-one-helper) describe
 the public authoring and detached execution path. The
-[continuation record](campaigns/202609291100.md) owns verification evidence and
-uncompleted trials. This is not general memory borrowing, an atomic transaction
-across resources, asynchronous borrowing or a resource-return facility. Automatic
-function extraction keeps its narrower eligibility. No v0.1.59 distribution is
-claimed here; the public v0.1.55 executable is unchanged.
+[continuation record](campaigns/202609291100.md#complete-accepted-source) records
+source `9daca43e`: all 26 full-profile gates passed fresh, zero reused results,
+with stable inputs. The exact retained optimized executable also passed the six
+suffix cases and aligned legacy handoff case.
+
+This is not general memory borrowing, an atomic transaction across resources,
+asynchronous borrowing or a resource-return facility. Automatic function extraction
+keeps its narrower eligibility. This source integration does not publish v0.1.59
+or replace the public executable or running applications.
 
 ## Development v0.1.58: exact deployment grant selection
 
