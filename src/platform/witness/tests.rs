@@ -34,18 +34,23 @@ fn witness_contract_domains_are_closed_and_unique() {
         RelationKind::ALL.len()
     );
     assert_ne!(contract::validator_contract_digest().bytes(), [0_u8; 32]);
-    // Affine feature 7 admits exact resource suffixes; predecessor single-resource
-    // validation evidence must not share this contract identity.
+    // Affine feature 8 admits callback effects without rebinding exact resources;
+    // predecessor effect-prohibiting evidence must not share this contract identity.
     assert_eq!(
         contract::VALIDATOR_FEATURES
             .iter()
             .find(|feature| feature.name == "affine_capability_resources")
             .map(|feature| feature.version),
-        Some(7)
+        Some(8)
+    );
+    let digest = contract::validator_contract_digest().to_string();
+    assert_ne!(
+        digest,
+        "validator_contract_8252e6edc84de595500db6d5a5d0d9acc49f18bf9f1fa757b53978f1d00a3348"
     );
     assert_eq!(
-        contract::validator_contract_digest().to_string(),
-        "validator_contract_8252e6edc84de595500db6d5a5d0d9acc49f18bf9f1fa757b53978f1d00a3348"
+        digest,
+        "validator_contract_a8f4f286f668895a3c2f2d712352fe1a382e6d602ad6d4e93f0a74c1c9f13d78"
     );
 }
 

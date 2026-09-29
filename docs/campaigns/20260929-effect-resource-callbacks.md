@@ -117,6 +117,54 @@ seconds). Their logs are `/tmp/lkjscript-effect-resource-internal.log` and
 `/tmp/lkjscript-effect-resource-public-expanded.log`. These observations are not a full-profile
 receipt and do not validate later edits, generated assets or a release.
 
+## First full attempt and affected verification consumers
+
+Implementation commit `f22003fd2c7a041993c95836fa051ffae012857b`, tree
+`a2536b962ba8108e64194d83ec269d4a2a7d72a7`, was checked with the unchanged
+`check full --fresh --jobs 2 --machine` profile. The completed attempt selected all
+26 gates, passed 25 freshly, reused zero, and failed `workspace_tests`; it is not
+source acceptance. Elapsed time was 933.894142944 seconds. Input identity remained
+`verification_01be6176e2cae3314d3b5eed1728268e81a5d646e5d92be05d673b4c13b25589`
+throughout (`input_stable=true`). The retained receipt is
+`.artifacts/lkjscript-dev/check/1790672004194107182-1831151-0/receipt.json`,
+67,238 bytes, `verification_c3e327256d9ebef2c6237b6a9b7c968fded8e9da1ef99c99dffe69b9ea5ba082`.
+
+The library stage reported 897 passed, two failed and eight existing ignored cases.
+The isolated foreign-signature flow corpus still classified any effect parameter as
+invalid; the witness-contract fixture still pinned affine feature 7. Cargo stopped
+that workspace gate after the library failures, so this attempt is not evidence that
+its later public CLI and tool test binaries ran. A subsequent targeted run of
+`copied_binary_authors_requirement_bound_affine_handoffs_and_rejects_predecessors`
+reproduced a third stale assumption: the raw CLI correctly prepared the now-legal
+E-bearing signature, while the old fixture expected rejection. That separate test
+failed in 3.94 seconds; its log is `/tmp/lkjscript-effect-resource-legacy-cli-before.log`.
+
+The follow-up changes are restricted to these verification consumers and this record;
+they do not change product code or the selected semantics. The foreign-signature corpus
+now exercises both ordinary and effect-generic imports, each across nested/plain and
+single/suffix resources, while retaining a requirement-generic rejection and the other
+nine invalid mutations. Native literal callbacks remain the complete publication and
+execution witness, distinct from this isolated flow corpus. The raw CLI's negative case
+now adds the still-unsupported requirement parameter alongside its admitted T and E.
+The witness test pins feature 8 and
+`validator_contract_a8f4f286f668895a3c2f2d712352fe1a382e6d602ad6d4e93f0a74c1c9f13d78`,
+and explicitly rejects equality with the previous feature-7 identity. The updated
+foreign-signature corpus passed independently in 0.94 seconds; its log is
+`/tmp/lkjscript-effect-resource-foreign-oracle.log`. The corrected exact-contract
+pin and the complete raw CLI handoff case also passed (0.00 and 4.04 seconds), the
+latter against the first run's retained final `release_command_lifecycle/0` producer;
+log: `/tmp/lkjscript-effect-resource-corrected-regressions.log`.
+
+Separately, all six new public callback tests passed against the retained optimized
+`retained/release_build/0` executable from the first run, in 36.28 seconds, from `/tmp`
+with `LKJSCRIPT_RELEASE_CANDIDATE` selecting that exact copy. Its SHA-256 is
+`d771b5d5775faadf496ac84b424d48d80f04ceaf8ac5c6d9fe66674656ba1662`;
+log: `/tmp/lkjscript-effect-resource-optimized.log`. The later retained
+`release_command_lifecycle/0` producer has different bytes
+(`4ee0f8e1c384b831f123eb725eabd57c57fe380f99c74158c80c6bac0e24eade`), so the former
+result is not silently relabeled as a test of the latter. A successful final source
+receipt and selected final executable checks remain separate completion obligations.
+
 ## Acceptance and delivery
 
 The selected completion requires an identified implementation source, generated documentation

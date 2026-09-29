@@ -6,87 +6,103 @@ use crate::platform::semantic_id::RevisionId;
 
 #[test]
 fn exact_package_resource_signatures_agree_with_the_disjoint_flow_oracle() {
-    for (nested, suffix) in [(false, false), (true, false), (false, true), (true, true)] {
-        let (snapshot, revision, declaration, resource) = imported_helper(nested, suffix);
-        assert_flow(&snapshot, true, "exact public import");
-        for fault in [
-            "missing-function",
-            "missing-parameter",
-            "missing-binding",
-            "foreign-binding",
-            "ordinary-use",
-            "wrong-parent",
-            "resource-result",
-            "pure",
-            "open-effect",
-            "external",
-        ] {
-            let mut broken = snapshot.clone();
-            let owners = broken.dependency_interfaces.get_mut(&revision).unwrap();
-            if fault == "missing-function" {
-                owners.remove(&OwnerKey::Declaration(declaration));
-            } else if fault == "missing-parameter" {
-                owners.remove(&OwnerKey::Parameter(resource));
-            } else if matches!(
-                fault,
-                "missing-binding" | "foreign-binding" | "ordinary-use" | "wrong-parent"
-            ) {
-                let Some(PackageInterfaceRecord::Parameter(parameter)) =
-                    owners.get_mut(&OwnerKey::Parameter(resource))
-                else {
-                    panic!("parameter");
-                };
-                match fault {
-                    "missing-binding" => parameter.resource_requirement = None,
-                    "foreign-binding" => {
-                        parameter.resource_requirement.as_mut().unwrap().package =
-                            PackageId::migrate(b"foreign-affine-corpus", 99);
+    for effects in [false, true] {
+        for (nested, suffix) in [(false, false), (true, false), (false, true), (true, true)] {
+            let (snapshot, revision, declaration, resource) =
+                imported_helper(nested, suffix, effects);
+            assert_flow(
+                &snapshot,
+                true,
+                if effects {
+                    "effect-generic public import"
+                } else {
+                    "exact public import"
+                },
+            );
+            for fault in [
+                "missing-function",
+                "missing-parameter",
+                "missing-binding",
+                "foreign-binding",
+                "ordinary-use",
+                "wrong-parent",
+                "resource-result",
+                "pure",
+                "open-requirement",
+                "external",
+            ] {
+                let mut broken = snapshot.clone();
+                let owners = broken.dependency_interfaces.get_mut(&revision).unwrap();
+                if fault == "missing-function" {
+                    owners.remove(&OwnerKey::Declaration(declaration));
+                } else if fault == "missing-parameter" {
+                    owners.remove(&OwnerKey::Parameter(resource));
+                } else if matches!(
+                    fault,
+                    "missing-binding" | "foreign-binding" | "ordinary-use" | "wrong-parent"
+                ) {
+                    let Some(PackageInterfaceRecord::Parameter(parameter)) =
+                        owners.get_mut(&OwnerKey::Parameter(resource))
+                    else {
+                        panic!("parameter");
+                    };
+                    match fault {
+                        "missing-binding" => parameter.resource_requirement = None,
+                        "foreign-binding" => {
+                            parameter.resource_requirement.as_mut().unwrap().package =
+                                PackageId::migrate(b"foreign-affine-corpus", 99);
+                        }
+                        "ordinary-use" => parameter.use_mode = ParameterUse::Unrestricted,
+                        "wrong-parent" => {
+                            parameter.parent = ParameterParent::Function(DeclarationId::migrate(
+                                b"foreign-affine-corpus",
+                                99,
+                            ))
+                        }
+                        _ => unreachable!(),
                     }
-                    "ordinary-use" => parameter.use_mode = ParameterUse::Unrestricted,
-                    "wrong-parent" => {
-                        parameter.parent = ParameterParent::Function(DeclarationId::migrate(
-                            b"foreign-affine-corpus",
-                            99,
-                        ))
-                    }
-                    _ => unreachable!(),
-                }
-            } else {
-                let resource_type = match &owners[&OwnerKey::Parameter(resource)] {
-                    PackageInterfaceRecord::Parameter(parameter) => parameter.ty,
-                    _ => unreachable!(),
-                };
-                let Some(PackageInterfaceRecord::Declaration(record)) =
-                    owners.get_mut(&OwnerKey::Declaration(declaration))
-                else {
-                    panic!("declaration");
-                };
-                let PackageInterfaceDeclarationPayload::Function(signature) = &mut record.payload
-                else {
-                    panic!("signature");
-                };
-                match fault {
-                    "resource-result" => signature.result = resource_type,
-                    "pure" => signature.effect = FunctionEffect::Pure,
-                    "open-effect" => signature.effect_parameters.push(
-                        crate::platform::semantic_id::EffectParameterId::migrate(
-                            b"foreign-affine-corpus",
-                            98,
+                } else {
+                    let resource_type = match &owners[&OwnerKey::Parameter(resource)] {
+                        PackageInterfaceRecord::Parameter(parameter) => parameter.ty,
+                        _ => unreachable!(),
+                    };
+                    let Some(PackageInterfaceRecord::Declaration(record)) =
+                        owners.get_mut(&OwnerKey::Declaration(declaration))
+                    else {
+                        panic!("declaration");
+                    };
+                    let PackageInterfaceDeclarationPayload::Function(signature) =
+                        &mut record.payload
+                    else {
+                        panic!("signature");
+                    };
+                    match fault {
+                        "resource-result" => signature.result = resource_type,
+                        "pure" => signature.effect = FunctionEffect::Pure,
+                        "open-requirement" => signature.requirement_parameters.push(
+                            crate::platform::semantic_id::RequirementParameterId::migrate(
+                                b"foreign-affine-corpus",
+                                98,
+                            ),
                         ),
-                    ),
-                    "external" => {
-                        record.payload = PackageInterfaceDeclarationPayload::External(
-                            crate::platform::kernel::PackageExternalSignature {
-                                type_parameters: signature.type_parameters.clone(),
-                                parameters: signature.parameters.clone(),
-                                result: signature.result,
-                            },
-                        )
+                        "external" => {
+                            record.payload = PackageInterfaceDeclarationPayload::External(
+                                crate::platform::kernel::PackageExternalSignature {
+                                    type_parameters: signature.type_parameters.clone(),
+                                    parameters: signature.parameters.clone(),
+                                    result: signature.result,
+                                },
+                            )
+                        }
+                        _ => unreachable!(),
                     }
-                    _ => unreachable!(),
                 }
+                assert_flow(
+                    &broken,
+                    false,
+                    &format!("{fault} nested={nested} suffix={suffix} effects={effects}"),
+                );
             }
-            assert_flow(&broken, false, fault);
         }
     }
 }
@@ -103,6 +119,7 @@ fn assert_flow(snapshot: &KernelSnapshot, expected: bool, case: &str) {
 fn imported_helper(
     nested: bool,
     suffix: bool,
+    effects: bool,
 ) -> (
     KernelSnapshot,
     PackageRevisionDigest,
@@ -114,6 +131,9 @@ fn imported_helper(
     } else {
         crate::platform::execution::normalized::tests::iteration_resource_tests::type_generic_borrowed_snapshot(nested)
     };
+    if effects {
+        crate::platform::execution::normalized::tests::iteration_resource_tests::effect_resource_tests::generalize(&mut snapshot, false);
+    }
     let (expression, reference) = snapshot.owners.iter().find_map(|(key, owner)| {
         let OwnerRecord::Expression(record) = owner else { return None; };
         let ExpressionOperation::Call { function, .. } = &record.operation else { return None; };
@@ -144,6 +164,12 @@ fn imported_helper(
                 .type_parameters
                 .iter()
                 .map(|parameter| OwnerKey::TypeParameter(*parameter)),
+        )
+        .chain(
+            signature
+                .effect_parameters
+                .iter()
+                .map(|parameter| OwnerKey::EffectParameter(*parameter)),
         )
         .collect::<Vec<_>>();
     let mut owners = BTreeMap::from([(

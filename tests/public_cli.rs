@@ -5755,13 +5755,14 @@ add.parameter as=$bad_parameter function=$bad_function name=lease type=@bad_leas
             "kernel_affine_function_resource_effect",
         ),
         (
-            "effect-generic-resource-signature",
+            "requirement-generic-resource-signature",
             format!(
                 r#"type.capability-resource as=@bad_lease interface={lease_interface}
 expression.unit as=$bad_body
-create.function as=$bad_function module={application} name=effect-generic-resource-signature visibility=private result=unit effect=task body=$bad_body
+create.function as=$bad_function module={application} name=requirement-generic-resource-signature visibility=private result=unit effect=task body=$bad_body
 add.type-parameter as=$bad_type declaration=$bad_function name=Item
 add.effect-parameter as=$bad_effect declaration=$bad_function name=E
+add.requirement-parameter as=$bad_requirement declaration=$bad_function name=R interface={lease_interface}
 add.parameter as=$bad_parameter function=$bad_function name=lease type=@bad_lease use=consume requirement={requirement}
 effect.requirement parent=$bad_function index=0 requirement={requirement}"#
             ),
