@@ -1,6 +1,6 @@
 # Language-first project direction
 
-Owner decision: 2026-09-28, amended 2026-09-29 (Asia/Tokyo) to select Rust for first-party implementation and request a public site. The numbered earlier owner answers are retained in
+Owner decision: 2026-09-28 (Asia/Tokyo), reaffirmed by the 2026-09-29 repository-target correction. The owner clarified that the later Rust-only and lkjstr.lkjsxc.com request concerned lkjsxc/lkjstr, not this repository. The numbered owner answers are retained in
 [the mandate](campaigns/202609281300.md). This document separates binding direction
 from delegated, revisable engineering selections. [Status](status.md) describes
 implemented behavior; [the roadmap](roadmap.md) selects the next work. A selected
@@ -176,15 +176,15 @@ recovery are explicit storage design questions, not a transparent unlimited heap
 
 Keep offline development possible and dependencies exact, with explicit updates.
 A convenient single distribution need not make every application retain every
-service. The 2026-09-29 owner instruction now selects Rust for first-party
-implementation, including tooling, compiler, runtime and the documentation server.
-This supersedes the earlier implementation self-hosting/removal-of-Rust goal.
-Ordinary user programs and native standard-library/application examples still
-exercise the language; their inputs and serialized artifacts are not an additional
-implementation language for the host tools. Preserve historical evidence rather
-than rewriting it to manufacture a Rust-only statistic. Replace interpreted tool
-implementations with tested Rust owners; do not conceal remaining workflow or
-installation shell glue, or claim third-party dependencies are all written in Rust.
+service. Move tooling, compiler and runtime toward eventual complete self-hosting,
+including the possibility of removing Rust entirely. Do not impose a distant date
+or rush a rewrite before its replacement can own the relevant semantics.
+
+The owner explicitly corrected the 2026-09-29 Rust-only request to target
+`lkjsxc/lkjstr`. It does not supersede this repository's self-hosting direction.
+The already-integrated Rust policy classifier and experimental documentation origin
+are implementation facts, not a permanent Rust-only mandate. This correction does
+not roll back their code or the separately developed language improvements.
 
 ## Governance and experimental compatibility
 

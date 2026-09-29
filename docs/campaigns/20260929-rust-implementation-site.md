@@ -2,6 +2,19 @@
 
 Date: 2026-09-29 (Asia/Tokyo).
 
+## Subsequent owner correction — target was lkjstr
+
+The owner subsequently stated: "すみません。lkjstrのつもりがlkjscriptとしていました".
+The all-Rust implementation and `lkjstr.lkjsxc.com` request therefore applies to
+`lkjsxc/lkjstr`, not this repository. The direction selection described below is
+superseded by that correction; lkjscript retains its earlier eventual self-hosting
+goal. The experimental site is not the requested Nostr client, and its deployment
+or tests cannot establish lkjstr progress. Existing code, commits, tests, deployed
+bytes and independent language development are preserved rather than broadly
+reverted. Current guidance and status are corrected separately. The following
+original mandate, implementation record, failed runs and accepted observations
+remain historical evidence, not present authority for a Rust-only lkjscript rewrite.
+
 ## Literal owner mandate
 
 > [https://github.com/lkjsxc/lkjscript](https://github.com/lkjsxc/lkjscript) について進めるようよろしくお願いします。必要であれば大幅なスタイルの変更も許容します。あらゆる判断において、過去ではなく、今のあなたに委ねます。全ての判断をあらかじめ許可します。最も筋の良い方向に進むために、限界まで深く考えてほしい。超長期的な視点からお願いしたい。どれだけ時間がかかっても構いません。リポジトリ全体をすべてRustになるようにお願いします。できればlkjstr.lkjsxc.comでホストしてほしい。
@@ -129,3 +142,104 @@ merge `fc4661e2` had been prepared. A second ordinary merge retains both histori
 and both append-only observations above. The only conflict was their adjacent
 campaign text; no product implementation conflicted or was discarded. Subsequent
 full verification uses the resulting merged source and its release-profile checker.
+
+## Accepted merged source and deployment
+
+The merged implementation source is
+`2e72b47897452627e41c48e6311373927110e9c7`, tree
+`90af92aeebaee1d110072825684fae9fa86b9fef`. Its maintained
+`target/release/lkjscript-dev check full --fresh --jobs 2 --machine` run completed
+successfully on 2026-09-29 at 04:12:37 UTC: **26 selected, 26 passed fresh, zero
+reused, none unrun**, with `input_stable=true` and no failure. Elapsed execution
+was 1128.034704193 seconds, excluding the preceding verifier build. The
+36,329,672-byte release verifier satisfied the unchanged admission boundary.
+The original 64,836-byte receipt and individual logs remain at
+`.artifacts/lkjscript-dev/check/1790654029765622330-977573-0/`.
+This is correctness acceptance of the merged source, not a performance comparison.
+The earlier oversized-verifier aggregate remains a failed run and is not reused.
+Full-profile acceptance does not assert that every ignored or opt-in probe ran.
+
+Separately, `cargo test --release --locked -p lkjscript-site`, using a separate
+site target directory and the same source label, passed all eight library tests
+and the CLI test. The installed site executable was built from that clean merged
+source and compared byte-for-byte with its root-owned installed copy. It resides
+at `/opt/lkjscript-site/releases/2e72b47897452627e41c48e6311373927110e9c7/`;
+`current` points to this revision, with the preceding installed revision retained
+for rollback. The source label is an explicit build label, not independent attestation.
+
+The read-only origin is enabled as `lkjscript-site.service` on `127.0.0.1:8798`.
+Its dynamic user, read-only system view, inaccessible homes and 128 MiB memory
+ceiling are deployed service settings, not a hostile-code sandbox claim. A second
+owned test instance served the same source on port 18998, stopped normally with
+exit status zero after SIGTERM, and left no listener there. The public origin
+remained running throughout that lifecycle probe.
+
+Public preview: https://symposium-tips-twins-hotel.trycloudflare.com/
+
+At 03:54 UTC, HTTPS requests through that public front door from the development
+workspace returned 200 for the home page, all eight document pages, search, CSS
+and health (12 routes). Health reported the exact merged source above. A private
+file path returned 404, POST to the home page returned 405, a repeated search field
+returned 400, and the script-free CSP and other documented response headers were
+present. These are real HTTP observations, not browser rendering acceptance.
+Optional visual-browser checks and a separate automated internal-link audit were
+not completed because the execution tools blocked them; no pass is claimed and
+those blocked operations were not retried by an alternate route.
+
+The preview tunnel is the separate transient
+`lkjscript-site-preview-tunnel.service`. It is development infrastructure, not a
+persistent custom-domain deployment or an uptime guarantee. Workspace/tunnel
+restarts can invalidate its URL. The requested `lkjstr.lkjsxc.com` resolved to
+`92.202.56.95`, but connecting to port 443 from this workspace timed out. An
+existing authorized connection for changing the relevant DNS/TLS/edge routing
+was not available. No DNS record, existing edge configuration, unrelated service,
+credential or GitOps repository was changed. Custom-domain hosting remains undone.
+
+This closing campaign update and the native-guide README correction are
+narrative-only descendants of the tested source. Neither is in the site's embedded
+catalog, and neither changes the compiler, policy classifier, site implementation,
+lockfile, generated capability pages or deployed executable. Normal mainline
+publication and its independent ref read are recorded in the execution return;
+these notes do not relabel earlier proof with a later reporting commit. No release
+tag, compiler distribution, forced update or protection change belongs to this work.
+The separate worktree and ignored original evidence remain available for diagnosis;
+unrelated shared-checkout changes and services remain preserved.
+
+## Catalog-aware source acceptance and subsequent target correction
+
+The shared-checkout catalogue-aware implementation source
+`08f9be1356c8bb09d299a1cf3168283311af36fc`, tree
+`23e317477210630c9140a13342bfb3ed74bbfc1b`, completed its own maintained
+`check full --fresh --jobs 2 --machine` on 2026-09-29 at 04:19:45 UTC.
+All 26 selected gates passed fresh, zero were reused or unrun, and
+`input_stable=true`; elapsed execution was 1045.493776767 seconds, excluding
+its release-verifier build. The original 64,450-byte receipt is
+`.artifacts/lkjscript-dev/check/1790654540487945419-997778-0/receipt.json`.
+This result belongs to that source, not the parallel source or a later merge.
+Ignored and opt-in probes are not claimed to have run. The earlier intentional
+changed-selection regression failure remains retained independently.
+
+Two copied-site HTTP observations also passed for that source: the workspace
+release executable and an isolated `cargo test --release --locked -p lkjscript-site`
+plus `cargo build --release --locked -p lkjscript-site` build. The latter passed
+eight library tests and one CLI test, and ran from an owned directory outside the
+checkout with an empty environment and the explicit source label `08f9be13...`.
+Each run checked 52 response status/header combinations plus one current-status
+body, exact copied executable bytes, SIGTERM exit zero and listener closure.
+Original logs and the Rust harness remain under
+`.artifacts/20260929-rust-integration/`; the labelled second result is
+`live-standalone/live-site-result.txt`. These are HTTP observations, not visual
+browser, custom-domain, kernel-only-Rust or general-memory-ownership evidence.
+The source label is selected build metadata, not independent attestation.
+
+Before final publication, remote main advanced through narrative-only `b0c63bdb`
+and then the owner's target-correction commit `b99555d2`. The latter changes
+embedded direction/status documents and therefore is NOT merely evidence-only
+for the site. Both histories and observations are merged normally. The mistakenly
+amended roadmap and contributor sentence are corrected here as well: Rust-only
+migration and the custom domain concern `lkjsxc/lkjstr`; lkjscript retains its
+language-first, eventual self-hosting goal. The independent classifier/site work
+and this real changed-selection repair remain supported current implementation,
+not authority for a permanent Rust-only rewrite. No unrelated service or deployment
+is changed by this continuation. Acceptance and copied-site checks are repeated
+for the corrected merged input before claiming completion below.

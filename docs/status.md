@@ -257,12 +257,15 @@ detached use. [Standard](../packages/standard/README.md) owns ordinary functions
 and exact platform interfaces. [lkjournal](../applications/lkjournal/README.md)
 is the maintained HTTP/session/worker and durable-data consumer.
 
-The 2026-09-29 owner instruction selects Rust for first-party host implementation.
+The owner corrected the 2026-09-29 request: complete Rust migration and hosting
+at `lkjstr.lkjsxc.com` concern `lkjsxc/lkjstr`, not this language repository.
+The existing language-first and eventual self-hosting direction remains in force.
 Rust owns the kernel, parser, platform, contributor/release orchestration and the
 no-Python classifier. The [native policy predecessor](../tools/native-policy/README.md)
 remains an executable differential-test fixture, not a production fallback.
-The [reference renderers](../tools/native-guides/README.md) still execute an ordinary
-language bundle, so the Rust implementation migration is not complete. Native
+The [reference renderers](../tools/native-guides/README.md) execute an ordinary
+language bundle. That is a supported implementation choice, not unfinished work
+under a Rust-only mandate for this repository. Native
 standard-library/application programs, authored test inputs and historical shell
 evidence remain present; no all-files-or-dependencies-are-Rust claim is made.
 

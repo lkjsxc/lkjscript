@@ -3,7 +3,9 @@
 `lkjscript-site` is an independent, read-only Rust HTTP server for the project's
 public documentation. It is not a native-language application, a compiler service,
 a playground, a replacement capability-reference generator or a new product CLI
-operation. The 2026-09-29 owner instruction selects Rust for host implementation.
+operation. It was added before the owner corrected the 2026-09-29 request to
+target `lkjsxc/lkjstr`. This retained experiment is not the requested Nostr client
+or a Rust-only implementation mandate for lkjscript.
 
 ## Build and run
 

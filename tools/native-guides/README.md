@@ -6,10 +6,14 @@ execute its embedded artifact. Native meaning owns page prose, layout, escaping,
 required-reference selection and missing/ambiguous-reference rejection. Rust
 observes authoritative registry/interface metadata and numeric adapter defaults,
 admits typed arguments, executes pure commands and publishes derived files.
-No parallel Rust page renderer remains. Its strict grant-free artifact embedding
-uses the shared `platform::native_tool::PureTool` boundary also adopted by the
-[repository-policy tool](../native-policy/README.md). Preparation is shared only
-for immutable code; invocation state and cancellation remain per call.
+No Rust replacement for this capability-reference renderer has been integrated.
+Its strict grant-free artifact embedding uses `platform::native_tool::PureTool`,
+which is also used by the retained [repository-policy predecessor](../native-policy/README.md)
+in differential tests. The required production no-Python gate now classifies
+observations directly in Rust. Preparation for this native guide program is shared
+only for immutable code; invocation state and cancellation remain per call.
+The separate [Rust documentation site](../../docs/guides/rust-site.md) renders
+embedded Markdown; it does not replace this capability-reference generator.
 
 This is native development-tool adoption, not compiler self-hosting. The program
 needs no Python, Node, shell subprocess or compiler checkout at runtime. The
