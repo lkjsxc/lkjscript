@@ -3141,12 +3141,7 @@ fn normalized_map_intrinsic(
             })?;
             reserve(super::map::Charge {
                 slots: 0,
-                bytes: key
-                    .value_storage_bytes()?
-                    .checked_add(super::value::projected_value_bytes(value)?)
-                    .ok_or_else(|| {
-                        resource_error("normalized_map_storage", "map projection size overflows")
-                    })?,
+                bytes: super::value::projected_value_bytes(value)?,
             })?;
             entries.push(NormalizedValue::Record(NormalizedRecord::Structural {
                 fields: Arc::new(vec![
@@ -3180,10 +3175,7 @@ fn normalized_map_intrinsic(
             .next()
             .ok_or_else(|| type_error("map intrinsic omits its key"))?,
     );
-    reserve(super::map::Charge {
-        slots: 0,
-        bytes: super::value::map_key_buffer_bytes(key_value.raw()),
-    })?;
+    reserve(super::map::Charge::default())?;
     let key = NormalizedMapKey::from_value(key_value.into_raw()).ok_or_else(|| {
         trap_error(
             "normalized_map_key",

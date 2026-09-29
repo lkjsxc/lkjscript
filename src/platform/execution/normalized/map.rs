@@ -2,9 +2,9 @@
 //!
 //! AVL path copying retains immutable entry handles, including keys and payloads.
 //! Each new node reserves one collection slot and its node plus two Arc counters;
-//! each new entry reserves its key/value header plus two Arc counters. Owned key
-//! buffers and payloads move from their already reserved construction owner. The
-//! borrowed-key helper reserves its copied key buffer before cloning it. Existing
+//! each new entry reserves its key/value header plus two Arc counters. Immutable
+//! key buffers are shared; payloads move from their already reserved owner. Ordinary
+//! value/key conversion, key clone and projection allocate no payload buffer. Existing
 //! entry handles and subtrees are shared, never charged as fresh deep payloads.
 //! Temporary rotation nodes are charged even when the resulting tree omits them.
 //! Zero reservations check cancellation on entry and before successful exposure.
@@ -48,6 +48,8 @@ pub(crate) struct Work {
     pub nodes_allocated: u64,
     pub entry_handles_allocated: u64,
     pub entry_handle_copies: u64,
+    /// Retained observation field: shared key conversions/projections copy zero
+    /// payload bytes. Original parsing and serialization are outside this counter.
     pub key_bytes_copied: u64,
 }
 
@@ -90,11 +92,6 @@ fn observe(update: impl FnOnce(&mut Work)) {
 
 fn visit() {
     observe(|work| work.node_visits = work.node_visits.saturating_add(1));
-}
-
-/// The evaluator calls this after its reserved owned-key conversion completes.
-pub(super) fn key_copied(bytes: u64) {
-    observe(|work| work.key_bytes_copied = work.key_bytes_copied.saturating_add(bytes));
 }
 
 fn share(entry: &Arc<Entry>) -> Arc<Entry> {
@@ -394,8 +391,8 @@ impl Map {
         })
     }
 
-    // A bounded borrowed-key owner used to challenge reservation ordering. Normal
-    // evaluator producers reserve conversion at their own key allocation boundary.
+    // A test-only borrowed-handle owner challenges reservation ordering. Normal
+    // evaluators move their already-admitted immutable key handles.
     #[cfg(test)]
     fn insert_borrowed(
         &self,
@@ -410,19 +407,11 @@ impl Map {
         };
         reserve(Charge::default())?;
         let length = self.inserted_length(key, maximum_length)?;
-        let key_bytes = match key {
-            NormalizedMapKey::Bytes(value) => value.len(),
-            NormalizedMapKey::Text(value) => value.len(),
-            NormalizedMapKey::Bool(_) | NormalizedMapKey::I64(_) => 0,
-        } as u64;
         reserve(Charge {
             slots: 0,
-            bytes: entry_bytes()
-                .checked_add(key_bytes)
-                .ok_or_else(storage_error)?,
+            bytes: entry_bytes(),
         })?;
         added.key = key.clone();
-        key_copied(key_bytes);
         observe(|work| {
             work.entry_handles_allocated = work.entry_handles_allocated.saturating_add(1);
         });

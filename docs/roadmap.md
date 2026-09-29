@@ -124,7 +124,10 @@ and a conservative fallback. Keep this as a disposable execution optimization, n
 substitute for the region/trait/ownership contract below. The original
 [controlled evidence](campaigns/20260929-terminal-local-moves.md) and its continuation
 distinguish retained payload identity from local-read counts and from any whole-program
-zero-copy claim.
+zero-copy claim. [Immutable map-key sharing](campaigns/20260929-shared-map-keys.md)
+removes another concrete copy boundary without changing logical admission or
+language meaning. These bootstrap storage choices do not make universal atomic
+reference counting the future region model.
 
 Compare unique/scoped storage, region-local aliases, local tracing and frozen
 shared segments. Support cyclic data without making universal Arc-style ownership

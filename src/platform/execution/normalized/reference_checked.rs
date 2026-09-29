@@ -311,8 +311,8 @@ impl ReferenceState<'_> {
     }
 
     pub(super) fn map_key_value(&mut self, key: Value) -> Result<NormalizedMapKey, ExecutionError> {
-        let bytes = super::super::value::map_key_buffer_bytes(key.raw());
-        self.reserve_map(super::super::map::Charge { slots: 0, bytes })?;
+        // Sharing storage does not skip the cancellation boundary or raw admission.
+        self.reserve_map(super::super::map::Charge::default())?;
         let key = NormalizedMapKey::from_value(key.release()).ok_or_else(|| {
             super::reference_trap(
                 "reference_map_key",

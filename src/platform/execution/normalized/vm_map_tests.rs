@@ -8,6 +8,9 @@ use normalized::prepare::{NormalizedEntryPoint, NormalizedFunctionBody};
 use normalized::reference::NormalizedReferenceRead;
 use normalized::vm::{NormalizedRunPolicy, NormalizedVm};
 
+#[path = "vm_map_key_tests.rs"]
+mod vm_map_key_tests;
+
 #[derive(Debug)]
 struct Observed {
     value: Result<NormalizedValue, ExecutionError>,
@@ -1023,7 +1026,7 @@ fn retained_map_state_preserves_exact_logical_storage_and_depth_boundaries() {
             let static_text = internal_type(&mut program, &mut schema, TypeForm::StaticText);
             for (key, key_type, stored_bytes) in [
                 (NormalizedMapKey::Bool(true), boolean, 9),
-                (NormalizedMapKey::Bytes(vec![0, 1, 255]), bytes, 11),
+                (NormalizedMapKey::Bytes(vec![0, 1, 255].into()), bytes, 11),
             ] {
                 let ty = internal_type(
                     &mut program,
@@ -1054,7 +1057,7 @@ fn retained_map_state_preserves_exact_logical_storage_and_depth_boundaries() {
                 },
             );
             let value = map([(
-                NormalizedMapKey::Text("λ".repeat(32_768)),
+                NormalizedMapKey::Text("λ".repeat(32_768).into()),
                 NormalizedValue::I64(7),
             )]);
             // Text counts UTF-8 bytes, plus the eight-byte integer payload. No
@@ -1523,7 +1526,10 @@ fn checked_map_text_keys_and_boxed_projections_reserve_their_actual_owned_bytes(
     for _ in 0..12 {
         payload = NormalizedValue::Option(Some(Box::new(payload)));
     }
-    let retained = map([(NormalizedMapKey::Text(text_key.clone()), payload.clone())]);
+    let retained = map([(
+        NormalizedMapKey::Text(text_key.clone().into()),
+        payload.clone(),
+    )]);
     let word = std::mem::size_of::<usize>() as u64;
     let boxes = 12 * std::mem::size_of::<NormalizedValue>() as u64;
     let entry_and_node = (std::mem::size_of::<NormalizedMapKey>()
@@ -1553,7 +1559,7 @@ fn checked_map_text_keys_and_boxed_projections_reserve_their_actual_owned_bytes(
             None,
         );
         assert_eq!(missing.value.unwrap(), payload);
-        assert_eq!(missing.work.maps.key_bytes_copied, text_key.len() as u64);
+        assert_eq!(missing.work.maps.key_bytes_copied, 0);
         let projected = invoke(
             &program,
             &reader,
@@ -1617,7 +1623,7 @@ fn checked_map_text_keys_and_boxed_projections_reserve_their_actual_owned_bytes(
             entry_and_node,
             "replacement moves its admitted payload and shared old entries remain untouched"
         );
-        assert_eq!(replaced.work.maps.key_bytes_copied, text_key.len() as u64);
+        assert_eq!(replaced.work.maps.key_bytes_copied, 0);
         assert_eq!(
             invoke(
                 &program,
