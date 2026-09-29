@@ -50,6 +50,9 @@ also passed both native byte/map tests from an unrelated directory; the campaign
 records the 1,024-concatenation observation without claiming a timing or RSS result.
 A consolidated [v0.1.60 successor](releases/v0.1.60.md) is selected for candidate
 acceptance. This includes the affine-proof correction below; public v0.1.55 is unchanged.
+Candidate `36605595167/1` uses notes/reporting descendant `89241cd3`; its source was
+read back and its last observed state is in progress, not accepted or published.
+The candidate and final-archive cases remain separate from the local source proof.
 
 ## Development v0.1.60: affine validation admission
 

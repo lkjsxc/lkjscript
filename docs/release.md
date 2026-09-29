@@ -38,6 +38,10 @@ retained final optimized executable also passed the native byte/map cases. The
 needs its own exact source/final-archive acceptance and the public-case filters
 recorded in the continuation before ordinary unchanged-asset promotion. Public/latest
 remains v0.1.55. Source acceptance is not publication or acceptance of another tree.
+After the notes/reporting descendant `89241cd3` reached main, one candidate
+`36605595167/1` was dispatched from that exact source on 2026-09-30 at 02:31:54 JST.
+Its observed in-progress state is not acceptance; use that original producer for
+resumption and preserve its frozen inputs. No v0.1.60 tag or promotion is selected.
 
 Immutable [v0.1.38](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.38) already publishes source
 `7083f9a6d56ed702017942e100c3696fc6f35308`. Publisher

@@ -211,3 +211,27 @@ all selected cases to pass. The locally copied optimized executable is not that
 final archive. Only then use the existing annotated-tag, scoped-selection and
 unchanged-asset promotion procedure. Do not rebuild accepted assets or infer public
 availability from either source acceptance or a successful candidate alone.
+
+## Selected successor candidate
+
+After notes/reporting-only commit `89241cd33c88d27ef1b6f774e24ab9b0726ff093`, tree
+`53bb7a56b0dd072b07b253ac7af20c36ccddbfaf`, reached main normally, existing release
+runs, v0.1.60 tag occupancy and public releases were refreshed. No duplicate v0.1.60
+producer, tag or release was present. One non-publishing candidate was dispatched:
+[36605595167/1](https://github.com/lkjsxc/lkjscript/actions/runs/36605595167), created
+2026-09-29T17:31:54Z (2026-09-30 02:31:54 JST). Independent GitHub reading confirms
+`workflow_dispatch`, branch main, original attempt 1, and exact product/controller
+source `89241cd3`. Its observed state advanced from queued to in progress, with no
+terminal acceptance yet. No tag, scoped-selector update or promotion was created.
+
+The local full-profile receipt remains bound to implementation source `0f0f4d92`;
+the five-file `89241cd3` descendant changes notes and reporting only. Documentation
+validation passed generated-reference comparison, no-Python and product-surface
+checks, with zero policy violations. This does not relabel the local full run with
+a later source SHA. The hosted candidate must establish its own acceptance.
+
+Resume this original producer at its actual failed or incomplete boundary, or use
+its accepted original assets for the final-archive cases above. Do not dispatch a
+replacement merely because this handoff was recorded while it was running. All local
+jobs owned here have finished; external CI remains the pending publication boundary.
+The final reporting descendant records that state without changing candidate inputs.
