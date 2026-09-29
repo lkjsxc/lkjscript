@@ -414,7 +414,7 @@ fn web_snapshot_rebuild_does_not_replace_running_old_program_or_require_its_grap
     let checked = public.cli(&["check"], true);
     assert_eq!(
         compact_field(compact_record(&checked, "tests"), "passed"),
-        "107"
+        "117"
     );
     assert_eq!(
         compact_field(compact_record(&checked, "tests"), "differential"),
