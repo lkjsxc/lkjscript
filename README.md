@@ -173,8 +173,10 @@ are maintained meaning-graph packages with deterministic generated assets.
 Rust owns the kernel, platform adapters, contributor/release orchestration and
 no-Python filename/shebang decisions. The [native policy predecessor](tools/native-policy/README.md)
 is retained only as an independent executable regression oracle and language example.
-The [native guide tool](tools/native-guides/README.md) still renders the eight
-capability-reference pages: the implementation migration to Rust is not complete.
+The [native guide tool](tools/native-guides/README.md) renders the eight
+capability-reference pages. The owner corrected the 2026-09-29 Rust-only request
+to target the separate `lkjsxc/lkjstr` repository; this project's long-term
+self-hosting direction is unchanged.
 Native application/library programs and language test inputs remain product artifacts,
 not evidence that the compiler is self-hosted.
 

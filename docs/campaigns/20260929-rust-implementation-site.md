@@ -2,6 +2,19 @@
 
 Date: 2026-09-29 (Asia/Tokyo).
 
+## Subsequent owner correction — target was lkjstr
+
+The owner subsequently stated: "すみません。lkjstrのつもりがlkjscriptとしていました".
+The all-Rust implementation and `lkjstr.lkjsxc.com` request therefore applies to
+`lkjsxc/lkjstr`, not this repository. The direction selection described below is
+superseded by that correction; lkjscript retains its earlier eventual self-hosting
+goal. The experimental site is not the requested Nostr client, and its deployment
+or tests cannot establish lkjstr progress. Existing code, commits, tests, deployed
+bytes and independent language development are preserved rather than broadly
+reverted. Current guidance and status are corrected separately. The following
+original mandate, implementation record, failed runs and accepted observations
+remain historical evidence, not present authority for a Rust-only lkjscript rewrite.
+
 ## Literal owner mandate
 
 > [https://github.com/lkjsxc/lkjscript](https://github.com/lkjsxc/lkjscript) について進めるようよろしくお願いします。必要であれば大幅なスタイルの変更も許容します。あらゆる判断において、過去ではなく、今のあなたに委ねます。全ての判断をあらかじめ許可します。最も筋の良い方向に進むために、限界まで深く考えてほしい。超長期的な視点からお願いしたい。どれだけ時間がかかっても構いません。リポジトリ全体をすべてRustになるようにお願いします。できればlkjstr.lkjsxc.comでホストしてほしい。
