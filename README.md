@@ -170,11 +170,24 @@ measured tradeoffs. Read each guide's runtime boundary: text-join is not in v0.1
 
 [Standard](packages/standard/README.md) and [lkjournal](applications/lkjournal/README.md)
 are maintained meaning-graph packages with deterministic generated assets.
-The development [native guide tool](tools/native-guides/README.md) renders all eight
-reference pages, and the [native policy tool](tools/native-policy/README.md) owns
-no-Python filename/shebang decisions. Rust retains metadata/filesystem observation,
-orchestration, the kernel and platform adapters. Native tool adoption does not mean
-that the compiler is self-hosted or all development already uses lkjscript.
+Rust owns the kernel, platform adapters, contributor/release orchestration and
+no-Python filename/shebang decisions. The [native policy predecessor](tools/native-policy/README.md)
+is retained only as an independent executable regression oracle and language example.
+The [native guide tool](tools/native-guides/README.md) still renders the eight
+capability-reference pages: the implementation migration to Rust is not complete.
+Native application/library programs and language test inputs remain product artifacts,
+not evidence that the compiler is self-hosted.
+
+## Public documentation site
+
+The independent [Rust documentation server](docs/guides/rust-site.md) embeds an
+explicit eight-document publication allowlist, renders Markdown and searches it on
+the server, and sends no browser JavaScript. It does not depend on the compiler or
+expose workspace files, program execution, project mutation or a database. Build it
+with `cargo build --release --locked -p lkjscript-site`; run `lkjscript-site --help`
+for its loopback-first listener. HTTPS and hostname routing belong to the deployment
+proxy, not this origin. This server does not replace the native capability-reference
+generator.
 
 ## Public surface and compatibility
 

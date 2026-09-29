@@ -6,7 +6,7 @@ license = "Apache-2.0"
 publish = false
 
 [workspace]
-members = [".", "tools/lkjscript-dev"]
+members = [".", "tools/lkjscript-dev", "tools/lkjscript-site"]
 resolver = "3"
 
 [dependencies]

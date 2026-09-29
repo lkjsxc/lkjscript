@@ -234,10 +234,21 @@ detached use. [Standard](../packages/standard/README.md) owns ordinary functions
 and exact platform interfaces. [lkjournal](../applications/lkjournal/README.md)
 is the maintained HTTP/session/worker and durable-data consumer.
 
-Native [reference renderers](../tools/native-guides/README.md) and
-[repository policy](../tools/native-policy/README.md) are real ordinary-language
-consumers. Rust still owns the supported kernel, parser, platform and
-contributor/release orchestration. This adoption is not compiler self-hosting.
+The 2026-09-29 owner instruction selects Rust for first-party host implementation.
+Rust owns the kernel, parser, platform, contributor/release orchestration and the
+no-Python classifier. The [native policy predecessor](../tools/native-policy/README.md)
+remains an executable differential-test fixture, not a production fallback.
+The [reference renderers](../tools/native-guides/README.md) still execute an ordinary
+language bundle, so the Rust implementation migration is not complete. Native
+standard-library/application programs, authored test inputs and historical shell
+evidence remain present; no all-files-or-dependencies-are-Rust claim is made.
+
+The independent [Rust documentation site](guides/rust-site.md) serves eight explicitly
+selected embedded documents, bounded server-side search and source-revision metadata.
+It has no runtime dependency on the compiler, Node.js, Python or an external template
+engine, and exposes no workspace directory or execution API. TLS, public DNS and
+front-door traffic limits require deployment infrastructure. This presentation server
+is separate from the still-native capability-reference generator.
 
 ## Native web starter
 

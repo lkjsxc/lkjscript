@@ -1,15 +1,17 @@
-# Native repository-policy tool
+# Retained native repository-policy predecessor
 
-The required `lkjscript-dev policy no-python` gate uses this ordinary lkjscript
-program for extension and raw-byte shebang decisions. There is no Rust decision
-fallback. The contributor executable embeds its generated bundle and calls the
-same grant-free `PureTool` adapter as the native reference guides.
+Since the 2026-09-29 owner decision, the required `lkjscript-dev policy no-python`
+gate makes extension and bounded raw-byte shebang decisions directly in Rust.
+Production policy classification no longer loads or executes this bundle, and does
+not serialize observations through JSON or Base64. Filesystem admission, ordering,
+final-symlink nonfollowing, extension precedence and the 512-byte prefix remain.
 
-This is maintained native-tool adoption, not a self-hosted compiler or a native
-filesystem/Git implementation. Rust observes paths, validates relative paths,
-reads bounded regular-file prefixes, encodes the existing typed Bytes boundary,
-reports decisions and returns exit codes. Native functions inspect Bytes directly
-through general `bytes-get`; no production List<I64> expansion remains.
+This ordinary lkjscript program is retained as an independent executable regression
+oracle and a language example, not as a runtime fallback. The Rust unit tests load
+its unchanged derived bundle under `cfg(test)` and compare ASCII case variants,
+single-byte mutations and the read boundary. The public-CLI reproduction tests still
+exercise real native authorship and execution. The retained native functions inspect
+Bytes through general `bytes-get`; these fixtures do not establish compiler self-hosting.
 
 ## Authority and reproduction
 

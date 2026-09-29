@@ -19,7 +19,7 @@ fn compare(prefixes: &[Vec<u8>]) {
             .iter()
             .map(|prefix| reference(prefix))
             .collect::<Vec<_>>();
-        assert_eq!(shebangs(batch).expect("native decisions"), expected);
+        assert_eq!(shebangs(batch), expected);
     }
 }
 
@@ -28,14 +28,13 @@ fn extensions_preserve_ascii_matching_and_one_result_per_input() {
     assert_eq!(
         extensions(&[
             "py", "pY", "Py", "PY", "", "pyc", ".py", "py ", "ｐｙ", "rs", "épy"
-        ])
-        .expect("extension decisions"),
+        ]),
         [
             true, true, true, true, false, false, false, false, false, false, false
         ]
     );
-    assert!(extensions(&[]).expect("empty extensions").is_empty());
-    assert!(shebangs(&[]).expect("empty prefixes").is_empty());
+    assert!(extensions(&[]).is_empty());
+    assert!(shebangs(&[]).is_empty());
 }
 
 #[test]
@@ -99,15 +98,82 @@ fn raw_bytes_first_line_and_adjacent_read_boundaries_are_preserved() {
     let mut last = vec![b'x'; 506];
     last[..2].copy_from_slice(b"#!");
     last.extend_from_slice(b"python");
-    assert_eq!(shebangs(&[last.clone()]).unwrap(), [true]);
+    assert_eq!(shebangs(&[last.clone()]), [true]);
     last.insert(2, b'x');
-    assert_eq!(shebangs(&[last]).unwrap(), [false]);
+    assert_eq!(shebangs(&[last]), [false]);
 }
 
 #[test]
-fn malformed_native_calls_fail_instead_of_returning_a_clean_policy() {
-    assert!(classify("missing", &["py"]).is_err());
-    assert!(classify("shebangs", &["not a byte list"]).is_err());
-    assert!(classify("extensions", &[true]).is_err());
-    assert_eq!(extensions(&["py"]).unwrap(), [true]);
+fn rust_decisions_match_the_retained_language_predecessor() {
+    use base64::Engine;
+    use lkjscript::platform::{ExecutionControl, JsonLimits, native_tool::PureTool};
+    let program = PureTool::load(
+        include_bytes!("../../../../../native-policy/generated/policy.lkja"),
+        &ExecutionControl::uncancelled(),
+    )
+    .expect("retained predecessor fixture");
+    let values = [
+        "py", "pY", "Py", "PY", "", "pyc", ".py", "py ", "ｐｙ", "rs", "épy",
+    ];
+    let input = serde_json::to_vec(&(values,)).unwrap();
+    let output = program
+        .run_json(
+            "extensions",
+            &input,
+            JsonLimits::default(),
+            &ExecutionControl::uncancelled(),
+        )
+        .unwrap();
+    assert_eq!(
+        extensions(&values),
+        serde_json::from_slice::<Vec<bool>>(&output).unwrap()
+    );
+    let mut prefixes = Vec::new();
+    for mask in 0..64 {
+        let mut prefix = b"#!/usr/bin/".to_vec();
+        prefix.extend(b"python".iter().enumerate().map(|(index, byte)| {
+            if mask & (1 << index) != 0 {
+                byte.to_ascii_uppercase()
+            } else {
+                *byte
+            }
+        }));
+        prefixes.push(prefix);
+    }
+    for position in 0..6 {
+        for value in 0..=255 {
+            let mut prefix = b"#!python".to_vec();
+            prefix[2 + position] = value;
+            prefixes.push(prefix);
+        }
+    }
+    for offset in [500, 505, 506, 507, 510, 511, 512] {
+        let mut prefix = vec![b'x'; offset];
+        prefix[..2].copy_from_slice(b"#!");
+        prefix.extend_from_slice(b"python");
+        prefixes.push(prefix);
+    }
+    for batch in prefixes.chunks(64) {
+        let values = batch
+            .iter()
+            .map(|prefix| {
+                serde_json::json!({
+                    "$bytes": base64::engine::general_purpose::STANDARD.encode(prefix)
+                })
+            })
+            .collect::<Vec<_>>();
+        let input = serde_json::to_vec(&(values,)).unwrap();
+        let output = program
+            .run_json(
+                "shebangs",
+                &input,
+                JsonLimits::default(),
+                &ExecutionControl::uncancelled(),
+            )
+            .unwrap();
+        assert_eq!(
+            shebangs(batch),
+            serde_json::from_slice::<Vec<bool>>(&output).unwrap()
+        );
+    }
 }
