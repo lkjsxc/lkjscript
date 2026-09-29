@@ -5,14 +5,14 @@ use super::super::value::{ValueOrigin, VariantLayoutIndex};
 use super::*;
 use crate::platform::execution::ExecutionControl;
 
-fn load(local: u32) -> I {
+pub(super) fn load(local: u32) -> I {
     I::LoadLocal {
         local,
         use_mode: ParameterUse::Unrestricted,
     }
 }
 
-fn code(instructions: Vec<I>) -> NormalizedCode {
+pub(super) fn code(instructions: Vec<I>) -> NormalizedCode {
     NormalizedCode {
         parameter_count: 2,
         local_count: 2,
@@ -20,11 +20,11 @@ fn code(instructions: Vec<I>) -> NormalizedCode {
     }
 }
 
-fn optimize(code: &mut NormalizedCode) {
+pub(super) fn optimize(code: &mut NormalizedCode) {
     derive(code, &mut Budget::new(&ExecutionControl::uncancelled())).unwrap();
 }
 
-fn switch(a: u32, b: u32) -> I {
+pub(super) fn switch(a: u32, b: u32) -> I {
     I::SwitchVariant(
         [a, b]
             .into_iter()
@@ -40,9 +40,9 @@ fn switch(a: u32, b: u32) -> I {
     )
 }
 
-// Independent reachability, not the production last-index/interval algorithm.
-// Even a redefinition does not erase a read here: the optimizer is conservative.
-fn future_read(instructions: &[I], at: usize, local: u32) -> bool {
+// Independent per-read reachability, not the production bitset fixed point or
+// linear fallback. A write ends this value's lifetime only on its actual path.
+pub(super) fn future_read(instructions: &[I], at: usize, local: u32) -> bool {
     let mut pending = vec![at + 1];
     let mut seen = vec![false; instructions.len()];
     while let Some(pc) = pending.pop() {
@@ -58,16 +58,31 @@ fn future_read(instructions: &[I], at: usize, local: u32) -> bool {
             {
                 return true;
             }
+            I::StoreLocal(write)
+            | I::BeginTransaction { binding: write, .. }
+            | I::BeginParameterTransaction { binding: write, .. }
+            | I::BeginTransactionOutcome { binding: write, .. }
+                if *write == local =>
+            {
+                continue;
+            }
             I::Jump(target) => {
                 pending.push(*target as usize);
                 continue;
             }
             I::JumpIfFalse(target) => pending.push(*target as usize),
             I::SwitchVariant(jumps) => {
-                pending.extend(jumps.iter().map(|jump| jump.target as usize));
+                pending.extend(
+                    jumps
+                        .iter()
+                        .filter(|jump| jump.binding_local != Some(local))
+                        .map(|jump| jump.target as usize),
+                );
                 continue;
             }
-            I::Return | I::TailCall { .. } | I::TailInvoke { .. } => continue,
+            I::Return | I::TailCall { .. } => continue,
+            // A dynamic external call can return even at a tail-position invoke.
+            I::TailInvoke { .. } => {}
             _ => {}
         }
         pending.push(pc + 1);
@@ -103,12 +118,28 @@ fn terminal_reads_preserve_reuse_affinity_and_shared_preparation() {
     optimize(&mut input);
     assert!(Arc::ptr_eq(&once, &input.instructions));
     let mut instructions = input.instructions.to_vec();
+    instructions.pop(); // A reachable later read, not dead code after Return.
     instructions.push(load(0));
     instructions.push(I::Return);
     input.instructions = instructions.into();
     optimize(&mut input);
     assert_eq!(input.instructions[2], load(0));
-    assert_eq!(input.instructions[8], I::MoveLocal(0));
+    assert_eq!(input.instructions[7], I::MoveLocal(0));
+}
+
+#[test]
+fn exclusive_branch_reads_are_both_terminal() {
+    let mut input = code(vec![
+        load(1),
+        I::JumpIfFalse(4),
+        load(0),
+        I::Jump(5),
+        load(0),
+        I::Return,
+    ]);
+    optimize(&mut input);
+    assert_eq!(input.instructions[2], I::MoveLocal(0));
+    assert_eq!(input.instructions[4], I::MoveLocal(0));
 }
 
 #[test]
@@ -117,8 +148,8 @@ fn weak_shared_storage_is_reserved_before_detaching_and_rewriting() {
     let weak = Arc::downgrade(&input.instructions);
     let control = ExecutionControl::uncancelled();
     let mut work = Budget::new(&control);
-    // Fill the finite ledger except for the exact two scratch arrays. A weak
-    // observer still requires fresh instruction storage before make_mut detaches it.
+    // Leave room only for the linear fallback's scratch arrays. Optional
+    // liveness cannot authorize an unreserved copy when a weak observer exists.
     let scratch = 2 * std::mem::size_of::<Option<usize>>() + 2 * std::mem::size_of::<usize>();
     work.reserve::<u8>(256 * 1024 * 1024 - scratch).unwrap();
     assert_eq!(
@@ -215,7 +246,7 @@ fn analysis_is_bounded_cancelled_and_rejects_foreign_operands() {
     );
     for size in [32, 4096] {
         let mut input = code(vec![load(0); size]);
-        let control = ExecutionControl::cancel_after_checks((size * 2 + 10) as u64);
+        let control = ExecutionControl::cancel_after_checks((size * 12 + 64) as u64);
         derive(&mut input, &mut Budget::new(&control)).unwrap();
         assert_eq!(input.instructions[size - 1], I::MoveLocal(0));
         let control = ExecutionControl::cancel_after_checks(1);

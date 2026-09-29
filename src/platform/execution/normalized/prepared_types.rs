@@ -43,6 +43,20 @@ impl<'a> Budget<'a> {
         reserve_metadata(&mut self.bytes, count, std::mem::size_of::<T>())
     }
 
+    /// Advisory analyses may decline storage without consuming the ledger or
+    /// turning their own capacity limit into rejection of admitted meaning.
+    pub(super) fn try_reserve<T>(&mut self, count: usize) -> bool {
+        let Some(total) = count
+            .checked_mul(std::mem::size_of::<T>())
+            .and_then(|added| self.bytes.checked_add(added))
+            .filter(|total| *total <= MAXIMUM_METADATA_BYTES)
+        else {
+            return false;
+        };
+        self.bytes = total;
+        true
+    }
+
     pub(super) fn step(&mut self) -> Result<(), Diagnostic> {
         step(self)
     }

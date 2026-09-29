@@ -234,16 +234,33 @@ must agree with it. Physical pack/catalog layout, persistent-map partitioning, d
 and request spelling are normalized away only when they are not semantic.
 
 Terminal ordinary-local transfer derivation requires an independent all-successors
-reachability oracle, including the 65,536 small control-flow fixtures in
-`local_moves_tests.rs`. These are analysis fixtures, not claims that arbitrary bytecode
-is an admitted program. Tests cover backward jumps and variant dispatch, implicit
-transaction reads, unchanged borrow/consume modes, shared-code preservation,
-re-derivation, cancellation and preparation capacity rejection.
+reachability oracle. The 65,536 small control-flow fixtures in `local_moves_tests.rs`
+remain; `local_moves_flow_tests.rs` adds 234,256 fixtures with redefinitions and
+edge-specific variant payload writes, checking both soundness and expected last uses.
+These are analysis fixtures, not claims that arbitrary bytecode is an admitted program.
+Tests cover cyclic and acyclic flow, live joins, implicit transaction reads/writes,
+multiple local bitset words, unchanged borrow/consume modes, shared-code preservation,
+re-derivation, cancellation and preparation capacity rejection. Dynamic `TailInvoke`
+retains a possible external-callee continuation; only exact graph `TailCall` and
+`Return` are unconditional exits.
+
+The optional precise analysis computes `live-in = reads union (live-out minus writes)`
+to a fixed point; each switch edge removes only that edge's payload binding from the
+successor's live set. A last use may move only when the current value is absent from
+all successor paths before a redefinition. Reads in cycles remain live unless every
+returning path first replaces the value. Derived moves are reads on re-analysis, not
+certificates. A complete result must precede any optimization rewrite. The 8 MiB
+scratch/plan limit and one-million-step advisory limit select the retained linear
+fallback, never a partial proof. Actual global preparation limits and cancellation
+remain distinct and can still reject preparation. This changes no canonical type,
+ownership, effect, package or artifact contract.
 
 `local_moves_value_tests.rs` authors real native recursive data and functions through
 canonical publication. Production and the independent interpreter must return the
 same values. Restoring only copying local reads must preserve value semantics but
-lose the original boxed payload identity. Cancelled recursive transfers must release
+lose the original boxed payload identity. Both branches of the native `choose`
+function must retain all 65 original boxes, agree with canonical interpretation and
+perform no copying local reads. Cancelled recursive transfers must release
 frames, operands and locals; the same prepared program must remain reusable. Foreign
 prepared values must reject before a local move. The copied-binary
 `native_terminal_values` case adds generic forwarding, both branches, bound-callback

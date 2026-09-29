@@ -29,6 +29,21 @@ Inspect the actual installed executable with `lkjscript capabilities`. Installin
 a newer runtime does not silently replace accepted application definitions,
 exact dependency selections, running processes or operational data.
 
+## Development v0.1.60: control-flow local transfers
+
+Ordinary local values can transfer at the final use on each branch, not only at the
+last lexical occurrence. Bounded fixed-point liveness distinguishes loop-carried
+values, redefinitions and edge-specific match bindings; dynamic external-call
+continuations retain live values. Advisory exhaustion falls back to the existing
+conservative proof, while global preparation limits and cancellation still apply.
+Exact resource modes, runtime origin/class admission and canonical formats are unchanged.
+
+The [continuation](campaigns/20260929-flow-local-moves.md) records predecessor failure
+sensitivity, independent control-flow checks and native boxed-payload observations.
+This is an execution optimization, not general memory borrowing, a region type system
+or a whole-program zero-copy claim. It does not publish a binary release or change
+running applications.
+
 ## Development v0.1.60: effect-generic resource callbacks
 
 Exact-resource helpers may declare effect parameters for resource-free task callbacks,

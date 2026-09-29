@@ -21,6 +21,11 @@ declarations.begin
     (function create keep (visibility public)
       (parameter create value (type Envelope))
       (returns Envelope) (effect pure) (body (local value)))
+    (function create choose (visibility public)
+      (parameter create value (type Envelope))
+      (parameter create flag (type Bool))
+      (returns Envelope) (effect pure)
+      (body (if (local flag) (local value) (local value))))
     (function create forever (visibility public)
       (parameter create value (type Envelope))
       (returns Envelope) (effect pure) (body (call forever (local value))))))
@@ -157,6 +162,44 @@ fn terminal_move_preserves_owned_box_and_matches_canonical_and_copying_execution
         .invoke(
             declaration,
             vec![nested(&program, 64)],
+            None,
+            &ExecutionControl::uncancelled(),
+        )
+        .unwrap()
+        .0;
+        assert_eq!(actual, reference);
+    }
+}
+
+#[test]
+fn branch_terminal_moves_preserve_both_paths_payload_identity() {
+    let snapshot = fixture();
+    let program = prepare_snapshot(&snapshot);
+    let declaration = declaration_named(&snapshot, "choose");
+    for flag in [false, true] {
+        let argument = nested(&program, 64);
+        let addresses = payload_addresses(&argument);
+        let (actual, observation) = NormalizedVm::new(&program, NormalizedRunPolicy::default())
+            .invoke(
+                declaration,
+                vec![argument, NormalizedValue::Bool(flag)],
+                None,
+                &ExecutionControl::uncancelled(),
+            )
+            .unwrap();
+        assert_eq!(actual, nested(&program, 64));
+        assert_eq!(payload_addresses(&actual), addresses, "branch {flag}");
+        assert_eq!(observation.value_work.local_value_moves, 2);
+        assert_eq!(observation.value_work.local_value_copies, 0);
+        assert_eq!(observation.live_locals_after, 0);
+        let reference = NormalizedReferenceInterpreter::new(
+            &snapshot,
+            &program,
+            NormalizedRunPolicy::default(),
+        )
+        .invoke(
+            declaration,
+            vec![nested(&program, 64), NormalizedValue::Bool(flag)],
             None,
             &ExecutionControl::uncancelled(),
         )

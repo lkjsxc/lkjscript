@@ -116,11 +116,15 @@ delivery. A cancelled blocking native call needs an explicit lifecycle solution.
 
 ### Ownership and memory-management regions
 
-Terminal ordinary-local transfers now avoid a proved unnecessary duplication without
-changing source meaning or resource authority. Keep this as a disposable execution
-optimization, not a substitute for the region/trait/ownership contract below. Its
-[controlled evidence](campaigns/20260929-terminal-local-moves.md) distinguishes retained
-payload identity from local-read counts and from any whole-program zero-copy claim.
+Terminal ordinary-local transfers avoid a proved unnecessary duplication without
+changing source meaning or resource authority. The
+[control-flow continuation](campaigns/20260929-flow-local-moves.md) extends this to
+exclusive branches and path-specific redefinitions with bounded fixed-point analysis
+and a conservative fallback. Keep this as a disposable execution optimization, not a
+substitute for the region/trait/ownership contract below. The original
+[controlled evidence](campaigns/20260929-terminal-local-moves.md) and its continuation
+distinguish retained payload identity from local-read counts and from any whole-program
+zero-copy claim.
 
 Compare unique/scoped storage, region-local aliases, local tracing and frozen
 shared segments. Support cyclic data without making universal Arc-style ownership

@@ -1,9 +1,11 @@
-//! Conservative terminal reads of ordinary locals, derived from admitted code.
-//! A last lexical read outside every backward-edge interval cannot be followed
-//! by another read: a later read is absent, and reaching an earlier one requires
-//! a backward edge crossing this instruction. This linear proof deliberately
-//! leaves loop-carried reads and some branch-local opportunities unoptimized.
-//! It is not a language ownership contract, a borrow proof, or wire authority.
+//! Terminal reads of ordinary locals, derived from admitted control flow.
+//! Bounded liveness proves branch-local and redefinition-sensitive last uses.
+//! When its advisory capacity is exhausted, the linear last-read/backward-edge
+//! proof remains a conservative fallback. Neither proof is a language ownership
+//! contract, a borrow proof, or wire authority.
+
+#[path = "local_liveness.rs"]
+mod liveness;
 
 use super::prepare::{
     NormalizedCode, NormalizedEntryPoint, NormalizedFunction, NormalizedFunctionBody,
@@ -76,6 +78,14 @@ fn edge(
 }
 
 pub(super) fn derive(code: &mut NormalizedCode, work: &mut Budget<'_>) -> Result<(), Diagnostic> {
+    work.step()?;
+    if liveness::derive(code, work)? {
+        return Ok(());
+    }
+    derive_linear(code, work)
+}
+
+fn derive_linear(code: &mut NormalizedCode, work: &mut Budget<'_>) -> Result<(), Diagnostic> {
     work.step()?;
     work.reserve::<Option<usize>>(code.local_count as usize)?;
     work.reserve::<usize>(code.instructions.len())?;
@@ -170,3 +180,7 @@ pub(super) fn derive(code: &mut NormalizedCode, work: &mut Budget<'_>) -> Result
 #[cfg(test)]
 #[path = "local_moves_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "local_moves_flow_tests.rs"]
+mod flow_tests;
