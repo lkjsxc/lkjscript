@@ -167,8 +167,83 @@ receipt and selected final executable checks remain separate completion obligati
 
 ## Acceptance and delivery
 
-The selected completion requires an identified implementation source, generated documentation
-through product discovery, the unchanged full profile with fresh execution, and independent
-remote main verification after ordinary integration. Results and exact source/receipt identities
-are recorded below only after they are observed. No release tag, promotion, anonymous acquisition
-or replacement of an existing service is implied by source integration.
+### Accepted source
+
+The corrected verification source is `f129c2fd986159180f39ea6c65e935e314bbdf08`,
+tree `2d4ef7feea18a1f3e6a83498ae39e5b3215bc677`. Its parent implementation remains
+`f22003fd2c7a041993c95836fa051ffae012857b`; the follow-up changes only the three
+verification consumers and this record. Both commits are authored and committed as
+`lkjsxc <lkjsxc@gmail.com>`.
+
+The unchanged `target/release/lkjscript-dev check full --fresh --jobs 2 --machine`
+profile completed successfully on that corrected source. All **26 selected gates passed
+freshly**, with **zero reused results**, no unrun gates and `input_stable=true`.
+Elapsed time was **634.553947263 seconds**. The original receipt is:
+
+```text
+.artifacts/lkjscript-dev/check/1790673540151244275-1886863-0/receipt.json
+```
+
+It is 64,496 bytes, with digest
+`verification_7c98872dfcf816140f264be3c0302e424c9de60da426bd4a1b61aab8dffd7cb5`.
+Initial and final worktree input identities both equal
+`verification_97575683d559b839a19d612cc5aaf36c12ebd3d786d5e73e929ef5f32d61b2fc`.
+The profile definition remains
+`verification_299c0ba24b2f905bcc971785d9e8579391d9f5683c55bc996b2908134cdf79bb`.
+The machine summary is `/tmp/lkjscript-effect-resource-full-final.log`; the original
+receipt, input/DAG manifests, individual logs and retained outputs stay under the run root.
+No source edits occurred during this run.
+
+The workspace gate completed all its binaries: 1,302 passed, zero failed and 29
+preexisting ignored cases. These are 899 library, 10 data-admission, 7 data-scan,
+9 general-service, 165 public-CLI, 12 structural-CLI, 191 developer-tool, 8 site-library
+and 1 site-command test passes. The ignored counts are 8 library, 1 public-CLI,
+1 structural-CLI and 19 developer-tool cases; they are not claimed as executed.
+The new callback cases are not ignored. Other full gates cover Clippy, generated
+public guides, product/tooling policy, standard/application artifacts and transport,
+offline packages, pure-tail execution and the maintained HTTP/service witnesses.
+
+### Selected optimized executable
+
+The last producer's retained executable for this same run is:
+
+```text
+.artifacts/lkjscript-dev/check/1790673540151244275-1886863-0/retained/release_command_lifecycle/0
+```
+
+It is a regular executable, 26,657,800 bytes, SHA-256
+`4ee0f8e1c384b831f123eb725eabd57c57fe380f99c74158c80c6bac0e24eade`.
+Its standard-dependent public command lifecycle passed in 178.46 seconds within
+its full-profile gate. After that producer completed, the freshly built workspace
+harness `target/debug/deps/public_cli-f303d5c773072baf` was invoked from `/tmp`
+with `LKJSCRIPT_RELEASE_CANDIDATE` set to this exact retained path, not the mutable
+`target/release` file. The six `native_effect_generic` cases passed in **31.06 seconds**
+with two test threads. The full raw CLI affine-handoff regression then passed in
+**4.59 seconds** with its exact test-name filter. Their retained development log is
+`/tmp/lkjscript-effect-resource-final-producer.log`. This is selected executable
+acceptance, not anonymous installation or publication evidence.
+
+### Mainline delivery and remaining boundaries
+
+After the completed source receipt and selected executable checks were read, both
+commits were normally pushed from `a8bc93dc` to `f129c2fd`. An independent live GitHub
+branch read confirmed main `f129c2fd986159180f39ea6c65e935e314bbdf08` and tree
+`2d4ef7feea18a1f3e6a83498ae39e5b3215bc677`; the local HEAD and tracking ref agreed.
+The live branch was unprotected and the applicable ruleset collection was empty.
+No protection, credentials, workflow permissions or existing remote history were changed.
+The subsequent reporting descendant changes only this campaign and `docs/status.md`;
+it does not relabel the accepted source or claim a new full-profile run for prose edits.
+
+The selected language increment is integrated as development **v0.1.60**. No release
+candidate workflow, tag, promotion, anonymous acquisition or service replacement was
+performed. A public version remains a separate delivery point requiring the existing
+candidate/promotion and anonymous installed-consumption checks for its selected exact
+assets; this local source receipt cannot substitute for them. Existing services,
+retained worktrees, the historical stash and unrelated untracked files were preserved.
+
+The next semantic boundary remains an ordinary package-level owned producer/transformer/
+consumer with scoped views and explicit implementation/lifetime/effect contracts. This
+increment supplies callback-effect composition without claiming requirement-polymorphic
+resource binding, general memory borrowing, regions, trait completeness or zero-copy
+payload processing. The failed first full attempt and its concrete corrections above
+remain retained alongside, not overwritten by, the successful result.

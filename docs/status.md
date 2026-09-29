@@ -41,9 +41,15 @@ The [literal library](../tests/fixtures/effect-resources-library.lkjc),
 [consumer](../tests/fixtures/effect-resources-consumer.lkjc) and
 [guide](guides/native-resources.md#effectful-callbacks-without-rebinding-resources) describe
 normal authoring and detached execution. The
-[campaign](campaigns/20260929-effect-resource-callbacks.md) separates focused observations,
-complete source acceptance and delivery. This source extension does not publish v0.1.60,
-replace running applications or establish general memory borrowing or zero-copy execution.
+[campaign](campaigns/20260929-effect-resource-callbacks.md#accepted-source) records
+source `f129c2fd`: all 26 full-profile gates passed freshly with zero reused results and
+stable inputs. The workspace tests passed 1,302 cases, with 29 existing ignored cases
+kept distinct. The exact retained final optimized producer also passed all six new
+callback cases and the raw CLI handoff regression. Both source commits were normally
+pushed to main and independently re-read from GitHub.
+
+This source extension does not publish v0.1.60, replace running applications or establish
+general memory borrowing or zero-copy execution.
 
 ## Development v0.1.59: terminal ordinary-value transfers
 
