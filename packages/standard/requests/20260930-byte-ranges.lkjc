@@ -1,0 +1,50 @@
+request base=rev_1499261f258acf77f2580733bfe193230c955512aa79fb68222bd53fb008e00a idempotency=standard-byte-ranges
+reference.owner as=$core package=local class=module name=core
+reference.owner as=$from-text package=local class=declaration parent=$core name=bytes-from-text
+reference.owner as=$from-list package=local class=declaration parent=$core name=bytes-from-list
+reference.owner as=$concat package=local class=declaration parent=$core name=bytes-concat
+declarations.begin
+(units
+  (external create bytes-slice (in $core) (visibility public)
+    (implementation core.bytes.slice)
+    (parameter create bytes (type Bytes))
+    (parameter create start (type I64)) (parameter create end (type I64))
+    (returns Bytes))
+  (external create bytes-copy (in $core) (visibility public)
+    (implementation core.bytes.copy)
+    (parameter create bytes (type Bytes)) (returns Bytes))
+  (test create byte-range-full (in $core) (visibility private)
+    (actual (call bytes-slice (call $from-text (text "ABCDE")) (i64 0) (i64 5)))
+    (expected (call $from-text (text "ABCDE"))))
+  (test create byte-range-middle (in $core) (visibility private)
+    (actual (call bytes-slice (call $from-text (text "ABCDE")) (i64 1) (i64 4)))
+    (expected (call $from-text (text "BCD"))))
+  (test create byte-range-empty-middle (in $core) (visibility private)
+    (actual (call bytes-slice (call $from-text (text "ABCDE")) (i64 2) (i64 2)))
+    (expected (call $from-text (text ""))))
+  (test create byte-range-empty-end (in $core) (visibility private)
+    (actual (call bytes-slice (call $from-text (text "ABCDE")) (i64 5) (i64 5)))
+    (expected (call $from-text (text ""))))
+  (test create byte-range-empty-input (in $core) (visibility private)
+    (actual (call bytes-slice (call $from-text (text "")) (i64 0) (i64 0)))
+    (expected (call $from-text (text ""))))
+  (test create byte-range-splits-utf8 (in $core) (visibility private)
+    (actual (call bytes-slice (call $from-text (text "猫")) (i64 1) (i64 3)))
+    (expected (call $from-list (list I64 (i64 140) (i64 171)))))
+  (test create byte-range-nested (in $core) (visibility private)
+    (actual (call bytes-slice
+      (call bytes-slice (call $from-text (text "ABCDE")) (i64 1) (i64 4)) (i64 1) (i64 2)))
+    (expected (call $from-text (text "C"))))
+  (test create byte-range-detached (in $core) (visibility private)
+    (actual (call bytes-copy (call bytes-slice
+      (call $from-list (list I64 (i64 0) (i64 255) (i64 128) (i64 13) (i64 10))) (i64 1) (i64 4))))
+    (expected (call $from-list (list I64 (i64 255) (i64 128) (i64 13)))))
+  (test create byte-range-copy-empty (in $core) (visibility private)
+    (actual (call bytes-copy (call $from-text (text ""))))
+    (expected (call $from-text (text ""))))
+  (test create byte-range-concatenation (in $core) (visibility private)
+    (actual (call $concat
+      (call bytes-slice (call $from-text (text "ABCDE")) (i64 0) (i64 2))
+      (call bytes-slice (call $from-text (text "ABCDE")) (i64 2) (i64 5))))
+    (expected (call $from-text (text "ABCDE")))))
+declarations.end

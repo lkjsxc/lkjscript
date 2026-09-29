@@ -54,12 +54,12 @@ Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_1499261f258acf77f2580733bfe193230c955512aa79fb68222bd53fb008e00a`;
-- package revision: `package_revision_a8d6160bb925675424d86c12e7f3eb39df513b414b2116a615cc10ee21811b6b`;
-- package transport: `package_transport_e541794cfa0f183ed87a74351bab9d87eeff0f6881181c7789cf2a7d8b7e49f1`;
-- artifact manifest: `artifact_manifest_03eb512a4d24ef869d27737592ab32d22c252bcd343b657098a822314fcdc3bd`;
-- artifact bundle: `artifact_bundle_e40292b3a4b37f0f9a2c4d1d4cee6dfb9a541199be06e4796c79cd6dad45950d`;
-- 1,454 live semantic owners, 210 compiler units, and 75 graph tests.
+- semantic revision: `rev_7a13416f398fceb35d246500dd02b0f02ab7931347bb21cb7f6841ad8b65556a`;
+- package revision: `package_revision_97275d57a6addc7a574b6114868c5dd736ad471e66b1fa61b2f5a7530b981603`;
+- package transport: `package_transport_1f2b61a31ae16e186014beb8eb30a5609d6ed77176d8063de62d130691d70b78`;
+- artifact manifest: `artifact_manifest_c3123cf64b8d142448b74ff949e20e37c0abf738ef54ae22deb36762282815c8`;
+- artifact bundle: `artifact_bundle_fce7ce9c39b0b899ca12768fedf47c566eede9d8a09b620dd20042254a9161be`;
+- 1,558 live semantic owners, 222 compiler units, and 85 graph tests.
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose
 ordinary parametric records with pure functions. Mapping invokes the first callback then the second,

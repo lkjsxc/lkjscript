@@ -3549,6 +3549,25 @@ fn reference_intrinsic(
             }
             _ => Err(reference_type_error("byte length received a foreign value")),
         },
+        "core.bytes.slice" => match arguments.as_slice() {
+            [
+                NormalizedValue::Bytes(value),
+                NormalizedValue::I64(start),
+                NormalizedValue::I64(end),
+            ] => {
+                let selected = reference_byte_range(value, *start, *end)?;
+                control.check()?;
+                Ok(NormalizedValue::bytes(selected))
+            }
+            _ => Err(reference_type_error("byte slicing received foreign values")),
+        },
+        "core.bytes.copy" => match arguments.as_slice() {
+            [NormalizedValue::Bytes(value)] => {
+                control.check()?;
+                Ok(NormalizedValue::bytes(value.as_ref()))
+            }
+            _ => Err(reference_type_error("byte copying received foreign values")),
+        },
         "core.bytes.get" => match arguments.as_slice() {
             [NormalizedValue::Bytes(value), NormalizedValue::I64(index)] => {
                 match usize::try_from(*index) {
@@ -4444,6 +4463,18 @@ fn reference_capabilities_unbound() -> ExecutionError {
 
 fn reference_type_error(message: impl Into<String>) -> ExecutionError {
     reference_error("normalized_reference_type", message)
+}
+
+fn reference_byte_range(bytes: &[u8], start: i64, end: i64) -> Result<&[u8], ExecutionError> {
+    // Independent value oracle: signed bounds are checked before any conversion,
+    // without using the optimized payload's offset or sharing implementation.
+    if start < 0 || end < start || end as u64 > bytes.len() as u64 {
+        return Err(reference_trap(
+            "reference_bytes_range",
+            "byte range is out of bounds",
+        ));
+    }
+    Ok(&bytes[start as usize..end as usize])
 }
 
 fn reference_trap(code: &'static str, message: &'static str) -> ExecutionError {

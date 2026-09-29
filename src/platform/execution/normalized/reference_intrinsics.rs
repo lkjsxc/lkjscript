@@ -118,6 +118,51 @@ impl ReferenceState<'_> {
                     ),
                 ])
             }
+            "core.bytes.slice" | "core.bytes.copy" => {
+                let selected = match (implementation, arguments.as_slice()) {
+                    ("core.bytes.slice", [value, start, end]) => {
+                        match (value.raw(), start.raw(), end.raw()) {
+                            (
+                                NormalizedValue::Bytes(bytes),
+                                NormalizedValue::I64(start),
+                                NormalizedValue::I64(end),
+                            ) => reference_byte_range(bytes, *start, *end)?,
+                            _ => {
+                                return Err(reference_type_error(
+                                    "byte slicing received foreign values",
+                                ));
+                            }
+                        }
+                    }
+                    ("core.bytes.copy", [value]) => match value.raw() {
+                        NormalizedValue::Bytes(bytes) => bytes.as_ref(),
+                        _ => {
+                            return Err(reference_type_error(
+                                "byte copying received a foreign value",
+                            ));
+                        }
+                    },
+                    _ => {
+                        return Err(reference_type_error(
+                            "byte range operation has foreign arity",
+                        ));
+                    }
+                };
+                // Deliberately materialize the range instead of sharing the optimized
+                // carrier. Reserve scratch and retained storage at their own boundaries.
+                self.charge_allocation(selected.len() as u64)?;
+                let mut output = Vec::new();
+                output.try_reserve_exact(selected.len()).map_err(|_| {
+                    reference_resource("reference_bytes_storage", "cannot allocate byte range")
+                })?;
+                for chunk in selected.chunks(65_536) {
+                    self.control.check()?;
+                    output.extend_from_slice(chunk);
+                }
+                self.control.check()?;
+                self.charge_allocation(output.len() as u64)?;
+                CheckedValue::primitive(&self.schema, NormalizedValue::Bytes(output.into()))
+            }
             "core.bytes.from-list" => {
                 let [list] = arguments.as_slice() else {
                     return Err(reference_type_error("byte construction requires one list"));

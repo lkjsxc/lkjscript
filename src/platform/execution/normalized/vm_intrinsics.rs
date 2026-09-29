@@ -333,6 +333,36 @@ impl Machine<'_> {
                 self.observation.value_work.bytes = work;
                 CheckedValue::scalar(self.program, NormalizedValue::Bytes(result?))
             }
+            "core.bytes.slice" => {
+                let [value, start, end]: [CheckedValue; 3] = arguments
+                    .try_into()
+                    .map_err(|_| type_error("byte slicing received a foreign arity"))?;
+                let (
+                    NormalizedValue::Bytes(value),
+                    NormalizedValue::I64(start),
+                    NormalizedValue::I64(end),
+                ) = (value.into_raw(), start.into_raw(), end.into_raw())
+                else {
+                    return Err(type_error("byte slicing received foreign values"));
+                };
+                let control = self.control;
+                let result = value.slice(start, end, control, &mut |bytes| {
+                    self.charge_allocation(bytes)
+                })?;
+                CheckedValue::scalar(self.program, NormalizedValue::Bytes(result))
+            }
+            "core.bytes.copy" => {
+                let [value]: [CheckedValue; 1] = arguments
+                    .try_into()
+                    .map_err(|_| type_error("byte copying received a foreign arity"))?;
+                let NormalizedValue::Bytes(value) = value.into_raw() else {
+                    return Err(type_error("byte copying received a foreign value"));
+                };
+                let control = self.control;
+                let result =
+                    value.detached_copy(control, &mut |bytes| self.charge_allocation(bytes))?;
+                CheckedValue::scalar(self.program, NormalizedValue::Bytes(result))
+            }
             "core.bytes.from-list" => {
                 let [value] = arguments.as_slice() else {
                     return Err(type_error("byte construction received a foreign arity"));

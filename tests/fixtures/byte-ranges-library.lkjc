@@ -1,0 +1,30 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create ranges
+    (function create map-range (visibility public)
+      (type-parameter create Output)
+      (parameter create bytes (type Bytes))
+      (parameter create start (type I64)) (parameter create end (type I64))
+      (parameter create transform (type (function (Bytes) Output)))
+      (returns Output) (effect pure)
+      (body (invoke (local transform)
+        (call std::bytes-slice (local bytes) (local start) (local end)))))
+    (function create remember (visibility public)
+      (parameter create bytes (type Bytes))
+      (returns (function (Unit) Bytes)) (effect pure)
+      (body (call std::function-constant (types Bytes Unit) (local bytes))))
+    (function create payload (visibility public)
+      (parameter create frame (type Bytes)) (returns Bytes) (effect pure)
+      (body (call std::bytes-slice (local frame) (i64 1)
+        (call std::add (i64 1) (call std::bytes-get (local frame) (i64 0))))))
+    (test create binary-payload (visibility private)
+      (actual (call payload (call std::bytes-from-list
+        (list I64 (i64 3) (i64 0) (i64 255) (i64 128) (i64 42)))))
+      (expected (call std::bytes-from-list (list I64 (i64 0) (i64 255) (i64 128)))))
+    (test create generic-hex (visibility private)
+      (actual (call map-range (types Text)
+        (call std::bytes-from-list (list I64 (i64 0) (i64 255) (i64 128)))
+        (i64 1) (i64 3) (function-value std::bytes-to-hex)))
+      (expected (text "ff80")))))
+declarations.end

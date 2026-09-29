@@ -5,6 +5,9 @@ use std::cmp::Ordering;
 use std::ops::Deref;
 use std::sync::Arc;
 
+#[path = "bytes_slice.rs"]
+mod slices;
+
 #[cfg(test)]
 #[path = "bytes_storage_tests.rs"]
 mod tests;
@@ -16,6 +19,7 @@ pub struct BytePayload(Storage);
 enum Storage {
     Shared(Arc<[u8]>),
     Buffer(Arc<Vec<u8>>),
+    Window(Arc<slices::Window>),
 }
 
 /// Production checked-concatenation work, not allocator internals, RSS, or a quota.
@@ -130,6 +134,7 @@ impl AsRef<[u8]> for BytePayload {
         match &self.0 {
             Storage::Shared(bytes) => bytes,
             Storage::Buffer(bytes) => bytes,
+            Storage::Window(window) => window.bytes(),
         }
     }
 }

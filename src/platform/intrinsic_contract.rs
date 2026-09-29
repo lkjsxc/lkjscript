@@ -199,6 +199,12 @@ fn validate_shape(
             &[IntrinsicType::Bytes, IntrinsicType::Bytes],
             &IntrinsicType::Bytes,
         ),
+        "core.bytes.slice" => exact(
+            signature,
+            &[IntrinsicType::Bytes, IntrinsicType::I64, IntrinsicType::I64],
+            &IntrinsicType::Bytes,
+        ),
+        "core.bytes.copy" => exact(signature, &[IntrinsicType::Bytes], &IntrinsicType::Bytes),
         "core.bytes.length" => exact(signature, &[IntrinsicType::Bytes], &IntrinsicType::I64),
         "core.bytes.get" => exact(
             signature,
@@ -620,6 +626,54 @@ fn kernel_type<R: ExpressionRead + ?Sized>(
 #[cfg(test)]
 mod byte_contract_tests {
     use super::*;
+
+    #[test]
+    fn byte_range_contracts_accept_only_their_exact_pure_signatures() {
+        for (name, required) in [
+            (
+                "core.bytes.slice",
+                vec![IntrinsicType::Bytes, IntrinsicType::I64, IntrinsicType::I64],
+            ),
+            ("core.bytes.copy", vec![IntrinsicType::Bytes]),
+        ] {
+            let mut candidates = vec![
+                required.clone(),
+                vec![],
+                vec![IntrinsicType::Bytes, IntrinsicType::I64],
+                vec![IntrinsicType::Bytes; 4],
+            ];
+            for index in 0..required.len() {
+                for ty in [
+                    IntrinsicType::Text,
+                    IntrinsicType::Bool,
+                    IntrinsicType::I64,
+                    IntrinsicType::Bytes,
+                ] {
+                    let mut parameters = required.clone();
+                    parameters[index] = ty;
+                    candidates.push(parameters);
+                }
+            }
+            for parameters in candidates {
+                for result in [
+                    IntrinsicType::Bytes,
+                    IntrinsicType::Text,
+                    IntrinsicType::I64,
+                ] {
+                    for effectful in [false, true] {
+                        let expected =
+                            parameters == required && result == IntrinsicType::Bytes && !effectful;
+                        let signature = IntrinsicSignature {
+                            parameters: parameters.clone(),
+                            result: result.clone(),
+                            effectful,
+                        };
+                        assert_eq!(validate_shape(name, &signature).is_ok(), expected);
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn byte_index_has_one_exact_closed_signature() {

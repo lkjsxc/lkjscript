@@ -2871,6 +2871,32 @@ fn call_core_intrinsic(
             };
             Ok(NormalizedValue::I64(normalized_length(value.len())?))
         }
+        "core.bytes.slice" => {
+            let [
+                NormalizedValue::Bytes(value),
+                NormalizedValue::I64(start),
+                NormalizedValue::I64(end),
+            ] = arguments.as_slice()
+            else {
+                return Err(type_error("byte slicing received foreign values"));
+            };
+            let selected = usize::try_from(*start)
+                .ok()
+                .zip(usize::try_from(*end).ok())
+                .and_then(|(start, end)| value.get(start..end))
+                .ok_or_else(|| {
+                    trap_error("normalized_bytes_range", "byte range is out of bounds")
+                })?;
+            control.check()?;
+            Ok(NormalizedValue::bytes(selected))
+        }
+        "core.bytes.copy" => {
+            let [NormalizedValue::Bytes(value)] = arguments.as_slice() else {
+                return Err(type_error("byte copying received foreign values"));
+            };
+            control.check()?;
+            Ok(NormalizedValue::bytes(value.as_ref()))
+        }
         "core.bytes.get" => {
             let [NormalizedValue::Bytes(value), NormalizedValue::I64(index)] = arguments.as_slice()
             else {
