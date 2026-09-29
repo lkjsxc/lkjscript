@@ -1016,8 +1016,15 @@ A normal exit with sampled surviving descendants cannot certify clean completion
 Graceful interrupt/termination retains the actual application exit classification.
 
 The Linux sampler follows already-owned identities after reparenting, including newly
-created descendants of a known branch. PID/start identity and pidfd checks remain
-required before individual signals. This is not complete hostile-process containment:
+created descendants of a known branch. Before discovery it retires only confirmed
+absent, terminated or replaced PID/start identities; observation errors retain cleanup
+ownership and fail the operation. A recycled PID alone grants no new ownership.
+Traversal admits each distinct queued/visited PID once, including the direct root,
+under the existing 4,096-process bound. Connected traversal precedes retained fallback
+roots so known children do not reset the depth-64 bound. Thread and procfs byte limits
+remain separate. Serial historical departures do not accumulate a lifetime process quota.
+PID/start identity and pidfd checks remain required before individual signals.
+This is not complete hostile-process containment:
 a separate-session descendant created and reparented entirely between samples may be
 unobserved. Unobserved inherited output still cannot create an indefinite reader join.
 Git and toolchain identity probes share this lifecycle, a 30-second execution allowance,

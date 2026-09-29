@@ -1,11 +1,16 @@
 //! Bounded cleanup of owned verifier descendants, including children with separate process groups.
+#[cfg(test)]
+mod inventory_tests;
+mod traversal;
+
 use crate::error::DevError;
 use rustix::process::{Pid, PidfdFlags, Signal, pidfd_open, pidfd_send_signal};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::Read;
 use std::path::Path;
 use std::time::{Duration, Instant};
+use traversal::Traversal;
 
 const MAXIMUM_PROCESSES: usize = 4096;
 const MAXIMUM_DEPTH: usize = 64;
@@ -38,20 +43,29 @@ impl Descendants {
         }
         self.discover(false)
     }
+    fn refresh_known(
+        &mut self,
+        mut observation: impl FnMut(u32) -> Result<Option<(Identity, bool)>, DevError>,
+    ) -> Result<(), DevError> {
+        let mut failure = None;
+        // Capacity describes currently owned live identities, not all historical children.
+        // A recycled PID is not authority to adopt its replacement; only a newly observed
+        // child edge may do that. Failed observations retain ownership for cleanup.
+        self.known.retain(|pid, expected| match observation(*pid) {
+            Ok(Some((current, true))) => current == *expected,
+            Ok(_) => false,
+            Err(error) => {
+                failure.get_or_insert(error);
+                true
+            }
+        });
+        failure.map_or(Ok(()), Err)
+    }
     fn discover(&mut self, stop: bool) -> Result<(), DevError> {
-        // Continue from already-owned branches after their parents exit/reparent.
-        let mut pending: Vec<_> = self.known.keys().map(|pid| (*pid, 0)).collect();
-        pending.push((self.root, 0));
-        let mut visited = BTreeSet::new();
-        while let Some((pid, depth)) = pending.pop() {
-            if !visited.insert(pid) {
-                continue;
-            }
-            if visited.len() > MAXIMUM_PROCESSES || depth > MAXIMUM_DEPTH {
-                return Err(DevError::infrastructure(
-                    "owned descendant inventory exhausted",
-                ));
-            }
+        self.refresh_known(observe)?;
+        // Continue from live already-owned branches after their parents exit/reparent.
+        let mut traversal = Traversal::new(self.root, self.known.keys().copied());
+        while let Some((pid, depth)) = traversal.pop()? {
             let Some((identity, live)) = observe(pid)? else {
                 continue;
             };
@@ -65,7 +79,7 @@ impl Descendants {
                 continue;
             }
             if pid != self.root {
-                if self.known.len() >= MAXIMUM_PROCESSES {
+                if !self.known.contains_key(&pid) && self.known.len() >= MAXIMUM_PROCESSES {
                     return Err(DevError::infrastructure(
                         "owned process inventory exhausted",
                     ));
@@ -97,19 +111,10 @@ impl Descendants {
                 let children = std::str::from_utf8(&children)
                     .map_err(|_| DevError::corrupt("non-UTF-8 process children"))?;
                 for child in children.split_whitespace() {
-                    if pending
-                        .len()
-                        .checked_add(visited.len())
-                        .is_none_or(|count| count >= MAXIMUM_PROCESSES)
-                    {
-                        return Err(DevError::infrastructure(
-                            "owned descendant traversal exhausted",
-                        ));
-                    }
                     let child = child
                         .parse::<u32>()
                         .map_err(|_| DevError::corrupt("invalid child PID"))?;
-                    pending.push((child, depth + 1));
+                    traversal.push(child, depth + 1)?;
                 }
             }
         }

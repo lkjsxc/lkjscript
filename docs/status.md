@@ -50,8 +50,13 @@ also passed both native byte/map tests from an unrelated directory; the campaign
 records the 1,024-concatenation observation without claiming a timing or RSS result.
 A consolidated [v0.1.60 successor](releases/v0.1.60.md) is selected for candidate
 acceptance. This includes the affine-proof correction below; public v0.1.55 is unchanged.
-Candidate `36605595167/1` uses notes/reporting descendant `89241cd3`; its source was
-read back and its last observed state is in progress, not accepted or published.
+Candidate `36605595167/1` at notes/reporting descendant `89241cd3` failed source
+acceptance: 19 of 20 gates passed; the contributor's child-process inventory exhausted
+during `workspace_tests`. It was neither accepted nor published. The
+[inventory correction](campaigns/20260930-descendant-inventory.md) retires confirmed
+historical departures and counts each traversal PID once without raising the existing
+bounds or weakening joined cleanup. Its focused process tests pass; complete source
+and new exact-candidate acceptance remain distinct from that focused result.
 The candidate and final-archive cases remain separate from the local source proof.
 
 ## Development v0.1.60: affine validation admission

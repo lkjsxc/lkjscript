@@ -40,8 +40,13 @@ recorded in the continuation before ordinary unchanged-asset promotion. Public/l
 remains v0.1.55. Source acceptance is not publication or acceptance of another tree.
 After the notes/reporting descendant `89241cd3` reached main, one candidate
 `36605595167/1` was dispatched from that exact source on 2026-09-30 at 02:31:54 JST.
-Its observed in-progress state is not acceptance; use that original producer for
-resumption and preserve its frozen inputs. No v0.1.60 tag or promotion is selected.
+That original run ended in failure at 03:23:21 JST: 19 source gates passed, while
+`workspace_tests` exhausted the contributor's historical descendant inventory.
+The [inventory correction](campaigns/20260930-descendant-inventory.md) preserves its
+original diagnostics and addresses the verifier defect without raising the bounds.
+The failed producer cannot be promoted or relabeled under a corrected verifier;
+complete source acceptance must precede a new exact-source candidate. No v0.1.60
+tag or promotion is selected, and public/latest remains v0.1.55.
 
 Immutable [v0.1.38](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.38) already publishes source
 `7083f9a6d56ed702017942e100c3696fc6f35308`. Publisher
