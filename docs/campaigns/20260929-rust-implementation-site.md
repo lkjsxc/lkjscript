@@ -83,3 +83,65 @@ worktree incorporated that complete history without conflicts. The new aggregate
 must use the maintained release verifier built for the merged source, not the
 oversized test-profile executable or an old source label. The original shared
 checkout remains separate and no unpublished work there is selected for staging.
+
+## Accepted merged source and deployment
+
+The merged implementation source is
+`2e72b47897452627e41c48e6311373927110e9c7`, tree
+`90af92aeebaee1d110072825684fae9fa86b9fef`. Its maintained
+`target/release/lkjscript-dev check full --fresh --jobs 2 --machine` run completed
+successfully on 2026-09-29 at 04:12:37 UTC: **26 selected, 26 passed fresh, zero
+reused, none unrun**, with `input_stable=true` and no failure. Elapsed execution
+was 1128.034704193 seconds, excluding the preceding verifier build. The
+36,329,672-byte release verifier satisfied the unchanged admission boundary.
+The original 64,836-byte receipt and individual logs remain at
+`.artifacts/lkjscript-dev/check/1790654029765622330-977573-0/`.
+This is correctness acceptance of the merged source, not a performance comparison.
+The earlier oversized-verifier aggregate remains a failed run and is not reused.
+Full-profile acceptance does not assert that every ignored or opt-in probe ran.
+
+Separately, `cargo test --release --locked -p lkjscript-site`, using a separate
+site target directory and the same source label, passed all eight library tests
+and the CLI test. The installed site executable was built from that clean merged
+source and compared byte-for-byte with its root-owned installed copy. It resides
+at `/opt/lkjscript-site/releases/2e72b47897452627e41c48e6311373927110e9c7/`;
+`current` points to this revision, with the preceding installed revision retained
+for rollback. The source label is an explicit build label, not independent attestation.
+
+The read-only origin is enabled as `lkjscript-site.service` on `127.0.0.1:8798`.
+Its dynamic user, read-only system view, inaccessible homes and 128 MiB memory
+ceiling are deployed service settings, not a hostile-code sandbox claim. A second
+owned test instance served the same source on port 18998, stopped normally with
+exit status zero after SIGTERM, and left no listener there. The public origin
+remained running throughout that lifecycle probe.
+
+Public preview: https://symposium-tips-twins-hotel.trycloudflare.com/
+
+At 03:54 UTC, HTTPS requests through that public front door from the development
+workspace returned 200 for the home page, all eight document pages, search, CSS
+and health (12 routes). Health reported the exact merged source above. A private
+file path returned 404, POST to the home page returned 405, a repeated search field
+returned 400, and the script-free CSP and other documented response headers were
+present. These are real HTTP observations, not browser rendering acceptance.
+Optional visual-browser checks and a separate automated internal-link audit were
+not completed because the execution tools blocked them; no pass is claimed and
+those blocked operations were not retried by an alternate route.
+
+The preview tunnel is the separate transient
+`lkjscript-site-preview-tunnel.service`. It is development infrastructure, not a
+persistent custom-domain deployment or an uptime guarantee. Workspace/tunnel
+restarts can invalidate its URL. The requested `lkjstr.lkjsxc.com` resolved to
+`92.202.56.95`, but connecting to port 443 from this workspace timed out. An
+existing authorized connection for changing the relevant DNS/TLS/edge routing
+was not available. No DNS record, existing edge configuration, unrelated service,
+credential or GitOps repository was changed. Custom-domain hosting remains undone.
+
+This closing campaign update and the native-guide README correction are
+narrative-only descendants of the tested source. Neither is in the site's embedded
+catalog, and neither changes the compiler, policy classifier, site implementation,
+lockfile, generated capability pages or deployed executable. Normal mainline
+publication and its independent ref read are recorded in the execution return;
+these notes do not relabel earlier proof with a later reporting commit. No release
+tag, compiler distribution, forced update or protection change belongs to this work.
+The separate worktree and ignored original evidence remain available for diagnosis;
+unrelated shared-checkout changes and services remain preserved.
