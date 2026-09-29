@@ -242,7 +242,10 @@ Tests cover cyclic and acyclic flow, live joins, implicit transaction reads/writ
 multiple local bitset words, unchanged borrow/consume modes, shared-code preservation,
 re-derivation, cancellation and preparation capacity rejection. Dynamic `TailInvoke`
 retains a possible external-callee continuation; only exact graph `TailCall` and
-`Return` are unconditional exits.
+`Return` are unconditional exits. Transaction begin also observes the old slot's
+emptiness before defining its token. Both precise and fallback proofs must treat
+that guard as a read so an earlier move cannot change an occupied-slot rejection;
+the independent oracle and stale-move tests enforce this separately.
 
 The optional precise analysis computes `live-in = reads union (live-out minus writes)`
 to a fixed point; each switch edge removes only that edge's payload binding from the

@@ -51,19 +51,17 @@ pub(super) fn future_read(instructions: &[I], at: usize, local: u32) -> bool {
         }
         match &instructions[pc] {
             I::LoadLocal { local: read, .. } | I::MoveLocal(read) if *read == local => return true,
-            I::CommitTransaction { binding, .. }
+            I::BeginTransaction { binding, .. }
+            | I::BeginParameterTransaction { binding, .. }
+            | I::BeginTransactionOutcome { binding, .. }
+            | I::CommitTransaction { binding, .. }
             | I::CommitParameterTransaction { binding, .. }
             | I::CommitTransactionOutcome { binding, .. }
                 if *binding == local =>
             {
                 return true;
             }
-            I::StoreLocal(write)
-            | I::BeginTransaction { binding: write, .. }
-            | I::BeginParameterTransaction { binding: write, .. }
-            | I::BeginTransactionOutcome { binding: write, .. }
-                if *write == local =>
-            {
+            I::StoreLocal(write) if *write == local => {
                 continue;
             }
             I::Jump(target) => {

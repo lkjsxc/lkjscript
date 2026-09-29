@@ -97,7 +97,12 @@ fn derive_linear(code: &mut NormalizedCode, work: &mut Budget<'_>) -> Result<(),
         // reads and non-fallthrough successors before they may use this proof.
         let read = match instruction {
             I::LoadLocal { local, .. } | I::MoveLocal(local) => Some(*local),
-            I::CommitTransaction { binding, .. }
+            // Begin observes whether the slot is occupied before defining its
+            // token. The fallback must preserve that guard just like a value read.
+            I::BeginTransaction { binding, .. }
+            | I::BeginParameterTransaction { binding, .. }
+            | I::BeginTransactionOutcome { binding, .. }
+            | I::CommitTransaction { binding, .. }
             | I::CommitParameterTransaction { binding, .. }
             | I::CommitTransactionOutcome { binding, .. } => Some(*binding),
             I::Jump(target) | I::JumpIfFalse(target) => {
@@ -132,10 +137,7 @@ fn derive_linear(code: &mut NormalizedCode, work: &mut Budget<'_>) -> Result<(),
             | I::List { .. }
             | I::Map { .. }
             | I::Perform { .. }
-            | I::BeginTransaction { .. }
             | I::PerformParameter { .. }
-            | I::BeginParameterTransaction { .. }
-            | I::BeginTransactionOutcome { .. }
             | I::Return => None,
         };
         if let Some(local) = read {

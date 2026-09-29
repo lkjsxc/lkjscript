@@ -70,3 +70,30 @@ run passed 10 cases; the expanded pre-dispatch-review run passed 16. Final corre
 focused, full-profile and copied-executable results are recorded below only after
 observation. Complete acceptance must use stable source, fresh gates and zero reuse;
 subsequent reporting commits must not be mislabeled as the tested product source.
+
+## Frozen first acceptance and slot-guard review
+
+Implementation `b8b0e356a96be2b88e65a5ad6c54d0a961cd62ef`, tree
+`6db45607829e6d3b6b21ae9ad8f52b1d82e2f813`, passed the corrected 18-test focused
+suite, then fresh `full`: 26/26 passed, reuse 0, input stable, 1027.787499679 seconds.
+Original receipt:
+`.artifacts/lkjscript-dev/check/1790677596095447694-2029534-0/receipt.json`.
+Its original summary is retained as `full-source.log` under this campaign's evidence
+root. The source remained frozen until the run ended; this is not final acceptance
+of the subsequent refinement.
+
+Continued review of VM local accesses found that transaction begin observes slot
+emptiness before installing its token. An analysis must preserve that observation,
+not treat begin as a blind overwrite. Two new analysis witnesses ran against the
+unchanged first production source: precise and linear proofs both selected a move
+before the guard and failed the expected copying-read assertion (exit 101, two
+failures). Original log: `slot-guards-before.log`. These hostile analysis fixtures
+are not evidence of an admitted source program bypassing a runtime check.
+
+Both proofs now count transaction begin as a read; precise liveness also records its
+following definition. The independent path oracle treats the guard as an observation.
+Tests separately require both proofs to retain an ordinary read and to demote a stale
+move before that guard. The prior begin/commit ordering witness is corrected to the
+same VM behavior. Ordinary stores and selected variant payload writes still end the
+old value's lifetime. Final focused, full and copied-release-executable acceptance
+must run on this corrected source, not reuse the first receipt.

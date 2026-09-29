@@ -29,10 +29,14 @@ fn flow(instruction: &I) -> Flow<'_> {
     // be classified when an instruction is added. A derived move is still a read.
     let (read, write, edges) = match instruction {
         I::LoadLocal { local, .. } | I::MoveLocal(local) => (Some(*local), None, Edges::Next),
-        I::StoreLocal(local)
-        | I::BeginTransaction { binding: local, .. }
+        I::StoreLocal(local) => (None, Some(*local), Edges::Next),
+        // Begin observes the old slot's emptiness before defining its token.
+        // Moving an earlier value must not turn that guard into acceptance.
+        I::BeginTransaction { binding: local, .. }
         | I::BeginParameterTransaction { binding: local, .. }
-        | I::BeginTransactionOutcome { binding: local, .. } => (None, Some(*local), Edges::Next),
+        | I::BeginTransactionOutcome { binding: local, .. } => {
+            (Some(*local), Some(*local), Edges::Next)
+        }
         I::CommitTransaction { binding, .. }
         | I::CommitParameterTransaction { binding, .. }
         | I::CommitTransactionOutcome { binding, .. } => (Some(*binding), None, Edges::Next),

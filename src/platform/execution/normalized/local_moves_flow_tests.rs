@@ -102,8 +102,46 @@ fn local_bitset_words_do_not_alias_and_exact_tail_exits_do_not_fall_through() {
     }
 }
 
+fn transaction_slot_guard_witness(fallback: bool) {
+    let requirement = super::super::value::RequirementIndex(0);
+    for first in [load(0), I::MoveLocal(0)] {
+        let mut input = code(vec![
+            first,
+            I::BeginTransaction {
+                requirement,
+                binding: 0,
+            },
+            I::Unit,
+            I::Return,
+        ]);
+        if fallback {
+            derive_linear(
+                &mut input,
+                &mut Budget::new(&ExecutionControl::uncancelled()),
+            )
+            .unwrap();
+        } else {
+            optimize(&mut input);
+        }
+        // Begin checks that the slot is empty before installing its token. An
+        // earlier move must not turn an occupied-slot rejection into acceptance.
+        assert_eq!(input.instructions[0], load(0));
+        assert!(future_read(&input.instructions, 0, 0));
+    }
+}
+
 #[test]
-fn implicit_transaction_definition_and_commit_preserve_value_order() {
+fn precise_transaction_slot_guards_preserve_earlier_occupancy() {
+    transaction_slot_guard_witness(false);
+}
+
+#[test]
+fn fallback_transaction_slot_guards_preserve_earlier_occupancy() {
+    transaction_slot_guard_witness(true);
+}
+
+#[test]
+fn implicit_transaction_slot_checks_and_commit_preserve_value_order() {
     let requirement = super::super::value::RequirementIndex(0);
     let mut input = code(vec![
         load(0),
@@ -119,7 +157,7 @@ fn implicit_transaction_definition_and_commit_preserve_value_order() {
         I::Return,
     ]);
     optimize(&mut input);
-    assert_eq!(input.instructions[0], I::MoveLocal(0));
+    assert_eq!(input.instructions[0], load(0));
     assert_eq!(input.instructions[2], load(0));
     let mut bad = code(vec![
         I::Return,
