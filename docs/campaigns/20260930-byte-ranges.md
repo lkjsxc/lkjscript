@@ -169,3 +169,51 @@ The separate frozen v0.1.60 candidate `36617982924/1` at `2962c43f` completed it
 workflow successfully at 05:11:11 JST. That is not a claim of v0.1.61 acceptance,
 public promotion or anonymous installed acquisition. Existing releases and running
 applications are not changed by this implementation.
+
+## Completed source acceptance and documentation continuation
+
+The intermediate acceptance statements above describe their original checkpoints.
+The final frozen full run subsequently completed successfully at exact source
+`4a8ac5e5cf2797894238874e463d0d8b516f370d`, tree
+`4e08b5c52d60fe83edcb4b6ae37f6f4356274826`. This includes implementation
+`2b2b5743` and its exact-inventory/test expectation corrections; none of the failed
+or interrupted earlier runs is relabeled as acceptance.
+
+All **26 full-profile gates passed freshly**, with zero result reuse, no unrun gates
+and stable input. Elapsed time was 966.082907959 seconds. The initial and final input
+digests both equal `verification_3cbb98fc6f4b0c82db5c9f419b683b6fc739fda6268b9e43fe726dacea862a8e`.
+The original receipt is retained at
+`.artifacts/lkjscript-dev/check/1790715420061981590-3350694-0/receipt.json`, digest
+`verification_d2913775c90923fae953612cfc798776ff3ec265b422d1b530f2add7fbb4cfac`;
+`full-third.log` contains its terminal summary. The top-level workspace suites passed
+1,366 tests with 29 existing ignored cases kept separate. Two nested subprocess
+summaries are not counted again. In particular, core unit tests passed 949 cases
+and public CLI tests passed 170 cases, with 8 and 1 ignored respectively.
+
+The checker recorded nonfatal cache-store failures for some otherwise successful
+fresh gates. Those results were not reused: source acceptance depends on their
+retained successful process results, not on successful creation of future cache entries.
+
+The resumed final-product check used the exact immutable executable retained by
+`release_command_lifecycle/0` in that run, not a guessed or subsequently overwritten
+Cargo output. The public test executable was selected from Cargo's JSON artifact
+message. All three byte-range tests passed from `/tmp`, with an empty environment/PATH
+except the explicit candidate selector, in **14.01 seconds**. The retained log is
+`final-retained-native-joined.log`. An earlier interrupted observation,
+`final-retained-native.log`, contains two passing cases but no terminal result and
+is not counted as a successful suite. The successful rerun returned exit zero.
+Both guide discovery commands also found exactly one matching built-in external.
+
+The documentation continuation adds the [native guide](../guides/native-byte-ranges.md),
+its index entry, the [language contract](../spec/language.md#immutable-byte-ranges-and-explicit-backing-detachment),
+standard-package notes and current status/roadmap links. It also corrects stale map-key
+copy wording to match the already-implemented immutable payload sharing. No executable
+source, literal fixture, graph owner, generated asset, manifest or lockfile changed
+after the accepted source. The retained product verified all eight generated references;
+formatting, product-surface policy, no-Python policy, local link existence and diff
+checks passed. `documentation-check.log` retains those results.
+
+Source acceptance and this documentation-only continuation do not publish v0.1.61.
+The separate frozen v0.1.60 candidate retains its original source and release
+obligations. The next language priority remains the package-level owned-region/scoped-read
+and trait contract, not an indefinite sequence of runtime-carrier optimizations.

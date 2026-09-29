@@ -29,6 +29,28 @@ Inspect the actual installed executable with `lkjscript capabilities`. Installin
 a newer runtime does not silently replace accepted application definitions,
 exact dependency selections, running processes or operational data.
 
+## Development v0.1.61: immutable byte ranges
+
+`bytes-slice(bytes, start, end)` selects a strict half-open byte range without copying
+its payload in the production checked evaluator. Nested ranges retain one original
+backing, not a descriptor chain. Full ranges reuse their carrier; empty ranges retain
+no original backing. `bytes-copy(bytes)` explicitly detaches visible bytes into an
+independent backing when retaining a small view would otherwise keep a large parent alive.
+Aliases, map ordering, captures and encoded bytes remain content-based and immutable.
+
+The [native guide](guides/native-byte-ranges.md) describes ordinary library/generic
+composition and detached command use. The [campaign](campaigns/20260930-byte-ranges.md)
+retains the implementation, predecessor rejection, exact allocation/cancellation
+boundaries, 10,000 nested-view test and original failed/interrupted validation runs.
+The expanded standard has 85 graph tests. A new closed-signature validator generation
+invalidates predecessor proof reuse; existing exact application suppliers are unchanged.
+
+Source `4a8ac5e5cf2797894238874e463d0d8b516f370d` passed all 26 full-profile gates freshly,
+with stable inputs, zero reused results and no unrun gates. This is not a new ownership,
+lifetime or region type system, a live-memory quota, a measured speed/RSS improvement
+or binary publication. A nonempty view can retain a larger backing; explicit detachment
+is a tradeoff, not a whole-program zero-copy guarantee. Public availability is recorded above.
+
 ## Development v0.1.60: unique byte concatenation storage
 
 Ordinary immutable `Bytes` concatenation now reuses a uniquely held vector's spare

@@ -136,6 +136,11 @@ uses terminal ordinary transfers to amortize prefix copying while retaining immu
 aliases, keys and captures. Its extra metadata and spare capacity remain derived;
 it is not the selected language-level ownership or region contract. These bootstrap
 storage choices do not make universal atomic reference counting the future region model.
+[Immutable byte ranges](campaigns/20260930-byte-ranges.md) add strict non-copying
+selection and explicit backing detachment to ordinary Bytes. Their flat carrier and
+retention tests close a concrete binary-processing boundary, not the semantic
+owned-region/scoped-borrow/trait slice selected above. Prefer that semantic slice
+next over treating further carrier optimizations as a replacement for it.
 
 Compare unique/scoped storage, region-local aliases, local tracing and frozen
 shared segments. Support cyclic data without making universal Arc-style ownership

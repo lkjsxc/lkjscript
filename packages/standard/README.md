@@ -186,6 +186,29 @@ caller-owned HTML escaping and detached execution. The maintained reference-page
 now uses this function instead of its own range implementation. Other exact consumers
 are unchanged. This function is development source after the frozen v0.1.44 release.
 
+## Byte ranges and explicit copies (development v0.1.61)
+
+`bytes-slice(bytes: Bytes, start: I64, end: I64) -> Bytes` selects `[start, end)` with
+strict `0 <= start <= end <= bytes-length(bytes)` bounds. Invalid bounds trap;
+valid empty ranges return empty Bytes. Offsets count bytes, not UTF-8 characters.
+The production checked evaluator shares immutable backing without copying the
+selected payload. Nested views stay flat, aliases are unchanged and empty ranges
+do not retain the original allocation. A small nonempty range may retain a large parent.
+
+`bytes-copy(bytes: Bytes) -> Bytes` creates an independent nonempty backing containing
+only the visible bytes. Use it when a small retained result should not keep its
+original parent alive. Other aliases still own that parent. Copying has an explicit
+allocation/copy cost; it does not promise secure erasure or immediate RSS reduction.
+Both operations remain ordinary immutable Bytes and introduce no region or borrow type.
+
+The closed primitives are `core.bytes.slice` and `core.bytes.copy`. The
+[literal native request](requests/20260930-byte-ranges.lkjc) adds ten fixed graph
+tests. The [native guide](../../docs/guides/native-byte-ranges.md) covers exact library
+composition, captures, map keys and source-free command execution. A predecessor
+runtime rejects the expanded standard at closure admission. Old exact suppliers and
+unchanged applications are not implicitly upgraded; see [status](../../docs/status.md)
+for the separately published executable.
+
 ## Unreleased byte construction and UTF-8 results
 
 These additions require development source after v0.1.45. The immutable v0.1.45

@@ -23,6 +23,45 @@ A runtime lacking this intrinsic rejects its external declaration during ordinar
 closure admission; unchanged old exact closures retain their previous behavior.
 
 
+### Immutable byte ranges and explicit backing detachment
+
+The pure closed external `core.bytes.slice` has exactly `(Bytes, I64, I64) -> Bytes`,
+exposed as `bytes-slice(bytes, start, end)`. It selects the half-open byte interval
+`[start, end)`. Bounds must satisfy `0 <= start <= end <= bytes-length(bytes)`.
+Negative, reversed, excessive and unrepresentable bounds trap; they never wrap,
+clamp or select a partial prefix. Equal in-bounds endpoints return empty Bytes,
+including at the end of the input. Byte offsets need not align with UTF-8 scalars.
+
+The production checked evaluator shares the original immutable backing without
+copying the selected payload. A range of a range refers directly to that backing,
+not to an unbounded chain of descriptors. Full nonempty ranges retain their carrier;
+empty ranges release their ownership of the original backing. A uniquely held view
+may reuse its descriptor, but retained strong or weak aliases prevent mutation of
+that descriptor. Slicing never modifies any byte. New descriptors reserve their
+storage before allocation; cancellation and existing logical-value admission remain
+in force. A small nonempty range may keep a much larger parent allocation alive.
+
+The pure closed external `core.bytes.copy` has exactly `(Bytes) -> Bytes`, exposed
+as `bytes-copy(bytes)`. It preserves all visible bytes in order and, for nonempty
+input, produces an independent backing containing only those bytes. It does not
+retain the original backing through the result. Input aliases remain valid; the
+parent can be reclaimed only after its other owners also release it. Copying reserves
+the vector descriptor and payload before allocation and checks cancellation during
+bounded chunks. Empty output retains no original backing. This is neither secure
+erasure nor a guarantee about allocator rounding, immediate RSS reduction or a live
+memory quota.
+
+The reference evaluator independently validates bounds and materializes equal byte
+values rather than using the optimized view algorithm. Allocation work may therefore
+differ between evaluators. Equality, map ordering, captures, generic composition,
+encoding and external values depend only on visible contents, never on offsets or
+backing identity. These operations add no owned/borrowed type, lifetime, region,
+mutable reference, effect authority or persisted encoding. Runtimes lacking either
+closed external reject a closure containing it before execution; existing exact
+package selections are not upgraded implicitly. The
+[native guide](../guides/native-byte-ranges.md) and
+[implementation record](../campaigns/20260930-byte-ranges.md) own examples and evidence.
+
 ### Raw byte construction and checked text decoding
 
 The pure closed external `core.bytes.from-list` has exactly
@@ -96,8 +135,9 @@ Each evaluator independently reserves map storage before growth. One newly alloc
 charges one collection item and `size_of(Node) + 2*sizeof(usize)` bytes, including its Arc
 reference counts; Node contains one entry handle, two child links and its height. A new entry
 charges `size_of(Entry) + 2*sizeof(usize)` bytes, including the inline key and value, with no
-second item charge. A key converted from Text/Bytes additionally reserves its owned buffer
-before copying. Existing payloads move into new entries; shared payloads, keys and subtrees
+second item charge. A key converted from Text/Bytes retains its immutable payload, including the visible
+range of a byte view, without a second payload allocation. Existing payloads move into
+new entries; shared payloads, keys and subtrees
 incur no fresh deep-copy charge. Even transient rotation nodes remain cumulatively charged.
 Absent removal allocates no tree storage. Neither finite value admission (depth 256 and
 1,000,000 aggregate items), single-allocation bounds nor project defaults are raised.
