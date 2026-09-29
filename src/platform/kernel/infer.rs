@@ -117,7 +117,7 @@ impl<R: ExpressionRead + ?Sized> ExpressionRead for CheckedExpressionRead<'_, R>
 /// Request-local deterministic admissions owned by expression validation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct ExpressionValidationLimits {
-    /// Maximum inference and substitution steps.
+    /// Shared maximum for inference/substitution, affine visits and affine metadata reads.
     pub maximum_steps: usize,
     /// Maximum semantic diagnostics inserted into the caller's bounded sink.
     pub maximum_diagnostics: usize,

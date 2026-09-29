@@ -810,6 +810,71 @@ fn request_expression_and_declared_type_admission_stops_before_exact_limit() {
 }
 
 #[test]
+fn affine_budget_is_resource_exhaustion_through_incremental_change_validation() {
+    let base = crate::platform::kernel::tests::witness_snapshot();
+    let original = base.clone();
+    let witness = rebuild_full_witness(&base).expect("current base proof");
+    let body = function_body(&base, declaration_named(&base, "callee"));
+    let mut replacement = base.owners[&body].clone();
+    let OwnerRecord::Expression(record) = &mut replacement else {
+        panic!("callee body");
+    };
+    record.operation = ExpressionOperation::Unit {};
+    let delta = replace_owner_delta(&base, body, replacement);
+    let accepted = prepare_change_analysis_with_budget(
+        &base,
+        &witness,
+        delta.clone(),
+        ChangeBudget::default(),
+        ChangeBudgetWork::default(),
+    )
+    .expect("ordinary change with complete proof");
+    let exact = accepted.validation.work.expression_work;
+    let mut affine_rejections = 0;
+    for maximum in 0..=exact {
+        let mut budget = ChangeBudget::default();
+        budget.validation.maximum_expression_steps = maximum;
+        budget.validation.maximum_diagnostics = 0;
+        let outcome = prepare_change_analysis_with_budget(
+            &base,
+            &witness,
+            delta.clone(),
+            budget,
+            ChangeBudgetWork::default(),
+        );
+        if maximum == exact {
+            assert_eq!(
+                outcome
+                    .expect("exact shared admission fits")
+                    .validation
+                    .work
+                    .expression_work,
+                exact
+            );
+        } else {
+            let errors = outcome.expect_err("every incomplete proof must stop");
+            assert_eq!(errors.len(), 1);
+            assert_eq!(
+                errors[0].class,
+                crate::platform::diagnostic::DiagnosticClass::Resource
+            );
+            match errors[0].code.as_str() {
+                "change_budget_validation_affine_steps" => affine_rejections += 1,
+                "change_budget_validation_expression_steps" => {}
+                code => panic!("unexpected exhaustion {code} at {maximum}/{exact}"),
+            }
+        }
+    }
+    assert!(
+        affine_rejections > 0,
+        "ordinary signatures must consume affine read admission"
+    );
+    assert_eq!(base.owners, original.owners);
+    assert_eq!(base.types, original.types);
+    assert_eq!(base.root, original.root);
+}
+
+#[test]
 fn request_diagnostic_admission_stops_before_zero_and_accepts_exactly_one() {
     let base = crate::platform::kernel::tests::witness_snapshot();
     let base_witness = rebuild_full_witness(&base).expect("base witness");

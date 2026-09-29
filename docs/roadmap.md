@@ -64,6 +64,11 @@ Do not force every advanced generic feature into the first increment. Preserve
 a coherent extension path for associated type families, higher-ranked borrowing,
 effect polymorphism and region-aware traits.
 
+The [affine-work correction](campaigns/20260929-affine-validation-work.md) closes
+unmetered metadata traversal and lost exhaustion reporting in the existing proof
+boundary. Keep bounded proof and invalid meaning distinct while extending ownership;
+this correction does not itself implement the owned-region slice.
+
 The first boundary must be useful from ordinary graph authoring, query, package,
 check and execution paths. A privileged Rust helper or new declaration name alone
 does not establish a language feature. A proof-search limit is reported separately

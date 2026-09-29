@@ -1,5 +1,12 @@
 //! Language-order affine capability-resource validation for Graph 14.
 
+#[path = "affine_work.rs"]
+mod work;
+
+#[cfg(test)]
+#[path = "affine_budget_tests.rs"]
+mod budget_tests;
+
 use super::contract::MAXIMUM_EXPRESSION_DEPTH;
 use super::infer::{ExpressionRead, ExpressionValidationExhaustion, ExpressionValidationLimits};
 use super::{
@@ -61,7 +68,7 @@ pub(super) fn validate_affine_meaning(
     maximum_steps: usize,
 ) {
     let roots = snapshot.owners.keys().copied().collect::<Vec<_>>();
-    let _ = validate_affine_roots_with_limits(
+    if validate_affine_roots_with_limits(
         read,
         roots,
         diagnostics,
@@ -70,7 +77,10 @@ pub(super) fn validate_affine_meaning(
             maximum_steps,
             maximum_diagnostics: usize::MAX,
         },
-    );
+    ) == Err(ExpressionValidationExhaustion::Steps)
+    {
+        diagnostics.push(work::exhaustion());
+    }
 }
 
 pub(crate) fn validate_affine_roots_with_limits<R: ExpressionRead>(
@@ -80,10 +90,14 @@ pub(crate) fn validate_affine_roots_with_limits<R: ExpressionRead>(
     work: &mut usize,
     limits: ExpressionValidationLimits,
 ) -> Result<(), ExpressionValidationExhaustion> {
+    let work = work::Meter::new(work, limits.maximum_steps);
+    let read = work::Read {
+        inner: read,
+        meter: &work,
+    };
     let mut validator = AffineValidator {
-        read,
-        work,
-        maximum_steps: limits.maximum_steps,
+        read: &read,
+        work: &work,
         current_function: None,
     };
     for owner in roots {
@@ -121,9 +135,6 @@ pub(crate) fn validate_affine_roots_with_limits<R: ExpressionRead>(
             }
         };
         if let Err(diagnostic) = validator.evaluate(function.body, &mut state, 0) {
-            if diagnostic.code == "kernel_affine_work" {
-                return Err(ExpressionValidationExhaustion::Steps);
-            }
             push_diagnostic(diagnostics, diagnostic, limits.maximum_diagnostics)?;
         }
         validator.current_function = None;
@@ -136,6 +147,11 @@ fn push_diagnostic(
     diagnostic: Diagnostic,
     maximum: usize,
 ) -> Result<(), ExpressionValidationExhaustion> {
+    // Work exhaustion may arise while reading a root, its shape/signature, or
+    // its body. It is control flow, never a semantic diagnostic-sink entry.
+    if diagnostic.code == "kernel_affine_work" {
+        return Err(ExpressionValidationExhaustion::Steps);
+    }
     if diagnostics.len() >= maximum {
         return Err(ExpressionValidationExhaustion::Diagnostics);
     }
@@ -145,8 +161,7 @@ fn push_diagnostic(
 
 struct AffineValidator<'a, 'b, R: ?Sized> {
     read: &'a R,
-    work: &'b mut usize,
-    maximum_steps: usize,
+    work: &'b work::Meter<'b>,
     current_function: Option<DeclarationId>,
 }
 
@@ -1615,15 +1630,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 "affine validation exceeded the expression-depth bound",
             ));
         }
-        *self.work = self.work.saturating_add(1);
-        if *self.work > self.maximum_steps {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Resource,
-                "kernel_affine_work",
-                "affine validation exhausted its explicit work budget",
-            ));
-        }
-        Ok(())
+        self.work.step()
     }
 }
 

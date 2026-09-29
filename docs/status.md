@@ -29,6 +29,21 @@ Inspect the actual installed executable with `lkjscript capabilities`. Installin
 a newer runtime does not silently replace accepted application definitions,
 exact dependency selections, running processes or operational data.
 
+## Development v0.1.60: affine validation admission
+
+Affine checking now charges metadata reads as well as expression visits before work
+occurs. All phases propagate budget exhaustion separately from invalid meaning and
+from diagnostic-sink exhaustion; whole-snapshot checking no longer drops the affine
+exhaustion result. Shared counters stop before overflow, and underlying read/cancellation
+behavior remains intact. The [campaign](campaigns/20260929-affine-validation-work.md)
+owns the predecessor failures and exact-source acceptance observations.
+
+Validator feature 9 invalidates predecessor affine proof reuse. Language meaning,
+canonical encodings and runtime resource/effect behavior are unchanged. A fixed request
+budget can now exhaust on previously uncounted metadata work; this does not make the
+program semantically invalid. This is not region ownership, a new execution quota,
+a linear-time type-analysis claim or a binary publication.
+
 ## Development v0.1.60: shared immutable map keys
 
 Byte and text map keys now retain the same immutable payload as ordinary values.

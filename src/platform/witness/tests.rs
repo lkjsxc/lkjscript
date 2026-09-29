@@ -34,23 +34,23 @@ fn witness_contract_domains_are_closed_and_unique() {
         RelationKind::ALL.len()
     );
     assert_ne!(contract::validator_contract_digest().bytes(), [0_u8; 32]);
-    // Affine feature 8 admits callback effects without rebinding exact resources;
-    // predecessor effect-prohibiting evidence must not share this contract identity.
+    // Affine feature 9 meters metadata reads and propagates work exhaustion;
+    // evidence from the incomplete predecessor admission must not be reused.
     assert_eq!(
         contract::VALIDATOR_FEATURES
             .iter()
             .find(|feature| feature.name == "affine_capability_resources")
             .map(|feature| feature.version),
-        Some(8)
+        Some(9)
     );
     let digest = contract::validator_contract_digest().to_string();
     assert_ne!(
         digest,
-        "validator_contract_8252e6edc84de595500db6d5a5d0d9acc49f18bf9f1fa757b53978f1d00a3348"
+        "validator_contract_a8f4f286f668895a3c2f2d712352fe1a382e6d602ad6d4e93f0a74c1c9f13d78"
     );
     assert_eq!(
         digest,
-        "validator_contract_a8f4f286f668895a3c2f2d712352fe1a382e6d602ad6d4e93f0a74c1c9f13d78"
+        "validator_contract_acb29f7085474c4d7be4f9b74b21c13a52da78973379612f79f56552064938c7"
     );
 }
 
