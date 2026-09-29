@@ -4,7 +4,7 @@ GitHub Releases are the public binary distribution path. Accept one finalized ca
 its exact producer run and attempt, and promote its unchanged archive, checksum and bootstrap.
 Content identity, behavioral acceptance and publication authority are separate decisions.
 
-Current delivery observation (2026-09-29): immutable public/latest v0.1.55 is
+Current delivery observation (2026-09-30): immutable public/latest v0.1.55 is
 release `398379899`, published at 00:26:30 JST. Original producer `36419055364/1`
 was accepted at source `320dacc0`; promotion `36442849973/1` subsequently completed
 publication, anonymous acquisition/installed smoke and its terminal decision.
@@ -44,9 +44,13 @@ That original run ended in failure at 03:23:21 JST: 19 source gates passed, whil
 `workspace_tests` exhausted the contributor's historical descendant inventory.
 The [inventory correction](campaigns/20260930-descendant-inventory.md) preserves its
 original diagnostics and addresses the verifier defect without raising the bounds.
-The failed producer cannot be promoted or relabeled under a corrected verifier;
-complete source acceptance must precede a new exact-source candidate. No v0.1.60
-tag or promotion is selected, and public/latest remains v0.1.55.
+The failed producer cannot be promoted or relabeled under a corrected verifier.
+Corrected source `2962c43f` passed all 26 full-profile gates freshly with stable
+inputs, reached main normally, and is the exact source of successor candidate
+`36617982924/1`, dispatched on 2026-09-30 at 04:15:47 JST. Its pending state is not
+acceptance. Resume that original successor and require the selected final-archive
+cases before promotion. No v0.1.60 tag or promotion is selected, and public/latest
+remains v0.1.55.
 
 Immutable [v0.1.38](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.38) already publishes source
 `7083f9a6d56ed702017942e100c3696fc6f35308`. Publisher

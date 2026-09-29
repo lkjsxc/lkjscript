@@ -81,11 +81,71 @@ not measurements of 4,096 concurrent real processes. Small real child fixtures
 retain finite fallbacks and a kill/reap guard. No runtime speedup or memory-use
 measurement is claimed.
 
-## Acceptance and delivery
+## Frozen-source acceptance and mainline delivery
 
-Focused results above precede complete source acceptance. Record the exact frozen
-source, full-profile result and normal remote-main integration below after they
-are observed. The failed original producer remains failed and must not be promoted.
-A corrected verifier needs a new exact-source candidate, not a relabeling of the
-old source or its evidence. Public/latest remains v0.1.55 until separate final
-archive acceptance and unchanged-asset publication succeed.
+Implementation `2962c43f0617bda2c5726a96249c8fe53f571747`, tree
+`4b7db15df18c5d6692f011e477c703e2f7387691`, passed
+`lkjscript-dev check full --fresh --jobs 2 --machine`: 26 selected gates,
+26 freshly passed, zero reused, zero unrun, no failure, `input_stable=true`.
+Elapsed verification time was 709.792214972 seconds. Cargo used two build jobs;
+fresh gate execution does not mean compilation caches were disabled.
+The initial and final source input digest both equal
+`verification_066e83fa6eca83a3332e7611061a8a451c137a2517489d2e04338e5575f75fa4`.
+The authoritative receipt is
+`.artifacts/lkjscript-dev/check/1790708563039022847-3099556-0/receipt.json`.
+The checker-owned copied harness and original gate logs remain beside that receipt.
+The campaign directory additionally retains the verifier build log, full summary,
+and a separate byte-identical copy of the running verifier used for the probe below.
+
+All language/product code, dependency locks, product tests and workflows are unchanged
+from entry. After refreshing remote main and its branch rules, the implementation
+was pushed normally as lkjsxc. An independent GitHub ref read confirmed remote main
+at exact `2962c43f`. Later reporting edits do not replace this tested-source identity.
+
+## Supplementary traversal and real-process observations
+
+A standalone Rust probe included the actual `traversal.rs` implementation and used
+independent parent chains as its depth oracle. With seed `d712847a1f0b3915`, all
+8,192 generated root-connected trees passed: 525,857 distinct node observations,
+no missing or duplicate visits, and matching depths despite repeated child edges
+and varying retained-root selections/order. Each tree had at most 128 nodes.
+`traversal-oracle.rs`, its executable and `traversal-oracle.log` remain in the
+campaign artifact directory. Its simplified error carrier does not model procfs
+or process identity, and these finite cases are not an exhaustive proof.
+
+The retained corrected verifier's public `measure` route then ran
+`serial-processes.sh` from `/tmp`. The script successfully started and joined
+5,000 serial `/bin/sleep 0.02` children and printed exactly `completed=5000`.
+The verifier recorded `passed`, exit code 0, no error, complete output, and
+102.576210683 seconds elapsed. Original `serial-observation/observation.json`,
+stdout/stderr and the script remain alongside `serial-summary.json`.
+Only a small live tree was needed; this is not a 5,000-concurrent-process test,
+an assertion that the sampler observed every child, or a performance comparison.
+
+## Corrected successor candidate
+
+After exact-source integration and refreshing release runs and tag occupancy,
+one new non-publishing candidate was dispatched:
+[36617982924/1](https://github.com/lkjsxc/lkjscript/actions/runs/36617982924), created
+2026-09-29T19:15:47Z (2026-09-30 04:15:47 JST). Independent GitHub reading confirms
+`workflow_dispatch`, main, original attempt 1, and the same tested product/controller
+source `2962c43f`. It was observed queued and then in progress; neither state is
+acceptance or publication. No v0.1.60 tag, scoped-selection change or promotion
+was created.
+
+The failed original producer `36605595167/1` remains failed. Its demonstrated
+verifier defect, not the mere passage of time, requires this new source/candidate.
+Public/latest remains immutable v0.1.55. A successful local full profile is not
+hosted source acceptance or final-archive acceptance. Resume `36617982924/1` at
+its actual observed boundary; do not duplicate it just because it is pending.
+Before promotion, run the original final-archive cases specified in the
+[consolidated selection](20260930-byte-buffer-reuse.md#revised-publication-selection-consolidate-v0160):
+`native_generic_resources`, `native_byte_reuse`, `native_map_keys`,
+`native_terminal_values`, and `shared_runtime`. Those final-archive cases have not
+been executed by this continuation. All local verification jobs here have completed;
+only the separate hosted candidate/publication boundary remains outstanding.
+
+The subsequent reporting-only edits affect this campaign, status and the release
+procedure. Generated-reference comparison, no-Python policy and product-surface
+policy passed, with zero policy violations. They do not claim a new full-profile
+run or alter the already-frozen candidate source.

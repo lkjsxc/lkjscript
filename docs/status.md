@@ -55,9 +55,12 @@ acceptance: 19 of 20 gates passed; the contributor's child-process inventory exh
 during `workspace_tests`. It was neither accepted nor published. The
 [inventory correction](campaigns/20260930-descendant-inventory.md) retires confirmed
 historical departures and counts each traversal PID once without raising the existing
-bounds or weakening joined cleanup. Its focused process tests pass; complete source
-and new exact-candidate acceptance remain distinct from that focused result.
-The candidate and final-archive cases remain separate from the local source proof.
+bounds or weakening joined cleanup. Corrected source `2962c43f` passed all 26 full
+profile gates freshly, with stable inputs and zero result reuse, then reached main.
+Its same-source successor candidate `36617982924/1` was dispatched at 04:15:47 JST
+on 2026-09-30; it is pending, not accepted or published. The 32 focused process tests,
+independent traversal probe and 5,000-child serial observation are recorded in the
+continuation. Candidate and final-archive cases remain separate from local proof.
 
 ## Development v0.1.60: affine validation admission
 
