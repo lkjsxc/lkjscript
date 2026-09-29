@@ -34,11 +34,18 @@ fn witness_contract_domains_are_closed_and_unique() {
         RelationKind::ALL.len()
     );
     assert_ne!(contract::validator_contract_digest().bytes(), [0_u8; 32]);
-    // Affine feature 6 and qualified-task feature 2 admit exact public resource
-    // contracts and explicit imported port obligations, not predecessor evidence.
+    // Affine feature 7 admits exact resource suffixes; predecessor single-resource
+    // validation evidence must not share this contract identity.
+    assert_eq!(
+        contract::VALIDATOR_FEATURES
+            .iter()
+            .find(|feature| feature.name == "affine_capability_resources")
+            .map(|feature| feature.version),
+        Some(7)
+    );
     assert_eq!(
         contract::validator_contract_digest().to_string(),
-        "validator_contract_2bf742fb0f1d14e45f17e9e20777400c9014c222e1cfab9e21419b58288b68fd"
+        "validator_contract_8252e6edc84de595500db6d5a5d0d9acc49f18bf9f1fa757b53978f1d00a3348"
     );
 }
 

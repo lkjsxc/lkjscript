@@ -39,6 +39,11 @@ The [exact-selector continuation](campaigns/202609290337.md) closes the same-nam
 deployment selection gap using existing package/requirement identities and one
 shared preflight/preparation resolver. Name ambiguity never grants authority by
 elimination, and independent durable roots remain distinct.
+The [multi-resource continuation](campaigns/202609291100.md) composes a contiguous
+final suffix of borrowed/consumed resources, each retaining exact concrete authority.
+Repeated borrows may share an owner; any consuming alias in one helper call rejects.
+Native two-queue and imported-library workloads retain this boundary through
+ordinary generics, recursion, detached execution and independent persisted effects.
 Effect/requirement-polymorphic resource transfer, resource returns and general
 memory references remain open. These are implementation increments toward the
 coordinated slice, not substitutes
