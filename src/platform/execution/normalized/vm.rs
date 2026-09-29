@@ -1695,18 +1695,17 @@ impl Machine<'_> {
         function: &super::prepare::NormalizedFunction,
         arguments: &[CheckedValue],
     ) -> Result<(), ExecutionError> {
-        for (index, (parameter, argument)) in function.parameters.iter().zip(arguments).enumerate()
-        {
+        let mut uses = BTreeMap::new();
+        for (parameter, argument) in function.parameters.iter().zip(arguments) {
             match parameter.resource_requirement {
                 Some(requirement) => {
-                    if index.saturating_add(1) != function.parameters.len()
-                        || parameter.use_mode == ParameterUse::Unrestricted
+                    if parameter.use_mode == ParameterUse::Unrestricted
                         || argument.class(self.program, &mut self.observation.value_work)?
                             != Class::Direct
                     {
                         return Err(runtime_error(
                             "normalized_resource_call_shape",
-                            "resource-bearing call does not use one final borrow/consume parameter and direct handle",
+                            "resource-bearing call requires a borrow/consume parameter and direct handle",
                         ));
                     }
                     let NormalizedValue::Resource(handle) = argument.raw() else {
@@ -1715,6 +1714,17 @@ impl Machine<'_> {
                             "resource-bearing call argument is not one exact runtime handle",
                         ));
                     };
+                    // Normalize only the ownership flag for identity comparison;
+                    // a borrowed view and an owned handle still name the same slot.
+                    if let Some(previous) = uses.insert(handle.borrow(), parameter.use_mode)
+                        && (previous == ParameterUse::Consume
+                            || parameter.use_mode == ParameterUse::Consume)
+                    {
+                        return Err(runtime_error(
+                            "normalized_resource_call_alias",
+                            "a consuming resource argument aliases another argument in the same call",
+                        ));
+                    }
                     let requirement_record = self
                         .program
                         .requirements
@@ -1746,7 +1756,8 @@ impl Machine<'_> {
                     }
                 }
                 None => {
-                    if parameter.use_mode != ParameterUse::Unrestricted
+                    if !uses.is_empty()
+                        || parameter.use_mode != ParameterUse::Unrestricted
                         || argument.class(self.program, &mut self.observation.value_work)?
                             != Class::Free
                     {

@@ -1488,27 +1488,12 @@ fn validate_normalized_resource_signature(
     if direct.is_empty() {
         return Ok(());
     }
-    if direct.len() != 1 {
-        return Err(runtime_corrupt(
-            "normalized_function_resource_count",
-            "function signature contains more than one direct resource parameter",
-        ));
-    }
-    let (index, parameter, interface) = direct[0];
-    let requirement_index = parameter.resource_requirement.ok_or_else(|| {
-        runtime_corrupt(
-            "normalized_function_resource_requirement",
-            "direct resource function parameter omits its exact requirement binding",
-        )
-    })?;
-    if index.saturating_add(1) != parameters.len()
-        || parameter.use_mode == ParameterUse::Unrestricted
+    if direct[0].0.saturating_add(direct.len()) != parameters.len()
         || !matches!(body, NormalizedFunctionBody::Code(_))
-        || !task_requirements.contains(&requirement_index)
     {
         return Err(runtime_corrupt(
             "normalized_function_resource_shape",
-            "resource signature is not one final borrow/consume parameter on a task body",
+            "resource parameters must form a contiguous suffix on a task body",
         ));
     }
     if normalized_type_contains_resource(
@@ -1521,20 +1506,6 @@ fn validate_normalized_resource_signature(
         return Err(runtime_corrupt(
             "normalized_function_resource_result",
             "resource-bearing function returns affine authority",
-        ));
-    }
-    let requirement = requirements
-        .get(requirement_index.0 as usize)
-        .ok_or_else(|| {
-            runtime_corrupt(
-                "normalized_function_resource_requirement",
-                "resource parameter requirement escaped the prepared table",
-            )
-        })?;
-    if requirement.interface != interface {
-        return Err(runtime_corrupt(
-            "normalized_function_resource_authority",
-            "resource parameter is not bound to its exact requirement interface",
         ));
     }
     let OwnerRecord::Declaration(record) = exact_runtime_owner(
@@ -1573,14 +1544,15 @@ fn validate_normalized_resource_signature(
                 "task requirement escaped the prepared table",
             )
         })?;
-    if function.type_parameters != type_parameters
+    if !function.effect_parameters.is_empty()
+        || !function.requirement_parameters.is_empty()
+        || function.type_parameters != type_parameters
         || function.parameters != parameter_ids
         || function.result != result
         || !matches!(
             &function.effect,
             FunctionEffect::Task { effect_parameters: _, requirements: canonical }
                 if canonical.iter().filter_map(|r| r.concrete()).collect::<Vec<_>>() == requirement_references
-                    && canonical.contains(&requirement.reference.into())
         )
     {
         return Err(runtime_corrupt(
@@ -1588,26 +1560,57 @@ fn validate_normalized_resource_signature(
             "prepared resource signature disagrees with its exact canonical task declaration",
         ));
     }
-    let OwnerRecord::Parameter(canonical_parameter) = exact_runtime_owner(
-        owners,
-        declaration.package,
-        OwnerKey::Parameter(parameter.parameter),
-        "resource parameter",
-    )?
-    else {
-        return Err(runtime_corrupt(
-            "normalized_function_resource_parameter",
-            "resource parameter runtime metadata has another owner kind",
-        ));
-    };
-    if canonical_parameter.parent != ParameterParent::Function(declaration.declaration)
-        || canonical_parameter.use_mode != parameter.use_mode
-        || canonical_parameter.resource_requirement != Some(requirement.reference)
-    {
-        return Err(runtime_corrupt(
-            "normalized_function_resource_parameter",
-            "resource parameter parent or requirement disagrees with its exact function",
-        ));
+    for (_, parameter, interface) in direct {
+        let requirement_index = parameter.resource_requirement.ok_or_else(|| {
+            runtime_corrupt(
+                "normalized_function_resource_requirement",
+                "direct resource function parameter omits its exact requirement binding",
+            )
+        })?;
+        if parameter.use_mode == ParameterUse::Unrestricted
+            || !task_requirements.contains(&requirement_index)
+        {
+            return Err(runtime_corrupt(
+                "normalized_function_resource_shape",
+                "every resource parameter must borrow or consume with its exact task requirement",
+            ));
+        }
+        let requirement = requirements
+            .get(requirement_index.0 as usize)
+            .ok_or_else(|| {
+                runtime_corrupt(
+                    "normalized_function_resource_requirement",
+                    "resource parameter requirement escaped the prepared table",
+                )
+            })?;
+        if requirement.interface != interface {
+            return Err(runtime_corrupt(
+                "normalized_function_resource_authority",
+                "resource parameter is not bound to its exact requirement interface",
+            ));
+        }
+        let OwnerRecord::Parameter(canonical_parameter) = exact_runtime_owner(
+            owners,
+            declaration.package,
+            OwnerKey::Parameter(parameter.parameter),
+            "resource parameter",
+        )?
+        else {
+            return Err(runtime_corrupt(
+                "normalized_function_resource_parameter",
+                "resource parameter runtime metadata has another owner kind",
+            ));
+        };
+        if canonical_parameter.parent != ParameterParent::Function(declaration.declaration)
+            || canonical_parameter.ty != parameter.ty
+            || canonical_parameter.use_mode != parameter.use_mode
+            || canonical_parameter.resource_requirement != Some(requirement.reference)
+        {
+            return Err(runtime_corrupt(
+                "normalized_function_resource_parameter",
+                "resource parameter parent, type, use or requirement disagrees with its exact function",
+            ));
+        }
     }
     Ok(())
 }
@@ -1740,19 +1743,43 @@ fn validate_resource_calls(functions: &[NormalizedFunction]) -> Result<(), Diagn
                             "resource call target escaped the prepared function table",
                         )
                     })?;
-                    if *arguments != callee.parameter_count
-                        || !matches!(
-                            instruction_index
-                                .checked_sub(1)
-                                .and_then(|index| code.instructions.get(index)),
-                            Some(NormalizedInstruction::LoadLocal { use_mode, .. })
-                                if callee.parameters.last().is_some_and(|p| p.use_mode == *use_mode)
-                        )
-                    {
+                    let suffix = callee
+                        .parameters
+                        .iter()
+                        .filter(|parameter| parameter.resource_requirement.is_some())
+                        .collect::<Vec<_>>();
+                    let transfers = instruction_index
+                        .checked_sub(suffix.len())
+                        .and_then(|start| code.instructions.get(start..instruction_index));
+                    if *arguments != callee.parameter_count || transfers.is_none() {
                         return Err(runtime_corrupt(
                             "normalized_resource_call_transfer",
-                            "prepared resource call is not one final local use matching its exact parameter",
+                            "prepared resource call omits its complete local-use suffix",
                         ));
+                    }
+                    let mut uses = BTreeMap::new();
+                    for (transfer, parameter) in transfers.into_iter().flatten().zip(suffix) {
+                        let NormalizedInstruction::LoadLocal { local, use_mode } = transfer else {
+                            return Err(runtime_corrupt(
+                                "normalized_resource_call_transfer",
+                                "prepared resource suffix contains a nonlocal argument",
+                            ));
+                        };
+                        if parameter.use_mode != *use_mode {
+                            return Err(runtime_corrupt(
+                                "normalized_resource_call_transfer",
+                                "prepared resource transfer disagrees with its exact parameter use",
+                            ));
+                        }
+                        if let Some(previous) = uses.insert(*local, *use_mode)
+                            && (previous == ParameterUse::Consume
+                                || *use_mode == ParameterUse::Consume)
+                        {
+                            return Err(runtime_corrupt(
+                                "normalized_resource_call_alias",
+                                "prepared consuming resource argument aliases another call argument",
+                            ));
+                        }
                     }
                 }
                 _ => {}

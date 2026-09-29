@@ -7,6 +7,8 @@ use crate::platform::semantic_id::BindingId;
 mod generic_resource_fixture;
 #[path = "recursive_resource_tests.rs"]
 pub(crate) mod recursive_resource_tests;
+#[path = "resource_suffix_tests.rs"]
+pub(crate) mod resource_suffix_tests;
 
 fn fixture(mode: &str) -> (crate::platform::kernel::KernelSnapshot, NormalizedProgram) {
     let generic = mode.starts_with("generic:");

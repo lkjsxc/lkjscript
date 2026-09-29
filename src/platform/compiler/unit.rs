@@ -1068,21 +1068,19 @@ impl CompiledSignature {
                 "compiled external parameters cannot use or bind affine resources",
             ));
         }
-        if bound.len() > 1 {
-            return Err(unit_corrupt(
-                "compiler_unit_resource_parameter_count",
-                "compiled function signature binds more than one resource parameter",
-            ));
-        }
-        if let Some((index, parameter, requirement)) = bound.first().copied()
-            && (kind != OwnerKind::TaskFunction
-                || index.saturating_add(1) != self.parameters.len()
-                || parameter.use_mode == ParameterUse::Unrestricted
-                || !self.task_requirements.contains(&requirement))
+        if bound
+            .iter()
+            .enumerate()
+            .any(|(offset, (index, parameter, requirement))| {
+                kind != OwnerKind::TaskFunction
+                    || index.saturating_add(bound.len() - offset) != self.parameters.len()
+                    || parameter.use_mode == ParameterUse::Unrestricted
+                    || !self.task_requirements.contains(requirement)
+            })
         {
             return Err(unit_corrupt(
                 "compiler_unit_resource_parameter_shape",
-                "compiled resource parameter is not one final borrow/consume parameter bound to its task requirement",
+                "compiled resource parameters must form a borrow/consume suffix bound to their exact task requirements",
             ));
         }
         if self.parameters.iter().any(|parameter| {

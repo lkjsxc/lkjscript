@@ -2,6 +2,12 @@ use super::*;
 use crate::platform::kernel::{DeclarationPayload, KernelSnapshot};
 
 #[test]
+fn resource_suffix_artifact_checks_every_parameter_after_rehashing() {
+    let snapshot = crate::platform::execution::normalized::tests::iteration_resource_tests::resource_suffix_tests::snapshot(true);
+    check_resource_artifact(snapshot);
+}
+
+#[test]
 fn type_generic_resource_artifact_preserves_exact_signature_and_authority() {
     let snapshot = crate::platform::execution::normalized::tests::iteration_resource_tests::type_generic_borrowed_snapshot(true);
     check_resource_artifact(snapshot);

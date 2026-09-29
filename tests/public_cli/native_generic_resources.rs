@@ -12,10 +12,38 @@ mod packages;
 mod recursion;
 #[path = "native_generic_resources_rejections.rs"]
 mod rejections;
+#[path = "native_resource_suffix.rs"]
+mod suffix;
 
 #[test]
 fn native_type_generic_resources_survive_drafting_and_detached_queue_execution() {
     check_program(PROGRAM);
+}
+
+#[test]
+fn native_resource_suffix_allows_repeated_shared_borrow() {
+    let program = PROGRAM
+        .replacen(
+            "(returns T) (effect (task (requirement queue::jobs)))",
+            "(parameter create other (type (resource std::DurableQueue))\n        (use borrow) (requirement queue::jobs))\n      (returns T) (effect (task (requirement queue::jobs)))",
+            1,
+        )
+        .replacen(
+            "(body (invoke (local decode)",
+            "(body (sequence (capability-call queue::jobs std::DurableQueue::lease-info (local lease)) (invoke (local decode)",
+            1,
+        )
+        .replacen("std::QueueLeaseInfo::payload))))", "std::QueueLeaseInfo::payload)))))", 1)
+        .replacen("std::DurableQueue::lease-info (local lease))\n          std::QueueLeaseInfo::payload", "std::DurableQueue::lease-info (local other))\n          std::QueueLeaseInfo::payload", 1)
+        .replace(
+            "(call read-lease (types U) (local decode) (local lease))",
+            "(call read-lease (types U) (local decode) (local lease) (local lease))",
+        )
+        .replace(
+            "(call read-lease (types T) (local decode) (local lease))",
+            "(call read-lease (types T) (local decode) (local lease) (local lease))",
+        );
+    check_program(&program);
 }
 
 fn check_program(program: &str) {

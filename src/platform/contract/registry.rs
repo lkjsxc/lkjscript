@@ -4125,7 +4125,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_affine_function_resource_use",
             DiagnosticClass::Semantic,
             "A direct function resource parameter has no explicit borrow or consume mode.",
-            "Set use=borrow or use=consume on the one final resource parameter.",
+            "Set use=borrow or use=consume on each resource parameter in the final suffix.",
         ),
         diagnostic(
             "kernel_affine_borrow_consumed",
@@ -4140,16 +4140,10 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Bind requirement to the same exact task requirement that owns the resource interface.",
         ),
         diagnostic(
-            "kernel_affine_function_resource_count",
-            DiagnosticClass::Semantic,
-            "A function signature contains more than one direct resource parameter.",
-            "Keep exactly one direct borrow/consume resource parameter.",
-        ),
-        diagnostic(
             "kernel_affine_function_resource_order",
             DiagnosticClass::Semantic,
-            "A function resource parameter is not final in parameter order.",
-            "Move the resource parameter after all unrestricted parameters.",
+            "Direct resource parameters do not form a contiguous final suffix.",
+            "Move every resource parameter after all unrestricted parameters.",
         ),
         diagnostic(
             "kernel_affine_function_resource_generic",
@@ -4185,7 +4179,13 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_affine_resource_call_arguments",
             DiagnosticClass::Semantic,
             "A resource-bearing direct call has an unsupported argument shape.",
-            "Pass unrestricted arguments first and one direct live owner as the final argument.",
+            "Pass unrestricted arguments first, then direct live owners matching the resource suffix.",
+        ),
+        diagnostic(
+            "kernel_affine_resource_call_alias",
+            DiagnosticClass::Semantic,
+            "A consuming resource argument aliases another argument in the same call.",
+            "Use distinct owners for consuming arguments; only repeated non-consuming borrows may alias.",
         ),
         diagnostic(
             "kernel_affine_resource_call_interface",

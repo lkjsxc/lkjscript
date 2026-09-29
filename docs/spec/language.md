@@ -329,8 +329,8 @@ value retains that acquiring requirement as authority.
 Every parameter has canonical use meaning: `unrestricted`, `borrow`, or `consume`. Nonresource
 parameters must be unrestricted. A direct capability-resource operation parameter must be an
 explicit borrow or consume. A directly named graph-authored task function may instead have
-exactly one final direct capability-resource parameter with `borrow` or `consume` use. That parameter carries
-one canonical `resource_requirement` reference to a requirement in the function effect whose exact
+a contiguous final suffix of direct capability-resource parameters with `borrow` or `consume` use.
+Each parameter carries one canonical `resource_requirement` reference to a requirement in the function effect whose exact
 interface matches the resource type. The binding is graph meaning and is never inferred from a
 name, order, deployment grant, or runtime handle. Resource results and every other
 resource-containing function signature reject.
@@ -338,7 +338,7 @@ resource-containing function signature reject.
 Such a helper may declare ordinary type parameters. They can describe preceding ordinary
 arguments, resource-free callbacks and the ordinary result; direct calls substitute them through
 the existing explicit rank-one rules. Nested helpers may forward those exact type parameters.
-The final resource interface and requirement remain concrete and exact: effect and requirement
+Every resource interface and requirement remains concrete and exact: effect and requirement
 parameters on a resource-bearing helper are not admitted. An ordinary type application never
 turns a live resource into an unrestricted argument, returned value or retained callable.
 Automatic function extraction retains its narrower nongeneric, consume-only boundary.
@@ -346,8 +346,11 @@ Automatic function extraction retains its narrower nongeneric, consume-only boun
 Affine flow follows ordinary left-to-right evaluation order. A borrow observes one live lexical
 owner and preserves it. A consume moves that owner; every later use on a reachable path rejects
 before publication. For an admitted consuming resource-bearing call, all unrestricted arguments
-finish first and evaluation of the final argument commits transfer of one exact live owner. The
-consuming callee may borrow it, consume it through the bound requirement, drop it, or forward it through
+finish first, followed by the resource-local suffix in authored order. Each consuming argument
+transfers its exact live owner. Repeated arguments may name one owner only when all those occurrences
+borrow it; any duplicate containing a consume rejects before publication, in either order.
+Different resource arguments may bind different exact requirements, even for the same interface.
+The consuming callee may borrow each owned resource, consume it through its bound requirement, drop it, or forward it through
 another admitted direct call. Caller and callee must use the same exact requirement identity.
 Direct and mutual synchronous recursion are admitted: each body is independently checked under
 its declared parameter-use contract, and every recursive call applies that same contract rather
@@ -358,7 +361,7 @@ does not restore caller ownership; unwinding drops remaining task-local authorit
 implicit external queue transition.
 
 A `borrow` function parameter instead receives a non-owning view. All ordinary arguments finish
-before its final local read; the synchronous call preserves the caller's owner. A borrowing helper
+before the resource-local suffix; the synchronous call preserves each borrowed caller owner. A borrowing helper
 may pass the view to an exact borrow operation or reborrow it through another admitted helper.
 It cannot consume it, forward it to a consuming helper, wrap it in a variant, return it, or retain
 it in a callable or container. A borrowed parameter grants no additional effects or deployment

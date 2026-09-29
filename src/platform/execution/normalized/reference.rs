@@ -1421,17 +1421,18 @@ impl ReferenceState<'_> {
         parameters: &[ParameterRecord],
         arguments: &[CheckedValue],
     ) -> Result<(), ExecutionError> {
+        let mut resource_seen = false;
         for (index, (parameter, argument)) in parameters.iter().zip(arguments).enumerate() {
             match parameter.resource_requirement {
                 Some(requirement) => {
-                    if index.saturating_add(1) != parameters.len()
-                        || parameter.use_mode == ParameterUse::Unrestricted
+                    resource_seen = true;
+                    if parameter.use_mode == ParameterUse::Unrestricted
                         || argument.ownership(&self.schema, &mut self.observation.value_work)?
                             != Ownership::Capability
                     {
                         return Err(reference_error(
                             "normalized_reference_resource_call_shape",
-                            "resource-bearing call does not use one final borrow/consume parameter and direct handle",
+                            "resource-bearing call requires a borrow/consume parameter and direct handle",
                         ));
                     }
                     let NormalizedValue::Resource(handle) = argument.raw() else {
@@ -1440,6 +1441,18 @@ impl ReferenceState<'_> {
                             "resource-bearing call argument is not one exact runtime handle",
                         ));
                     };
+                    for (prior, value) in parameters[..index].iter().zip(&arguments[..index]) {
+                        if let NormalizedValue::Resource(other) = value.raw()
+                            && handle.borrow() == other.borrow()
+                            && (parameter.use_mode == ParameterUse::Consume
+                                || prior.use_mode == ParameterUse::Consume)
+                        {
+                            return Err(reference_error(
+                                "normalized_reference_resource_call_alias",
+                                "a consuming resource argument aliases another argument in the same call",
+                            ));
+                        }
+                    }
                     let Some(OwnerRecord::Requirement(record)) = self.owner_in_package(
                         requirement.package,
                         OwnerKey::Requirement(requirement.requirement),
@@ -1472,7 +1485,8 @@ impl ReferenceState<'_> {
                     }
                 }
                 None => {
-                    if parameter.use_mode != ParameterUse::Unrestricted
+                    if resource_seen
+                        || parameter.use_mode != ParameterUse::Unrestricted
                         || argument.ownership(&self.schema, &mut self.observation.value_work)?
                             != Ownership::Ordinary
                     {

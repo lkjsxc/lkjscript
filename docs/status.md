@@ -8,7 +8,8 @@ The owner-selected [language-first direction](direction.md) now prioritizes adva
 type/ownership/effect composition, region-based memory research and a shared runtime.
 The exact-code shared service host and scoped capability borrowing are public.
 Ordinary generic composition is public in v0.1.55. Recursive helpers and exact
-cross-package resource contracts and exact deployment grant selectors are development
+cross-package resource contracts, exact deployment grant selectors and multi-resource
+parameter suffixes are development
 capabilities below; none is supplied by that public executable.
 Advanced ownership/trait and region-memory work remains a research selection,
 not a capability conferred by a roadmap or by sharing existing prepared code.
@@ -27,6 +28,24 @@ The earlier immutable releases and genuinely failed/withheld candidates remain u
 Inspect the actual installed executable with `lkjscript capabilities`. Installing
 a newer runtime does not silently replace accepted application definitions,
 exact dependency selections, running processes or operational data.
+
+## Development v0.1.59: composing exact resource parameters
+
+Direct graph-authored task helpers may take a contiguous final suffix of resources,
+with a concrete requirement and borrow/consume mode for each parameter. Repeated
+shared borrows are accepted; a repeated owner with any consuming occurrence rejects
+in either order. Ordinary generic values, exact package contracts and synchronous
+recursion compose with this boundary. Different resources can retain different
+requirements even when their interfaces match.
+
+The [literal two-queue workload](../tests/fixtures/resource-suffix.lkjc) and
+[resource guide](guides/native-resources.md#multiple-resources-in-one-helper) describe
+the public authoring and detached execution path. The
+[continuation record](campaigns/202609291100.md) owns verification evidence and
+uncompleted trials. This is not general memory borrowing, an atomic transaction
+across resources, asynchronous borrowing or a resource-return facility. Automatic
+function extraction keeps its narrower eligibility. No v0.1.59 distribution is
+claimed here; the public v0.1.55 executable is unchanged.
 
 ## Development v0.1.58: exact deployment grant selection
 
