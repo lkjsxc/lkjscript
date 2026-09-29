@@ -157,7 +157,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
         _function: &FunctionDeclaration,
     ) -> Result<FlowState, Diagnostic> {
         let mut state = FlowState::new();
-        if let Some(parameter) = self.resource_function_parameter(DeclarationReference {
+        for parameter in self.resource_function_parameters(DeclarationReference {
             package: self.read.package_id(),
             declaration,
         })? {
@@ -204,7 +204,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                                     "direct resource function parameter requires one exact requirement binding",
                                 ));
                             }
-                            self.resource_function_parameter(DeclarationReference {
+                            self.resource_function_parameters(DeclarationReference {
                                 package: self.read.package_id(),
                                 declaration,
                             })?;
@@ -365,7 +365,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                             "function has a foreign owner identity domain",
                         ));
                     };
-                    self.resource_function_parameter(DeclarationReference {
+                    self.resource_function_parameters(DeclarationReference {
                         package: self.read.package_id(),
                         declaration,
                     })?;
@@ -432,7 +432,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
             | ExpressionOperation::StaticText { .. }
             | ExpressionOperation::Constant { .. } => Ok(EvaluatedValue::Unrestricted),
             ExpressionOperation::FunctionValue { function, .. } => {
-                if self.resource_function_parameter(function)?.is_some() {
+                if !self.resource_function_parameters(function)?.is_empty() {
                     return Err(affine_error(
                         "kernel_affine_resource_function_value",
                         expression,
@@ -703,41 +703,54 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
         state: &mut FlowState,
         depth: usize,
     ) -> Result<EvaluatedValue, Diagnostic> {
-        let Some(parameter) = self.resource_function_parameter(function)? else {
+        let parameters = self.resource_function_parameters(function)?;
+        let Some(first) = parameters.first() else {
             for argument in arguments {
                 self.require_unrestricted(*argument, state, depth, "function argument")?;
             }
             return Ok(EvaluatedValue::Unrestricted);
         };
-        if arguments.len() != parameter.parameter_count {
+        if arguments.len() != first.parameter_count {
             return Err(affine_error(
                 "kernel_affine_resource_call_arguments",
                 expression,
                 "resource-bearing call argument count disagrees with its exact callee signature",
             ));
         }
-        let Some((resource_argument, ordinary_arguments)) = arguments.split_last() else {
-            return Err(affine_error(
-                "kernel_affine_resource_call_arguments",
-                expression,
-                "resource-bearing call omits its final borrow/consume argument",
-            ));
-        };
+        let (ordinary_arguments, resource_arguments) =
+            arguments.split_at(arguments.len() - parameters.len());
         for argument in ordinary_arguments {
             self.require_unrestricted(*argument, state, depth, "function argument")?;
         }
-        let resource = self.take_local_resource(
-            *resource_argument,
-            state,
-            parameter.use_mode,
-            Some(parameter.requirement.into()),
-        )?;
-        if resource.provenance.interface != parameter.interface {
-            return Err(affine_error(
-                "kernel_affine_resource_call_interface",
-                expression,
-                "transferred resource has a foreign exact interface",
-            ));
+        // The entire suffix is local uses: no later ordinary expression may
+        // consume an owner after an earlier argument has borrowed it. Borrowed
+        // aliases may coexist, but a consuming argument must have a unique owner.
+        let mut uses = BTreeMap::new();
+        for (argument, parameter) in resource_arguments.iter().zip(&parameters) {
+            if let ExpressionOperation::Local { value } = self.expression(*argument)?.operation
+                && let Some(previous) = uses.insert(value, parameter.use_mode)
+                && (previous == ParameterUse::Consume
+                    || parameter.use_mode == ParameterUse::Consume)
+            {
+                return Err(affine_error(
+                    "kernel_affine_resource_call_alias",
+                    *argument,
+                    "a consuming resource argument must not alias another argument in the same call",
+                ));
+            }
+            let resource = self.take_local_resource(
+                *argument,
+                state,
+                parameter.use_mode,
+                Some(parameter.requirement.into()),
+            )?;
+            if resource.provenance.interface != parameter.interface {
+                return Err(affine_error(
+                    "kernel_affine_resource_call_interface",
+                    expression,
+                    "transferred resource has a foreign exact interface",
+                ));
+            }
         }
         if self.current_function.is_none() {
             return Err(affine_error(
@@ -1371,10 +1384,10 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
         }
     }
 
-    fn resource_function_parameter(
+    fn resource_function_parameters(
         &mut self,
         reference: DeclarationReference,
-    ) -> Result<Option<ResourceFunctionParameter>, Diagnostic> {
+    ) -> Result<Vec<ResourceFunctionParameter>, Diagnostic> {
         let owner = OwnerKey::Declaration(reference.declaration);
         // Inspect the same exact signature fields for local and imported calls.
         // Visibility is admitted by name/reference resolution, not by affine use.
@@ -1402,7 +1415,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                             },
                         )
                     }
-                    _ => return Ok(None),
+                    _ => return Ok(Vec::new()),
                 }
             }
             Some(ExactRecord::Foreign(PackageInterfaceRecord::Declaration(declaration))) => {
@@ -1432,13 +1445,13 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                         ));
                     }
                 }
-                return Ok(None);
+                return Ok(Vec::new());
             }
-            _ => return Ok(None),
+            _ => return Ok(Vec::new()),
         };
 
-        let mut resource = None;
-        for (index, parameter) in function.parameters.iter().copied().enumerate() {
+        let mut resources = Vec::new();
+        for parameter in function.parameters.iter().copied() {
             let record = self.parameter(reference.package, parameter)?;
             if record.parent != super::ParameterParent::Function(reference.declaration) {
                 return Err(owner_affine_error(
@@ -1449,20 +1462,6 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
             }
             match self.resource_type(record.ty)? {
                 Some((ResourceShape::Direct, interface)) => {
-                    if resource.is_some() {
-                        return Err(owner_affine_error(
-                            "kernel_affine_function_resource_count",
-                            owner,
-                            "function has more than one direct resource parameter",
-                        ));
-                    }
-                    if index.saturating_add(1) != function.parameters.len() {
-                        return Err(owner_affine_error(
-                            "kernel_affine_function_resource_order",
-                            OwnerKey::Parameter(parameter),
-                            "resource parameter must be final in its function signature",
-                        ));
-                    }
                     if record.use_mode == ParameterUse::Unrestricted {
                         return Err(owner_affine_error(
                             "kernel_affine_function_resource_use",
@@ -1477,7 +1476,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                             "direct resource function parameter requires one exact requirement binding",
                         )
                     })?;
-                    resource = Some(ResourceFunctionParameter {
+                    resources.push(ResourceFunctionParameter {
                         parameter,
                         requirement,
                         interface,
@@ -1500,6 +1499,13 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                     ));
                 }
                 None => {
+                    if !resources.is_empty() {
+                        return Err(owner_affine_error(
+                            "kernel_affine_function_resource_order",
+                            OwnerKey::Parameter(parameter),
+                            "resource parameters must form a contiguous suffix of the function signature",
+                        ));
+                    }
                     if record.use_mode != ParameterUse::Unrestricted {
                         return Err(owner_affine_error(
                             "kernel_affine_function_parameter_use",
@@ -1518,9 +1524,9 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
             }
         }
 
-        let Some(resource) = resource else {
-            return Ok(None);
-        };
+        if resources.is_empty() {
+            return Ok(resources);
+        }
         if !function.effect_parameters.is_empty() || !function.requirement_parameters.is_empty() {
             return Err(owner_affine_error(
                 "kernel_affine_function_resource_generic",
@@ -1546,22 +1552,24 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 "resource-bearing function must be a task",
             ));
         };
-        if !requirements.contains(&resource.requirement.into()) {
-            return Err(owner_affine_error(
-                "kernel_affine_function_resource_effect",
-                OwnerKey::Parameter(resource.parameter),
-                "resource parameter binding is absent from its function effect",
-            ));
+        for resource in &resources {
+            if !requirements.contains(&resource.requirement.into()) {
+                return Err(owner_affine_error(
+                    "kernel_affine_function_resource_effect",
+                    OwnerKey::Parameter(resource.parameter),
+                    "resource parameter binding is absent from its function effect",
+                ));
+            }
+            let requirement = self.requirement(resource.requirement.into())?;
+            if requirement.interface != resource.interface {
+                return Err(owner_affine_error(
+                    "kernel_affine_function_resource_interface",
+                    OwnerKey::Parameter(resource.parameter),
+                    "resource parameter type disagrees with its exact requirement interface",
+                ));
+            }
         }
-        let requirement = self.requirement(resource.requirement.into())?;
-        if requirement.interface != resource.interface {
-            return Err(owner_affine_error(
-                "kernel_affine_function_resource_interface",
-                OwnerKey::Parameter(resource.parameter),
-                "resource parameter type disagrees with its exact requirement interface",
-            ));
-        }
-        Ok(Some(resource))
+        Ok(resources)
     }
 
     fn case(

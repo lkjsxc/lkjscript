@@ -1665,20 +1665,14 @@ impl FullValidator<'_> {
                             })
                             .collect::<Vec<_>>();
                         if !resource_parameters.is_empty() {
-                            if resource_parameters.len() != 1 {
-                                self.error(
-                                    "kernel_affine_function_resource_count",
-                                    format!(
-                                        "function declaration {owner:?} must have exactly one direct resource parameter"
-                                    ),
-                                );
-                            }
-                            let (index, parameter, record) = resource_parameters[0];
-                            if index.saturating_add(1) != function.parameters.len() {
+                            let (index, parameter, _) = resource_parameters[0];
+                            if index.saturating_add(resource_parameters.len())
+                                != function.parameters.len()
+                            {
                                 self.error(
                                     "kernel_affine_function_resource_order",
                                     format!(
-                                        "resource parameter {parameter} must be final in its function signature"
+                                        "resource parameter {parameter} must belong to a contiguous suffix of its function signature"
                                     ),
                                 );
                             }
@@ -1705,48 +1699,50 @@ impl FullValidator<'_> {
                                 );
                                 continue;
                             };
-                            let Some(requirement) = record.resource_requirement else {
-                                continue;
-                            };
-                            if !requirements.contains(&requirement.into()) {
-                                self.error(
+                            for (_, parameter, record) in resource_parameters {
+                                let Some(requirement) = record.resource_requirement else {
+                                    continue;
+                                };
+                                if !requirements.contains(&requirement.into()) {
+                                    self.error(
                                     "kernel_affine_function_resource_effect",
                                     format!(
                                         "resource parameter {parameter} binding is absent from its function effect"
                                     ),
                                 );
-                            }
-                            let Some(interface) =
-                                snapshot_resource_interface(self.snapshot, record.ty)
-                            else {
-                                continue;
-                            };
-                            let key = OwnerKey::Requirement(requirement.requirement);
-                            let bound_interface = if requirement.package
-                                == self.snapshot.root.package_id
-                            {
-                                match self.snapshot.owners.get(&key) {
-                                    Some(OwnerRecord::Requirement(bound)) => Some(bound.interface),
-                                    _ => None,
                                 }
-                            } else {
-                                self.snapshot
-                                    .dependencies
-                                    .get(&requirement.package)
-                                    .and_then(|dependency| {
-                                        self.snapshot
-                                            .dependency_interfaces
-                                            .get(&dependency.package_revision)
-                                    })
-                                    .and_then(|owners| owners.get(&key))
-                                    .and_then(|record| match record {
-                                        PackageInterfaceRecord::Requirement(bound) => {
-                                            Some(bound.interface)
+                                let Some(interface) =
+                                    snapshot_resource_interface(self.snapshot, record.ty)
+                                else {
+                                    continue;
+                                };
+                                let key = OwnerKey::Requirement(requirement.requirement);
+                                let bound_interface =
+                                    if requirement.package == self.snapshot.root.package_id {
+                                        match self.snapshot.owners.get(&key) {
+                                            Some(OwnerRecord::Requirement(bound)) => {
+                                                Some(bound.interface)
+                                            }
+                                            _ => None,
                                         }
-                                        _ => None,
-                                    })
-                            };
-                            match bound_interface {
+                                    } else {
+                                        self.snapshot
+                                            .dependencies
+                                            .get(&requirement.package)
+                                            .and_then(|dependency| {
+                                                self.snapshot
+                                                    .dependency_interfaces
+                                                    .get(&dependency.package_revision)
+                                            })
+                                            .and_then(|owners| owners.get(&key))
+                                            .and_then(|record| match record {
+                                                PackageInterfaceRecord::Requirement(bound) => {
+                                                    Some(bound.interface)
+                                                }
+                                                _ => None,
+                                            })
+                                    };
+                                match bound_interface {
                                 Some(bound) if bound == interface => {}
                                 Some(_) => self.error(
                                     "kernel_affine_function_resource_interface",
@@ -1758,6 +1754,7 @@ impl FullValidator<'_> {
                                     "kernel_affine_function_resource_requirement",
                                     format!("resource parameter {parameter} binds an unavailable exact requirement"),
                                 ),
+                            }
                             }
                         }
                     }

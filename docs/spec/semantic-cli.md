@@ -749,23 +749,25 @@ conversion of an accepted request to a new supplier.
 parameter use and the optional exact function-resource binding. Omission means unrestricted and no
 binding for an ordinary nonresource parameter. Resource operation parameters require explicit
 borrow or consume and no binding. A directly named graph-authored task function may instead
-have one final direct resource parameter with `use=borrow` or `use=consume` and `requirement` naming the same exact
-requirement in its effect and interface in its resource type. Its preceding parameters and result
-must be resource-free, and only a direct named call may borrow or transfer the final resource owner.
+have a contiguous final suffix of direct resource parameters. Each uses `use=borrow` or `use=consume`,
+with `requirement` naming the same exact requirement in its effect and interface in its resource type.
+Its preceding parameters and result must be resource-free. Only a direct named call may borrow or
+transfer these owners. Repeated arguments may share one owner only when all occurrences borrow;
+any repeated owner with a consuming occurrence rejects, regardless of argument order.
 Direct and mutual synchronous recursion apply the same per-body use contracts and execution
 limits; an accepted recursive call does not prove termination.
 Borrow preserves caller ownership and permits nested reborrows. Consuming a borrowed parameter,
 forwarding it to a consuming helper, or escaping it through a result/container/closure rejects.
 Ordinary `(type-parameter create T)` and explicit `(types T)` call arguments compose with this
-boundary, including ordinary callbacks/results and nested reborrowing. The final resource and its
-requirement remain concrete; effect/requirement-polymorphic resource helpers still reject.
+boundary, including ordinary callbacks/results and nested reborrowing. Every resource and its
+requirement remains concrete; effect/requirement-polymorphic resource helpers still reject.
 Automatic `extract.function` retains its existing nongeneric, consume-only extraction boundary.
 Public helpers can cross exact package boundaries; private/package-visible dependency members
 remain hidden. A forwarding parameter may name the original imported requirement, not a new
 same-name local slot. The consumer port must explicitly include imported authority in its closed
 top-level task row, and deployment must grant it. No authority is inferred from helper bodies.
 Direct and input-file records lower to identical intent. Missing, extra, rebound, interface-
-mismatched, unrestricted, multiple, nonfinal, effect/requirement-generic, pure,
+mismatched, unrestricted, noncontiguous-suffix, consuming-alias, effect/requirement-generic, pure,
 indirect, resource-result, and post-consume caller-reuse forms reject before plan publication. Unknown predecessor type/use spellings also reject.
 
 The higher-order slice uses these public spellings: `add.type-parameter` adds one ordered

@@ -25,6 +25,26 @@ fn native_package_resources_preserve_exact_authority_and_detached_execution() {
     assert_execution(&packages.consumer, &data);
 }
 
+#[test]
+fn native_resource_suffix_survives_package_transport_and_detached_execution() {
+    let library = LIBRARY.replacen(
+        "(returns T) (effect (task (requirement queue::jobs)))",
+        "(parameter create other (type (resource std::DurableQueue)) (use borrow) (requirement queue::jobs))\n      (returns T) (effect (task (requirement queue::jobs)))", 1)
+        .replacen("(body (call repeat-read (types T) (i64 2) (local decode) (local lease)))",
+            "(body (sequence (capability-call queue::jobs std::DurableQueue::lease-info (local other)) (call repeat-read (types T) (i64 2) (local decode) (local lease))))", 1);
+    assert_ne!(library, LIBRARY);
+    let source = CONSUMER
+        .replace("(call lib::read-lease (types U)\n        (local decode) (local lease))",
+            "(call lib::read-lease (types U)\n        (local decode) (local lease) (local lease))")
+        .replace("(call lib::read-lease\n                (types T) (local decode) (local lease))",
+            "(call lib::read-lease\n                (types T) (local decode) (local lease) (local lease))");
+    assert_eq!(source.matches("(local lease) (local lease)").count(), 2);
+    let packages = Packages::stage(&library);
+    packages.apply(&source);
+    let data = packages.detach();
+    assert_execution(&packages.consumer, &data);
+}
+
 fn assert_execution(consumer: &Native, data: &Path) {
     let deployment = consumer.root.path().join("generic.deployment.json");
     for (target, expected) in [

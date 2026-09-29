@@ -5623,6 +5623,34 @@ fn copied_binary_authors_requirement_bound_affine_handoffs_and_rejects_predecess
         );
     }
 
+    let paired_signature = format!(
+        r#"request base={accepted}
+type.capability-resource as=@pair_lease interface={lease_interface}
+expression.unit as=$pair_body
+create.function as=$pair module={application} name=paired-resource-bindings visibility=private result=unit effect=task body=$pair_body
+add.parameter as=$pair_first function=$pair name=first type=@pair_lease use=consume requirement={requirement}
+add.parameter as=$pair_second function=$pair name=second type=@pair_lease use=consume requirement={requirement}
+effect.requirement parent=$pair index=0 requirement={requirement}"#
+    );
+    let paired = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input",
+            &paired_signature,
+        ],
+    );
+    assert!(compact_field(compact_record(&paired, "plan"), "token").is_some());
+    assert_eq!(content_inventory(&project), accepted_inventory);
+    assert_eq!(
+        current_revision_at(&copied_binary, temporary.path(), &project),
+        accepted
+    );
+
     let handoff_signature_rejections = [
         (
             "missing-resource-binding",
@@ -5682,12 +5710,13 @@ effect.requirement parent=$bad_function index=0 requirement={requirement}"#
             "kernel_affine_function_resource_order",
         ),
         (
-            "multiple-resource-bindings",
+            "noncontiguous-resource-bindings",
             format!(
                 r#"type.capability-resource as=@bad_lease interface={lease_interface}
 expression.unit as=$bad_body
-create.function as=$bad_function module={application} name=multiple-resource-bindings visibility=private result=unit effect=task body=$bad_body
+create.function as=$bad_function module={application} name=noncontiguous-resource-bindings visibility=private result=unit effect=task body=$bad_body
 add.parameter as=$bad_first function=$bad_function name=first type=@bad_lease use=consume requirement={requirement}
+add.parameter as=$bad_middle function=$bad_function name=gap type=text
 add.parameter as=$bad_second function=$bad_function name=second type=@bad_lease use=consume requirement={requirement}
 effect.requirement parent=$bad_function index=0 requirement={requirement}"#
             ),
@@ -5753,7 +5782,7 @@ effect.requirement parent=$bad_function index=0 requirement={requirement}"#
         let rejection = temporary.path().join(format!("{name}.lkjc"));
         std::fs::write(&rejection, format!("request base={accepted}\n{body}\n"))
             .expect("write affine signature rejection request");
-        let rejected = compact_failure_output(command_at(
+        let output = command_at(
             &copied_binary,
             temporary.path(),
             &[
@@ -5764,7 +5793,13 @@ effect.requirement parent=$bad_function index=0 requirement={requirement}"#
                 "--input-file",
                 path(&rejection),
             ],
-        ));
+        );
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "signature case {name}: {output:?}"
+        );
+        let rejected = compact_failure_output(output);
         assert!(
             rejected.iter().any(|record| {
                 record.operation == "diagnostic" && compact_field(record, "code") == Some(code)

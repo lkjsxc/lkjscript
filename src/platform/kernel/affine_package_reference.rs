@@ -6,8 +6,8 @@ use crate::platform::semantic_id::RevisionId;
 
 #[test]
 fn exact_package_resource_signatures_agree_with_the_disjoint_flow_oracle() {
-    for nested in [false, true] {
-        let (snapshot, revision, declaration, resource) = imported_helper(nested);
+    for (nested, suffix) in [(false, false), (true, false), (false, true), (true, true)] {
+        let (snapshot, revision, declaration, resource) = imported_helper(nested, suffix);
         assert_flow(&snapshot, true, "exact public import");
         for fault in [
             "missing-function",
@@ -102,13 +102,18 @@ fn assert_flow(snapshot: &KernelSnapshot, expected: bool, case: &str) {
 
 fn imported_helper(
     nested: bool,
+    suffix: bool,
 ) -> (
     KernelSnapshot,
     PackageRevisionDigest,
     DeclarationId,
     ParameterId,
 ) {
-    let mut snapshot = crate::platform::execution::normalized::tests::iteration_resource_tests::type_generic_borrowed_snapshot(nested);
+    let mut snapshot = if suffix {
+        crate::platform::execution::normalized::tests::iteration_resource_tests::resource_suffix_tests::snapshot(nested)
+    } else {
+        crate::platform::execution::normalized::tests::iteration_resource_tests::type_generic_borrowed_snapshot(nested)
+    };
     let (expression, reference) = snapshot.owners.iter().find_map(|(key, owner)| {
         let OwnerRecord::Expression(record) = owner else { return None; };
         let ExpressionOperation::Call { function, .. } = &record.operation else { return None; };

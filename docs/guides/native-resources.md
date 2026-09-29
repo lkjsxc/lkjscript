@@ -1,6 +1,6 @@
 # Ordinary generics with scoped capability resources
 
-This guide describes development **v0.1.57**. Check [current availability](../status.md)
+This guide describes development **v0.1.59**. Check [current availability](../status.md)
 before selecting an executable; an older public runtime does not gain these
 semantics by reading this document.
 
@@ -97,8 +97,9 @@ includes `(row (requirement lib::queue::jobs))`; its component need not invent a
 new local queue requirement. The deployment still needs a `jobs` grant. The
 supplier's unused `unused-jobs` requirement does not become a consumer obligation,
 and an extra grant for it is rejected. A same-name local queue is not equivalent
-to this imported authority. The current name-based deployment descriptor cannot
-address two different obligations with the same name; use distinct names.
+to this imported authority. When distinct obligations have the same name, the deployment descriptor can use
+their exact package/requirement selectors instead. See
+[exact requirement selection](../spec/deployment-security.md#exact-requirement-selection).
 
 The [package cases](../../tests/public_cli/native_package_resources.rs) repeat the
 list/text workload after removing both source projects, and after forwarding
@@ -107,9 +108,32 @@ the leased durable job rather than completing or retrying it. An HTTP case exerc
 the same imported authority across server startup, shutdown and restart. Ordinary
 use of these libraries requires no Rust or Python generator and no compiler API.
 
+## Multiple resources in one helper
+
+The [complete suffix input](../../tests/fixtures/resource-suffix.lkjc) handles two
+independent queues. `observe<T>` receives ordinary arguments first, then three
+borrowed parameters: `left` and `again` bind `queue::jobs`, while `right` binds
+`queue::other`. A call may pass the same owner to `left` and `again` because both
+are non-consuming views. All resource parameters form a contiguous final suffix.
+Each parameter retains its own exact requirement and interface; sharing an
+interface does not merge two requirements.
+
+`finish<V>` instead receives two distinct consuming owners. It reads both payloads,
+completes each queue job through its exact requirement, and returns ordinary V.
+The [public cases](../../tests/public_cli/native_resource_suffix.rs) also borrow
+one owner while consuming the other, in both parameter orders, leaving the caller
+to complete its retained owner. Tail and non-tail recursive calls apply the same
+rules. A repeated argument with any consuming occurrence rejects before publication;
+this includes borrow/consume, consume/borrow and consume/consume.
+
+The first detached `pair` invocation returns `[7, 42, -3]`, and its repeat returns
+`[]`. Tests read both durable namespaces independently and require each completion
+result to equal its original payload. This is synchronous composition, not a
+transaction across queues: failure after one external completion cannot undo it.
+
 ## Deliberate limits
 
-There is one final direct resource parameter, exact concrete authority, and a
+Resource parameters form a final suffix with exact concrete authority and a
 direct call admitted by the normal package visibility rules. Ordinary arguments,
 callbacks and results must remain resource-free. Effect/requirement-polymorphic
 resource signatures, escaping views, indirect resource calls and asynchronous

@@ -75,13 +75,12 @@ impl Reference<'_> {
                 return true;
             }
             let mut live = Live::new();
-            if let Some(signature) = self
+            for signature in self
                 .resource_signature(DeclarationReference {
                     package: self.snapshot.root.package_id,
                     declaration: *declaration_id,
                 })
-                .ok()
-                .flatten()
+                .unwrap_or_default()
             {
                 live.insert(
                     LocalValueReference::FunctionParameter(signature.parameter),
@@ -224,7 +223,7 @@ impl Reference<'_> {
             | ExpressionOperation::StaticText { .. }
             | ExpressionOperation::Constant { .. } => Ok(Value::Plain),
             ExpressionOperation::FunctionValue { function, .. } => {
-                if self.resource_signature(*function)?.is_some() {
+                if !self.resource_signature(*function)?.is_empty() {
                     Err(())
                 } else {
                     Ok(Value::Plain)
@@ -474,22 +473,49 @@ impl Reference<'_> {
         arguments: &[ExpressionId],
         live: &mut Live,
     ) -> Result<Value, ()> {
-        let Some(signature) = self.resource_signature(function)? else {
+        let signatures = self.resource_signature(function)?;
+        let Some(first) = signatures.first() else {
             for argument in arguments {
                 self.plain(*argument, live)?;
             }
             return Ok(Value::Plain);
         };
-        if arguments.len() != signature.parameter_count {
+        if arguments.len() != first.parameter_count {
             return Err(());
         }
-        let (resource, ordinary) = arguments.split_last().ok_or(())?;
-        for argument in ordinary {
+        let split = arguments.len().checked_sub(signatures.len()).ok_or(())?;
+        for argument in &arguments[..split] {
             self.plain(*argument, live)?;
         }
-        let right = self.take(*resource, live, signature.use_mode)?;
-        if right != signature.right {
-            return Err(());
+        let resources = &arguments[split..];
+        // Pairwise lexical comparison is deliberately independent of production's
+        // accumulating use map. All repeated occurrences must be shared views.
+        for (index, (argument, signature)) in resources.iter().zip(&signatures).enumerate() {
+            let Some(OwnerRecord::Expression(record)) =
+                self.snapshot.owners.get(&OwnerKey::Expression(*argument))
+            else {
+                return Err(());
+            };
+            let ExpressionOperation::Local { value } = record.operation else {
+                return Err(());
+            };
+            for (earlier, prior) in resources[..index].iter().zip(&signatures[..index]) {
+                let Some(OwnerRecord::Expression(record)) =
+                    self.snapshot.owners.get(&OwnerKey::Expression(*earlier))
+                else {
+                    return Err(());
+                };
+                if let ExpressionOperation::Local { value: other } = record.operation
+                    && value == other
+                    && (signature.use_mode == ParameterUse::Consume
+                        || prior.use_mode == ParameterUse::Consume)
+                {
+                    return Err(());
+                }
+            }
+            if self.take(*argument, live, signature.use_mode)? != signature.right {
+                return Err(());
+            }
         }
         Ok(Value::Plain)
     }
@@ -497,7 +523,7 @@ impl Reference<'_> {
     fn resource_signature(
         &self,
         reference: DeclarationReference,
-    ) -> Result<Option<ResourceSignature>, ()> {
+    ) -> Result<Vec<ResourceSignature>, ()> {
         // This flow oracle reads interface fields directly; it does not use the
         // production signature projection or its affine transfer implementation.
         let (parameters, result, effect, authority_generic) =
@@ -519,9 +545,9 @@ impl Reference<'_> {
                     ),
                     DeclarationPayload::External(signature) => {
                         self.external_parameters(reference.package, &signature.parameters)?;
-                        return Ok(None);
+                        return Ok(Vec::new());
                     }
-                    _ => return Ok(None),
+                    _ => return Ok(Vec::new()),
                 }
             } else {
                 let Some(PackageInterfaceRecord::Declaration(declaration)) = self.foreign_owner(
@@ -540,28 +566,25 @@ impl Reference<'_> {
                     ),
                     PackageInterfaceDeclarationPayload::External(signature) => {
                         self.external_parameters(reference.package, &signature.parameters)?;
-                        return Ok(None);
+                        return Ok(Vec::new());
                     }
-                    _ => return Ok(None),
+                    _ => return Ok(Vec::new()),
                 }
             };
 
-        let mut resource = None;
-        for (index, parameter) in parameters.iter().copied().enumerate() {
+        let mut resources = Vec::new();
+        for parameter in parameters.iter().copied() {
             let record = self.parameter(reference.package, parameter).ok_or(())?;
             if record.parent != super::ParameterParent::Function(reference.declaration) {
                 return Err(());
             }
             match self.resource_type(record.ty, &mut BTreeSet::new()) {
                 Some((Shape::Direct, interface)) => {
-                    if resource.is_some()
-                        || index.saturating_add(1) != parameters.len()
-                        || record.use_mode == ParameterUse::Unrestricted
-                    {
+                    if record.use_mode == ParameterUse::Unrestricted {
                         return Err(());
                     }
                     let requirement = record.resource_requirement.ok_or(())?;
-                    resource = Some(ResourceSignature {
+                    resources.push(ResourceSignature {
                         parameter,
                         parameter_count: parameters.len(),
                         use_mode: record.use_mode,
@@ -574,7 +597,8 @@ impl Reference<'_> {
                 }
                 Some((Shape::Variant, _)) => return Err(()),
                 None => {
-                    if self.contains_resource(record.ty, &mut BTreeSet::new())
+                    if !resources.is_empty()
+                        || self.contains_resource(record.ty, &mut BTreeSet::new())
                         || record.use_mode != ParameterUse::Unrestricted
                         || record.resource_requirement.is_some()
                     {
@@ -583,9 +607,9 @@ impl Reference<'_> {
                 }
             }
         }
-        let Some(resource) = resource else {
-            return Ok(None);
-        };
+        if resources.is_empty() {
+            return Ok(resources);
+        }
         if authority_generic || self.contains_resource(result, &mut BTreeSet::new()) {
             return Err(());
         }
@@ -596,14 +620,15 @@ impl Reference<'_> {
         else {
             return Err(());
         };
-        if !requirements.contains(&resource.right.requirement)
-            || self
-                .requirement(resource.right.requirement)
-                .is_none_or(|requirement| requirement.0 != resource.right.interface)
-        {
+        if resources.iter().any(|resource| {
+            !requirements.contains(&resource.right.requirement)
+                || self
+                    .requirement(resource.right.requirement)
+                    .is_none_or(|requirement| requirement.0 != resource.right.interface)
+        }) {
             return Err(());
         }
-        Ok(Some(resource))
+        Ok(resources)
     }
 
     fn external_parameters(
@@ -1631,6 +1656,50 @@ fn independent_reference_agrees_on_maintained_graphs_and_finite_negative_corpus(
             .accepts(),
             "reference rejects {name}"
         );
+    }
+}
+
+#[test]
+fn resource_suffix_has_independent_parameter_and_alias_admission() {
+    for nested in [false, true] {
+        let snapshot = crate::platform::execution::normalized::tests::iteration_resource_tests::resource_suffix_tests::snapshot(nested);
+        assert!(production_accepts(&snapshot));
+        assert!(
+            Reference {
+                snapshot: &snapshot
+            }
+            .accepts()
+        );
+        let parameters = snapshot.owners.iter().filter_map(|(key, record)| {
+            matches!(record, OwnerRecord::Parameter(parameter) if parameter.resource_requirement.is_some()).then_some(*key)
+        }).collect::<Vec<_>>();
+        assert_eq!(parameters.len(), if nested { 4 } else { 2 });
+        for parameter in parameters {
+            for fault in ["missing", "foreign", "ordinary", "consume"] {
+                let mut broken = snapshot.clone();
+                let Some(OwnerRecord::Parameter(record)) = broken.owners.get_mut(&parameter) else {
+                    unreachable!()
+                };
+                match fault {
+                    "missing" => record.resource_requirement = None,
+                    "foreign" => {
+                        record.resource_requirement.as_mut().unwrap().package =
+                            PackageId::migrate(b"resource-suffix-rejection", 1)
+                    }
+                    "ordinary" => record.use_mode = ParameterUse::Unrestricted,
+                    "consume" => record.use_mode = ParameterUse::Consume,
+                    _ => unreachable!(),
+                }
+                assert!(
+                    !production_accepts(&broken),
+                    "production/{parameter:?}/{fault}"
+                );
+                assert!(
+                    !Reference { snapshot: &broken }.accepts(),
+                    "reference/{parameter:?}/{fault}"
+                );
+            }
+        }
     }
 }
 

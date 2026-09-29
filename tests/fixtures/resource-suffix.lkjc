@@ -1,0 +1,92 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create suffix (as $module)
+    (function create observe (as $observer) (visibility private)
+      (type-parameter create T)
+      (parameter create remaining (type I64))
+      (parameter create value (type T))
+      (parameter create left (type (resource std::DurableQueue))
+        (use borrow) (requirement queue::jobs))
+      (parameter create right (type (resource std::DurableQueue))
+        (use borrow) (requirement queue::other))
+      (parameter create again (type (resource std::DurableQueue))
+        (use borrow) (requirement queue::jobs))
+      (returns T) (effect (task (requirement queue::jobs) (requirement queue::other)))
+      (body (if (call std::i64-equal (local remaining) (i64 0))
+        (sequence
+          (capability-call queue::jobs std::DurableQueue::lease-info (local left))
+          (capability-call queue::other std::DurableQueue::lease-info (local right))
+          (capability-call queue::jobs std::DurableQueue::lease-info (local again))
+          (local value))
+        (call observe (types T) (call std::subtract (local remaining) (i64 1))
+          (local value) (local left) (local right) (local again)))))
+    (function create finish (as $finisher) (visibility private)
+      (type-parameter create V)
+      (parameter create remaining (type I64))
+      (parameter create value (type V))
+      (parameter create left (type (resource std::DurableQueue))
+        (use consume) (requirement queue::jobs))
+      (parameter create right (type (resource std::DurableQueue))
+        (use consume) (requirement queue::other))
+      (returns V) (effect (task (requirement queue::jobs) (requirement queue::other)))
+      (body (if (call std::i64-equal (local remaining) (i64 0))
+        (let
+          (binding left-data (field
+            (capability-call queue::jobs std::DurableQueue::lease-info (local left))
+            std::QueueLeaseInfo::payload))
+          (binding right-data (field
+            (capability-call queue::other std::DurableQueue::lease-info (local right))
+            std::QueueLeaseInfo::payload))
+          (in (sequence
+            (capability-call queue::jobs std::DurableQueue::complete
+              (local left) (i64 0) (local left-data))
+            (capability-call queue::other std::DurableQueue::complete
+              (local right) (i64 0) (local right-data))
+            (local value))))
+        (call finish (types V) (call std::subtract (local remaining) (i64 1))
+          (local value) (local left) (local right)))))
+    (function create pair (visibility private)
+      (returns (list I64))
+      (effect (task (requirement queue::jobs) (requirement queue::other)))
+      (body (sequence
+        (capability-call queue::jobs std::DurableQueue::initialize)
+        (capability-call queue::other std::DurableQueue::initialize)
+        (capability-call queue::jobs std::DurableQueue::enqueue
+          (text "left") (text "left")
+          (call std::data-encode (types Text) (text "左 + first")) (i64 0) (i64 0))
+        (capability-call queue::other std::DurableQueue::enqueue
+          (text "right") (text "right")
+          (call std::data-encode (types Text) (text "右 + second")) (i64 0) (i64 0))
+        (match (capability-call queue::jobs std::DurableQueue::claim
+          (text "suffix-worker") (i64 0) (i64 1000))
+          (arm std::QueueLeaseState::live (payload first (resource std::DurableQueue))
+            (match (capability-call queue::other std::DurableQueue::claim
+              (text "suffix-worker") (i64 0) (i64 1000))
+              (arm std::QueueLeaseState::live (payload second (resource std::DurableQueue))
+                (let
+                  (binding value (call observe (types (list I64)) (i64 4097)
+                    (list I64 (i64 7) (i64 42) (i64 -3))
+                    (local first) (local second) (local first)))
+                  (in (call finish (types (list I64)) (i64 8)
+                    (local value) (local first) (local second)))))
+              (arm std::QueueLeaseState::absent (sequence
+                (capability-call queue::jobs std::DurableQueue::complete
+                  (local first) (i64 0)
+                  (call std::data-encode (types Text) (text "左 + first")))
+                (list I64)))))
+          (arm std::QueueLeaseState::absent (list I64))))))
+    (component create queue (visibility private)
+      (requirement create jobs (interface std::DurableQueue)
+        (operations std::DurableQueue::initialize std::DurableQueue::enqueue
+          std::DurableQueue::claim std::DurableQueue::lease-info std::DurableQueue::complete)
+        (limits (maximum_calls 64 calls)))
+      (requirement create other (interface std::DurableQueue)
+        (operations std::DurableQueue::initialize std::DurableQueue::enqueue
+          std::DurableQueue::claim std::DurableQueue::lease-info std::DurableQueue::complete)
+        (limits (maximum_calls 64 calls)))
+      (port create pair
+        (type (task-function () (list I64) (row (requirement jobs) (requirement other))))
+        (function pair))))
+  (target create pair (component suffix::queue) (runner command) (port suffix::queue::pair)))
+declarations.end
