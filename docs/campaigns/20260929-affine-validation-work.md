@@ -96,5 +96,61 @@ These focused observations are not a full-profile receipt or binary-release acce
 
 ## Acceptance
 
-Implementation, complete-source acceptance and mainline delivery are recorded below only
-after their respective observations. Public/latest remains a separate release identity.
+Executable and test source was frozen at
+`6aa625822ec27282c1735c2c47f73271b39dc6f5`, tree
+`2db5ebf5c6d0ecebbcc3ea15f2b3948acd97f7f6`. The pinned Rust contributor checker was
+rebuilt before running:
+
+```text
+target/release/lkjscript-dev check full --fresh --jobs 2 --machine
+```
+
+The full profile passed all 26 selected gates, with 26 fresh executions and zero reused
+results, in 1027.718580926 seconds. The terminal command result was `CHECK_EXIT=0` in
+`/tmp/lkjscript-affine-budget-full.log`. Its authoritative receipt is
+`.artifacts/lkjscript-dev/check/1790687675535381354-2379470-0/receipt.json` (64,531 bytes),
+with identity
+`verification_d47cff799782d199c6327cd8e4f3cee7a7df56f285d00937c6f2c8feaa802064`.
+The receipt records the exact source commit above and `input_stable=true`; both input
+identities are
+`verification_01de8221854c7728ef1ff15f3b21a56a73d89acd5ac7c3ef9cac358aae52e47d`.
+Fresh means verification results were not reused; it does not claim an empty compiler cache.
+
+The full gates include workspace/all-target/all-feature tests, static analysis, copied
+command lifecycle, offline packages, distributed/outbound/stateful HTTP, service acceptance,
+generated guides and retained standard/application artifact and package comparisons. No
+existing test was removed or newly ignored, and no gate timeout or acceptance threshold was
+relaxed. This source changed proof accounting while the unchanged artifact/package comparison
+gates continued to pass.
+
+The release command-lifecycle test passed separately inside that full profile: one passed,
+zero failed/ignored, 166 filtered, 185.72 seconds. Cargo's observed test executable was
+`target/release/deps/public_cli-1487f05fc811cdd1`. Its last produced application executable
+is retained at
+`.artifacts/lkjscript-dev/check/1790687675535381354-2379470-0/retained/release_command_lifecycle/0`.
+That retained file was byte-compared with `target/release/lkjscript` before the additional
+native checks; the earlier release-build producer was not substituted for it.
+
+From `/tmp`, the same observed release test executable was run with the retained application
+as `LKJSCRIPT_RELEASE_CANDIDATE`, selecting `native_effect_generic_resources` and two test
+threads. All five selected tests passed, zero failed/ignored, 162 filtered, in 21.12 seconds.
+The exact retained log is `.artifacts/affine-validation-work-20260929/native-effects.log`,
+with `TEST_EXIT=0`. These cases preserve repeated shared-borrow suffixes, empty task callbacks,
+rejection of mismatch/escape without publication, callback grants before effects, and detached
+cross-package callback authority. They are preservation observations, not a new ownership or
+effect capability claim.
+
+The original predecessor failure log also has a byte-for-byte retained copy at
+`.artifacts/affine-validation-work-20260929/predecessor.log`; `cmp` against the original
+`/tmp/lkjscript-affine-budget-before-complete.log` succeeded. Ignored evidence files were the
+only additions after the frozen source during verification.
+
+## Delivery boundary
+
+This acceptance belongs to source `6aa625822ec27282c1735c2c47f73271b39dc6f5`. The subsequent
+reporting commit updates this campaign only, not executable source, tests or generated
+artifacts. Normal fast-forward delivery to main is selected after acceptance; it does not
+turn source acceptance into a binary-release claim. No release tag, binary publication,
+runtime selection, running-service replacement, access-control change or history rewrite
+is part of this campaign. Existing untracked files, the prior stash and other worktrees
+remain outside the change.
