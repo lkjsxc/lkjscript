@@ -79,6 +79,7 @@ struct Node {
     types: Vec<CompactField>,
     effects: Vec<CompactField>,
     requirements: Vec<CompactField>,
+    implementations: Vec<CompactField>,
     members: Vec<CompactRecord>,
     // Only lexical resolution constructs this value. User text always uses the public decoder.
     lexical: Option<AuthoredLocalReference>,
@@ -154,6 +155,7 @@ pub(super) fn layout(
             types: Vec::new(),
             effects: Vec::new(),
             requirements: Vec::new(),
+            implementations: Vec::new(),
             members: Vec::new(),
             lexical: None,
         };
@@ -240,7 +242,14 @@ pub(super) fn layout(
                 node.children.extend_from_slice(args);
             }
             "sequence" => node.children.extend_from_slice(args),
-            "call" | "function-value" => {
+            "method-call" => {
+                minimum(&block, id, args, 3)?;
+                node.record.fields.push(block.field(args[0], "witness")?);
+                node.record.fields.push(block.field(args[1], "contract")?);
+                node.record.fields.push(block.field(args[2], "method")?);
+                node.children.extend_from_slice(&args[3..]);
+            }
+            "implementation-call" | "call" | "function-value" => {
                 minimum(&block, id, args, 1)?;
                 node.record.fields.push(block.field(args[0], "function")?);
                 let rest = applications(&block, &args[1..], &mut node, true)?;
@@ -609,6 +618,7 @@ fn applications<'a>(
             "types" => 1,
             "effects" => 2,
             "requirements" => 3,
+            "implementations" => 4,
             _ => break,
         };
         if rank <= previous || (!callable && rank != 1) {
@@ -618,7 +628,8 @@ fn applications<'a>(
         let (target, field) = match rank {
             1 => (&mut node.types, "type"),
             2 => (&mut node.effects, "effect"),
-            _ => (&mut node.requirements, "requirement"),
+            3 => (&mut node.requirements, "requirement"),
+            _ => (&mut node.implementations, "implementation"),
         };
         for atom in clause(block, *id, head)? {
             target.push(block.field(*atom, field)?);
@@ -693,7 +704,41 @@ fn lower_node(
             )
         })
         .collect::<Result<Vec<_>, _>>()?;
+    if record.operation == "expression.implementation-call"
+        && (!node.effects.is_empty() || !node.requirements.is_empty())
+    {
+        return Err(inventory_error(
+            record,
+            "implementation calls do not accept effect or requirement applications",
+        ));
+    }
+    if !node.implementations.is_empty() && record.operation != "expression.implementation-call" {
+        return Err(inventory_error(
+            record,
+            "implementation operands require an implementation call",
+        ));
+    }
     let operation = match record.operation.as_str() {
+        "expression.implementation-call" => AuthoredExpressionOperation::ImplementationCall {
+            function: decoder.parse_declaration_reference(record, "function")?,
+            type_arguments: types,
+            implementations: node
+                .implementations
+                .iter()
+                .map(|f| decoder.parse_implementation_operand(record, &f.value))
+                .collect::<Result<_, _>>()?,
+            arguments: (0..node.children.len())
+                .map(|_| child())
+                .collect::<Result<_, _>>()?,
+        },
+        "expression.method-call" => AuthoredExpressionOperation::MethodCall {
+            witness: decoder.parse_implementation_operand(record, required(record, "witness")?)?,
+            contract: decoder.parse_declaration_reference(record, "contract")?,
+            method: required(record, "method")?.parse()?,
+            arguments: (0..node.children.len())
+                .map(|_| child())
+                .collect::<Result<_, _>>()?,
+        },
         "expression.unit" => AuthoredExpressionOperation::Unit {},
         "expression.bool" => AuthoredExpressionOperation::Bool {
             value: parse_bool(record, "value")?,

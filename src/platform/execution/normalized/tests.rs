@@ -39,6 +39,10 @@ pub(crate) mod byte_buffer_tests;
 mod bytes_reuse_tests;
 #[path = "bytes_tests.rs"]
 mod bytes_tests;
+#[path = "owned_closure_tests.rs"]
+mod owned_closure_tests;
+#[path = "owned_generic_tests.rs"]
+mod owned_generic_tests;
 
 #[path = "local_moves_value_tests.rs"]
 mod local_moves_value_tests;
@@ -573,6 +577,7 @@ fn nominal_phantom_identity_origin_properties_codecs_and_alias_fault_are_indepen
                 name: Name::new(format!("consume-{index}")).unwrap(),
                 visibility: DeclarationVisibility::Private,
                 payload: DeclarationPayload::Function(FunctionDeclaration {
+                    implementation_parameters: Vec::new(),
                     requirement_parameters: Vec::new(),
                     effect_parameters: Vec::new(),
                     type_parameters: vec![],
@@ -1305,6 +1310,7 @@ fn normalized_worker_snapshot(
                     name: Name::new("worker_iteration").unwrap(),
                     visibility: DeclarationVisibility::Package,
                     payload: DeclarationPayload::Function(FunctionDeclaration {
+                        implementation_parameters: Vec::new(),
                         requirement_parameters: Vec::new(),
                         effect_parameters: Vec::new(),
                         type_parameters: Vec::new(),
@@ -3302,6 +3308,7 @@ fn nominal_and_structural_json_fields_obey_representation_limits() {
             name: Name::new("consume-framing").unwrap(),
             visibility: DeclarationVisibility::Private,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                implementation_parameters: Vec::new(),
                 requirement_parameters: vec![],
                 effect_parameters: vec![],
                 type_parameters: vec![],
@@ -6144,3 +6151,8 @@ fn pure_artifact_commands_admit_inputs_and_reject_both_effect_authorities() {
         }
     }
 }
+
+#[path = "owned_boundary_tests.rs"]
+mod owned_boundary_tests;
+#[path = "owned_cleanup_tests.rs"]
+mod owned_cleanup_tests;

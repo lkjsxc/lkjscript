@@ -238,6 +238,25 @@ impl Closure<'_> {
                 self.types.entry(ty).or_insert(object);
             }
             match record.operation {
+                ExpressionOperation::ImplementationCall {
+                    function,
+                    type_arguments,
+                    ..
+                } => {
+                    // Static selection does not erase the generic source body. Its concrete
+                    // applications contribute types independently of prepared witness code.
+                    allocate::<TypeObjectDigest>(&mut self.allocated, type_arguments.len())?;
+                    let mut concrete = Vec::with_capacity(type_arguments.len());
+                    for ty in type_arguments {
+                        concrete.push(self.identity(ty, bindings, 0)?);
+                    }
+                    self.tick()?;
+                    allocate::<(DeclarationReference, Vec<TypeObjectDigest>)>(
+                        &mut self.allocated,
+                        1,
+                    )?;
+                    calls.push_back((function, concrete, Vec::new(), Vec::new()));
+                }
                 ExpressionOperation::Let {
                     bindings: locals, ..
                 } => {
@@ -874,12 +893,14 @@ fn property_types(
     for (ty, object) in &schema.types {
         control.check()?;
         tick(visits)?;
-        if (retention == Retention::BufferFree && !matches!(object.form, TypeForm::ByteBuffer))
+        if (retention == Retention::BufferFree
+            && !matches!(object.form, TypeForm::ByteBuffer | TypeForm::OwnedI64Cell))
             || retention == Retention::NoApplication
             || retention != Retention::BufferFree
                 && !matches!(
                     object.form,
                     TypeForm::ByteBuffer
+                        | TypeForm::OwnedI64Cell
                         | TypeForm::Stream { .. }
                         | TypeForm::CapabilityResource { .. }
                         | TypeForm::TypeParameter { .. }
@@ -912,7 +933,11 @@ fn property_types(
                 Ok(safe.contains(&child))
             };
             let accepted = match &object.form {
-                TypeForm::ByteBuffer if retention == Retention::BufferFree => false,
+                TypeForm::ByteBuffer | TypeForm::OwnedI64Cell
+                    if retention == Retention::BufferFree =>
+                {
+                    false
+                }
                 _ if retention == Retention::BufferFree => {
                     let mut accepted = true;
                     for ty in object.child_types() {
@@ -922,6 +947,7 @@ fn property_types(
                 }
                 TypeForm::Applied { .. } if retention == Retention::NoApplication => false,
                 TypeForm::ByteBuffer
+                | TypeForm::OwnedI64Cell
                 | TypeForm::Secret
                 | TypeForm::Stream { .. }
                 | TypeForm::CapabilityResource { .. }

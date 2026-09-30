@@ -1662,3 +1662,12 @@ mod web_starter;
 
 #[path = "native_byte_buffer.rs"]
 mod native_byte_buffer;
+
+#[path = "native_owned_parameters.rs"]
+mod native_owned_parameters;
+
+#[path = "native_owned_witnesses.rs"]
+mod native_owned_witnesses;
+
+#[path = "native_owned_mutation.rs"]
+mod native_owned_mutation;

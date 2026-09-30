@@ -54,6 +54,8 @@ fn flow(instruction: &I) -> Flow<'_> {
         | I::Text(_)
         | I::StaticText(_)
         | I::Drop
+        | I::ImplementationCall { .. }
+        | I::MethodCall { .. }
         | I::Call { .. }
         | I::FunctionValue { .. }
         | I::Invoke { .. }

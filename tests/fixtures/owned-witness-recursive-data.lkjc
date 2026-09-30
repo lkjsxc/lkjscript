@@ -1,0 +1,33 @@
+declarations.begin
+(units (module create recursive-data
+  (record create Node (visibility public) (type-parameter create T)
+    (field create value (type T)) (field create next (type (option (Node T)))))
+  (record create Left (visibility public) (type-parameter create L)
+    (field create value (type L)) (field create right (type (option (Right L)))))
+  (record create Right (visibility public) (type-parameter create R)
+    (field create left (type (option (Left R)))))
+  (owned-contract create Visitor (visibility public)
+    (self Self) (type-parameter create Self (constraint owned))
+    (method method_93000000000000000000000000000001 inspect
+      (parameters ((Node I64) unrestricted) ((Left (list I64)) unrestricted) (Self borrow)) (returns I64))
+    (method method_93000000000000000000000000000002 read
+      (parameters (Self borrow)) (returns I64)))
+  (external create new (visibility private) (implementation core.cell.create)
+    (parameter create n (type I64)) (returns OwnedI64Cell))
+  (external create get (visibility private) (implementation core.cell.read)
+    (parameter create value (type OwnedI64Cell) (use borrow)) (returns I64))
+  (function create inspect (visibility public)
+    (parameter create node (type (Node I64)))
+    (parameter create mutual (type (Left (list I64))))
+    (parameter create cell (type OwnedI64Cell) (use borrow))
+    (returns I64) (effect pure) (body (i64 7)))
+  (function create read (visibility public)
+    (parameter create cell (type OwnedI64Cell) (use borrow))
+    (returns I64) (effect pure) (body (call get (local cell))))
+  (owned-implementation create VisitorCell (visibility public) (contract Visitor) (self OwnedI64Cell)
+    (method method_93000000000000000000000000000001 inspect)
+    (method method_93000000000000000000000000000002 read))
+  (function create recursive-data-main (visibility public) (returns I64) (effect pure)
+    (body (let (binding cell (type OwnedI64Cell) (call new (i64 128)))
+      (in (method-call concrete@VisitorCell Visitor method_93000000000000000000000000000002 (local cell))))))))
+declarations.end

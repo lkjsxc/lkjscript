@@ -118,3 +118,7 @@ filesystem caches were not flushed. The host executable grew by 254,272 bytes.
 These same-machine command costs are not application-runtime or peak-memory
 measurements. See the [completion campaign](../../docs/campaigns/202609240132.md)
 for the full fresh 26-gate source result, reproducibility, costs and delivery boundary.
+
+The Owned-generic compiler refresh regenerates this derived artifact through the
+public build owner while preserving accepted HEAD and its exact standard supplier.
+The generated reference pages continue to be owned by this native program.

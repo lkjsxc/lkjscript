@@ -159,6 +159,7 @@ impl PackageInterfaceDeclaration {
             }
             DeclarationPayload::Function(function) => {
                 PackageInterfaceDeclarationPayload::Function(PackageFunctionSignature {
+                    implementation_parameters: function.implementation_parameters.clone(),
                     requirement_parameters: function.requirement_parameters.clone(),
                     effect_parameters: function.effect_parameters.clone(),
                     type_parameters: function.type_parameters.clone(),
@@ -177,6 +178,12 @@ impl PackageInterfaceDeclaration {
                 requirements: requirements.clone(),
                 ports: ports.clone(),
             },
+            DeclarationPayload::OwnedContract(c) => {
+                PackageInterfaceDeclarationPayload::OwnedContract(c.clone())
+            }
+            DeclarationPayload::OwnedImplementation(i) => {
+                PackageInterfaceDeclarationPayload::OwnedImplementation(i.clone())
+            }
             DeclarationPayload::Test { .. } => {
                 return Err(interface_error(
                     DiagnosticClass::Semantic,
@@ -195,7 +202,14 @@ impl PackageInterfaceDeclaration {
     pub fn type_roots(&self) -> Vec<TypeObjectDigest> {
         match &self.payload {
             PackageInterfaceDeclarationPayload::External(signature) => vec![signature.result],
-            PackageInterfaceDeclarationPayload::Function(signature) => vec![signature.result],
+            PackageInterfaceDeclarationPayload::Function(signature) => signature
+                .implementation_parameters
+                .iter()
+                .map(|p| p.self_type)
+                .chain([signature.result])
+                .collect(),
+            PackageInterfaceDeclarationPayload::OwnedContract(c) => c.type_roots(),
+            PackageInterfaceDeclarationPayload::OwnedImplementation(i) => vec![i.self_type],
             PackageInterfaceDeclarationPayload::Constant { ty } => vec![*ty],
             PackageInterfaceDeclarationPayload::Record { .. }
             | PackageInterfaceDeclarationPayload::Variant { .. }
@@ -252,6 +266,14 @@ impl PackageInterfaceDeclaration {
                     OwnerKind::PureFunction
                 }
             }
+            PackageInterfaceDeclarationPayload::OwnedContract(c) => {
+                c.validate_local()?;
+                OwnerKind::OwnedContract
+            }
+            PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
+                i.validate_local()?;
+                OwnerKind::OwnedImplementation
+            }
             PackageInterfaceDeclarationPayload::Constant { .. } => OwnerKind::Constant,
             PackageInterfaceDeclarationPayload::Component {
                 requirements,
@@ -288,6 +310,8 @@ pub enum PackageInterfaceDeclarationPayload {
     },
     External(PackageExternalSignature),
     Function(PackageFunctionSignature),
+    OwnedContract(super::OwnedContract),
+    OwnedImplementation(super::OwnedImplementation),
     Constant {
         ty: TypeObjectDigest,
     },
@@ -306,6 +330,7 @@ pub struct PackageExternalSignature {
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct PackageFunctionSignature {
+    pub implementation_parameters: Vec<super::ImplementationParameter>,
     pub requirement_parameters: Vec<crate::platform::semantic_id::RequirementParameterId>,
     pub effect_parameters: Vec<EffectParameterId>,
     pub type_parameters: Vec<TypeParameterId>,

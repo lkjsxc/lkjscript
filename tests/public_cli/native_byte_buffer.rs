@@ -4,7 +4,7 @@ use serde_json::json;
 const PRODUCER: &str = include_str!("../fixtures/owned-buffer-producer.lkjc");
 const TRANSFORMER: &str = include_str!("../fixtures/owned-buffer-transformer.lkjc");
 const CONSUMER: &str = include_str!("../fixtures/owned-buffer-consumer.lkjc");
-fn author(public: &Native, body: &str) {
+pub(super) fn author(public: &Native, body: &str) {
     let input = public.input(
         "native.lkjc",
         &format!("request base={}\n{body}", public.revision()),
@@ -13,14 +13,14 @@ fn author(public: &Native, body: &str) {
     public.apply(&input, &plan, true);
     public.cli(&["check"], true);
 }
-struct Export {
-    path: PathBuf,
-    package: String,
-    semantic: String,
-    revision: String,
-    transport: String,
+pub(super) struct Export {
+    pub(super) path: PathBuf,
+    pub(super) package: String,
+    pub(super) semantic: String,
+    pub(super) revision: String,
+    pub(super) transport: String,
 }
-fn export(public: &Native) -> Export {
+pub(super) fn export(public: &Native) -> Export {
     let output = public.root.path().join("package.lkjp");
     let records = public.cli(
         &[
@@ -43,7 +43,7 @@ fn export(public: &Native) -> Export {
         transport: compact_field(record, "transport").into(),
     }
 }
-fn stage(public: &Native, package: &Export) {
+pub(super) fn stage(public: &Native, package: &Export) {
     public.cli(
         &[
             "package",
@@ -57,7 +57,7 @@ fn stage(public: &Native, package: &Export) {
         true,
     );
 }
-fn dependency(e: &Export) -> String {
+pub(super) fn dependency(e: &Export) -> String {
     format!(
         "add.dependency package={} semantic-revision={} package-revision={}\n",
         e.package, e.semantic, e.revision

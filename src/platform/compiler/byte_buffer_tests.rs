@@ -138,7 +138,7 @@ fn byte_buffer_forged_artifact_cannot_erase_modes_results_moves_or_cleanup() {
             loaded.manifest.compiler_contract_version,
             loaded.manifest.bytecode_contract_version
         ),
-        (14, 10)
+        (15, 11)
     );
     let mut checked = 0;
     for (package, record) in loaded.manifest.packages.iter().enumerate() {
@@ -315,22 +315,12 @@ fn byte_buffer_forged_artifact_cannot_erase_modes_results_moves_or_cleanup() {
                         changed.graph_contract_version,
                     )
                     .unwrap();
-                    let buffer = crate::platform::kernel::encode_type_object(
-                        &crate::platform::kernel::TypeObject::new(TypeForm::ByteBuffer).unwrap(),
-                    )
-                    .unwrap()
-                    .0;
-                    if changed.tables.types.contains(&buffer) {
-                        assert_eq!(
-                            changed.validate().unwrap_err().code,
-                            "compiler_unit_buffer_generation"
-                        );
-                        rejected_faults.insert(fault);
-                        continue;
-                    }
-                    // A transient local's annotation can live only in canonical owners,
-                    // outside unit type relocations. The loader must reject this too.
-                    changed.validate().unwrap();
+                    assert_eq!(
+                        changed.validate().unwrap_err().code,
+                        "compiler_unit_contract"
+                    );
+                    rejected_faults.insert(fault);
+                    continue;
                 }
                 _ => unreachable!(),
             }

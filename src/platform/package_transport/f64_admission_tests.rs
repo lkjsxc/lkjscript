@@ -175,10 +175,13 @@ fn f64_successor_checks_rebuilds_and_executes_genuine_pre_f64_source_without_rew
     assert!(package.revision.dependencies.is_empty());
 
     let rebuilt = compile_immutable(package, &container.objects, &[]).unwrap();
-    let artifacts = [
-        include_bytes!("../../../tests/fixtures/graph16-standard.lkja").as_slice(),
-        rebuilt.artifact.bytes.as_slice(),
-    ];
+    let original_artifact = include_bytes!("../../../tests/fixtures/graph16-standard.lkja");
+    assert_eq!(load_artifact(original_artifact).unwrap_err().code, "compiler_unit_contract");
+    // Retain both independently produced instruction streams. The test-only frozen
+    // reader changes derived envelopes, not canonical source or old instructions;
+    // production still requires a public rebuild of the retained source.
+    let reencoded = crate::platform::compiler::tests::predecessor_attack_tests::current_derived_fixture(original_artifact);
+    let artifacts = [reencoded.as_slice(), rebuilt.artifact.bytes.as_slice()];
     let mut observations = Vec::new();
     for artifact in artifacts {
         let program = NormalizedProgram::prepare(load_artifact(artifact).unwrap()).unwrap();
@@ -291,7 +294,7 @@ fn f64_successor_checks_stages_and_rebuilds_genuine_graph16_transaction_library(
             .collect::<Vec<_>>();
         let linked = compile_immutable(package, &container.objects, &dependencies).unwrap();
         let artifact = load_artifact(&linked.artifact.bytes).unwrap();
-        assert_eq!(artifact.manifest.contract_version, 21);
+        assert_eq!(artifact.manifest.contract_version, 22);
         assert_eq!(
             artifact.manifest.root_package,
             package.snapshot.root.package_id
@@ -333,17 +336,23 @@ async fn f64_successor_executes_genuine_graph16_transaction_completion_with_fres
     use crate::platform::execution::ExecutionControl;
 
     let original = include_bytes!("../../../tests/fixtures/graph16-transaction-consumer.lkja");
-    let artifact = load_artifact(original).unwrap();
-    assert_eq!(artifact.manifest.contract_version, 20);
-    assert_eq!(artifact.manifest.graph_contract_version, 16);
+    assert_eq!(&original[..8], b"LKJART20");
+    let mut original_digest = blake3::Hasher::new_derive_key("lkjscript.artifact-bundle.v20");
+    original_digest.update(&(original.len() as u64).to_be_bytes());
+    original_digest.update(original);
     assert_eq!(
-        artifact.bundle_digest.to_string(),
-        "artifact_bundle_90d3efba04601441578e65a1cf33aba1591be13d1bd17377f26aba4cbe5d420a"
+        original_digest.finalize().to_hex().as_str(),
+        "90d3efba04601441578e65a1cf33aba1591be13d1bd17377f26aba4cbe5d420a"
     );
+    assert_eq!(load_artifact(original).unwrap_err().code, "compiler_unit_contract");
+    let reencoded = crate::platform::compiler::tests::predecessor_attack_tests::current_derived_fixture(original);
+    let artifact = load_artifact(&reencoded).unwrap();
+    assert_eq!(artifact.manifest.contract_version, 22);
+    assert_eq!(artifact.manifest.graph_contract_version, 18);
     assert!(artifact.manifest.packages.iter().any(|package| package.package_revision.to_string() == "package_revision_0528bf6c37becea151d02b4ce34f08f897bb76e60f69e1a9a3a203c3abafe1ad"));
     let temporary = tempfile::tempdir().unwrap();
     let artifact_path = temporary.path().join("consumer.lkja");
-    std::fs::write(&artifact_path, original).unwrap();
+    std::fs::write(&artifact_path, &reencoded).unwrap();
     for store in ["numbers", "texts"] {
         DataStore::initialize(&temporary.path().join(store)).unwrap();
     }
@@ -418,5 +427,5 @@ async fn f64_successor_executes_genuine_graph16_transaction_completion_with_fres
         assert_eq!(checked.records, 0);
         assert_eq!(checked.staging_leftovers, 0);
     }
-    assert_eq!(std::fs::read(&artifact_path).unwrap(), original);
+    assert_eq!(std::fs::read(&artifact_path).unwrap(), reencoded);
 }

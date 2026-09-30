@@ -47,12 +47,16 @@ pub enum OwnerKind {
     HttpRoute,
     EffectParameter,
     RequirementParameter,
+    OwnedContract,
+    OwnedImplementation,
 }
 
 impl OwnerKind {
-    pub const ALL: [Self; 25] = [
+    pub const ALL: [Self; 27] = [
         Self::Module,
         Self::Record,
+        Self::OwnedContract,
+        Self::OwnedImplementation,
         Self::Variant,
         Self::Interface,
         Self::External,
@@ -80,7 +84,9 @@ impl OwnerKind {
 
     /// Coarse durable owner kinds that survive the scoped-identity cutover and may therefore be
     /// selected by the current public exact-owner command.
-    pub const PUBLIC_EXACT: [Self; 12] = [
+    pub const PUBLIC_EXACT: [Self; 14] = [
+        Self::OwnedContract,
+        Self::OwnedImplementation,
         Self::Module,
         Self::Record,
         Self::Variant,
@@ -99,6 +105,8 @@ impl OwnerKind {
         match self {
             Self::Module => 1,
             Self::Record => 2,
+            Self::OwnedContract => 26,
+            Self::OwnedImplementation => 27,
             Self::Variant => 3,
             Self::Interface => 4,
             Self::External => 5,
@@ -129,6 +137,8 @@ impl OwnerKind {
         match self {
             Self::Module => "module",
             Self::Record => "record",
+            Self::OwnedContract => "owned_contract",
+            Self::OwnedImplementation => "owned_implementation",
             Self::Variant => "variant",
             Self::Interface => "interface",
             Self::External => "external",
@@ -173,6 +183,8 @@ impl OwnerKind {
             (self, owner),
             (Self::Module, OwnerKey::Module(_))
                 | (Self::Record, OwnerKey::Declaration(_))
+                | (Self::OwnedContract, OwnerKey::Declaration(_))
+                | (Self::OwnedImplementation, OwnerKey::Declaration(_))
                 | (Self::Variant, OwnerKey::Declaration(_))
                 | (Self::Interface, OwnerKey::Declaration(_))
                 | (Self::External, OwnerKey::Declaration(_))
@@ -205,7 +217,9 @@ impl OwnerKind {
     pub const fn has_compilation_unit(self) -> bool {
         matches!(
             self,
-            Self::Record
+            Self::OwnedContract
+                | Self::OwnedImplementation
+                | Self::Record
                 | Self::Variant
                 | Self::Interface
                 | Self::External

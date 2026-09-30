@@ -39,7 +39,10 @@ impl Value {
         program: &NormalizedProgram,
         raw: NormalizedValue,
     ) -> Result<Self, ExecutionError> {
-        if !matches!(raw, NormalizedValue::ByteBuffer(_)) {
+        if !matches!(
+            raw,
+            NormalizedValue::ByteBuffer(_) | NormalizedValue::OwnedI64Cell(_)
+        ) {
             return Err(admission_error(
                 "memory constructor requires a sealed token",
             ));
@@ -76,11 +79,8 @@ impl Value {
 
     pub(super) fn duplicate(&self, use_mode: ParameterUse) -> Result<Self, ExecutionError> {
         if self.class == Class::Memory && use_mode == ParameterUse::Borrow {
-            let NormalizedValue::ByteBuffer(buffer) = &self.raw else {
-                return Err(admission_error("memory proof lacks its token"));
-            };
             return Ok(Self {
-                raw: NormalizedValue::ByteBuffer(buffer.borrow()?),
+                raw: self.raw.memory_borrow()?,
                 origin: self.origin,
                 class: Class::Memory,
             });
@@ -170,7 +170,8 @@ impl Value {
                 "function constructor requires capture-safe type arguments",
             ));
         }
-        if !target.requirement_parameters.is_empty()
+        if !target.implementation_parameters.is_empty()
+            || !target.requirement_parameters.is_empty()
             || !target.effect_parameters.is_empty()
             || !target.effect.row().is_closed()
             || (matches!(target.effect, crate::platform::kernel::FunctionEffect::Pure)
@@ -348,7 +349,9 @@ impl Value {
                 .is_some_and(|object| {
                     matches!(
                         object.form,
-                        TypeForm::ByteBuffer | TypeForm::CapabilityResource { .. }
+                        TypeForm::ByteBuffer
+                            | TypeForm::OwnedI64Cell
+                            | TypeForm::CapabilityResource { .. }
                     )
                 });
             if payload.class(program, work)? != if direct { Class::Direct } else { Class::Free } {
@@ -469,7 +472,9 @@ impl Value {
             .is_some_and(|ty| {
                 matches!(
                     ty.form,
-                    TypeForm::ByteBuffer | TypeForm::CapabilityResource { .. }
+                    TypeForm::ByteBuffer
+                        | TypeForm::OwnedI64Cell
+                        | TypeForm::CapabilityResource { .. }
                 )
             });
         Ok((
@@ -632,7 +637,8 @@ impl Admission<'_> {
             .get(function.0 as usize)
             .filter(|_| function.1 == self.program.value_origin)
             .ok_or_else(|| admission_error("bind target belongs to another prepared program"))?;
-        if !target.requirement_parameters.is_empty()
+        if !target.implementation_parameters.is_empty()
+            || !target.requirement_parameters.is_empty()
             || !target.effect_parameters.is_empty()
             || target
                 .parameters
@@ -826,6 +832,7 @@ impl Admission<'_> {
                 TypeForm::Secret
                 | TypeForm::Stream { .. }
                 | TypeForm::ByteBuffer
+                | TypeForm::OwnedI64Cell
                 | TypeForm::CapabilityResource { .. }
                 | TypeForm::TypeParameter { .. } => {
                     return Err(admission_error(
@@ -1053,7 +1060,9 @@ impl Admission<'_> {
                             let direct = self.program.types.get(&ty).is_some_and(|object| {
                                 matches!(
                                     object.form,
-                                    TypeForm::ByteBuffer | TypeForm::CapabilityResource { .. }
+                                    TypeForm::ByteBuffer
+                                        | TypeForm::OwnedI64Cell
+                                        | TypeForm::CapabilityResource { .. }
                                 )
                             });
                             children.push((
@@ -1175,6 +1184,7 @@ impl Admission<'_> {
                         _ => false,
                     };
                     if !effect_matches
+                        || !callable.implementation_parameters.is_empty()
                         || !callable.requirement_parameters.is_empty()
                         || !callable.effect_parameters.is_empty()
                         || requirement_arguments.as_ref() != callable.requirement_arguments.as_ref()

@@ -1,5 +1,6 @@
 //! Coherent canonical and compiled double consumption must fail affine artifact admission.
 use super::*;
+use crate::platform::DiagnosticClass;
 use crate::platform::kernel::{
     DeclarationPayload, EncodedOwnerKey, ExpressionValidationLimits, KernelSnapshot, ParameterUse,
     decode_owner_binding, encode_owner_binding, validate_affine_roots_with_limits,
@@ -50,6 +51,31 @@ fn expression(snapshot: &KernelSnapshot, id: ExpressionId) -> &ExpressionOperati
 fn reject_untaken_double_consume(name: &str) {
     let snapshot =
         crate::platform::execution::normalized::tests::byte_buffer_tests::author(EXTRA).unwrap();
+    reject_source(snapshot, name, TypeForm::ByteBuffer, "discard");
+}
+
+#[test]
+fn owned_witness_artifact_rejects_consistently_rehashed_untaken_consumption() {
+    let source = crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(
+        &[
+            include_str!("../../../tests/fixtures/owned-witness-library.lkjc"),
+            include_str!("../../../tests/fixtures/owned-witness-cell.lkjc"),
+            include_str!("../../../tests/fixtures/owned-witness-buffer.lkjc"),
+            include_str!("../../../tests/fixtures/owned-witness-artifact.lkjc"),
+        ]
+        .join("\n"),
+    )
+    .unwrap();
+    reject_source(
+        source.clone(),
+        "hostile-cell",
+        TypeForm::OwnedI64Cell,
+        "retire",
+    );
+    reject_source(source, "hostile-buffer", TypeForm::ByteBuffer, "retire");
+}
+
+fn reject_source(snapshot: KernelSnapshot, name: &str, carrier: TypeForm, callee: &str) {
     assert!(crate::platform::kernel::memory_reference::accepts(
         &snapshot
     ));
@@ -85,7 +111,7 @@ fn reject_untaken_double_consume(name: &str) {
         panic!("untaken lexical buffer scope");
     };
     assert_eq!(bindings.len(), 2);
-    let buffer = encode_type_object(&TypeObject::new(TypeForm::ByteBuffer).unwrap())
+    let buffer = encode_type_object(&TypeObject::new(carrier).unwrap())
         .unwrap()
         .0;
     for (binding, expected) in bindings.iter().zip(["a", "b"]) {
@@ -103,19 +129,21 @@ fn reject_untaken_double_consume(name: &str) {
         .iter()
         .zip(bindings)
         .map(|(call, binding)| {
-            let ExpressionOperation::Call {
-                function,
-                arguments,
-                ..
-            } = expression(&snapshot, *call)
-            else {
-                panic!("discard call");
+            let (function, arguments) = match expression(&snapshot, *call) {
+                ExpressionOperation::Call {
+                    function,
+                    arguments,
+                    ..
+                }
+                | ExpressionOperation::ImplementationCall {
+                    function,
+                    arguments,
+                    ..
+                } => (function, arguments),
+                _ => panic!("consuming call"),
             };
             assert_eq!(function.package, snapshot.root.package_id);
-            assert_eq!(
-                function.declaration,
-                declaration_named(&snapshot, "discard")
-            );
+            assert_eq!(function.declaration, declaration_named(&snapshot, callee));
             assert_eq!(arguments.len(), 1);
             assert_eq!(
                 expression(&snapshot, arguments[0]),
@@ -134,6 +162,52 @@ fn reject_untaken_double_consume(name: &str) {
     let compiled = build_clean(&repository, OptimizationPolicy::DeterministicBaseline).unwrap();
     let linked = link_artifact(&repository, compiled.manifest_digest, &[]).unwrap();
     let loaded = load_artifact(&linked.artifact.bytes).expect("accepted native control loads");
+    let mappings: usize = snapshot
+        .owners
+        .values()
+        .map(|record| match record {
+            OwnerRecord::Declaration(d) => match &d.payload {
+                DeclarationPayload::OwnedImplementation(i) => i.methods.len(),
+                _ => 0,
+            },
+            _ => 0,
+        })
+        .sum();
+    assert_eq!(
+        loaded.work.implementation_inventory_steps,
+        linked.work.compiler_units + mappings as u64
+    );
+    assert_eq!(
+        linked.work.implementation_inventory_steps,
+        loaded.work.implementation_inventory_steps
+    );
+    let units = loaded
+        .objects
+        .iter()
+        .filter(|(key, _)| key.domain == ObjectDomain::CompilerUnit)
+        .map(|(key, bytes)| {
+            let unit = CompilationUnit::decode(bytes, *key).unwrap();
+            ((unit.source.package, unit.source.owner), unit)
+        })
+        .collect();
+    let mut exhausted = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK as u64;
+    let failure =
+        super::super::artifact::runtime_owner_expectations(&units, &mut exhausted, || Ok(()))
+            .unwrap_err();
+    assert_eq!(failure.class, DiagnosticClass::Resource);
+    assert_eq!(failure.code, "artifact_owned_contract_work");
+    let mut cancelled = 0;
+    let failure =
+        super::super::artifact::runtime_owner_expectations(&units, &mut cancelled, || {
+            Err(crate::platform::diagnostic::Diagnostic::new(
+                DiagnosticClass::Resource,
+                "owned_inventory_cancelled",
+                "cancel before inventory growth",
+            ))
+        })
+        .unwrap_err();
+    assert_eq!(failure.code, "owned_inventory_cancelled");
+    assert_eq!(cancelled, 0);
     let (old_unit, mut unit) = loaded
         .objects
         .iter()

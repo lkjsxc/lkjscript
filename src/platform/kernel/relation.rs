@@ -60,6 +60,9 @@ pub enum RelationKind {
     EffectParameterUse,
     RequirementParameterUse,
     RequirementArgument,
+    OwnedContractUse,
+    ImplementationSelection,
+    ImplementationMethod,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -76,7 +79,7 @@ pub enum PropagationClass {
 }
 
 impl RelationKind {
-    pub const ALL: [Self; 33] = [
+    pub const ALL: [Self; 36] = [
         Self::DeclarationModule,
         Self::MemberDeclaration,
         Self::ParameterOperation,
@@ -110,6 +113,9 @@ impl RelationKind {
         Self::EffectParameterUse,
         Self::RequirementParameterUse,
         Self::RequirementArgument,
+        Self::OwnedContractUse,
+        Self::ImplementationSelection,
+        Self::ImplementationMethod,
     ];
 
     pub const fn tag(self) -> u8 {
@@ -123,6 +129,9 @@ impl RelationKind {
             Self::EffectParameterUse => 31,
             Self::RequirementParameterUse => 32,
             Self::RequirementArgument => 33,
+            Self::OwnedContractUse => 34,
+            Self::ImplementationSelection => 35,
+            Self::ImplementationMethod => 36,
             Self::NamedTypeUse => 7,
             Self::LocalValueReference => 8,
             Self::ConstantReference => 9,
@@ -165,6 +174,9 @@ impl RelationKind {
             Self::EffectParameterUse => "effect_parameter_use",
             Self::RequirementParameterUse => "requirement_parameter_use",
             Self::RequirementArgument => "requirement_argument",
+            Self::OwnedContractUse => "owned_contract_use",
+            Self::ImplementationSelection => "implementation_selection",
+            Self::ImplementationMethod => "implementation_method",
             Self::NamedTypeUse => "named_type_use",
             Self::LocalValueReference => "local_value_reference",
             Self::ConstantReference => "constant_reference",
@@ -212,7 +224,8 @@ impl RelationKind {
             | Self::ParameterOperation
             | Self::ExpressionParent
             | Self::ExpressionRoot => PropagationClass::Ownership,
-            Self::RequirementParameterUse
+            Self::OwnedContractUse
+            | Self::RequirementParameterUse
             | Self::EffectParameterUse
             | Self::TypeParameterUse
             | Self::NamedTypeUse => PropagationClass::Type,
@@ -223,7 +236,10 @@ impl RelationKind {
             | Self::VariantConstruction
             | Self::VariantMatch
             | Self::VariantExhaustiveness => PropagationClass::Value,
-            Self::FunctionCall | Self::FunctionValue => PropagationClass::Behavior,
+            Self::ImplementationSelection
+            | Self::ImplementationMethod
+            | Self::FunctionCall
+            | Self::FunctionValue => PropagationClass::Behavior,
             Self::RequirementArgument
             | Self::FunctionRequirement
             | Self::ParameterRequirement
@@ -423,7 +439,35 @@ where
                         )?;
                     }
                 }
+                DeclarationPayload::OwnedContract(_) => {}
+                DeclarationPayload::OwnedImplementation(i) => {
+                    exact_edge(
+                        edges,
+                        source,
+                        RelationKind::OwnedContractUse,
+                        i.contract.package,
+                        OwnerKey::Declaration(i.contract.declaration),
+                    )?;
+                    for m in &i.methods {
+                        exact_edge(
+                            edges,
+                            source,
+                            RelationKind::ImplementationMethod,
+                            m.function.package,
+                            OwnerKey::Declaration(m.function.declaration),
+                        )?;
+                    }
+                }
                 DeclarationPayload::Function(function) => {
+                    for p in &function.implementation_parameters {
+                        exact_edge(
+                            edges,
+                            source,
+                            RelationKind::OwnedContractUse,
+                            p.contract.package,
+                            OwnerKey::Declaration(p.contract.declaration),
+                        )?;
+                    }
                     extract_effect_relations(source, &function.effect.row(), edges)?;
                     if let FunctionEffect::Task {
                         effect_parameters: _,
@@ -752,6 +796,34 @@ where
             declaration.package,
             OwnerKey::Declaration(declaration.declaration),
         )?,
+        ExpressionOperation::ImplementationCall {
+            function,
+            implementations,
+            ..
+        } => {
+            exact_edge(
+                edges,
+                source,
+                RelationKind::FunctionCall,
+                function.package,
+                OwnerKey::Declaration(function.declaration),
+            )?;
+            for operand in implementations {
+                implementation_edge(edges, source, *operand)?;
+            }
+        }
+        ExpressionOperation::MethodCall {
+            witness, contract, ..
+        } => {
+            exact_edge(
+                edges,
+                source,
+                RelationKind::OwnedContractUse,
+                contract.package,
+                OwnerKey::Declaration(contract.declaration),
+            )?;
+            implementation_edge(edges, source, *witness)?;
+        }
         ExpressionOperation::Call { function, .. } => exact_edge(
             edges,
             source,
@@ -1095,4 +1167,22 @@ fn consume_work(work: &mut usize) -> Result<(), Diagnostic> {
 
 fn relation_error(code: &str, message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Semantic, code, message)
+}
+
+fn implementation_edge(
+    edges: &mut RelationCollector,
+    source: ExactOwnerKey,
+    operand: super::ImplementationOperand,
+) -> Result<(), Diagnostic> {
+    let r = match operand {
+        super::ImplementationOperand::Concrete { implementation } => implementation,
+        super::ImplementationOperand::Parameter { function, .. } => function,
+    };
+    exact_edge(
+        edges,
+        source,
+        RelationKind::ImplementationSelection,
+        r.package,
+        OwnerKey::Declaration(r.declaration),
+    )
 }

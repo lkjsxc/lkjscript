@@ -785,6 +785,11 @@ pub(crate) fn aggregation_children(
     }
     match record {
         OwnerRecord::Declaration(record) => match &record.payload {
+            DeclarationPayload::OwnedContract(c) => children.push((
+                OwnershipRole::DeclarationTypeParameter,
+                OwnerKey::TypeParameter(c.self_parameter),
+            )),
+            DeclarationPayload::OwnedImplementation(_) => {}
             DeclarationPayload::Record { fields, .. } => children.extend(
                 fields
                     .iter()
@@ -1047,7 +1052,19 @@ fn local_summary(
                     interface.piece(6, &function.result)?;
                     implementation.piece(1, &function.implementation)?;
                 }
+                DeclarationPayload::OwnedContract(c) => {
+                    interface.raw_piece(2, &[9]);
+                    interface.piece(10, c)?;
+                }
+                DeclarationPayload::OwnedImplementation(i) => {
+                    interface.raw_piece(2, &[10]);
+                    interface.piece(10, i)?;
+                    implementation.piece(5, &i.methods)?;
+                }
                 DeclarationPayload::Function(function) => {
+                    if !function.implementation_parameters.is_empty() {
+                        interface.piece(10, &function.implementation_parameters)?;
+                    }
                     interface.piece(7, &function.effect_parameters)?;
                     if !function.requirement_parameters.is_empty() {
                         interface.piece(9, &function.requirement_parameters)?;

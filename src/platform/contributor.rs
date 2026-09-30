@@ -2683,6 +2683,8 @@ fn oracle_operation_parameter_uses(
 
 fn oracle_expression_form(operation: &ExpressionOperation) -> &'static str {
     match operation {
+        ExpressionOperation::ImplementationCall { .. } => "implementation_call",
+        ExpressionOperation::MethodCall { .. } => "method_call",
         ExpressionOperation::Unit {} => "unit",
         ExpressionOperation::Bool { .. } => "bool",
         ExpressionOperation::I64 { .. } => "i64",

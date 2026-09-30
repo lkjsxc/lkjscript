@@ -93,6 +93,7 @@ fn fixture() -> Fixture {
             name: Name::new("consume").unwrap(),
             visibility: DeclarationVisibility::Private,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                implementation_parameters: Vec::new(),
                 requirement_parameters: vec![],
                 effect_parameters: vec![],
                 type_parameters: vec![],

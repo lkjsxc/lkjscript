@@ -143,6 +143,7 @@ fn json_form<'a>(
         TypeForm::Secret
         | TypeForm::Stream { .. }
         | TypeForm::ByteBuffer
+        | TypeForm::OwnedI64Cell
         | TypeForm::CapabilityResource { .. }
         | TypeForm::Function { .. }
         | TypeForm::TaskFunction { .. }
@@ -413,6 +414,7 @@ fn from_json(
         }
         TypeForm::Secret
         | TypeForm::ByteBuffer
+        | TypeForm::OwnedI64Cell
         | TypeForm::CapabilityResource { .. }
         | TypeForm::Stream { .. }
         | TypeForm::Function { .. }
@@ -628,6 +630,7 @@ fn to_json(
             _,
             TypeForm::Secret
             | TypeForm::ByteBuffer
+            | TypeForm::OwnedI64Cell
             | TypeForm::CapabilityResource { .. }
             | TypeForm::Stream { .. }
             | TypeForm::Function { .. }

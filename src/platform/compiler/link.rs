@@ -40,6 +40,7 @@ pub struct ArtifactLinkWork {
     pub type_objects: u64,
     pub blob_objects: u64,
     pub runtime_owners: u64,
+    pub implementation_inventory_steps: u64,
     pub reference_owners: u64,
     pub reference_map: MapWork,
     pub closure_objects: u64,
@@ -260,7 +261,11 @@ pub(super) fn link_prepared(
 
     let mut runtime_owners = Vec::new();
     let mut runtime_records = BTreeMap::new();
-    for ((package, owner), expectation) in runtime_owner_expectations(&local_units)? {
+    for ((package, owner), expectation) in runtime_owner_expectations(
+        &local_units,
+        &mut work.implementation_inventory_steps,
+        || view.validation_checkpoint(),
+    )? {
         if package != view.package_id() {
             // Imported task rows reference authority owned by a dependency.
             // Its already validated artifact contributes that canonical owner;

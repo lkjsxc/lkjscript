@@ -1,0 +1,12 @@
+declarations.begin
+(units (module create composite
+  (function create leaf (visibility private)
+    (type-parameter create V) (returns I64) (effect pure) (body (i64 7)))
+  (function create via-witness (visibility public)
+    (type-parameter create T (constraint owned)) (type-parameter create U)
+    (implementation-parameter implparam_31000000000000000000000000000001 ops abstraction::Storage T)
+    (returns I64) (effect pure) (body (call leaf (types (list U)))))
+  (function create composite-main (visibility public) (returns I64) (effect pure)
+    (body (implementation-call via-witness (types OwnedI64Cell I64)
+      (implementations concrete@cell::Scalar))))))
+declarations.end

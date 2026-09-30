@@ -387,6 +387,7 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         name: helper_name.clone(),
         visibility: crate::platform::kernel::DeclarationVisibility::Private,
         payload: DeclarationPayload::Function(FunctionDeclaration {
+            implementation_parameters: Vec::new(),
             requirement_parameters: Vec::new(),
             effect_parameters: Vec::new(),
             type_parameters: Vec::new(),
@@ -1208,6 +1209,13 @@ fn infer_requirements<B: CanonicalBaseRead + ?Sized>(
             )
         })?;
         match operation {
+            ExpressionOperation::ImplementationCall { .. }
+            | ExpressionOperation::MethodCall { .. } => {
+                return Err(extract_corrupt(
+                    "change_extract_owned_witness",
+                    "function extraction cannot move scoped implementation operands",
+                ));
+            }
             ExpressionOperation::CapabilityCall { requirement, .. }
             | ExpressionOperation::Transaction { requirement, .. }
             | ExpressionOperation::TransactionOutcome { requirement, .. } => {
@@ -1442,7 +1450,13 @@ fn replace_expression_reference(
         | ExpressionOperation::Field { value: body, .. }
         | ExpressionOperation::Transaction { body, .. }
         | ExpressionOperation::TransactionOutcome { body, .. } => replace(body),
-        ExpressionOperation::Sequence { items }
+        ExpressionOperation::ImplementationCall {
+            arguments: items, ..
+        }
+        | ExpressionOperation::MethodCall {
+            arguments: items, ..
+        }
+        | ExpressionOperation::Sequence { items }
         | ExpressionOperation::List { items, .. }
         | ExpressionOperation::Call {
             arguments: items, ..
@@ -1815,7 +1829,7 @@ fn resource_class<B: CanonicalBaseRead + ?Sized>(
     })?;
     let result = match object.form {
         TypeForm::CapabilityResource { interface } => ResourceClass::Direct(interface),
-        TypeForm::ByteBuffer => ResourceClass::Memory,
+        TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => ResourceClass::Memory,
         TypeForm::Named { declaration } => {
             let key = (declaration.package, declaration.declaration);
             if !active_declarations.insert(key) {

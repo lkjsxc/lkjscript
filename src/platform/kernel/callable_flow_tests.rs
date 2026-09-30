@@ -285,6 +285,7 @@ impl Read {
                     name: Name::new(format!("f{f}")).unwrap(),
                     visibility: DeclarationVisibility::Private,
                     payload: DeclarationPayload::Function(FunctionDeclaration {
+                        implementation_parameters: Vec::new(),
                         requirement_parameters: Vec::new(),
                         effect_parameters: vec![],
                         type_parameters: (0..*arity).map(|p| parameter(f, p)).collect(),

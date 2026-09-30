@@ -16,12 +16,20 @@ pub(crate) fn direct(
     read: &(impl ExpressionRead + ?Sized),
     ty: TypeObjectDigest,
 ) -> Result<bool, Diagnostic> {
-    Ok(matches!(
-        read.type_object(ty)?
+    Ok(
+        match read
+            .type_object(ty)?
             .ok_or_else(|| reject("missing memory type"))?
-            .form,
-        TypeForm::ByteBuffer
-    ))
+            .form
+        {
+            TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => true,
+            TypeForm::TypeParameter { parameter } => matches!(
+                read.owner(OwnerKey::TypeParameter(parameter))?,
+                Some(OwnerRecord::TypeParameter(p)) if p.constraints == TypeParameterConstraints::Owned
+            ),
+            _ => false,
+        },
+    )
 }
 fn owned_annotation(
     read: &(impl ExpressionRead + ?Sized),
@@ -42,8 +50,11 @@ fn owned_annotation(
     // Artifacts may omit ordinary annotation types reconstructed by expression
     // inference. Only the exact concrete buffer annotation requests ownership;
     // that type must still be present, and its initializer is checked separately.
-    if annotation != *buffer {
-        return Ok(false);
+    if annotation != *buffer && read.type_object(annotation)?.is_none() {
+        let cell = encode_type_object(&TypeObject::new(TypeForm::OwnedI64Cell)?)?.0;
+        if annotation != cell {
+            return Ok(false);
+        }
     }
     direct(read, annotation)
 }
@@ -64,6 +75,7 @@ fn owner(
         PackageInterfaceRecord::Parameter(p) => OwnerRecord::Parameter(p),
         PackageInterfaceRecord::Field(p) => OwnerRecord::Field(p),
         PackageInterfaceRecord::Case(p) => OwnerRecord::Case(p),
+        PackageInterfaceRecord::TypeParameter(p) => OwnerRecord::TypeParameter(p),
         _ => return Err(reject("unexpected memory contract owner kind")),
     })
 }
@@ -75,14 +87,14 @@ pub(crate) fn contains(
     let mut seen = BTreeSet::new();
     let mut declarations = BTreeSet::new();
     while let Some(ty) = pending.pop() {
-        read.validation_checkpoint()?;
+        read.validation_work()?;
         if !seen.insert(ty) {
             continue;
         }
         let object = read
             .type_object(ty)?
             .ok_or_else(|| reject("missing memory containment type"))?;
-        if matches!(object.form, TypeForm::ByteBuffer) {
+        if direct(read, ty)? {
             return Ok(true);
         }
         pending.extend(object.child_types());
@@ -133,6 +145,7 @@ pub(crate) fn contains(
     Ok(false)
 }
 struct Signature {
+    type_parameters: Vec<crate::platform::semantic_id::TypeParameterId>,
     parameters: Vec<ParameterRecord>,
     result: TypeObjectDigest,
     pure: bool,
@@ -141,15 +154,18 @@ fn signature(
     read: &(impl ExpressionRead + ?Sized),
     d: DeclarationReference,
 ) -> Result<Option<Signature>, Diagnostic> {
-    let (parameters, result, pure) = if d.package == read.package_id() {
+    let (type_parameters, parameters, result, pure) = if d.package == read.package_id() {
         match read.owner(OwnerKey::Declaration(d.declaration))? {
             Some(OwnerRecord::Declaration(r)) => match r.payload {
                 DeclarationPayload::Function(f) => (
+                    f.type_parameters,
                     f.parameters,
                     f.result,
                     matches!(f.effect, FunctionEffect::Pure),
                 ),
-                DeclarationPayload::External(f) => (f.parameters, f.result, true),
+                DeclarationPayload::External(f) => {
+                    (f.type_parameters, f.parameters, f.result, true)
+                }
                 _ => return Ok(None),
             },
             _ => return Err(reject("missing direct memory callee")),
@@ -158,11 +174,14 @@ fn signature(
         match read.package_interface_owner(d.package, OwnerKey::Declaration(d.declaration))? {
             Some(PackageInterfaceRecord::Declaration(r)) => match r.payload {
                 PackageInterfaceDeclarationPayload::Function(f) => (
+                    f.type_parameters,
                     f.parameters,
                     f.result,
                     matches!(f.effect, FunctionEffect::Pure),
                 ),
-                PackageInterfaceDeclarationPayload::External(f) => (f.parameters, f.result, true),
+                PackageInterfaceDeclarationPayload::External(f) => {
+                    (f.type_parameters, f.parameters, f.result, true)
+                }
                 _ => return Ok(None),
             },
             _ => return Err(reject("missing imported memory callee")),
@@ -178,10 +197,57 @@ fn signature(
         )
         .collect::<Result<Vec<_>, _>>()?;
     Ok(Some(Signature {
+        type_parameters,
         parameters,
         result,
         pure,
     }))
+}
+
+fn instantiate(
+    read: &(impl ExpressionRead + ?Sized),
+    d: DeclarationReference,
+    arguments: &[TypeObjectDigest],
+    s: &mut Signature,
+) -> Result<(), Diagnostic> {
+    if s.type_parameters.len() != arguments.len() {
+        return Err(reject("memory type argument arity"));
+    }
+    let mut substitutions = BTreeMap::new();
+    for (id, ty) in s.type_parameters.iter().zip(arguments) {
+        let OwnerRecord::TypeParameter(p) = owner(read, d.package, OwnerKey::TypeParameter(*id))?
+        else {
+            return Err(reject("missing generic memory parameter"));
+        };
+        if p.declaration != d.declaration {
+            return Err(reject("foreign generic memory parameter"));
+        }
+        if p.constraints == TypeParameterConstraints::Owned {
+            if !direct(read, *ty)? {
+                return Err(reject("owned substitution must be direct memory"));
+            }
+        } else if contains(read, *ty)? {
+            return Err(reject("ordinary generic argument contains owned memory"));
+        }
+        substitutions.insert(*id, *ty);
+    }
+    let substitute = |ty: TypeObjectDigest| -> Result<TypeObjectDigest, Diagnostic> {
+        match read
+            .type_object(ty)?
+            .ok_or_else(|| reject("missing memory signature type"))?
+            .form
+        {
+            TypeForm::TypeParameter { parameter } => {
+                Ok(substitutions.get(&parameter).copied().unwrap_or(ty))
+            }
+            _ => Ok(ty),
+        }
+    };
+    for p in &mut s.parameters {
+        p.ty = substitute(p.ty)?;
+    }
+    s.result = substitute(s.result)?;
+    Ok(())
 }
 fn admit_signature(read: &(impl ExpressionRead + ?Sized), s: &Signature) -> Result<(), Diagnostic> {
     let mut memory = false;
@@ -243,6 +309,7 @@ fn join(a: &mut State, b: &State) -> Result<(), Diagnostic> {
 }
 struct Check<'a, R: ?Sized> {
     read: &'a R,
+    scope: Option<crate::platform::semantic_id::DeclarationId>,
 }
 impl<R: ExpressionRead + ?Sized> Check<'_, R> {
     fn eval(
@@ -255,7 +322,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
         if depth > contract::MAXIMUM_EXPRESSION_DEPTH {
             return Err(reject("memory expression depth exceeded"));
         }
-        self.read.validation_checkpoint()?;
+        self.read.validation_work()?;
         let Some(OwnerRecord::Expression(e)) = self.read.owner(OwnerKey::Expression(id))? else {
             return Err(reject("missing memory expression"));
         };
@@ -364,25 +431,25 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 }
                 result
             }
-            ExpressionOperation::Call {
+            ExpressionOperation::ImplementationCall {
+                function,
+                type_arguments,
+                arguments,
+                ..
+            }
+            | ExpressionOperation::Call {
                 function,
                 type_arguments,
                 arguments,
                 ..
             } => {
-                for t in type_arguments {
-                    if contains(self.read, t)? {
-                        return Err(reject(
-                            "ByteBuffer is not an unrestricted generic argument, including unused arguments",
-                        ));
-                    }
-                }
-                let Some(s) = signature(self.read, function)? else {
+                let Some(mut s) = signature(self.read, function)? else {
                     for a in arguments {
                         plain(a, state)?;
                     }
                     return Ok(false);
                 };
+                instantiate(self.read, function, &type_arguments, &mut s)?;
                 admit_signature(self.read, &s)?;
                 if s.parameters.len() != arguments.len() {
                     return Err(reject("memory call arity mismatch"));
@@ -415,6 +482,47 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                     }
                 }
                 direct(self.read, s.result)?
+            }
+            ExpressionOperation::MethodCall {
+                witness,
+                contract,
+                method,
+                arguments,
+            } => {
+                let signature = super::owned_contract::method_signature(
+                    self.read, witness, contract, method, self.scope,
+                )?;
+                if signature.parameters.len() != arguments.len() {
+                    return Err(reject("owned method arity mismatch"));
+                }
+                let mut uses = BTreeMap::new();
+                for (p, a) in signature.parameters.iter().zip(arguments) {
+                    if direct(self.read, p.ty)? {
+                        let Some(OwnerRecord::Expression(e)) =
+                            self.read.owner(OwnerKey::Expression(a))?
+                        else {
+                            return Err(reject("missing owned method argument"));
+                        };
+                        let ExpressionOperation::Local { value } = e.operation else {
+                            return Err(reject(
+                                "owned methods require exact local memory arguments",
+                            ));
+                        };
+                        if let Some(prior) = uses.insert(value, p.use_mode)
+                            && (prior == ParameterUse::Consume
+                                || p.use_mode == ParameterUse::Consume)
+                        {
+                            return Err(reject("owned method consuming alias"));
+                        }
+                        if !state.contains_key(&value) {
+                            return Err(reject("fabricated owned method argument"));
+                        }
+                        self.eval(a, state, p.use_mode, next)?;
+                    } else {
+                        plain(a, state)?;
+                    }
+                }
+                direct(self.read, signature.result)?
             }
             ExpressionOperation::FunctionValue {
                 function,
@@ -525,6 +633,34 @@ pub(crate) fn validate_owner(
     record: &OwnerRecord,
 ) -> Result<(), Diagnostic> {
     match record {
+        OwnerRecord::TypeParameter(p) if p.constraints == TypeParameterConstraints::Owned => {
+            let allowed = match read.owner(OwnerKey::Declaration(p.declaration))? {
+                Some(OwnerRecord::Declaration(d)) => match d.payload {
+                    DeclarationPayload::OwnedContract(c) => {
+                        c.self_parameter
+                            == match key {
+                                OwnerKey::TypeParameter(id) => id,
+                                _ => return Err(reject("invalid Owned parameter identity")),
+                            }
+                    }
+                    DeclarationPayload::Function(f) => {
+                        matches!(f.effect, FunctionEffect::Pure)
+                            && f.effect_parameters.is_empty()
+                            && f.requirement_parameters.is_empty()
+                            && matches!(key, OwnerKey::TypeParameter(id) if f.type_parameters.contains(&id))
+                    }
+                    _ => false,
+                },
+                _ => false,
+            };
+            if !allowed {
+                return Err(Diagnostic::new(
+                    DiagnosticClass::Semantic,
+                    "kernel_owned_parameter_owner",
+                    "Owned requires an exact pure graph-function parameter or owned contract Self",
+                ));
+            }
+        }
         OwnerRecord::Parameter(p) if direct(read, p.ty)? => {
             let ParameterParent::Function(d) = p.parent else {
                 return Err(reject("capability operations cannot carry ByteBuffer"));
@@ -544,7 +680,12 @@ pub(crate) fn validate_owner(
                 return Err(reject("buffer adapter port is forbidden"));
             }
             if let PortImplementation::Expression(e) = p.implementation {
-                Check { read }.eval(e, &mut State::new(), ParameterUse::Unrestricted, 0)?;
+                Check { read, scope: None }.eval(
+                    e,
+                    &mut State::new(),
+                    ParameterUse::Unrestricted,
+                    0,
+                )?;
             }
         }
         OwnerRecord::Field(f) if contains(read, f.ty)? => {
@@ -562,22 +703,44 @@ pub(crate) fn validate_owner(
             return Err(reject("buffer adapter result is forbidden"));
         }
         OwnerRecord::Declaration(d) => match &d.payload {
+            DeclarationPayload::OwnedContract(c) => {
+                super::owned_contract::validate_contract(read, key, c)?
+            }
+            DeclarationPayload::OwnedImplementation(i) => {
+                super::owned_contract::validate_implementation(read, i)?
+            }
             DeclarationPayload::Constant { ty, value } => {
                 if contains(read, *ty)? {
                     return Err(reject("buffer constants are forbidden"));
                 }
-                Check { read }.eval(*value, &mut State::new(), ParameterUse::Unrestricted, 0)?;
+                Check { read, scope: None }.eval(
+                    *value,
+                    &mut State::new(),
+                    ParameterUse::Unrestricted,
+                    0,
+                )?;
             }
             DeclarationPayload::Test {
                 actual, expected, ..
             } => {
-                Check { read }.eval(*actual, &mut State::new(), ParameterUse::Unrestricted, 0)?;
-                Check { read }.eval(*expected, &mut State::new(), ParameterUse::Unrestricted, 0)?;
+                Check { read, scope: None }.eval(
+                    *actual,
+                    &mut State::new(),
+                    ParameterUse::Unrestricted,
+                    0,
+                )?;
+                Check { read, scope: None }.eval(
+                    *expected,
+                    &mut State::new(),
+                    ParameterUse::Unrestricted,
+                    0,
+                )?;
             }
             DeclarationPayload::Function(f) => {
                 let OwnerKey::Declaration(id) = key else {
                     return Err(reject("wrong memory function owner"));
                 };
+                super::owned_contract::validate_parameters(read, id, f)?;
                 let s = signature(
                     read,
                     DeclarationReference {
@@ -602,7 +765,11 @@ pub(crate) fn validate_owner(
                         );
                     }
                 }
-                let result = Check { read }.eval(
+                let result = Check {
+                    read,
+                    scope: Some(id),
+                }
+                .eval(
                     f.body,
                     &mut state,
                     if direct(read, f.result)? {
@@ -633,7 +800,10 @@ pub(crate) fn validate_owner(
                 for p in &s.parameters {
                     memory |= direct(read, p.ty)?;
                 }
-                if memory && !f.implementation.as_str().starts_with("core.buffer.") {
+                if memory
+                    && !f.implementation.as_str().starts_with("core.buffer.")
+                    && !f.implementation.as_str().starts_with("core.cell.")
+                {
                     return Err(reject(
                         "memory externals require the closed buffer inventory",
                     ));

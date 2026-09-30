@@ -333,6 +333,8 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
                 let value = PackageInterfaceOwner {
                     contract_version: if record.header().contract_version == 14 {
                         10
+                    } else if record.header().contract_version <= 17 {
+                        11
                     } else {
                         crate::platform::package_interface::PACKAGE_INTERFACE_CONTRACT_VERSION
                     },
@@ -365,6 +367,63 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
     }
     if observed != choices.keys().copied().collect() {
         return Err(failure("unreachable transport selection"));
+    }
+    // Reconstruct static-witness visibility directly from the independently
+    // selected public inventories, never from canonical private owners.
+    for (package, inventory) in &interfaces {
+        let require = |reference: DeclarationReference,
+                       kind: OwnerKind|
+         -> Result<(), Diagnostic> {
+            reader.charge(1)?;
+            let mut declared = reference.package == *package;
+            for dependency in &revisions[package].dependencies {
+                reader.charge(1)?;
+                declared |= dependency.package == reference.package;
+            }
+            if !declared {
+                return Err(failure("static witness names an undeclared dependency"));
+            }
+            let owner = interfaces
+                .get(&reference.package)
+                .and_then(|i| i.get(&OwnerKey::Declaration(reference.declaration)))
+                .ok_or_else(|| failure("static witness signature is not public"))?;
+            let matches = match (kind, owner) {
+                (OwnerKind::OwnedContract, PackageInterfaceRecord::Declaration(d)) => matches!(
+                    d.payload,
+                    PackageInterfaceDeclarationPayload::OwnedContract(_)
+                ),
+                (OwnerKind::PureFunction, PackageInterfaceRecord::Declaration(d)) => {
+                    matches!(&d.payload, PackageInterfaceDeclarationPayload::Function(f) if matches!(f.effect, FunctionEffect::Pure))
+                }
+                _ => false,
+            };
+            if !matches {
+                return Err(failure(
+                    "static witness public signature has the wrong kind",
+                ));
+            }
+            Ok(())
+        };
+        for value in inventory.values() {
+            reader.charge(1)?;
+            let PackageInterfaceRecord::Declaration(d) = value else {
+                continue;
+            };
+            match &d.payload {
+                PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
+                    require(i.contract, OwnerKind::OwnedContract)?;
+                    for m in &i.methods {
+                        require(m.function, OwnerKind::PureFunction)?;
+                    }
+                }
+                PackageInterfaceDeclarationPayload::Function(f) => {
+                    for p in &f.implementation_parameters {
+                        require(p.contract, OwnerKind::OwnedContract)?;
+                    }
+                }
+                _ => {}
+            }
+        }
     }
     let mut children_remaining = BTreeMap::new();
     let mut parents = BTreeMap::<PackageId, Vec<PackageId>>::new();
@@ -484,6 +543,14 @@ fn public_inventory(
             continue;
         }
         let payload = match &declaration.payload {
+            DeclarationPayload::OwnedContract(c) => {
+                reader.charge(1)?;
+                selected.insert(OwnerKey::TypeParameter(c.self_parameter));
+                PackageInterfaceDeclarationPayload::OwnedContract(c.clone())
+            }
+            DeclarationPayload::OwnedImplementation(i) => {
+                PackageInterfaceDeclarationPayload::OwnedImplementation(i.clone())
+            }
             DeclarationPayload::Record {
                 fields,
                 type_parameters,
@@ -557,6 +624,7 @@ fn public_inventory(
                     );
                 }
                 PackageInterfaceDeclarationPayload::Function(PackageFunctionSignature {
+                    implementation_parameters: function.implementation_parameters.clone(),
                     requirement_parameters: function.requirement_parameters.clone(),
                     effect_parameters: function.effect_parameters.clone(),
                     type_parameters: function.type_parameters.clone(),

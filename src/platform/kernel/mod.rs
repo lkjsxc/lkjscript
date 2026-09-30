@@ -26,7 +26,10 @@ pub(crate) mod memory;
 pub(crate) mod memory_reference;
 mod name;
 mod namespace;
+mod owned_contract;
 mod owner;
+pub use owned_contract::*;
+pub(crate) mod interface11;
 mod reference;
 mod relation;
 mod requirement;
@@ -36,6 +39,7 @@ mod state;
 mod type_object;
 mod validate;
 pub(crate) mod wire14;
+mod wire17;
 
 pub(crate) use affine::validate_affine_roots_with_limits;
 pub use codec::{
@@ -80,3 +84,6 @@ pub(crate) use validate::{validate_full_checked, validate_full_with_limit};
 
 #[cfg(test)]
 pub(crate) mod tests;
+
+#[cfg(test)]
+mod owned_contract_tests;

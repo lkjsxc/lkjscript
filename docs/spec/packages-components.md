@@ -239,24 +239,19 @@ transport preserves private graph bodies and exact closed callable descriptors. 
 remain unavailable to public name lookup. Checksums and compiled metadata cannot override the
 canonical constraints or confer deployment grants.
 
-The current graph/owner generation is 17, compiler-unit 14, bytecode 10 and package-interface-owner
-11. Supported predecessors retain Graph 14 / compiler-unit 10 / bytecode 6, Graph 15 /
-compiler-unit 11 / bytecode 7, Graph 16 / compiler-unit 12 / bytecode 8, and Graph 17 /
-compiler-unit 13 / bytecode 9, with interface-owner
-10 and 11 as previously admitted. TypeObject 10 and nominal application encodings remain unchanged;
-F64 uses the disjoint version-1 `LKJF6401` type envelope and fixed little-endian binary64 payloads.
-Concrete [ByteBuffer](owned-byte-buffers.md) uses disjoint version-1 `LKJBUF01` and requires
-compiler-unit 14 / bytecode 10 for memory modes, owned results and lexical cleanup.
-Task-callable rows use the explicit successor envelope only when symbolic requirement operands
-need it. Canonical re-encoding follows the admitted object's generation, preserving unchanged
-predecessor objects and IDs. Current package/interface wrappers may contain compatible old canonical
-objects and necessarily acquire new wrapper identities. Artifact 21 and its manifest bind the
-supported graph/compiler/bytecode tuple. Exact Artifact 18 decoding admits only its predecessor
-Graph 14 / compiler 10 / bytecode 6 tuple; Artifact 19 additionally admits its original Graph 15 /
-compiler 11 / bytecode 7 tuple. Artifact 20 additionally admits its original Graph 16 /
-compiler 12 / bytecode 8 tuple. New bundles use the explicit version 21 outer envelope,
-so predecessor executables reject them before decoding extended owners. Mixed or unsupported
-tuples reject before execution.
+Current [owned-generic meaning](owned-generics.md) uses graph/owner generation 18,
+compiler unit 15, bytecode 11, artifact 22 and package-interface-owner 12. Canonical
+owner generations 14–17 and frozen interface-owner layouts 10 and 11 remain
+supported source inputs, preserving their exact bytes and identities. Predecessor
+derived artifacts require rebuilding from those supported canonical inputs;
+previous compiler layouts are rejected before interpretation as current units.
+TypeObject 10 and nominal application encodings remain unchanged. F64, ByteBuffer
+and OwnedI64Cell use disjoint version-1 type envelopes. Task-callable rows retain
+their explicit symbolic-requirement envelope. Current package/interface wrappers
+may contain supported old canonical objects and acquire new wrapper identities.
+Artifact 22 binds the current graph/compiler/bytecode tuple; mixed or unsupported
+executable tuples reject before execution. Exact dependency revisions remain
+separate from the bundle's inventory of available symbols.
 The transport/container framing remains unchanged, with explicit contained graph generations.
 A predecessor executable rejects new graph meaning rather than ignoring requirement arguments.
 

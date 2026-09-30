@@ -59,8 +59,13 @@ struct Reference<'a> {
 
 impl Reference<'_> {
     fn buffer(&self, ty: TypeObjectDigest) -> bool {
-        self.type_object(ty)
-            .is_some_and(|t| matches!(t.form, TypeForm::ByteBuffer))
+        match self.type_object(ty).map(|t| &t.form) {
+            Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell) => true,
+            Some(TypeForm::TypeParameter { parameter }) => {
+                matches!(self.snapshot.owners.get(&OwnerKey::TypeParameter(*parameter)), Some(OwnerRecord::TypeParameter(p)) if p.constraints == super::TypeParameterConstraints::Owned)
+            }
+            _ => false,
+        }
     }
     fn accepts(&self) -> bool {
         if !super::memory_reference::accepts(self.snapshot) || !self.shapes_are_legal() {
@@ -221,6 +226,13 @@ impl Reference<'_> {
             _ => return Err(()),
         };
         match operation {
+            ExpressionOperation::ImplementationCall { arguments, .. }
+            | ExpressionOperation::MethodCall { arguments, .. } => {
+                for arg in arguments {
+                    self.plain(*arg, live)?;
+                }
+                Ok(Value::Plain)
+            }
             ExpressionOperation::Unit { .. }
             | ExpressionOperation::Bool { .. }
             | ExpressionOperation::I64 { .. }
@@ -1233,6 +1245,7 @@ fn mutate_function_escape(snapshot: &mut KernelSnapshot) {
                 if matches!(
                     record.payload,
                     DeclarationPayload::Function(super::FunctionDeclaration {
+                        implementation_parameters: _,
                         effect: FunctionEffect::Task { .. },
                         ..
                     })

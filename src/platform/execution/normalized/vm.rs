@@ -712,6 +712,10 @@ impl Machine<'_> {
                 instruction
             };
             match instruction {
+                NormalizedInstruction::ImplementationCall { .. }
+                | NormalizedInstruction::MethodCall { .. } => {
+                    return Err(type_error("unclosed implementation instruction"));
+                }
                 NormalizedInstruction::Unit => self.push_scalar(NormalizedValue::Unit)?,
                 NormalizedInstruction::Bool(value) => {
                     self.push_scalar(NormalizedValue::Bool(value))?
@@ -1192,18 +1196,23 @@ impl Machine<'_> {
                     }
                     if let Some(function) = self.current_frame()?.function {
                         let f = &self.program.functions[function.0 as usize];
-                        let expected = matches!(
-                            self.program.types.get(&f.result).map(|t| &t.form),
-                            Some(TypeForm::ByteBuffer)
-                        );
+                        let memory_form = direct_memory_type(
+                            &self.program.types,
+                            f.result,
+                            &self.current_frame()?.type_arguments,
+                        )?;
+                        let expected = memory_form.is_some();
                         if (result.class(self.program, &mut self.observation.value_work)?
                             == Class::Memory)
                             != expected
                         {
                             return Err(type_error("function memory result contract mismatch"));
                         }
-                        if let NormalizedValue::ByteBuffer(buffer) = result.raw() {
-                            buffer.validate(self.memory_domain, true)?;
+                        if result.raw().memory_form().is_some() {
+                            if result.raw().memory_form().as_ref() != memory_form.as_ref() {
+                                return Err(type_error("memory result representation mismatch"));
+                            }
+                            result.raw().memory_validate(self.memory_domain, true)?;
                         }
                     }
                     let frame = self.frames.pop().ok_or_else(|| {
@@ -1596,14 +1605,6 @@ impl Machine<'_> {
         if arguments.len() != function.parameter_count as usize {
             return Err(type_error("function argument count is foreign"));
         }
-        if type_arguments
-            .iter()
-            .any(|ty| !self.program.buffer_free_types.contains(ty))
-        {
-            return Err(type_error(
-                "ByteBuffer cannot substitute an unrestricted generic parameter",
-            ));
-        }
         if type_arguments.len() != function.type_parameters.len() {
             return Err(type_error("function type-argument count is foreign"));
         }
@@ -1611,9 +1612,18 @@ impl Machine<'_> {
             .type_parameter_constraints
             .iter()
             .zip(type_arguments.iter())
-            .any(|(constraint, ty)| {
-                *constraint == crate::platform::kernel::TypeParameterConstraints::CaptureSafe
-                    && !self.program.capture_safe_types.contains(ty)
+            .any(|(constraint, ty)| match constraint {
+                crate::platform::kernel::TypeParameterConstraints::Owned => !matches!(
+                    self.program.types.get(ty).map(|t| &t.form),
+                    Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell)
+                ),
+                crate::platform::kernel::TypeParameterConstraints::None => {
+                    !self.program.buffer_free_types.contains(ty)
+                }
+                crate::platform::kernel::TypeParameterConstraints::CaptureSafe => {
+                    !self.program.buffer_free_types.contains(ty)
+                        || !self.program.capture_safe_types.contains(ty)
+                }
             })
         {
             return Err(type_error(
@@ -1643,14 +1653,44 @@ impl Machine<'_> {
         }) {
             return Err(capabilities_unbound());
         }
-        self.validate_call_resources(function, &arguments)?;
+        if function.implementation_parameters.len() != function.implementation_arguments.len() {
+            return Err(type_error("unbound static implementation template"));
+        }
+        for (parameter, (_, self_type)) in function
+            .implementation_parameters
+            .iter()
+            .zip(function.implementation_arguments.iter())
+        {
+            self.control.check()?;
+            let Some(TypeForm::TypeParameter {
+                parameter: type_parameter,
+            }) = self
+                .program
+                .types
+                .get(&parameter.self_type)
+                .map(|t| &t.form)
+            else {
+                return Err(type_error(
+                    "implementation Self has no exact generic binding",
+                ));
+            };
+            if type_arguments_by_parameter.get(type_parameter) != Some(self_type) {
+                return Err(type_error(
+                    "implementation Self disagrees with actual type application",
+                ));
+            }
+        }
+        self.validate_call_resources(function, &type_arguments_by_parameter, &arguments)?;
         // A retained ancestor owns the storage for read-only reborrows. Only an outgoing
         // owner with live loans prevents replacing this activation.
-        let tail = tail && !self.frames.last().is_some_and(|frame| {
-            frame.locals.iter().flatten().any(|value| {
-                matches!(value.raw(), NormalizedValue::ByteBuffer(buffer) if buffer.owns_live_loans())
-            })
-        });
+        let tail = tail
+            && !self.frames.last().is_some_and(|frame| {
+                frame
+                    .locals
+                    .iter()
+                    .flatten()
+                    .any(|value| value.raw().memory_owns_live_loans())
+            });
         if tail {
             self.validate_tail_caller()?;
             if !function.graph_function {
@@ -1671,7 +1711,9 @@ impl Machine<'_> {
             ),
             NormalizedFunctionBody::External(implementation) => {
                 self.observation.external_calls = self.observation.external_calls.saturating_add(1);
-                let value = if implementation.as_str().starts_with("core.buffer.") {
+                let value = if implementation.as_str().starts_with("core.buffer.")
+                    || implementation.as_str().starts_with("core.cell.")
+                {
                     self.call_checked_intrinsic(
                         function,
                         implementation.as_str(),
@@ -1710,14 +1752,13 @@ impl Machine<'_> {
     fn validate_call_resources(
         &mut self,
         function: &super::prepare::NormalizedFunction,
+        substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
         arguments: &[CheckedValue],
     ) -> Result<(), ExecutionError> {
         let mut uses = BTreeMap::new();
         for (parameter, argument) in function.parameters.iter().zip(arguments) {
-            if matches!(
-                self.program.types.get(&parameter.ty).map(|t| &t.form),
-                Some(TypeForm::ByteBuffer)
-            ) {
+            let memory_form = direct_memory_type(&self.program.types, parameter.ty, substitutions)?;
+            if memory_form.is_some() {
                 if !matches!(
                     function.effect,
                     crate::platform::kernel::FunctionEffect::Pure
@@ -1728,14 +1769,16 @@ impl Machine<'_> {
                 {
                     return Err(type_error("invalid memory call signature"));
                 }
-                let NormalizedValue::ByteBuffer(buffer) = argument.raw() else {
-                    return Err(type_error("memory call token"));
-                };
-                buffer.validate(
+                if argument.raw().memory_form().as_ref() != memory_form.as_ref() {
+                    return Err(type_error("memory call representation mismatch"));
+                }
+                argument.raw().memory_validate(
                     self.memory_domain,
                     parameter.use_mode == ParameterUse::Consume,
                 )?;
-                if (parameter.use_mode == ParameterUse::Borrow) != buffer.is_borrowed() {
+                if (parameter.use_mode == ParameterUse::Borrow)
+                    != argument.raw().memory_is_borrowed()
+                {
                     return Err(type_error("memory argument loan mode mismatch"));
                 }
                 continue;
@@ -2215,8 +2258,10 @@ impl Machine<'_> {
                 "normalized local use disagrees with the checked ownership classification",
             ));
         }
-        if let NormalizedValue::ByteBuffer(buffer) = value.raw() {
-            buffer.validate(self.memory_domain, use_mode == ParameterUse::Consume)?;
+        if value.raw().memory_form().is_some() {
+            value
+                .raw()
+                .memory_validate(self.memory_domain, use_mode == ParameterUse::Consume)?;
         }
         if let NormalizedValue::Resource(handle) = value.raw() {
             if use_mode == ParameterUse::Consume {
@@ -2365,7 +2410,7 @@ fn value_cost(value: &NormalizedValue) -> Result<(u64, u64), ExecutionError> {
     let mut items = 0_u64;
     while let Some(value) = pending.pop() {
         match value {
-            NormalizedValue::ByteBuffer(_) => {
+            NormalizedValue::ByteBuffer(_) | NormalizedValue::OwnedI64Cell(_) => {
                 return Err(ExecutionError::resource(
                     "normalized_buffer_boundary",
                     "ByteBuffer cannot cross raw/adapter boundaries",
@@ -3624,4 +3669,28 @@ fn resource_error(code: &'static str, message: &'static str) -> ExecutionError {
 
 fn runtime_error(code: &'static str, message: &'static str) -> ExecutionError {
     ExecutionError::new(ExecutionFailureClass::Infrastructure, code, message)
+}
+
+fn direct_memory_type(
+    types: &BTreeMap<TypeObjectDigest, crate::platform::kernel::TypeObject>,
+    mut ty: TypeObjectDigest,
+    substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+) -> Result<Option<TypeForm>, ExecutionError> {
+    for _ in 0..=substitutions.len() {
+        match &types
+            .get(&ty)
+            .ok_or_else(|| type_error("missing direct memory type metadata"))?
+            .form
+        {
+            TypeForm::ByteBuffer => return Ok(Some(TypeForm::ByteBuffer)),
+            TypeForm::OwnedI64Cell => return Ok(Some(TypeForm::OwnedI64Cell)),
+            TypeForm::TypeParameter { parameter } => {
+                ty = *substitutions
+                    .get(parameter)
+                    .ok_or_else(|| type_error("unbound memory type parameter"))?;
+            }
+            _ => return Ok(None),
+        }
+    }
+    Err(type_error("cyclic memory type substitution"))
 }

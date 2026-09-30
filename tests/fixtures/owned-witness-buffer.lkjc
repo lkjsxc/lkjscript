@@ -1,0 +1,22 @@
+declarations.begin
+(units
+  (module create buffer
+    (external create empty (visibility private) (implementation core.buffer.empty) (returns ByteBuffer))
+    (external create push (visibility private) (implementation core.buffer.push)
+      (parameter create n (type I64)) (parameter create value (type ByteBuffer) (use consume)) (returns ByteBuffer))
+    (external create length (visibility private) (implementation core.buffer.length)
+      (parameter create value (type ByteBuffer) (use borrow)) (returns I64))
+    (function create create (visibility public)
+      (parameter create n (type I64)) (returns ByteBuffer) (effect pure)
+      (body (let (binding value (type ByteBuffer) (call empty)) (in (call push (local n) (local value))))))
+    (function create update (visibility public)
+      (parameter create n (type I64)) (parameter create value (type ByteBuffer) (use consume)) (returns ByteBuffer) (effect pure)
+      (body (call push (local n) (local value))))
+    (function create read (visibility public)
+      (parameter create value (type ByteBuffer) (use borrow)) (returns I64) (effect pure)
+      (body (call length (local value))))
+    (owned-implementation create Octets (visibility public) (contract abstraction::Storage) (self ByteBuffer)
+      (method method_10000000000000000000000000000001 create)
+      (method method_10000000000000000000000000000002 update)
+      (method method_10000000000000000000000000000003 read))))
+declarations.end

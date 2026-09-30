@@ -98,6 +98,7 @@ pub enum NormalizedValue {
     I64(i64),
     F64(Binary64),
     ByteBuffer(super::byte_buffer::ByteBuffer),
+    OwnedI64Cell(super::owned_i64_cell::OwnedI64Cell),
     Bytes(BytePayload),
     Text(Arc<str>),
     StaticText(Arc<str>),
@@ -127,6 +128,56 @@ pub enum NormalizedValue {
 }
 
 impl NormalizedValue {
+    pub(super) fn memory_form(&self) -> Option<crate::platform::kernel::TypeForm> {
+        match self {
+            Self::ByteBuffer(_) => Some(crate::platform::kernel::TypeForm::ByteBuffer),
+            Self::OwnedI64Cell(_) => Some(crate::platform::kernel::TypeForm::OwnedI64Cell),
+            _ => None,
+        }
+    }
+
+    pub(super) fn memory_validate(
+        &self,
+        domain: ValueOrigin,
+        consume: bool,
+    ) -> Result<(), crate::platform::execution::ExecutionError> {
+        match self {
+            Self::ByteBuffer(token) => token.validate(domain, consume),
+            Self::OwnedI64Cell(token) => token.validate(domain, consume),
+            _ => Err(crate::platform::execution::ExecutionError::resource(
+                "normalized_memory_token",
+                "expected a sealed owned-memory token",
+            )),
+        }
+    }
+
+    pub(super) fn memory_borrow(&self) -> Result<Self, crate::platform::execution::ExecutionError> {
+        match self {
+            Self::ByteBuffer(token) => token.borrow().map(Self::ByteBuffer),
+            Self::OwnedI64Cell(token) => token.borrow().map(Self::OwnedI64Cell),
+            _ => Err(crate::platform::execution::ExecutionError::resource(
+                "normalized_memory_token",
+                "expected a sealed owned-memory token",
+            )),
+        }
+    }
+
+    pub(super) fn memory_is_borrowed(&self) -> bool {
+        match self {
+            Self::ByteBuffer(token) => token.is_borrowed(),
+            Self::OwnedI64Cell(token) => token.is_borrowed(),
+            _ => false,
+        }
+    }
+
+    pub(super) fn memory_owns_live_loans(&self) -> bool {
+        match self {
+            Self::ByteBuffer(token) => token.owns_live_loans(),
+            Self::OwnedI64Cell(token) => token.owns_live_loans(),
+            _ => false,
+        }
+    }
+
     /// Bounded raw ingress only. The carrier conveys no type or origin certificate;
     /// each evaluator admits every logical child independently before using it.
     pub fn map(
@@ -195,7 +246,10 @@ impl NormalizedValue {
     #[cfg(test)]
     pub fn is_durable(&self) -> bool {
         match self {
-            Self::ByteBuffer(_) | Self::Function { .. } | Self::Resource(_) => false,
+            Self::OwnedI64Cell(_)
+            | Self::ByteBuffer(_)
+            | Self::Function { .. }
+            | Self::Resource(_) => false,
             Self::Record(NormalizedRecord::Nominal { fields, .. }) => {
                 fields.iter().all(Self::is_durable)
             }

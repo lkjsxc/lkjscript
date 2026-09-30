@@ -2750,6 +2750,7 @@ fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
             name: Name::new("effect-owner").unwrap(),
             visibility: DeclarationVisibility::Private,
             payload: DeclarationPayload::Function(crate::platform::kernel::FunctionDeclaration {
+                implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 type_parameters: vec![],
                 effect_parameters: vec![parameter],
@@ -2800,6 +2801,103 @@ fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
         panic!("function signature");
     };
     function.requirement_parameters.push(requirement_parameter);
+    // Both new declaration kinds participate in the same ownership/deletion oracle.
+    let owned_contract = DeclarationId::migrate(seed, 1);
+    let implementation = DeclarationId::migrate(seed, 2);
+    let method_function = DeclarationId::migrate(seed, 3);
+    let self_parameter = crate::platform::semantic_id::TypeParameterId::migrate(seed, 0);
+    let method = crate::platform::semantic_id::MethodId::migrate(seed, 0);
+    let method_body = crate::platform::semantic_id::ExpressionId::migrate(seed, 1);
+    let cell = TypeObject::new(TypeForm::OwnedI64Cell).unwrap();
+    let cell_type = crate::platform::kernel::encode_type_object(&cell)
+        .unwrap()
+        .0;
+    logical.types.insert(cell_type, cell);
+    logical.owners.insert(
+        OwnerKey::TypeParameter(self_parameter),
+        OwnerRecord::TypeParameter(crate::platform::kernel::TypeParameterRecord {
+            header: OwnerHeader::new(
+                OwnerKey::TypeParameter(self_parameter),
+                OwnerKind::TypeParameter,
+            ),
+            declaration: owned_contract,
+            name: Name::new("Self").unwrap(),
+            constraints: crate::platform::kernel::TypeParameterConstraints::Owned,
+        }),
+    );
+    logical.owners.insert(
+        OwnerKey::Expression(method_body),
+        OwnerRecord::Expression(
+            crate::platform::kernel::ExpressionRecord::new(
+                method_body,
+                ExpressionOperation::Unit {},
+            )
+            .unwrap(),
+        ),
+    );
+    for (id, name, kind, payload) in [
+        (
+            owned_contract,
+            "OwnedMarker",
+            OwnerKind::OwnedContract,
+            DeclarationPayload::OwnedContract(crate::platform::kernel::OwnedContract {
+                self_parameter,
+                methods: vec![crate::platform::kernel::OwnedMethod {
+                    id: method,
+                    name: Name::new("inspect").unwrap(),
+                    parameters: vec![],
+                    result: unit,
+                    effect: FunctionEffect::Pure,
+                }],
+            }),
+        ),
+        (
+            implementation,
+            "CellMarker",
+            OwnerKind::OwnedImplementation,
+            DeclarationPayload::OwnedImplementation(crate::platform::kernel::OwnedImplementation {
+                contract: crate::platform::kernel::DeclarationReference {
+                    package: logical.root.package_id,
+                    declaration: owned_contract,
+                },
+                self_type: cell_type,
+                methods: vec![crate::platform::kernel::OwnedMethodImplementation {
+                    method,
+                    function: crate::platform::kernel::DeclarationReference {
+                        package: logical.root.package_id,
+                        declaration: method_function,
+                    },
+                }],
+            }),
+        ),
+        (
+            method_function,
+            "marker-method",
+            OwnerKind::PureFunction,
+            DeclarationPayload::Function(crate::platform::kernel::FunctionDeclaration {
+                implementation_parameters: vec![],
+                requirement_parameters: vec![],
+                effect_parameters: vec![],
+                type_parameters: vec![],
+                parameters: vec![],
+                result: unit,
+                effect: FunctionEffect::Pure,
+                body: method_body,
+            }),
+        ),
+    ] {
+        logical.owners.insert(
+            OwnerKey::Declaration(id),
+            OwnerRecord::Declaration(crate::platform::kernel::DeclarationRecord {
+                header: OwnerHeader::new(OwnerKey::Declaration(id), kind),
+                module,
+                name: Name::new(name).unwrap(),
+                visibility: DeclarationVisibility::Private,
+                payload,
+            }),
+        );
+    }
+
     logical.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
         logical.root.owners.page(),
         logical.owners.len() as u64,
@@ -5877,6 +5975,7 @@ fn authored_type_builder_interns_every_unrestricted_graph_nine_type_form() {
             TypeForm::Stream { .. } => "stream",
             TypeForm::Function { .. } => "function",
             TypeForm::TaskFunction { .. } => "task_function",
+            TypeForm::OwnedI64Cell => "owned_i64_cell",
             TypeForm::ByteBuffer => "byte_buffer",
         });
     }

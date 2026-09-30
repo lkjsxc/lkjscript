@@ -11,6 +11,12 @@ mod byte_buffer_tests;
 mod effect_tests;
 #[path = "generic_resource_tests.rs"]
 mod generic_resource_tests;
+#[path = "owned_closure_tests.rs"]
+mod owned_closure_tests;
+#[path = "predecessor_attack_tests.rs"]
+pub(crate) mod predecessor_attack_tests;
+#[path = "predecessor_units.rs"]
+mod predecessor_units;
 
 #[path = "f64_tests.rs"]
 mod f64_tests;
@@ -2660,7 +2666,9 @@ impl PayloadCodes for CompilationPayload {
             Self::Test {
                 actual, expected, ..
             } => Box::new([actual, expected].into_iter()),
-            Self::Record { .. }
+            Self::OwnedContract(_)
+            | Self::OwnedImplementation(_)
+            | Self::Record { .. }
             | Self::Variant { .. }
             | Self::Interface { .. }
             | Self::External { .. }

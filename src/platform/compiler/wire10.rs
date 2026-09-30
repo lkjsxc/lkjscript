@@ -318,6 +318,9 @@ impl TryFrom<CompilationPayload> for CompilationPayload10 {
                 signature: signature.try_into()?,
                 implementation,
             },
+            CompilationPayload::OwnedContract(_) | CompilationPayload::OwnedImplementation(_) => {
+                return Err(extension());
+            }
             CompilationPayload::Function { signature, code } => Self::Function {
                 signature: signature.try_into()?,
                 code: code.try_into()?,
@@ -379,6 +382,7 @@ impl From<CompiledSignature10> for CompiledSignature {
             parameters,
             result,
             task_requirements,
+            implementation_parameters: Vec::new(),
             requirement_parameters: Vec::new(),
         }
     }
@@ -388,6 +392,7 @@ impl TryFrom<CompiledSignature> for CompiledSignature10 {
     type Error = Diagnostic;
     fn try_from(value: CompiledSignature) -> Result<Self, Diagnostic> {
         let CompiledSignature {
+            implementation_parameters,
             effect_parameters,
             effect,
             type_parameters,
@@ -397,7 +402,7 @@ impl TryFrom<CompiledSignature> for CompiledSignature10 {
             task_requirements,
             requirement_parameters,
         } = value;
-        if !requirement_parameters.is_empty() {
+        if !requirement_parameters.is_empty() || !implementation_parameters.is_empty() {
             return Err(extension());
         }
         Ok(Self {
@@ -662,6 +667,8 @@ impl TryFrom<CompiledInstruction> for CompiledInstruction10 {
             CompiledInstruction::CommitParameterTransaction { .. } => return Err(extension()),
             CompiledInstruction::BeginTransactionOutcome { .. }
             | CompiledInstruction::CommitTransactionOutcome { .. }
+            | CompiledInstruction::ImplementationCall { .. }
+            | CompiledInstruction::MethodCall { .. }
             | CompiledInstruction::F64(_) => return Err(extension()),
         })
     }

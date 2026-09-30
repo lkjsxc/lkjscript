@@ -118,6 +118,7 @@ struct Writer {
     outcome_extension: bool,
     f64_extension: bool,
     buffer_extension: bool,
+    owned_extension: bool,
     declaration_body_extension: bool,
     literal_extension: bool,
 }
@@ -131,13 +132,16 @@ impl Writer {
             outcome_extension: false,
             f64_extension: false,
             buffer_extension: false,
+            owned_extension: false,
             declaration_body_extension: false,
             literal_extension: false,
         }
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.buffer_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+        if self.owned_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR21");
+        } else if self.buffer_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR20");
         } else if self.literal_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR19");
@@ -281,6 +285,26 @@ impl Writer {
         }
     }
 
+    fn implementation_operand(
+        &mut self,
+        operand: &AuthoredImplementationOperand,
+        definitions: &BTreeMap<String, SymbolDefinition>,
+    ) -> Result<(), Diagnostic> {
+        match operand {
+            AuthoredImplementationOperand::Concrete { implementation } => {
+                self.tag(1)?;
+                self.declaration_reference(implementation, definitions)
+            }
+            AuthoredImplementationOperand::Parameter {
+                function,
+                parameter,
+            } => {
+                self.tag(2)?;
+                self.declaration_reference(function, definitions)?;
+                self.raw(&parameter.bytes())
+            }
+        }
+    }
     fn symbol(
         &mut self,
         value: &str,
@@ -438,6 +462,102 @@ impl Writer {
         definitions: &BTreeMap<String, SymbolDefinition>,
     ) -> Result<(), Diagnostic> {
         match value {
+            AuthoredChange::CreateOwnedContract {
+                symbol,
+                module,
+                name,
+                visibility,
+                self_type,
+                methods,
+            } => {
+                self.owned_extension = true;
+                self.tag(80)?;
+                self.symbol(symbol, definitions)?;
+                self.module_selector(module, definitions)?;
+                self.name(name)?;
+                self.visibility(*visibility)?;
+                self.authored_type(self_type, definitions, 1)?;
+                self.list(methods, |w, m| {
+                    w.raw(&m.id.bytes())?;
+                    w.name(&m.name)?;
+                    w.list(&m.parameters, |w, (t, mode)| {
+                        w.authored_type(t, definitions, 1)?;
+                        w.parameter_use(*mode)
+                    })?;
+                    w.authored_type(&m.result, definitions, 1)
+                })
+            }
+            AuthoredChange::CreateOwnedImplementation {
+                symbol,
+                module,
+                name,
+                visibility,
+                contract,
+                self_type,
+                methods,
+            } => {
+                self.owned_extension = true;
+                self.tag(81)?;
+                self.symbol(symbol, definitions)?;
+                self.module_selector(module, definitions)?;
+                self.name(name)?;
+                self.visibility(*visibility)?;
+                self.declaration_reference(contract, definitions)?;
+                self.authored_type(self_type, definitions, 1)?;
+                self.list(methods, |w, (method, function)| {
+                    w.raw(&method.bytes())?;
+                    w.declaration_reference(function, definitions)
+                })
+            }
+            AuthoredChange::SetOwnedContract {
+                declaration,
+                self_type,
+                methods,
+            } => {
+                self.owned_extension = true;
+                self.tag(84)?;
+                self.declaration_selector(declaration, definitions)?;
+                self.authored_type(self_type, definitions, 1)?;
+                self.list(methods, |w, m| {
+                    w.raw(&m.id.bytes())?;
+                    w.name(&m.name)?;
+                    w.list(&m.parameters, |w, (t, mode)| {
+                        w.authored_type(t, definitions, 1)?;
+                        w.parameter_use(*mode)
+                    })?;
+                    w.authored_type(&m.result, definitions, 1)
+                })
+            }
+            AuthoredChange::SetOwnedImplementation {
+                declaration,
+                contract,
+                self_type,
+                methods,
+            } => {
+                self.owned_extension = true;
+                self.tag(85)?;
+                self.declaration_selector(declaration, definitions)?;
+                self.declaration_reference(contract, definitions)?;
+                self.authored_type(self_type, definitions, 1)?;
+                self.list(methods, |w, (method, function)| {
+                    w.raw(&method.bytes())?;
+                    w.declaration_reference(function, definitions)
+                })
+            }
+            AuthoredChange::SetImplementationParameters {
+                declaration,
+                parameters,
+            } => {
+                self.owned_extension = true;
+                self.tag(82)?;
+                self.declaration_selector(declaration, definitions)?;
+                self.list(parameters, |w, p| {
+                    w.raw(&p.id.bytes())?;
+                    w.name(&p.name)?;
+                    w.declaration_reference(&p.contract, definitions)?;
+                    w.authored_type(&p.self_type, definitions, 1)
+                })
+            }
             AuthoredChange::ReferenceBindings { bindings } => {
                 self.tag(255)?;
                 self.list(&bindings.packages, Self::reference_package)?;
@@ -710,6 +830,8 @@ impl Writer {
             } => {
                 self.tag(39)?;
                 self.owner_selector(parameter, definitions)?;
+                self.owned_extension |=
+                    *constraints == crate::platform::kernel::TypeParameterConstraints::Owned;
                 self.tag(constraints.tag())
             }
             AuthoredChange::AddParameter { parent, parameter } => {
@@ -769,6 +891,15 @@ impl Writer {
                 self.optional(payload.as_ref(), |writer, value| {
                     writer.authored_type(value, definitions, 1)
                 })
+            }
+            AuthoredChange::SetParameterUse {
+                parameter,
+                use_mode,
+            } => {
+                self.owned_extension = true;
+                self.tag(83)?;
+                self.owner_selector(parameter, definitions)?;
+                self.parameter_use(*use_mode)
             }
             AuthoredChange::SetParameterType { parameter, ty } => {
                 self.tag(25)?;
@@ -1130,6 +1261,8 @@ impl Writer {
     ) -> Result<(), Diagnostic> {
         self.symbol(&value.symbol, definitions)?;
         self.name(&value.name)?;
+        self.owned_extension |=
+            value.constraints == crate::platform::kernel::TypeParameterConstraints::Owned;
         self.tag(value.constraints.tag())
     }
 
@@ -1253,6 +1386,10 @@ impl Writer {
                 AuthoredType::Unit {} => self.tag(1)?,
                 AuthoredType::Bool {} => self.tag(2)?,
                 AuthoredType::I64 {} => self.tag(3)?,
+                AuthoredType::OwnedI64Cell {} => {
+                    self.owned_extension = true;
+                    self.tag(21)?;
+                }
                 AuthoredType::ByteBuffer {} => {
                     self.buffer_extension = true;
                     self.tag(20)?;
@@ -1620,6 +1757,34 @@ impl Writer {
                 self.list(items, |writer, value| {
                     writer.expression(value, definitions, next)
                 })
+            }
+            AuthoredExpressionOperation::ImplementationCall {
+                function,
+                type_arguments,
+                implementations,
+                arguments,
+            } => {
+                self.owned_extension = true;
+                self.tag(30)?;
+                self.declaration_reference(function, definitions)?;
+                self.list(type_arguments, |w, t| w.authored_type(t, definitions, 1))?;
+                self.list(implementations, |w, i| {
+                    w.implementation_operand(i, definitions)
+                })?;
+                self.list(arguments, |w, e| w.expression(e, definitions, next))
+            }
+            AuthoredExpressionOperation::MethodCall {
+                witness,
+                contract,
+                method,
+                arguments,
+            } => {
+                self.owned_extension = true;
+                self.tag(31)?;
+                self.implementation_operand(witness, definitions)?;
+                self.declaration_reference(contract, definitions)?;
+                self.raw(&method.bytes())?;
+                self.list(arguments, |w, e| w.expression(e, definitions, next))
             }
             AuthoredExpressionOperation::Call {
                 requirement_arguments,

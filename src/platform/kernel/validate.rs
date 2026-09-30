@@ -551,6 +551,14 @@ impl FullValidator<'_> {
                         OwnerKey::Declaration(parameter.declaration),
                         "type parameter",
                     );
+                    if parameter.constraints == super::TypeParameterConstraints::Owned
+                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::OwnedContract(_)) || matches!(&declaration.payload, DeclarationPayload::Function(f) if matches!(f.effect, FunctionEffect::Pure) && f.effect_parameters.is_empty() && f.requirement_parameters.is_empty()))
+                    {
+                        self.error(
+                            "kernel_owned_parameter_owner",
+                            "Owned is supported only by graph functions and owned contract Self",
+                        );
+                    }
                     if parameter.constraints != super::TypeParameterConstraints::None
                         && matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::External(_)))
                     {
@@ -1128,6 +1136,14 @@ impl FullValidator<'_> {
             return;
         };
         match payload {
+            DeclarationPayload::OwnedContract(c) => {
+                self.require_local_kind(
+                    OwnerKey::TypeParameter(c.self_parameter),
+                    &[OwnerKind::TypeParameter],
+                    "owned Self parameter",
+                );
+            }
+            DeclarationPayload::OwnedImplementation(_) => {}
             DeclarationPayload::Record {
                 fields,
                 type_parameters,
@@ -1443,7 +1459,9 @@ impl FullValidator<'_> {
                     .types
                     .get(&t)
                     .or_else(|| self.snapshot.dependency_types.get(&t))
-                    .is_some_and(|t| matches!(t.form, TypeForm::ByteBuffer))
+                    .is_some_and(|t| {
+                        matches!(t.form, TypeForm::ByteBuffer | TypeForm::OwnedI64Cell)
+                    })
             }) {
                 self.error("kernel_buffer_container", format!("type object {digest} contains ByteBuffer in an unsupported container or callable descriptor"));
             }
@@ -1495,12 +1513,7 @@ impl FullValidator<'_> {
             }
             match record {
                 OwnerRecord::Parameter(parameter) => {
-                    if self
-                        .snapshot
-                        .types
-                        .get(&parameter.ty)
-                        .is_some_and(|t| matches!(t.form, TypeForm::ByteBuffer))
-                    {
+                    if super::memory::direct(self.snapshot, parameter.ty).unwrap_or(false) {
                         continue;
                     }
                     let contains = snapshot_type_contains_resource(self.snapshot, parameter.ty);
@@ -2292,6 +2305,23 @@ impl FullValidator<'_> {
         }
     }
 
+    fn validate_implementation_operand(&mut self, operand: super::ImplementationOperand) {
+        let (reference, kind) = match operand {
+            super::ImplementationOperand::Concrete { implementation } => {
+                (implementation, OwnerKind::OwnedImplementation)
+            }
+            super::ImplementationOperand::Parameter { function, .. } => {
+                (function, OwnerKind::PureFunction)
+            }
+        };
+        self.require_exact_kind(
+            reference.package,
+            OwnerKey::Declaration(reference.declaration),
+            &[kind],
+            "static implementation operand",
+        );
+    }
+
     fn validate_expression_references(
         &mut self,
         expression: ExpressionId,
@@ -2312,6 +2342,32 @@ impl FullValidator<'_> {
                 &[OwnerKind::Constant],
                 "constant reference",
             ),
+            ExpressionOperation::ImplementationCall {
+                function,
+                implementations,
+                ..
+            } => {
+                self.require_exact_kind(
+                    function.package,
+                    OwnerKey::Declaration(function.declaration),
+                    &[OwnerKind::PureFunction],
+                    "implementation callee",
+                );
+                for operand in implementations {
+                    self.validate_implementation_operand(*operand);
+                }
+            }
+            ExpressionOperation::MethodCall {
+                witness, contract, ..
+            } => {
+                self.validate_implementation_operand(*witness);
+                self.require_exact_kind(
+                    contract.package,
+                    OwnerKey::Declaration(contract.declaration),
+                    &[OwnerKind::OwnedContract],
+                    "owned method contract",
+                );
+            }
             ExpressionOperation::Call {
                 function,
                 requirement_arguments,
@@ -2602,6 +2658,7 @@ impl FullValidator<'_> {
                     | DeclarationPayload::Variant {
                         type_parameters, ..
                     } => type_parameters.contains(&id),
+                    DeclarationPayload::OwnedContract(c) => c.self_parameter == id,
                     DeclarationPayload::External(function) => {
                         function.type_parameters.contains(&id)
                     }

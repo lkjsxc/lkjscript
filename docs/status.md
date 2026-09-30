@@ -11,8 +11,8 @@ Ordinary generic composition is public in v0.1.55. Recursive helpers and exact
 cross-package resource contracts, exact deployment grant selectors and multi-resource
 parameter suffixes and effect-generic resource callbacks are development
 capabilities below; none is supplied by that public executable.
-Advanced ownership/trait and region-memory work remains a research selection,
-not a capability conferred by a roadmap or by sharing existing prepared code.
+General traits and region-memory policies remain research selections. The bounded
+first-order Owned implementation below is a development increment toward that direction.
 
 ## Public binary release
 
@@ -28,6 +28,20 @@ The earlier immutable releases and genuinely failed/withheld candidates remain u
 Inspect the actual installed executable with `lkjscript capabilities`. Installing
 a newer runtime does not silently replace accepted application definitions,
 exact dependency selections, running processes or operational data.
+
+## Development: first-order Owned generics
+
+Explicit `Owned` parameters support symbolically checked direct affine parameters,
+locals and results. Nominal method contracts use exact static implementation operands;
+an independently sealed `OwnedI64Cell` supplies fixed signed-scalar storage alongside
+ByteBuffer. Focused native tests exercise a generic-only library, cross-package
+producer/transformer/consumer composition, exact alternate implementation selection,
+unchanged drafts and detached execution with empty grants. General traits, owned
+containers, escaping or mutable borrows, asynchronous transfer and task memory
+signatures remain unsupported. See the [specification](spec/owned-generics.md),
+[native guide](guides/native-owned-generics.md) and
+[campaign evidence](campaigns/20260930-owned-generics.md). Frozen-source full acceptance
+and integration are delegated to the independent integrator; this is not a release claim.
 
 ## Development: owned byte buffers
 

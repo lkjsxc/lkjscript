@@ -343,6 +343,7 @@ fn historical_prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             name: name("callee"),
             visibility: DeclarationVisibility::Package,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 effect_parameters: Vec::new(),
                 type_parameters: Vec::new(),
@@ -475,6 +476,7 @@ fn historical_prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             name: name("caller"),
             visibility: DeclarationVisibility::Public,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 effect_parameters: Vec::new(),
                 type_parameters: Vec::new(),
@@ -532,6 +534,7 @@ fn historical_prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             name: name("with_binding"),
             visibility: DeclarationVisibility::Private,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 effect_parameters: Vec::new(),
                 type_parameters: Vec::new(),

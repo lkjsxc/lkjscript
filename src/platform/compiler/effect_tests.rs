@@ -24,7 +24,14 @@ fn strict_artifact_rejects_fully_rehashed_expanding_canonical_applications() {
             .as_slice(),
         ),
     ] {
-        let error = load_artifact(bytes).unwrap_err();
+        // The original remains rejected at the declared derived-format cut.
+        assert_eq!(
+            load_artifact(bytes).unwrap_err().code,
+            "compiler_unit_contract"
+        );
+        // Re-envelope the exact frozen instructions and source to exercise current semantics.
+        let current = predecessor_attack_tests::current_derived_fixture(bytes);
+        let error = load_artifact(&current).unwrap_err();
         assert_eq!(error.code, "kernel_callable_expansion", "{name}: {error:?}");
         assert_eq!(error.class, crate::platform::DiagnosticClass::Semantic);
         println!("strict-expanding-artifact {name}: {}", error.code);
@@ -194,6 +201,7 @@ pub(super) fn replace_unit(
         12 => (*b"LKJCUN12", "lkjscript.compiler-unit-envelope.v12"),
         13 => (*b"LKJCUN13", "lkjscript.compiler-unit-envelope.v13"),
         14 => (*b"LKJCUN14", "lkjscript.compiler-unit-envelope.v14"),
+        15 => (*b"LKJCUN15", "lkjscript.compiler-unit-envelope.v15"),
         other => panic!("unexpected forged-unit generation {other}"),
     };
     let bytes = crate::platform::packed::encode(
@@ -204,7 +212,14 @@ pub(super) fn replace_unit(
     )
     .unwrap();
     let key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &bytes);
-    CompilationUnit::decode(&bytes, key).expect("structurally valid forged unit");
+    if unit.contract_version == 15 {
+        CompilationUnit::decode(&bytes, key).expect("structurally valid forged unit");
+    } else {
+        assert_eq!(
+            CompilationUnit::decode(&bytes, key).unwrap_err().code,
+            "compiler_unit_contract"
+        );
+    }
     let mut objects = loaded.objects.clone();
     objects.remove(&old);
     objects.insert(key, bytes);

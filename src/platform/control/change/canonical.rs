@@ -158,6 +158,7 @@ impl<'a> Reader<'a> {
             TypeForm::I64 => AuthoredType::I64 {},
             TypeForm::F64 => AuthoredType::F64 {},
             TypeForm::ByteBuffer => AuthoredType::ByteBuffer {},
+            TypeForm::OwnedI64Cell => AuthoredType::OwnedI64Cell {},
             TypeForm::Bytes => AuthoredType::Bytes {},
             TypeForm::Text => AuthoredType::Text {},
             TypeForm::StaticText => AuthoredType::StaticText {},
@@ -338,6 +339,31 @@ impl<'a> Reader<'a> {
             }
             E::Sequence { items } => A::Sequence {
                 items: self.expressions(items, depth)?,
+            },
+            E::ImplementationCall {
+                function,
+                type_arguments,
+                implementations,
+                arguments,
+            } => A::ImplementationCall {
+                function: declaration(function),
+                type_arguments: self.types(type_arguments)?,
+                implementations: implementations
+                    .into_iter()
+                    .map(implementation_operand)
+                    .collect(),
+                arguments: self.expressions(arguments, depth)?,
+            },
+            E::MethodCall {
+                witness,
+                contract,
+                method,
+                arguments,
+            } => A::MethodCall {
+                witness: implementation_operand(witness),
+                contract: declaration(contract),
+                method,
+                arguments: self.expressions(arguments, depth)?,
             },
             E::Call {
                 function,
@@ -567,5 +593,24 @@ fn field(selector: k::FieldSelector) -> AuthoredFieldSelector {
             },
         },
         k::FieldSelector::Structural(name) => AuthoredFieldSelector::Structural { name },
+    }
+}
+
+pub(super) fn implementation_operand(
+    operand: k::ImplementationOperand,
+) -> AuthoredImplementationOperand {
+    match operand {
+        k::ImplementationOperand::Concrete { implementation } => {
+            AuthoredImplementationOperand::Concrete {
+                implementation: declaration(implementation),
+            }
+        }
+        k::ImplementationOperand::Parameter {
+            function,
+            parameter,
+        } => AuthoredImplementationOperand::Parameter {
+            function: declaration(function),
+            parameter,
+        },
     }
 }

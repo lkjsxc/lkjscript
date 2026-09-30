@@ -307,6 +307,8 @@ impl PackageContainer {
                     != Some(crate::platform::kernel::contract::REQUIREMENT_OWNER_MAGIC.as_slice())
                 && object.get(..8)
                     != Some(crate::platform::kernel::contract::TRANSACTION_OWNER_MAGIC.as_slice())
+                && object.get(..8)
+                    != Some(crate::platform::kernel::contract::SCALAR_OWNER_MAGIC.as_slice())
             {
                 return Err(package_error(
                     DiagnosticClass::Source,

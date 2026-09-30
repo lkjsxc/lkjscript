@@ -260,6 +260,39 @@ impl<R: ExpressionRead> Flow<'_, R> {
                     ));
                 };
                 match &record.operation {
+                    ExpressionOperation::ImplementationCall {
+                        function,
+                        type_arguments,
+                        implementations,
+                        ..
+                    } => {
+                        self.reserve::<super::ImplementationOperand>(implementations.len())?;
+                        for operand in implementations {
+                            self.tick()?;
+                            if let super::ImplementationOperand::Concrete { implementation } =
+                                operand
+                            {
+                                self.implementation_targets(*implementation, &mut pending)?;
+                            }
+                        }
+                        self.application(
+                            caller,
+                            &parameters,
+                            expression,
+                            *function,
+                            type_arguments,
+                        )?;
+                        if function.package == self.read.package_id() {
+                            self.reserve::<OwnerKey>(1)?;
+                            pending.insert(OwnerKey::Declaration(function.declaration));
+                        }
+                    }
+                    ExpressionOperation::MethodCall { witness, .. } => {
+                        self.tick()?;
+                        if let super::ImplementationOperand::Concrete { implementation } = witness {
+                            self.implementation_targets(*implementation, &mut pending)?;
+                        }
+                    }
                     ExpressionOperation::Call {
                         function,
                         type_arguments,
@@ -296,6 +329,65 @@ impl<R: ExpressionRead> Flow<'_, R> {
                 let children = record.children();
                 self.reserve::<ExpressionId>(children.len())?;
                 syntax.extend(children.into_iter().map(|child| child.expression));
+            }
+        }
+        Ok(())
+    }
+
+    fn implementation_targets(
+        &mut self,
+        reference: DeclarationReference,
+        pending: &mut BTreeSet<OwnerKey>,
+    ) -> Result<(), Diagnostic> {
+        self.tick()?;
+        let methods = if reference.package == self.read.package_id() {
+            match self
+                .read
+                .owner(OwnerKey::Declaration(reference.declaration))?
+            {
+                Some(OwnerRecord::Declaration(d)) => match d.payload {
+                    DeclarationPayload::OwnedImplementation(i) => i.methods,
+                    _ => {
+                        return Err(semantic(
+                            "kernel_owned_contract",
+                            "witness selects a foreign owner kind",
+                        ));
+                    }
+                },
+                _ => {
+                    return Err(semantic(
+                        "kernel_owned_contract",
+                        "missing selected implementation",
+                    ));
+                }
+            }
+        } else {
+            match self.read.package_interface_owner(
+                reference.package,
+                OwnerKey::Declaration(reference.declaration),
+            )? {
+                Some(super::PackageInterfaceRecord::Declaration(d)) => match d.payload {
+                    super::PackageInterfaceDeclarationPayload::OwnedImplementation(i) => i.methods,
+                    _ => {
+                        return Err(semantic(
+                            "kernel_owned_contract",
+                            "witness selects a foreign imported kind",
+                        ));
+                    }
+                },
+                _ => {
+                    return Err(semantic(
+                        "kernel_owned_contract",
+                        "missing imported implementation",
+                    ));
+                }
+            }
+        };
+        for mapping in methods {
+            self.tick()?;
+            if mapping.function.package == self.read.package_id() {
+                self.reserve::<OwnerKey>(1)?;
+                pending.insert(OwnerKey::Declaration(mapping.function.declaration));
             }
         }
         Ok(())

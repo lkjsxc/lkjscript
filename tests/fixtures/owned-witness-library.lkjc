@@ -1,0 +1,33 @@
+declarations.begin
+(units
+  (module create abstraction
+    (owned-contract create Storage (visibility public)
+      (self Self) (type-parameter create Self (constraint owned))
+      (method method_10000000000000000000000000000001 create (parameters (I64 unrestricted)) (returns Self))
+      (method method_10000000000000000000000000000002 update (parameters (I64 unrestricted) (Self consume)) (returns Self))
+      (method method_10000000000000000000000000000003 read (parameters (Self borrow)) (returns I64)))
+    (function create produce (visibility public)
+      (type-parameter create T (constraint owned))
+      (implementation-parameter implparam_10000000000000000000000000000001 ops Storage T)
+      (parameter create n (type I64)) (returns T) (effect pure)
+      (body (method-call parameter@produce@implparam_10000000000000000000000000000001 Storage method_10000000000000000000000000000001 (local n))))
+    (function create transform (visibility public)
+      (type-parameter create T (constraint owned))
+      (implementation-parameter implparam_10000000000000000000000000000002 ops Storage T)
+      (parameter create n (type I64))
+      (parameter create value (type T) (use consume)) (returns T) (effect pure)
+      (body (method-call parameter@transform@implparam_10000000000000000000000000000002 Storage method_10000000000000000000000000000002 (local n) (local value))))
+    (function create read-helper (visibility public)
+      (type-parameter create T (constraint owned))
+      (implementation-parameter implparam_10000000000000000000000000000003 ops Storage T)
+      (parameter create value (type T) (use borrow)) (returns I64) (effect pure)
+      (body (sequence
+        (method-call parameter@read-helper@implparam_10000000000000000000000000000003 Storage method_10000000000000000000000000000003 (local value))
+        (method-call parameter@read-helper@implparam_10000000000000000000000000000003 Storage method_10000000000000000000000000000003 (local value)))))
+    (function create consume (visibility public)
+      (type-parameter create T (constraint owned))
+      (implementation-parameter implparam_10000000000000000000000000000004 ops Storage T)
+      (parameter create value (type T) (use consume)) (returns I64) (effect pure)
+      (body (implementation-call read-helper (types T)
+        (implementations parameter@consume@implparam_10000000000000000000000000000004) (local value))))))
+declarations.end

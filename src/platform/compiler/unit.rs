@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-14";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 14;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-10";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 10;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN14";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v14";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v14";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-15";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 15;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-11";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 11;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN15";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v15";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v15";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -160,6 +160,8 @@ pub enum CompiledText {
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum CompilationPayload {
+    OwnedContract(crate::platform::kernel::OwnedContract),
+    OwnedImplementation(crate::platform::kernel::OwnedImplementation),
     Record {
         type_parameters: Vec<TypeParameterId>,
         type_parameter_constraints: Vec<crate::platform::kernel::TypeParameterConstraints>,
@@ -213,6 +215,7 @@ pub struct CompiledHttpRoute {
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct CompiledSignature {
+    pub implementation_parameters: Vec<crate::platform::kernel::ImplementationParameter>,
     pub requirement_parameters: Vec<crate::platform::semantic_id::RequirementParameterId>,
     pub effect_parameters: Vec<crate::platform::semantic_id::EffectParameterId>,
     pub effect: crate::platform::kernel::FunctionEffect,
@@ -283,6 +286,18 @@ pub struct CompiledCode {
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum CompiledInstruction {
+    ImplementationCall {
+        function: u32,
+        type_arguments: Vec<u32>,
+        implementations: Vec<crate::platform::kernel::ImplementationOperand>,
+        arguments: u32,
+    },
+    MethodCall {
+        witness: crate::platform::kernel::ImplementationOperand,
+        contract: crate::platform::kernel::DeclarationReference,
+        method: crate::platform::semantic_id::MethodId,
+        arguments: u32,
+    },
     Unit,
     Bool(bool),
     I64(i64),
@@ -468,43 +483,30 @@ impl CompilationUnit {
                 "compiler-unit bytes disagree with their exact object-domain digest",
             ));
         }
-        let unit: Self = if bytes.starts_with(b"LKJCUN10") {
-            crate::platform::packed::decode::<super::wire10::CompilationUnit10>(
-                bytes,
-                *b"LKJCUN10",
-                "lkjscript.compiler-unit-envelope.v10",
-                MAXIMUM_COMPILER_UNIT_BYTES,
-            )?
-            .into()
-        } else if bytes.starts_with(b"LKJCUN11") {
-            crate::platform::packed::decode(
-                bytes,
-                *b"LKJCUN11",
-                "lkjscript.compiler-unit-envelope.v11",
-                MAXIMUM_COMPILER_UNIT_BYTES,
-            )?
-        } else if bytes.starts_with(b"LKJCUN12") {
-            crate::platform::packed::decode(
-                bytes,
-                *b"LKJCUN12",
-                "lkjscript.compiler-unit-envelope.v12",
-                MAXIMUM_COMPILER_UNIT_BYTES,
-            )?
-        } else if bytes.starts_with(b"LKJCUN13") {
-            crate::platform::packed::decode(
-                bytes,
-                *b"LKJCUN13",
-                "lkjscript.compiler-unit-envelope.v13",
-                MAXIMUM_COMPILER_UNIT_BYTES,
-            )?
-        } else {
-            crate::platform::packed::decode(
-                bytes,
-                COMPILER_UNIT_MAGIC,
-                COMPILER_UNIT_ENVELOPE_DOMAIN,
-                MAXIMUM_COMPILER_UNIT_BYTES,
-            )?
-        };
+        // Derived generations 10–14 require a rebuild from supported canonical owners.
+        // Reject before decoding: their function layouts are not generation 15 layouts.
+        if [
+            b"LKJCUN10",
+            b"LKJCUN11",
+            b"LKJCUN12",
+            b"LKJCUN13",
+            b"LKJCUN14",
+        ]
+        .iter()
+        .any(|magic| bytes.starts_with(*magic))
+        {
+            return Err(unit_error(
+                DiagnosticClass::Source,
+                "compiler_unit_contract",
+                "predecessor compiler units require rebuilding from canonical meaning",
+            ));
+        }
+        let unit: Self = crate::platform::packed::decode(
+            bytes,
+            COMPILER_UNIT_MAGIC,
+            COMPILER_UNIT_ENVELOPE_DOMAIN,
+            MAXIMUM_COMPILER_UNIT_BYTES,
+        )?;
         unit.validate()?;
         let (actual, canonical) = unit.encode()?;
         if actual != expected || canonical != bytes {
@@ -524,7 +526,7 @@ impl CompilationUnit {
                 self.bytecode_contract_version,
                 self.graph_contract_version
             ),
-            (10, 6, 14) | (11, 7, 15) | (12, 8, 16) | (13, 9, 17) | (14, 10, 17)
+            (15, 11, 18)
         ) {
             return Err(unit_error(
                 DiagnosticClass::Source,
@@ -693,6 +695,14 @@ impl CompilationPayload {
         tables: &CompilationTables,
     ) -> Result<(), Diagnostic> {
         match self {
+            Self::OwnedContract(c) => {
+                require_kind(source, OwnerKind::OwnedContract)?;
+                c.validate_local()?;
+            }
+            Self::OwnedImplementation(i) => {
+                require_kind(source, OwnerKind::OwnedImplementation)?;
+                i.validate_local()?;
+            }
             Self::Record {
                 fields,
                 type_parameters,
@@ -1092,10 +1102,17 @@ impl CompiledSignature {
                 )?,
             )?
             .0;
+            let cell = crate::platform::kernel::encode_type_object(
+                &crate::platform::kernel::TypeObject::new(
+                    crate::platform::kernel::TypeForm::OwnedI64Cell,
+                )?,
+            )?
+            .0;
             if self.parameters.iter().any(|parameter| {
                 parameter.resource_requirement.is_some()
                     || (parameter.use_mode != ParameterUse::Unrestricted
-                        && tables.types[parameter.ty as usize] != buffer)
+                        && tables.types[parameter.ty as usize] != buffer
+                        && tables.types[parameter.ty as usize] != cell)
             }) {
                 return Err(unit_corrupt(
                     "compiler_unit_external_resource_parameter",
@@ -1257,6 +1274,28 @@ impl CompiledInstruction {
             }
             Self::JumpIfFalse(target) | Self::Jump(target) => {
                 require_index("jump target", *target, code.instructions.len())
+            }
+            Self::ImplementationCall {
+                function,
+                type_arguments,
+                implementations,
+                arguments,
+            } => {
+                require_index(
+                    "implementation call target",
+                    *function,
+                    tables.declarations.len(),
+                )?;
+                require_runtime_count("implementation arguments", *arguments)?;
+                require_item_count("implementation witnesses", implementations.len(), true)?;
+                require_item_count("implementation types", type_arguments.len(), true)?;
+                for ty in type_arguments {
+                    require_index("implementation type", *ty, tables.types.len())?;
+                }
+                Ok(())
+            }
+            Self::MethodCall { arguments, .. } => {
+                require_runtime_count("method arguments", *arguments)
             }
             Self::Call {
                 requirement_arguments,
@@ -1723,7 +1762,9 @@ fn stack_effect(instruction: &CompiledInstruction) -> Result<(usize, usize), Dia
         | CompiledInstruction::BeginTransactionOutcome { .. }
         | CompiledInstruction::CommitTransaction { .. } => (0, 0),
         CompiledInstruction::CommitTransactionOutcome { .. } => (1, 1),
-        CompiledInstruction::Call { arguments, .. } => (count(*arguments)?, 1),
+        CompiledInstruction::ImplementationCall { arguments, .. }
+        | CompiledInstruction::MethodCall { arguments, .. }
+        | CompiledInstruction::Call { arguments, .. } => (count(*arguments)?, 1),
         CompiledInstruction::BeginBind { .. } | CompiledInstruction::Capture { .. } => (1, 1),
         CompiledInstruction::Invoke { arguments } | CompiledInstruction::Bind { arguments } => {
             let consumed = count(*arguments)?.checked_add(1).ok_or_else(|| {

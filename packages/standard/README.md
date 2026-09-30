@@ -63,10 +63,10 @@ Current identity:
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
 - semantic revision: `rev_85b2be44a8deca911fc6bdf4efdd4fb7b510f53e4a39723fbee263dff4b3a9b2`;
-- package revision: `package_revision_f42e4c5c8126bb56dc00bc2eaae1782571d84a2b2ec0253b222ec7bc362fddbf`;
-- package transport: `package_transport_51e9d14b3bdaa452aaadf9fedc5f7a35fe137efa2902f30916187bef9655a738`;
-- artifact manifest: `artifact_manifest_66f542016cd6e5f63c92df25a9fee429ea22c2d3e5a4725f66a039519759bed9`;
-- artifact bundle: `artifact_bundle_2597b3294ec83e49c54f8524758b8e7ec32f1eb9b814a0dee21ae83e906959b4`;
+- package revision: `package_revision_573523e947ac4b65eee9de6b7184361b3a2acf8be52d06db6491ae054821b932`;
+- package transport: `package_transport_5b9f9cb3cd2dc756e0cf98dcadd1e6b48d16044bf4e01753e4240cfc1b8ba0ea`;
+- artifact manifest: `artifact_manifest_181a173820088a532694da64b4553cdc22548853d7b984487b9a9729b5a16f1e`;
+- artifact bundle: `artifact_bundle_4c0df591124fcd3d546e8d090eef68214d4787b4e93e37326a9350bcfc566579`;
 - 1,626 live semantic owners, 232 compiler units, and 89 graph tests.
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose
@@ -239,3 +239,12 @@ The existing trapping `bytes-to-text` is unchanged.
 The closed primitives are `core.bytes.from-list` and `core.bytes.to-text-result`.
 The [literal public request](requests/20260925-byte-conversion.lkjc) adds two exact
 externals and twelve fixed graph tests, without changing graph or data encodings.
+
+## Owned-generic compiler refresh
+
+The first-order [Owned increment](../../docs/spec/owned-generics.md) rebuilds the
+standard transport/interface projection and derived artifact through public
+export/build. Accepted HEAD and all standard operations/tests retain their meaning.
+The scalar-cell primitives are available as closed externals; this campaign adds
+no standard graph operation. Exact retained older suppliers remain source inputs
+and require current derived artifacts.

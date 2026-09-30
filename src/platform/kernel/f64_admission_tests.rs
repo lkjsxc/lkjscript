@@ -345,6 +345,7 @@ pub(crate) fn admission_snapshot(
             name: name("ignore"),
             visibility: DeclarationVisibility::Private,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 effect_parameters: Vec::new(),
                 type_parameters: Vec::new(),

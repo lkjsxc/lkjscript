@@ -154,12 +154,16 @@ fn task_iteration_cutover_preserves_unrelated_owners_public_contracts_and_old_su
             );
         }
     }
-    let loaded = crate::platform::compiler::load_artifact(include_bytes!(
-        "../../../../tests/fixtures/graph14-before-task-iteration.lkja"
-    ))
-    .unwrap();
-    let program =
-        crate::platform::execution::normalized::NormalizedProgram::prepare(loaded).unwrap();
+    assert_eq!(
+        crate::platform::compiler::load_artifact(include_bytes!(
+            "../../../../tests/fixtures/graph14-before-task-iteration.lkja"
+        ))
+        .unwrap_err()
+        .code,
+        "compiler_unit_contract"
+    );
+    // Rebuild the exact retained canonical graph; all 33 old behavioral cases remain exercised.
+    let program = crate::platform::execution::normalized::tests::prepare_snapshot(old);
     let control = crate::platform::execution::ExecutionControl::uncancelled();
     let vm = NormalizedVm::new(&program, Default::default());
     let reference = NormalizedReferenceInterpreter::new(old, &program, Default::default());

@@ -1,0 +1,27 @@
+declarations.begin
+(units
+  (module create cell
+    (external create new (visibility public) (implementation core.cell.create)
+      (parameter create value (type I64)) (returns OwnedI64Cell))
+    (external create replace (visibility public) (implementation core.cell.replace)
+      (parameter create value (type I64))
+      (parameter create cell (type OwnedI64Cell) (use consume)) (returns OwnedI64Cell))
+    (external create read (visibility public) (implementation core.cell.read)
+      (parameter create cell (type OwnedI64Cell) (use borrow)) (returns I64))
+    (external create extract (visibility public) (implementation core.cell.extract)
+      (parameter create cell (type OwnedI64Cell) (use consume)) (returns I64))
+    (external create discard (visibility public) (implementation core.cell.discard)
+      (parameter create cell (type OwnedI64Cell) (use consume)) (returns Unit)))
+  (module create generic
+    (function create relay (visibility public) (effect pure)
+      (type-parameter create T (constraint owned))
+      (parameter create value (type T) (use consume)) (returns T)
+      (body (let (binding result (type T) (local value)) (in (local result))))))
+  (module create sample
+    (function create main (visibility public) (effect pure)
+      (parameter create value (type I64)) (returns I64)
+      (body (let
+        (binding a (type OwnedI64Cell) (call cell::new (local value)))
+        (binding b (type OwnedI64Cell) (call generic::relay (types OwnedI64Cell) (local a)))
+        (in (call cell::read (local b))))))))
+declarations.end

@@ -173,6 +173,26 @@ fn validate_shape(
             &[IntrinsicType::Bytes, IntrinsicType::Text],
             &IntrinsicType::Bool,
         ),
+        "core.cell.create" => exact(
+            signature,
+            &[IntrinsicType::I64],
+            &IntrinsicType::OwnedI64Cell,
+        ),
+        "core.cell.replace" => exact(
+            signature,
+            &[IntrinsicType::I64, IntrinsicType::OwnedI64Cell],
+            &IntrinsicType::OwnedI64Cell,
+        ),
+        "core.cell.read" | "core.cell.extract" => exact(
+            signature,
+            &[IntrinsicType::OwnedI64Cell],
+            &IntrinsicType::I64,
+        ),
+        "core.cell.discard" => exact(
+            signature,
+            &[IntrinsicType::OwnedI64Cell],
+            &IntrinsicType::Unit,
+        ),
         "core.buffer.empty" => exact(signature, &[], &IntrinsicType::ByteBuffer),
         "core.buffer.push" => exact(
             signature,
@@ -394,6 +414,7 @@ fn json_decodable(ty: &IntrinsicType) -> bool {
         IntrinsicType::List(item) => json_decodable(item),
         IntrinsicType::Map(key, value) => json_decodable(key) && json_decodable(value),
         IntrinsicType::ByteBuffer
+        | IntrinsicType::OwnedI64Cell
         | IntrinsicType::StaticText
         | IntrinsicType::Secret
         | IntrinsicType::Option(_)
@@ -406,6 +427,7 @@ fn json_decodable(ty: &IntrinsicType) -> bool {
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum IntrinsicType {
     ByteBuffer,
+    OwnedI64Cell,
     Unit,
     Bool,
     I64,
@@ -441,7 +463,11 @@ fn record(mut fields: Vec<IntrinsicField>) -> IntrinsicType {
 impl IntrinsicType {
     fn is_durable(&self) -> bool {
         match self {
-            Self::ByteBuffer | Self::Secret | Self::Stream(_) | Self::Function(_, _) => false,
+            Self::ByteBuffer
+            | Self::OwnedI64Cell
+            | Self::Secret
+            | Self::Stream(_)
+            | Self::Function(_, _) => false,
             Self::Parameter(_, canonical_template) => *canonical_template,
             Self::Record(fields) => fields.iter().all(|field| field.ty.is_durable()),
             Self::List(item) | Self::Option(item) => item.is_durable(),
@@ -517,18 +543,23 @@ pub(crate) fn validate_kernel_intrinsic<R: ExpressionRead + ?Sized>(
             return Err(signature_error("external parameter is missing"));
         };
         let expected_use = match external.implementation.as_str() {
-            "core.buffer.push" | "core.buffer.freeze" | "core.buffer.discard"
+            "core.cell.replace"
+            | "core.cell.extract"
+            | "core.cell.discard"
+            | "core.buffer.push"
+            | "core.buffer.freeze"
+            | "core.buffer.discard"
                 if matches!(
                     read.type_object(parameter.ty)?.map(|t| t.form),
-                    Some(TypeForm::ByteBuffer)
+                    Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell)
                 ) =>
             {
                 ParameterUse::Consume
             }
-            "core.buffer.get" | "core.buffer.length"
+            "core.cell.read" | "core.buffer.get" | "core.buffer.length"
                 if matches!(
                     read.type_object(parameter.ty)?.map(|t| t.form),
-                    Some(TypeForm::ByteBuffer)
+                    Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell)
                 ) =>
             {
                 ParameterUse::Borrow
@@ -618,6 +649,7 @@ fn kernel_type<R: ExpressionRead + ?Sized>(
         TypeForm::I64 => IntrinsicType::I64,
         TypeForm::F64 => IntrinsicType::F64,
         TypeForm::ByteBuffer => IntrinsicType::ByteBuffer,
+        TypeForm::OwnedI64Cell => IntrinsicType::OwnedI64Cell,
         TypeForm::Bytes => IntrinsicType::Bytes,
         TypeForm::Text => IntrinsicType::Text,
         TypeForm::StaticText => IntrinsicType::StaticText,

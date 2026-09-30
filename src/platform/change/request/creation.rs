@@ -64,6 +64,10 @@ mod effect_admission_tests {
 
 mod declarations;
 mod mutation;
+pub(super) mod owned;
+pub use owned::{
+    AuthoredImplementationOperand, AuthoredImplementationParameter, AuthoredOwnedMethod,
+};
 
 pub use declarations::{
     AuthoredAnnotationValue, AuthoredCase, AuthoredField, AuthoredOperation, AuthoredPort,
@@ -163,6 +167,7 @@ pub enum AuthoredType {
     I64 {},
     F64 {},
     ByteBuffer {},
+    OwnedI64Cell {},
     Bytes {},
     Text {},
     StaticText {},
@@ -323,6 +328,18 @@ pub struct AuthoredExpression {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredExpressionOperation {
+    ImplementationCall {
+        function: AuthoredDeclarationReference,
+        type_arguments: Vec<AuthoredType>,
+        implementations: Vec<AuthoredImplementationOperand>,
+        arguments: Vec<AuthoredExpression>,
+    },
+    MethodCall {
+        witness: AuthoredImplementationOperand,
+        contract: AuthoredDeclarationReference,
+        method: crate::platform::semantic_id::MethodId,
+        arguments: Vec<AuthoredExpression>,
+    },
     Unit {},
     Bool {
         value: bool,
@@ -564,7 +581,9 @@ pub(super) fn collect_expression_symbols(
                     stack.push(Visit::Expression(expression, next));
                 }
             }
-            AuthoredExpressionOperation::Call { arguments, .. }
+            AuthoredExpressionOperation::ImplementationCall { arguments, .. }
+            | AuthoredExpressionOperation::MethodCall { arguments, .. }
+            | AuthoredExpressionOperation::Call { arguments, .. }
             | AuthoredExpressionOperation::CapabilityCall { arguments, .. } => {
                 for expression in arguments.iter().rev() {
                     stack.push(Visit::Expression(expression, next));
@@ -691,6 +710,7 @@ pub(super) fn lower_function<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead +
         name: name.clone(),
         visibility,
         payload: DeclarationPayload::Function(FunctionDeclaration {
+            implementation_parameters: Vec::new(),
             requirement_parameters: Vec::new(),
             effect_parameters: Vec::new(),
             type_parameters: type_parameter_ids,
@@ -743,6 +763,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             AuthoredType::I64 {} => TypeForm::I64,
             AuthoredType::F64 {} => TypeForm::F64,
             AuthoredType::ByteBuffer {} => TypeForm::ByteBuffer,
+            AuthoredType::OwnedI64Cell {} => TypeForm::OwnedI64Cell,
             AuthoredType::Bytes {} => TypeForm::Bytes,
             AuthoredType::Text {} => TypeForm::Text,
             AuthoredType::StaticText {} => TypeForm::StaticText,
@@ -990,6 +1011,31 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
     ) -> Result<crate::platform::semantic_id::ExpressionId, Diagnostic> {
         let id = self.expression_identity(authored.symbol.as_deref())?;
         let operation = match &authored.operation {
+            AuthoredExpressionOperation::ImplementationCall {
+                function,
+                type_arguments,
+                implementations,
+                arguments,
+            } => ExpressionOperation::ImplementationCall {
+                function: self.lower_declaration_reference(function)?,
+                type_arguments: self.lower_types(type_arguments)?,
+                implementations: implementations
+                    .iter()
+                    .map(|i| self.lower_implementation_operand(i))
+                    .collect::<Result<_, _>>()?,
+                arguments: self.lower_expressions(arguments)?,
+            },
+            AuthoredExpressionOperation::MethodCall {
+                witness,
+                contract,
+                method,
+                arguments,
+            } => ExpressionOperation::MethodCall {
+                witness: self.lower_implementation_operand(witness)?,
+                contract: self.lower_declaration_reference(contract)?,
+                method: *method,
+                arguments: self.lower_expressions(arguments)?,
+            },
             AuthoredExpressionOperation::Unit {} => ExpressionOperation::Unit {},
             AuthoredExpressionOperation::Bool { value } => {
                 ExpressionOperation::Bool { value: *value }

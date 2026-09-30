@@ -649,6 +649,7 @@ fn authored_type(
         TypeForm::I64 => AuthoredType::I64 {},
         TypeForm::F64 => AuthoredType::F64 {},
         TypeForm::ByteBuffer => AuthoredType::ByteBuffer {},
+        TypeForm::OwnedI64Cell => AuthoredType::OwnedI64Cell {},
         TypeForm::Bytes => AuthoredType::Bytes {},
         TypeForm::Text => AuthoredType::Text {},
         TypeForm::StaticText => AuthoredType::StaticText {},

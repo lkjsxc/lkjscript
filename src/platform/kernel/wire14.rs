@@ -375,6 +375,8 @@ impl TryFrom<super::DeclarationPayload> for DeclarationPayload14 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(value: super::DeclarationPayload) -> Result<Self, Self::Error> {
         Ok(match value {
+            super::DeclarationPayload::OwnedContract(_)
+            | super::DeclarationPayload::OwnedImplementation(_) => return Err(extension()),
             super::DeclarationPayload::Record {
                 type_parameters,
                 fields,
@@ -424,6 +426,7 @@ impl From<FunctionDeclaration14> for super::FunctionDeclaration {
             body,
         } = value;
         Self {
+            implementation_parameters: Vec::new(),
             requirement_parameters: Vec::new(),
             effect_parameters,
             type_parameters,
@@ -439,6 +442,7 @@ impl TryFrom<super::FunctionDeclaration> for FunctionDeclaration14 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(value: super::FunctionDeclaration) -> Result<Self, Self::Error> {
         let super::FunctionDeclaration {
+            implementation_parameters,
             effect_parameters,
             type_parameters,
             parameters,
@@ -447,6 +451,8 @@ impl TryFrom<super::FunctionDeclaration> for FunctionDeclaration14 {
             body,
             requirement_parameters,
         } = value;
+        require_empty(&implementation_parameters)?;
+        require_empty(&implementation_parameters)?;
         require_empty(&requirement_parameters)?;
         Ok(Self {
             effect_parameters,
@@ -627,6 +633,8 @@ impl TryFrom<super::ExpressionOperation> for ExpressionOperation14 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(value: super::ExpressionOperation) -> Result<Self, Self::Error> {
         Ok(match value {
+            super::ExpressionOperation::ImplementationCall { .. }
+            | super::ExpressionOperation::MethodCall { .. } => return Err(extension()),
             super::ExpressionOperation::Unit {} => Self::Unit {},
             super::ExpressionOperation::Bool { value } => Self::Bool { value },
             super::ExpressionOperation::I64 { value } => Self::I64 { value },
@@ -878,6 +886,10 @@ impl TryFrom<super::PackageInterfaceDeclarationPayload> for PackageInterfaceDecl
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(value: super::PackageInterfaceDeclarationPayload) -> Result<Self, Self::Error> {
         Ok(match value {
+            super::PackageInterfaceDeclarationPayload::OwnedContract(_)
+            | super::PackageInterfaceDeclarationPayload::OwnedImplementation(_) => {
+                return Err(extension());
+            }
             super::PackageInterfaceDeclarationPayload::Record {
                 type_parameters,
                 fields,
@@ -921,6 +933,7 @@ impl From<PackageFunctionSignature14> for super::PackageFunctionSignature {
             effect,
         } = value;
         Self {
+            implementation_parameters: Vec::new(),
             requirement_parameters: Vec::new(),
             effect_parameters,
             type_parameters,
@@ -935,6 +948,7 @@ impl TryFrom<super::PackageFunctionSignature> for PackageFunctionSignature14 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(value: super::PackageFunctionSignature) -> Result<Self, Self::Error> {
         let super::PackageFunctionSignature {
+            implementation_parameters,
             effect_parameters,
             type_parameters,
             parameters,
@@ -942,6 +956,7 @@ impl TryFrom<super::PackageFunctionSignature> for PackageFunctionSignature14 {
             effect,
             requirement_parameters,
         } = value;
+        require_empty(&implementation_parameters)?;
         require_empty(&requirement_parameters)?;
         Ok(Self {
             effect_parameters,

@@ -20,10 +20,11 @@ pub use creation::{
     AuthoredAnnotationValue, AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference,
     AuthoredDeclarationReference, AuthoredEffectParameter, AuthoredEffectParameterReference,
     AuthoredEffectRow, AuthoredExpression, AuthoredExpressionOperation, AuthoredField,
-    AuthoredFieldReference, AuthoredFieldSelector, AuthoredFunctionEffect, AuthoredLetBinding,
+    AuthoredFieldReference, AuthoredFieldSelector, AuthoredFunctionEffect,
+    AuthoredImplementationOperand, AuthoredImplementationParameter, AuthoredLetBinding,
     AuthoredLocalReference, AuthoredMapExpressionEntry, AuthoredMatchExpressionArm,
-    AuthoredOperation, AuthoredOperationReference, AuthoredParameter, AuthoredPort,
-    AuthoredPortImplementation, AuthoredPortReference, AuthoredRecordExpressionField,
+    AuthoredOperation, AuthoredOperationReference, AuthoredOwnedMethod, AuthoredParameter,
+    AuthoredPort, AuthoredPortImplementation, AuthoredPortReference, AuthoredRecordExpressionField,
     AuthoredRequirement, AuthoredRequirementParameter, AuthoredRequirementReference,
     AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredTransactionOutcomeContract,
     AuthoredType, AuthoredTypeParameter, AuthoredTypeParameterReference,
@@ -66,6 +67,44 @@ pub struct AuthoredChangeSet {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredChange {
+    CreateOwnedContract {
+        symbol: String,
+        module: ModuleSelector,
+        name: Name,
+        visibility: crate::platform::kernel::DeclarationVisibility,
+        self_type: AuthoredType,
+        methods: Vec<AuthoredOwnedMethod>,
+    },
+    CreateOwnedImplementation {
+        symbol: String,
+        module: ModuleSelector,
+        name: Name,
+        visibility: crate::platform::kernel::DeclarationVisibility,
+        contract: AuthoredDeclarationReference,
+        self_type: AuthoredType,
+        methods: Vec<(
+            crate::platform::semantic_id::MethodId,
+            AuthoredDeclarationReference,
+        )>,
+    },
+    SetOwnedContract {
+        declaration: DeclarationSelector,
+        self_type: AuthoredType,
+        methods: Vec<AuthoredOwnedMethod>,
+    },
+    SetOwnedImplementation {
+        declaration: DeclarationSelector,
+        contract: AuthoredDeclarationReference,
+        self_type: AuthoredType,
+        methods: Vec<(
+            crate::platform::semantic_id::MethodId,
+            AuthoredDeclarationReference,
+        )>,
+    },
+    SetImplementationParameters {
+        declaration: DeclarationSelector,
+        parameters: Vec<AuthoredImplementationParameter>,
+    },
     ReferenceBindings {
         bindings: AuthoredReferenceBindings,
     },
@@ -234,6 +273,10 @@ pub enum AuthoredChange {
     SetCasePayload {
         case: OwnerSelector,
         payload: Option<AuthoredType>,
+    },
+    SetParameterUse {
+        parameter: OwnerSelector,
+        use_mode: crate::platform::kernel::ParameterUse,
     },
     SetParameterType {
         parameter: OwnerSelector,
@@ -678,6 +721,10 @@ pub(crate) fn lower_authored_changes_with_source_owners<
     }
     for change in &request.changes {
         match change {
+            AuthoredChange::CreateOwnedContract { .. }
+            | AuthoredChange::CreateOwnedImplementation { .. } => {
+                creation::owned::lower(&mut lowerer, change)?
+            }
             AuthoredChange::CreateRecord {
                 symbol,
                 module,
@@ -868,7 +915,14 @@ pub(crate) fn lower_authored_changes_with_source_owners<
     }
     for change in &request.changes {
         match change {
-            AuthoredChange::ReferenceBindings { .. }
+            AuthoredChange::SetOwnedContract { .. }
+            | AuthoredChange::SetOwnedImplementation { .. }
+            | AuthoredChange::SetImplementationParameters { .. } => {
+                creation::owned::lower(&mut lowerer, change)?
+            }
+            AuthoredChange::CreateOwnedContract { .. }
+            | AuthoredChange::CreateOwnedImplementation { .. }
+            | AuthoredChange::ReferenceBindings { .. }
             | AuthoredChange::CreateModule { .. }
             | AuthoredChange::CreateRecord { .. }
             | AuthoredChange::CreateVariant { .. }
@@ -902,6 +956,7 @@ pub(crate) fn lower_authored_changes_with_source_owners<
             | AuthoredChange::SetExternalContract { .. }
             | AuthoredChange::SetFieldType { .. }
             | AuthoredChange::SetCasePayload { .. }
+            | AuthoredChange::SetParameterUse { .. }
             | AuthoredChange::SetParameterType { .. }
             | AuthoredChange::SetPortContract { .. }
             | AuthoredChange::SetPort { .. }
@@ -1081,6 +1136,13 @@ fn collect_symbol_definitions(
     let mut definitions = SymbolDefinitions::new(maximum);
     for change in &request.changes {
         match change {
+            AuthoredChange::CreateOwnedContract { .. }
+            | AuthoredChange::CreateOwnedImplementation { .. }
+            | AuthoredChange::SetOwnedContract { .. }
+            | AuthoredChange::SetOwnedImplementation { .. }
+            | AuthoredChange::SetImplementationParameters { .. } => {
+                creation::owned::collect(change, &mut definitions)?
+            }
             AuthoredChange::ReferenceBindings { .. } => {}
             AuthoredChange::CreateModule { symbol, .. } => {
                 define_symbol(&mut definitions, symbol, SymbolKind::Module)?;
@@ -1174,6 +1236,7 @@ fn collect_symbol_definitions(
             | AuthoredChange::SetExternalContract { .. }
             | AuthoredChange::SetFieldType { .. }
             | AuthoredChange::SetCasePayload { .. }
+            | AuthoredChange::SetParameterUse { .. }
             | AuthoredChange::SetParameterType { .. }
             | AuthoredChange::SetPortContract { .. }
             | AuthoredChange::SetPort { .. }

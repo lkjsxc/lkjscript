@@ -173,7 +173,9 @@ pub(crate) fn ownership_contributions(
                     ExpressionRootRole::TestExpected,
                 )?;
             }
-            DeclarationPayload::Record { .. }
+            DeclarationPayload::OwnedContract(_)
+            | DeclarationPayload::OwnedImplementation(_)
+            | DeclarationPayload::Record { .. }
             | DeclarationPayload::Variant { .. }
             | DeclarationPayload::Interface { .. }
             | DeclarationPayload::External(_)

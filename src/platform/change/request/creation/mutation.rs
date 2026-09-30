@@ -76,6 +76,7 @@ pub(in crate::platform::change::request) fn collect_mutation_symbols(
         | AuthoredChange::SetExternalContract { .. }
         | AuthoredChange::SetFieldType { .. }
         | AuthoredChange::SetCasePayload { .. }
+        | AuthoredChange::SetParameterUse { .. }
         | AuthoredChange::SetParameterType { .. }
         | AuthoredChange::SetTypeParameterConstraint { .. }
         | AuthoredChange::SetOperationContract { .. }
@@ -249,6 +250,20 @@ pub(in crate::platform::change::request) fn lower_mutation<
             record.payload = payload;
             Ok(())
         }
+        AuthoredChange::SetParameterUse {
+            parameter,
+            use_mode,
+        } => {
+            let owner = lowerer.resolve_owner(parameter)?;
+            let OwnerRecord::Parameter(parameter) = lowerer.candidate_mut(owner)? else {
+                return Err(mutation_corrupt(
+                    "change_parameter_kind",
+                    "use contract requires a parameter owner",
+                ));
+            };
+            parameter.use_mode = *use_mode;
+            Ok(())
+        }
         AuthoredChange::SetParameterType { parameter, ty } => {
             let ty = lowerer.lower_type(ty)?;
             let owner = lowerer.resolve_owner(parameter)?;
@@ -279,6 +294,10 @@ pub(in crate::platform::change::request) fn lower_mutation<
                 return Err(mutation_kind("type parameter", owner));
             };
             record.constraints = *constraints;
+            if *constraints == crate::platform::kernel::TypeParameterConstraints::Owned {
+                record.header.contract_version =
+                    crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+            }
             Ok(())
         }
         AuthoredChange::SetOperationContract {
@@ -452,6 +471,7 @@ fn lower_add_type_parameter<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + 
         | DeclarationPayload::Variant {
             type_parameters, ..
         } => type_parameters.push(parameter_id),
+        DeclarationPayload::OwnedContract(c) if c.self_parameter == parameter_id => {}
         DeclarationPayload::Function(function) => function.type_parameters.push(parameter_id),
         DeclarationPayload::External(function) => function.type_parameters.push(parameter_id),
         _ => {

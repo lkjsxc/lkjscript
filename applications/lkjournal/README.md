@@ -22,9 +22,9 @@ Current normalized identity:
 - package: `pkg_20000000000000000000000000000001`;
 - semantic revision: `rev_a1d97c5d7deda1ece8e2e3383bd7a58ae1e267838368ec5b42678e40c9eb1640`;
 - semantic state: `semantic_state_3832cd12c3fee672d0bdfb975cb363cbc457f6ef45f15cb44a62d40ab47f2dee`;
-- package revision: `package_revision_e87e327ed5f4cf9e7ceff3d217c7aaf1897631409fca62f83882bf6d310dbd3f`;
-- artifact manifest: `artifact_manifest_c605f169b71099ac9a05dd0a9fea84ef86da281e2864df2a45ebd47f96a550c1`;
-- artifact bundle: `artifact_bundle_963c8d58546a93bea9865bcaf09c02c3f3e5d1b2df042ad06d225c3f1c58a871`;
+- package revision: `package_revision_ff8273529489c6bcbb57f4c4becd37b0fdcfacd092adfc81d008f3e624e65cd1`;
+- artifact manifest: `artifact_manifest_2628047a859a2bdc08eeabc668948f6a94ba52e75dff9b9f21b67547c08d2b9f`;
+- artifact bundle: `artifact_bundle_173b97a463b061f608cccb27fe3352109f0e7d30caae4f657497f4617f710b22`;
 - 2,044 live root semantic owners and one exact built-in standard dependency.
 
 The original Graph 13 materialization preserved all existing application owner identities and behavior.
@@ -202,3 +202,7 @@ server, connection secret, or host database-library prerequisite.
 Contributor-only `lkjscript-dev data-oracle` separately uses an exact PostgreSQL 16.15 image for
 neutral migration and differential/resource evidence. That tool is not a deployment provider,
 application helper, public import path, or permanent dual reader/writer.
+
+The Owned-generic compiler refresh rebuilds the derived artifact through public
+build with compiler unit 15, bytecode 11 and artifact 22. It preserves accepted
+HEAD, exact standard selection, application owners and operational data.

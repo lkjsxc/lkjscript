@@ -93,3 +93,7 @@ The complete exact standard closure and Base64 boundary have real costs. This is
 zero-copy I/O. Matched complete-command measurements, failures and source acceptance
 belong to the [byte campaign](../../docs/campaigns/202609240603.md); the
 [predecessor campaign](../../docs/campaigns/202609240414.md) retains the original costs.
+
+The Owned-generic compiler refresh rebuilds the retained policy artifact through
+public build, preserving its accepted HEAD and exact standard supplier. No native
+policy meaning is changed; older derived artifact generations require rebuilding.

@@ -123,6 +123,8 @@ fn derive_linear(code: &mut NormalizedCode, work: &mut Budget<'_>) -> Result<(),
             | I::StaticText(_)
             | I::StoreLocal(_)
             | I::Drop
+            | I::ImplementationCall { .. }
+            | I::MethodCall { .. }
             | I::Call { .. }
             | I::TailCall { .. }
             | I::FunctionValue { .. }

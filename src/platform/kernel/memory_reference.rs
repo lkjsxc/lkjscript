@@ -11,7 +11,12 @@ struct Rights {
     owned: BTreeSet<LocalValueReference>,
     borrowed: BTreeSet<LocalValueReference>,
 }
-struct Oracle<'a>(&'a KernelSnapshot);
+#[path = "memory_witness_reference.rs"]
+mod witnesses;
+struct Oracle<'a>(
+    &'a KernelSnapshot,
+    Option<crate::platform::semantic_id::DeclarationId>,
+);
 impl Oracle<'_> {
     fn foreign(&self, package: PackageId, key: OwnerKey) -> Option<&PackageInterfaceRecord> {
         let revision = self.0.dependencies.get(&package)?.package_revision;
@@ -24,8 +29,8 @@ impl Oracle<'_> {
                 .get(&t)
                 .or_else(|| self.0.dependency_types.get(&t))
                 .map(|t| &t.form),
-            Some(TypeForm::ByteBuffer)
-        )
+            Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell)
+        ) || matches!(self.0.types.get(&t).or_else(|| self.0.dependency_types.get(&t)).map(|t| &t.form), Some(TypeForm::TypeParameter { parameter }) if matches!(self.0.owners.get(&OwnerKey::TypeParameter(*parameter)), Some(OwnerRecord::TypeParameter(p)) if p.constraints == TypeParameterConstraints::Owned))
     }
     fn contains(&self, t: TypeObjectDigest) -> bool {
         let mut todo = vec![t];
@@ -33,6 +38,9 @@ impl Oracle<'_> {
         while let Some(t) = todo.pop() {
             if !seen.insert(t) {
                 continue;
+            }
+            if self.buffer(t) {
+                return true;
             }
             let Some(t) = self
                 .0
@@ -42,8 +50,15 @@ impl Oracle<'_> {
             else {
                 return true;
             };
-            if matches!(t.form, TypeForm::ByteBuffer) {
+            if matches!(t.form, TypeForm::ByteBuffer | TypeForm::OwnedI64Cell) {
                 return true;
+            }
+            if let TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } = &t.form
+            {
+                let Some((_, fields)) = self.nominal(*declaration) else {
+                    return true;
+                };
+                todo.extend(fields);
             }
             todo.extend(t.child_types());
         }
@@ -64,6 +79,75 @@ impl Oracle<'_> {
                 PackageInterfaceRecord::Parameter(p) => Some(p.clone()),
                 _ => None,
             }
+        }
+    }
+    fn type_parameters(
+        &self,
+        d: DeclarationReference,
+    ) -> Option<Vec<crate::platform::semantic_id::TypeParameterId>> {
+        if d.package == self.0.root.package_id {
+            let OwnerRecord::Declaration(record) =
+                self.0.owners.get(&OwnerKey::Declaration(d.declaration))?
+            else {
+                return None;
+            };
+            Some(match &record.payload {
+                DeclarationPayload::Function(f) => f.type_parameters.clone(),
+                DeclarationPayload::External(f) => f.type_parameters.clone(),
+                _ => return None,
+            })
+        } else {
+            let PackageInterfaceRecord::Declaration(record) =
+                self.foreign(d.package, OwnerKey::Declaration(d.declaration))?
+            else {
+                return None;
+            };
+            Some(match &record.payload {
+                PackageInterfaceDeclarationPayload::Function(f) => f.type_parameters.clone(),
+                PackageInterfaceDeclarationPayload::External(f) => f.type_parameters.clone(),
+                _ => return None,
+            })
+        }
+    }
+    fn application(&self, d: DeclarationReference, arguments: &[TypeObjectDigest]) -> bool {
+        let Some(parameters) = self.type_parameters(d) else {
+            return arguments.iter().all(|t| !self.contains(*t));
+        };
+        if parameters.len() != arguments.len() {
+            return false;
+        }
+        parameters.iter().zip(arguments).all(|(id, ty)| {
+            let p = if d.package == self.0.root.package_id {
+                match self.0.owners.get(&OwnerKey::TypeParameter(*id)) {
+                    Some(OwnerRecord::TypeParameter(p)) => Some(p),
+                    _ => None,
+                }
+            } else {
+                match self.foreign(d.package, OwnerKey::TypeParameter(*id)) {
+                    Some(PackageInterfaceRecord::TypeParameter(p)) => Some(p),
+                    _ => None,
+                }
+            };
+            p.is_some_and(|p| {
+                p.declaration == d.declaration
+                    && if p.constraints == TypeParameterConstraints::Owned {
+                        self.buffer(*ty) && self.owned_type_in_scope(*ty)
+                    } else {
+                        !self.contains(*ty)
+                    }
+            })
+        })
+    }
+    fn owned_type_in_scope(&self, ty: TypeObjectDigest) -> bool {
+        match self.form(ty) {
+            Some(TypeForm::TypeParameter { parameter }) => self
+                .type_parameter(self.0.root.package_id, *parameter)
+                .is_some_and(|p| {
+                    Some(p.declaration) == self.1
+                        && p.constraints == TypeParameterConstraints::Owned
+                }),
+            Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell) => true,
+            _ => false,
         }
     }
     fn signature(
@@ -149,8 +233,23 @@ impl Oracle<'_> {
         if let Some(i) = implementation
             && memory
         {
+            if i == "core.cell.create" {
+                return parameters.len() == 1
+                    && matches!(
+                        self.0.types.get(&parameters[0].ty).map(|t| &t.form),
+                        Some(TypeForm::I64)
+                    )
+                    && parameters[0].use_mode == ParameterUse::Unrestricted
+                    && matches!(
+                        self.0.types.get(result).map(|t| &t.form),
+                        Some(TypeForm::OwnedI64Cell)
+                    );
+            }
             let expected = match i.as_str() {
                 "core.buffer.empty" => (0, false, true),
+                "core.cell.replace" => (2, false, true),
+                "core.cell.read" => (1, true, false),
+                "core.cell.extract" | "core.cell.discard" => (1, false, false),
                 "core.buffer.push" => (2, false, true),
                 "core.buffer.get" => (2, true, false),
                 "core.buffer.length" => (1, true, false),
@@ -180,6 +279,43 @@ impl Oracle<'_> {
         };
         Some(&e.operation)
     }
+    fn arguments(
+        &self,
+        parameters: &[(TypeObjectDigest, ParameterUse)],
+        arguments: &[ExpressionId],
+        rights: &mut Rights,
+        depth: usize,
+    ) -> Option<()> {
+        if parameters.len() != arguments.len() {
+            return None;
+        }
+        let mut moved = BTreeSet::new();
+        let mut borrowed = BTreeSet::new();
+        for ((ty, use_mode), argument) in parameters.iter().zip(arguments) {
+            if self.buffer(*ty) {
+                let ExpressionOperation::Local { value } = self.expression(*argument)? else {
+                    return None;
+                };
+                match use_mode {
+                    ParameterUse::Borrow => {
+                        if !rights.owned.contains(value) && !rights.borrowed.contains(value) {
+                            return None;
+                        }
+                        borrowed.insert(*value);
+                    }
+                    ParameterUse::Consume => {
+                        if !moved.insert(*value) || !rights.owned.remove(value) {
+                            return None;
+                        }
+                    }
+                    ParameterUse::Unrestricted => return None,
+                }
+            } else if self.run(*argument, rights, false, depth + 1)? {
+                return None;
+            }
+        }
+        moved.is_disjoint(&borrowed).then_some(())
+    }
     // A result is either ordinary data or a moved owner. Reads never produce owners.
     fn run(&self, id: ExpressionId, rights: &mut Rights, take: bool, depth: usize) -> Option<bool> {
         if depth > contract::MAXIMUM_EXPRESSION_DEPTH {
@@ -208,6 +344,9 @@ impl Oracle<'_> {
                         return None;
                     };
                     let memory = b.declared_type.is_some_and(|t| self.buffer(t));
+                    if memory && !self.owned_type_in_scope(b.declared_type?) {
+                        return None;
+                    }
                     if self.run(b.value?, rights, memory, depth + 1)? != memory {
                         return None;
                     }
@@ -259,7 +398,11 @@ impl Oracle<'_> {
                 arguments,
                 ..
             } => {
-                if type_arguments.iter().any(|t| self.contains(*t)) {
+                if self
+                    .function(*function)
+                    .is_some_and(|f| !f.implementation_parameters.is_empty())
+                    || !self.application(*function, type_arguments)
+                {
                     return None;
                 }
                 let Some(s) = self.signature(*function) else {
@@ -271,38 +414,65 @@ impl Oracle<'_> {
                 if !self.legal_signature(&s) || s.0.len() != arguments.len() {
                     return None;
                 }
-                let mut moved = BTreeSet::new();
-                let mut read = BTreeSet::new();
-                for (p, a) in s.0.iter().zip(arguments) {
-                    if self.buffer(p.ty) {
-                        let ExpressionOperation::Local { value } = self.expression(*a)? else {
-                            return None;
-                        };
-                        if p.use_mode == ParameterUse::Borrow {
-                            if !rights.owned.contains(value) && !rights.borrowed.contains(value) {
-                                return None;
-                            }
-                            read.insert(*value);
-                        } else {
-                            if !moved.insert(*value) || !rights.owned.remove(value) {
-                                return None;
-                            }
-                        }
-                    } else {
-                        self.run(*a, rights, false, depth + 1).filter(|v| !*v)?;
-                    }
-                }
-                if !moved.is_disjoint(&read) {
+                self.arguments(
+                    &s.0.iter().map(|p| (p.ty, p.use_mode)).collect::<Vec<_>>(),
+                    arguments,
+                    rights,
+                    depth,
+                )?;
+                self.buffer(s.1)
+            }
+            ExpressionOperation::ImplementationCall {
+                function,
+                type_arguments,
+                implementations,
+                arguments,
+            } => {
+                if !self.application(*function, type_arguments)
+                    || !self.witnesses(*function, type_arguments, implementations)
+                {
                     return None;
                 }
+                let s = self.signature(*function)?;
+                if !self.legal_signature(&s) {
+                    return None;
+                }
+                self.arguments(
+                    &s.0.iter().map(|p| (p.ty, p.use_mode)).collect::<Vec<_>>(),
+                    arguments,
+                    rights,
+                    depth,
+                )?;
                 self.buffer(s.1)
+            }
+            ExpressionOperation::MethodCall {
+                witness,
+                contract,
+                method,
+                arguments,
+            } => {
+                let m = self.method(*witness, *contract, *method)?;
+                self.arguments(
+                    &m.parameters
+                        .iter()
+                        .map(|p| (p.ty, p.use_mode))
+                        .collect::<Vec<_>>(),
+                    arguments,
+                    rights,
+                    depth,
+                )?;
+                self.buffer(m.result)
             }
             ExpressionOperation::FunctionValue {
                 function,
                 type_arguments,
                 ..
             } => {
-                if type_arguments.iter().any(|t| self.contains(*t)) {
+                if self
+                    .function(*function)
+                    .is_some_and(|f| !f.implementation_parameters.is_empty())
+                    || type_arguments.iter().any(|t| self.contains(*t))
+                {
                     return None;
                 }
                 let s = self.signature(*function)?;
@@ -380,13 +550,20 @@ impl Oracle<'_> {
                 *rights = r;
                 v
             }
-            _ => false,
+            ExpressionOperation::Unit {}
+            | ExpressionOperation::Bool { .. }
+            | ExpressionOperation::I64 { .. }
+            | ExpressionOperation::F64 { .. }
+            | ExpressionOperation::Text { .. }
+            | ExpressionOperation::StaticText { .. }
+            | ExpressionOperation::Local { .. }
+            | ExpressionOperation::Constant { .. } => false,
         };
         if output && !take { None } else { Some(output) }
     }
 }
 pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
-    let oracle = Oracle(snapshot);
+    let oracle = Oracle(snapshot, None);
     if snapshot
         .types
         .values()
@@ -397,6 +574,22 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
     }
     for (key, owner) in &snapshot.owners {
         match owner {
+            OwnerRecord::TypeParameter(p) if p.constraints == TypeParameterConstraints::Owned => {
+                let Some(OwnerRecord::Declaration(d)) =
+                    snapshot.owners.get(&OwnerKey::Declaration(p.declaration))
+                else {
+                    return false;
+                };
+                match &d.payload {
+                    DeclarationPayload::OwnedContract(c)
+                        if *key == OwnerKey::TypeParameter(c.self_parameter) => {}
+                    DeclarationPayload::Function(f)
+                        if matches!(f.effect, FunctionEffect::Pure)
+                            && f.effect_parameters.is_empty()
+                            && f.requirement_parameters.is_empty() => {}
+                    _ => return false,
+                }
+            }
             OwnerRecord::Port(p) => {
                 if oracle.contains(p.function_type) {
                     return false;
@@ -416,6 +609,22 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                 return false;
             }
             OwnerRecord::Declaration(d) => match &d.payload {
+                DeclarationPayload::OwnedContract(_) => {
+                    let OwnerKey::Declaration(id) = key else {
+                        return false;
+                    };
+                    if !oracle.valid_contract(DeclarationReference {
+                        package: snapshot.root.package_id,
+                        declaration: *id,
+                    }) {
+                        return false;
+                    }
+                }
+                DeclarationPayload::OwnedImplementation(i) => {
+                    if !oracle.valid_implementation(i) {
+                        return false;
+                    }
+                }
                 DeclarationPayload::Constant { ty, value } => {
                     if oracle.contains(*ty)
                         || oracle.run(*value, &mut Rights::default(), false, 0) != Some(false)
@@ -436,6 +645,10 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                     let OwnerKey::Declaration(id) = key else {
                         return false;
                     };
+                    let oracle = Oracle(snapshot, Some(*id));
+                    if !oracle.valid_parameters(*id, f) {
+                        return false;
+                    }
                     let Some(s) = oracle.signature(DeclarationReference {
                         package: snapshot.root.package_id,
                         declaration: *id,
@@ -443,6 +656,14 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                         return false;
                     };
                     if !oracle.legal_signature(&s) {
+                        return false;
+                    }
+                    if s.0
+                        .iter()
+                        .map(|p| p.ty)
+                        .chain([s.1])
+                        .any(|ty| oracle.buffer(ty) && !oracle.owned_type_in_scope(ty))
+                    {
                         return false;
                     }
                     let mut rights = Rights::default();

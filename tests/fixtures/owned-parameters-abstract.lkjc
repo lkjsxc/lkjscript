@@ -1,0 +1,28 @@
+declarations.begin
+(units
+  (module create abstract-memory
+    (function create forward (visibility public)
+      (type-parameter create T (constraint owned))
+      (parameter create value (type T) (use consume))
+      (returns T) (effect pure) (body (local value)))
+    (function create discard (visibility public)
+      (type-parameter create T (constraint owned))
+      (parameter create value (type T) (use consume))
+      (returns Unit) (effect pure) (body (unit)))
+    (function create read-scope (visibility public)
+      (type-parameter create T (constraint owned))
+      (parameter create value (type T) (use borrow))
+      (returns Unit) (effect pure) (body (unit)))
+    (function create relay (visibility public)
+      (type-parameter create T (constraint owned))
+      (parameter create value (type T) (use consume))
+      (returns T) (effect pure)
+      (body (call forward (types T) (local value))))
+    (function create read-twice (visibility public)
+      (type-parameter create T (constraint owned))
+      (parameter create value (type T) (use borrow))
+      (returns Unit) (effect pure)
+      (body (sequence
+        (call read-scope (types T) (local value))
+        (call read-scope (types T) (local value)))))))
+declarations.end

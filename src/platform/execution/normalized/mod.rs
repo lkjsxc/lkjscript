@@ -19,6 +19,7 @@ mod list;
 mod local_moves;
 mod map;
 mod object;
+mod owned_i64_cell;
 mod password;
 mod prepare;
 mod prepared_types;

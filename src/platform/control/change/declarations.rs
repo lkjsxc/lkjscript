@@ -652,6 +652,7 @@ impl Lowering<'_> {
                 "F64" => "f64",
                 "Text" => "text",
                 "ByteBuffer" => "byte-buffer",
+                "OwnedI64Cell" => "owned-i64-cell",
                 "Bytes" => "bytes",
                 "StaticText" => "static-text",
                 "Secret" => "secret",
@@ -659,7 +660,8 @@ impl Lowering<'_> {
             };
             if matches!(
                 primitive,
-                "byte-buffer"
+                "owned-i64-cell"
+                    | "byte-buffer"
                     | "unit"
                     | "bool"
                     | "i64"
@@ -856,6 +858,19 @@ impl Lowering<'_> {
         Ok(())
     }
 
+    fn implementation_atom(
+        &mut self,
+        text: &str,
+        scope: &str,
+        at: usize,
+    ) -> Result<String, Diagnostic> {
+        let parts = text.split('@').collect::<Vec<_>>();
+        match parts.as_slice() {
+            ["concrete", reference] => Ok(format!("concrete@{}", self.resolve(reference, scope, "declaration", at)?)),
+            ["parameter", reference, id] => Ok(format!("parameter@{}@{id}", self.resolve(reference, scope, "declaration", at)?)),
+            _ => Err(self.error(at, "expected concrete@IMPLEMENTATION or parameter@FUNCTION@IMPLEMENTATION_PARAMETER_ID")),
+        }
+    }
     fn body(&mut self, id: usize, scope: &str) -> Result<String, Diagnostic> {
         let label = self.allocate('$')?;
         let mut block = self.block.clone();
@@ -888,7 +903,10 @@ impl Lowering<'_> {
                 Ok(())
             };
             match form.as_str() {
-                "call" | "function-value" | "constant" => reference(0, "declaration")?,
+                "implementation-call" | "call" | "function-value" | "constant" => {
+                    reference(0, "declaration")?
+                }
+                "method-call" => reference(1, "declaration")?,
                 "variant" => reference(0, "case")?,
                 "capability-call" => {
                     reference(0, "requirement")?;
@@ -897,7 +915,25 @@ impl Lowering<'_> {
                 "transaction" | "transaction-outcome" => reference(0, "requirement")?,
                 _ => {}
             }
+            if form == "method-call" {
+                let value = self.implementation_atom(self.block.atom(args[0])?, scope, args[0])?;
+                block.syntax[args[0]].kind = SyntaxKind::Atom {
+                    value,
+                    quoted: false,
+                };
+            }
             match form.as_str() {
+                "implementations" => {
+                    for arg in &args {
+                        let value =
+                            self.implementation_atom(self.block.atom(*arg)?, scope, *arg)?;
+                        block.syntax[*arg].kind = SyntaxKind::Atom {
+                            value,
+                            quoted: false,
+                        };
+                    }
+                    continue;
+                }
                 "types" | "type" => {
                     for arg in &args {
                         let value = self.ty(*arg, scope, 1)?;
@@ -1032,7 +1068,145 @@ impl Lowering<'_> {
         }
         let operation = match kind {
             "module" | "record" | "variant" | "interface" | "component" => format!("create.{kind}"),
+            "owned-contract" | "owned-implementation" => {
+                allowed.extend(["self", "method"]);
+                let self_type = self.one(self.required_clause(unit, "self")?)?;
+                fields.push(("self", self.ty(self_type, &scope, 1)?));
+                if kind == "owned-implementation" {
+                    let contract = self.one(self.required_clause(unit, "contract")?)?;
+                    fields.push(("contract", self.reference(contract, &scope, "declaration")?));
+                    allowed.push("contract");
+                }
+                for (index, clause) in unit
+                    .clauses
+                    .iter()
+                    .copied()
+                    .filter(|id| self.block.head(*id) == Some("method"))
+                    .collect::<Vec<_>>()
+                    .iter()
+                    .enumerate()
+                {
+                    let (_, args) = self.parts(*clause)?;
+                    let args = args.to_vec();
+                    if kind == "owned-implementation" {
+                        if args.len() != 2 {
+                            return Err(self.error(
+                                *clause,
+                                "method mapping requires exact method ID and function",
+                            ));
+                        }
+                        let function = self.reference(args[1], &scope, "declaration")?;
+                        self.record(
+                            *clause,
+                            "owned.mapping",
+                            vec![
+                                ("parent", unit.label.clone()),
+                                ("index", index.to_string()),
+                                ("method", self.block.atom(args[0])?.into()),
+                                ("function", function),
+                            ],
+                        )?;
+                    } else {
+                        if args.len() != 4 {
+                            return Err(self.error(
+                                *clause,
+                                "method requires ID, name, parameters and returns",
+                            ));
+                        }
+                        let label = self.allocate('$')?;
+                        let (parameter_clause, parameters) = self.parts(args[2])?;
+                        if parameter_clause != "parameters" {
+                            return Err(self.error(args[2], "method requires parameters"));
+                        }
+                        let parameters = parameters.to_vec();
+                        let (result_clause, results) = self.parts(args[3])?;
+                        if result_clause != "returns" || results.len() != 1 {
+                            return Err(self.error(args[3], "method requires one result"));
+                        }
+                        let result = self.ty(results[0], &scope, 1)?;
+                        self.record(
+                            *clause,
+                            "owned.method",
+                            vec![
+                                ("parent", unit.label.clone()),
+                                ("index", index.to_string()),
+                                ("as", label.clone()),
+                                ("id", self.block.atom(args[0])?.into()),
+                                ("name", self.block.atom(args[1])?.into()),
+                                ("result", result),
+                            ],
+                        )?;
+                        for (index, parameter) in parameters.into_iter().enumerate() {
+                            let parts = self.block.list(parameter)?.to_vec();
+                            if parts.len() != 2 {
+                                return Err(self.error(
+                                    parameter,
+                                    "method parameter requires type and use mode",
+                                ));
+                            }
+                            let ty = self.ty(parts[0], &scope, 1)?;
+                            self.record(
+                                parameter,
+                                "owned.parameter",
+                                vec![
+                                    ("parent", label.clone()),
+                                    ("index", index.to_string()),
+                                    ("type", ty),
+                                    ("use", self.block.atom(parts[1])?.into()),
+                                ],
+                            )?;
+                        }
+                    }
+                }
+                format!("create.{kind}")
+            }
             "function" | "external" => {
+                if kind == "function" {
+                    allowed.push("implementation-parameter");
+                    let label = self.allocate('%')?;
+                    self.record(
+                        unit.syntax,
+                        "set.implementations",
+                        vec![
+                            ("as", label.clone()),
+                            (
+                                "declaration",
+                                unit.existing
+                                    .map(|id| id.to_string())
+                                    .unwrap_or_else(|| unit.label.clone()),
+                            ),
+                        ],
+                    )?;
+                    for (index, clause) in unit
+                        .clauses
+                        .iter()
+                        .copied()
+                        .filter(|id| self.block.head(*id) == Some("implementation-parameter"))
+                        .collect::<Vec<_>>()
+                        .iter()
+                        .enumerate()
+                    {
+                        let (_, args) = self.parts(*clause)?;
+                        let args = args.to_vec();
+                        if args.len() != 4 {
+                            return Err(self.error(*clause, "implementation parameter requires ID, name, contract and Self type"));
+                        }
+                        let contract = self.reference(args[2], &scope, "declaration")?;
+                        let ty = self.ty(args[3], &scope, 1)?;
+                        self.record(
+                            *clause,
+                            "owned.witness",
+                            vec![
+                                ("parent", label.clone()),
+                                ("index", index.to_string()),
+                                ("id", self.block.atom(args[0])?.into()),
+                                ("name", self.block.atom(args[1])?.into()),
+                                ("contract", contract),
+                                ("self", ty),
+                            ],
+                        )?;
+                    }
+                }
                 let ty = self.one(self.required_clause(unit, "returns")?)?;
                 fields.push(("result", self.ty(ty, &scope, 1)?));
                 allowed.push("returns");
@@ -1399,6 +1573,7 @@ pub(super) fn contract_children(record: &crate::platform::kernel::OwnerRecord) -
     let mut children = Vec::new();
     match record {
         O::Declaration(d) => match &d.payload {
+            D::OwnedContract(c) => children.push(OwnerKey::TypeParameter(c.self_parameter)),
             D::Record {
                 type_parameters,
                 fields,
@@ -1466,6 +1641,8 @@ pub(super) fn owner_family(record: &crate::platform::kernel::OwnerRecord) -> &'s
     match record {
         O::Module(_) => "module",
         O::Declaration(d) => match &d.payload {
+            D::OwnedContract(_) => "owned-contract",
+            D::OwnedImplementation(_) => "owned-implementation",
             D::Record { .. } => "record",
             D::Variant { .. } => "variant",
             D::Interface { .. } => "interface",
@@ -1503,7 +1680,9 @@ pub(super) fn finish(
     let mut changes = Vec::new();
     for change in request.semantic.changes {
         let symbol = match &change {
-            AuthoredChange::CreateModule { symbol, .. }
+            AuthoredChange::CreateOwnedContract { symbol, .. }
+            | AuthoredChange::CreateOwnedImplementation { symbol, .. }
+            | AuthoredChange::CreateModule { symbol, .. }
             | AuthoredChange::CreateRecord { symbol, .. }
             | AuthoredChange::CreateVariant { symbol, .. }
             | AuthoredChange::CreateInterface { symbol, .. }
@@ -1535,6 +1714,44 @@ pub(super) fn finish(
             _ => None,
         };
         match change {
+            AuthoredChange::CreateOwnedContract {
+                visibility,
+                self_type,
+                methods,
+                ..
+            } => {
+                let declaration = declaration
+                    .ok_or_else(|| canonical::error("expected owned contract identity"))?;
+                changes.push(AuthoredChange::SetDeclarationVisibility {
+                    declaration: declaration.clone(),
+                    visibility,
+                });
+                changes.push(AuthoredChange::SetOwnedContract {
+                    declaration,
+                    self_type,
+                    methods,
+                });
+            }
+            AuthoredChange::CreateOwnedImplementation {
+                visibility,
+                contract,
+                self_type,
+                methods,
+                ..
+            } => {
+                let declaration = declaration
+                    .ok_or_else(|| canonical::error("expected implementation identity"))?;
+                changes.push(AuthoredChange::SetDeclarationVisibility {
+                    declaration: declaration.clone(),
+                    visibility,
+                });
+                changes.push(AuthoredChange::SetOwnedImplementation {
+                    declaration,
+                    contract,
+                    self_type,
+                    methods,
+                });
+            }
             AuthoredChange::CreateModule { name, .. }
             | AuthoredChange::AddEffectParameter {
                 parameter: AuthoredEffectParameter { name, .. },
@@ -1708,12 +1925,16 @@ pub(super) fn finish(
                             package: r.package,
                             requirement: r.requirement,
                         });
-                if parameter.use_mode != old.use_mode
-                    || parameter.resource_requirement != requirement
-                {
+                if parameter.resource_requirement != requirement {
                     return Err(canonical::error(
                         "changing an existing parameter use mode/resource binding requires a supported explicit contract operation",
                     ));
+                }
+                if parameter.use_mode != old.use_mode {
+                    changes.push(AuthoredChange::SetParameterUse {
+                        parameter: exact.clone(),
+                        use_mode: parameter.use_mode,
+                    });
                 }
                 changes.push(AuthoredChange::SetParameterType {
                     parameter: exact,
@@ -1857,7 +2078,15 @@ fn scopes(mut scope: &str) -> Vec<&str> {
 fn namespace(kind: &str) -> Option<&'static str> {
     Some(match kind {
         "module" => "module",
-        "record" | "variant" | "interface" | "external" | "function" | "constant" | "component"
+        "owned-contract"
+        | "owned-implementation"
+        | "record"
+        | "variant"
+        | "interface"
+        | "external"
+        | "function"
+        | "constant"
+        | "component"
         | "test" => "declaration",
         "field" => "field",
         "case" => "case",
@@ -1879,6 +2108,7 @@ fn child_allowed(parent: &str, child: &str) -> bool {
         "module" => namespace(child) == Some("declaration"),
         "record" => matches!(child, "field" | "type-parameter"),
         "variant" => matches!(child, "case" | "type-parameter"),
+        "owned-contract" => child == "type-parameter",
         "interface" => child == "operation",
         "function" => matches!(
             child,

@@ -459,7 +459,9 @@ fn visit_expression(
         ExpressionOperation::Sequence { items } => {
             visit_many(snapshot, items, &label, "item", identities)
         }
-        ExpressionOperation::Call { arguments, .. } => {
+        ExpressionOperation::ImplementationCall { arguments, .. }
+        | ExpressionOperation::MethodCall { arguments, .. }
+        | ExpressionOperation::Call { arguments, .. } => {
             visit_many(snapshot, arguments, &label, "argument", identities)
         }
         ExpressionOperation::Invoke { callee, arguments }

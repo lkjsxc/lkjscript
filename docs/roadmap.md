@@ -55,7 +55,9 @@ region/trait/ownership design or evidence of zero-copy payload processing.
 The [concrete ByteBuffer increment](spec/owned-byte-buffers.md) implements pure
 creation, scoped synchronous reads, consuming updates, direct owned result transfer
 and lexical/failure cleanup across ordinary generic packages. Capability-resource
-authority remains separate. Extend this boundary toward owned generic constraints,
+authority remains separate. The [first-order owned abstraction](spec/owned-generics.md)
+implements rank-one Owned constraints and explicit nominal implementation witnesses
+for ByteBuffer and an independent scalar cell. Extend this boundary toward
 typed traits, general lifetimes and region policies; none is supplied by this
 increment. Keep declared ownership/effect meaning separate from physical placement
 and recomputable analyses.
@@ -109,16 +111,13 @@ Keep code installation, instance activation and data migration separate. Bind
 secrets and operational handles to an instance, not to reusable code metadata.
 Test version coexistence and cancellation during admission as well as normal stop.
 
-The concrete ByteBuffer producer/transformer/consumer now has accepted mainline
-source and source-free package evidence. Next generalize its ownership contract:
-an explicitly constrained type parameter should carry an owned value through
-producer, consuming transformation and result return without hiding a copy or
-allowing a read loan to escape. Couple that boundary with exact typed implementation
-witnesses; adding a type name, descriptor or unchecked trait search is insufficient.
-Require both concrete ByteBuffer instantiation and another owned representation,
-independent duplicate-use/escape/wrong-witness failures, and failure cleanup before
-claiming a general ownership abstraction. These are future gates, not current
-capabilities or a commitment to a particular syntax or storage carrier.
+The first-order [Owned implementation](spec/owned-generics.md) now supplies the
+symbolically checked producer/transformer/consumer boundary with explicit witnesses
+for both ByteBuffer and OwnedI64Cell. Its focused native evidence includes exact
+same-Self alternate selection, loan cleanup and source-free package execution.
+Dependency-complete frozen-source acceptance and integration remain separate from
+that implementation evidence. General traits, owned containers, mutable or escaping
+borrows, asynchronous ownership transfer and region placement remain future work.
 
 Do not turn the initial host into a broad supervisor before those transfer,
 lifetime and effect contracts compose. Dynamic CLI admission/removal and

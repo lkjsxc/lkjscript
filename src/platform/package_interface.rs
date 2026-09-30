@@ -31,11 +31,11 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-10";
-pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 11;
-pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF11";
+pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-12";
+pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 12;
+pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF12";
 pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str =
-    "lkjscript.package-interface-owner-envelope.v11";
+    "lkjscript.package-interface-owner-envelope.v12";
 const PACKAGE_INTERFACE_IDENTITY_MAGIC: [u8; 8] = *b"LKJPIFI1";
 const PACKAGE_INTERFACE_IDENTITY_DOMAIN: &str = "lkjscript.package-interface-identity.v1";
 pub const MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES: usize = 1024 * 1024;
@@ -81,6 +81,12 @@ struct PackageInterfaceOwner14 {
     record: crate::platform::kernel::wire14::PackageInterfaceRecord14,
 }
 
+#[derive(Clone, Debug, Decode, Encode)]
+struct PackageInterfaceOwner11 {
+    contract_version: u16,
+    record: crate::platform::kernel::interface11::PackageInterfaceRecord11,
+}
+
 impl PackageInterfaceOwner {
     pub fn project(
         canonical: &OwnerRecord,
@@ -111,6 +117,8 @@ impl PackageInterfaceOwner {
         let value = Self {
             contract_version: if canonical.header().contract_version == 14 {
                 10
+            } else if canonical.header().contract_version < 18 {
+                11
             } else {
                 PACKAGE_INTERFACE_CONTRACT_VERSION
             },
@@ -147,6 +155,19 @@ impl PackageInterfaceOwner {
             )?;
             return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
         }
+        if self.contract_version == 11 {
+            let wire = PackageInterfaceOwner11 {
+                contract_version: 11,
+                record: self.record.clone().try_into()?,
+            };
+            let bytes = crate::platform::packed::encode(
+                *b"LKJPIF11",
+                "lkjscript.package-interface-owner-envelope.v11",
+                &wire,
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
+        }
         let bytes = crate::platform::packed::encode(
             PACKAGE_INTERFACE_MAGIC,
             PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
@@ -168,7 +189,23 @@ impl PackageInterfaceOwner {
                 "package-interface owner bytes disagree with their exact digest",
             ));
         }
-        let value: Self = if bytes.starts_with(b"LKJPIF10") {
+        let value: Self = if bytes.starts_with(b"LKJPIF11") {
+            let wire: PackageInterfaceOwner11 = crate::platform::packed::decode(
+                bytes,
+                *b"LKJPIF11",
+                "lkjscript.package-interface-owner-envelope.v11",
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            if wire.contract_version != 11 {
+                return Err(interface_corrupt(
+                    "predecessor interface envelope has a foreign generation",
+                ));
+            }
+            Self {
+                contract_version: 11,
+                record: wire.record.into(),
+            }
+        } else if bytes.starts_with(b"LKJPIF10") {
             let wire: PackageInterfaceOwner14 = crate::platform::packed::decode(
                 bytes,
                 *b"LKJPIF10",
@@ -214,6 +251,7 @@ impl PackageInterfaceOwner {
     fn validate_local(&self) -> Result<(), Diagnostic> {
         if self.contract_version != PACKAGE_INTERFACE_CONTRACT_VERSION
             && self.contract_version != 10
+            && self.contract_version != 11
         {
             return Err(interface_error(
                 DiagnosticClass::Source,
@@ -358,6 +396,10 @@ impl PackageInterfaceSelection {
         self.type_parameters
             .extend(record.payload.type_parameters());
         match &record.payload {
+            DeclarationPayload::OwnedContract(c) => {
+                self.type_parameters.insert(c.self_parameter);
+            }
+            DeclarationPayload::OwnedImplementation(_) => {}
             DeclarationPayload::Record { fields, .. } => self.fields.extend(fields),
             DeclarationPayload::Variant { cases, .. } => self.cases.extend(cases),
             DeclarationPayload::Interface { operations } => self.operations.extend(operations),
@@ -370,6 +412,7 @@ impl PackageInterfaceSelection {
                 self.parameters.extend(parameters);
             }
             DeclarationPayload::Function(FunctionDeclaration {
+                implementation_parameters: _,
                 effect_parameters,
                 requirement_parameters,
                 type_parameters,
@@ -697,6 +740,14 @@ pub(crate) fn validate_package_interface_metered<S: ImmutableObjectStore + ?Size
 pub(crate) fn interface_owner_validation_visits(owner: &PackageInterfaceOwner) -> u64 {
     let children = match &owner.record {
         PackageInterfaceRecord::Declaration(declaration) => match &declaration.payload {
+            PackageInterfaceDeclarationPayload::OwnedContract(c) => {
+                c.methods
+                    .iter()
+                    .map(|m| m.parameters.len() + 1)
+                    .sum::<usize>()
+                    + 1
+            }
+            PackageInterfaceDeclarationPayload::OwnedImplementation(i) => i.methods.len() + 1,
             PackageInterfaceDeclarationPayload::Record {
                 fields,
                 type_parameters,
@@ -708,6 +759,7 @@ pub(crate) fn interface_owner_validation_visits(owner: &PackageInterfaceOwner) -
             PackageInterfaceDeclarationPayload::Interface { operations } => operations.len(),
             PackageInterfaceDeclarationPayload::Function(function) => {
                 function.parameters.len()
+                    + function.implementation_parameters.len()
                     + function.type_parameters.len()
                     + function.requirement_parameters.len()
                     + function.effect_parameters.len()
@@ -759,6 +811,16 @@ fn validate_owner_closure(
             ));
         };
         match &declaration.payload {
+            PackageInterfaceDeclarationPayload::OwnedContract(c) => {
+                require_child(
+                    owners,
+                    &mut expected,
+                    OwnerKey::TypeParameter(c.self_parameter),
+                    OwnerKind::TypeParameter,
+                    Some(*declaration_id),
+                )?;
+            }
+            PackageInterfaceDeclarationPayload::OwnedImplementation(_) => {}
             PackageInterfaceDeclarationPayload::Record {
                 fields,
                 type_parameters,
@@ -1268,6 +1330,7 @@ fn validate_interface_type_reference(
         | TypeForm::I64
         | TypeForm::F64
         | TypeForm::ByteBuffer
+        | TypeForm::OwnedI64Cell
         | TypeForm::Bytes
         | TypeForm::Text
         | TypeForm::StaticText
@@ -1737,5 +1800,59 @@ mod tests {
             package_interface_digest(package, build.root.content_root()).unwrap(),
             package_interface_digest(package, repacked.content_root()).unwrap()
         );
+    }
+}
+
+#[cfg(test)]
+mod owned_generation_tests {
+    use super::*;
+    #[test]
+    fn owned_generation_preserves_frozen_predecessor_interface11_layouts() {
+        let bytes = include_bytes!("../../tests/fixtures/owned-legacy-interface11.lkjp");
+        let transport =
+            "package_transport_458b038313692227f3a3842e420e85a247ada81ca3fdcbecdf7b715191aa5f31"
+                .parse()
+                .unwrap();
+        let container =
+            crate::platform::package_transport::source::PackageContainer::decode(bytes, transport)
+                .unwrap();
+        let admitted = container.admit().unwrap();
+        let independently_reconstructed =
+            crate::platform::package_transport::oracle::reconstruct(&container).unwrap();
+        assert_eq!(independently_reconstructed.snapshots.len(), 1);
+        let package = &admitted.packages[&container.root.package_revision];
+        assert_eq!(package.snapshot.root.graph_contract_version, 17);
+        let mut kinds = BTreeSet::new();
+        for interface in package.interface_owners.values() {
+            assert_eq!(interface.contract_version, 11);
+            let (digest, encoded) = interface.encode().unwrap();
+            assert_eq!(&encoded[..8], b"LKJPIF11");
+            assert_eq!(
+                PackageInterfaceOwner::decode(&encoded, interface.owner(), digest).unwrap(),
+                *interface
+            );
+            assert!(
+                container.objects.values().any(|bytes| *bytes == encoded),
+                "exact predecessor bytes survive re-encoding"
+            );
+            if let PackageInterfaceRecord::Declaration(d) = &interface.record {
+                match &d.payload {
+                    PackageInterfaceDeclarationPayload::Function(f) => {
+                        assert!(f.implementation_parameters.is_empty());
+                        kinds.insert("function");
+                    }
+                    PackageInterfaceDeclarationPayload::Constant { .. } => {
+                        assert_eq!(d.name.as_str(), "seed");
+                        kinds.insert("constant");
+                    }
+                    PackageInterfaceDeclarationPayload::Component { ports, .. } => {
+                        assert_eq!(ports.len(), 1);
+                        kinds.insert("component");
+                    }
+                    _ => unreachable!(),
+                }
+            }
+        }
+        assert_eq!(kinds, BTreeSet::from(["function", "constant", "component"]));
     }
 }

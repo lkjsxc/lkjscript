@@ -32,7 +32,10 @@ impl Value {
         schema: &BoundReferenceSchema,
         datum: NormalizedValue,
     ) -> Result<Self, ExecutionError> {
-        if !matches!(datum, NormalizedValue::ByteBuffer(_)) {
+        if !matches!(
+            datum,
+            NormalizedValue::ByteBuffer(_) | NormalizedValue::OwnedI64Cell(_)
+        ) {
             return Err(reject("memory constructor requires a sealed token"));
         }
         Ok(Self {
@@ -67,11 +70,8 @@ impl Value {
 
     pub(super) fn duplicate(&self, use_mode: ParameterUse) -> Result<Self, ExecutionError> {
         if self.ownership == Ownership::Memory && use_mode == ParameterUse::Borrow {
-            let NormalizedValue::ByteBuffer(buffer) = &self.datum else {
-                return Err(reject("memory proof lacks its token"));
-            };
             return Ok(Self {
-                datum: NormalizedValue::ByteBuffer(buffer.borrow()?),
+                datum: self.datum.memory_borrow()?,
                 preparation: self.preparation,
                 ownership: Ownership::Memory,
             });
@@ -294,7 +294,9 @@ impl Value {
             .is_some_and(|ty| {
                 matches!(
                     ty.form,
-                    TypeForm::ByteBuffer | TypeForm::CapabilityResource { .. }
+                    TypeForm::ByteBuffer
+                        | TypeForm::OwnedI64Cell
+                        | TypeForm::CapabilityResource { .. }
                 )
             }) {
             Ownership::Capability
@@ -506,7 +508,9 @@ impl ReferenceState<'_> {
                 .is_some_and(|ty| {
                     matches!(
                         ty.form,
-                        TypeForm::ByteBuffer | TypeForm::CapabilityResource { .. }
+                        TypeForm::ByteBuffer
+                            | TypeForm::OwnedI64Cell
+                            | TypeForm::CapabilityResource { .. }
                     )
                 }) {
                 Ownership::Capability
@@ -837,6 +841,7 @@ impl ReferenceState<'_> {
                                         matches!(
                                             ty.form,
                                             TypeForm::ByteBuffer
+                                                | TypeForm::OwnedI64Cell
                                                 | TypeForm::CapabilityResource { .. }
                                         )
                                     });
@@ -1090,9 +1095,13 @@ impl ReferenceState<'_> {
                             }
                         })?;
                     let kind_matches = match ty {
-                        TypeForm::Function { .. } => signature.pure,
+                        TypeForm::Function { .. } => {
+                            signature.pure && !signature.has_implementations
+                        }
                         TypeForm::TaskFunction { effect, .. } => {
-                            !signature.pure && signature.effect.row() == *effect
+                            !signature.pure
+                                && !signature.has_implementations
+                                && signature.effect.row() == *effect
                         }
                         _ => false,
                     };
@@ -1331,6 +1340,23 @@ impl ReferenceState<'_> {
                 return Err(reject(
                     "raw invocation requires resolved canonical type arguments",
                 ));
+            }
+            match constraint {
+                crate::platform::kernel::TypeParameterConstraints::Owned
+                    if !matches!(
+                        self.schema.types.get(ty).map(|t| &t.form),
+                        Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell)
+                    ) =>
+                {
+                    return Err(reject("Owned requires an exact closed owned type"));
+                }
+                crate::platform::kernel::TypeParameterConstraints::None
+                | crate::platform::kernel::TypeParameterConstraints::CaptureSafe
+                    if !self.schema.buffer_free_types.contains(ty) =>
+                {
+                    return Err(reject("ordinary type argument contains owned memory"));
+                }
+                _ => {}
             }
             if *constraint == crate::platform::kernel::TypeParameterConstraints::CaptureSafe {
                 self.check_capture_type(*ty, &BTreeMap::new(), &mut BTreeSet::new())?;
@@ -1642,6 +1668,7 @@ impl ReferenceState<'_> {
                 TypeForm::Secret
                 | TypeForm::Stream { .. }
                 | TypeForm::ByteBuffer
+                | TypeForm::OwnedI64Cell
                 | TypeForm::CapabilityResource { .. }
                 | TypeForm::TypeParameter { .. } => {
                     return Err(reject(

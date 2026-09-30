@@ -1495,7 +1495,8 @@ executable root, unused/phantom substitutions and memory-result descriptors. Exa
 parameter/result metadata and canonical cleanup code must reject forged modes, moves, omitted
 or reordered lexical cleanup and predecessor-generation memory, even after integrity hashes are
 recomputed. Work-read failure retains its exact exhaustion diagnostic. Existing resource and
-proof-budget expectations must remain unchanged. Coherently rehashed canonical and compiled
+proof limits and cancellation semantics must remain unchanged; added metadata work must
+be counted before traversal rather than bypassed by an absence shortcut. Coherently rehashed canonical and compiled
 function and constant roots with untaken double consumes must reject at affine admission,
 while neutral reconstruction of the original valid artifact remains accepted. The independent
 memory oracle must retain moved identities until lexical exit, including discarded direct
@@ -1517,3 +1518,39 @@ consumer packages through exact transports, unchanged draft re-entry and detache
 Execution after removal of source projects must return `{"$bytes":"AP+A"}` with empty grants.
 Primitive discovery, generated standard assets and native capability references must match the
 accepted graph through their maintained authoring/build/export/generation owners.
+
+## First-order Owned generics and static implementations
+
+The [Owned contract](owned-generics.md) requires a generic-only native package with
+no concrete carrier, standard dependency, implementation or caller. Independently
+check consume-forwarding, lexical drop and repeated read borrowing before
+instantiation. Editing only an existing ordinary type constraint and parameter use
+must recheck its unchanged body and reject a newly affine duplicate use without
+publishing. Symbolic-only malformed closures, phantom arguments, untaken branches,
+aliases in either order and escaping loans/captures/containers must reject.
+
+An exported producer/transformer/consumer graph must run with ByteBuffer and the
+independently stored I64 cell: input sequence 0,255,128 yields 3 and 128; cell signed
+extremes remain exact. Two implementations with the same Self/signatures must retain
+exact selection through unchanged drafts, transport, nested/recursive forwarding
+and source-free execution with empty grants. Pure tail forwarding must retain bounded
+activation depth and live read-loan obligations. Unbound witness templates cannot
+be called or captured through an ordinary descriptor or raw entry.
+
+Every method mapping is checked, including unused mappings. Negative evidence covers
+contract, Self, scope, method identity, type, use mode, result, missing/stale witness
+and empty-effect tasks. The independent source interpreter and symbolic memory
+oracle derive these checks from canonical records, not the production resolver or
+lowered witness specialization. Consistently rehashed source/code/metadata attacks
+must still fail affine admission. VM admission independently checks actual Self
+bindings, exact token origin/type, raw ingress and cleanup. Both carriers require
+lexical, trap, cancellation, quota and adapter-boundary cleanup evidence; user methods
+cannot implement cleanup.
+
+Count unused-method traversal, type inspection and finite specialization under the
+existing proof budgets, preserving cancellation and resource/semantic distinctions.
+Retain predecessor interface-11 function/constant/component bytes and canonical
+owner generations 14–17; new layout generations and validator identity invalidate
+old derived execution proof. Rebuild maintained artifacts through public owners
+without changing accepted meaning HEADs. The integrator owns dependency-complete
+acceptance after implementation source stabilizes.

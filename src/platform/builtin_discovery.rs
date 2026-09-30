@@ -299,6 +299,28 @@ fn append_owner_detail(
 ) -> Result<(), Diagnostic> {
     match record {
         PackageInterfaceRecord::Declaration(declaration) => match &declaration.payload {
+            PackageInterfaceDeclarationPayload::OwnedContract(c) => {
+                append_child_owner(
+                    standard,
+                    OwnerKey::TypeParameter(c.self_parameter),
+                    0,
+                    records,
+                )?;
+                records.push(declaration_detail(
+                    declaration,
+                    "owned-contract",
+                    c.methods.len(),
+                    None,
+                ));
+            }
+            PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
+                records.push(declaration_detail(
+                    declaration,
+                    "owned-implementation",
+                    i.methods.len(),
+                    None,
+                ));
+            }
             PackageInterfaceDeclarationPayload::Record {
                 fields,
                 type_parameters,
@@ -802,6 +824,7 @@ fn append_type(
         | TypeForm::I64
         | TypeForm::F64
         | TypeForm::ByteBuffer
+        | TypeForm::OwnedI64Cell
         | TypeForm::Bytes
         | TypeForm::Text
         | TypeForm::StaticText
@@ -928,6 +951,7 @@ fn append_type(
         | TypeForm::I64
         | TypeForm::F64
         | TypeForm::ByteBuffer
+        | TypeForm::OwnedI64Cell
         | TypeForm::Bytes
         | TypeForm::Text
         | TypeForm::StaticText
@@ -1006,6 +1030,7 @@ fn type_form_name(form: &TypeForm) -> &'static str {
         TypeForm::I64 => "i64",
         TypeForm::F64 => "f64",
         TypeForm::ByteBuffer => "byte-buffer",
+        TypeForm::OwnedI64Cell => "owned-i64-cell",
         TypeForm::Bytes => "bytes",
         TypeForm::Text => "text",
         TypeForm::StaticText => "static-text",

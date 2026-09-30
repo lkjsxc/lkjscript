@@ -1,0 +1,29 @@
+declarations.begin
+(units
+  (use abstraction GENERIC_PACKAGE GENERIC_PACKAGE_REVISION)
+  (use cell IMPLEMENTATION_PACKAGE IMPLEMENTATION_PACKAGE_REVISION)
+  (use buffer IMPLEMENTATION_PACKAGE IMPLEMENTATION_PACKAGE_REVISION)
+  (module create application
+    (function create buffer-result (visibility private) (returns I64) (effect pure)
+      (body (let
+        (binding a (type ByteBuffer) (implementation-call abstraction::produce (types ByteBuffer) (implementations concrete@buffer::Octets) (i64 0)))
+        (binding b (type ByteBuffer) (implementation-call abstraction::transform (types ByteBuffer) (implementations concrete@buffer::Octets) (i64 255) (local a)))
+        (binding c (type ByteBuffer) (implementation-call abstraction::transform (types ByteBuffer) (implementations concrete@buffer::Octets) (i64 128) (local b)))
+        (in (implementation-call abstraction::consume (types ByteBuffer) (implementations concrete@buffer::Octets) (local c))))))
+    (function create cell-result (visibility private) (parameter create n (type I64)) (returns I64) (effect pure)
+      (body (let
+        (binding a (type OwnedI64Cell) (implementation-call abstraction::produce (types OwnedI64Cell) (implementations concrete@cell::Scalar) (i64 0)))
+        (binding b (type OwnedI64Cell) (implementation-call abstraction::transform (types OwnedI64Cell) (implementations concrete@cell::Scalar) (i64 255) (local a)))
+        (binding c (type OwnedI64Cell) (implementation-call abstraction::transform (types OwnedI64Cell) (implementations concrete@cell::Scalar) (local n) (local b)))
+        (in (implementation-call abstraction::consume (types OwnedI64Cell) (implementations concrete@cell::Scalar) (local c))))))
+    (function create alternate (visibility private) (returns I64) (effect pure)
+      (body (let
+        (binding value (type OwnedI64Cell) (implementation-call abstraction::produce (types OwnedI64Cell) (implementations concrete@cell::Alternate) (i64 128)))
+        (in (implementation-call abstraction::consume (types OwnedI64Cell) (implementations concrete@cell::Alternate) (local value))))))
+    (function create main (visibility public) (parameter create n (type I64))
+      (returns (record (length I64) (scalar I64) (alternate I64))) (effect pure)
+      (body (record structural (field length (call buffer-result)) (field alternate (call alternate)) (field scalar (call cell-result (local n))))))
+    (component create command (visibility private)
+      (port create main (type (function (I64) (record (length I64) (scalar I64) (alternate I64)))) (function main))))
+  (target create owned (component application::command) (runner command) (port application::command::main)))
+declarations.end

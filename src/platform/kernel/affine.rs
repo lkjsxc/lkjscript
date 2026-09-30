@@ -95,7 +95,6 @@ pub(crate) fn validate_affine_roots_with_limits<R: ExpressionRead>(
         inner: read,
         meter: &work,
     };
-    let memory_absent = read.byte_buffer_type_known_absent();
     let mut validator = AffineValidator {
         read: &read,
         work: &work,
@@ -110,12 +109,8 @@ pub(crate) fn validate_affine_roots_with_limits<R: ExpressionRead>(
                 continue;
             }
         };
-        if let Err(diagnostic) = (if memory_absent {
-            Ok(())
-        } else {
-            super::memory::validate_owner(&read, owner, &record)
-        })
-        .and_then(|()| validator.validate_owner_shape(owner, &record))
+        if let Err(diagnostic) = super::memory::validate_owner(&read, owner, &record)
+            .and_then(|()| validator.validate_owner_shape(owner, &record))
         {
             push_diagnostic(diagnostics, diagnostic, limits.maximum_diagnostics)?;
             continue;
@@ -560,6 +555,17 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                     result = self.evaluate(item, state, depth + 1)?;
                 }
                 Ok(result)
+            }
+            ExpressionOperation::ImplementationCall {
+                function,
+                arguments,
+                ..
+            } => self.evaluate_function_call(expression, function, &arguments, state, depth + 1),
+            ExpressionOperation::MethodCall { arguments, .. } => {
+                for argument in arguments {
+                    self.require_unrestricted(argument, state, depth + 1, "owned method argument")?;
+                }
+                Ok(EvaluatedValue::Unrestricted)
             }
             ExpressionOperation::Call {
                 function,
@@ -1423,6 +1429,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                     DeclarationPayload::Function(function) => {
                         PackageInterfaceDeclarationPayload::Function(
                             super::PackageFunctionSignature {
+                                implementation_parameters: function.implementation_parameters,
                                 requirement_parameters: function.requirement_parameters,
                                 effect_parameters: function.effect_parameters,
                                 type_parameters: function.type_parameters,

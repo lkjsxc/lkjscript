@@ -89,6 +89,18 @@ pub struct NormalizedCode {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NormalizedInstruction {
+    ImplementationCall {
+        function: FunctionIndex,
+        type_arguments: Arc<[TypeObjectDigest]>,
+        implementations: Arc<[crate::platform::kernel::ImplementationOperand]>,
+        arguments: u32,
+    },
+    MethodCall {
+        witness: crate::platform::kernel::ImplementationOperand,
+        contract: DeclarationReference,
+        method: crate::platform::semantic_id::MethodId,
+        arguments: u32,
+    },
     Unit,
     Bool(bool),
     I64(i64),
@@ -236,6 +248,8 @@ pub enum NormalizedFunctionBody {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedFunction {
+    pub implementation_parameters: Arc<[crate::platform::kernel::ImplementationParameter]>,
+    pub implementation_arguments: Arc<[(DeclarationReference, TypeObjectDigest)]>,
     pub requirement_parameters: Arc<[crate::platform::semantic_id::RequirementParameterId]>,
     pub requirement_arguments: Arc<[crate::platform::kernel::RequirementOperand]>,
     pub effect_parameters: Arc<[crate::platform::semantic_id::EffectParameterId]>,
@@ -543,7 +557,7 @@ impl NormalizedProgram {
             tests,
             types,
         };
-        super::prepared_types::complete_controlled(&mut program, control)?;
+        super::prepared_types::complete_with_implementations(&mut program, &units, control)?;
         super::session::validate_program_interactive_targets(&program)?;
         Ok(program)
     }
@@ -692,6 +706,8 @@ impl RuntimeIndexes {
                 declaration: *declaration,
             };
             match &unit.payload {
+                CompilationPayload::OwnedContract(_)
+                | CompilationPayload::OwnedImplementation(_) => {}
                 CompilationPayload::Record { .. } => {
                     record_refs.insert(reference);
                 }
@@ -795,7 +811,9 @@ impl RuntimeIndexes {
                         }
                     }
                 }
-                CompilationPayload::Interface { .. }
+                CompilationPayload::OwnedContract(_)
+                | CompilationPayload::OwnedImplementation(_)
+                | CompilationPayload::Interface { .. }
                 | CompilationPayload::External { .. }
                 | CompilationPayload::Function { .. }
                 | CompilationPayload::Constant { .. }
@@ -1218,7 +1236,9 @@ fn prepare_functions(
                     artifact, unit, code, indexes, text_cache, work,
                 )?),
             ),
-            CompilationPayload::Record { .. }
+            CompilationPayload::OwnedContract(_)
+            | CompilationPayload::OwnedImplementation(_)
+            | CompilationPayload::Record { .. }
             | CompilationPayload::Variant { .. }
             | CompilationPayload::Interface { .. }
             | CompilationPayload::Component { .. }
@@ -1313,7 +1333,15 @@ fn prepare_functions(
             ),
             _ => (Vec::new(), Vec::new(), FunctionEffect::Pure),
         };
+        let implementation_parameters = match &unit.payload {
+            CompilationPayload::Function { signature, .. } => {
+                signature.implementation_parameters.clone()
+            }
+            _ => Vec::new(),
+        };
         functions[index.0 as usize] = Some(NormalizedFunction {
+            implementation_parameters: implementation_parameters.into(),
+            implementation_arguments: Arc::from([]),
             requirement_parameters: requirement_parameters.into(),
             requirement_arguments: Arc::from([]),
             effect_parameters: effect_parameters.into(),
@@ -1468,6 +1496,15 @@ fn validate_normalized_resource_signature(
     types: &BTreeMap<TypeObjectDigest, TypeObject>,
     requirements: &[NormalizedRequirement],
 ) -> Result<(), Diagnostic> {
+    let is_memory = |ty| -> Result<bool, Diagnostic> {
+        Ok(match types.get(&ty).map(|t| &t.form) {
+            Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell) => true,
+            Some(TypeForm::TypeParameter { parameter }) => {
+                matches!(exact_runtime_owner(owners, declaration.package, OwnerKey::TypeParameter(*parameter), "owned signature type parameter")?, OwnerRecord::TypeParameter(p) if p.constraints == crate::platform::kernel::TypeParameterConstraints::Owned)
+            }
+            _ => false,
+        })
+    };
     let mut direct = Vec::new();
     for (index, parameter) in parameters.iter().enumerate() {
         let form = types.get(&parameter.ty).ok_or_else(|| {
@@ -1477,7 +1514,7 @@ fn validate_normalized_resource_signature(
             )
         })?;
         match &form.form {
-            TypeForm::ByteBuffer => {
+            _ if is_memory(parameter.ty)? => {
                 if parameter.resource_requirement.is_some()
                     || parameter.use_mode == ParameterUse::Unrestricted
                     || !matches!(
@@ -1519,15 +1556,10 @@ fn validate_normalized_resource_signature(
             }
         }
     }
-    let memory = parameters.iter().any(|p| {
-        matches!(
-            types.get(&p.ty).map(|t| &t.form),
-            Some(TypeForm::ByteBuffer)
-        )
-    }) || matches!(
-        types.get(&result).map(|t| &t.form),
-        Some(TypeForm::ByteBuffer)
-    );
+    let mut memory = is_memory(result)?;
+    for p in parameters {
+        memory |= is_memory(p.ty)?;
+    }
     if memory {
         if !direct.is_empty() || !task_requirements.is_empty() {
             return Err(runtime_corrupt(
@@ -2527,6 +2559,43 @@ fn translate_code(
             CompiledInstruction::Drop => NormalizedInstruction::Drop,
             CompiledInstruction::JumpIfFalse(target) => NormalizedInstruction::JumpIfFalse(*target),
             CompiledInstruction::Jump(target) => NormalizedInstruction::Jump(*target),
+            CompiledInstruction::ImplementationCall {
+                function,
+                type_arguments,
+                implementations,
+                arguments,
+            } => {
+                let declaration = index_copy(
+                    &unit.tables.declarations,
+                    *function,
+                    "implementation call target",
+                )?;
+                NormalizedInstruction::ImplementationCall {
+                    function: required_index(
+                        &indexes.functions,
+                        declaration,
+                        "implementation function",
+                    )?,
+                    type_arguments: type_arguments
+                        .iter()
+                        .map(|i| index_copy(&unit.tables.types, *i, "implementation type argument"))
+                        .collect::<Result<Vec<_>, _>>()?
+                        .into(),
+                    implementations: implementations.clone().into(),
+                    arguments: *arguments,
+                }
+            }
+            CompiledInstruction::MethodCall {
+                witness,
+                contract,
+                method,
+                arguments,
+            } => NormalizedInstruction::MethodCall {
+                witness: *witness,
+                contract: *contract,
+                method: *method,
+                arguments: *arguments,
+            },
             CompiledInstruction::Call {
                 requirement_arguments,
                 effect_arguments,

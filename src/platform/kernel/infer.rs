@@ -60,12 +60,6 @@ fn nominal_parts(form: &TypeForm) -> Option<(DeclarationReference, &[TypeObjectD
 pub(crate) trait ExpressionRead {
     fn package_id(&self) -> PackageId;
 
-    /// Only complete immutable type inventories may certify absence. Point readers
-    /// default to checking memory flow; absence never grants a valid type or value.
-    fn byte_buffer_type_known_absent(&self) -> bool {
-        false
-    }
-
     fn owner(&self, owner: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic>;
 
     fn type_object(&self, digest: TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic>;
@@ -82,6 +76,12 @@ pub(crate) trait ExpressionRead {
     fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
         Ok(())
     }
+
+    /// Admit a metadata traversal step before scanning or growing derived state.
+    /// Cancellation-only checkpoints remain distinct from proof-work admission.
+    fn validation_work(&self) -> Result<(), Diagnostic> {
+        self.validation_checkpoint()
+    }
 }
 
 /// Adds an owning operation's cancellation checkpoint to immutable, possibly cached reads.
@@ -91,9 +91,6 @@ pub(crate) struct CheckedExpressionRead<'a, R: ?Sized> {
 }
 
 impl<R: ExpressionRead + ?Sized> ExpressionRead for CheckedExpressionRead<'_, R> {
-    fn byte_buffer_type_known_absent(&self) -> bool {
-        self.read.byte_buffer_type_known_absent()
-    }
     fn package_id(&self) -> PackageId {
         self.read.package_id()
     }
@@ -140,22 +137,6 @@ pub(crate) enum ExpressionValidationExhaustion {
 }
 
 impl ExpressionRead for KernelSnapshot {
-    fn byte_buffer_type_known_absent(&self) -> bool {
-        // The complete canonical inventory admits exactly one buffer identity. Full
-        // validation separately rejects miskeyed or missing type objects. No cached
-        // claim survives mutation of a raw snapshot.
-        static BUFFER: std::sync::OnceLock<Result<TypeObjectDigest, Diagnostic>> =
-            std::sync::OnceLock::new();
-        BUFFER
-            .get_or_init(|| {
-                TypeObject::new(TypeForm::ByteBuffer)
-                    .and_then(|t| super::encode_type_object(&t).map(|(digest, _)| digest))
-            })
-            .as_ref()
-            .is_ok_and(|buffer| {
-                !self.types.contains_key(buffer) && !self.dependency_types.contains_key(buffer)
-            })
-    }
     fn package_id(&self) -> PackageId {
         self.root.package_id
     }
@@ -494,7 +475,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             "port expression",
                         ),
                         PortImplementation::Function(function) => {
-                            match self.function_signature(function, &[], &[], &[], &context) {
+                            match self.function_signature(function, &[], &[], &[], &[], &context) {
                                 Ok(signature) => {
                                     if let Err(diagnostic) =
                                         self.validate_call_effect(&signature, &context)
@@ -827,6 +808,53 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     )
                 })
             }
+            ExpressionOperation::ImplementationCall {
+                function,
+                type_arguments,
+                implementations,
+                arguments,
+            } => {
+                let signature = self.function_signature(
+                    function,
+                    &type_arguments,
+                    &[],
+                    &[],
+                    &implementations,
+                    context,
+                )?;
+                self.validate_call_effect(&signature, context)?;
+                self.validate_arguments(&arguments, &signature.parameters, context, next)?;
+                Ok(signature.result)
+            }
+            ExpressionOperation::MethodCall {
+                witness,
+                contract,
+                method,
+                arguments,
+            } => {
+                let signature = self.owned_read(|read| {
+                    super::owned_contract::method_signature(
+                        read,
+                        witness,
+                        contract,
+                        method,
+                        context.declaration,
+                    )
+                })?;
+                if !matches!(signature.effect, FunctionEffect::Pure) {
+                    return Err(type_error("kernel_owned_contract", "method is not pure"));
+                }
+                let parameters = signature
+                    .parameters
+                    .iter()
+                    .map(|p| p.ty)
+                    .collect::<Vec<_>>();
+                for ty in parameters.iter().chain([&signature.result]) {
+                    self.validate_nominal_type(*ty, context, 0)?;
+                }
+                self.validate_arguments(&arguments, &parameters, context, next)?;
+                Ok(signature.result)
+            }
             ExpressionOperation::Call {
                 requirement_arguments,
                 effect_arguments,
@@ -839,6 +867,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     &type_arguments,
                     &effect_arguments,
                     &requirement_arguments,
+                    &[],
                     context,
                 )?;
                 self.validate_call_effect(&signature, context)?;
@@ -856,6 +885,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     &type_arguments,
                     &effect_arguments,
                     &requirement_arguments,
+                    &[],
                     context,
                 )?;
                 self.function_type(&signature)
@@ -1573,6 +1603,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 TypeForm::Secret
                 | TypeForm::Stream { .. }
                 | TypeForm::ByteBuffer
+                | TypeForm::OwnedI64Cell
                 | TypeForm::CapabilityResource { .. } => {
                     return Err(type_error(
                         "kernel_type_bind_capture",
@@ -1823,8 +1854,29 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         type_arguments: &[TypeObjectDigest],
         effect_arguments: &[super::EffectRow],
         requirement_arguments: &[super::RequirementOperand],
+        implementations: &[super::ImplementationOperand],
         context: &ExecutionContext,
     ) -> Result<FunctionSignature, Diagnostic> {
+        if let Some(f) = self
+            .owned_read(|read| super::owned_contract::optional_function_contract(read, reference))?
+        {
+            if !f.implementation_parameters.is_empty() || !implementations.is_empty() {
+                self.owned_read(|read| {
+                    super::owned_contract::validate_application(
+                        read,
+                        reference,
+                        type_arguments,
+                        implementations,
+                        context.declaration,
+                    )
+                })?;
+            }
+        } else if !implementations.is_empty() {
+            return Err(type_error(
+                "kernel_owned_contract",
+                "external cannot accept implementation witnesses",
+            ));
+        }
         let foreign = reference.package != self.read.package_id();
         let (
             type_parameters,
@@ -2032,12 +2084,6 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             ));
         }
         for (parameter, supplied) in type_parameters.iter().zip(type_arguments) {
-            if self.type_contains_buffer(*supplied)? {
-                return Err(type_error(
-                    "kernel_buffer_generic",
-                    "ByteBuffer cannot substitute an unrestricted generic parameter",
-                ));
-            }
             self.consume_work()?;
             let owner = if foreign {
                 match self.dependency_owner(
@@ -2062,6 +2108,19 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         "callee type parameter has no exact declaration owner",
                     )
                 })?;
+            if owner.constraints == super::TypeParameterConstraints::Owned {
+                if !super::memory::direct(self.read, *supplied)? {
+                    return Err(type_error(
+                        "kernel_owned_constraint",
+                        "owned parameter requires a direct owned type or exact owned parameter",
+                    ));
+                }
+            } else if self.type_contains_buffer(*supplied)? {
+                return Err(type_error(
+                    "kernel_buffer_generic",
+                    "owned memory cannot substitute an ordinary generic parameter",
+                ));
+            }
             if owner.constraints == super::TypeParameterConstraints::CaptureSafe {
                 self.require_capture_safe(*supplied, context).map_err(|error| {
                     if error.code != "kernel_type_bind_capture" { return error; }
@@ -2747,9 +2806,6 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
     }
 
     fn type_contains_buffer(&mut self, ty: TypeObjectDigest) -> Result<bool, Diagnostic> {
-        if self.read.byte_buffer_type_known_absent() {
-            return Ok(false);
-        }
         let mut seen = BTreeSet::new();
         let mut declarations = BTreeSet::new();
         let mut pending = vec![ty];
@@ -2759,7 +2815,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 continue;
             }
             let object = self.type_object(ty)?;
-            if matches!(object.form, TypeForm::ByteBuffer) {
+            if matches!(object.form, TypeForm::ByteBuffer | TypeForm::OwnedI64Cell)
+                || matches!(object.form, TypeForm::TypeParameter { parameter } if matches!(self.read.owner(OwnerKey::TypeParameter(parameter))?, Some(OwnerRecord::TypeParameter(p)) if p.constraints == super::TypeParameterConstraints::Owned))
+            {
                 return Ok(true);
             }
             pending.extend(object.child_types());
@@ -2782,6 +2840,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             let object = self.type_object(ty)?;
             let children = match &object.form {
                 TypeForm::ByteBuffer
+                | TypeForm::OwnedI64Cell
                 | TypeForm::CapabilityResource { .. }
                 | TypeForm::Stream { .. } => {
                     return Err(type_error(
@@ -3212,6 +3271,33 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             })
     }
 
+    fn owned_read<T>(
+        &mut self,
+        action: impl FnOnce(&dyn ExpressionRead) -> Result<T, Diagnostic>,
+    ) -> Result<T, Diagnostic> {
+        let used = std::cell::Cell::from_mut(self.work);
+        let maximum = self.limits.maximum_steps;
+        let checkpoint = || {
+            if used.get() >= maximum {
+                return Err(Diagnostic::new(
+                    DiagnosticClass::Resource,
+                    "kernel_type_work",
+                    "owned contract validation exhausted inference work",
+                ));
+            }
+            used.set(used.get() + 1);
+            Ok(())
+        };
+        let read = CheckedExpressionRead {
+            read: self.read,
+            checkpoint: &checkpoint,
+        };
+        let result = action(&read);
+        if result.as_ref().is_err_and(|e| e.code == "kernel_type_work") {
+            self.exhaustion = Some(ExpressionValidationExhaustion::Steps);
+        }
+        result
+    }
     fn consume_work(&mut self) -> Result<(), Diagnostic> {
         self.read.validation_checkpoint()?;
         if self.exhaustion.is_some() {

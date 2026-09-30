@@ -1,0 +1,38 @@
+declarations.begin
+(units (module create cleanup
+  (external create probe (visibility private) (implementation core.i64.add)
+    (parameter create a (type I64)) (parameter create b (type I64)) (returns I64))
+  (external create divide (visibility private) (implementation core.i64.divide)
+    (parameter create a (type I64)) (parameter create b (type I64)) (returns I64))
+  (function create inspect-loan (visibility private)
+    (type-parameter create T (constraint owned))
+    (implementation-parameter implparam_50000000000000000000000000000001 ops abstraction::Storage T)
+    (parameter create value (type T) (use borrow)) (returns I64) (effect pure)
+    (body (sequence
+      (method-call parameter@inspect-loan@implparam_50000000000000000000000000000001 abstraction::Storage method_10000000000000000000000000000003 (local value))
+      (call probe (i64 0) (i64 0)))))
+  (function create cell-loan (visibility public) (returns I64) (effect pure)
+    (body (let
+      (binding value (type OwnedI64Cell) (implementation-call abstraction::produce (types OwnedI64Cell) (implementations concrete@cell::Scalar) (i64 128)))
+      (in (implementation-call inspect-loan (types OwnedI64Cell) (implementations concrete@cell::Scalar) (local value))))))
+  (function create buffer-loan (visibility public) (returns I64) (effect pure)
+    (body (let
+      (binding value (type ByteBuffer) (implementation-call abstraction::produce (types ByteBuffer) (implementations concrete@buffer::Octets) (i64 128)))
+      (in (implementation-call inspect-loan (types ByteBuffer) (implementations concrete@buffer::Octets) (local value))))))
+  (function create cell-drop (visibility public) (returns I64) (effect pure)
+    (body (sequence
+      (let (binding value (type OwnedI64Cell) (implementation-call abstraction::produce (types OwnedI64Cell) (implementations concrete@cell::Scalar) (i64 128))) (in (unit)))
+      (call probe (i64 0) (i64 0)))))
+  (function create buffer-drop (visibility public) (returns I64) (effect pure)
+    (body (sequence
+      (let (binding value (type ByteBuffer) (implementation-call abstraction::produce (types ByteBuffer) (implementations concrete@buffer::Octets) (i64 128))) (in (unit)))
+      (call probe (i64 0) (i64 0)))))
+  (function create cell-trap (visibility public) (returns I64) (effect pure)
+    (body (let
+      (binding value (type OwnedI64Cell) (implementation-call abstraction::produce (types OwnedI64Cell) (implementations concrete@cell::Scalar) (i64 128)))
+      (in (call divide (i64 1) (i64 0))))))
+  (function create buffer-trap (visibility public) (returns I64) (effect pure)
+    (body (let
+      (binding value (type ByteBuffer) (implementation-call abstraction::produce (types ByteBuffer) (implementations concrete@buffer::Octets) (i64 128)))
+      (in (call divide (i64 1) (i64 0))))))))
+declarations.end

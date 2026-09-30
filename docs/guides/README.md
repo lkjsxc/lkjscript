@@ -16,6 +16,7 @@ intrinsics or automatically maintained application packages.
 | [First native command](native-command.md) | A literal function/test/target, reviewed publication, canonical re-entry and detached execution on public v0.1.44 and development v0.1.45. |
 | [Native text composition](native-text.md) | Development-standard text-join, exact separators and caller-owned escaping. |
 | [Owned byte buffers](native-byte-buffer.md) | Development: concrete affine storage, scoped synchronous reads, generic package composition and exact frozen binary output. |
+| [Owned generics and explicit witnesses](native-owned-generics.md) | Development: a symbolic library, ByteBuffer and scalar-cell implementations, exact static selection and grant-free detached execution. |
 | [Immutable byte ranges](native-byte-ranges.md) | Development v0.1.61: strict binary ranges, explicit backing detachment, generic package composition and source-free execution. |
 | [HTML over HTTP](native-html-http.md) | Compose the separate typed HTML and HTTP libraries in a detached public-v0.1.44 service. |
 | [Resident execution policy](resident-policy.md) | Nullable cumulative quotas available in v0.1.45, preserved legacy limits and independent deadline/grant controls. |

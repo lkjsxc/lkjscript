@@ -395,9 +395,9 @@ fn read_value(
         }
         TypeForm::StaticText => Err(unsupported("StaticText")),
         TypeForm::Secret => Err(unsupported("Secret")),
-        TypeForm::ByteBuffer | TypeForm::CapabilityResource { .. } => {
-            Err(unsupported("CapabilityResource"))
-        }
+        TypeForm::ByteBuffer => Err(unsupported("ByteBuffer")),
+        TypeForm::OwnedI64Cell => Err(unsupported("OwnedI64Cell")),
+        TypeForm::CapabilityResource { .. } => Err(unsupported("CapabilityResource")),
         TypeForm::Stream { .. } => Err(unsupported("Stream")),
         TypeForm::Function { .. } | TypeForm::TaskFunction { .. } => Err(unsupported("Function")),
         TypeForm::TypeParameter { .. } => Err(unsupported("unresolved type parameter")),
@@ -528,7 +528,7 @@ fn describe_type(
         }
         TypeForm::StaticText => return Err(unsupported("StaticText")),
         TypeForm::Secret => return Err(unsupported("Secret")),
-        TypeForm::ByteBuffer | TypeForm::CapabilityResource { .. } => {
+        TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::CapabilityResource { .. } => {
             return Err(unsupported("CapabilityResource"));
         }
         TypeForm::Stream { .. } => return Err(unsupported("Stream")),

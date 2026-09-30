@@ -507,6 +507,21 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
         record: DeclarationRecord,
     ) -> Result<CompilationPayload, Diagnostic> {
         match record.payload {
+            DeclarationPayload::OwnedContract(c) => {
+                self.compile_type_parameter_constraints(declaration, &[c.self_parameter])?;
+                for ty in c.type_roots() {
+                    self.tables.ty(ty)?;
+                }
+                Ok(CompilationPayload::OwnedContract(c))
+            }
+            DeclarationPayload::OwnedImplementation(i) => {
+                self.tables.declaration(i.contract)?;
+                self.tables.ty(i.self_type)?;
+                for m in &i.methods {
+                    self.tables.declaration(m.function)?;
+                }
+                Ok(CompilationPayload::OwnedImplementation(i))
+            }
             DeclarationPayload::Record {
                 fields,
                 type_parameters,
@@ -583,7 +598,11 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                 })
             }
             DeclarationPayload::Function(function) => {
-                let signature = self.compile_signature(
+                for p in &function.implementation_parameters {
+                    self.tables.ty(p.self_type)?;
+                    self.tables.declaration(p.contract)?;
+                }
+                let mut signature = self.compile_signature(
                     declaration,
                     SignatureGenerics {
                         types: &function.type_parameters,
@@ -594,6 +613,7 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                     function.result,
                     &function.effect,
                 )?;
+                signature.implementation_parameters = function.implementation_parameters;
                 let code = self.compile_code(function.body, &function.parameters)?;
                 Ok(CompilationPayload::Function { signature, code })
             }
@@ -700,6 +720,7 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                 .collect::<Result<Vec<_>, _>>()?,
         };
         Ok(CompiledSignature {
+            implementation_parameters: Vec::new(),
             requirement_parameters: requirement_parameters.to_vec(),
             effect_parameters: effect_parameters.to_vec(),
             effect: effect.clone(),
@@ -841,6 +862,76 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
 }
 
 impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
+    fn implementation_operand(
+        &mut self,
+        operand: crate::platform::kernel::ImplementationOperand,
+    ) -> Result<(), Diagnostic> {
+        let reference = match operand {
+            crate::platform::kernel::ImplementationOperand::Concrete { implementation } => {
+                implementation
+            }
+            crate::platform::kernel::ImplementationOperand::Parameter { function, .. } => function,
+        };
+        self.tables.declaration(reference)?;
+        Ok(())
+    }
+
+    fn owned_method(
+        &mut self,
+        contract: DeclarationReference,
+        method: crate::platform::semantic_id::MethodId,
+    ) -> Result<crate::platform::kernel::OwnedMethod, Diagnostic> {
+        let c = if contract.package == self.package {
+            match self.required_owner(
+                OwnerKey::Declaration(contract.declaration),
+                "owned method contract",
+            )? {
+                OwnerRecord::Declaration(d) => match d.payload {
+                    DeclarationPayload::OwnedContract(c) => Some(c),
+                    _ => None,
+                },
+                _ => None,
+            }
+        } else {
+            match self.exact_package_interface_owner(
+                contract.package,
+                OwnerKey::Declaration(contract.declaration),
+            )? {
+                PackageInterfaceRecord::Declaration(d) => match d.payload {
+                    crate::platform::kernel::PackageInterfaceDeclarationPayload::OwnedContract(
+                        c,
+                    ) => Some(c),
+                    _ => None,
+                },
+                _ => None,
+            }
+        }
+        .ok_or_else(|| {
+            compiler_corrupt(
+                "compiler_owned_contract",
+                "missing exact owned method contract",
+            )
+        })?;
+        c.methods
+            .into_iter()
+            .find(|m| m.id == method)
+            .ok_or_else(|| {
+                compiler_corrupt("compiler_owned_contract", "missing exact owned method")
+            })
+    }
+
+    fn owned_local_type(&mut self, ty: TypeObjectDigest) -> Result<bool, Diagnostic> {
+        let read = self.canonical.code_type(ty)?;
+        self.work.canonical.add(read.work);
+        Ok(match read.value.map(|t| t.form) {
+            Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell) => true,
+            Some(TypeForm::TypeParameter { parameter }) => matches!(
+                self.required_owner(OwnerKey::TypeParameter(parameter), "owned local parameter")?,
+                OwnerRecord::TypeParameter(p) if p.constraints == crate::platform::kernel::TypeParameterConstraints::Owned
+            ),
+            _ => false,
+        })
+    }
     fn compile_code(
         &mut self,
         root: ExpressionId,
@@ -1349,10 +1440,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     None
                 };
                 let memory = if let Some(ty) = ty {
-                    matches!(
-                        self.unit.canonical.code_type(ty)?.value.map(|t| t.form),
-                        Some(TypeForm::ByteBuffer)
-                    )
+                    self.unit.owned_local_type(ty)?
                 } else {
                     false
                 };
@@ -1412,10 +1500,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     };
                     let record = self.binding(*binding, BindingKind::Let)?;
                     if let Some(ty) = record.declared_type
-                        && matches!(
-                            self.unit.canonical.code_type(ty)?.value.map(|t| t.form),
-                            Some(TypeForm::ByteBuffer)
-                        )
+                        && self.unit.owned_local_type(ty)?
                     {
                         let local = self.locals[reference];
                         self.push(CompiledInstruction::Unit)?;
@@ -1432,6 +1517,64 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                         self.push(CompiledInstruction::Drop)?;
                     }
                 }
+            }
+            ExpressionOperation::ImplementationCall {
+                function,
+                type_arguments,
+                implementations,
+                arguments,
+            } => {
+                let uses = self.unit.function_parameter_uses(function)?;
+                if uses.len() != arguments.len() {
+                    return Err(compiler_corrupt(
+                        "compiler_call_argument_count",
+                        "implementation call arity",
+                    ));
+                }
+                for operand in &implementations {
+                    self.unit.implementation_operand(*operand)?;
+                }
+                let function = self.unit.tables.declaration(function)?;
+                let type_arguments = type_arguments
+                    .into_iter()
+                    .map(|ty| self.unit.tables.ty(ty))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let count = u32_count("implementation call arguments", arguments.len())?;
+                for (argument, use_mode) in arguments.into_iter().zip(uses) {
+                    self.expression_with_use(argument, depth, use_mode)?;
+                }
+                self.push(CompiledInstruction::ImplementationCall {
+                    function,
+                    type_arguments,
+                    implementations,
+                    arguments: count,
+                })?;
+            }
+            ExpressionOperation::MethodCall {
+                witness,
+                contract,
+                method,
+                arguments,
+            } => {
+                self.unit.implementation_operand(witness)?;
+                self.unit.tables.declaration(contract)?;
+                let signature = self.unit.owned_method(contract, method)?;
+                if signature.parameters.len() != arguments.len() {
+                    return Err(compiler_corrupt(
+                        "compiler_call_argument_count",
+                        "owned method arity",
+                    ));
+                }
+                let count = u32_count("method call arguments", arguments.len())?;
+                for (argument, parameter) in arguments.into_iter().zip(signature.parameters) {
+                    self.expression_with_use(argument, depth, parameter.use_mode)?;
+                }
+                self.push(CompiledInstruction::MethodCall {
+                    witness,
+                    contract,
+                    method,
+                    arguments: count,
+                })?;
             }
             ExpressionOperation::Call {
                 requirement_arguments,

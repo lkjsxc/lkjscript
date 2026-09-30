@@ -265,6 +265,7 @@ impl NormalizedValueSchema for BoundReferenceSchema {
 }
 
 pub struct ReferenceSignature {
+    has_implementations: bool,
     requirement_parameters: Vec<crate::platform::semantic_id::RequirementParameterId>,
     effect_parameters: Vec<crate::platform::semantic_id::EffectParameterId>,
     effect: FunctionEffect,
@@ -566,6 +567,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
             next_transaction: 0,
             transactions: BTreeMap::new(),
             calls_by_requirement: BTreeMap::new(),
+            implementation_scopes: Vec::new(),
             type_scopes: Vec::new(),
             effect_scopes: Vec::new(),
             requirement_scopes: Vec::new(),
@@ -669,10 +671,21 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
     }
 }
 
+#[path = "reference_implementations.rs"]
+mod implementations;
+
 struct ReferenceTransaction {
     binding: BindingId,
     generation: u64,
     transaction: Box<dyn NormalizedCapabilityTransaction>,
+}
+
+#[derive(Default)]
+struct ReferenceApplication<'a> {
+    types: &'a [TypeObjectDigest],
+    effects: &'a [EffectRow],
+    requirements: &'a [RequirementOperand],
+    implementations: &'a [DeclarationReference],
 }
 
 struct ReferenceState<'a> {
@@ -694,6 +707,10 @@ struct ReferenceState<'a> {
     next_transaction: u64,
     transactions: BTreeMap<RequirementReference, ReferenceTransaction>,
     calls_by_requirement: BTreeMap<RequirementReference, u64>,
+    implementation_scopes: Vec<(
+        DeclarationReference,
+        BTreeMap<crate::platform::semantic_id::ImplementationParameterId, DeclarationReference>,
+    )>,
     type_scopes: Vec<BTreeMap<TypeParameterId, TypeObjectDigest>>,
     effect_scopes: Vec<super::reference_effects::Bindings>,
     requirement_scopes: Vec<super::reference_effects::RequirementBindings>,
@@ -710,6 +727,8 @@ enum ReferenceStep {
 /// One internal transition, constructed only by canonical call admission in this state.
 /// It is neither a callable value nor a reusable proof, and carries no component grant.
 struct AdmittedGraphCall {
+    implementations:
+        BTreeMap<crate::platform::semantic_id::ImplementationParameterId, DeclarationReference>,
     declaration: DeclarationReference,
     function: FunctionDeclaration,
     types: BTreeMap<TypeParameterId, TypeObjectDigest>,
@@ -1170,14 +1189,6 @@ impl ReferenceState<'_> {
     ) -> Result<CheckedValue, ExecutionError> {
         self.control.check()?;
         let type_arguments = self.resolve_type_arguments(type_arguments)?;
-        if type_arguments
-            .iter()
-            .any(|ty| !self.schema.buffer_free_types.contains(ty))
-        {
-            return Err(reference_type_error(
-                "ByteBuffer cannot substitute an unrestricted generic parameter",
-            ));
-        }
         let effect_arguments = self.resolve_effect_arguments(effect_arguments)?;
         let requirement_arguments = self.resolve_requirement_arguments(requirement_arguments)?;
         if self.call_depth >= self.policy.maximum_call_depth {
@@ -1240,7 +1251,21 @@ impl ReferenceState<'_> {
                 DeclarationPayload::External(external) => {
                     self.count_call(arguments.len())?;
                     let parameters = self.parameters(reference.package, &external.parameters)?;
-                    self.validate_call_resources(&parameters, &arguments)?;
+                    for ty in type_arguments {
+                        self.control.check()?;
+                        if !self.schema.buffer_free_types.contains(ty) {
+                            return Err(reference_type_error(
+                                "external ordinary type argument contains owned memory",
+                            ));
+                        }
+                    }
+                    let types = external
+                        .type_parameters
+                        .iter()
+                        .copied()
+                        .zip(type_arguments.iter().copied())
+                        .collect();
+                    self.validate_call_resources(&parameters, &types, &arguments)?;
                     if type_arguments.len() != external.type_parameters.len()
                         || !effect_arguments.is_empty()
                         || !requirement_arguments.is_empty()
@@ -1254,6 +1279,7 @@ impl ReferenceState<'_> {
                         ))
                     } else {
                         let signature = ReferenceSignature {
+                            has_implementations: false,
                             requirement_parameters: Vec::new(),
                             effect_parameters: Vec::new(),
                             effect: FunctionEffect::Pure,
@@ -1267,6 +1293,7 @@ impl ReferenceState<'_> {
                         self.observation.external_calls =
                             self.observation.external_calls.saturating_add(1);
                         let value = if external.implementation.as_str().starts_with("core.buffer.")
+                            || external.implementation.as_str().starts_with("core.cell.")
                         {
                             self.checked_intrinsic(
                                 &signature,
@@ -1350,6 +1377,32 @@ impl ReferenceState<'_> {
         requirements: &[RequirementOperand],
         arguments: Vec<CheckedValue>,
     ) -> Result<AdmittedGraphCall, ExecutionError> {
+        self.admit_graph_call_with_implementations(
+            declaration,
+            function,
+            arguments,
+            ReferenceApplication {
+                types,
+                effects,
+                requirements,
+                implementations: &[],
+            },
+        )
+    }
+
+    fn admit_graph_call_with_implementations(
+        &mut self,
+        declaration: DeclarationReference,
+        function: FunctionDeclaration,
+        arguments: Vec<CheckedValue>,
+        application: ReferenceApplication<'_>,
+    ) -> Result<AdmittedGraphCall, ExecutionError> {
+        let ReferenceApplication {
+            types,
+            effects,
+            requirements,
+            implementations: supplied,
+        } = application;
         self.control.check()?;
         if arguments.len() != function.parameters.len()
             || types.len() != function.type_parameters.len()
@@ -1362,10 +1415,23 @@ impl ReferenceState<'_> {
         }
         let constraints =
             self.type_parameter_constraints(declaration, &function.type_parameters)?;
-        if constraints.iter().zip(types).any(|(constraint, ty)| {
-            *constraint == crate::platform::kernel::TypeParameterConstraints::CaptureSafe
-                && !self.schema.capture_safe_types.contains(ty)
-        }) {
+        if constraints
+            .iter()
+            .zip(types)
+            .any(|(constraint, ty)| match constraint {
+                crate::platform::kernel::TypeParameterConstraints::Owned => !matches!(
+                    self.schema.types.get(ty).map(|t| &t.form),
+                    Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell)
+                ),
+                crate::platform::kernel::TypeParameterConstraints::None => {
+                    !self.schema.buffer_free_types.contains(ty)
+                }
+                crate::platform::kernel::TypeParameterConstraints::CaptureSafe => {
+                    !self.schema.buffer_free_types.contains(ty)
+                        || !self.schema.capture_safe_types.contains(ty)
+                }
+            })
+        {
             return Err(reference_type_error(
                 "canonical callable type arguments fail capture-safe constraints",
             ));
@@ -1384,19 +1450,21 @@ impl ReferenceState<'_> {
             Some(row)
         };
         let parameters = self.parameters(declaration.package, &function.parameters)?;
-        self.validate_call_resources(&parameters, &arguments)?;
         let types = function
             .type_parameters
             .iter()
             .copied()
             .zip(types.iter().copied())
             .collect::<BTreeMap<_, _>>();
+        self.validate_call_resources(&parameters, &types, &arguments)?;
         if types.len() != function.type_parameters.len() {
             return Err(reference_type_error(
                 "function type parameters are not unique",
             ));
         }
+        let implementations = self.implementation_bindings(&function, &types, supplied)?;
         Ok(AdmittedGraphCall {
+            implementations,
             declaration,
             function,
             types,
@@ -1422,6 +1490,8 @@ impl ReferenceState<'_> {
             .collect::<BTreeMap<_, _>>();
         self.control.check()?;
         self.active_package = target.declaration.package;
+        self.implementation_scopes
+            .push((target.declaration, target.implementations));
         self.type_scopes.push(target.types);
         self.effect_scopes.push(target.effects);
         self.requirement_scopes.push(target.requirements);
@@ -1442,13 +1512,14 @@ impl ReferenceState<'_> {
         let result = self.evaluate_tail(target.function.body, &mut locals);
         let result = result.and_then(|step| {
             if let ReferenceStep::Value(value) = &step {
-                let expected = matches!(
-                    self.schema
-                        .types
-                        .get(&target.function.result)
-                        .map(|t| &t.form),
-                    Some(TypeForm::ByteBuffer)
-                );
+                let memory_form = direct_memory_type(
+                    &self.schema.types,
+                    target.function.result,
+                    self.type_scopes
+                        .last()
+                        .ok_or_else(|| reference_type_error("missing type scope"))?,
+                )?;
+                let expected = memory_form.is_some();
                 if (value.ownership(&self.schema, &mut self.observation.value_work)?
                     == Ownership::Memory)
                     != expected
@@ -1457,13 +1528,19 @@ impl ReferenceState<'_> {
                         "reference memory result contract mismatch",
                     ));
                 }
-                if let NormalizedValue::ByteBuffer(buffer) = value.raw() {
-                    buffer.validate(self.memory_domain, true)?;
+                if value.raw().memory_form().is_some() {
+                    if value.raw().memory_form().as_ref() != memory_form.as_ref() {
+                        return Err(reference_type_error(
+                            "memory result representation mismatch",
+                        ));
+                    }
+                    value.raw().memory_validate(self.memory_domain, true)?;
                 }
             }
             Ok(step)
         });
         self.local_counts.pop();
+        self.implementation_scopes.pop();
         self.type_scopes.pop();
         self.effect_scopes.pop();
         self.requirement_scopes.pop();
@@ -1474,14 +1551,13 @@ impl ReferenceState<'_> {
     fn validate_call_resources(
         &mut self,
         parameters: &[ParameterRecord],
+        substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
         arguments: &[CheckedValue],
     ) -> Result<(), ExecutionError> {
         let mut resource_seen = false;
         for (index, (parameter, argument)) in parameters.iter().zip(arguments).enumerate() {
-            if matches!(
-                self.schema.types.get(&parameter.ty).map(|t| &t.form),
-                Some(TypeForm::ByteBuffer)
-            ) {
+            let memory_form = direct_memory_type(&self.schema.types, parameter.ty, substitutions)?;
+            if memory_form.is_some() {
                 if parameter.resource_requirement.is_some()
                     || parameter.use_mode == ParameterUse::Unrestricted
                     || argument.ownership(&self.schema, &mut self.observation.value_work)?
@@ -1489,14 +1565,16 @@ impl ReferenceState<'_> {
                 {
                     return Err(reference_type_error("invalid memory call signature"));
                 }
-                let NormalizedValue::ByteBuffer(buffer) = argument.raw() else {
-                    return Err(reference_type_error("memory call token"));
-                };
-                buffer.validate(
+                if argument.raw().memory_form().as_ref() != memory_form.as_ref() {
+                    return Err(reference_type_error("memory call representation mismatch"));
+                }
+                argument.raw().memory_validate(
                     self.memory_domain,
                     parameter.use_mode == ParameterUse::Consume,
                 )?;
-                if (parameter.use_mode == ParameterUse::Borrow) != buffer.is_borrowed() {
+                if (parameter.use_mode == ParameterUse::Borrow)
+                    != argument.raw().memory_is_borrowed()
+                {
                     return Err(reference_type_error("memory argument loan mode mismatch"));
                 }
                 continue;
@@ -1680,6 +1758,29 @@ impl ReferenceState<'_> {
                     }
                     expression = arm.body;
                 }
+                ExpressionOperation::ImplementationCall {
+                    function,
+                    type_arguments,
+                    implementations,
+                    arguments,
+                } => {
+                    let uses = self.function_parameter_uses(function)?;
+                    let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
+                    let target =
+                        self.witness_call(function, &type_arguments, &implementations, arguments)?;
+                    return self.transfer_graph_call(target, locals);
+                }
+                ExpressionOperation::MethodCall {
+                    witness,
+                    contract,
+                    method,
+                    arguments,
+                } => {
+                    let function = self.method_target(witness, contract, method)?;
+                    let uses = self.function_parameter_uses(function)?;
+                    let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
+                    return self.tail_step(function, &[], &[], &[], arguments, locals);
+                }
                 ExpressionOperation::Call {
                     requirement_arguments,
                     effect_arguments,
@@ -1750,38 +1851,7 @@ impl ReferenceState<'_> {
                 &requirements,
                 arguments,
             )?;
-            self.charge_allocation(std::mem::size_of::<AdmittedGraphCall>() as u64)?;
-            self.control.check()?;
-            if locals
-                .values()
-                .any(|v| matches!(v.raw(),NormalizedValue::ByteBuffer(b)if b.owns_live_loans()))
-            {
-                if self.call_depth >= self.policy.maximum_call_depth {
-                    return Err(reference_resource(
-                        "normalized_reference_call_depth",
-                        "retained memory owner exceeded call-depth limit",
-                    ));
-                }
-                self.call_depth += 1;
-                self.observation.maximum_call_depth =
-                    self.observation.maximum_call_depth.max(self.call_depth);
-                let package = self.active_package;
-                let mut step = self.enter_graph_call(target, false);
-                let result = loop {
-                    match step {
-                        Ok(ReferenceStep::Value(value)) => break Ok(ReferenceStep::Value(value)),
-                        Ok(ReferenceStep::Tail(target)) => {
-                            step = self.enter_graph_call(*target, true);
-                        }
-                        Err(error) => break Err(error),
-                    }
-                };
-                self.active_package = package;
-                self.call_depth -= 1;
-                result
-            } else {
-                Ok(ReferenceStep::Tail(Box::new(target)))
-            }
+            self.transfer_graph_call(target, locals)
         } else {
             self.call_declaration(
                 declaration,
@@ -1791,6 +1861,42 @@ impl ReferenceState<'_> {
                 arguments,
             )
             .map(ReferenceStep::Value)
+        }
+    }
+
+    fn transfer_graph_call(
+        &mut self,
+        target: AdmittedGraphCall,
+        locals: &BTreeMap<LocalValueReference, CheckedValue>,
+    ) -> Result<ReferenceStep, ExecutionError> {
+        self.charge_allocation(std::mem::size_of::<AdmittedGraphCall>() as u64)?;
+        self.control.check()?;
+        if locals.values().any(|v| v.raw().memory_owns_live_loans()) {
+            if self.call_depth >= self.policy.maximum_call_depth {
+                return Err(reference_resource(
+                    "normalized_reference_call_depth",
+                    "retained memory owner exceeded call-depth limit",
+                ));
+            }
+            self.call_depth += 1;
+            self.observation.maximum_call_depth =
+                self.observation.maximum_call_depth.max(self.call_depth);
+            let package = self.active_package;
+            let mut step = self.enter_graph_call(target, false);
+            let result = loop {
+                match step {
+                    Ok(ReferenceStep::Value(value)) => break Ok(ReferenceStep::Value(value)),
+                    Ok(ReferenceStep::Tail(target)) => {
+                        step = self.enter_graph_call(*target, true);
+                    }
+                    Err(error) => break Err(error),
+                }
+            };
+            self.active_package = package;
+            self.call_depth -= 1;
+            result
+        } else {
+            Ok(ReferenceStep::Tail(Box::new(target)))
         }
     }
 
@@ -1864,6 +1970,29 @@ impl ReferenceState<'_> {
             (std::mem::size_of::<CheckedValue>() - std::mem::size_of::<NormalizedValue>()) as u64,
         )?;
         match operation {
+            ExpressionOperation::ImplementationCall {
+                function,
+                type_arguments,
+                implementations,
+                arguments,
+            } => {
+                let uses = self.function_parameter_uses(function)?;
+                let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
+                let target =
+                    self.witness_call(function, &type_arguments, &implementations, arguments)?;
+                self.execute_witness_call(target)
+            }
+            ExpressionOperation::MethodCall {
+                witness,
+                contract,
+                method,
+                arguments,
+            } => {
+                let function = self.method_target(witness, contract, method)?;
+                let uses = self.function_parameter_uses(function)?;
+                let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
+                self.call_declaration(function, &[], &[], &[], arguments)
+            }
             ExpressionOperation::Unit {} => {
                 CheckedValue::primitive(&self.schema, NormalizedValue::Unit)
             }
@@ -1883,17 +2012,16 @@ impl ReferenceState<'_> {
                 CheckedValue::primitive(&self.schema, NormalizedValue::StaticText(value))
             }),
             ExpressionOperation::Local { value } => {
-                if locals
-                    .get(&value)
-                    .is_some_and(|v| matches!(v.raw(), NormalizedValue::ByteBuffer(_)))
-                {
+                if locals.get(&value).is_some_and(|v| {
+                    matches!(
+                        v.raw(),
+                        NormalizedValue::ByteBuffer(_) | NormalizedValue::OwnedI64Cell(_)
+                    )
+                }) {
                     let result = locals
                         .remove(&value)
                         .ok_or_else(|| reference_type_error("missing memory owner"))?;
-                    let NormalizedValue::ByteBuffer(buffer) = result.raw() else {
-                        return Err(reference_type_error("memory local token"));
-                    };
-                    buffer.validate(self.memory_domain, true)?;
+                    result.raw().memory_validate(self.memory_domain, true)?;
                     return Ok(result);
                 }
                 let value = locals.get(&value).ok_or_else(|| {
@@ -1989,6 +2117,11 @@ impl ReferenceState<'_> {
                 type_arguments,
             } => {
                 let signature = self.function_signature(function)?;
+                if signature.has_implementations {
+                    return Err(reference_type_error(
+                        "static witness templates cannot become callable values",
+                    ));
+                }
                 if signature
                     .parameters
                     .iter()
@@ -2305,8 +2438,10 @@ impl ReferenceState<'_> {
                 "canonical parameter use disagrees with its runtime affine value",
             ));
         }
-        if let NormalizedValue::ByteBuffer(buffer) = value.raw() {
-            buffer.validate(self.memory_domain, use_mode == ParameterUse::Consume)?;
+        if value.raw().memory_form().is_some() {
+            value
+                .raw()
+                .memory_validate(self.memory_domain, use_mode == ParameterUse::Consume)?;
         }
         if let NormalizedValue::Resource(handle) = value.raw() {
             if use_mode == ParameterUse::Consume {
@@ -2362,6 +2497,7 @@ impl ReferenceState<'_> {
         reference: DeclarationReference,
     ) -> Result<ReferenceSignature, ExecutionError> {
         let (
+            has_implementations,
             type_parameters,
             effect_parameters,
             requirement_parameters,
@@ -2371,6 +2507,7 @@ impl ReferenceState<'_> {
             pure,
         ) = match self.declaration(reference)?.payload {
             DeclarationPayload::Function(function) => (
+                !function.implementation_parameters.is_empty(),
                 function.type_parameters,
                 function.effect_parameters,
                 function.requirement_parameters,
@@ -2380,6 +2517,7 @@ impl ReferenceState<'_> {
                 matches!(function.effect, FunctionEffect::Pure),
             ),
             DeclarationPayload::External(external) => (
+                false,
                 external.type_parameters,
                 Vec::new(),
                 Vec::new(),
@@ -2402,6 +2540,7 @@ impl ReferenceState<'_> {
         let type_parameter_constraints =
             self.type_parameter_constraints(reference, &type_parameters)?;
         Ok(ReferenceSignature {
+            has_implementations,
             requirement_parameters,
             effect_parameters,
             effect,
@@ -4443,7 +4582,7 @@ fn reference_value_cost(value: &NormalizedValue) -> Result<(u64, u64), Execution
     let mut items = 0_u64;
     while let Some(value) = pending.pop() {
         match value {
-            NormalizedValue::ByteBuffer(_) => {
+            NormalizedValue::ByteBuffer(_) | NormalizedValue::OwnedI64Cell(_) => {
                 return Err(ExecutionError::resource(
                     "normalized_buffer_boundary",
                     "ByteBuffer cannot cross raw/adapter boundaries",
@@ -4621,4 +4760,28 @@ pub(super) fn reference_resource(code: &'static str, message: &'static str) -> E
 
 pub(super) fn reference_error(code: &'static str, message: impl Into<String>) -> ExecutionError {
     ExecutionError::new(ExecutionFailureClass::Infrastructure, code, message)
+}
+
+fn direct_memory_type(
+    types: &BTreeMap<TypeObjectDigest, crate::platform::kernel::TypeObject>,
+    mut ty: TypeObjectDigest,
+    substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+) -> Result<Option<TypeForm>, ExecutionError> {
+    for _ in 0..=substitutions.len() {
+        match &types
+            .get(&ty)
+            .ok_or_else(|| reference_type_error("missing direct memory type metadata"))?
+            .form
+        {
+            TypeForm::ByteBuffer => return Ok(Some(TypeForm::ByteBuffer)),
+            TypeForm::OwnedI64Cell => return Ok(Some(TypeForm::OwnedI64Cell)),
+            TypeForm::TypeParameter { parameter } => {
+                ty = *substitutions
+                    .get(parameter)
+                    .ok_or_else(|| reference_type_error("unbound memory type parameter"))?;
+            }
+            _ => return Ok(None),
+        }
+    }
+    Err(reference_type_error("cyclic memory type substitution"))
 }

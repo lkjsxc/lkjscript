@@ -141,6 +141,8 @@ impl NormalizedReferenceSchema {
                             declaration: *id,
                         };
                         match &declaration.payload {
+                            DeclarationPayload::OwnedContract(_)
+                            | DeclarationPayload::OwnedImplementation(_) => {}
                             DeclarationPayload::Function(_)
                             | DeclarationPayload::External(_)
                             | DeclarationPayload::Constant { .. } => {

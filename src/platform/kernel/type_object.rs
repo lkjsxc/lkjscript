@@ -20,7 +20,9 @@ pub struct TypeObject {
 impl TypeObject {
     pub fn new(form: TypeForm) -> Result<Self, Diagnostic> {
         let object = Self {
-            contract_version: if matches!(form, TypeForm::ByteBuffer) {
+            contract_version: if matches!(form, TypeForm::OwnedI64Cell) {
+                super::contract::OWNED_CELL_TYPE_CONTRACT_VERSION
+            } else if matches!(form, TypeForm::ByteBuffer) {
                 super::contract::BYTE_BUFFER_TYPE_CONTRACT_VERSION
             } else if matches!(form, TypeForm::F64) {
                 super::contract::F64_TYPE_CONTRACT_VERSION
@@ -38,7 +40,9 @@ impl TypeObject {
     }
 
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
-        let expected = if matches!(self.form, TypeForm::ByteBuffer) {
+        let expected = if matches!(self.form, TypeForm::OwnedI64Cell) {
+            super::contract::OWNED_CELL_TYPE_CONTRACT_VERSION
+        } else if matches!(self.form, TypeForm::ByteBuffer) {
             super::contract::BYTE_BUFFER_TYPE_CONTRACT_VERSION
         } else if matches!(self.form, TypeForm::F64) {
             super::contract::F64_TYPE_CONTRACT_VERSION
@@ -85,6 +89,7 @@ impl TypeObject {
             | TypeForm::I64
             | TypeForm::F64
             | TypeForm::ByteBuffer
+            | TypeForm::OwnedI64Cell
             | TypeForm::Bytes
             | TypeForm::Text
             | TypeForm::StaticText
@@ -141,6 +146,7 @@ impl TypeObject {
             | TypeForm::I64
             | TypeForm::F64
             | TypeForm::ByteBuffer
+            | TypeForm::OwnedI64Cell
             | TypeForm::Bytes
             | TypeForm::Text
             | TypeForm::StaticText
@@ -210,6 +216,7 @@ pub enum TypeForm {
     /// A disjoint envelope preserves every predecessor type object's bytes.
     F64,
     ByteBuffer,
+    OwnedI64Cell,
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]

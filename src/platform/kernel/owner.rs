@@ -162,6 +162,14 @@ impl OwnerRecord {
             }
             Self::TypeParameter(record) => {
                 validate_header_domain(record.header, OwnerKind::TypeParameter)?;
+                if record.constraints == TypeParameterConstraints::Owned
+                    && record.header.contract_version < 18
+                {
+                    return Err(owner_error(
+                        "kernel_owned_generation",
+                        "owned constraint requires Graph 18",
+                    ));
+                }
                 validate_names([&record.name])
             }
             Self::Field(record) => {
@@ -290,7 +298,20 @@ impl DeclarationRecord {
     fn validate_local(&self) -> Result<(), Diagnostic> {
         validate_header_domain(self.header, self.expected_kind())?;
         validate_names([&self.name])?;
+        if self.header.contract_version < 18
+            && (matches!(
+                self.payload,
+                DeclarationPayload::OwnedContract(_) | DeclarationPayload::OwnedImplementation(_)
+            ) || matches!(&self.payload, DeclarationPayload::Function(f) if !f.implementation_parameters.is_empty()))
+        {
+            return Err(owner_error(
+                "kernel_owned_generation",
+                "owned contracts require Graph 18",
+            ));
+        }
         match &self.payload {
+            DeclarationPayload::OwnedContract(c) => c.validate_local(),
+            DeclarationPayload::OwnedImplementation(i) => i.validate_local(),
             DeclarationPayload::Record {
                 fields,
                 type_parameters,
@@ -324,6 +345,8 @@ impl DeclarationRecord {
 
     pub fn expected_kind(&self) -> OwnerKind {
         match &self.payload {
+            DeclarationPayload::OwnedContract(_) => OwnerKind::OwnedContract,
+            DeclarationPayload::OwnedImplementation(_) => OwnerKind::OwnedImplementation,
             DeclarationPayload::Record { .. } => OwnerKind::Record,
             DeclarationPayload::Variant { .. } => OwnerKind::Variant,
             DeclarationPayload::Interface { .. } => OwnerKind::Interface,
@@ -343,7 +366,14 @@ impl DeclarationRecord {
             DeclarationPayload::External(function) => {
                 vec![function.result]
             }
-            DeclarationPayload::Function(function) => vec![function.result],
+            DeclarationPayload::Function(function) => function
+                .implementation_parameters
+                .iter()
+                .map(|p| p.self_type)
+                .chain([function.result])
+                .collect(),
+            DeclarationPayload::OwnedContract(c) => c.type_roots(),
+            DeclarationPayload::OwnedImplementation(i) => vec![i.self_type],
             DeclarationPayload::Constant { ty, .. } => vec![*ty],
             DeclarationPayload::Record { .. }
             | DeclarationPayload::Variant { .. }
@@ -402,6 +432,8 @@ pub enum DeclarationPayload {
         expected: ExpressionId,
         comparison: ComparisonPolicy,
     },
+    OwnedContract(super::OwnedContract),
+    OwnedImplementation(super::OwnedImplementation),
 }
 
 impl DeclarationPayload {
@@ -413,6 +445,7 @@ impl DeclarationPayload {
             | Self::Variant {
                 type_parameters, ..
             } => type_parameters,
+            Self::OwnedContract(c) => std::slice::from_ref(&c.self_parameter),
             Self::Function(function) => &function.type_parameters,
             Self::External(function) => &function.type_parameters,
             _ => &[],
@@ -440,6 +473,7 @@ impl ExternalDeclaration {
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct FunctionDeclaration {
+    pub implementation_parameters: Vec<super::ImplementationParameter>,
     pub requirement_parameters: Vec<crate::platform::semantic_id::RequirementParameterId>,
     pub effect_parameters: Vec<EffectParameterId>,
     pub type_parameters: Vec<TypeParameterId>,
@@ -528,6 +562,7 @@ pub enum TypeParameterConstraints {
     #[default]
     None,
     CaptureSafe,
+    Owned,
 }
 
 impl TypeParameterConstraints {
@@ -535,6 +570,7 @@ impl TypeParameterConstraints {
         match self {
             Self::None => 0,
             Self::CaptureSafe => 1,
+            Self::Owned => 2,
         }
     }
 
@@ -542,6 +578,7 @@ impl TypeParameterConstraints {
         match self {
             Self::None => "none",
             Self::CaptureSafe => "capture-safe",
+            Self::Owned => "owned",
         }
     }
 }
@@ -557,6 +594,7 @@ impl<Context> Decode<Context> for TypeParameterConstraints {
         match u8::decode(decoder)? {
             0 => Ok(Self::None),
             1 => Ok(Self::CaptureSafe),
+            2 => Ok(Self::Owned),
             _ => Err(DecodeError::Other("unknown type-parameter constraint set")),
         }
     }
@@ -573,9 +611,9 @@ impl<'de, Context> BorrowDecode<'de, Context> for TypeParameterConstraints {
 impl Serialize for TypeParameterConstraints {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeSeq;
-        let mut sequence = serializer.serialize_seq(Some(usize::from(self.tag())))?;
-        if *self == Self::CaptureSafe {
-            sequence.serialize_element("capture-safe")?;
+        let mut sequence = serializer.serialize_seq(Some(usize::from(*self != Self::None)))?;
+        if *self != Self::None {
+            sequence.serialize_element(self.name())?;
         }
         sequence.end()
     }
@@ -596,7 +634,7 @@ impl<'de> Deserialize<'de> for TypeParameterConstraints {
                 let Some(value) = sequence.next_element::<String>()? else {
                     return Ok(TypeParameterConstraints::None);
                 };
-                if value != "capture-safe" {
+                if value != "capture-safe" && value != "owned" {
                     return Err(serde::de::Error::custom(
                         "unknown type-parameter constraint",
                     ));
@@ -606,7 +644,11 @@ impl<'de> Deserialize<'de> for TypeParameterConstraints {
                         "duplicate or unknown type-parameter constraint",
                     ));
                 }
-                Ok(TypeParameterConstraints::CaptureSafe)
+                Ok(if value == "owned" {
+                    TypeParameterConstraints::Owned
+                } else {
+                    TypeParameterConstraints::CaptureSafe
+                })
             }
         }
         deserializer.deserialize_seq(ConstraintSet)
@@ -1776,6 +1818,8 @@ fn validate_header_domain(header: OwnerHeader, kind: OwnerKind) -> Result<(), Di
     let valid_domain = matches!(
         (header.owner, kind),
         (OwnerKey::Module(_), OwnerKind::Module)
+            | (OwnerKey::Declaration(_), OwnerKind::OwnedContract)
+            | (OwnerKey::Declaration(_), OwnerKind::OwnedImplementation)
             | (OwnerKey::Declaration(_), OwnerKind::Record)
             | (OwnerKey::Declaration(_), OwnerKind::Variant)
             | (OwnerKey::Declaration(_), OwnerKind::Interface)

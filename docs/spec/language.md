@@ -6,6 +6,8 @@ Status: normative for the typed meaning graph.
 
 Concrete owned byte storage and synchronous scoped read borrowing are specified in
 [owned byte buffers](owned-byte-buffers.md).
+The [first-order owned abstraction](owned-generics.md) adds explicit Owned parameters,
+sealed scalar cells and nominal contracts with explicitly selected implementation witnesses.
 
 ### Raw byte observation
 

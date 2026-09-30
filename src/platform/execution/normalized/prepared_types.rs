@@ -13,6 +13,9 @@ use crate::platform::kernel::{TypeForm, TypeObject, TypeObjectDigest, encode_typ
 use crate::platform::semantic_id::TypeParameterId;
 use std::collections::{BTreeMap, BTreeSet};
 
+#[path = "prepared_implementations.rs"]
+mod implementations;
+
 type Context = (FunctionIndex, Vec<TypeObjectDigest>);
 type EffectBindings =
     BTreeMap<crate::platform::kernel::EffectParameterReference, crate::platform::kernel::EffectRow>;
@@ -157,24 +160,45 @@ pub(super) fn complete(program: &mut NormalizedProgram) -> Result<(), Diagnostic
     )
 }
 
+pub(super) fn complete_with_implementations(
+    program: &mut NormalizedProgram,
+    units: &BTreeMap<
+        (
+            crate::platform::kernel::PackageId,
+            crate::platform::kernel::OwnerKey,
+        ),
+        crate::platform::compiler::CompilationUnit,
+    >,
+    control: &crate::platform::execution::ExecutionControl,
+) -> Result<(), Diagnostic> {
+    let mut work = Budget::new(control);
+    implementations::close(program, units, &mut work)?;
+    complete_budgeted(program, &mut work)
+}
+
+#[cfg(test)]
 pub(super) fn complete_controlled(
     program: &mut NormalizedProgram,
     control: &crate::platform::execution::ExecutionControl,
 ) -> Result<(), Diagnostic> {
-    let mut pending = BTreeSet::new();
     let mut work = Budget::new(control);
-    close_effect_applications(program, &mut work)?;
+    complete_budgeted(program, &mut work)
+}
+
+fn complete_budgeted(
+    program: &mut NormalizedProgram,
+    work: &mut Budget<'_>,
+) -> Result<(), Diagnostic> {
+    let mut pending = BTreeSet::new();
+    close_effect_applications(program, work)?;
     // Derive dispatch only after each exact effect application and its callees are closed.
-    super::prepare::derive_tail_dispatch(
-        std::sync::Arc::make_mut(&mut program.functions),
-        &mut work,
-    )?;
+    super::prepare::derive_tail_dispatch(std::sync::Arc::make_mut(&mut program.functions), work)?;
     for (index, function) in program.functions.iter().enumerate() {
         if function.type_parameters.is_empty()
             && function.effect_parameters.is_empty()
             && function.requirement_parameters.is_empty()
         {
-            step(&mut work)?;
+            step(work)?;
             work.node::<Context>()?;
             pending.insert((
                 FunctionIndex(
@@ -192,7 +216,7 @@ pub(super) fn complete_controlled(
             &empty,
             &mut program.types,
             &mut pending,
-            &mut work,
+            work,
             &program.records,
             &program.variants,
         )?;
@@ -201,7 +225,7 @@ pub(super) fn complete_controlled(
             &empty,
             &mut program.types,
             &mut pending,
-            &mut work,
+            work,
             &program.records,
             &program.variants,
         )?;
@@ -215,7 +239,7 @@ pub(super) fn complete_controlled(
                 &empty,
                 &mut program.types,
                 &mut pending,
-                &mut work,
+                work,
                 &program.records,
                 &program.variants,
             )?;
@@ -223,7 +247,7 @@ pub(super) fn complete_controlled(
     }
     let mut visited = BTreeSet::new();
     while let Some((index, arguments)) = pending.pop_first() {
-        step(&mut work)?;
+        step(work)?;
         work.node::<Context>()?;
         work.reserve::<TypeObjectDigest>(arguments.len())?;
         if !visited.insert((index, arguments.clone())) {
@@ -237,7 +261,7 @@ pub(super) fn complete_controlled(
             return Err(missing());
         }
         for _ in &arguments {
-            step(&mut work)?;
+            step(work)?;
             work.node::<(TypeParameterId, TypeObjectDigest)>()?;
         }
         let bindings = function
@@ -246,9 +270,9 @@ pub(super) fn complete_controlled(
             .copied()
             .zip(arguments)
             .collect();
-        substitute(&mut program.types, function.result, &bindings, 0, &mut work)?;
+        substitute(&mut program.types, function.result, &bindings, 0, work)?;
         for parameter in function.parameters.iter() {
-            substitute(&mut program.types, parameter.ty, &bindings, 0, &mut work)?;
+            substitute(&mut program.types, parameter.ty, &bindings, 0, work)?;
         }
         if let NormalizedFunctionBody::Code(code) = &function.body {
             calls(
@@ -256,22 +280,22 @@ pub(super) fn complete_controlled(
                 &bindings,
                 &mut program.types,
                 &mut pending,
-                &mut work,
+                work,
                 &program.records,
                 &program.variants,
             )?;
         }
     }
-    complete_nominal_layouts(program, &mut work)?;
+    complete_nominal_layouts(program, work)?;
     program.work.type_objects = program.types.len() as u64;
-    program.capture_safe_types = property_types(program, &mut work, Property::Capture)?;
-    program.ordinary_types = property_types(program, &mut work, Property::Ordinary)?;
-    program.buffer_free_types = property_types(program, &mut work, Property::BufferFree)?;
-    program.comparable_types = property_types(program, &mut work, Property::Equality)?;
-    program.application_free_types = property_types(program, &mut work, Property::NoApplication)?;
+    program.capture_safe_types = property_types(program, work, Property::Capture)?;
+    program.ordinary_types = property_types(program, work, Property::Ordinary)?;
+    program.buffer_free_types = property_types(program, work, Property::BufferFree)?;
+    program.comparable_types = property_types(program, work, Property::Equality)?;
+    program.application_free_types = property_types(program, work, Property::NoApplication)?;
     let mut bytes = 0usize;
     for function in program.functions.iter() {
-        step(&mut work)?;
+        step(work)?;
         bytes = function
             .type_parameter_constraints
             .len()
@@ -289,7 +313,7 @@ pub(super) fn complete_controlled(
             .ok_or_else(missing)?;
     }
     work.reserve::<u8>(bytes)?;
-    super::local_moves::derive_program(program, &mut work)?;
+    super::local_moves::derive_program(program, work)?;
     program.capture_proof_bytes = work.bytes;
     program.work.type_derivation_steps = work.steps as u64;
     program.work.type_metadata_bytes = program.capture_proof_bytes as u64;
@@ -643,7 +667,9 @@ fn property_types(
             Ok(())
         };
         match &object.form {
-            TypeForm::ByteBuffer if property == Property::BufferFree => admitted = false,
+            TypeForm::ByteBuffer | TypeForm::OwnedI64Cell if property == Property::BufferFree => {
+                admitted = false
+            }
             _ if property == Property::BufferFree => {
                 for ty in object.child_types() {
                     child(ty)?;
@@ -653,6 +679,7 @@ fn property_types(
                 admitted = false;
             }
             TypeForm::ByteBuffer
+            | TypeForm::OwnedI64Cell
             | TypeForm::Secret
             | TypeForm::Stream { .. }
             | TypeForm::CapabilityResource { .. }
@@ -671,6 +698,7 @@ fn property_types(
             TypeForm::Function { .. }
             | TypeForm::TaskFunction { .. }
             | TypeForm::ByteBuffer
+            | TypeForm::OwnedI64Cell
             | TypeForm::Secret
             | TypeForm::Stream { .. }
             | TypeForm::CapabilityResource { .. }
@@ -1168,7 +1196,9 @@ fn close_effect_applications(
         work,
     };
     for i in 0..closing.templates.len() {
-        if closing.templates[i].effect_parameters.is_empty()
+        if closing.templates[i].implementation_parameters.len()
+            == closing.templates[i].implementation_arguments.len()
+            && closing.templates[i].effect_parameters.is_empty()
             && closing.templates[i].requirement_parameters.is_empty()
         {
             closing.application(

@@ -1,0 +1,23 @@
+declarations.begin
+(units (module create hostile
+  (function create retire (visibility private)
+    (type-parameter create T (constraint owned))
+    (implementation-parameter implparam_40000000000000000000000000000001 ops abstraction::Storage T)
+    (parameter create value (type T) (use consume)) (returns Unit) (effect pure) (body (unit)))
+  (function create hostile-cell (visibility private) (returns Unit) (effect pure)
+    (body (if (bool true) (unit)
+      (let
+        (binding a (type OwnedI64Cell) (implementation-call abstraction::produce (types OwnedI64Cell) (implementations concrete@cell::Scalar) (i64 0)))
+        (binding b (type OwnedI64Cell) (implementation-call abstraction::produce (types OwnedI64Cell) (implementations concrete@cell::Scalar) (i64 128)))
+        (in (sequence
+          (implementation-call retire (types OwnedI64Cell) (implementations concrete@cell::Scalar) (local a))
+          (implementation-call retire (types OwnedI64Cell) (implementations concrete@cell::Scalar) (local b))))))))
+  (function create hostile-buffer (visibility private) (returns Unit) (effect pure)
+    (body (if (bool true) (unit)
+      (let
+        (binding a (type ByteBuffer) (implementation-call abstraction::produce (types ByteBuffer) (implementations concrete@buffer::Octets) (i64 0)))
+        (binding b (type ByteBuffer) (implementation-call abstraction::produce (types ByteBuffer) (implementations concrete@buffer::Octets) (i64 128)))
+        (in (sequence
+          (implementation-call retire (types ByteBuffer) (implementations concrete@buffer::Octets) (local a))
+          (implementation-call retire (types ByteBuffer) (implementations concrete@buffer::Octets) (local b))))))))))
+declarations.end

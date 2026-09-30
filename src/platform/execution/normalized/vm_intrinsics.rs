@@ -303,6 +303,71 @@ impl Machine<'_> {
     ) -> Result<CheckedValue, ExecutionError> {
         self.control.check()?;
         match implementation {
+            "core.cell.create" => {
+                let [scalar]: [CheckedValue; 1] = arguments
+                    .try_into()
+                    .map_err(|_| type_error("cell create arity"))?;
+                let NormalizedValue::I64(scalar) = scalar.into_raw() else {
+                    return Err(type_error("cell create type"));
+                };
+                self.charge_allocation(
+                    super::super::owned_i64_cell::OwnedI64Cell::ALLOCATION_BYTES,
+                )?;
+                self.control.check()?;
+                CheckedValue::memory(
+                    self.program,
+                    NormalizedValue::OwnedI64Cell(super::super::owned_i64_cell::OwnedI64Cell::new(
+                        self.memory_domain,
+                        scalar,
+                    )),
+                )
+            }
+            "core.cell.replace" => {
+                let [scalar, cell]: [CheckedValue; 2] = arguments
+                    .try_into()
+                    .map_err(|_| type_error("cell replace arity"))?;
+                let (NormalizedValue::I64(scalar), NormalizedValue::OwnedI64Cell(cell)) =
+                    (scalar.into_raw(), cell.into_raw())
+                else {
+                    return Err(type_error("cell replace types"));
+                };
+                cell.validate(self.memory_domain, true)?;
+                CheckedValue::memory(
+                    self.program,
+                    NormalizedValue::OwnedI64Cell(cell.replace(scalar, self.control)?),
+                )
+            }
+            "core.cell.read" => {
+                let [cell]: [CheckedValue; 1] = arguments
+                    .try_into()
+                    .map_err(|_| type_error("cell read arity"))?;
+                let NormalizedValue::OwnedI64Cell(cell) = cell.raw() else {
+                    return Err(type_error("cell read type"));
+                };
+                cell.validate(self.memory_domain, false)?;
+                if !cell.is_borrowed() {
+                    return Err(type_error("cell read requires a scoped loan"));
+                }
+                CheckedValue::scalar(self.program, NormalizedValue::I64(cell.read()?))
+            }
+            "core.cell.extract" | "core.cell.discard" => {
+                let [cell]: [CheckedValue; 1] = arguments
+                    .try_into()
+                    .map_err(|_| type_error("cell terminal arity"))?;
+                let NormalizedValue::OwnedI64Cell(cell) = cell.into_raw() else {
+                    return Err(type_error("cell terminal type"));
+                };
+                cell.validate(self.memory_domain, true)?;
+                let scalar = cell.extract()?;
+                CheckedValue::scalar(
+                    self.program,
+                    if implementation == "core.cell.extract" {
+                        NormalizedValue::I64(scalar)
+                    } else {
+                        NormalizedValue::Unit
+                    },
+                )
+            }
             "core.buffer.empty" => {
                 if !arguments.is_empty() {
                     return Err(type_error("buffer empty arity"));

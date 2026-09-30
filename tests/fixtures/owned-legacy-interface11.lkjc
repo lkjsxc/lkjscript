@@ -1,0 +1,16 @@
+request base=rev_2843db99014c112611c911d656483e9401d7d8e6586410958e42f782bffa03b6
+declarations.begin
+(units
+  (module create legacy
+    (constant create seed (visibility public) (type I64) (value (i64 7)))
+    (function create duplicate (visibility public)
+      (type-parameter create T)
+      (parameter create value (type T))
+      (returns T) (effect pure)
+      (body (sequence (local value) (local value))))
+    (function create answer (visibility public)
+      (returns I64) (effect pure) (body (constant seed)))
+    (component create console (visibility public)
+      (port create main (type (function () I64)) (function answer))))
+  (target create main (component legacy::console) (runner command) (port legacy::console::main)))
+declarations.end

@@ -372,6 +372,7 @@ impl Renderer<'_> {
             T::I64 {} => Some("I64"),
             T::F64 {} => Some("F64"),
             T::ByteBuffer {} => Some("ByteBuffer"),
+            T::OwnedI64Cell {} => Some("OwnedI64Cell"),
             T::Bytes {} => Some("Bytes"),
             T::Text {} => Some("Text"),
             T::StaticText {} => Some("StaticText"),
@@ -454,6 +455,20 @@ impl Renderer<'_> {
     fn typed_list(&mut self, head: &str, types: &[AuthoredType]) -> Result<String, Diagnostic> {
         Ok(format!("({head} {})", self.type_items(types)?))
     }
+    fn implementation_operand(
+        &mut self,
+        operand: &AuthoredImplementationOperand,
+    ) -> Result<String, Diagnostic> {
+        Ok(match operand {
+            AuthoredImplementationOperand::Concrete { implementation } => {
+                format!("concrete@{}", self.declaration(implementation)?)
+            }
+            AuthoredImplementationOperand::Parameter {
+                function,
+                parameter,
+            } => format!("parameter@{}@{parameter}", self.declaration(function)?),
+        })
+    }
     fn type_digest(&mut self, ty: k::TypeObjectDigest) -> Result<String, Diagnostic> {
         let ty = self.reader.ty(ty)?;
         self.ty(&ty)
@@ -475,6 +490,54 @@ impl Renderer<'_> {
             O::Declaration(d) => {
                 clauses.push(format!("(visibility {})", visibility(d.visibility)));
                 match d.payload {
+                    D::OwnedContract(c) => {
+                        children.push(OwnerKey::TypeParameter(c.self_parameter));
+                        let self_type = self.ty(&AuthoredType::TypeParameter {
+                            parameter: AuthoredTypeParameterReference::Id {
+                                parameter: c.self_parameter,
+                            },
+                        })?;
+                        clauses.push(format!("(self {self_type})"));
+                        for method in c.methods {
+                            let mut parameters = String::new();
+                            for p in method.parameters {
+                                append(
+                                    &mut parameters,
+                                    &format!(
+                                        " ({} {})",
+                                        self.type_digest(p.ty)?,
+                                        match p.use_mode {
+                                            k::ParameterUse::Unrestricted => "unrestricted",
+                                            k::ParameterUse::Borrow => "borrow",
+                                            k::ParameterUse::Consume => "consume",
+                                        }
+                                    ),
+                                    self.maximum,
+                                )?;
+                            }
+                            clauses.push(format!(
+                                "(method {} {} (parameters{}) (returns {}))",
+                                method.id,
+                                method.name,
+                                parameters,
+                                self.type_digest(method.result)?
+                            ));
+                        }
+                    }
+                    D::OwnedImplementation(i) => {
+                        clauses.push(format!(
+                            "(contract {})",
+                            self.declaration(&canonical::declaration(i.contract))?
+                        ));
+                        clauses.push(format!("(self {})", self.type_digest(i.self_type)?));
+                        for m in i.methods {
+                            clauses.push(format!(
+                                "(method {} {})",
+                                m.method,
+                                self.declaration(&canonical::declaration(m.function))?
+                            ));
+                        }
+                    }
                     D::Record {
                         type_parameters,
                         fields,
@@ -500,6 +563,15 @@ impl Renderer<'_> {
                         children.extend(ports.into_iter().map(OwnerKey::Port));
                     }
                     D::Function(f) => {
+                        for p in &f.implementation_parameters {
+                            clauses.push(format!(
+                                "(implementation-parameter {} {} {} {})",
+                                p.id,
+                                p.name,
+                                self.declaration(&canonical::declaration(p.contract))?,
+                                self.type_digest(p.self_type)?
+                            ));
+                        }
                         children.extend(f.type_parameters.into_iter().map(OwnerKey::TypeParameter));
                         children.extend(
                             f.effect_parameters
@@ -879,6 +951,57 @@ impl Renderer<'_> {
                 text
             }
             E::Sequence { items } => self.expressions("sequence", items, env)?,
+            E::ImplementationCall {
+                function,
+                type_arguments,
+                implementations,
+                arguments,
+            } => {
+                let mut text = format!(
+                    "(implementation-call {}{} (implementations",
+                    self.declaration(function)?,
+                    self.application(type_arguments, &[], &[])?
+                );
+                for operand in implementations {
+                    append(
+                        &mut text,
+                        &format!(" {}", self.implementation_operand(operand)?),
+                        self.maximum,
+                    )?;
+                }
+                text.push(')');
+                for arg in arguments {
+                    append(
+                        &mut text,
+                        &format!(" {}", self.expression(arg, env)?),
+                        self.maximum,
+                    )?;
+                }
+                text.push(')');
+                text
+            }
+            E::MethodCall {
+                witness,
+                contract,
+                method,
+                arguments,
+            } => {
+                let mut text = format!(
+                    "(method-call {} {} {}",
+                    self.implementation_operand(witness)?,
+                    self.declaration(contract)?,
+                    method
+                );
+                for arg in arguments {
+                    append(
+                        &mut text,
+                        &format!(" {}", self.expression(arg, env)?),
+                        self.maximum,
+                    )?;
+                }
+                text.push(')');
+                text
+            }
             E::Call {
                 function,
                 type_arguments,

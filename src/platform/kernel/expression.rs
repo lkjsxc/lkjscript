@@ -57,6 +57,18 @@ impl ExpressionRecord {
                 "F64 literals require Graph Contract 17",
             ));
         }
+        if self.contract_version < 18
+            && matches!(
+                self.operation,
+                ExpressionOperation::ImplementationCall { .. }
+                    | ExpressionOperation::MethodCall { .. }
+            )
+        {
+            return Err(expression_error(
+                "kernel_owned_generation",
+                "implementation operands require Graph 18",
+            ));
+        }
         validate_operation(&self.operation)
     }
 
@@ -66,7 +78,8 @@ impl ExpressionRecord {
 
     pub fn type_roots(&self) -> Vec<TypeObjectDigest> {
         match &self.operation {
-            ExpressionOperation::Call { type_arguments, .. }
+            ExpressionOperation::ImplementationCall { type_arguments, .. }
+            | ExpressionOperation::Call { type_arguments, .. }
             | ExpressionOperation::FunctionValue { type_arguments, .. }
             | ExpressionOperation::Record { type_arguments, .. }
             | ExpressionOperation::Variant { type_arguments, .. } => type_arguments.clone(),
@@ -183,6 +196,18 @@ pub enum ExpressionOperation {
     },
     F64 {
         value: crate::platform::binary64::Binary64,
+    },
+    ImplementationCall {
+        function: DeclarationReference,
+        type_arguments: Vec<TypeObjectDigest>,
+        implementations: Vec<super::ImplementationOperand>,
+        arguments: Vec<ExpressionId>,
+    },
+    MethodCall {
+        witness: super::ImplementationOperand,
+        contract: DeclarationReference,
+        method: crate::platform::semantic_id::MethodId,
+        arguments: Vec<ExpressionId>,
     },
 }
 
@@ -386,6 +411,19 @@ fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic>
         ExpressionOperation::Variant { type_arguments, .. } => {
             require_count("variant type arguments", type_arguments.len(), true)?;
         }
+        ExpressionOperation::ImplementationCall {
+            type_arguments,
+            implementations,
+            arguments,
+            ..
+        } => {
+            require_count("implementation call types", type_arguments.len(), true)?;
+            require_count("implementation call witnesses", implementations.len(), true)?;
+            require_count("implementation call arguments", arguments.len(), true)?;
+        }
+        ExpressionOperation::MethodCall { arguments, .. } => {
+            require_count("method arguments", arguments.len(), true)?;
+        }
         ExpressionOperation::Invoke { arguments, .. } => {
             require_count("invoke arguments", arguments.len(), true)?;
         }
@@ -539,7 +577,9 @@ fn expression_children(operation: &ExpressionOperation) -> Vec<ExpressionChild> 
         ExpressionOperation::Sequence { items } => {
             push_many(&mut children, items, ExpressionChildRole::SequenceItem)
         }
-        ExpressionOperation::Call { arguments, .. } => {
+        ExpressionOperation::ImplementationCall { arguments, .. }
+        | ExpressionOperation::MethodCall { arguments, .. }
+        | ExpressionOperation::Call { arguments, .. } => {
             push_many(&mut children, arguments, ExpressionChildRole::CallArgument)
         }
         ExpressionOperation::Invoke { callee, arguments } => {

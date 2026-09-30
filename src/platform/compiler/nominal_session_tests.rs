@@ -30,6 +30,11 @@ pub(super) fn hostile_bundle(
             *b"LKJAEN21",
             "lkjscript.artifact-bundle.complete.v21",
         ),
+        22 => (
+            *b"LKJART22",
+            *b"LKJAEN22",
+            "lkjscript.artifact-bundle.complete.v22",
+        ),
         other => panic!("unexpected forged-artifact generation {other}"),
     };
     let (digest, manifest_bytes) = manifest.encode().unwrap();

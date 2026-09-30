@@ -29,13 +29,15 @@ use crate::platform::change::{
     AuthoredChangeSet, AuthoredDeclarationReference, AuthoredDeletePolicy, AuthoredEffectParameter,
     AuthoredEffectParameterReference, AuthoredEffectRow, AuthoredExpression,
     AuthoredExpressionOperation, AuthoredField, AuthoredFieldReference, AuthoredFieldSelector,
-    AuthoredFunctionEffect, AuthoredLetBinding, AuthoredLocalReference, AuthoredMapExpressionEntry,
-    AuthoredMatchExpressionArm, AuthoredOperationReference, AuthoredOwnerParent, AuthoredParameter,
-    AuthoredPort, AuthoredPortImplementation, AuthoredPortReference, AuthoredPrecondition,
-    AuthoredRecordExpressionField, AuthoredRequirement, AuthoredRequirementReference,
-    AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredTransactionOutcomeContract,
-    AuthoredType, AuthoredTypeParameter, AuthoredTypeParameterReference, DeclarationSelector,
-    ModuleSelector, OwnerSelector, ParameterParentSelector,
+    AuthoredFunctionEffect, AuthoredImplementationOperand, AuthoredImplementationParameter,
+    AuthoredLetBinding, AuthoredLocalReference, AuthoredMapExpressionEntry,
+    AuthoredMatchExpressionArm, AuthoredOperationReference, AuthoredOwnedMethod,
+    AuthoredOwnerParent, AuthoredParameter, AuthoredPort, AuthoredPortImplementation,
+    AuthoredPortReference, AuthoredPrecondition, AuthoredRecordExpressionField,
+    AuthoredRequirement, AuthoredRequirementReference, AuthoredResourceLimit,
+    AuthoredStructuralTypeField, AuthoredTransactionOutcomeContract, AuthoredType,
+    AuthoredTypeParameter, AuthoredTypeParameterReference, DeclarationSelector, ModuleSelector,
+    OwnerSelector, ParameterParentSelector,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass, SourceLocation};
 use crate::platform::kernel::{
@@ -52,10 +54,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-24";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 24;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-20";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 20;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-25";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 25;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-21";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 21;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -130,6 +132,9 @@ pub(crate) enum CompactChangeOperation {
     CreateRecord,
     CreateVariant,
     CreateInterface,
+    CreateOwnedContract,
+    CreateOwnedImplementation,
+    SetImplementations,
     CreateExternal,
     CreateFunction,
     CreateConstant,
@@ -146,6 +151,7 @@ pub(crate) enum CompactChangeOperation {
     SetTypeParameterConstraint,
     SetFieldType,
     SetCasePayload,
+    SetParameterUse,
     SetParameterType,
     AddParameter,
     AddRequirement,
@@ -165,13 +171,16 @@ pub(crate) enum CompactChangeOperation {
 }
 
 impl CompactChangeOperation {
-    pub(crate) const ALL: [Self; 38] = [
+    pub(crate) const ALL: [Self; 42] = [
         Self::ReferencePackage,
         Self::ReferenceOwner,
         Self::CreateModule,
         Self::CreateRecord,
         Self::CreateVariant,
         Self::CreateInterface,
+        Self::CreateOwnedContract,
+        Self::CreateOwnedImplementation,
+        Self::SetImplementations,
         Self::CreateExternal,
         Self::CreateFunction,
         Self::CreateConstant,
@@ -188,6 +197,7 @@ impl CompactChangeOperation {
         Self::SetTypeParameterConstraint,
         Self::SetFieldType,
         Self::SetCasePayload,
+        Self::SetParameterUse,
         Self::SetParameterType,
         Self::AddParameter,
         Self::AddRequirement,
@@ -527,6 +537,92 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
                 name: "visibility",
                 required: true,
                 form: FieldForm::DeclarationVisibility,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::CreateOwnedContract,
+        name: "create.owned-contract",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "module",
+                required: true,
+                form: FieldForm::ModuleSelector,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "visibility",
+                required: true,
+                form: FieldForm::DeclarationVisibility,
+            },
+            CompactChangeOperationField {
+                name: "self",
+                required: true,
+                form: FieldForm::TypeReference,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::CreateOwnedImplementation,
+        name: "create.owned-implementation",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "module",
+                required: true,
+                form: FieldForm::ModuleSelector,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "visibility",
+                required: true,
+                form: FieldForm::DeclarationVisibility,
+            },
+            CompactChangeOperationField {
+                name: "contract",
+                required: true,
+                form: FieldForm::DeclarationReference,
+            },
+            CompactChangeOperationField {
+                name: "self",
+                required: true,
+                form: FieldForm::TypeReference,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::SetImplementations,
+        name: "set.implementations",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestFragment,
+            },
+            CompactChangeOperationField {
+                name: "declaration",
+                required: true,
+                form: FieldForm::DeclarationSelector,
             },
         ],
         direct: None,
@@ -1006,6 +1102,23 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
                 name: "payload",
                 required: false,
                 form: FieldForm::TypeReference,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::SetParameterUse,
+        name: "set.parameter-use",
+        fields: &[
+            CompactChangeOperationField {
+                name: "parameter",
+                required: true,
+                form: FieldForm::OwnerSelector,
+            },
+            CompactChangeOperationField {
+                name: "use",
+                required: true,
+                form: FieldForm::ParameterUse,
             },
         ],
         direct: None,
@@ -1530,6 +1643,7 @@ pub(crate) const COMPACT_CHANGE_PRECONDITION_FIELDS: &[CompactChangePrecondition
     },
 ];
 pub const COMPACT_TYPE_FORMS: &[&str] = &[
+    "owned-i64-cell",
     "byte-buffer",
     "unit",
     "bool",
@@ -1560,6 +1674,8 @@ pub(crate) const COMPACT_EFFECT_FORM_FIELDS: &[CompactFormField] = &[CompactForm
     syntax: "@NAME",
 }];
 pub const COMPACT_EXPRESSION_FORMS: &[&str] = &[
+    "implementation-call",
+    "method-call",
     "unit",
     "bool",
     "i64",
@@ -1595,6 +1711,12 @@ pub(crate) struct CompactFormField {
 }
 
 pub(crate) const COMPACT_TYPE_FORM_FIELDS: &[CompactFormField] = &[
+    CompactFormField {
+        form: "owned-i64-cell",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
     CompactFormField {
         form: "byte-buffer",
         name: "as",
@@ -1808,6 +1930,42 @@ pub(crate) const COMPACT_TYPE_FORM_FIELDS: &[CompactFormField] = &[
 ];
 
 pub(crate) const COMPACT_EXPRESSION_FORM_FIELDS: &[CompactFormField] = &[
+    CompactFormField {
+        form: "implementation-call",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "implementation-call",
+        name: "function",
+        required: true,
+        syntax: "declaration-reference",
+    },
+    CompactFormField {
+        form: "method-call",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "method-call",
+        name: "witness",
+        required: true,
+        syntax: "concrete@DECLARATION|parameter@FUNCTION@implparam_HEX",
+    },
+    CompactFormField {
+        form: "method-call",
+        name: "contract",
+        required: true,
+        syntax: "declaration-reference",
+    },
+    CompactFormField {
+        form: "method-call",
+        name: "method",
+        required: true,
+        syntax: "method_HEX",
+    },
     CompactFormField {
         form: "unit",
         name: "as",
@@ -2215,6 +2373,154 @@ pub(crate) struct CompactEdgeDescriptor {
 }
 
 pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
+    CompactEdgeDescriptor {
+        name: "owned.method",
+        parent: "owned-contract",
+        child: "method",
+        fields: &[
+            CompactFormField {
+                form: "owned.method",
+                name: "parent",
+                required: true,
+                syntax: "$NAME|%NAME",
+            },
+            CompactFormField {
+                form: "owned.method",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "owned.method",
+                name: "as",
+                required: true,
+                syntax: "%NAME",
+            },
+            CompactFormField {
+                form: "owned.method",
+                name: "id",
+                required: true,
+                syntax: "method_HEX",
+            },
+            CompactFormField {
+                form: "owned.method",
+                name: "name",
+                required: true,
+                syntax: "name",
+            },
+            CompactFormField {
+                form: "owned.method",
+                name: "result",
+                required: true,
+                syntax: "type-reference",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "owned.parameter",
+        parent: "owned.method",
+        child: "parameter",
+        fields: &[
+            CompactFormField {
+                form: "owned.parameter",
+                name: "parent",
+                required: true,
+                syntax: "$NAME|%NAME",
+            },
+            CompactFormField {
+                form: "owned.parameter",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "owned.parameter",
+                name: "type",
+                required: true,
+                syntax: "type-reference",
+            },
+            CompactFormField {
+                form: "owned.parameter",
+                name: "use",
+                required: true,
+                syntax: "unrestricted|borrow|consume",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "owned.mapping",
+        parent: "owned-implementation",
+        child: "method-implementation",
+        fields: &[
+            CompactFormField {
+                form: "owned.mapping",
+                name: "parent",
+                required: true,
+                syntax: "$NAME|%NAME",
+            },
+            CompactFormField {
+                form: "owned.mapping",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "owned.mapping",
+                name: "method",
+                required: true,
+                syntax: "method_HEX",
+            },
+            CompactFormField {
+                form: "owned.mapping",
+                name: "function",
+                required: true,
+                syntax: "declaration-reference",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "owned.witness",
+        parent: "set.implementations",
+        child: "implementation-parameter",
+        fields: &[
+            CompactFormField {
+                form: "owned.witness",
+                name: "parent",
+                required: true,
+                syntax: "$NAME|%NAME",
+            },
+            CompactFormField {
+                form: "owned.witness",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "owned.witness",
+                name: "id",
+                required: true,
+                syntax: "implparam_HEX",
+            },
+            CompactFormField {
+                form: "owned.witness",
+                name: "name",
+                required: true,
+                syntax: "name",
+            },
+            CompactFormField {
+                form: "owned.witness",
+                name: "contract",
+                required: true,
+                syntax: "declaration-reference",
+            },
+            CompactFormField {
+                form: "owned.witness",
+                name: "self",
+                required: true,
+                syntax: "type-reference",
+            },
+        ],
+    },
     CompactEdgeDescriptor {
         name: "requirement.argument",
         parent: "call-or-function-value",
@@ -2925,6 +3231,21 @@ impl Decoder {
                         ));
                     }
                 }
+                "owned.method" => self.insert_indexed_record_edge(
+                    record,
+                    &["parent", "index", "as", "id", "name", "result"],
+                )?,
+                "owned.parameter" => {
+                    self.insert_indexed_record_edge(record, &["parent", "index", "type", "use"])?
+                }
+                "owned.mapping" => self.insert_indexed_record_edge(
+                    record,
+                    &["parent", "index", "method", "function"],
+                )?,
+                "owned.witness" => self.insert_indexed_record_edge(
+                    record,
+                    &["parent", "index", "id", "name", "contract", "self"],
+                )?,
                 "requirement.argument" => {
                     self.insert_indexed_record_edge(record, &["parent", "index", "requirement"])?
                 }
@@ -3006,7 +3327,8 @@ impl Decoder {
                     if let Some(descriptor) = compact_change_operation_descriptor(operation) {
                         if matches!(
                             descriptor.operation,
-                            CompactChangeOperation::SetFunctionContract
+                            CompactChangeOperation::SetImplementations
+                                | CompactChangeOperation::SetFunctionContract
                                 | CompactChangeOperation::SetRequirementContract
                                 | CompactChangeOperation::SetRequirementParameter
                         ) {
@@ -3273,6 +3595,43 @@ impl Decoder {
         Ok(())
     }
 
+    fn parse_implementation_operand(
+        &mut self,
+        record: &CompactRecord,
+        text: &str,
+    ) -> Result<AuthoredImplementationOperand, Diagnostic> {
+        let parts = text.split('@').collect::<Vec<_>>();
+        let (reference, parameter) = match parts.as_slice() {
+            ["concrete", reference] => (*reference, None),
+            ["parameter", reference, parameter] => (*reference, Some(parameter.parse()?)),
+            _ => {
+                return Err(record_error(
+                    record,
+                    "change_owned_operand",
+                    "witness must be concrete@IMPLEMENTATION or parameter@FUNCTION@IMPLEMENTATION_PARAMETER_ID",
+                ));
+            }
+        };
+        let r = CompactRecord {
+            operation: record.operation.clone(),
+            fields: vec![CompactField {
+                name: "reference".into(),
+                value: reference.into(),
+                location: record.location.clone(),
+            }],
+            location: record.location.clone(),
+        };
+        let reference = self.parse_declaration_reference(&r, "reference")?;
+        Ok(match parameter {
+            Some(parameter) => AuthoredImplementationOperand::Parameter {
+                function: reference,
+                parameter,
+            },
+            None => AuthoredImplementationOperand::Concrete {
+                implementation: reference,
+            },
+        })
+    }
     fn decode_change(
         &mut self,
         descriptor: &CompactChangeOperationDescriptor,
@@ -3307,6 +3666,71 @@ impl Decoder {
                 visibility: parse_visibility(record, "visibility")?,
                 cases: Vec::new(),
             }),
+            CompactChangeOperation::CreateOwnedContract => {
+                let parent = symbol(record, "as")?;
+                let mut methods = Vec::new();
+                for edge in self.ordered_record_edges("owned.method", &parent)? {
+                    let method = &edge.record;
+                    let label = required(method, "as")?;
+                    let mut parameters = Vec::new();
+                    for edge in self.ordered_record_edges("owned.parameter", label)? {
+                        parameters.push((
+                            self.decode_type(required(&edge.record, "type")?)?,
+                            parse_parameter_use(&edge.record, "use")?,
+                        ));
+                    }
+                    methods.push(AuthoredOwnedMethod {
+                        id: required(method, "id")?.parse()?,
+                        name: parse_name(method, "name")?,
+                        parameters,
+                        result: self.decode_type(required(method, "result")?)?,
+                    });
+                }
+                Ok(AuthoredChange::CreateOwnedContract {
+                    symbol: parent,
+                    module: self.parse_module_selector(record, "module")?,
+                    name: parse_name(record, "name")?,
+                    visibility: parse_visibility(record, "visibility")?,
+                    self_type: self.decode_type(required(record, "self")?)?,
+                    methods,
+                })
+            }
+            CompactChangeOperation::CreateOwnedImplementation => {
+                let parent = symbol(record, "as")?;
+                let mut methods = Vec::new();
+                for edge in self.ordered_record_edges("owned.mapping", &parent)? {
+                    methods.push((
+                        required(&edge.record, "method")?.parse()?,
+                        self.parse_declaration_reference(&edge.record, "function")?,
+                    ));
+                }
+                Ok(AuthoredChange::CreateOwnedImplementation {
+                    symbol: parent,
+                    module: self.parse_module_selector(record, "module")?,
+                    name: parse_name(record, "name")?,
+                    visibility: parse_visibility(record, "visibility")?,
+                    contract: self.parse_declaration_reference(record, "contract")?,
+                    self_type: self.decode_type(required(record, "self")?)?,
+                    methods,
+                })
+            }
+            CompactChangeOperation::SetImplementations => {
+                let parent = fragment(record, "as")?;
+                let mut parameters = Vec::new();
+                for edge in self.ordered_record_edges("owned.witness", &parent)? {
+                    let p = &edge.record;
+                    parameters.push(AuthoredImplementationParameter {
+                        id: required(p, "id")?.parse()?,
+                        name: parse_name(p, "name")?,
+                        contract: self.parse_declaration_reference(p, "contract")?,
+                        self_type: self.decode_type(required(p, "self")?)?,
+                    });
+                }
+                Ok(AuthoredChange::SetImplementationParameters {
+                    declaration: self.parse_declaration_selector(record, "declaration")?,
+                    parameters,
+                })
+            }
             CompactChangeOperation::CreateInterface => Ok(AuthoredChange::CreateInterface {
                 symbol: symbol(record, "as")?,
                 module: self.parse_module_selector(record, "module")?,
@@ -3483,6 +3907,10 @@ impl Decoder {
                 payload: optional(record, "payload")
                     .map(|value| self.decode_type(value))
                     .transpose()?,
+            }),
+            CompactChangeOperation::SetParameterUse => Ok(AuthoredChange::SetParameterUse {
+                parameter: self.parse_owner_selector(record, "parameter")?,
+                use_mode: parse_parameter_use(record, "use")?,
             }),
             CompactChangeOperation::SetParameterType => Ok(AuthoredChange::SetParameterType {
                 parameter: self.parse_owner_selector(record, "parameter")?,
@@ -3823,6 +4251,7 @@ impl Decoder {
             "bool" => Some(AuthoredType::Bool {}),
             "i64" => Some(AuthoredType::I64 {}),
             "byte-buffer" => Some(AuthoredType::ByteBuffer {}),
+            "owned-i64-cell" => Some(AuthoredType::OwnedI64Cell {}),
             "f64" => Some(AuthoredType::F64 {}),
             "bytes" => Some(AuthoredType::Bytes {}),
             "text" => Some(AuthoredType::Text {}),
@@ -3866,6 +4295,7 @@ impl Decoder {
                     "type.bool" => AuthoredType::Bool {},
                     "type.i64" => AuthoredType::I64 {},
                     "type.byte-buffer" => AuthoredType::ByteBuffer {},
+                    "type.owned-i64-cell" => AuthoredType::OwnedI64Cell {},
                     "type.f64" => AuthoredType::F64 {},
                     "type.bytes" => AuthoredType::Bytes {},
                     "type.text" => AuthoredType::Text {},
@@ -5245,6 +5675,7 @@ fn parse_type_parameter_constraint(
     match optional(record, "constraint").unwrap_or("none") {
         "none" => Ok(TypeParameterConstraints::None),
         "capture-safe" => Ok(TypeParameterConstraints::CaptureSafe),
+        "owned" => Ok(TypeParameterConstraints::Owned),
         _ => Err(field_error(
             record,
             "constraint",

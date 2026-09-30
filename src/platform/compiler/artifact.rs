@@ -48,16 +48,16 @@ use std::fmt;
 #[path = "artifact_code.rs"]
 mod code_admission;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-21";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-21";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 21;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF21";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART21";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN21";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-22";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-22";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 22;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF22";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART22";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN22";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v21";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v21";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v21";
+    "lkjscript.artifact-manifest-envelope.v22";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v22";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v22";
 pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v18";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
@@ -294,7 +294,9 @@ where
 const fn runtime_owner_kind(kind: OwnerKind) -> bool {
     matches!(
         kind,
-        OwnerKind::PureFunction
+        OwnerKind::OwnedContract
+            | OwnerKind::OwnedImplementation
+            | OwnerKind::PureFunction
             | OwnerKind::External
             | OwnerKind::TaskFunction
             | OwnerKind::Component
@@ -318,7 +320,9 @@ const fn runtime_owner_kind(kind: OwnerKind) -> bool {
 const fn reference_owner_kind(kind: OwnerKind) -> bool {
     matches!(
         kind,
-        OwnerKind::External
+        OwnerKind::OwnedContract
+            | OwnerKind::OwnedImplementation
+            | OwnerKind::External
             | OwnerKind::PureFunction
             | OwnerKind::TaskFunction
             | OwnerKind::Constant
@@ -418,7 +422,7 @@ impl ArtifactManifest {
                     self.compiler_contract_version,
                     self.bytecode_contract_version
                 ),
-                (14, 10, 6) | (15, 11, 7) | (16, 12, 8) | (17, 13, 9) | (17, 14, 10)
+                (14, 10, 6) | (15, 11, 7) | (16, 12, 8) | (17, 13, 9) | (17, 14, 10) | (18, 15, 11)
             )
             || self.compilation_manifest_contract_version != COMPILATION_MANIFEST_CONTRACT_VERSION
         {
@@ -494,6 +498,7 @@ pub struct ArtifactLoadWork {
     pub object_bytes: u64,
     pub map: MapWork,
     pub store: StoreWork,
+    pub implementation_inventory_steps: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -1187,6 +1192,8 @@ fn validate_declared_closure(
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum RuntimeOwnerExpectation {
+    OwnedContract(crate::platform::kernel::OwnedContract),
+    OwnedImplementation(crate::platform::kernel::OwnedImplementation),
     Interface {
         operations: Vec<crate::platform::semantic_id::OperationId>,
     },
@@ -1203,6 +1210,7 @@ pub(crate) enum RuntimeOwnerExpectation {
         cases: Vec<crate::platform::semantic_id::CaseId>,
     },
     ResourceFunction {
+        implementation_parameters: Vec<crate::platform::kernel::ImplementationParameter>,
         requirement_parameters: Vec<crate::platform::semantic_id::RequirementParameterId>,
         type_parameters: Vec<TypeParameterId>,
         effect_parameters: Vec<crate::platform::semantic_id::EffectParameterId>,
@@ -1284,6 +1292,8 @@ pub(crate) enum RuntimePortImplementation {
 impl RuntimeOwnerExpectation {
     pub(crate) const fn kind(&self) -> OwnerKind {
         match self {
+            Self::OwnedContract(_) => OwnerKind::OwnedContract,
+            Self::OwnedImplementation(_) => OwnerKind::OwnedImplementation,
             Self::MemoryExternal { .. } => OwnerKind::External,
             Self::Interface { .. } => OwnerKind::Interface,
             Self::Component { .. } => OwnerKind::Component,
@@ -1312,6 +1322,12 @@ impl RuntimeOwnerExpectation {
 
     fn matches(&self, record: &OwnerRecord) -> bool {
         match (self, record) {
+            (Self::OwnedContract(c), OwnerRecord::Declaration(d)) => {
+                matches!(&d.payload, DeclarationPayload::OwnedContract(actual) if actual == c)
+            }
+            (Self::OwnedImplementation(i), OwnerRecord::Declaration(d)) => {
+                matches!(&d.payload, DeclarationPayload::OwnedImplementation(actual) if actual == i)
+            }
             (Self::Interface { operations }, OwnerRecord::Declaration(record)) => {
                 matches!(&record.payload, DeclarationPayload::Interface { operations: actual } if actual == operations)
             }
@@ -1345,6 +1361,7 @@ impl RuntimeOwnerExpectation {
             }
             (
                 Self::ResourceFunction {
+                    implementation_parameters,
                     requirement_parameters,
                     type_parameters,
                     effect_parameters,
@@ -1358,7 +1375,8 @@ impl RuntimeOwnerExpectation {
                 matches!(
                     &record.payload,
                     DeclarationPayload::Function(function)
-                    if function.type_parameters == *type_parameters
+                    if function.implementation_parameters == *implementation_parameters
+                        && function.type_parameters == *type_parameters
                         && function.effect_parameters == *effect_parameters
                         && function.effect == *effect
                         && function.requirement_parameters == *requirement_parameters
@@ -1506,7 +1524,38 @@ impl RuntimeOwnerExpectation {
 
 pub(crate) fn runtime_owner_expectations(
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    inventory_steps: &mut u64,
+    mut checkpoint: impl FnMut() -> Result<(), Diagnostic>,
 ) -> Result<BTreeMap<(PackageId, OwnerKey), RuntimeOwnerExpectation>, Diagnostic> {
+    let mut method_targets = BTreeSet::new();
+    let mut inventory_step = || {
+        checkpoint()?;
+        if *inventory_steps >= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK as u64 {
+            return Err(artifact_error(
+                DiagnosticClass::Resource,
+                "artifact_owned_contract_work",
+                "static method inventory exceeds artifact proof admission",
+            ));
+        }
+        *inventory_steps += 1;
+        Ok(())
+    };
+    for unit in units.values() {
+        inventory_step()?;
+        if let CompilationPayload::OwnedImplementation(implementation) = &unit.payload {
+            for method in &implementation.methods {
+                inventory_step()?;
+                if method_targets.len() >= MAXIMUM_ARTIFACT_RUNTIME_OWNERS {
+                    return Err(artifact_error(
+                        DiagnosticClass::Resource,
+                        "artifact_owned_contract_work",
+                        "static method inventory exceeds artifact proof admission",
+                    ));
+                }
+                method_targets.insert(method.function);
+            }
+        }
+    }
     let mut expected = BTreeMap::new();
     let mut current_package = None;
     let mut current_package_count = 0_usize;
@@ -1527,6 +1576,28 @@ pub(crate) fn runtime_owner_expectations(
             )?;
         }
         match &unit.payload {
+            CompilationPayload::OwnedContract(c) => {
+                insert_runtime_expectation(
+                    &mut expected,
+                    (*package, *owner),
+                    RuntimeOwnerExpectation::OwnedContract(c.clone()),
+                )?;
+                insert_runtime_expectation(
+                    &mut expected,
+                    (*package, OwnerKey::TypeParameter(c.self_parameter)),
+                    RuntimeOwnerExpectation::TypeParameter {
+                        declaration: declaration_owner(*owner, "owned contract")?,
+                        constraints: crate::platform::kernel::TypeParameterConstraints::Owned,
+                    },
+                )?;
+            }
+            CompilationPayload::OwnedImplementation(i) => {
+                insert_runtime_expectation(
+                    &mut expected,
+                    (*package, *owner),
+                    RuntimeOwnerExpectation::OwnedImplementation(i.clone()),
+                )?;
+            }
             CompilationPayload::Record {
                 fields,
                 type_parameters,
@@ -1693,13 +1764,9 @@ pub(crate) fn runtime_owner_expectations(
                     .parameters
                     .iter()
                     .any(|p| p.use_mode != crate::platform::kernel::ParameterUse::Unrestricted)
-                    || unit.tables.types.get(signature.result as usize)
-                        == Some(
-                            &crate::platform::kernel::encode_type_object(
-                                &crate::platform::kernel::TypeObject::new(TypeForm::ByteBuffer)?,
-                            )?
-                            .0,
-                        )
+                    || memory_result_type(
+                        unit.tables.types.get(signature.result as usize).copied(),
+                    )?
                 {
                     insert_runtime_expectation(
                         &mut expected,
@@ -1726,16 +1793,21 @@ pub(crate) fn runtime_owner_expectations(
                     signature,
                     unit,
                 )?;
-                if signature.parameters.iter().any(|parameter| {
-                    parameter.resource_requirement.is_some()
-                        || parameter.use_mode != crate::platform::kernel::ParameterUse::Unrestricted
-                }) || unit.tables.types.get(signature.result as usize)
-                    == Some(
-                        &crate::platform::kernel::encode_type_object(
-                            &crate::platform::kernel::TypeObject::new(TypeForm::ByteBuffer)?,
-                        )?
-                        .0,
-                    )
+                if method_targets.contains(&DeclarationReference {
+                    package: *package,
+                    declaration,
+                }) || !signature.implementation_parameters.is_empty()
+                    || signature
+                        .type_parameter_constraints
+                        .contains(&crate::platform::kernel::TypeParameterConstraints::Owned)
+                    || signature.parameters.iter().any(|parameter| {
+                        parameter.resource_requirement.is_some()
+                            || parameter.use_mode
+                                != crate::platform::kernel::ParameterUse::Unrestricted
+                    })
+                    || memory_result_type(
+                        unit.tables.types.get(signature.result as usize).copied(),
+                    )?
                 {
                     let parameters = signature
                         .parameters
@@ -1762,6 +1834,7 @@ pub(crate) fn runtime_owner_expectations(
                         &mut expected,
                         (*package, OwnerKey::Declaration(declaration)),
                         RuntimeOwnerExpectation::ResourceFunction {
+                            implementation_parameters: signature.implementation_parameters.clone(),
                             requirement_parameters: signature.requirement_parameters.clone(),
                             type_parameters: signature.type_parameters.clone(),
                             effect_parameters: signature.effect_parameters.clone(),
@@ -2497,7 +2570,13 @@ fn trace_object_closure(
         result.map_err(map_diagnostic)?;
     }
     validate_package_interface_closure(&logical.revisions, &interfaces)?;
-    let runtime_owners = validate_runtime_owners(manifest, &units, &store, &mut store_work)?;
+    let runtime_owners = validate_runtime_owners(
+        manifest,
+        &units,
+        &store,
+        &mut store_work,
+        &mut work.implementation_inventory_steps,
+    )?;
     let reference_owners = validate_reference_owners(
         manifest,
         &units,
@@ -2569,6 +2648,7 @@ fn trace_object_closure(
         &reference_owners,
         &interfaces,
         &types,
+        &logical.revisions,
     )?;
     validate_nominal_instruction_inventory(&units, &reference_owners, &runtime_owners)?;
     code_admission::validate(
@@ -3133,6 +3213,10 @@ fn validate_artifact_nominal_meaning(
     reference: &BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
     interfaces: &BTreeMap<PackageRevisionDigest, PackageInterfaceValidation>,
     types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    revisions: &BTreeMap<
+        PackageRevisionDigest,
+        crate::platform::package_transport::PackageRevision,
+    >,
 ) -> Result<(), Diagnostic> {
     struct Read<'a> {
         package: PackageId,
@@ -3140,6 +3224,7 @@ fn validate_artifact_nominal_meaning(
         reference: &'a BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
         interfaces: &'a BTreeMap<PackageId, &'a PackageInterfaceValidation>,
         types: &'a BTreeMap<TypeObjectDigest, TypeObject>,
+        dependencies: &'a [crate::platform::kernel::DependencyRecord],
     }
     impl crate::platform::kernel::ExpressionRead for Read<'_> {
         fn package_id(&self) -> PackageId {
@@ -3160,6 +3245,9 @@ fn validate_artifact_nominal_meaning(
             package: PackageId,
             owner: OwnerKey,
         ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+            if package != self.package && !self.has_dependency(package)? {
+                return Ok(None);
+            }
             Ok(self
                 .interfaces
                 .get(&package)
@@ -3167,7 +3255,10 @@ fn validate_artifact_nominal_meaning(
                 .map(|owner| owner.record.clone()))
         }
         fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
-            Ok(self.interfaces.contains_key(&package))
+            Ok(self
+                .dependencies
+                .binary_search_by_key(&package, |d| d.package)
+                .is_ok())
         }
     }
     let interfaces = manifest
@@ -3227,12 +3318,25 @@ fn validate_artifact_nominal_meaning(
         roots.entry(*package).or_default();
     }
     for (package, roots) in roots {
+        let exact = manifest
+            .packages
+            .binary_search_by_key(&package, |p| p.package)
+            .ok()
+            .and_then(|i| revisions.get(&manifest.packages[i].package_revision))
+            .ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_nominal_dependency_context",
+                    "body validation lost its source package's exact logical revision",
+                )
+            })?;
         let read = Read {
             package,
             runtime,
             reference,
             interfaces: &interfaces,
             types,
+            dependencies: &exact.dependencies,
         };
         let mut diagnostics = Vec::new();
         let exhausted = crate::platform::kernel::validate_expression_roots_with_limits(
@@ -3785,8 +3889,9 @@ fn validate_runtime_owners(
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
     store: &TrackingObjectStore<'_>,
     work: &mut StoreWork,
+    inventory_steps: &mut u64,
 ) -> Result<BTreeMap<(PackageId, OwnerKey), OwnerRecord>, Diagnostic> {
-    let expected = runtime_owner_expectations(units)?;
+    let expected = runtime_owner_expectations(units, inventory_steps, || Ok(()))?;
     let package_ids = manifest
         .packages
         .iter()
@@ -4343,6 +4448,10 @@ fn validate_unit_relocations(
     for unit in units.values() {
         requirements.extend(unit.tables.requirements.iter().copied());
         match &unit.payload {
+            CompilationPayload::OwnedContract(c) => {
+                type_parameters.insert(c.self_parameter);
+            }
+            CompilationPayload::OwnedImplementation(_) => {}
             CompilationPayload::Record {
                 fields: layouts,
                 type_parameters: parameters,
@@ -4649,4 +4758,20 @@ pub(crate) fn artifact_error(
     message: impl Into<String>,
 ) -> Diagnostic {
     Diagnostic::new(class, code, message)
+}
+
+fn memory_result_type(ty: Option<TypeObjectDigest>) -> Result<bool, Diagnostic> {
+    for form in [TypeForm::ByteBuffer, TypeForm::OwnedI64Cell] {
+        if ty
+            == Some(
+                crate::platform::kernel::encode_type_object(
+                    &crate::platform::kernel::TypeObject::new(form)?,
+                )?
+                .0,
+            )
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }

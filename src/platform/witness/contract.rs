@@ -7,8 +7,8 @@ pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-9";
 pub const WITNESS_CONTRACT_VERSION: u16 = 9;
 pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-9";
 pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 9;
-pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-17";
-pub const VALIDATOR_CONTRACT_VERSION: u16 = 17;
+pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-18";
+pub const VALIDATOR_CONTRACT_VERSION: u16 = 18;
 
 pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT09";
 pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM14";
@@ -45,7 +45,20 @@ pub struct ValidatorFeatureDescriptor {
 
 /// This list is the executable owner for rules that affect acceptance or safe witness reuse.
 /// Changing one rule requires changing its feature version, which changes the validator digest.
-pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 28] = [
+pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 31] = [
+    ValidatorFeatureDescriptor {
+        name: "symbolic_owned_parameters",
+        version: 1,
+    },
+    ValidatorFeatureDescriptor {
+        name: "explicit_owned_implementation_witnesses",
+        // Discard preliminary proof reuse after exact dependency and recursive-type corrections.
+        version: 2,
+    },
+    ValidatorFeatureDescriptor {
+        name: "sealed_owned_i64_cells",
+        version: 1,
+    },
     ValidatorFeatureDescriptor {
         name: "closed_external_signatures",
         version: 4,

@@ -28,6 +28,71 @@ impl ReferenceState<'_> {
     ) -> Result<CheckedValue, ExecutionError> {
         self.control.check()?;
         match implementation {
+            "core.cell.create" => {
+                let [scalar]: [CheckedValue; 1] = arguments
+                    .try_into()
+                    .map_err(|_| reference_type_error("cell create arity"))?;
+                let NormalizedValue::I64(scalar) = scalar.release() else {
+                    return Err(reference_type_error("cell create type"));
+                };
+                self.charge_allocation(
+                    super::super::owned_i64_cell::OwnedI64Cell::ALLOCATION_BYTES,
+                )?;
+                self.control.check()?;
+                CheckedValue::memory(
+                    &self.schema,
+                    NormalizedValue::OwnedI64Cell(super::super::owned_i64_cell::OwnedI64Cell::new(
+                        self.memory_domain,
+                        scalar,
+                    )),
+                )
+            }
+            "core.cell.replace" => {
+                let [scalar, cell]: [CheckedValue; 2] = arguments
+                    .try_into()
+                    .map_err(|_| reference_type_error("cell replace arity"))?;
+                let (NormalizedValue::I64(scalar), NormalizedValue::OwnedI64Cell(cell)) =
+                    (scalar.release(), cell.release())
+                else {
+                    return Err(reference_type_error("cell replace types"));
+                };
+                cell.validate(self.memory_domain, true)?;
+                CheckedValue::memory(
+                    &self.schema,
+                    NormalizedValue::OwnedI64Cell(cell.replace(scalar, self.control)?),
+                )
+            }
+            "core.cell.read" => {
+                let [cell]: [CheckedValue; 1] = arguments
+                    .try_into()
+                    .map_err(|_| reference_type_error("cell read arity"))?;
+                let NormalizedValue::OwnedI64Cell(cell) = cell.raw() else {
+                    return Err(reference_type_error("cell read type"));
+                };
+                cell.validate(self.memory_domain, false)?;
+                if !cell.is_borrowed() {
+                    return Err(reference_type_error("cell read requires a scoped loan"));
+                }
+                CheckedValue::primitive(&self.schema, NormalizedValue::I64(cell.read()?))
+            }
+            "core.cell.extract" | "core.cell.discard" => {
+                let [cell]: [CheckedValue; 1] = arguments
+                    .try_into()
+                    .map_err(|_| reference_type_error("cell terminal arity"))?;
+                let NormalizedValue::OwnedI64Cell(cell) = cell.release() else {
+                    return Err(reference_type_error("cell terminal type"));
+                };
+                cell.validate(self.memory_domain, true)?;
+                let scalar = cell.extract()?;
+                CheckedValue::primitive(
+                    &self.schema,
+                    if implementation == "core.cell.extract" {
+                        NormalizedValue::I64(scalar)
+                    } else {
+                        NormalizedValue::Unit
+                    },
+                )
+            }
             "core.buffer.empty" => {
                 if !arguments.is_empty() {
                     return Err(reference_type_error("buffer empty arity"));

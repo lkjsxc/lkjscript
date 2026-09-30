@@ -107,12 +107,20 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-18";
 pub const REGISTRY_CONTRACT_VERSION: u16 = 18;
-pub const CLI_CONTRACT_VERSION: u16 = 33;
+pub const CLI_CONTRACT_VERSION: u16 = 34;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
 
 const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
+    (
+        "implementation-call",
+        "(implementation-call FUNCTION (types TYPE...) (implementations OPERAND...) EXPR...)",
+    ),
+    (
+        "method-call",
+        "(method-call OPERAND CONTRACT method_HEX EXPR...)",
+    ),
     ("unit", "(unit)"),
     ("bool", "(bool true|false)"),
     ("i64", "(i64 I64)"),
@@ -164,8 +172,8 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
 ];
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-function-definition-projection-8";
-pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 8;
+    "lkjscript-function-definition-projection-9";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 9;
 pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
 pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
 pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -264,6 +272,13 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("definition.function", "name"),
     ("definition.function", "visibility"),
     ("definition.function", "type-parameters"),
+    ("definition.function", "implementation-parameters"),
+    ("definition.implementation-parameter", "id"),
+    ("definition.implementation-parameter", "parent"),
+    ("definition.implementation-parameter", "index"),
+    ("definition.implementation-parameter", "name"),
+    ("definition.implementation-parameter", "contract"),
+    ("definition.implementation-parameter", "self"),
     ("definition.function", "effect-parameters"),
     ("definition.function", "requirement-parameters"),
     ("definition.function", "effect-row-parameters"),
@@ -346,6 +361,9 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("definition.expression", "key-type"),
     ("definition.expression", "value-type"),
     ("definition.expression", "function"),
+    ("definition.expression", "implementations"),
+    ("definition.expression", "implementation-parameter"),
+    ("definition.expression", "method"),
     ("definition.expression", "requirement"),
     ("definition.expression", "operation"),
     ("definition.expression", "binding"),
@@ -680,7 +698,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         ContractDescriptor {
             key: ContractKey::Cli,
             name: "normalized command line protocol",
-            identity: "lkjscript-cli-28",
+            identity: "lkjscript-cli-34",
             version: CLI_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
@@ -696,7 +714,10 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
-            magic_values: &["LKJOWN17", "LKJSMR01", "LKJDEP14", "LKJRET14"],
+            magic_values: &[
+                "LKJOWN18", "LKJOWN17", "LKJOWN16", "LKJOWN15", "LKJOWN14", "LKJSMR01", "LKJDEP14",
+                "LKJRET14",
+            ],
             digest_domains: &[
                 super::super::kernel::contract::OWNER_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::ROOT_ENVELOPE_DOMAIN,
@@ -721,11 +742,12 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
-            magic_values: &["LKJTYP10", "LKJF6401", "LKJBUF01"],
+            magic_values: &["LKJTYP10", "LKJF6401", "LKJBUF01", "LKJCEL01"],
             digest_domains: &[
                 super::super::kernel::contract::TYPE_OBJECT_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::F64_TYPE_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::BYTE_BUFFER_TYPE_ENVELOPE_DOMAIN,
+                super::super::kernel::contract::OWNED_CELL_TYPE_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::TYPE_OBJECT_DIGEST_DOMAIN,
             ],
         },
@@ -909,7 +931,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             predecessor_policy: REJECT,
             magic_values: &[
                 "LKJACR14", "LKJACR15", "LKJACR16", "LKJACR17", "LKJACR18", "LKJACR19", "LKJACR20",
-                "LKJABG01",
+                "LKJACR21", "LKJABG01",
             ],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
@@ -1054,7 +1076,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
-            magic_values: &["LKJCUN14"],
+            magic_values: &["LKJCUN15"],
             digest_domains: &[
                 COMPILER_UNIT_ENVELOPE_DOMAIN,
                 COMPILER_UNIT_KEY_DOMAIN,
@@ -1076,7 +1098,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJAMF21"],
+            magic_values: &["LKJAMF22"],
             digest_domains: &[
                 ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
                 storage_contract::ARTIFACT_MANIFEST_DIGEST_DOMAIN,
@@ -1090,7 +1112,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJART21", "LKJAEN21"],
+            magic_values: &["LKJART22", "LKJAEN22"],
             digest_domains: &[
                 ARTIFACT_BUNDLE_DIGEST_DOMAIN,
                 ARTIFACT_BUNDLE_CHECKSUM_DOMAIN,
@@ -4097,18 +4119,36 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "artifact_buffer_generation",
             DiagnosticClass::Corrupt,
             "Predecessor compiled control refers to an owned memory contract.",
-            "Rebuild from accepted meaning with compiler unit 14 and bytecode 10.",
+            "Rebuild from accepted meaning with compiler unit 15 and bytecode 11.",
         ),
         diagnostic(
             "compiler_unit_buffer_generation",
             DiagnosticClass::Corrupt,
             "A predecessor compiler unit contains the ByteBuffer type digest.",
-            "Rebuild from accepted meaning with compiler unit 14 and bytecode 10.",
+            "Rebuild from accepted meaning with compiler unit 15 and bytecode 11.",
+        ),
+        diagnostic(
+            "kernel_owned_contract",
+            DiagnosticClass::Semantic,
+            "An owned method contract, implementation map or explicit witness is not exact.",
+            "Check nominal contract identity, Owned Self, all monomorphic pure method signatures and lexical witness scope.",
+        ),
+        diagnostic(
+            "kernel_owned_parameter_owner",
+            DiagnosticClass::Semantic,
+            "An Owned constraint belongs to an unsupported declaration or foreign scope.",
+            "Use Owned only on a pure graph function without effect/requirement parameters or on the exact owned-contract Self.",
+        ),
+        diagnostic(
+            "normalized_cell_token",
+            DiagnosticClass::Resource,
+            "A scalar ownership token is stale, foreign, borrowed for consumption or unadmitted.",
+            "Preserve exact origin, carrier and live ownership; Clone never grants ownership or a read loan.",
         ),
         diagnostic(
             "kernel_buffer_ownership",
             DiagnosticClass::Semantic,
-            "ByteBuffer ownership, scoped read borrowing, or supported signature shape is invalid.",
+            "Direct owned memory, scoped read borrowing, or supported signature shape is invalid.",
             "Keep exact owned locals and pure final borrow/consume suffixes; move each owner once and prevent loan escape.",
         ),
         diagnostic(
@@ -4120,8 +4160,8 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "kernel_buffer_generic",
             DiagnosticClass::Semantic,
-            "An unrestricted generic substitution contains ByteBuffer, including a phantom argument.",
-            "Use resource-free ordinary data/callback arguments and a concrete memory suffix/result.",
+            "An ordinary generic substitution contains owned memory, including a phantom argument.",
+            "Use ordinary data/callback arguments or an explicit Owned parameter with a direct final memory suffix/result.",
         ),
         diagnostic(
             "kernel_buffer_type_tag",
@@ -7539,7 +7579,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ("layout-origin", "one-validated-preparation".to_owned()),
                     (
                         "constraints",
-                        "none,capture-safe-in-exact-declaration-scope".to_owned(),
+                        "none,capture-safe,owned-in-exact-declaration-scope".to_owned(),
                     ),
                     (
                         "eligibility",
@@ -7984,8 +8024,23 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
             "Owned by a function, external or operation; additions explicitly create and append.",
         ),
         (
+            "owned-contract",
+            "(owned-contract MODE BINDING (visibility public|private) (self SELF) (type-parameter MODE SELF (constraint owned)) (method method_HEX NAME (parameters (TYPE unrestricted|borrow|consume)...) (returns TYPE))...)",
+            "Nominal first-order pure methods with exactly one owned Self parameter; all ordinary method types must be closed and contain no callable or affine types.",
+        ),
+        (
+            "owned-implementation",
+            "(owned-implementation MODE BINDING (visibility public|private) (contract DECLARATION) (self TYPE) (method method_HEX FUNCTION)...)",
+            "Every method maps to an exact visible monomorphic pure graph function; selection is explicit and never grants effects.",
+        ),
+        (
+            "implementation-parameter",
+            "(implementation-parameter implparam_HEX NAME CONTRACT SELF_TYPE)",
+            "A function-scoped static witness. Operand syntax is concrete@IMPLEMENTATION or parameter@FUNCTION@implparam_HEX. Forwarding must use the exact lexical scope.",
+        ),
+        (
             "type-parameter",
-            "(type-parameter MODE BINDING [(constraint none|capture-safe)])",
+            "(type-parameter MODE BINDING [(constraint none|capture-safe|owned)])",
             "Lexically scoped generic type; no escape to unrelated contracts.",
         ),
         (
@@ -8010,7 +8065,7 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         ),
         (
             "types",
-            "Unit|Bool|I64|F64|Text|Bytes|StaticText|Secret|NAME|(NAME TYPE...)|(list TYPE)|(map TYPE TYPE)|(result TYPE TYPE)|(option TYPE)|(stream TYPE)|(record (NAME TYPE)...)|(function (TYPE...) TYPE)|(task-function (TYPE...) TYPE ROW)|(resource INTERFACE)|(parameter-type EXACT_PARAMETER)",
+            "Unit|Bool|I64|F64|Text|Bytes|StaticText|Secret|ByteBuffer|OwnedI64Cell|NAME|(NAME TYPE...)|(list TYPE)|(map TYPE TYPE)|(result TYPE TYPE)|(option TYPE)|(stream TYPE)|(record (NAME TYPE)...)|(function (TYPE...) TYPE)|(task-function (TYPE...) TYPE ROW)|(resource INTERFACE)|(parameter-type EXACT_PARAMETER)",
             "Inline composition; (type-alias NAME TYPE) is scoped notation and is admitted even when unused.",
         ),
         (
@@ -8770,7 +8825,7 @@ mod tests {
             .expect("definition projection contract");
         assert_eq!(
             contract.identity,
-            "lkjscript-function-definition-projection-8"
+            "lkjscript-function-definition-projection-9"
         );
         assert_eq!(contract.version, 8);
         assert_eq!(

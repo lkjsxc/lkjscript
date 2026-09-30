@@ -1,0 +1,8 @@
+declarations.begin
+(units (module create deep
+  (function create deep-main (visibility public) (parameter create n (type I64)) (returns I64) (effect pure)
+    (body (let
+      (binding initial (type OwnedI64Cell) (implementation-call abstraction::produce (types OwnedI64Cell) (implementations concrete@cell::Scalar) (local n)))
+      (binding forwarded (type OwnedI64Cell) (implementation-call recursion::forward (types OwnedI64Cell) (implementations concrete@cell::Scalar) (i64 8192) (local initial)))
+      (in (implementation-call recursion::restore (types OwnedI64Cell) (implementations concrete@cell::Scalar concrete@cell::Alternate) (local forwarded))))))))
+declarations.end

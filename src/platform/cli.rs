@@ -3702,7 +3702,120 @@ fn execute_inspect_owner_with_limits(
         ),
     ];
     append_compact_record(&mut output, "summary", &summary_fields)?;
+    append_owned_inspection(&mut output, record)?;
     Ok(output.finish())
+}
+
+fn append_owned_inspection(
+    output: &mut CompactResponseWriter,
+    record: &OwnerRecord,
+) -> Result<(), Diagnostic> {
+    let OwnerRecord::Declaration(declaration) = record else {
+        return Ok(());
+    };
+    match &declaration.payload {
+        DeclarationPayload::OwnedContract(contract) => {
+            append_compact_record(
+                output,
+                "owned.contract",
+                &[
+                    ("owner", declaration.header.owner.to_string()),
+                    ("self", contract.self_parameter.to_string()),
+                    ("methods", contract.methods.len().to_string()),
+                ],
+            )?;
+            for (index, method) in contract.methods.iter().enumerate() {
+                append_compact_record(
+                    output,
+                    "owned.method",
+                    &[
+                        ("id", method.id.to_string()),
+                        ("index", index.to_string()),
+                        ("name", method.name.as_str().to_owned()),
+                        ("kind", "pure".to_owned()),
+                        ("parameters", method.parameters.len().to_string()),
+                        ("result", method.result.to_string()),
+                    ],
+                )?;
+                for (index, p) in method.parameters.iter().enumerate() {
+                    append_compact_record(
+                        output,
+                        "owned.method-parameter",
+                        &[
+                            ("method", method.id.to_string()),
+                            ("index", index.to_string()),
+                            ("type", p.ty.to_string()),
+                            (
+                                "use",
+                                match p.use_mode {
+                                    crate::platform::kernel::ParameterUse::Unrestricted => {
+                                        "unrestricted"
+                                    }
+                                    crate::platform::kernel::ParameterUse::Borrow => "borrow",
+                                    crate::platform::kernel::ParameterUse::Consume => "consume",
+                                }
+                                .to_owned(),
+                            ),
+                        ],
+                    )?;
+                }
+            }
+        }
+        DeclarationPayload::OwnedImplementation(implementation) => {
+            append_compact_record(
+                output,
+                "owned.implementation",
+                &[
+                    ("owner", declaration.header.owner.to_string()),
+                    (
+                        "contract",
+                        format!(
+                            "{}/{}",
+                            implementation.contract.package, implementation.contract.declaration
+                        ),
+                    ),
+                    ("self", implementation.self_type.to_string()),
+                    ("methods", implementation.methods.len().to_string()),
+                ],
+            )?;
+            for mapping in &implementation.methods {
+                append_compact_record(
+                    output,
+                    "owned.method-implementation",
+                    &[
+                        ("method", mapping.method.to_string()),
+                        (
+                            "function",
+                            format!(
+                                "{}/{}",
+                                mapping.function.package, mapping.function.declaration
+                            ),
+                        ),
+                    ],
+                )?;
+            }
+        }
+        DeclarationPayload::Function(function) => {
+            for (index, p) in function.implementation_parameters.iter().enumerate() {
+                append_compact_record(
+                    output,
+                    "owned.implementation-parameter",
+                    &[
+                        ("id", p.id.to_string()),
+                        ("index", index.to_string()),
+                        ("name", p.name.as_str().to_owned()),
+                        (
+                            "contract",
+                            format!("{}/{}", p.contract.package, p.contract.declaration),
+                        ),
+                        ("self", p.self_type.to_string()),
+                    ],
+                )?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 fn http_topology_inspection_fields(
@@ -5152,6 +5265,74 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                 fields.push(("form", "sequence".to_owned()));
                 fields.push(("items", items.len().to_string()));
             }
+            ExpressionOperation::ImplementationCall {
+                function,
+                type_arguments,
+                implementations,
+                arguments,
+            } => {
+                fields.push(("form", "implementation_call".into()));
+                fields.push((
+                    "function",
+                    format!("{}/{}", function.package, function.declaration),
+                ));
+                fields.push(("arguments", arguments.len().to_string()));
+                fields.push(("implementations", implementations.len().to_string()));
+                self.add_declaration_reference("call_function", owner, 0, *function)?;
+                for (index, ty) in type_arguments.iter().enumerate() {
+                    self.add_type_reference("call_type_argument", owner, index, *ty)?;
+                }
+                for (index, operand) in implementations.iter().enumerate() {
+                    let (reference, parameter) = match operand {
+                        crate::platform::kernel::ImplementationOperand::Concrete {
+                            implementation,
+                        } => (*implementation, None),
+                        crate::platform::kernel::ImplementationOperand::Parameter {
+                            function,
+                            parameter,
+                        } => (*function, Some(*parameter)),
+                    };
+                    self.add_declaration_reference(
+                        "implementation_operand",
+                        owner,
+                        index,
+                        reference,
+                    )?;
+                    if let Some(parameter) = parameter {
+                        self.add_reference(
+                            "implementation_parameter",
+                            owner,
+                            index,
+                            "implementation_parameter",
+                            parameter.to_string(),
+                        )?;
+                    }
+                }
+            }
+            ExpressionOperation::MethodCall {
+                witness,
+                contract,
+                method,
+                arguments,
+            } => {
+                fields.push(("form", "method_call".into()));
+                fields.push(("method", method.to_string()));
+                fields.push(("arguments", arguments.len().to_string()));
+                self.add_declaration_reference("owned_contract", owner, 0, *contract)?;
+                let reference = match witness {
+                    crate::platform::kernel::ImplementationOperand::Concrete { implementation } => {
+                        *implementation
+                    }
+                    crate::platform::kernel::ImplementationOperand::Parameter {
+                        function,
+                        parameter,
+                    } => {
+                        fields.push(("implementation-parameter", parameter.to_string()));
+                        *function
+                    }
+                };
+                self.add_declaration_reference("implementation_operand", owner, 0, reference)?;
+            }
             ExpressionOperation::Call {
                 requirement_arguments,
                 effect_arguments,
@@ -5498,7 +5679,9 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                     )?;
                 }
             }
-            ExpressionOperation::Call { arguments, .. } => {
+            ExpressionOperation::ImplementationCall { arguments, .. }
+            | ExpressionOperation::MethodCall { arguments, .. }
+            | ExpressionOperation::Call { arguments, .. } => {
                 for (index, argument) in arguments.into_iter().enumerate() {
                     self.visit_expression_child(
                         owner,
@@ -6039,6 +6222,10 @@ fn materialize_function_definition(
                 "requirement-parameters",
                 function.requirement_parameters.len().to_string(),
             ),
+            (
+                "implementation-parameters",
+                function.implementation_parameters.len().to_string(),
+            ),
             ("parameters", function.parameters.len().to_string()),
             ("result", function.result.to_string()),
             ("effect", effect_name.to_owned()),
@@ -6060,6 +6247,38 @@ fn materialize_function_definition(
         KernelOwnerKey::Expression(function.body),
     )?;
 
+    for (index, witness) in function.implementation_parameters.iter().enumerate() {
+        materializer.push_fields(
+            DefinitionSection::Contract,
+            "definition.implementation-parameter",
+            &[
+                ("id", witness.id.to_string()),
+                ("parent", function_owner.to_string()),
+                ("index", index.to_string()),
+                ("name", witness.name.as_str().to_owned()),
+                (
+                    "contract",
+                    format!(
+                        "{}/{}",
+                        witness.contract.package, witness.contract.declaration
+                    ),
+                ),
+                ("self", witness.self_type.to_string()),
+            ],
+        )?;
+        materializer.add_declaration_reference(
+            "implementation_contract",
+            function_owner,
+            index,
+            witness.contract,
+        )?;
+        materializer.add_type_reference(
+            "implementation_self",
+            function_owner,
+            index,
+            witness.self_type,
+        )?;
+    }
     for (index, type_parameter) in function.type_parameters.iter().copied().enumerate() {
         let owner = KernelOwnerKey::TypeParameter(type_parameter);
         materializer.add_local_reference(

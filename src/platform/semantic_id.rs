@@ -236,6 +236,13 @@ semantic_id!(DraftId, "draft_", "draft", 13u8);
 semantic_id!(ConflictId, "conflict_", "conflict", 14u8);
 semantic_id!(DocumentationId, "doc_", "documentation", 15u8);
 semantic_id!(AnnotationId, "annotation_", "annotation", 16u8);
+semantic_id!(MethodId, "method_", "owned_method", 21u8);
+semantic_id!(
+    ImplementationParameterId,
+    "implparam_",
+    "implementation_parameter",
+    22u8
+);
 semantic_id!(TypeParameterId, "typeparam_", "type_parameter", 17u8);
 semantic_id!(HttpRouteId, "route_", "http_route", 18u8);
 semantic_id!(EffectParameterId, "effectparam_", "effect_parameter", 19u8);

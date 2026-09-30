@@ -773,11 +773,40 @@ fn validate_interface_dependencies(
         for owner in interface.owners.values() {
             match &owner.record {
                 PackageInterfaceRecord::Declaration(declaration) => {
+                    if let PackageInterfaceDeclarationPayload::OwnedImplementation(implementation) =
+                        &declaration.payload
+                    {
+                        closure.require_owner(
+                            revision,
+                            implementation.contract.package,
+                            OwnerKey::Declaration(implementation.contract.declaration),
+                            &[OwnerKind::OwnedContract],
+                            "owned implementation contract",
+                        )?;
+                        for method in &implementation.methods {
+                            closure.require_owner(
+                                revision,
+                                method.function.package,
+                                OwnerKey::Declaration(method.function.declaration),
+                                &[OwnerKind::PureFunction],
+                                "owned implementation method",
+                            )?;
+                        }
+                    }
                     let PackageInterfaceDeclarationPayload::Function(signature) =
                         &declaration.payload
                     else {
                         continue;
                     };
+                    for parameter in &signature.implementation_parameters {
+                        closure.require_owner(
+                            revision,
+                            parameter.contract.package,
+                            OwnerKey::Declaration(parameter.contract.declaration),
+                            &[OwnerKind::OwnedContract],
+                            "implementation parameter contract",
+                        )?;
+                    }
                     let FunctionEffect::Task {
                         effect_parameters: _,
                         requirements,

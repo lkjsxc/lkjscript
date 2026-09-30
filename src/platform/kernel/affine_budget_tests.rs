@@ -22,11 +22,6 @@ impl CountingRead {
 }
 
 impl ExpressionRead for CountingRead {
-    // Forward the complete snapshot absence proof; the independently enumerated
-    // legacy resource reads and budget boundaries below are unchanged.
-    fn byte_buffer_type_known_absent(&self) -> bool {
-        self.snapshot.byte_buffer_type_known_absent()
-    }
     fn package_id(&self) -> PackageId {
         self.snapshot.root.package_id
     }
@@ -142,9 +137,14 @@ fn run(
 
 #[test]
 fn affine_budget_stops_before_every_read_and_expression_phase() {
-    // Independently enumerated work: root, result type, shape signature,
-    // initial-state signature, expression visit, expression record.
-    for (limit, expected_reads) in [0, 1, 2, 3, 4, 4].into_iter().enumerate() {
+    // Root; memory signature, result, containment visit/type/direct type,
+    // return mode, body visit/record, result transfer; resource result,
+    // shape signature, initial signature, body visit/record. Visits consume
+    // work without reading metadata. This includes the predecessor's six phases.
+    for (limit, expected_reads) in [0, 1, 2, 3, 3, 4, 5, 6, 6, 7, 8, 9, 10, 11, 11]
+        .into_iter()
+        .enumerate()
+    {
         let (snapshot, root) = task_fixture();
         let read = CountingRead::new(snapshot);
         let mut work = 0;
@@ -161,10 +161,10 @@ fn affine_budget_stops_before_every_read_and_expression_phase() {
     let (snapshot, root) = task_fixture();
     let read = CountingRead::new(snapshot);
     let mut work = 0;
-    let (outcome, diagnostics) = run(&read, root, &mut work, 6, 0);
+    let (outcome, diagnostics) = run(&read, root, &mut work, 15, 0);
     assert_eq!(outcome, Ok(()));
-    assert_eq!(work, 6);
-    assert_eq!(read.reads.get(), 5);
+    assert_eq!(work, 15);
+    assert_eq!(read.reads.get(), 12);
     assert!(diagnostics.is_empty());
 }
 
@@ -173,8 +173,8 @@ fn affine_budget_preserves_shared_counter_and_integer_ceiling() {
     let (snapshot, root) = task_fixture();
     let read = CountingRead::new(snapshot);
     let mut work = 7;
-    assert_eq!(run(&read, root, &mut work, 13, 0).0, Ok(()));
-    assert_eq!(work, 13);
+    assert_eq!(run(&read, root, &mut work, 22, 0).0, Ok(()));
+    assert_eq!(work, 22);
     let mut near_ceiling = usize::MAX - 1;
     let near_read = CountingRead::new(read.snapshot.clone());
     assert_eq!(
@@ -197,7 +197,12 @@ fn affine_budget_preserves_shared_counter_and_integer_ceiling() {
 
 #[test]
 fn affine_budget_meters_repeated_type_paths_without_changing_meaning() {
-    for (depth, limit, succeeds) in [(5, 64, true), (14, 32, false)] {
+    // Depth five has six unique memory types and five repeated visits: 23
+    // memory-containment steps, root + body visit/read = 3, and 63 resource
+    // type reads. Keep the former 64-step boundary as an exhaustion case.
+    for (depth, limit, succeeds, reads) in
+        [(5, 64, false, 52), (5, 89, true, 77), (14, 32, false, 21)]
+    {
         let (mut snapshot, root, mut ty) = constant_fixture();
         for _ in 0..depth {
             let object = TypeObject::new(TypeForm::Result { ok: ty, error: ty }).unwrap();
@@ -221,7 +226,7 @@ fn affine_budget_meters_repeated_type_paths_without_changing_meaning() {
         assert_eq!(work, limit);
         assert_eq!(
             read.reads.get(),
-            limit,
+            reads,
             "stop before the first unadmitted read"
         );
         assert!(diagnostics.is_empty());
@@ -247,8 +252,9 @@ fn affine_budget_keeps_semantic_and_diagnostic_exhaustion_distinct() {
     *result = ty;
     for (steps, sink, expected) in [
         (1, 0, Err(ExpressionValidationExhaustion::Steps)),
-        (2, 0, Err(ExpressionValidationExhaustion::Diagnostics)),
-        (2, 1, Ok(())),
+        (2, 0, Err(ExpressionValidationExhaustion::Steps)),
+        (7, 0, Err(ExpressionValidationExhaustion::Diagnostics)),
+        (7, 1, Ok(())),
     ] {
         let mut work = 0;
         let (outcome, diagnostics) = run(&snapshot, root, &mut work, steps, sink);
@@ -315,7 +321,13 @@ fn affine_budget_reader_covers_all_metadata_methods_before_delegation() {
 #[test]
 fn affine_budget_preserves_cancellation_at_each_read_phase() {
     use crate::platform::kernel::infer::CheckedExpressionRead;
-    for stop in 1..=5 {
+    // Cancellation happens before each read and memory traversal step. The
+    // resource expression visit consumes work, followed by its checked read.
+    for (index, expected_reads) in [0, 1, 2, 3, 3, 4, 5, 6, 6, 7, 8, 9, 10, 11]
+        .into_iter()
+        .enumerate()
+    {
+        let stop = index + 1;
         let (snapshot, root) = task_fixture();
         let inner = CountingRead::new(snapshot);
         let checkpoints = Cell::new(0);
@@ -342,8 +354,8 @@ fn affine_budget_preserves_cancellation_at_each_read_phase() {
         assert_eq!(diagnostics[0].code, "affine_fixture_cancelled");
         assert_eq!(diagnostics[0].class, DiagnosticClass::Resource);
         assert_eq!(checkpoints.get(), stop);
-        assert_eq!(inner.reads.get(), stop - 1);
-        assert_eq!(used, if stop == 5 { 6 } else { stop });
+        assert_eq!(inner.reads.get(), expected_reads, "checkpoint {stop}");
+        assert_eq!(used, if stop == 14 { 15 } else { stop });
     }
     let (snapshot, _, _) = constant_fixture();
     let cancellation = || {
