@@ -97,26 +97,52 @@ fn deployment(
     Ok(descriptor)
 }
 
-const HOSTILE: &[(&str, &[u8])] = &[
+// Preserve the historical format-cut controls separately from current semantic attacks.
+// Current fixtures retain the original canonical source and instructions; their
+// exact derived-envelope conversion is checked by the compiler's fixture test.
+type RejectionFixture = (&'static str, &'static [u8], &'static str, &'static str);
+const HOSTILE: &[RejectionFixture] = &[
     (
-        "direct",
+        "direct-predecessor",
         include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../tests/fixtures/finite-callable-predecessor/expanding-direct.lkja"
         )),
+        "source",
+        "compiler_unit_contract",
+    ),
+    (
+        "named-predecessor",
+        include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/fixtures/finite-callable-predecessor/expanding-named.lkja"
+        )),
+        "source",
+        "compiler_unit_contract",
+    ),
+    (
+        "direct",
+        include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/fixtures/finite-callable-current/expanding-direct.lkja"
+        )),
+        "semantic",
+        "kernel_callable_expansion",
     ),
     (
         "named",
         include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../tests/fixtures/finite-callable-predecessor/expanding-named.lkja"
+            "/../../tests/fixtures/finite-callable-current/expanding-named.lkja"
         )),
+        "semantic",
+        "kernel_callable_expansion",
     ),
 ];
 
 fn reject_artifacts(context: &mut Context, bundle: &Path) -> Result<(), DevError> {
     let mut commands = Vec::new();
-    for (label, bytes) in HOSTILE {
+    for (label, bytes, expected_class, expected_code) in HOSTILE {
         let artifact = format!("expanding-{label}.lkja");
         fs::write(bundle.join(&artifact), bytes)?;
         fs::write(context.evidence.join(format!("finite-{artifact}")), bytes)?;
@@ -147,10 +173,12 @@ fn reject_artifacts(context: &mut Context, bundle: &Path) -> Result<(), DevError
             false,
         )?;
         require(
-            field(&output, "diagnostic", "code")? == "kernel_callable_expansion"
-                && field(&output, "diagnostic", "class")? == "semantic"
+            field(&output, "diagnostic", "code")? == *expected_code
+                && field(&output, "diagnostic", "class")? == *expected_class
                 && output.iter().all(|record| record.operation != "execution"),
-            "coherent hostile artifact escaped semantic admission before execution",
+            &format!(
+                "finite artifact {label} did not reject at {expected_class}/{expected_code} before execution"
+            ),
         )?;
     }
     context.receipt.observations.insert(
@@ -171,7 +199,7 @@ fn validate_artifact_rejections(receipt: &Receipt, root: &Path) -> Result<(), De
         commands.len() == HOSTILE.len() && commands.windows(2).all(|pair| pair[0] < pair[1]),
         "finite hostile applications omitted or duplicated",
     )?;
-    for (index, (label, bytes)) in commands.iter().zip(HOSTILE) {
+    for (index, (label, bytes, expected_class, expected_code)) in commands.iter().zip(HOSTILE) {
         require(
             process::read_bounded(
                 &root.join(format!("finite-expanding-{label}.lkja")),
@@ -208,10 +236,12 @@ fn validate_artifact_rejections(receipt: &Receipt, root: &Path) -> Result<(), De
         )
         .map_err(|e| DevError::corrupt(format!("finite artifact output: {e:?}")))?;
         require(
-            field(&output, "diagnostic", "class")? == "semantic"
-                && field(&output, "diagnostic", "code")? == "kernel_callable_expansion"
+            field(&output, "diagnostic", "class")? == *expected_class
+                && field(&output, "diagnostic", "code")? == *expected_code
                 && output.iter().all(|record| record.operation != "execution"),
-            "finite artifact failed outside semantic application admission",
+            &format!(
+                "finite artifact {label} failed outside its exact {expected_class}/{expected_code} admission stage"
+            ),
         )?;
     }
     Ok(())

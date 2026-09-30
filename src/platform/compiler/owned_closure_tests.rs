@@ -119,7 +119,7 @@ declarations.end"#,
         ),
     );
     let a_export = a.export_package_transport().unwrap();
-    let a_loaded = build(&a, &[b_loaded.clone()]);
+    let a_loaded = build(&a, std::slice::from_ref(&b_loaded));
     let r = make("owned-closure-root");
     r.stage_package_transport(a_export.transport_digest, &a_export.container)
         .unwrap();

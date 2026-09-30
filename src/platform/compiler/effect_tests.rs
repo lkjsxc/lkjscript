@@ -31,6 +31,33 @@ fn strict_artifact_rejects_fully_rehashed_expanding_canonical_applications() {
         );
         // Re-envelope the exact frozen instructions and source to exercise current semantics.
         let current = predecessor_attack_tests::current_derived_fixture(bytes);
+        if let Some(directory) = std::env::var_os("LKJSCRIPT_WRITE_FINITE_FIXTURES") {
+            use std::io::Write;
+            let destination =
+                std::path::Path::new(&directory).join(format!("expanding-{name}.lkja"));
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(destination)
+                .unwrap()
+                .write_all(&current)
+                .unwrap();
+        }
+        let retained = match name {
+            "direct" => include_bytes!(
+                "../../../tests/fixtures/finite-callable-current/expanding-direct.lkja"
+            )
+            .as_slice(),
+            "named" => include_bytes!(
+                "../../../tests/fixtures/finite-callable-current/expanding-named.lkja"
+            )
+            .as_slice(),
+            _ => unreachable!(),
+        };
+        assert_eq!(
+            current, retained,
+            "current {name} fixture must preserve exact source and instructions"
+        );
         let error = load_artifact(&current).unwrap_err();
         assert_eq!(error.code, "kernel_callable_expansion", "{name}: {error:?}");
         assert_eq!(error.class, crate::platform::DiagnosticClass::Semantic);

@@ -281,3 +281,46 @@ observation ended after the two successful initial builds; their outputs were
 independently compared before continuing only the remaining stages. Neither
 partial observation is claimed as the complete successful finalization. The final
 `finalize.exit` is zero. No broad source acceptance is implied by these asset checks.
+
+## First frozen-source full profile and contributor alignment
+
+Source `caeb92299f3b5b86042ee8ad083427f673aeb362`, tree
+`b1b951dad72e17d52d1e08931d24a682203e98b0`, completed a full-profile attempt
+with 21 fresh passes, four failures, one skipped gate and zero reuse in
+1,044.676478306 seconds. Inputs remained stable. The original receipt is
+`.artifacts/lkjscript-dev/check/1790767674291317093-3006681-0/receipt.json`;
+its terminal output and source identities remain in `.artifacts/20260930-owned-full1/`.
+This is failed acceptance, not a mainline-delivered source.
+
+Clippy found one avoidable clone in the new source-dependency regression;
+`std::slice::from_ref` preserves its assertion without copying the loaded artifact.
+The failed prerequisite left `workspace_tests` unrun. Distributed HTTP reached
+successful function inspection, then rejected projection generation 9 because
+its exact expectation still named generation 8. Service acceptance stopped before
+starting a service because its retained SHA-256 expectation predated the already
+rebuilt lkjournal artifact. Both consumers now bind the actual current generation
+and the exact artifact already reproduced by public build and the full profile's
+successful artifact comparison. No runtime behavior or service fixture meaning
+was changed by these two expectation corrections.
+
+The offline workflow reached its frozen expanding-callable artifact cases.
+Those historical compiler units now reject at the explicit rebuild boundary,
+not at the later semantic stage expected by the old verifier. The correction
+keeps both original artifacts and tests their exact `source/compiler_unit_contract`
+rejection. It also adds two separately retained current-envelope fixtures, generated
+by the existing test-only converter without changing canonical source or original
+instructions. They must reject as `semantic/kernel_callable_expansion` before any
+execution. The offline runner and receipt reader now require all four exact cases;
+a format rejection cannot stand in for semantic admission. The compiler test
+reconstructs and byte-compares the current fixtures. Their provenance and the
+create-new-only regeneration command are recorded in
+[the fixture owner](../../tests/fixtures/finite-callable-current/README.md).
+
+The first fixture-generation launcher combined an unqualified filter with `--exact`
+and selected zero tests; its successful process exit is not a test pass.
+The corrected launcher selected and passed the one compiler test, covering both
+original and both current artifacts. Original logs and generated outputs remain
+in `.artifacts/20260930-owned-corrections/`. Subsequent retained-byte assertions,
+contributor changes and full acceptance still require their own completed runs.
+No failed receipt, predecessor artifact, original project HEAD, deployment grant,
+release selector, stash or unrelated worktree was rewritten.
