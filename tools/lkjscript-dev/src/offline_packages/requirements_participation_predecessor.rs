@@ -1,4 +1,4 @@
-//! Authentic official v0.1.40 exact-closure and raw-participation compatibility.
+//! Authentic v0.1.40 refusal/history and current-envelope raw-participation behavior.
 use super::*;
 
 const MATERIAL: &str = "requirement-participation-predecessor";
@@ -6,6 +6,10 @@ const TRANSPORT: &str =
     "package_transport_4c3f2f8387ee3ed16864681d951fc35317179d81d895bd60a43f1e9b603eed56";
 const ARTIFACT: &str =
     "artifact_bundle_4659d83df8f33b7eacd596328fccfdf6ab1893ad399c2e82582d1aca37ed2ea2";
+const CURRENT: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../tests/fixtures/owned-predecessor-current/participation.lkja"
+));
 const NEW_GUARD_ARTIFACT: &str =
     "artifact_bundle_fa1f2ff01c98c9a72b423192010956d9b7770921eda4c7d73f7c605500e9fb11";
 const PACKAGE: &str = "pkg_7c6771ecd2421f731a15aae77e081a05";
@@ -53,14 +57,72 @@ fn material_path(root: &Path, name: &str) -> PathBuf {
     root.join(format!("{MATERIAL}--{name}"))
 }
 
-fn descriptor(target: &str) -> Result<Value, DevError> {
+fn descriptor(target: &str, artifact: &str) -> Result<Value, DevError> {
     let mut value: Value = serde_json::from_slice(include_bytes!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../tests/fixtures/cell-participation-predecessor/read-credit.deployment.json"
     )))?;
-    value["artifact"] = json!("predecessor.lkja");
+    value["artifact"] = json!(artifact);
     value["target"] = json!(target);
     Ok(value)
+}
+
+fn current_identity(root: &Path) -> Result<String, DevError> {
+    let artifact = process::read_bounded(
+        &material_path(root, "current.lkja"),
+        MAXIMUM_CONTAINER_BYTES,
+    )?;
+    require(
+        artifact == CURRENT,
+        "participation current fixture bytes changed",
+    )?;
+    let identity = lkjscript::platform::contributor::strict_artifact_identity_probe(&artifact)
+        .map_err(|error| DevError::corrupt(error.to_string()))?;
+    let source = process::read_bounded(
+        &material_path(root, "predecessor.lkjp"),
+        MAXIMUM_CONTAINER_BYTES,
+    )?;
+    let bound = lkjscript::platform::contributor::strict_artifact_source_probe(
+        &artifact, &source, TRANSPORT,
+    )
+    .map_err(|error| DevError::corrupt(error.to_string()))?;
+    require(
+        bound["bundle"] == identity
+            && bound["source_transport"] == TRANSPORT
+            && bound["package"] == PACKAGE
+            && bound["revision"] == REVISION
+            && bound["package_revision"] == LOGICAL,
+        "participation current artifact lost original source transport binding",
+    )?;
+    Ok(identity)
+}
+
+fn original_refusal(output: &[CompactRecord]) -> Result<(), DevError> {
+    require(
+        field(output, "result", "status")? == "failure"
+            && field(output, "result", "command")? == "run"
+            && field(output, "diagnostic", "class")? == "source"
+            && field(output, "diagnostic", "code")? == "artifact_bundle_contract"
+            && output
+                .iter()
+                .filter(|record| record.operation == "diagnostic")
+                .count()
+                == 1
+            && !output.iter().any(|record| record.operation == "execution"),
+        "original participation artifact did not stop at its artifact bundle contract",
+    )
+}
+
+fn refusal_states(rows: &[Value], current_initial: &Value) -> Result<(), DevError> {
+    require(
+        rows.len() == 2
+            && rows[0] == rows[1]
+            && &rows[1] == current_initial
+            && revision_identity(&rows[0]["revision"])
+            && byte_array(&rows[0]["head"], None)
+            && rows[0]["entry"].is_null(),
+        "participation original refusal changed its initial store or omitted observations",
+    )
 }
 
 fn cases() -> [(&'static str, Option<Value>); 5] {
@@ -119,17 +181,22 @@ fn expected_states(rows: &[Value]) -> Result<(), DevError> {
 
 fn run_result(
     output: &[CompactRecord],
+    current_artifact: &str,
     target: &str,
     expected: Option<Value>,
 ) -> Result<(), DevError> {
     if let Some(expected) = expected {
         require(
-            serde_json::from_str::<Value>(&field(output, "execution", "value")?)? == expected
-                && field(output, "execution", "artifact")? == ARTIFACT
+            field(output, "result", "status")? == "success"
+                && field(output, "result", "command")? == "run"
+                && serde_json::from_str::<Value>(&field(output, "execution", "value")?)?
+                    == expected
+                && field(output, "execution", "artifact")? == current_artifact
                 && field(output, "execution", "package")? == PACKAGE
                 && field(output, "execution", "revision")? == REVISION
                 && field(output, "execution", "execution-mode")? == "production"
-                && field(output, "execution", "verification")? == "not-performed",
+                && field(output, "execution", "verification")? == "not-performed"
+                && !output.iter().any(|record| record.operation == "diagnostic"),
             "authentic participation artifact result or exact closure changed",
         )?;
         if target == "raw-owner" {
@@ -144,8 +211,13 @@ fn run_result(
         }
     } else {
         require(
-            field(output, "diagnostic", "class")? == "infrastructure"
-                && field(output, "diagnostic", "code")? == "normalized_transaction_nested",
+            field(output, "result", "status")? == "failure"
+                && field(output, "result", "command")? == "run"
+                && field(output, "diagnostic", "class")? == "infrastructure"
+                && field(output, "diagnostic", "code")? == "normalized_transaction_nested"
+                && field(output, "diagnostic", "notes")?
+                    .contains("remaining-owned-tasks=0 failures=0")
+                && !output.iter().any(|record| record.operation == "execution"),
             "old same-canonical owner reentry lost its classified rejection",
         )?;
     }
@@ -170,6 +242,9 @@ pub(super) fn workflow(context: &mut Context) -> Result<(), DevError> {
         fs::write(root.join(name), bytes)?;
         fs::write(material_path(&context.evidence, name), bytes)?;
     }
+    fs::write(root.join("current.lkja"), CURRENT)?;
+    fs::write(material_path(&context.evidence, "current.lkja"), CURRENT)?;
+    let current_artifact = current_identity(&context.evidence)?;
     let importer = context.new_package("participation-predecessor-importer")?;
     let stage = context.receipt.commands.len();
     context.cli(
@@ -196,15 +271,48 @@ pub(super) fn workflow(context: &mut Context) -> Result<(), DevError> {
         ],
         true,
     )?;
+    let mut refused_states = vec![observe(&root)?];
+    let refusal_name = "original-refusal.deployment.json";
+    let refusal_path = root.join(refusal_name);
+    let refusal_bytes = evidence::encode_json(&descriptor("read-credit", "predecessor.lkja")?)?;
+    fs::write(&refusal_path, &refusal_bytes)?;
+    fs::write(
+        material_path(&context.evidence, refusal_name),
+        refusal_bytes,
+    )?;
+    let refusal = context.receipt.commands.len();
+    let output = context.cli(
+        None,
+        &[
+            "run",
+            "--deployment",
+            &refusal_path.display().to_string(),
+            "--arguments",
+            "[]",
+        ],
+        false,
+    )?;
+    original_refusal(&output)?;
+    require(
+        context.receipt.commands[refusal].observation.exit_code == Some(2),
+        "participation original refusal exit differs",
+    )?;
+    refused_states.push(observe(&root)?);
     let mut states = vec![observe(&root)?];
+    refusal_states(&refused_states, &states[0])?;
+    fs::write(
+        material_path(&context.evidence, "original-refusal.states.json"),
+        evidence::encode_json(&refused_states)?,
+    )?;
     let mut commands = Vec::new();
     for (ordinal, (target, expected)) in cases().into_iter().enumerate() {
         let name = format!("run-{ordinal}-{target}.deployment.json");
         let path = root.join(&name);
-        let bytes = evidence::encode_json(&descriptor(target)?)?;
+        let bytes = evidence::encode_json(&descriptor(target, "current.lkja")?)?;
         fs::write(&path, &bytes)?;
         fs::write(material_path(&context.evidence, &name), bytes)?;
-        commands.push(context.receipt.commands.len());
+        let index = context.receipt.commands.len();
+        commands.push(index);
         let output = context.cli(
             None,
             &[
@@ -216,7 +324,12 @@ pub(super) fn workflow(context: &mut Context) -> Result<(), DevError> {
             ],
             expected.is_some(),
         )?;
-        run_result(&output, target, expected)?;
+        require(
+            context.receipt.commands[index].observation.exit_code
+                == Some(if expected.is_some() { 0 } else { 6 }),
+            "participation current execution exit differs",
+        )?;
+        run_result(&output, &current_artifact, target, expected)?;
         states.push(observe(&root)?);
     }
     expected_states(&states)?;
@@ -238,7 +351,7 @@ pub(super) fn workflow(context: &mut Context) -> Result<(), DevError> {
     verify_result(&output)?;
     context.receipt.observations.insert(
         MATERIAL.into(),
-        json!({"stage":stage,"initialize":initialize,"commands":commands,"verify":verify})
+        json!({"stage":stage,"initialize":initialize,"original_refusal":refusal,"commands":commands,"verify":verify})
             .to_string(),
     );
     Ok(())
@@ -263,25 +376,33 @@ fn read_output(
     .map_err(|_| DevError::corrupt("participation predecessor compact output"))
 }
 
-fn original_old_runtime_preflight(root: &Path) -> Result<(), DevError> {
-    // Retained original official-v0.1.40 evidence, not a fresh execution by the current candidate.
-    // Admission binds its exact new artifact separately from the classified old-runtime output.
-    let artifact = process::read_bounded(
-        &material_path(root, "new-guard.lkja"),
-        MAXIMUM_CONTAINER_BYTES,
-    )?;
+fn retained_original(root: &Path, name: &str) -> Result<Vec<u8>, DevError> {
+    let expected = FILES
+        .iter()
+        .find(|(file, _)| *file == name)
+        .ok_or_else(|| DevError::corrupt("participation original fixture missing"))?
+        .1;
+    let bytes = process::read_bounded(&material_path(root, name), MAXIMUM_CONTAINER_BYTES)?;
     require(
-        lkjscript::platform::contributor::strict_artifact_identity_probe(&artifact)
-            .map_err(|error| DevError::corrupt(error.to_string()))?
-            == NEW_GUARD_ARTIFACT,
+        bytes == expected,
+        "retained participation original bytes changed",
+    )?;
+    Ok(bytes)
+}
+
+fn original_old_runtime_preflight(root: &Path) -> Result<(), DevError> {
+    // Retained official-v0.1.40 evidence, not a fresh execution by the current candidate.
+    // Original bytes and provenance establish historical identity, not current admission.
+    retained_original(root, "new-guard.lkja")?;
+    let provenance: Value =
+        serde_json::from_slice(&retained_original(root, "new-guard-provenance.json")?)?;
+    require(
+        provenance["artifact"] == NEW_GUARD_ARTIFACT,
         "old-runtime new-operation preflight artifact identity changed",
     )?;
     let output = parse_records(
         "official-new-guard-preflight",
-        &process::read_bounded(
-            &material_path(root, "official-new-guard-preflight.stdout"),
-            MAXIMUM_OUTPUT_BYTES,
-        )?,
+        &retained_original(root, "official-new-guard-preflight.stdout")?,
     )
     .map_err(|_| DevError::corrupt("official old-runtime preflight output"))?;
     require(
@@ -289,10 +410,7 @@ fn original_old_runtime_preflight(root: &Path) -> Result<(), DevError> {
             && field(&output, "diagnostic", "code")? == "normalized_data_operation"
             && field(&output, "diagnostic", "message")?
                 == "first-party data adapter does not implement exact operation 'require-transaction'"
-            && process::read_bounded(
-                &material_path(root, "official-new-guard-preflight.exit"),
-                MAXIMUM_OUTPUT_BYTES,
-            )? == b"3\n",
+            && retained_original(root, "official-new-guard-preflight.exit")? == b"3\n",
         "official old runtime no longer retains its before-secret unsupported-operation rejection",
     )
 }
@@ -309,25 +427,28 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
         )?;
     }
     original_old_runtime_preflight(root)?;
+    let provenance: Value = serde_json::from_slice(&retained_original(root, "provenance.json")?)?;
     require(
-        lkjscript::platform::contributor::strict_artifact_identity_probe(&process::read_bounded(
-            &material_path(root, "predecessor.lkja"),
-            MAXIMUM_CONTAINER_BYTES,
-        )?)
-        .map_err(|error| DevError::corrupt(error.to_string()))?
-            == ARTIFACT,
-        "authentic participation artifact identity changed",
+        provenance["artifact"]["bundle"] == ARTIFACT,
+        "historical participation artifact provenance identity changed",
     )?;
+    let current_artifact = current_identity(root)?;
     let states: Vec<Value> = serde_json::from_slice(&process::read_bounded(
         &material_path(root, "states.json"),
         MAXIMUM_OUTPUT_BYTES,
     )?)?;
     expected_states(&states)?;
+    let refused_states: Vec<Value> = serde_json::from_slice(&process::read_bounded(
+        &material_path(root, "original-refusal.states.json"),
+        MAXIMUM_OUTPUT_BYTES,
+    )?)?;
+    refusal_states(&refused_states, &states[0])?;
     let commands: Vec<usize> = serde_json::from_value(value["commands"].clone())?;
     let stage: usize = serde_json::from_value(value["stage"].clone())?;
     let initialize: usize = serde_json::from_value(value["initialize"].clone())?;
+    let refusal: usize = serde_json::from_value(value["original_refusal"].clone())?;
     let verify: usize = serde_json::from_value(value["verify"].clone())?;
-    let all_commands: Vec<usize> = [stage, initialize]
+    let all_commands: Vec<usize> = [stage, initialize, refusal]
         .into_iter()
         .chain(commands.iter().copied())
         .chain([verify])
@@ -338,6 +459,33 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
     )?;
     let isolated = Path::new(&receipt.isolated_root);
     let material = isolated.join(MATERIAL);
+    let refusal_name = "original-refusal.deployment.json";
+    require(
+        serde_json::from_slice::<Value>(&process::read_bounded(
+            &material_path(root, refusal_name),
+            MAXIMUM_OUTPUT_BYTES,
+        )?)? == descriptor("read-credit", "predecessor.lkja")?,
+        "participation original refusal changed its exact descriptor",
+    )?;
+    let command = receipt
+        .commands
+        .get(refusal)
+        .ok_or_else(|| DevError::corrupt("participation original refusal command absent"))?;
+    require(
+        !command.expects_success
+            && command.observation.exit_code == Some(2)
+            && command.command
+                == [
+                    receipt.pinned_runtime_path.clone(),
+                    "run".into(),
+                    "--deployment".into(),
+                    material.join(refusal_name).display().to_string(),
+                    "--arguments".into(),
+                    "[]".into(),
+                ],
+        "participation original refusal changed its runtime, artifact or arguments",
+    )?;
+    original_refusal(&read_output(receipt, root, refusal)?)?;
     for (index, arguments) in [
         (
             stage,
@@ -404,7 +552,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
             serde_json::from_slice::<Value>(&process::read_bounded(
                 &material_path(root, &name),
                 MAXIMUM_OUTPUT_BYTES,
-            )?)? == descriptor(target)?,
+            )?)? == descriptor(target, "current.lkja")?,
             "participation predecessor deployment changed its target or exact grant",
         )?;
         let command = receipt
@@ -413,7 +561,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
             .ok_or_else(|| DevError::corrupt("participation predecessor execution omitted"))?;
         require(
             command.expects_success == expected.is_some()
-                && (expected.is_some() || command.observation.exit_code == Some(6))
+                && command.observation.exit_code == Some(if expected.is_some() { 0 } else { 6 })
                 && command.command
                     == [
                         receipt.pinned_runtime_path.clone(),
@@ -425,9 +573,14 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
                     ],
             "participation predecessor invocation changed runtime, artifact or arguments",
         )?;
-        run_result(&read_output(receipt, root, *index)?, target, expected)?;
+        run_result(
+            &read_output(receipt, root, *index)?,
+            &current_artifact,
+            target,
+            expected,
+        )?;
     }
-    Ok(commands)
+    Ok(std::iter::once(refusal).chain(commands).collect())
 }
 
 #[cfg(test)]
@@ -457,12 +610,60 @@ mod tests {
         .unwrap();
         assert!(original_old_runtime_preflight(root).is_err());
         copy_originals(root);
+        let provenance_path = material_path(root, "new-guard-provenance.json");
+        let mut provenance: Value =
+            serde_json::from_slice(&fs::read(&provenance_path).unwrap()).unwrap();
+        provenance["artifact"] = json!(ARTIFACT);
+        fs::write(
+            &provenance_path,
+            evidence::encode_json(&provenance).unwrap(),
+        )
+        .unwrap();
+        assert!(original_old_runtime_preflight(root).is_err());
+        copy_originals(root);
+        fs::remove_file(&provenance_path).unwrap();
+        assert!(original_old_runtime_preflight(root).is_err());
+        copy_originals(root);
+        fs::write(
+            material_path(root, "official-new-guard-preflight.exit"),
+            b"6\n",
+        )
+        .unwrap();
+        assert!(original_old_runtime_preflight(root).is_err());
+        copy_originals(root);
         fs::write(
             material_path(root, "official-new-guard-preflight.stdout"),
             b"result status=failure command=run\ndiagnostic class=capability code=secret_missing message=missing\n",
         )
         .unwrap();
         assert!(original_old_runtime_preflight(root).is_err());
+    }
+
+    #[test]
+    fn participation_current_control_requires_exact_bytes_and_original_transport() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path();
+        copy_originals(root);
+        fs::write(material_path(root, "current.lkja"), CURRENT).unwrap();
+        current_identity(root).unwrap();
+        fs::write(
+            material_path(root, "current.lkja"),
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/fixtures/owned-predecessor-current/transactions.lkja"
+            )),
+        )
+        .unwrap();
+        assert!(current_identity(root).is_err());
+        fs::remove_file(material_path(root, "current.lkja")).unwrap();
+        assert!(current_identity(root).is_err());
+        fs::write(material_path(root, "current.lkja"), CURRENT).unwrap();
+        fs::remove_file(material_path(root, "predecessor.lkjp")).unwrap();
+        assert!(current_identity(root).is_err());
+        let refusal = b"result status=failure command=run\ndiagnostic class=source code=artifact_bundle_contract message=unsupported\n";
+        original_refusal(&parse_records("refusal", refusal).unwrap()).unwrap();
+        let later = b"result status=failure command=run\ndiagnostic class=capability code=secret_missing message=missing\n";
+        assert!(original_refusal(&parse_records("later", later).unwrap()).is_err());
     }
 
     #[test]
@@ -476,6 +677,16 @@ mod tests {
         omitted.observations.remove(MATERIAL);
         assert!(validate(&omitted, root).is_err());
         let value: Value = serde_json::from_str(&receipt.observations[MATERIAL]).unwrap();
+        let mut missing_refusal = receipt.clone();
+        let mut missing_value = value.clone();
+        missing_value
+            .as_object_mut()
+            .unwrap()
+            .remove("original_refusal");
+        missing_refusal
+            .observations
+            .insert(MATERIAL.into(), missing_value.to_string());
+        assert!(validate(&missing_refusal, root).is_err());
         let stage: usize = serde_json::from_value(value["stage"].clone()).unwrap();
         for index in std::iter::once(stage).chain(commands.iter().copied()) {
             let mut substituted = receipt.clone();
@@ -484,11 +695,18 @@ mod tests {
         }
         let temporary = tempfile::tempdir().unwrap();
         copy_originals(temporary.path());
-        fs::copy(
-            material_path(root, "states.json"),
-            material_path(temporary.path(), "states.json"),
-        )
-        .unwrap();
+        for name in [
+            "states.json",
+            "current.lkja",
+            "original-refusal.states.json",
+            "original-refusal.deployment.json",
+        ] {
+            fs::copy(
+                material_path(root, name),
+                material_path(temporary.path(), name),
+            )
+            .unwrap();
+        }
         let verify: usize = serde_json::from_value(value["verify"].clone()).unwrap();
         for index in [stage, verify].into_iter().chain(commands) {
             let name = format!("command-{index:04}.stdout");
@@ -503,6 +721,28 @@ mod tests {
             .unwrap();
         }
         validate(&receipt, temporary.path()).unwrap();
+        fs::copy(
+            material_path(temporary.path(), "predecessor.lkja"),
+            material_path(temporary.path(), "current.lkja"),
+        )
+        .unwrap();
+        assert!(validate(&receipt, temporary.path()).is_err());
+        fs::copy(
+            material_path(root, "current.lkja"),
+            material_path(temporary.path(), "current.lkja"),
+        )
+        .unwrap();
+        fs::remove_file(material_path(
+            temporary.path(),
+            "original-refusal.states.json",
+        ))
+        .unwrap();
+        assert!(validate(&receipt, temporary.path()).is_err());
+        fs::copy(
+            material_path(root, "original-refusal.states.json"),
+            material_path(temporary.path(), "original-refusal.states.json"),
+        )
+        .unwrap();
         fs::remove_file(material_path(
             temporary.path(),
             "official-new-guard-preflight.stdout",

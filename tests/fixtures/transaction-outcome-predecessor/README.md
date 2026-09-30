@@ -19,3 +19,13 @@ output, imports the exact old transport into a new target package, and runs orig
 imported artifacts against fresh disposable data. It checks independent stored scalar bytes and
 unchanged HEAD after suppression, and makes a reviewed identity-preserving source edit.
 This is compatibility material, not a new application or a receipt for current execution.
+
+## 2026-09-30 derived-format cut
+
+The original execution observations above remain historical. Under Graph 18 the original
+artifact rejects at `source/compiler_unit_contract`, and every original target refusal must
+leave its disposable store and HEAD unchanged. The successor workflow additionally executes
+the strictly admitted current-envelope control in `../owned-predecessor-current/`, the public
+rebuild and the imported result on independent fresh stores. All five legacy output and
+conditional-publication assertions are retained for each executable group. The original
+artifact, requests, source packs, transports and provenance are not rewritten.

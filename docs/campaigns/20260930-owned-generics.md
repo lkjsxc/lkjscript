@@ -324,3 +324,138 @@ in `.artifacts/20260930-owned-corrections/`. Subsequent retained-byte assertions
 contributor changes and full acceptance still require their own completed runs.
 No failed receipt, predecessor artifact, original project HEAD, deployment grant,
 release selector, stash or unrelated worktree was rewritten.
+
+## Second frozen profile: ordinary intent and historical observers
+
+Source `37d18728c44e4f506e6ca4e5cda9bcb4702150bc`, tree
+`4deafa9623522391d1b402af2ec63d244854b8fd`, completed all 26 selected gates
+with 24 fresh passes, two failures, zero reuse and no unrun gates in
+1,198.105419898 seconds. Inputs remained stable. The original receipt is
+`.artifacts/lkjscript-dev/check/1790769770249759687-3071144-0/receipt.json`;
+the terminal record remains in `.artifacts/20260930-owned-full2/`.
+Clippy, the corrected distributed HTTP workflow (46 commands, two runners),
+service acceptance and the other 21 gates passed. This is still failed source
+acceptance: neither source commit has reached remote main.
+
+Offline packages passed the four old/current finite-artifact cases, then exposed
+a real native-authoring regression. Every native function emitted an empty
+`SetImplementationParameters`, including ordinary declarations with no witnesses.
+That extra request operation changed canonical intent and derived identities
+relative to independently authored flat/structural forms. The failed workflow
+retains all three inputs and plans under `.artifacts/offline-packages/run-3BCHKw/`.
+Flat and structural plans are byte-identical; native is not. Exact comparison is
+retained, not relaxed. Native lowering now emits a setter only when clauses exist
+or an existing function actually has witnesses to clear. Ordinary create/edit
+requests retain their prior generations; removing all witness clauses still clears
+the accepted signature. A new public create/draft/edit/check/build/draft regression
+covers that latter obligation.
+
+The workspace library run reported 984 passed, 12 failed and eight existing ignored
+cases. Three independent flat/native intent tests and the literal-edit generation
+test expose the same extra setter. Three historical/generation-neutral observers
+mistook the newly explicit empty function witness vector for changed meaning.
+Their comparison now elides only that empty function field; historical fixtures,
+expected historical hashes, owner identities, canonical type bytes and retirement
+checks remain unchanged. Two additional tests require nonempty witness selections,
+changed contracts and unrelated data fields to remain distinguishable. Current
+projection/graph/validator expectations are aligned with their explicit new
+versions, and the old graph-17 codec manifest is retained as a separate exact
+predecessor assertion. Constraint tag 2 is tested positively as Owned, while
+unknown tags, duplicate constraints and both orders of unsupported combinations
+still reject. The root-library failure prevented subsequent workspace test
+executables from running; an empty unrun-gate list is not a claim that those tests
+executed.
+
+At the same source, the copied optimized executable passed all eight `native_owned`
+public cases from `/tmp` with an empty environment and PATH in 1.43 seconds;
+173 unrelated tests were filtered, zero failed or ignored. This includes source-free
+three-package execution and exact witness remapping. Both executables came from
+the completed Cargo-reported release-command producer and were byte-compared.
+They remain in `.artifacts/20260930-owned-final-native/`, with original log/exit.
+Those successful cases did not establish ordinary intent equality and are not
+restamped as evidence for the subsequent parser correction. The correction's
+library/public runs and next frozen-source acceptance remain distinct.
+
+## Focused correction and exact predecessor controls
+
+The parser and historical-observer correction passed all 998 root-library tests,
+with zero failures and eight existing ignored cases, in 72.99 seconds. The two
+new observer controls preserve nonempty witness meaning. The following dev-library
+run passed 199 tests, failed one and retained 19 ignored cases. Its historical
+preflight helper incorrectly required a generation-21 artifact to pass current
+execution admission. The complete failed workspace-library command remains in
+`.artifacts/20260930-owned-corrections/library-correction.log` with exit 101;
+its root-library success does not relabel the command as successful.
+
+The independent native filter then passed all nine cases, including removal of an
+existing witness signature, in 3.77 seconds, with zero failures or ignored cases.
+`native-correction.log` and its exit 0 are retained separately. The subsequent
+workspace optimized build completed successfully in `release-correction.log`.
+
+A read-only source review in `/tmp/lkjscript-owned-legacy-cutover-review-20260930.txt`
+identified three offline predecessor execution workflows that also needed the
+explicit derived-format cut. It performed no tests. A scoped implementation
+continuation changed only those three contributors and performed no builds/tests.
+The main integrator reviewed their exact refusal, runtime, source, descriptor and
+store bindings and added separate omission/substitution controls before execution.
+
+The original preflight now binds exact retained official artifact/provenance/output
+and exit bytes rather than claiming current executable permission for old evidence.
+Original artifacts still require exact format refusal before execution or store
+mutation. Separate current controls retain canonical source and instruction forms,
+then require strict artifact admission and exact original-transport binding before
+running the existing scalar/transaction/participation workloads. Public rebuild and
+import paths remain mandatory. The scalar workflow records seven target calls;
+transactions record twenty across original-refusal/current/rebuilt/imported groups;
+participation records its additional original refusal plus all five prior cases.
+All legacy outcome, store, suppression and cleanup expectations remain in place.
+Normative verification and fixture continuation notes distinguish these claims.
+
+The first current-control generation failed at `artifact_runtime_owner_count`.
+The next attempt failed compilation because two test-helper imports were omitted;
+the third reached a missing original runtime owner. All failed logs remain under
+`.artifacts/20260930-owned-corrections/predecessor-controls-generate*.log`.
+Generation four read the exact original source transports independently and selected
+required metadata from their unchanged canonical records. The scalar predecessor
+needed 394 runtime-owner bindings rather than the historical 383. No canonical
+owner or instruction operand/order was edited. Reference maps include the necessary
+original external declarations; unreachable old derived map pages are retired.
+The converter remains test-only, and the existing source-less adversarial converter
+path retains its old behavior.
+
+Generation four passed the one table-driven test covering all three original/current
+pairs in 0.28 seconds. Current control identities are
+`artifact_bundle_1d8e03a37d339bc897500686e528ec47e49f73784cdfaa7e8201b1c7126e152e`
+(requirements),
+`artifact_bundle_5942bdd66c4c594547fdba1b232ce29e2ee2fdf51268e6a97087545a5d21b10e`
+(transactions), and
+`artifact_bundle_02c6be1f48c3ff43b2527e6440f13fd7c1bf3d1b03617fdb1723d04b2de10041`
+(participation). The retained fixture owner documents regeneration and source
+binding. Serialized instruction tags change with format; these are preserved
+instruction forms, not a claim of identical serialized instruction bytes.
+Original historical artifacts/provenance remain byte-for-byte unchanged. These
+fixture observations do not yet establish a completed offline or full-profile run.
+
+The first focused predecessor-reader run passed six tests with zero failures and
+retained two existing evidence-dependent ignored tests. It includes all three
+current-control omission/substitution/source checks and the historical preflight
+faults. Clippy passed all workspace targets/features in 9.71 seconds, and the
+optimized workspace rebuild completed. The subsequent focused offline execution
+failed with `contributor_artifact_source`; its original receipt is
+`.artifacts/offline-packages/run-cnITHb/receipt.json`, with wrapper log/exit retained
+as `legacy-focused.log` and exit 1. An additional receipt-inspection tool call was
+blocked; no permission or protection was changed to bypass it.
+
+Source inspection identified an overconstraint introduced in the contributor
+correction: it applied the original transport/package-revision equality not only
+to the mechanical current control but also to a public rebuild. Public rebuilding
+can project the new interface generation from unchanged accepted meaning and thus
+has a different derived package revision. The exact original transport binding
+remains mandatory for the mechanical current control. Public rebuilt executions
+now additionally require the original package and semantic revision, while retaining
+strict artifact admission, exact artifact identity, original source-pack/HEAD checks
+and every independent value/store outcome. Imported wrapper roots intentionally
+have their own source identities. New reader tests require wrong rebuilt package,
+semantic revision or artifact identity to reject. The strict product source probe
+is unchanged; this correction does not relax its comparison or old-format admission.
+These newest corrections require their subsequent test and execution results.

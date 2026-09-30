@@ -38,7 +38,8 @@ pub fn strict_artifact_identity_probe(bytes: &[u8]) -> Result<String, Diagnostic
 }
 
 /// Bind output evidence to an independently transported exact source closure. This is a
-/// read-only verifier boundary; an older self-consistent standalone bundle remains executable.
+/// read-only verifier boundary; current artifact admission still applies, including explicit
+/// rebuild cuts for superseded compiler envelopes.
 pub fn strict_artifact_source_probe(
     artifact: &[u8],
     source: &[u8],

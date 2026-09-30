@@ -20,3 +20,13 @@ artifacts and makes a reviewed public rename. New derived packs are allowed; ins
 revalidation cannot rewrite accepted source or historical bytes. Later wrappers and edited roots
 may have successor identities. The finite-callable predecessor owner separately retains invalid
 historical inspection, complete repair and original accepted retry identities.
+
+## 2026-09-30 derived-format cut
+
+The observations above remain historical. Graph 18 requires rebuilding compiled units;
+the original artifact now rejects with `source/compiler_unit_contract` before execution.
+The offline owner retains those original refusals and adds a separately named current-envelope
+control in `../owned-predecessor-current/`, plus the existing public rebuild and import paths.
+Canonical source, original instruction forms, original packs and provenance remain unchanged.
+Current control admission and exact source-transport binding are required independently;
+this note does not relabel an old runtime observation as fresh execution.

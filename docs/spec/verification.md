@@ -1285,10 +1285,15 @@ admission and storage failures before and after visibility. Agreement between ev
 does not establish physical publication classification.
 
 Authentic v0.1.36 Graph 15 source, offline packages and artifact 19 bytes retain the predecessor
-`UpdateAttempt`/`transaction` result and suppressed-publication behavior. Original, rebuilt and
-imported artifacts execute on fresh disposable stores, and a reviewed source edit preserves old
-pack bytes and identities. The reader requires the authenticated original material, literal
-inputs, exact execution/artifact bindings and independent observations. Existing target receipt
+`UpdateAttempt`/`transaction` result and suppressed-publication evidence. Under the Graph 18
+[derived-format cut](owned-generics.md#encodings-admission-and-compatibility), the original artifact
+must reject at its exact source-format boundary without execution or store mutation. A separately
+retained current-envelope control preserves the original canonical source and instruction forms;
+its strict admission and source-transport binding are mandatory. That control, the public rebuilt
+artifact and the imported artifact execute on separate fresh disposable stores and retain all
+predecessor outcome and suppressed-publication expectations. A reviewed source edit preserves old
+pack bytes and identities. The reader requires both original and current-control material, literal
+inputs, exact refusal/execution/artifact bindings and independent observations. Existing target receipt
 faults omit new completion material and forge a completed result after rebinding checksums; the
 matching owner must reject each fault without rerunning application effects.
 Focused execution uses `offline-packages --case requirement-parameters`; its child receipt is not
@@ -1330,12 +1335,21 @@ readers require the new observations and reject omissions or forged success with
 application effects. Maintained standard adoption, maintained witness adoption and designed public
 composition are separate claims; lkjournal remains a compatibility consumer.
 
-Authentic official v0.1.40 establishes the predecessor's nested-owner rejection and its already
-supported raw-helper participation. Its exact older artifact closure must run on the new runtime.
-That official old executable must reject a new required `require-transaction` operation before
-unavailable secret or store acquisition. Old requirement subsets remain valid, and unknown/forged
-contracts or incomplete reviewed dependency repairs must reject without partial meaning publication.
-This adds no graph, artifact, application-data or transaction-completion encoding change.
+Authentic official v0.1.40 evidence establishes the predecessor's nested-owner rejection and its
+already supported raw-helper participation. The retained official preflight must bind exact original
+artifact bytes, provenance, diagnostic and exit status: the old executable rejected the new required
+`require-transaction` operation before unavailable secret or store acquisition. Historical evidence
+is not current execution permission or a newly repeated official-runtime observation.
+
+After the Graph 18 derived-format cut, the original artifact must refuse at
+`source/artifact_bundle_contract` before execution and without changing the independently observed
+store. A separately retained current-envelope control of that same canonical package closure must
+pass strict loading and exact source-transport comparison, then execute every original participation
+case with the same package/revision, grants, outputs, transaction counters and cleanup assertions.
+The reader requires original bytes and current-control bytes separately. Old requirement subsets
+remain valid; unknown/forged contracts or incomplete reviewed dependency repairs still reject without
+partial meaning publication. Application-data and transaction-completion encodings are unchanged;
+the current compiler/artifact encoding is explicitly distinct.
 
 Canonical and normalized tests retain independent affine/reference checks for formal resource
 provenance, matching/borrowing/consumption, alias rejection and cumulative concrete grant accounting.

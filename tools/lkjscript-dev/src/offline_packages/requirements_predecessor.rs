@@ -1,4 +1,4 @@
-//! Strict authentic Graph 14 read/run/edit through the existing public package workflow.
+//! Authentic Graph 14 read/edit, original-format refusal and current-envelope execution.
 use super::*;
 include!("requirements_predecessor_files.rs");
 const REVISION: &str = "rev_2a50524afd4436be15e69c545fabf0f2eca056bb5b0f4e28459dfcf62ef816c4";
@@ -7,6 +7,100 @@ const LOGICAL: &str =
     "package_revision_9c46d3e276b3df89d29b792993283108017feabfc030d70f50a43ed05c8fb691";
 const TRANSPORT: &str =
     "package_transport_51f58676d0a4bc944c78c97370d945fe2a7fc575709cf46b34dcac7c4aae2d1e";
+const MATERIAL: &str = "requirement-predecessor";
+const CURRENT: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../tests/fixtures/owned-predecessor-current/requirements.lkja"
+));
+const CASES: [(&str, &str); 7] = [
+    ("predecessor.lkja", "encode-integer"),
+    ("predecessor.lkja", "encode-text"),
+    ("current.lkja", "encode-integer"),
+    ("current.lkja", "encode-text"),
+    ("rebuilt.lkja", "encode-integer"),
+    ("rebuilt.lkja", "encode-text"),
+    ("imported.lkja", "encode-integer"),
+];
+
+fn material_path(root: &Path, name: &str) -> PathBuf {
+    root.join(format!("{MATERIAL}--{}", name.replace('/', "--")))
+}
+
+fn descriptor(artifact: &str, target: &str) -> serde_json::Value {
+    serde_json::json!({"artifact":artifact,"target":target,"listen":null,"http":null,"session":null,"worker":null,"streams":lkjscript::platform::stream::StreamLimits::default(),"configuration":{},"secrets":[],"grants":[]})
+}
+
+fn admitted_artifact(root: &Path, artifact: &str) -> Result<String, DevError> {
+    let bytes = process::read_bounded(&material_path(root, artifact), MAXIMUM_CONTAINER_BYTES)?;
+    if artifact == "current.lkja" {
+        require(bytes == CURRENT, "scalar current fixture bytes changed")?;
+    }
+    let identity = lkjscript::platform::contributor::strict_artifact_identity_probe(&bytes)
+        .map_err(|error| DevError::corrupt(error.to_string()))?;
+    // A public rebuild may project a new interface/package revision while
+    // accepted source remains fixed. Only the mechanical control keeps the
+    // exact original transport; current_result checks rebuilt source identity.
+    if artifact == "current.lkja" {
+        let source = process::read_bounded(
+            &material_path(root, "predecessor.lkjp"),
+            MAXIMUM_CONTAINER_BYTES,
+        )?;
+        let bound = lkjscript::platform::contributor::strict_artifact_source_probe(
+            &bytes, &source, TRANSPORT,
+        )
+        .map_err(|error| DevError::corrupt(error.to_string()))?;
+        require(
+            bound["bundle"] == identity
+                && bound["source_transport"] == TRANSPORT
+                && bound["package"] == PACKAGE
+                && bound["revision"] == REVISION
+                && bound["package_revision"] == LOGICAL,
+            "scalar current artifact lost original source transport binding",
+        )?;
+    }
+    Ok(identity)
+}
+
+fn original_refusal(output: &[CompactRecord]) -> Result<(), DevError> {
+    require(
+        field(output, "result", "status")? == "failure"
+            && field(output, "result", "command")? == "run"
+            && field(output, "diagnostic", "class")? == "source"
+            && field(output, "diagnostic", "code")? == "compiler_unit_contract"
+            && output
+                .iter()
+                .filter(|record| record.operation == "diagnostic")
+                .count()
+                == 1
+            && !output.iter().any(|record| record.operation == "execution"),
+        "original scalar artifact did not stop at its compiler unit contract",
+    )
+}
+
+fn current_result(
+    output: &[CompactRecord],
+    identity: &str,
+    expected: &serde_json::Value,
+    original_source: bool,
+) -> Result<(), DevError> {
+    if original_source {
+        require(
+            field(output, "execution", "package")? == PACKAGE
+                && field(output, "execution", "revision")? == REVISION,
+            "rebuilt scalar changed accepted source identity",
+        )?;
+    }
+    require(
+        field(output, "result", "status")? == "success"
+            && field(output, "result", "command")? == "run"
+            && field(output, "execution", "artifact")? == identity
+            && serde_json::from_str::<serde_json::Value>(&field(output, "execution", "value")?)?
+                == *expected
+            && !output.iter().any(|record| record.operation == "diagnostic"),
+        "authentic predecessor scalar execution identity or bytes differ",
+    )
+}
+
 fn expected() -> Result<serde_json::Value, DevError> {
     let (_, bytes) = FILES
         .iter()
@@ -26,7 +120,7 @@ fn preserved(root: &Path) -> Result<(), DevError> {
     Ok(())
 }
 pub(super) fn workflow(context: &mut Context) -> Result<(), DevError> {
-    let root = context.root.join("requirement-predecessor");
+    let root = context.root.join(MATERIAL);
     for (name, bytes) in FILES {
         let path = root.join(name);
         fs::create_dir_all(
@@ -34,7 +128,10 @@ pub(super) fn workflow(context: &mut Context) -> Result<(), DevError> {
                 .ok_or_else(|| DevError::corrupt("predecessor file parent"))?,
         )?;
         fs::write(path, bytes)?;
+        fs::write(material_path(&context.evidence, name), bytes)?;
     }
+    fs::write(root.join("current.lkja"), CURRENT)?;
+    fs::write(material_path(&context.evidence, "current.lkja"), CURRENT)?;
     let mut old = Package {
         path: root.join("project"),
         id: PACKAGE.into(),
@@ -81,33 +178,47 @@ pub(super) fn workflow(context: &mut Context) -> Result<(), DevError> {
         ],
         true,
     )?;
+    for artifact in ["rebuilt.lkja", "imported.lkja"] {
+        fs::copy(
+            root.join(artifact),
+            material_path(&context.evidence, artifact),
+        )?;
+    }
     let values = expected()?;
     let mut commands = Vec::new();
-    for (artifact, target) in [
-        ("predecessor.lkja", "encode-integer"),
-        ("predecessor.lkja", "encode-text"),
-        ("rebuilt.lkja", "encode-integer"),
-        ("rebuilt.lkja", "encode-text"),
-        ("imported.lkja", "encode-integer"),
-    ] {
-        let path = root.join(format!("{artifact}-{target}.json"));
-        fs::write(
-            &path,
-            evidence::encode_json(
-                &serde_json::json!({"artifact":artifact,"target":target,"listen":null,"http":null,"session":null,"worker":null,"streams":lkjscript::platform::stream::StreamLimits::default(),"configuration":{},"secrets":[],"grants":[]}),
-            )?,
-        )?;
-        commands.push(context.receipt.commands.len());
+    for (artifact, target) in CASES {
+        let original = artifact == "predecessor.lkja";
+        let identity = if original {
+            None
+        } else {
+            Some(admitted_artifact(&context.evidence, artifact)?)
+        };
+        let name = format!("{artifact}-{target}.json");
+        let path = root.join(&name);
+        let bytes = evidence::encode_json(&descriptor(artifact, target))?;
+        fs::write(&path, &bytes)?;
+        fs::write(material_path(&context.evidence, &name), bytes)?;
+        let index = context.receipt.commands.len();
+        commands.push(index);
         let output = context.cli(
             None,
             &["run", "--deployment", &path.display().to_string()],
-            true,
+            !original,
         )?;
-        require(
-            serde_json::from_str::<serde_json::Value>(&field(&output, "execution", "value")?)?
-                == values[target],
-            "authentic predecessor scalar bytes differ",
-        )?;
+        if let Some(identity) = identity {
+            current_result(
+                &output,
+                &identity,
+                &values[target],
+                artifact != "imported.lkja",
+            )?;
+        } else {
+            original_refusal(&output)?;
+            require(
+                context.receipt.commands[index].observation.exit_code == Some(2),
+                "scalar original refusal exit differs",
+            )?;
+        }
     }
     let result = context.apply(&mut old,"reference.owner as=$module package=local class=module name=scalar-compatibility\nrename.owner owner=$module name=scalar-compatibility-edited\n")?;
     require(
@@ -140,26 +251,34 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
                 .is_some_and(|v| v.starts_with("receipt_object_")),
         "predecessor authority/ordinary edit binding differs",
     )?;
+    for (name, bytes) in FILES {
+        require(
+            process::read_bounded(&material_path(root, name), MAXIMUM_CONTAINER_BYTES)? == *bytes,
+            "authentic scalar predecessor material changed",
+        )?;
+    }
     let commands: Vec<usize> = serde_json::from_value(value["commands"].clone())?;
     require(
-        commands.len() == 5 && commands.windows(2).all(|pair| pair[0] < pair[1]),
-        "predecessor original/rebuilt/transport executions missing",
+        commands.len() == CASES.len() && commands.windows(2).all(|pair| pair[0] < pair[1]),
+        "predecessor original refusal/current/rebuilt/transport calls missing",
     )?;
     let values = expected()?;
-    for (index, (artifact, target)) in commands.iter().zip([
-        ("predecessor.lkja", "encode-integer"),
-        ("predecessor.lkja", "encode-text"),
-        ("rebuilt.lkja", "encode-integer"),
-        ("rebuilt.lkja", "encode-text"),
-        ("imported.lkja", "encode-integer"),
-    ]) {
+    for (index, (artifact, target)) in commands.iter().zip(CASES) {
+        let original = artifact == "predecessor.lkja";
         let command = receipt
             .commands
             .get(*index)
             .ok_or_else(|| DevError::corrupt("predecessor command missing"))?;
         let path = Path::new(&receipt.isolated_root)
-            .join("requirement-predecessor")
+            .join(MATERIAL)
             .join(format!("{artifact}-{target}.json"));
+        require(
+            serde_json::from_slice::<serde_json::Value>(&process::read_bounded(
+                &material_path(root, &format!("{artifact}-{target}.json")),
+                MAXIMUM_OUTPUT_BYTES,
+            )?)? == descriptor(artifact, target),
+            "scalar predecessor exact descriptor changed",
+        )?;
         require(
             command.command
                 == [
@@ -168,7 +287,8 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
                     "--deployment".into(),
                     path.display().to_string(),
                 ]
-                && command.expects_success,
+                && command.expects_success != original
+                && command.observation.exit_code == Some(if original { 2 } else { 0 }),
             "predecessor artifact/target changed",
         )?;
         let output = parse_records(
@@ -179,11 +299,97 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
             )?,
         )
         .map_err(|_| DevError::corrupt("predecessor output"))?;
-        require(
-            serde_json::from_str::<serde_json::Value>(&field(&output, "execution", "value")?)?
-                == values[target],
-            "predecessor frozen typed-data bytes changed",
-        )?;
+        if original {
+            original_refusal(&output)?;
+        } else {
+            current_result(
+                &output,
+                &admitted_artifact(root, artifact)?,
+                &values[target],
+                artifact != "imported.lkja",
+            )?;
+        }
     }
     Ok(commands)
+}
+
+#[cfg(test)]
+mod current_control_tests {
+    use super::*;
+
+    #[test]
+    fn rebuilt_scalar_result_requires_original_semantic_revision() {
+        let text = format!(
+            "result status=success command=run\nexecution artifact=selected value=0 package={PACKAGE} revision={REVISION}\n"
+        );
+        let value = serde_json::json!(0);
+        current_result(
+            &parse_records("valid", text.as_bytes()).unwrap(),
+            "selected",
+            &value,
+            true,
+        )
+        .unwrap();
+        let changed = text.replace(REVISION, "different-revision");
+        assert!(
+            current_result(
+                &parse_records("changed", changed.as_bytes()).unwrap(),
+                "selected",
+                &value,
+                true
+            )
+            .is_err()
+        );
+        let changed = text.replace(PACKAGE, "different-package");
+        assert!(
+            current_result(
+                &parse_records("changed", changed.as_bytes()).unwrap(),
+                "selected",
+                &value,
+                true
+            )
+            .is_err()
+        );
+        assert!(
+            current_result(
+                &parse_records("wrong-artifact", text.as_bytes()).unwrap(),
+                "different-artifact",
+                &value,
+                false
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn scalar_current_control_requires_exact_bytes_and_original_transport() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path();
+        let source = FILES
+            .iter()
+            .find(|(name, _)| *name == "predecessor.lkjp")
+            .unwrap()
+            .1;
+        fs::write(material_path(root, "predecessor.lkjp"), source).unwrap();
+        fs::write(material_path(root, "current.lkja"), CURRENT).unwrap();
+        admitted_artifact(root, "current.lkja").unwrap();
+        fs::write(
+            material_path(root, "current.lkja"),
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/fixtures/owned-predecessor-current/transactions.lkja"
+            )),
+        )
+        .unwrap();
+        assert!(admitted_artifact(root, "current.lkja").is_err());
+        fs::remove_file(material_path(root, "current.lkja")).unwrap();
+        assert!(admitted_artifact(root, "current.lkja").is_err());
+        fs::write(material_path(root, "current.lkja"), CURRENT).unwrap();
+        fs::remove_file(material_path(root, "predecessor.lkjp")).unwrap();
+        assert!(admitted_artifact(root, "current.lkja").is_err());
+        let refusal = b"result status=failure command=run\ndiagnostic class=source code=compiler_unit_contract message=unsupported\n";
+        original_refusal(&parse_records("refusal", refusal).unwrap()).unwrap();
+        let later = b"result status=failure command=run\ndiagnostic class=capability code=secret_missing message=missing\n";
+        assert!(original_refusal(&parse_records("later", later).unwrap()).is_err());
+    }
 }

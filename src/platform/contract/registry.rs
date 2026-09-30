@@ -8827,7 +8827,7 @@ mod tests {
             contract.identity,
             "lkjscript-function-definition-projection-9"
         );
-        assert_eq!(contract.version, 8);
+        assert_eq!(contract.version, 9);
         assert_eq!(
             contract_descriptors()
                 .iter()

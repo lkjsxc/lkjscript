@@ -625,7 +625,7 @@ impl<'de> Deserialize<'de> for TypeParameterConstraints {
         impl<'de> serde::de::Visitor<'de> for ConstraintSet {
             type Value = TypeParameterConstraints;
             fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                formatter.write_str("an empty constraint set or [\"capture-safe\"]")
+                formatter.write_str("an empty constraint set, [\"capture-safe\"], or [\"owned\"]")
             }
             fn visit_seq<A: serde::de::SeqAccess<'de>>(
                 self,

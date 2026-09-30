@@ -11,6 +11,16 @@ pub(crate) fn neutral_effect_fields(value: &mut serde_json::Value) {
         serde_json::Value::Object(fields) => {
             fields.remove("contract_version");
             fields.remove("graph_contract_version");
+            // Generation 18 makes the previously absent witness vector explicit.
+            // Only the empty vector on a function is generation-neutral; every
+            // actual selection remains part of the historical meaning comparison.
+            if fields.get("kind").and_then(serde_json::Value::as_str) == Some("function")
+                && fields
+                    .get("implementation_parameters")
+                    .is_some_and(|value| value.as_array().is_some_and(Vec::is_empty))
+            {
+                fields.remove("implementation_parameters");
+            }
             for key in [
                 "effect_parameters",
                 "effect_arguments",
@@ -35,6 +45,25 @@ pub(crate) fn neutral_effect_fields(value: &mut serde_json::Value) {
         }
         _ => {}
     }
+}
+
+#[test]
+fn historical_projection_preserves_nonempty_implementation_meaning() {
+    use serde_json::json;
+    let base = json!({"kind": "function", "body": "same-body"});
+    let mut empty = base.clone();
+    empty["implementation_parameters"] = json!([]);
+    assert_eq!(meaning_hash(base.clone()), meaning_hash(empty));
+    let mut selected = base.clone();
+    selected["implementation_parameters"] = json!([{"contract": "first", "self_type": "owned-T"}]);
+    assert_ne!(meaning_hash(base), meaning_hash(selected.clone()));
+    let mut changed = selected.clone();
+    changed["implementation_parameters"][0]["contract"] = json!("second");
+    assert_ne!(meaning_hash(selected), meaning_hash(changed));
+    assert_ne!(
+        meaning_hash(json!({})),
+        meaning_hash(json!({"implementation_parameters": []}))
+    );
 }
 
 fn meaning_hash(mut value: serde_json::Value) -> String {

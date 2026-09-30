@@ -1,4 +1,4 @@
-//! Authentic v0.1.36 transaction source, transport and artifact compatibility.
+//! Authentic v0.1.36 transaction source, original refusal and current-envelope execution.
 use super::*;
 include!("requirements_transaction_predecessor_files.rs");
 
@@ -9,9 +9,106 @@ const LOGICAL: &str =
 const TRANSPORT: &str =
     "package_transport_3abb212b71ff3e56bdba07c0977bebffb1b8e336cc8092e982ab2398bb81a74d";
 const MATERIAL: &str = "requirement-transaction-predecessor";
+const CURRENT: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../tests/fixtures/owned-predecessor-current/transactions.lkja"
+));
+const ARTIFACTS: [&str; 4] = [
+    "predecessor.lkja",
+    "current.lkja",
+    "rebuilt.lkja",
+    "imported.lkja",
+];
 
 fn material_path(root: &Path, name: &str) -> PathBuf {
     root.join(format!("{MATERIAL}--{}", name.replace('/', "--")))
+}
+
+fn admitted_artifact(root: &Path, artifact: &str) -> Result<String, DevError> {
+    let bytes = process::read_bounded(&material_path(root, artifact), MAXIMUM_CONTAINER_BYTES)?;
+    if artifact == "current.lkja" {
+        require(
+            bytes == CURRENT,
+            "transaction current fixture bytes changed",
+        )?;
+    }
+    let identity = lkjscript::platform::contributor::strict_artifact_identity_probe(&bytes)
+        .map_err(|error| DevError::corrupt(error.to_string()))?;
+    // A public rebuild may project a new interface/package revision while
+    // accepted source remains fixed. Only the mechanical control keeps the
+    // exact original transport; current_result checks rebuilt source identity.
+    if artifact == "current.lkja" {
+        let source = process::read_bounded(
+            &material_path(root, "predecessor.lkjp"),
+            MAXIMUM_CONTAINER_BYTES,
+        )?;
+        let bound = lkjscript::platform::contributor::strict_artifact_source_probe(
+            &bytes, &source, TRANSPORT,
+        )
+        .map_err(|error| DevError::corrupt(error.to_string()))?;
+        require(
+            bound["bundle"] == identity
+                && bound["source_transport"] == TRANSPORT
+                && bound["package"] == PACKAGE
+                && bound["revision"] == REVISION
+                && bound["package_revision"] == LOGICAL,
+            "transaction current artifact lost original source transport binding",
+        )?;
+    }
+    Ok(identity)
+}
+
+fn original_refusal(output: &[CompactRecord]) -> Result<(), DevError> {
+    require(
+        field(output, "result", "status")? == "failure"
+            && field(output, "result", "command")? == "run"
+            && field(output, "diagnostic", "class")? == "source"
+            && field(output, "diagnostic", "code")? == "compiler_unit_contract"
+            && output
+                .iter()
+                .filter(|record| record.operation == "diagnostic")
+                .count()
+                == 1
+            && !output.iter().any(|record| record.operation == "execution"),
+        "original transaction artifact did not stop at its compiler unit contract",
+    )
+}
+
+fn current_result(
+    output: &[CompactRecord],
+    identity: &str,
+    expected: &Value,
+    original_source: bool,
+) -> Result<(), DevError> {
+    if original_source {
+        require(
+            field(output, "execution", "package")? == PACKAGE
+                && field(output, "execution", "revision")? == REVISION,
+            "rebuilt transaction changed accepted source identity",
+        )?;
+    }
+    require(
+        field(output, "result", "status")? == "success"
+            && field(output, "result", "command")? == "run"
+            && field(output, "execution", "artifact")? == identity
+            && serde_json::from_str::<Value>(&field(output, "execution", "value")?)? == *expected
+            && !output.iter().any(|record| record.operation == "diagnostic"),
+        "predecessor UpdateAttempt or legacy completion behavior changed",
+    )
+}
+
+fn observe_refused(rows: &[Value]) -> Result<(), DevError> {
+    store_observations(rows)?;
+    require(
+        rows.len() == 6 && rows.iter().all(|row| row == &rows[0]),
+        "original transaction refusal changed its initial stores or omitted snapshots",
+    )?;
+    for store in 0..2 {
+        for key in CELL_KEYS {
+            expect_cell(&rows[0], store, key, None)?;
+        }
+    }
+    Ok(())
 }
 
 fn expected() -> [(&'static str, &'static str, Value); 5] {
@@ -81,6 +178,8 @@ pub(super) fn workflow(context: &mut Context) -> Result<(), DevError> {
             fs::write(path, bytes)?;
         }
     }
+    fs::write(root.join("current.lkja"), CURRENT)?;
+    fs::write(material_path(&context.evidence, "current.lkja"), CURRENT)?;
     let mut old = Package {
         path: root.join("project"),
         id: PACKAGE.into(),
@@ -131,7 +230,8 @@ pub(super) fn workflow(context: &mut Context) -> Result<(), DevError> {
     fs::remove_dir_all(&importer.path)?;
 
     let mut commands = Vec::new();
-    for artifact in ["predecessor.lkja", "rebuilt.lkja", "imported.lkja"] {
+    for artifact in ARTIFACTS {
+        let original = artifact == "predecessor.lkja";
         let bundle = root.join(artifact.trim_end_matches(".lkja"));
         fs::create_dir(&bundle)?;
         fs::copy(root.join(artifact), bundle.join(artifact))?;
@@ -141,6 +241,13 @@ pub(super) fn workflow(context: &mut Context) -> Result<(), DevError> {
                 material_path(&context.evidence, artifact),
             )?;
         }
+        // Historical identity is owned by exact retained bytes/provenance and refusal,
+        // never by loading an old artifact under the current contract.
+        let identity = if original {
+            None
+        } else {
+            Some(admitted_artifact(&context.evidence, artifact)?)
+        };
         for directory in ["numbers", "texts"] {
             context.cli(
                 None,
@@ -163,7 +270,8 @@ pub(super) fn workflow(context: &mut Context) -> Result<(), DevError> {
                     &format!("{artifact}-{target}.deployment.json"),
                 ),
             )?;
-            commands.push(context.receipt.commands.len());
+            let index = context.receipt.commands.len();
+            commands.push(index);
             let output = context.cli(
                 None,
                 &[
@@ -173,15 +281,24 @@ pub(super) fn workflow(context: &mut Context) -> Result<(), DevError> {
                     "--arguments",
                     arguments,
                 ],
-                true,
+                !original,
             )?;
-            require(
-                serde_json::from_str::<Value>(&field(&output, "execution", "value")?)? == value,
-                "authentic transaction predecessor result differs",
-            )?;
+            if let Some(identity) = &identity {
+                current_result(&output, identity, &value, artifact != "imported.lkja")?;
+            } else {
+                original_refusal(&output)?;
+                require(
+                    context.receipt.commands[index].observation.exit_code == Some(2),
+                    "transaction original refusal exit differs",
+                )?;
+            }
             states.push(observe(&bundle)?);
         }
-        observe_expected(&states)?;
+        if original {
+            observe_refused(&states)?;
+        } else {
+            observe_expected(&states)?;
+        }
         fs::write(
             material_path(&context.evidence, &format!("{artifact}.states.json")),
             evidence::encode_json(&states)?,
@@ -228,23 +345,28 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
     }
     let commands: Vec<usize> = serde_json::from_value(value["commands"].clone())?;
     require(
-        commands.len() == 15 && commands.windows(2).all(|w| w[0] < w[1]),
-        "authentic transaction original/rebuilt/imported executions omitted",
+        commands.len() == 20 && commands.windows(2).all(|w| w[0] < w[1]),
+        "authentic transaction original refusal/current/rebuilt/imported calls omitted",
     )?;
-    for (artifact, indices) in ["predecessor.lkja", "rebuilt.lkja", "imported.lkja"]
+    for (artifact, indices) in ARTIFACTS
         .into_iter()
         .zip(commands.as_chunks::<5>().0.iter())
     {
-        let artifact_bytes =
-            process::read_bounded(&material_path(root, artifact), MAXIMUM_CONTAINER_BYTES)?;
-        let admitted =
-            lkjscript::platform::contributor::strict_artifact_identity_probe(&artifact_bytes)
-                .map_err(|error| DevError::corrupt(error.to_string()))?;
+        let original = artifact == "predecessor.lkja";
+        let admitted = if original {
+            None
+        } else {
+            Some(admitted_artifact(root, artifact)?)
+        };
         let states: Vec<Value> = serde_json::from_slice(&process::read_bounded(
             &material_path(root, &format!("{artifact}.states.json")),
             MAXIMUM_OUTPUT_BYTES,
         )?)?;
-        observe_expected(&states)?;
+        if original {
+            observe_refused(&states)?;
+        } else {
+            observe_expected(&states)?;
+        }
         for (index, (target, arguments, expected)) in indices.iter().zip(expected()) {
             require(
                 serde_json::from_slice::<Value>(&process::read_bounded(
@@ -262,7 +384,8 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
                 .join(artifact.trim_end_matches(".lkja"))
                 .join(format!("{artifact}-{target}.deployment.json"));
             require(
-                command.expects_success
+                command.expects_success != original
+                    && command.observation.exit_code == Some(if original { 2 } else { 0 })
                     && command.command
                         == [
                             receipt.pinned_runtime_path.clone(),
@@ -282,12 +405,93 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
                 )?,
             )
             .map_err(|_| DevError::corrupt("transaction predecessor execution output"))?;
-            require(
-                serde_json::from_str::<Value>(&field(&output, "execution", "value")?)? == expected
-                    && field(&output, "execution", "artifact")? == admitted,
-                "predecessor UpdateAttempt or legacy completion behavior changed",
-            )?;
+            if let Some(admitted) = &admitted {
+                current_result(&output, admitted, &expected, artifact != "imported.lkja")?;
+            } else {
+                original_refusal(&output)?;
+            }
         }
     }
     Ok(commands)
+}
+
+#[cfg(test)]
+mod current_control_tests {
+    use super::*;
+
+    #[test]
+    fn rebuilt_transaction_result_requires_original_semantic_revision() {
+        let text = format!(
+            "result status=success command=run\nexecution artifact=selected value=0 package={PACKAGE} revision={REVISION}\n"
+        );
+        let value = json!(0);
+        current_result(
+            &parse_records("valid", text.as_bytes()).unwrap(),
+            "selected",
+            &value,
+            true,
+        )
+        .unwrap();
+        let changed = text.replace(REVISION, "different-revision");
+        assert!(
+            current_result(
+                &parse_records("changed", changed.as_bytes()).unwrap(),
+                "selected",
+                &value,
+                true
+            )
+            .is_err()
+        );
+        let changed = text.replace(PACKAGE, "different-package");
+        assert!(
+            current_result(
+                &parse_records("changed", changed.as_bytes()).unwrap(),
+                "selected",
+                &value,
+                true
+            )
+            .is_err()
+        );
+        assert!(
+            current_result(
+                &parse_records("wrong-artifact", text.as_bytes()).unwrap(),
+                "different-artifact",
+                &value,
+                false
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn transaction_current_control_requires_exact_bytes_and_original_transport() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path();
+        let source = FILES
+            .iter()
+            .find(|(name, _)| *name == "predecessor.lkjp")
+            .unwrap()
+            .1;
+        fs::write(material_path(root, "predecessor.lkjp"), source).unwrap();
+        fs::write(material_path(root, "current.lkja"), CURRENT).unwrap();
+        admitted_artifact(root, "current.lkja").unwrap();
+        fs::write(
+            material_path(root, "current.lkja"),
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/fixtures/owned-predecessor-current/requirements.lkja"
+            )),
+        )
+        .unwrap();
+        assert!(admitted_artifact(root, "current.lkja").is_err());
+        fs::remove_file(material_path(root, "current.lkja")).unwrap();
+        assert!(admitted_artifact(root, "current.lkja").is_err());
+        fs::write(material_path(root, "current.lkja"), CURRENT).unwrap();
+        fs::remove_file(material_path(root, "predecessor.lkjp")).unwrap();
+        assert!(admitted_artifact(root, "current.lkja").is_err());
+        let refusal = b"result status=failure command=run\ndiagnostic class=source code=compiler_unit_contract message=unsupported\n";
+        original_refusal(&parse_records("refusal", refusal).unwrap()).unwrap();
+        let later = b"result status=failure command=run\ndiagnostic class=capability code=secret_missing message=missing\n";
+        assert!(original_refusal(&parse_records("later", later).unwrap()).is_err());
+    }
 }

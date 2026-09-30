@@ -18,6 +18,73 @@ declarations.end
 "#;
 
 #[test]
+fn native_owned_witness_removal_clears_existing_signature() {
+    let public = Native::new();
+    const SOURCE: &str = r#"declarations.begin
+(units
+  (module create clearing
+    (owned-contract create Marker (visibility public)
+      (self Self) (type-parameter create Self (constraint owned))
+      (method method_40000000000000000000000000000001 observe
+        (parameters) (returns I64)))
+    (function create unused (visibility public)
+      (type-parameter create T (constraint owned))
+      (implementation-parameter implparam_40000000000000000000000000000001 ops Marker T)
+      (returns Unit) (effect pure) (body (unit)))))
+declarations.end
+"#;
+    let input = public.input(
+        "with-witness.lkjc",
+        &format!("request base={}\n{SOURCE}", public.revision()),
+    );
+    let plan = public.plan(&input, true);
+    public.apply(&input, &plan, true);
+    let before = public.revision();
+    let draft = public.root.path().join("with-witness-draft.lkjc");
+    public.cli(
+        &[
+            "change",
+            "draft",
+            "--module",
+            "clearing",
+            "--output",
+            path(&draft),
+        ],
+        true,
+    );
+    let source = std::fs::read_to_string(&draft).unwrap();
+    assert_eq!(source.matches("(implementation-parameter ").count(), 1);
+    let mut changed = source.clone();
+    changed.replace_range(form_span(&source, "(implementation-parameter "), "");
+    let input = public.input("without-witness.lkjc", &changed);
+    let plan = public.plan(&input, true);
+    public.apply(&input, &plan, true);
+    assert_ne!(before, public.revision());
+    public.cli(&["check"], true);
+    let artifact = public.root.path().join("without-witness.lkja");
+    public.cli(&["build", "--output", path(&artifact)], true);
+    let draft = public.root.path().join("without-witness-draft.lkjc");
+    public.cli(
+        &[
+            "change",
+            "draft",
+            "--module",
+            "clearing",
+            "--output",
+            path(&draft),
+        ],
+        true,
+    );
+    let rendered = std::fs::read_to_string(&draft).unwrap();
+    assert!(!rendered.contains("(implementation-parameter "));
+    let unchanged = public.plan(&draft, true);
+    assert_eq!(
+        compact_field(compact_record(&unchanged, "result"), "outcome"),
+        "unchanged"
+    );
+}
+
+#[test]
 fn native_owned_implementation_edit_reselects_tests_and_invalidates_prepared_results() {
     let public = Native::new();
     let input = public.input(

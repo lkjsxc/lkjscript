@@ -68,9 +68,27 @@ fn witness_contract_domains_are_closed_and_unique() {
         digest,
         "validator_contract_a8f4f286f668895a3c2f2d712352fe1a382e6d602ad6d4e93f0a74c1c9f13d78"
     );
-    assert_eq!(
+    assert_ne!(
         digest,
         "validator_contract_a4865032b8c53d9472988c166a7bce1d72eba3158026cb4a803482a08c2fc576"
+    );
+    for (name, version) in [
+        ("symbolic_owned_parameters", 1),
+        ("explicit_owned_implementation_witnesses", 2),
+        ("sealed_owned_i64_cells", 1),
+    ] {
+        assert_eq!(
+            contract::VALIDATOR_FEATURES
+                .iter()
+                .find(|feature| feature.name == name)
+                .map(|feature| feature.version),
+            Some(version),
+            "{name} must invalidate predecessor proof reuse"
+        );
+    }
+    assert_eq!(
+        digest,
+        "validator_contract_fa8eb111bceca8cfc83868f71c4f4c81e1a6ecbc3f7f3ffa16ffa8385761d61f"
     );
 }
 

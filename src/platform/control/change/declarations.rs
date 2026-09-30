@@ -1161,7 +1161,17 @@ impl Lowering<'_> {
                 format!("create.{kind}")
             }
             "function" | "external" => {
-                if kind == "function" {
+                // Ordinary declarations must retain the same canonical intent as
+                // their flat notation. An empty setter is necessary only to clear
+                // actual witnesses on an existing declaration, never as a default.
+                let has_implementations = unit.clauses.iter().any(|id| {
+                    self.block.head(*id) == Some("implementation-parameter")
+                }) || unit.existing.and_then(|owner| self.existing.get(&owner)).is_some_and(|owner| {
+                    matches!(owner, crate::platform::kernel::OwnerRecord::Declaration(d)
+                        if matches!(&d.payload, crate::platform::kernel::DeclarationPayload::Function(f)
+                            if !f.implementation_parameters.is_empty()))
+                });
+                if kind == "function" && has_implementations {
                     allowed.push("implementation-parameter");
                     let label = self.allocate('%')?;
                     self.record(

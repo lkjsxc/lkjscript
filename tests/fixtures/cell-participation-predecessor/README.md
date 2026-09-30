@@ -38,3 +38,19 @@ old-runtime stdout/exit preserve that observation. The receipt reader admits the
 artifact and requires the original unsupported-operation diagnostic; it does not fetch an old
 runtime or label this retained proof as a fresh candidate execution. Artifact substitution and
 replacing the diagnostic with a later secret failure are rejected by its adversarial reader test.
+
+## 2026-09-30 derived-format cut
+
+Both retained artifacts use generation 21, which the Graph 18 runtime now rejects at
+`source/artifact_bundle_contract`. Their original bytes and all official observations above
+remain historical evidence. The preflight reader binds exact original new-guard bytes and
+provenance to the unchanged official diagnostic and exit; it does not require current
+execution permission for a historical observation.
+
+The current workflow separately proves refusal of the original participation artifact without
+store mutation, then executes the current-envelope control in `../owned-predecessor-current/`.
+That control must pass strict admission and exact canonical source-transport comparison.
+All five original participation/nested-owner cases, grants, package/revision identities,
+transaction accounting and independent store/cleanup observations remain mandatory.
+A newly admitted bundle has its own artifact identity; the official original identity is
+never reused to label the new bytes.

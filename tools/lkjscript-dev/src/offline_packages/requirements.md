@@ -110,17 +110,25 @@ old and new bundles: separately initialized stores yield 70 and 65, both with `S
 These are fixed designed workload results, not application adoption or automatic migration.
 
 The official v0.1.40 predecessor fixture separately retains the actual same-store nested-owner
-rejection and already-supported raw helper participation returning `Committed(60)`. Its original
-three-package artifact runs with the new runtime against a fresh store. That fixture establishes
-the baseline distinction: this campaign adds a maintained composable library and an early guard,
-while raw capability helpers could already participate in an ancestor transaction.
+rejection and already-supported raw helper participation returning `Committed(60)`. The current
+Graph 18 compiler requires rebuilding derived artifacts: the original three-package artifact now
+refuses at its exact source-format boundary without execution or store changes. A separately retained
+current-envelope control preserves its canonical source and instruction forms and is bound to the
+original transport by strict admission before fresh-store execution. Every original output,
+nested-owner rejection, participation, transaction counter and cleanup assertion remains required.
+This establishes the baseline distinction: the composable-library campaign added a maintained library
+and an early guard, while raw capability helpers could already participate in an ancestor transaction.
+The historical official preflight remains exact retained evidence, not current execution permission.
 
 The former `attempt-update -> UpdateAttempt<T>` API is preserved as authentic v0.1.36 source,
 package and artifact material under `tests/fixtures/transaction-outcome-predecessor`. It keeps its
-honest candidate-plus-primary-boolean meaning. Original, rebuilt and imported old artifacts run
-against separate fresh stores and must preserve that result and publication behavior. The new
+honest candidate-plus-primary-boolean meaning. Its original artifact now has five exact format-refusal
+checks with unchanged store snapshots. Current-envelope, public rebuilt and imported controls run
+against separate fresh stores and must preserve every result and publication behavior. The new
 library result is an explicit API change in this designed workload. The earlier authentic scalar
-predecessor fixture also remains unchanged.
+predecessor fixture likewise retains both original refusals and current-envelope/rebuilt/imported
+executions. Original artifacts, provenance and historical observations are never rewritten;
+`tests/fixtures/owned-predecessor-current` owns the independently reconstructed current controls.
 
 Resource composition continues to use the public `DurableQueue` helper in
 `requirements.resource-library.structural.lkjc`. Transported execution changes the independently

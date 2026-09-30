@@ -1787,9 +1787,17 @@ fn canonical_kernel_codec_manifest_is_frozen() {
     let (mut snapshot, _) = historical_prototype_snapshot();
     assert_eq!(
         manifest(&snapshot, contract::GRAPH_CONTRACT_IDENTITY),
-        "6469f29fb9d33af7e62d491602de53106aaa2b57f18045c1001923c5ce815211"
+        "98811315ed4c9141eb7cbba1b0545822ab2797a0ef278f3ed96ad4967b9e3900"
     );
     // Preserve genuine predecessor identities under their own exact generations.
+    snapshot.root.graph_contract_version = 17;
+    for owner in snapshot.owners.values_mut() {
+        owner.set_encoding_for_edit(17);
+    }
+    assert_eq!(
+        manifest(&snapshot, "lkjscript-meaning-graph-17"),
+        "6469f29fb9d33af7e62d491602de53106aaa2b57f18045c1001923c5ce815211"
+    );
     snapshot.root.graph_contract_version = 16;
     for owner in snapshot.owners.values_mut() {
         owner.set_encoding_for_edit(16);
@@ -2349,6 +2357,7 @@ fn capture_constraint_set_has_stable_tags_and_strict_json() {
             1,
             "[\"capture-safe\"]",
         ),
+        (TypeParameterConstraints::Owned, 2, "[\"owned\"]"),
     ] {
         let bytes = bincode::encode_to_vec(constraint, bincode::config::standard()).unwrap();
         assert_eq!(bytes, [tag]);
@@ -2361,6 +2370,9 @@ fn capture_constraint_set_has_stable_tags_and_strict_json() {
     for json in [
         "[\"unknown\"]",
         "[\"capture-safe\",\"capture-safe\"]",
+        "[\"owned\",\"owned\"]",
+        "[\"owned\",\"capture-safe\"]",
+        "[\"capture-safe\",\"owned\"]",
         "[\"none\"]",
         "null",
         "{}",
@@ -2370,7 +2382,7 @@ fn capture_constraint_set_has_stable_tags_and_strict_json() {
             "{json}"
         );
     }
-    for tag in [2_u8, 127, 255] {
+    for tag in [3_u8, 127, 255] {
         assert!(
             bincode::decode_from_slice::<TypeParameterConstraints, _>(
                 &[tag],

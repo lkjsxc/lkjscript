@@ -637,6 +637,29 @@ fn sort_json_array(value: Option<&mut Value>) {
     }
 }
 
+#[test]
+fn recipe_projection_preserves_nonempty_implementation_meaning() {
+    use serde_json::json;
+    let observe = |mut value: Value| {
+        normalize_strings(&mut value, &BTreeMap::new());
+        value
+    };
+    let base = json!({"kind": "function", "body": "same-body"});
+    let mut empty = base.clone();
+    empty["implementation_parameters"] = json!([]);
+    assert_eq!(observe(base.clone()), observe(empty));
+    let mut selected = base.clone();
+    selected["implementation_parameters"] = json!([{"contract": "first", "self_type": "owned-T"}]);
+    assert_ne!(observe(base), observe(selected.clone()));
+    let mut changed = selected.clone();
+    changed["implementation_parameters"][0]["contract"] = json!("second");
+    assert_ne!(observe(selected), observe(changed));
+    assert_ne!(
+        observe(json!({})),
+        observe(json!({"implementation_parameters": []}))
+    );
+}
+
 fn normalize_strings(value: &mut Value, identities: &BTreeMap<String, String>) {
     if value["kind"] == "concrete" && value["reference"].get("requirement").is_some() {
         *value = value["reference"].clone();
@@ -657,6 +680,15 @@ fn normalize_strings(value: &mut Value, identities: &BTreeMap<String, String>) {
             // changes with maintained materialization; its stable package identity remains here.
             values.remove("contract_version");
             values.remove("graph_contract_version");
+            // Empty function witnesses mean the same as their pre-18 absence.
+            // Nonempty operands and unrelated data fields must remain observable.
+            if values.get("kind").and_then(Value::as_str) == Some("function")
+                && values
+                    .get("implementation_parameters")
+                    .is_some_and(|value| value.as_array().is_some_and(Vec::is_empty))
+            {
+                values.remove("implementation_parameters");
+            }
             // Effect arity zero preserves predecessor meaning; task kind and every nonempty
             // row/application remain represented in this generation-neutral observation.
             for key in [
