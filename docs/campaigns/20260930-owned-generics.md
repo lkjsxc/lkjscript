@@ -459,3 +459,82 @@ have their own source identities. New reader tests require wrong rebuilt package
 semantic revision or artifact identity to reject. The strict product source probe
 is unchanged; this correction does not relax its comparison or old-format admission.
 These newest corrections require their subsequent test and execution results.
+
+## Third frozen profile and ordinary-program preparation correction
+
+Source `9fb5e7308896bdc80d457e0e186c011223d10ec6`, tree
+`bbf6253cd276dcc5edb961260266e2196150db4d`, completed all 26 selected gates with
+25 fresh passes, one failed workspace gate, zero reuse and no unrun gates in
+1,288.698800748 seconds. Inputs remained stable. The original receipt is
+`.artifacts/lkjscript-dev/check/1790774145239279833-3209689-0/receipt.json`.
+The previously failing offline package workflows passed, including the separate
+original-format refusals and current/rebuilt/imported behavior. The root library
+passed 999 tests with eight existing ignored cases. The public CLI executable
+passed 178 tests, failed three and retained one ignored case; later workspace
+test executables did not run after that failure. This source was not accepted or
+pushed, and the failed receipt remains unchanged.
+
+The discovery test's exact expression inventory omitted `implementation-call`
+and `method-call`. Its two inventory comparisons now include both actual forms.
+The other two failures occurred in existing resident/foreground quota fixtures:
+their unchanged 1,000,000-byte allocation policy no longer admitted the small
+successful control. The measured resident program's derived type-metadata charge
+was 1,132,226 bytes before any substantial request work.
+
+Source inspection found that witness specialization cloned the entire function,
+test and port instruction inventory even when the program had no witness parameter
+or instruction. A new physical-sharing/allocation regression ran against that
+implementation and failed as intended: the otherwise unnecessary pass reserved
+386,512 bytes for the maintained standard program. Its original output and exit
+101 remain in `.artifacts/20260930-owned-ordinary-pass/red.log` and `red.exit`.
+That is an exact observation of this pass, not a total-RSS or allocator measurement.
+
+A bounded, allocation-free scan now checks every function signature and every
+instruction, including unreachable instructions and both test/port expression
+roots, before choosing whether specialization is needed. No-witness programs
+retain their original function/port and instruction carriers. A generic-only
+witness template, an already selected witness, an empty-operand implementation
+call, or a concrete method call still requires the full specialization path.
+Whole-artifact type, affine, implementation and source-dependency admission remain
+mandatory before this derived optimization. Cancellation and proof-work exhaustion
+stop the scan before it mutates code. No production or fixture quota was raised;
+no type/ownership validator generation changed for this derived-only optimization.
+
+Detector regressions cover both instruction forms in each of five root positions,
+both signature states, cancellation, the exact work boundary, zero allocation and
+shared carrier identity. The first post-change test invocation failed compilation
+because the test used `Name::from_str` and a two-field ComponentIndex constructor;
+`green-library.log` retains that failure. The corrected tests use the existing
+Name constructor and index representation. A preceding background launcher rejected
+`export` before starting Cargo; its corrected invocation uses an explicit shell.
+Neither launcher or compile failure is semantic test evidence. The corrected root
+library and selected public cases have separate output/status files and are not
+claimed successful until their complete terminal results are observed.
+
+The corrected all-feature root-library run passed 1,002 tests with zero failures
+and eight existing ignored cases in 70.74 seconds (`green-library2.log`, exit 0).
+Its three new absence-pass regressions all executed. The selected public run
+passed 12 of 13 cases in 13.60 seconds, including all eight Owned CLI cases and
+all four resident-policy cases. The unchanged 1,000,000-byte allocation policy
+again admitted both small controls while refusing the deliberately excessive
+workload, with joined cleanup and subsequent healthy requests. The same resident
+program now reported 709,906 type-metadata bytes instead of 1,132,226; this is
+422,320 fewer charged preparation bytes for that exact workload, not a general
+allocator/RSS or timing claim. `green-public2.log` and its exit 101 remain failed
+because the discovery test then reached another stale operation-list expectation.
+
+The complete literal discovery inventory now includes the four owned operations
+and their 15 required fields, both new owner kinds and all three witness relations.
+Inspection also found real omissions in the compact field descriptions: `owned`
+and `owned-i64-cell` were accepted by the parser but absent from their advertised
+constraint/type alternatives. Those descriptions and their independent expectations
+are corrected. The discovery test then passed in 0.61 seconds, exit 0, in
+`green-discovery3.log`. All eight reference pages were regenerated and verified
+through public `capabilities` (`references.log`), retaining the normal renderer.
+Only the field descriptions and the common capabilities digest changed there.
+
+These focused observations select the corrected source for a new frozen full
+profile; they do not combine earlier failed receipts into acceptance. Use two
+checker workers and four Cargo build jobs on the same isolated checkout, respecting
+the maintained producer dependency graph. Main, all other worktrees, immutable
+releases, running services and accepted application/standard HEADs are unchanged.

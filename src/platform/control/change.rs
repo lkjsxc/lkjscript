@@ -354,7 +354,7 @@ impl CompactChangeFieldForm {
             Self::DeclarationVisibility => "private|package|public",
             Self::FunctionEffect => "pure|task",
             Self::TypeReference => {
-                "unit|bool|i64|f64|byte-buffer|bytes|text|static-text|secret|@NAME"
+                "unit|bool|i64|f64|byte-buffer|owned-i64-cell|bytes|text|static-text|secret|@NAME"
             }
             Self::ExpressionReference => "$NAME",
             Self::DeletePolicy => "reject|owned-closure",
@@ -371,7 +371,7 @@ impl CompactChangeFieldForm {
             Self::Idempotency => "idempotent|idempotent-with-key|non-idempotent",
             Self::ExternalVisibility => "none|possible",
             Self::ParameterUse => "unrestricted|borrow|consume",
-            Self::TypeParameterConstraint => "none|capture-safe",
+            Self::TypeParameterConstraint => "none|capture-safe|owned",
             Self::RequirementReference => "$NAME|pkg_HEX/req_HEX",
             Self::ImplementationName => "dot.separated.name",
             Self::ExactExpression => "expr_HEX",

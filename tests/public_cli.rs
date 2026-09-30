@@ -1045,6 +1045,8 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
 
     let expression_section = compact_success(&["capabilities", "--section", "expression"]);
     let expected_expression_forms = [
+        "implementation-call",
+        "method-call",
         "unit",
         "bool",
         "i64",
@@ -1230,6 +1232,9 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "create.module",
             "create.record",
             "create.variant",
+            "create.owned-contract",
+            "create.owned-implementation",
+            "set.implementations",
             "create.interface",
             "create.external",
             "create.function",
@@ -1247,6 +1252,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "set.type-parameter-constraint",
             "set.field-type",
             "set.case-payload",
+            "set.parameter-use",
             "set.parameter-type",
             "add.parameter",
             "add.requirement",
@@ -1269,7 +1275,8 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .iter()
         .filter(|record| record.operation == "change.operation-field")
         .collect::<Vec<_>>();
-    assert_eq!(operation_fields.len(), 149);
+    // The four owned operations add 5 + 6 + 2 + 2 required fields.
+    assert_eq!(operation_fields.len(), 164);
     assert!(change_section.iter().any(|record| {
         record.operation == "change.edge-field"
             && compact_field(record, "edge") == Some("requirement-parameter.operation")
@@ -1317,6 +1324,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .collect::<Vec<_>>();
     assert_eq!(field_forms.len(), 36);
     for (name, syntax) in [
+        ("type_parameter_constraint", "none|capture-safe|owned"),
         ("reference_alias", "$REFERENCE_ALIAS"),
         ("exact_declaration", "decl_HEX"),
         ("exact_expression", "expr_HEX"),
@@ -1352,7 +1360,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .expect("type reference field form");
     assert_eq!(
         compact_field(type_reference, "syntax"),
-        Some("unit|bool|i64|f64|byte-buffer|bytes|text|static-text|secret|@NAME")
+        Some("unit|bool|i64|f64|byte-buffer|owned-i64-cell|bytes|text|static-text|secret|@NAME")
     );
     let query = compact_success(&["capabilities", "query"]);
     assert_eq!(
@@ -1397,6 +1405,9 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             && compact_field(record, "name") == Some("parameter_requirement")
     }));
     for relation in [
+        "owned_contract_use",
+        "implementation_selection",
+        "implementation_method",
         "http_route_target",
         "http_route_port",
         "requirement_parameter_use",
@@ -1412,7 +1423,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .iter()
             .filter(|record| record.operation == "query.owner-kind")
             .count(),
-        25
+        27
     );
     assert_eq!(
         query
@@ -1426,7 +1437,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .iter()
             .filter(|record| record.operation == "query.relation-kind")
             .count(),
-        33
+        36
     );
     assert_eq!(
         query
