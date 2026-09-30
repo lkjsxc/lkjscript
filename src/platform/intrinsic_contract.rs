@@ -173,6 +173,28 @@ fn validate_shape(
             &[IntrinsicType::Bytes, IntrinsicType::Text],
             &IntrinsicType::Bool,
         ),
+        "core.buffer.empty" => exact(signature, &[], &IntrinsicType::ByteBuffer),
+        "core.buffer.push" => exact(
+            signature,
+            &[IntrinsicType::I64, IntrinsicType::ByteBuffer],
+            &IntrinsicType::ByteBuffer,
+        ),
+        "core.buffer.get" => exact(
+            signature,
+            &[IntrinsicType::I64, IntrinsicType::ByteBuffer],
+            &IntrinsicType::I64,
+        ),
+        "core.buffer.length" => exact(signature, &[IntrinsicType::ByteBuffer], &IntrinsicType::I64),
+        "core.buffer.freeze" => exact(
+            signature,
+            &[IntrinsicType::ByteBuffer],
+            &IntrinsicType::Bytes,
+        ),
+        "core.buffer.discard" => exact(
+            signature,
+            &[IntrinsicType::ByteBuffer],
+            &IntrinsicType::Unit,
+        ),
         "core.bytes.from-text" => exact(signature, &[IntrinsicType::Text], &IntrinsicType::Bytes),
         "core.bytes.to-text" => exact(signature, &[IntrinsicType::Bytes], &IntrinsicType::Text),
         "core.bytes.from-list" => exact(
@@ -371,7 +393,8 @@ fn json_decodable(ty: &IntrinsicType) -> bool {
         IntrinsicType::Record(fields) => fields.iter().all(|field| json_decodable(&field.ty)),
         IntrinsicType::List(item) => json_decodable(item),
         IntrinsicType::Map(key, value) => json_decodable(key) && json_decodable(value),
-        IntrinsicType::StaticText
+        IntrinsicType::ByteBuffer
+        | IntrinsicType::StaticText
         | IntrinsicType::Secret
         | IntrinsicType::Option(_)
         | IntrinsicType::Result(_, _)
@@ -382,6 +405,7 @@ fn json_decodable(ty: &IntrinsicType) -> bool {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum IntrinsicType {
+    ByteBuffer,
     Unit,
     Bool,
     I64,
@@ -417,7 +441,7 @@ fn record(mut fields: Vec<IntrinsicField>) -> IntrinsicType {
 impl IntrinsicType {
     fn is_durable(&self) -> bool {
         match self {
-            Self::Secret | Self::Stream(_) | Self::Function(_, _) => false,
+            Self::ByteBuffer | Self::Secret | Self::Stream(_) | Self::Function(_, _) => false,
             Self::Parameter(_, canonical_template) => *canonical_template,
             Self::Record(fields) => fields.iter().all(|field| field.ty.is_durable()),
             Self::List(item) | Self::Option(item) => item.is_durable(),
@@ -492,9 +516,26 @@ pub(crate) fn validate_kernel_intrinsic<R: ExpressionRead + ?Sized>(
         let Some(OwnerRecord::Parameter(parameter)) = read.owner(OwnerKey::Parameter(*id))? else {
             return Err(signature_error("external parameter is missing"));
         };
-        if parameter.use_mode != ParameterUse::Unrestricted
-            || parameter.resource_requirement.is_some()
-        {
+        let expected_use = match external.implementation.as_str() {
+            "core.buffer.push" | "core.buffer.freeze" | "core.buffer.discard"
+                if matches!(
+                    read.type_object(parameter.ty)?.map(|t| t.form),
+                    Some(TypeForm::ByteBuffer)
+                ) =>
+            {
+                ParameterUse::Consume
+            }
+            "core.buffer.get" | "core.buffer.length"
+                if matches!(
+                    read.type_object(parameter.ty)?.map(|t| t.form),
+                    Some(TypeForm::ByteBuffer)
+                ) =>
+            {
+                ParameterUse::Borrow
+            }
+            _ => ParameterUse::Unrestricted,
+        };
+        if parameter.use_mode != expected_use || parameter.resource_requirement.is_some() {
             return Err(parameter_diagnostic(
                 signature_error("external cannot use or bind resources"),
                 *id,
@@ -576,6 +617,7 @@ fn kernel_type<R: ExpressionRead + ?Sized>(
         TypeForm::Bool => IntrinsicType::Bool,
         TypeForm::I64 => IntrinsicType::I64,
         TypeForm::F64 => IntrinsicType::F64,
+        TypeForm::ByteBuffer => IntrinsicType::ByteBuffer,
         TypeForm::Bytes => IntrinsicType::Bytes,
         TypeForm::Text => IntrinsicType::Text,
         TypeForm::StaticText => IntrinsicType::StaticText,

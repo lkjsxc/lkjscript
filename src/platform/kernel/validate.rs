@@ -1438,6 +1438,15 @@ impl FullValidator<'_> {
             if !self.consume_work() {
                 return;
             }
+            if object.child_types().into_iter().any(|t| {
+                self.snapshot
+                    .types
+                    .get(&t)
+                    .or_else(|| self.snapshot.dependency_types.get(&t))
+                    .is_some_and(|t| matches!(t.form, TypeForm::ByteBuffer))
+            }) {
+                self.error("kernel_buffer_container", format!("type object {digest} contains ByteBuffer in an unsupported container or callable descriptor"));
+            }
             let forbidden = match &object.form {
                 TypeForm::StructuralRecord { fields } => fields
                     .iter()
@@ -1486,6 +1495,14 @@ impl FullValidator<'_> {
             }
             match record {
                 OwnerRecord::Parameter(parameter) => {
+                    if self
+                        .snapshot
+                        .types
+                        .get(&parameter.ty)
+                        .is_some_and(|t| matches!(t.form, TypeForm::ByteBuffer))
+                    {
+                        continue;
+                    }
                     let contains = snapshot_type_contains_resource(self.snapshot, parameter.ty);
                     let direct = snapshot_type_is_direct_resource(self.snapshot, parameter.ty);
                     match parameter.parent {

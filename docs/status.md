@@ -29,6 +29,22 @@ Inspect the actual installed executable with `lkjscript capabilities`. Installin
 a newer runtime does not silently replace accepted application definitions,
 exact dependency selections, running processes or operational data.
 
+## Development: owned byte buffers
+
+Concrete `ByteBuffer` has pure creation, consuming push/freeze/discard and scoped
+synchronous read borrowing, independent of capability-resource authority. Direct
+owned results and a final borrow/consume suffix compose with ordinary generic data
+and callbacks across packages. Task bodies may hold locals; task memory signatures,
+mixed capability/memory signatures, containers, first-class memory descriptors and
+raw/durable memory boundaries remain unsupported. Immutable Bytes retains its
+unrestricted semantics.
+
+The [native guide](guides/native-byte-buffer.md) and
+[normative scope](spec/owned-byte-buffers.md) define authoring and rejection rules.
+The [implementation campaign](campaigns/20260930-owned-buffer.md) owns focused
+verification and preserved failures. Stable full acceptance and integration are
+pending the responsible main assistant; this work does not claim binary publication.
+
 ## Development v0.1.61: immutable byte ranges
 
 `bytes-slice(bytes, start, end)` selects a strict half-open byte range without copying

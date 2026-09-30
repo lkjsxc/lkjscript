@@ -801,6 +801,7 @@ fn append_type(
         | TypeForm::Bool
         | TypeForm::I64
         | TypeForm::F64
+        | TypeForm::ByteBuffer
         | TypeForm::Bytes
         | TypeForm::Text
         | TypeForm::StaticText
@@ -926,6 +927,7 @@ fn append_type(
         | TypeForm::Bool
         | TypeForm::I64
         | TypeForm::F64
+        | TypeForm::ByteBuffer
         | TypeForm::Bytes
         | TypeForm::Text
         | TypeForm::StaticText
@@ -1003,6 +1005,7 @@ fn type_form_name(form: &TypeForm) -> &'static str {
         TypeForm::Bool => "bool",
         TypeForm::I64 => "i64",
         TypeForm::F64 => "f64",
+        TypeForm::ByteBuffer => "byte-buffer",
         TypeForm::Bytes => "bytes",
         TypeForm::Text => "text",
         TypeForm::StaticText => "static-text",

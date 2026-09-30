@@ -1333,6 +1333,34 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                         "validated exact local reference is outside the compiled lexical scope",
                     )
                 })?;
+                let key = match value {
+                    LocalValueReference::FunctionParameter(p) => Some(OwnerKey::Parameter(p)),
+                    LocalValueReference::LexicalBinding(b)
+                    | LocalValueReference::MatchPayload(b) => Some(OwnerKey::Binding(b)),
+                    _ => None,
+                };
+                let ty = if let Some(key) = key {
+                    match self.unit.required_owner(key, "local ownership type")? {
+                        OwnerRecord::Parameter(p) => Some(p.ty),
+                        OwnerRecord::Binding(b) => b.declared_type,
+                        _ => None,
+                    }
+                } else {
+                    None
+                };
+                let memory = if let Some(ty) = ty {
+                    matches!(
+                        self.unit.canonical.code_type(ty)?.value.map(|t| t.form),
+                        Some(TypeForm::ByteBuffer)
+                    )
+                } else {
+                    false
+                };
+                let use_mode = if memory && use_mode == ParameterUse::Unrestricted {
+                    ParameterUse::Consume
+                } else {
+                    use_mode
+                };
                 self.push(CompiledInstruction::LoadLocal { local, use_mode })?;
             }
             ExpressionOperation::Constant { declaration } => {
@@ -1378,6 +1406,22 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     self.push(CompiledInstruction::StoreLocal(local))?;
                 }
                 self.expression(body, depth)?;
+                for reference in &scoped {
+                    let LocalValueReference::LexicalBinding(binding) = reference else {
+                        continue;
+                    };
+                    let record = self.binding(*binding, BindingKind::Let)?;
+                    if let Some(ty) = record.declared_type
+                        && matches!(
+                            self.unit.canonical.code_type(ty)?.value.map(|t| t.form),
+                            Some(TypeForm::ByteBuffer)
+                        )
+                    {
+                        let local = self.locals[reference];
+                        self.push(CompiledInstruction::Unit)?;
+                        self.push(CompiledInstruction::StoreLocal(local))?;
+                    }
+                }
                 self.unbind_all(&scoped);
             }
             ExpressionOperation::Sequence { items } => {

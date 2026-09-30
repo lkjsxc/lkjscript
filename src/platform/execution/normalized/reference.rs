@@ -543,6 +543,12 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         let list_work = super::list::Work::current();
         let map_work = super::map::Work::current();
         let mut state = ReferenceState {
+            memory_domain: super::value::ValueOrigin::fresh().ok_or_else(|| {
+                reference_resource(
+                    "normalized_buffer_domain",
+                    "memory invocation identity exhausted",
+                )
+            })?,
             authority: self.authority,
             binding,
             active_package: binding.package,
@@ -650,7 +656,16 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
             })?;
             *observed = Some(state.observation.clone());
         }
-        result.map(|value| (value.release(), state.observation))
+        result.and_then(|value| {
+            if value.ownership(&state.schema, &mut state.observation.value_work)?
+                == Ownership::Memory
+            {
+                return Err(reference_type_error(
+                    "ByteBuffer cannot cross raw results; freeze it",
+                ));
+            }
+            Ok((value.release(), state.observation))
+        })
     }
 }
 
@@ -661,6 +676,7 @@ struct ReferenceTransaction {
 }
 
 struct ReferenceState<'a> {
+    memory_domain: super::value::ValueOrigin,
     authority: &'a dyn NormalizedReferenceRead,
     binding: NormalizedReferenceBinding,
     active_package: PackageId,
@@ -1154,6 +1170,14 @@ impl ReferenceState<'_> {
     ) -> Result<CheckedValue, ExecutionError> {
         self.control.check()?;
         let type_arguments = self.resolve_type_arguments(type_arguments)?;
+        if type_arguments
+            .iter()
+            .any(|ty| !self.schema.buffer_free_types.contains(ty))
+        {
+            return Err(reference_type_error(
+                "ByteBuffer cannot substitute an unrestricted generic parameter",
+            ));
+        }
         let effect_arguments = self.resolve_effect_arguments(effect_arguments)?;
         let requirement_arguments = self.resolve_requirement_arguments(requirement_arguments)?;
         if self.call_depth >= self.policy.maximum_call_depth {
@@ -1242,7 +1266,15 @@ impl ReferenceState<'_> {
                         };
                         self.observation.external_calls =
                             self.observation.external_calls.saturating_add(1);
-                        let value = if let Some(host) = self.host {
+                        let value = if external.implementation.as_str().starts_with("core.buffer.")
+                        {
+                            self.checked_intrinsic(
+                                &signature,
+                                external.implementation.as_str(),
+                                type_arguments,
+                                arguments,
+                            )?
+                        } else if let Some(host) = self.host {
                             let value = host.call(
                                 self.schema.as_ref(),
                                 &signature,
@@ -1408,6 +1440,29 @@ impl ReferenceState<'_> {
             self.observation.tail_transfers = self.observation.tail_transfers.saturating_add(1);
         }
         let result = self.evaluate_tail(target.function.body, &mut locals);
+        let result = result.and_then(|step| {
+            if let ReferenceStep::Value(value) = &step {
+                let expected = matches!(
+                    self.schema
+                        .types
+                        .get(&target.function.result)
+                        .map(|t| &t.form),
+                    Some(TypeForm::ByteBuffer)
+                );
+                if (value.ownership(&self.schema, &mut self.observation.value_work)?
+                    == Ownership::Memory)
+                    != expected
+                {
+                    return Err(reference_type_error(
+                        "reference memory result contract mismatch",
+                    ));
+                }
+                if let NormalizedValue::ByteBuffer(buffer) = value.raw() {
+                    buffer.validate(self.memory_domain, true)?;
+                }
+            }
+            Ok(step)
+        });
         self.local_counts.pop();
         self.type_scopes.pop();
         self.effect_scopes.pop();
@@ -1423,6 +1478,29 @@ impl ReferenceState<'_> {
     ) -> Result<(), ExecutionError> {
         let mut resource_seen = false;
         for (index, (parameter, argument)) in parameters.iter().zip(arguments).enumerate() {
+            if matches!(
+                self.schema.types.get(&parameter.ty).map(|t| &t.form),
+                Some(TypeForm::ByteBuffer)
+            ) {
+                if parameter.resource_requirement.is_some()
+                    || parameter.use_mode == ParameterUse::Unrestricted
+                    || argument.ownership(&self.schema, &mut self.observation.value_work)?
+                        != Ownership::Memory
+                {
+                    return Err(reference_type_error("invalid memory call signature"));
+                }
+                let NormalizedValue::ByteBuffer(buffer) = argument.raw() else {
+                    return Err(reference_type_error("memory call token"));
+                };
+                buffer.validate(
+                    self.memory_domain,
+                    parameter.use_mode == ParameterUse::Consume,
+                )?;
+                if (parameter.use_mode == ParameterUse::Borrow) != buffer.is_borrowed() {
+                    return Err(reference_type_error("memory argument loan mode mismatch"));
+                }
+                continue;
+            }
             match parameter.resource_requirement {
                 Some(requirement) => {
                     resource_seen = true;
@@ -1617,6 +1695,7 @@ impl ReferenceState<'_> {
                         &effect_arguments,
                         &requirement_arguments,
                         arguments,
+                        locals,
                     );
                 }
                 ExpressionOperation::Invoke { callee, arguments } => {
@@ -1635,6 +1714,7 @@ impl ReferenceState<'_> {
                         &effect_arguments,
                         &requirement_arguments,
                         arguments,
+                        locals,
                     );
                 }
                 operation => {
@@ -1655,6 +1735,7 @@ impl ReferenceState<'_> {
         effect_arguments: &[EffectRow],
         requirement_arguments: &[RequirementOperand],
         arguments: Vec<CheckedValue>,
+        locals: &BTreeMap<LocalValueReference, CheckedValue>,
     ) -> Result<ReferenceStep, ExecutionError> {
         let callable = self.declaration(declaration)?;
         if let DeclarationPayload::Function(function) = callable.payload {
@@ -1671,7 +1752,36 @@ impl ReferenceState<'_> {
             )?;
             self.charge_allocation(std::mem::size_of::<AdmittedGraphCall>() as u64)?;
             self.control.check()?;
-            Ok(ReferenceStep::Tail(Box::new(target)))
+            if locals
+                .values()
+                .any(|v| matches!(v.raw(),NormalizedValue::ByteBuffer(b)if b.owns_live_loans()))
+            {
+                if self.call_depth >= self.policy.maximum_call_depth {
+                    return Err(reference_resource(
+                        "normalized_reference_call_depth",
+                        "retained memory owner exceeded call-depth limit",
+                    ));
+                }
+                self.call_depth += 1;
+                self.observation.maximum_call_depth =
+                    self.observation.maximum_call_depth.max(self.call_depth);
+                let package = self.active_package;
+                let mut step = self.enter_graph_call(target, false);
+                let result = loop {
+                    match step {
+                        Ok(ReferenceStep::Value(value)) => break Ok(ReferenceStep::Value(value)),
+                        Ok(ReferenceStep::Tail(target)) => {
+                            step = self.enter_graph_call(*target, true);
+                        }
+                        Err(error) => break Err(error),
+                    }
+                };
+                self.active_package = package;
+                self.call_depth -= 1;
+                result
+            } else {
+                Ok(ReferenceStep::Tail(Box::new(target)))
+            }
         } else {
             self.call_declaration(
                 declaration,
@@ -1773,6 +1883,19 @@ impl ReferenceState<'_> {
                 CheckedValue::primitive(&self.schema, NormalizedValue::StaticText(value))
             }),
             ExpressionOperation::Local { value } => {
+                if locals
+                    .get(&value)
+                    .is_some_and(|v| matches!(v.raw(), NormalizedValue::ByteBuffer(_)))
+                {
+                    let result = locals
+                        .remove(&value)
+                        .ok_or_else(|| reference_type_error("missing memory owner"))?;
+                    let NormalizedValue::ByteBuffer(buffer) = result.raw() else {
+                        return Err(reference_type_error("memory local token"));
+                    };
+                    buffer.validate(self.memory_domain, true)?;
+                    return Ok(result);
+                }
                 let value = locals.get(&value).ok_or_else(|| {
                     reference_error(
                         "normalized_reference_local_missing",
@@ -1829,16 +1952,18 @@ impl ReferenceState<'_> {
                 result
             }
             ExpressionOperation::Sequence { items } => {
-                let mut result = None;
-                for item in items {
-                    result = Some(self.evaluate(item, locals)?);
-                }
-                result.ok_or_else(|| {
+                let (last, preceding) = items.split_last().ok_or_else(|| {
                     reference_error(
                         "normalized_reference_sequence_empty",
                         "canonical sequence has no result expression",
                     )
-                })
+                })?;
+                // Discard each preceding result before its successor starts, including
+                // owners whose storage must not survive through the following call.
+                for item in preceding {
+                    self.evaluate(*item, locals)?;
+                }
+                self.evaluate(*last, locals)
             }
             ExpressionOperation::Call {
                 requirement_arguments,
@@ -2171,7 +2296,7 @@ impl ReferenceState<'_> {
             ParameterUse::Unrestricted => {
                 matches!(ownership, Ownership::Ordinary)
             }
-            ParameterUse::Borrow => ownership == Ownership::Capability,
+            ParameterUse::Borrow => matches!(ownership, Ownership::Capability | Ownership::Memory),
             ParameterUse::Consume => ownership != Ownership::Ordinary,
         };
         if !valid {
@@ -2179,6 +2304,9 @@ impl ReferenceState<'_> {
                 "normalized_reference_local_resource_use",
                 "canonical parameter use disagrees with its runtime affine value",
             ));
+        }
+        if let NormalizedValue::ByteBuffer(buffer) = value.raw() {
+            buffer.validate(self.memory_domain, use_mode == ParameterUse::Consume)?;
         }
         if let NormalizedValue::Resource(handle) = value.raw() {
             if use_mode == ParameterUse::Consume {
@@ -4315,6 +4443,12 @@ fn reference_value_cost(value: &NormalizedValue) -> Result<(u64, u64), Execution
     let mut items = 0_u64;
     while let Some(value) = pending.pop() {
         match value {
+            NormalizedValue::ByteBuffer(_) => {
+                return Err(ExecutionError::resource(
+                    "normalized_buffer_boundary",
+                    "ByteBuffer cannot cross raw/adapter boundaries",
+                ));
+            }
             NormalizedValue::Bytes(value) => {
                 bytes = bytes.checked_add(value.len() as u64).ok_or_else(|| {
                     reference_resource(

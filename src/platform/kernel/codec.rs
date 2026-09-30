@@ -532,6 +532,15 @@ pub fn decode_owner(
 
 pub fn encode_type_object(object: &TypeObject) -> Result<(TypeObjectDigest, Vec<u8>), Diagnostic> {
     object.validate_local()?;
+    if matches!(object.form, super::TypeForm::ByteBuffer) {
+        let bytes = packed::encode(
+            super::contract::BYTE_BUFFER_TYPE_MAGIC,
+            super::contract::BYTE_BUFFER_TYPE_ENVELOPE_DOMAIN,
+            &(object.contract_version, 1_u8),
+            MAXIMUM_TYPE_OBJECT_BYTES,
+        )?;
+        return Ok((TypeObjectDigest::of(&bytes), bytes));
+    }
     if matches!(object.form, super::TypeForm::F64) {
         let bytes = packed::encode(
             super::contract::F64_TYPE_MAGIC,
@@ -629,6 +638,33 @@ pub fn decode_type_object(
         TypeObjectDigest::of(bytes).bytes(),
         "type",
     )?;
+    if bytes.starts_with(&super::contract::BYTE_BUFFER_TYPE_MAGIC) {
+        let (contract_version, tag): (u16, u8) = packed::decode(
+            bytes,
+            super::contract::BYTE_BUFFER_TYPE_MAGIC,
+            super::contract::BYTE_BUFFER_TYPE_ENVELOPE_DOMAIN,
+            MAXIMUM_TYPE_OBJECT_BYTES,
+        )?;
+        if tag != 1 {
+            return Err(codec_error(
+                "kernel_buffer_type_tag",
+                "unknown ByteBuffer type tag",
+            ));
+        }
+        let object = TypeObject {
+            contract_version,
+            form: super::TypeForm::ByteBuffer,
+        };
+        let (digest, canonical) = encode_type_object(&object)?;
+        verify_canonical(
+            bytes,
+            &canonical,
+            digest.bytes(),
+            expected_digest.bytes(),
+            "type",
+        )?;
+        return Ok(object);
+    }
     if bytes.starts_with(&super::contract::F64_TYPE_MAGIC) {
         let (contract_version, tag): (u16, u8) = packed::decode(
             bytes,
@@ -902,4 +938,35 @@ fn verify_canonical(
 
 fn codec_error(code: &str, message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Corrupt, code, message)
+}
+
+#[cfg(test)]
+mod buffer_encoding_tests {
+    use super::*;
+    use crate::platform::kernel::TypeForm;
+    #[test]
+    fn byte_buffer_encoding_is_disjoint_and_rejects_disguised_or_unknown_tags() {
+        let buffer = TypeObject::new(TypeForm::ByteBuffer).unwrap();
+        let (digest, bytes) = encode_type_object(&buffer).unwrap();
+        assert_eq!(&bytes[..8], b"LKJBUF01");
+        assert_eq!(decode_type_object(&bytes, digest).unwrap(), buffer);
+        let disguised = packed::encode(
+            TYPE_OBJECT_MAGIC,
+            TYPE_OBJECT_ENVELOPE_DOMAIN,
+            &buffer,
+            MAXIMUM_TYPE_OBJECT_BYTES,
+        )
+        .unwrap();
+        assert!(decode_type_object(&disguised, TypeObjectDigest::of(&disguised)).is_err());
+        for (version, tag) in [(0_u16, 1_u8), (10, 1), (1, 0), (1, 2)] {
+            let raw = packed::encode(
+                super::super::contract::BYTE_BUFFER_TYPE_MAGIC,
+                super::super::contract::BYTE_BUFFER_TYPE_ENVELOPE_DOMAIN,
+                &(version, tag),
+                MAXIMUM_TYPE_OBJECT_BYTES,
+            )
+            .unwrap();
+            assert!(decode_type_object(&raw, TypeObjectDigest::of(&raw)).is_err());
+        }
+    }
 }

@@ -14,6 +14,9 @@ pub const fn supported_graph_contract(version: u16) -> bool {
 /// Existing base type bytes and identities stay unchanged; extensions use disjoint envelopes.
 pub const TYPE_OBJECT_CONTRACT_IDENTITY: &str = "lkjscript-type-object-10";
 pub const TYPE_OBJECT_CONTRACT_VERSION: u16 = 10;
+pub const BYTE_BUFFER_TYPE_CONTRACT_VERSION: u16 = 1;
+pub const BYTE_BUFFER_TYPE_MAGIC: [u8; 8] = *b"LKJBUF01";
+pub const BYTE_BUFFER_TYPE_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.byte-buffer-type-envelope.v1";
 pub const F64_TYPE_CONTRACT_VERSION: u16 = 1;
 pub const F64_TYPE_MAGIC: [u8; 8] = *b"LKJF6401";
 pub const F64_TYPE_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.f64-type-envelope.v1";

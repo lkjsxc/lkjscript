@@ -1,0 +1,44 @@
+request base=rev_7a13416f398fceb35d246500dd02b0f02ab7931347bb21cb7f6841ad8b65556a idempotency=standard-owned-buffer
+reference.owner as=$core package=local class=module name=core
+reference.owner as=$from-list package=local class=declaration parent=$core name=bytes-from-list
+declarations.begin
+(units
+  (external create buffer-empty (in $core) (visibility public)
+    (implementation core.buffer.empty) (returns ByteBuffer))
+  (external create buffer-push (in $core) (visibility public) (implementation core.buffer.push)
+    (parameter create octet (type I64)) (parameter create buffer (type ByteBuffer) (use consume))
+    (returns ByteBuffer))
+  (external create buffer-get (in $core) (visibility public) (implementation core.buffer.get)
+    (parameter create index (type I64)) (parameter create buffer (type ByteBuffer) (use borrow))
+    (returns I64))
+  (external create buffer-length (in $core) (visibility public) (implementation core.buffer.length)
+    (parameter create buffer (type ByteBuffer) (use borrow)) (returns I64))
+  (external create buffer-freeze (in $core) (visibility public) (implementation core.buffer.freeze)
+    (parameter create buffer (type ByteBuffer) (use consume)) (returns Bytes))
+  (external create buffer-discard (in $core) (visibility public) (implementation core.buffer.discard)
+    (parameter create buffer (type ByteBuffer) (use consume)) (returns Unit))
+  (test create buffer-empty-freeze (in $core) (visibility private)
+    (actual (let (binding b (type ByteBuffer) (call buffer-empty))
+      (in (call buffer-freeze (local b)))))
+    (expected (call $from-list (list I64))))
+  (test create buffer-exact-octets (in $core) (visibility private)
+    (actual (let
+      (binding b0 (type ByteBuffer) (call buffer-empty))
+      (binding b1 (type ByteBuffer) (call buffer-push (i64 0) (local b0)))
+      (binding b2 (type ByteBuffer) (call buffer-push (i64 255) (local b1)))
+      (binding b3 (type ByteBuffer) (call buffer-push (i64 128) (local b2)))
+      (in (call buffer-freeze (local b3)))))
+    (expected (call $from-list (list I64 (i64 0) (i64 255) (i64 128)))))
+  (test create buffer-scoped-read (in $core) (visibility private)
+    (actual (let
+      (binding empty (type ByteBuffer) (call buffer-empty))
+      (binding b (type ByteBuffer) (call buffer-push (i64 255) (local empty)))
+      (in (record structural
+        (field length (call buffer-length (local b)))
+        (field value (call buffer-get (i64 0) (local b)))))))
+    (expected (record structural (field length (i64 1)) (field value (i64 255)))))
+  (test create buffer-discarded (in $core) (visibility private)
+    (actual (let (binding b (type ByteBuffer) (call buffer-empty))
+      (in (call buffer-discard (local b)))))
+    (expected (unit))))
+declarations.end

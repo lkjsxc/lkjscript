@@ -589,11 +589,26 @@ fn internal_type(
     };
     let object = TypeObject::new(form).expect("internal boundary fixture type");
     let (digest, _) = encode_type_object(&object).expect("canonical type identity");
+    // This helper bypasses preparation. Preserve the new absence fact from already
+    // checked children; unknown nominal definitions still require real preparation.
+    let buffer_free = !matches!(object.form, TypeForm::ByteBuffer)
+        && object.child_types().iter().all(|ty| {
+            program.buffer_free_types.contains(ty) && schema.buffer_free_types.contains(ty)
+        })
+        && (!matches!(
+            object.form,
+            TypeForm::Named { .. } | TypeForm::Applied { .. }
+        ) || (program.buffer_free_types.contains(&digest)
+            && schema.buffer_free_types.contains(&digest)));
     program.types.insert(digest, object.clone());
     schema.types.insert(digest, object);
     if application_free {
         program.application_free_types.insert(digest);
         schema.application_free_types.insert(digest);
+    }
+    if buffer_free {
+        program.buffer_free_types.insert(digest);
+        schema.buffer_free_types.insert(digest);
     }
     digest
 }
@@ -988,10 +1003,12 @@ fn admission_limits_and_deterministic_cancellation_retain_progress_and_allow_reu
     let mut nested_types = vec![integer];
     let mut ty = integer;
     for _ in 0..256 {
+        assert!(program.buffer_free_types.contains(&ty));
         let object = TypeObject::new(TypeForm::Option { item: ty }).unwrap();
         let (digest, _) = encode_type_object(&object).unwrap();
         program.types.insert(digest, object.clone());
         program.application_free_types.insert(digest);
+        program.buffer_free_types.insert(digest);
         snapshot.types.insert(digest, object);
         ty = digest;
         nested_types.push(ty);

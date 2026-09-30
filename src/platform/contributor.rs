@@ -2818,8 +2818,8 @@ mod tests {
         let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
         let before = std::fs::read(project.join("HEAD")).expect("standard HEAD before oracle");
         let inventory = semantic_inventory(&project).expect("standard semantic inventory");
-        // Native byte ranges add two externals and ten tests (104 owners).
-        assert_eq!(inventory.owners, 1_558);
+        // Six owned-buffer externals and four native tests add 68 owners in core.
+        assert_eq!(inventory.owners, 1_626);
         assert_eq!(inventory.modules, 13);
         assert!(inventory.functions > 0);
         assert!(inventory.relations > 0);

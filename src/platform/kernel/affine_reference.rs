@@ -58,8 +58,12 @@ struct Reference<'a> {
 }
 
 impl Reference<'_> {
+    fn buffer(&self, ty: TypeObjectDigest) -> bool {
+        self.type_object(ty)
+            .is_some_and(|t| matches!(t.form, TypeForm::ByteBuffer))
+    }
     fn accepts(&self) -> bool {
-        if !self.shapes_are_legal() {
+        if !super::memory_reference::accepts(self.snapshot) || !self.shapes_are_legal() {
             return false;
         }
         self.snapshot.owners.iter().all(|(owner, record)| {
@@ -111,6 +115,7 @@ impl Reference<'_> {
                                     .is_ok()
                         }
                         Some((Shape::Variant, _)) => false,
+                        None if self.buffer(parameter.ty) => true,
                         None => {
                             !self.contains_resource(parameter.ty, &mut BTreeSet::new())
                                 && parameter.use_mode == ParameterUse::Unrestricted
@@ -162,7 +167,8 @@ impl Reference<'_> {
                             self.parameter(self.snapshot.root.package_id, *parameter)
                                 .is_some_and(|parameter| {
                                     !self.contains_resource(parameter.ty, &mut BTreeSet::new())
-                                        && parameter.use_mode == ParameterUse::Unrestricted
+                                        && (self.buffer(parameter.ty)
+                                            || parameter.use_mode == ParameterUse::Unrestricted)
                                         && parameter.resource_requirement.is_none()
                                 })
                         })
@@ -594,6 +600,7 @@ impl Reference<'_> {
                     });
                 }
                 Some((Shape::Variant, _)) => return Err(()),
+                None if self.buffer(record.ty) => continue,
                 None => {
                     if !resources.is_empty()
                         || self.contains_resource(record.ty, &mut BTreeSet::new())
@@ -637,7 +644,8 @@ impl Reference<'_> {
         if parameters.iter().any(|parameter| {
             self.parameter(package, *parameter).is_none_or(|parameter| {
                 self.contains_resource(parameter.ty, &mut BTreeSet::new())
-                    || parameter.use_mode != ParameterUse::Unrestricted
+                    || (!self.buffer(parameter.ty)
+                        && parameter.use_mode != ParameterUse::Unrestricted)
                     || parameter.resource_requirement.is_some()
             })
         }) {

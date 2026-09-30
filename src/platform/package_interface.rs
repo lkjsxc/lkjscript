@@ -1267,6 +1267,7 @@ fn validate_interface_type_reference(
         | TypeForm::Bool
         | TypeForm::I64
         | TypeForm::F64
+        | TypeForm::ByteBuffer
         | TypeForm::Bytes
         | TypeForm::Text
         | TypeForm::StaticText

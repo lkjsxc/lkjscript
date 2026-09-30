@@ -552,6 +552,13 @@ pub(super) fn complete(
     schema.affine_variants.resize(schema.variants.len(), false);
     let mut visits = closure.visits;
     let mut bytes = closure.allocated;
+    schema.buffer_free_types = property_types(
+        schema,
+        &mut visits,
+        &mut bytes,
+        control,
+        Retention::BufferFree,
+    )?;
     schema.capture_safe_types =
         property_types(schema, &mut visits, &mut bytes, control, Retention::Capture)?;
     schema.ordinary_types = property_types(
@@ -835,6 +842,7 @@ impl Closure<'_> {
 // no stored edges. Cycles admitted by canonical validation retain their ordinary meaning.
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum Retention {
+    BufferFree,
     Capture,
     Ordinary,
     Comparable,
@@ -866,13 +874,17 @@ fn property_types(
     for (ty, object) in &schema.types {
         control.check()?;
         tick(visits)?;
-        if retention == Retention::NoApplication
-            || !matches!(
-                object.form,
-                TypeForm::Stream { .. }
-                    | TypeForm::CapabilityResource { .. }
-                    | TypeForm::TypeParameter { .. }
-            ) && (secrets || !matches!(object.form, TypeForm::Secret))
+        if (retention == Retention::BufferFree && !matches!(object.form, TypeForm::ByteBuffer))
+            || retention == Retention::NoApplication
+            || retention != Retention::BufferFree
+                && !matches!(
+                    object.form,
+                    TypeForm::ByteBuffer
+                        | TypeForm::Stream { .. }
+                        | TypeForm::CapabilityResource { .. }
+                        | TypeForm::TypeParameter { .. }
+                )
+                && (secrets || !matches!(object.form, TypeForm::Secret))
                 && (callables
                     || !matches!(
                         object.form,
@@ -900,8 +912,17 @@ fn property_types(
                 Ok(safe.contains(&child))
             };
             let accepted = match &object.form {
+                TypeForm::ByteBuffer if retention == Retention::BufferFree => false,
+                _ if retention == Retention::BufferFree => {
+                    let mut accepted = true;
+                    for ty in object.child_types() {
+                        accepted &= retained(ty)?;
+                    }
+                    accepted
+                }
                 TypeForm::Applied { .. } if retention == Retention::NoApplication => false,
-                TypeForm::Secret
+                TypeForm::ByteBuffer
+                | TypeForm::Secret
                 | TypeForm::Stream { .. }
                 | TypeForm::CapabilityResource { .. }
                 | TypeForm::TypeParameter { .. }

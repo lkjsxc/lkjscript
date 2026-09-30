@@ -75,6 +75,7 @@ struct CaptureAnalysis {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ResourceClass {
     None,
+    Memory,
     Direct(DeclarationReference),
     Contained,
 }
@@ -199,7 +200,7 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         {
             return Err(extract_error(
                 "change_extract_resource_result",
-                "selected expression result may not contain a capability resource",
+                "selected expression result may not contain capability resources or owned memory",
             ));
         }
         let captures = analyze_captures(
@@ -931,6 +932,12 @@ fn analyze_captures<B: CanonicalBaseRead + ?Sized>(
         let class = resource_class(reader, ty, &mut BTreeSet::new(), &mut BTreeSet::new())?;
         let (use_mode, resource_requirement) = match class {
             ResourceClass::None => (ParameterUse::Unrestricted, None),
+            ResourceClass::Memory => {
+                return Err(extract_error(
+                    "change_extract_memory_capture",
+                    "function extraction does not support a ByteBuffer capture",
+                ));
+            }
             ResourceClass::Contained => {
                 return Err(extract_error(
                     "change_extract_resource_container",
@@ -1808,6 +1815,7 @@ fn resource_class<B: CanonicalBaseRead + ?Sized>(
     })?;
     let result = match object.form {
         TypeForm::CapabilityResource { interface } => ResourceClass::Direct(interface),
+        TypeForm::ByteBuffer => ResourceClass::Memory,
         TypeForm::Named { declaration } => {
             let key = (declaration.package, declaration.declaration);
             if !active_declarations.insert(key) {

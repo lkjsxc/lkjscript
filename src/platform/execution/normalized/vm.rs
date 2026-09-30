@@ -364,6 +364,12 @@ impl<'a> NormalizedVm<'a> {
         let list_work = super::list::Work::current();
         let map_work = super::map::Work::current();
         let mut machine = Machine {
+            memory_domain: super::value::ValueOrigin::fresh().ok_or_else(|| {
+                resource_error(
+                    "normalized_buffer_domain",
+                    "memory invocation identity exhausted",
+                )
+            })?,
             program: self.program,
             root_allowance: None,
             policy: self.policy,
@@ -483,7 +489,14 @@ impl<'a> NormalizedVm<'a> {
             })?;
             *observed = Some(machine.observation.clone());
         }
-        result.map(|value| (value.into_raw(), machine.observation))
+        result.and_then(|value| {
+            if value.class(machine.program, &mut machine.observation.value_work)? == Class::Memory {
+                return Err(type_error(
+                    "ByteBuffer cannot cross a raw result boundary; freeze it",
+                ));
+            }
+            Ok((value.into_raw(), machine.observation))
+        })
     }
 }
 
@@ -521,6 +534,7 @@ struct ActiveTransaction {
 }
 
 struct Machine<'a> {
+    memory_domain: super::value::ValueOrigin,
     root_allowance: Option<Arc<[RequirementIndex]>>,
     program: &'a NormalizedProgram,
     policy: NormalizedRunPolicy,
@@ -1176,6 +1190,22 @@ impl Machine<'_> {
                             "normalized function returned with extra operand values",
                         ));
                     }
+                    if let Some(function) = self.current_frame()?.function {
+                        let f = &self.program.functions[function.0 as usize];
+                        let expected = matches!(
+                            self.program.types.get(&f.result).map(|t| &t.form),
+                            Some(TypeForm::ByteBuffer)
+                        );
+                        if (result.class(self.program, &mut self.observation.value_work)?
+                            == Class::Memory)
+                            != expected
+                        {
+                            return Err(type_error("function memory result contract mismatch"));
+                        }
+                        if let NormalizedValue::ByteBuffer(buffer) = result.raw() {
+                            buffer.validate(self.memory_domain, true)?;
+                        }
+                    }
                     let frame = self.frames.pop().ok_or_else(|| {
                         runtime_error(
                             "normalized_frame_missing",
@@ -1566,6 +1596,14 @@ impl Machine<'_> {
         if arguments.len() != function.parameter_count as usize {
             return Err(type_error("function argument count is foreign"));
         }
+        if type_arguments
+            .iter()
+            .any(|ty| !self.program.buffer_free_types.contains(ty))
+        {
+            return Err(type_error(
+                "ByteBuffer cannot substitute an unrestricted generic parameter",
+            ));
+        }
         if type_arguments.len() != function.type_parameters.len() {
             return Err(type_error("function type-argument count is foreign"));
         }
@@ -1606,6 +1644,13 @@ impl Machine<'_> {
             return Err(capabilities_unbound());
         }
         self.validate_call_resources(function, &arguments)?;
+        // A retained ancestor owns the storage for read-only reborrows. Only an outgoing
+        // owner with live loans prevents replacing this activation.
+        let tail = tail && !self.frames.last().is_some_and(|frame| {
+            frame.locals.iter().flatten().any(|value| {
+                matches!(value.raw(), NormalizedValue::ByteBuffer(buffer) if buffer.owns_live_loans())
+            })
+        });
         if tail {
             self.validate_tail_caller()?;
             if !function.graph_function {
@@ -1626,7 +1671,14 @@ impl Machine<'_> {
             ),
             NormalizedFunctionBody::External(implementation) => {
                 self.observation.external_calls = self.observation.external_calls.saturating_add(1);
-                let value = if let Some(host) = self.host {
+                let value = if implementation.as_str().starts_with("core.buffer.") {
+                    self.call_checked_intrinsic(
+                        function,
+                        implementation.as_str(),
+                        &type_arguments,
+                        arguments,
+                    )?
+                } else if let Some(host) = self.host {
                     let raw = host.call(
                         self.program,
                         function,
@@ -1662,6 +1714,32 @@ impl Machine<'_> {
     ) -> Result<(), ExecutionError> {
         let mut uses = BTreeMap::new();
         for (parameter, argument) in function.parameters.iter().zip(arguments) {
+            if matches!(
+                self.program.types.get(&parameter.ty).map(|t| &t.form),
+                Some(TypeForm::ByteBuffer)
+            ) {
+                if !matches!(
+                    function.effect,
+                    crate::platform::kernel::FunctionEffect::Pure
+                ) || parameter.resource_requirement.is_some()
+                    || parameter.use_mode == ParameterUse::Unrestricted
+                    || argument.class(self.program, &mut self.observation.value_work)?
+                        != Class::Memory
+                {
+                    return Err(type_error("invalid memory call signature"));
+                }
+                let NormalizedValue::ByteBuffer(buffer) = argument.raw() else {
+                    return Err(type_error("memory call token"));
+                };
+                buffer.validate(
+                    self.memory_domain,
+                    parameter.use_mode == ParameterUse::Consume,
+                )?;
+                if (parameter.use_mode == ParameterUse::Borrow) != buffer.is_borrowed() {
+                    return Err(type_error("memory argument loan mode mismatch"));
+                }
+                continue;
+            }
             match parameter.resource_requirement {
                 Some(requirement) => {
                     if parameter.use_mode == ParameterUse::Unrestricted
@@ -1865,7 +1943,10 @@ impl Machine<'_> {
             .flat_map(|frame| &frame.locals)
             .flatten()
         {
-            if value.class(self.program, &mut self.observation.value_work)? != Class::Free {
+            if !matches!(
+                value.class(self.program, &mut self.observation.value_work)?,
+                Class::Free | Class::Memory
+            ) {
                 return Err(runtime_error(
                     "normalized_tail_resource",
                     "tail transfer cannot discard affine authority",
@@ -2125,7 +2206,7 @@ impl Machine<'_> {
         let class = value.class(self.program, &mut self.observation.value_work)?;
         let valid = match use_mode {
             ParameterUse::Unrestricted => class == Class::Free,
-            ParameterUse::Borrow => class == Class::Direct,
+            ParameterUse::Borrow => matches!(class, Class::Direct | Class::Memory),
             ParameterUse::Consume => class != Class::Free,
         };
         if !valid {
@@ -2133,6 +2214,9 @@ impl Machine<'_> {
                 "normalized_local_resource_use",
                 "normalized local use disagrees with the checked ownership classification",
             ));
+        }
+        if let NormalizedValue::ByteBuffer(buffer) = value.raw() {
+            buffer.validate(self.memory_domain, use_mode == ParameterUse::Consume)?;
         }
         if let NormalizedValue::Resource(handle) = value.raw() {
             if use_mode == ParameterUse::Consume {
@@ -2281,6 +2365,12 @@ fn value_cost(value: &NormalizedValue) -> Result<(u64, u64), ExecutionError> {
     let mut items = 0_u64;
     while let Some(value) = pending.pop() {
         match value {
+            NormalizedValue::ByteBuffer(_) => {
+                return Err(ExecutionError::resource(
+                    "normalized_buffer_boundary",
+                    "ByteBuffer cannot cross raw/adapter boundaries",
+                ));
+            }
             NormalizedValue::Bytes(value) => {
                 bytes = bytes.checked_add(value.len() as u64).ok_or_else(|| {
                     resource_error(

@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-13";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 13;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-9";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 9;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN13";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v13";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v13";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-14";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 14;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-10";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 10;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN14";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v14";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v14";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -76,6 +76,8 @@ impl CompilationUnitKey {
             "lkjscript.compiler-unit-key.v11"
         } else if compiler_contract_version == 12 {
             "lkjscript.compiler-unit-key.v12"
+        } else if compiler_contract_version == 13 {
+            "lkjscript.compiler-unit-key.v13"
         } else {
             COMPILER_UNIT_KEY_DOMAIN
         });
@@ -435,6 +437,13 @@ impl CompilationUnit {
                 self,
                 MAXIMUM_COMPILER_UNIT_BYTES,
             )?
+        } else if self.contract_version == 13 {
+            crate::platform::packed::encode(
+                *b"LKJCUN13",
+                "lkjscript.compiler-unit-envelope.v13",
+                self,
+                MAXIMUM_COMPILER_UNIT_BYTES,
+            )?
         } else {
             crate::platform::packed::encode(
                 COMPILER_UNIT_MAGIC,
@@ -481,6 +490,13 @@ impl CompilationUnit {
                 "lkjscript.compiler-unit-envelope.v12",
                 MAXIMUM_COMPILER_UNIT_BYTES,
             )?
+        } else if bytes.starts_with(b"LKJCUN13") {
+            crate::platform::packed::decode(
+                bytes,
+                *b"LKJCUN13",
+                "lkjscript.compiler-unit-envelope.v13",
+                MAXIMUM_COMPILER_UNIT_BYTES,
+            )?
         } else {
             crate::platform::packed::decode(
                 bytes,
@@ -508,12 +524,24 @@ impl CompilationUnit {
                 self.bytecode_contract_version,
                 self.graph_contract_version
             ),
-            (10, 6, 14) | (11, 7, 15) | (12, 8, 16) | (13, 9, 17)
+            (10, 6, 14) | (11, 7, 15) | (12, 8, 16) | (13, 9, 17) | (14, 10, 17)
         ) {
             return Err(unit_error(
                 DiagnosticClass::Source,
                 "compiler_unit_contract",
                 "compiler unit uses a predecessor or foreign contract",
+            ));
+        }
+        let buffer = crate::platform::kernel::encode_type_object(
+            &crate::platform::kernel::TypeObject::new(
+                crate::platform::kernel::TypeForm::ByteBuffer,
+            )?,
+        )?
+        .0;
+        if self.contract_version < 14 && self.tables.types.contains(&buffer) {
+            return Err(unit_corrupt(
+                "compiler_unit_buffer_generation",
+                "ByteBuffer requires compiler-unit 14 and bytecode 10",
             ));
         }
         if self.contract_version < 12 && self.payload.uses_transaction_outcome() {
@@ -1057,16 +1085,23 @@ impl CompiledSignature {
                     .map(|requirement| (index, parameter, requirement))
             })
             .collect::<Vec<_>>();
-        if kind == OwnerKind::External
-            && self.parameters.iter().any(|parameter| {
-                parameter.use_mode != ParameterUse::Unrestricted
-                    || parameter.resource_requirement.is_some()
-            })
-        {
-            return Err(unit_corrupt(
-                "compiler_unit_external_resource_parameter",
-                "compiled external parameters cannot use or bind affine resources",
-            ));
+        if kind == OwnerKind::External {
+            let buffer = crate::platform::kernel::encode_type_object(
+                &crate::platform::kernel::TypeObject::new(
+                    crate::platform::kernel::TypeForm::ByteBuffer,
+                )?,
+            )?
+            .0;
+            if self.parameters.iter().any(|parameter| {
+                parameter.resource_requirement.is_some()
+                    || (parameter.use_mode != ParameterUse::Unrestricted
+                        && tables.types[parameter.ty as usize] != buffer)
+            }) {
+                return Err(unit_corrupt(
+                    "compiler_unit_external_resource_parameter",
+                    "compiled external modes require ByteBuffer and cannot bind capability resources",
+                ));
+            }
         }
         if bound
             .iter()
@@ -1081,15 +1116,6 @@ impl CompiledSignature {
             return Err(unit_corrupt(
                 "compiler_unit_resource_parameter_shape",
                 "compiled resource parameters must form a borrow/consume suffix bound to their exact task requirements",
-            ));
-        }
-        if self.parameters.iter().any(|parameter| {
-            parameter.use_mode != ParameterUse::Unrestricted
-                && parameter.resource_requirement.is_none()
-        }) {
-            return Err(unit_corrupt(
-                "compiler_unit_function_parameter_use",
-                "compiled function parameter use requires an exact resource binding",
             ));
         }
         Ok(())

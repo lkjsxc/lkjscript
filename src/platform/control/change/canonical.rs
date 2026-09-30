@@ -157,6 +157,7 @@ impl<'a> Reader<'a> {
             TypeForm::Bool => AuthoredType::Bool {},
             TypeForm::I64 => AuthoredType::I64 {},
             TypeForm::F64 => AuthoredType::F64 {},
+            TypeForm::ByteBuffer => AuthoredType::ByteBuffer {},
             TypeForm::Bytes => AuthoredType::Bytes {},
             TypeForm::Text => AuthoredType::Text {},
             TypeForm::StaticText => AuthoredType::StaticText {},

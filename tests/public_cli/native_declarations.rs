@@ -1659,3 +1659,6 @@ mod native_literal_edits;
 mod native_named_drafts;
 #[path = "web_starter.rs"]
 mod web_starter;
+
+#[path = "native_byte_buffer.rs"]
+mod native_byte_buffer;

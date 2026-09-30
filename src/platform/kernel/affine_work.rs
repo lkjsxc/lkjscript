@@ -44,6 +44,9 @@ pub(super) struct Read<'a, R: ?Sized> {
 }
 
 impl<R: ExpressionRead + ?Sized> ExpressionRead for Read<'_, R> {
+    fn byte_buffer_type_known_absent(&self) -> bool {
+        self.inner.byte_buffer_type_known_absent()
+    }
     fn package_id(&self) -> PackageId {
         self.inner.package_id()
     }

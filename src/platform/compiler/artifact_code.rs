@@ -8,6 +8,7 @@ use crate::platform::semantic_id::ExpressionId;
 use std::cell::Cell;
 
 struct Read<'a> {
+    compiler_generation: u16,
     package: PackageId,
     owners: &'a BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
     runtime: &'a BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
@@ -85,12 +86,28 @@ impl CodeRead for Read<'_> {
         &self,
         owner: OwnerKey,
     ) -> Result<CanonicalRead<Option<OwnerRecord>>, Diagnostic> {
-        self.observed(|| {
+        let result = self.observed(|| {
             self.owners
                 .get(&(self.package, owner))
                 .or_else(|| self.runtime.get(&(self.package, owner)))
                 .cloned()
-        })
+        })?;
+        if self.compiler_generation < 14
+            && result.value.as_ref().is_some_and(|owner| {
+                owner.type_roots().iter().any(|ty| {
+                    self.types
+                        .get(ty)
+                        .is_some_and(|t| matches!(t.form, TypeForm::ByteBuffer))
+                })
+            })
+        {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_buffer_generation",
+                "predecessor compiled control refers to a ByteBuffer contract",
+            ));
+        }
+        Ok(result)
     }
     fn code_type(
         &self,
@@ -133,6 +150,7 @@ pub(super) fn validate(
     let remaining = Cell::new(crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK);
     for ((package, owner), unit) in units {
         let read = Read {
+            compiler_generation: unit.contract_version,
             package: *package,
             owners,
             runtime,
@@ -203,4 +221,49 @@ fn missing() -> Diagnostic {
         "artifact_compiled_control_owner",
         "compiled code has no matching canonical expression owner",
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn byte_buffer_predecessor_control_admission_checks_canonical_local_annotations() {
+        let source =
+            crate::platform::execution::normalized::tests::byte_buffer_tests::author("").unwrap();
+        let buffer = encode_type_object(&TypeObject::new(TypeForm::ByteBuffer).unwrap())
+            .unwrap()
+            .0;
+        let key = source
+            .owners
+            .iter()
+            .find_map(|(key, owner)| {
+                matches!(owner, OwnerRecord::Binding(b) if b.declared_type == Some(buffer))
+                    .then_some(*key)
+            })
+            .unwrap();
+        let owners = source
+            .owners
+            .iter()
+            .map(|(key, owner)| ((source.root.package_id, *key), owner.clone()))
+            .collect();
+        let runtime = BTreeMap::new();
+        let interfaces = BTreeMap::new();
+        for generation in [13, 14] {
+            let read = Read {
+                compiler_generation: generation,
+                package: source.root.package_id,
+                owners: &owners,
+                runtime: &runtime,
+                interfaces: &interfaces,
+                types: &source.types,
+                remaining: &Cell::new(crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK),
+            };
+            let result = read.code_owner(key);
+            if generation == 13 {
+                assert_eq!(result.unwrap_err().code, "artifact_buffer_generation");
+            } else {
+                assert_eq!(result.unwrap().value, source.owners.get(&key).cloned());
+            }
+        }
+    }
 }

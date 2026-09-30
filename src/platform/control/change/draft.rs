@@ -371,6 +371,7 @@ impl Renderer<'_> {
             T::Bool {} => Some("Bool"),
             T::I64 {} => Some("I64"),
             T::F64 {} => Some("F64"),
+            T::ByteBuffer {} => Some("ByteBuffer"),
             T::Bytes {} => Some("Bytes"),
             T::Text {} => Some("Text"),
             T::StaticText {} => Some("StaticText"),

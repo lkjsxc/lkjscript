@@ -374,6 +374,7 @@ pub struct NormalizedProgram {
     pub(super) affine_variants: Arc<[bool]>,
     pub(super) capture_safe_types: BTreeSet<TypeObjectDigest>,
     pub(super) ordinary_types: BTreeSet<TypeObjectDigest>,
+    pub(super) buffer_free_types: BTreeSet<TypeObjectDigest>,
     pub(super) comparable_types: BTreeSet<TypeObjectDigest>,
     pub(super) application_free_types: BTreeSet<TypeObjectDigest>,
     pub(super) capture_proof_bytes: usize,
@@ -516,6 +517,7 @@ impl NormalizedProgram {
             affine_variants,
             capture_safe_types: BTreeSet::new(),
             ordinary_types: BTreeSet::new(),
+            buffer_free_types: BTreeSet::new(),
             comparable_types: BTreeSet::new(),
             application_free_types: BTreeSet::new(),
             capture_proof_bytes: 0,
@@ -1355,6 +1357,20 @@ fn terminal_continuations(
                 terminal[index] = true;
                 pending.push(index);
             }
+            NormalizedInstruction::Unit
+                if matches!(
+                    code.get(index + 1),
+                    Some(NormalizedInstruction::StoreLocal(_))
+                ) =>
+            {
+                let first = predecessors.get_mut(index + 2).ok_or_else(|| {
+                    runtime_corrupt(
+                        "normalized_tail_destination",
+                        "memory cleanup has no continuation",
+                    )
+                })?;
+                next_predecessor[index] = first.replace(index);
+            }
             NormalizedInstruction::Jump(target) => {
                 let first = predecessors.get_mut(*target as usize).ok_or_else(|| {
                     runtime_corrupt(
@@ -1461,6 +1477,21 @@ fn validate_normalized_resource_signature(
             )
         })?;
         match &form.form {
+            TypeForm::ByteBuffer => {
+                if parameter.resource_requirement.is_some()
+                    || parameter.use_mode == ParameterUse::Unrestricted
+                    || !matches!(
+                        body,
+                        NormalizedFunctionBody::Code(_) | NormalizedFunctionBody::External(_)
+                    )
+                {
+                    return Err(runtime_corrupt(
+                        "normalized_buffer_signature",
+                        "invalid prepared memory parameter",
+                    ));
+                }
+                continue;
+            }
             TypeForm::CapabilityResource { interface } => {
                 direct.push((index, parameter, *interface));
             }
@@ -1486,6 +1517,36 @@ fn validate_normalized_resource_signature(
                     ));
                 }
             }
+        }
+    }
+    let memory = parameters.iter().any(|p| {
+        matches!(
+            types.get(&p.ty).map(|t| &t.form),
+            Some(TypeForm::ByteBuffer)
+        )
+    }) || matches!(
+        types.get(&result).map(|t| &t.form),
+        Some(TypeForm::ByteBuffer)
+    );
+    if memory {
+        if !direct.is_empty() || !task_requirements.is_empty() {
+            return Err(runtime_corrupt(
+                "normalized_buffer_signature",
+                "mixed capability and memory signature",
+            ));
+        }
+        if let OwnerRecord::Declaration(record) = exact_runtime_owner(
+            owners,
+            declaration.package,
+            OwnerKey::Declaration(declaration.declaration),
+            "memory function",
+        )? && let DeclarationPayload::Function(f) = &record.payload
+            && !matches!(f.effect, FunctionEffect::Pure)
+        {
+            return Err(runtime_corrupt(
+                "normalized_buffer_signature",
+                "task memory signature unsupported",
+            ));
         }
     }
     if direct.is_empty() {

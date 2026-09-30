@@ -54,8 +54,8 @@ use std::str::FromStr;
 
 pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-24";
 pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 24;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-19";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 19;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-20";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 20;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -343,7 +343,9 @@ impl CompactChangeFieldForm {
             Self::Name => "[A-Za-z_][A-Za-z0-9_-]{0,127}",
             Self::DeclarationVisibility => "private|package|public",
             Self::FunctionEffect => "pure|task",
-            Self::TypeReference => "unit|bool|i64|f64|bytes|text|static-text|secret|@NAME",
+            Self::TypeReference => {
+                "unit|bool|i64|f64|byte-buffer|bytes|text|static-text|secret|@NAME"
+            }
             Self::ExpressionReference => "$NAME",
             Self::DeletePolicy => "reject|owned-closure",
             Self::OwnerParent => "package|$REFERENCE_ALIAS|DOMAIN_HEX",
@@ -1528,6 +1530,7 @@ pub(crate) const COMPACT_CHANGE_PRECONDITION_FIELDS: &[CompactChangePrecondition
     },
 ];
 pub const COMPACT_TYPE_FORMS: &[&str] = &[
+    "byte-buffer",
     "unit",
     "bool",
     "i64",
@@ -1592,6 +1595,12 @@ pub(crate) struct CompactFormField {
 }
 
 pub(crate) const COMPACT_TYPE_FORM_FIELDS: &[CompactFormField] = &[
+    CompactFormField {
+        form: "byte-buffer",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
     CompactFormField {
         form: "task-function",
         name: "as",
@@ -3813,6 +3822,7 @@ impl Decoder {
             "unit" => Some(AuthoredType::Unit {}),
             "bool" => Some(AuthoredType::Bool {}),
             "i64" => Some(AuthoredType::I64 {}),
+            "byte-buffer" => Some(AuthoredType::ByteBuffer {}),
             "f64" => Some(AuthoredType::F64 {}),
             "bytes" => Some(AuthoredType::Bytes {}),
             "text" => Some(AuthoredType::Text {}),
@@ -3848,13 +3858,14 @@ impl Decoder {
             )
         })?;
         let ty = match record.operation.as_str() {
-            "type.unit" | "type.bool" | "type.i64" | "type.f64" | "type.bytes" | "type.text"
-            | "type.static-text" | "type.secret" => {
+            "type.byte-buffer" | "type.unit" | "type.bool" | "type.i64" | "type.f64"
+            | "type.bytes" | "type.text" | "type.static-text" | "type.secret" => {
                 check_fields(&record, &["as"])?;
                 match record.operation.as_str() {
                     "type.unit" => AuthoredType::Unit {},
                     "type.bool" => AuthoredType::Bool {},
                     "type.i64" => AuthoredType::I64 {},
+                    "type.byte-buffer" => AuthoredType::ByteBuffer {},
                     "type.f64" => AuthoredType::F64 {},
                     "type.bytes" => AuthoredType::Bytes {},
                     "type.text" => AuthoredType::Text {},

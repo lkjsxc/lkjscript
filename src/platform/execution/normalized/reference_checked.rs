@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Ownership {
     Ordinary,
+    Memory,
     Capability,
     AffineVariant,
 }
@@ -27,6 +28,20 @@ type Invocation = (
 );
 
 impl Value {
+    pub(super) fn memory(
+        schema: &BoundReferenceSchema,
+        datum: NormalizedValue,
+    ) -> Result<Self, ExecutionError> {
+        if !matches!(datum, NormalizedValue::ByteBuffer(_)) {
+            return Err(reject("memory constructor requires a sealed token"));
+        }
+        Ok(Self {
+            datum,
+            preparation: schema.value_origin,
+            ownership: Ownership::Memory,
+        })
+    }
+
     pub(super) fn raw(&self) -> &NormalizedValue {
         &self.datum
     }
@@ -51,6 +66,17 @@ impl Value {
     }
 
     pub(super) fn duplicate(&self, use_mode: ParameterUse) -> Result<Self, ExecutionError> {
+        if self.ownership == Ownership::Memory && use_mode == ParameterUse::Borrow {
+            let NormalizedValue::ByteBuffer(buffer) = &self.datum else {
+                return Err(reject("memory proof lacks its token"));
+            };
+            return Ok(Self {
+                datum: NormalizedValue::ByteBuffer(buffer.borrow()?),
+                preparation: self.preparation,
+                ownership: Ownership::Memory,
+            });
+        }
+
         match (self.ownership, use_mode) {
             (Ownership::Ordinary, ParameterUse::Unrestricted)
             | (Ownership::Capability, ParameterUse::Borrow) => Ok(Self {
@@ -109,7 +135,15 @@ impl Value {
                 "callable identity is foreign; select its canonical declaration",
             ));
         }
-        if signature.type_parameters.len() != type_arguments.len()
+        if type_arguments
+            .iter()
+            .any(|ty| !schema.buffer_free_types.contains(ty))
+            || !schema.buffer_free_types.contains(&signature.result)
+            || signature
+                .parameters
+                .iter()
+                .any(|p| !schema.buffer_free_types.contains(&p.ty))
+            || signature.type_parameters.len() != type_arguments.len()
             || signature.requirement_parameters.len() != requirement_arguments.len()
             || requirement_arguments.iter().any(|r| r.concrete().is_none())
             || signature.effect_parameters.len() != effect_arguments.len()
@@ -257,8 +291,12 @@ impl Value {
         let ownership = if selected
             .payload
             .and_then(|ty| schema.types.get(&ty))
-            .is_some_and(|ty| matches!(ty.form, TypeForm::CapabilityResource { .. }))
-        {
+            .is_some_and(|ty| {
+                matches!(
+                    ty.form,
+                    TypeForm::ByteBuffer | TypeForm::CapabilityResource { .. }
+                )
+            }) {
             Ownership::Capability
         } else {
             Ownership::Ordinary
@@ -465,8 +503,12 @@ impl ReferenceState<'_> {
             let expected = if selected
                 .payload
                 .and_then(|ty| self.schema.types.get(&ty))
-                .is_some_and(|ty| matches!(ty.form, TypeForm::CapabilityResource { .. }))
-            {
+                .is_some_and(|ty| {
+                    matches!(
+                        ty.form,
+                        TypeForm::ByteBuffer | TypeForm::CapabilityResource { .. }
+                    )
+                }) {
                 Ownership::Capability
             } else {
                 Ownership::Ordinary
@@ -792,7 +834,11 @@ impl ReferenceState<'_> {
                                         std::mem::size_of::<NormalizedValue>(),
                                     )?;
                                     let direct = schema.types.get(&ty).is_some_and(|ty| {
-                                        matches!(ty.form, TypeForm::CapabilityResource { .. })
+                                        matches!(
+                                            ty.form,
+                                            TypeForm::ByteBuffer
+                                                | TypeForm::CapabilityResource { .. }
+                                        )
                                     });
                                     visits.push((
                                         payload,
@@ -1050,6 +1096,19 @@ impl ReferenceState<'_> {
                         }
                         _ => false,
                     };
+                    if !schema.buffer_free_types.contains(&signature.result)
+                        || signature
+                            .parameters
+                            .iter()
+                            .any(|p| !schema.buffer_free_types.contains(&p.ty))
+                        || type_arguments
+                            .iter()
+                            .any(|ty| !schema.buffer_free_types.contains(ty))
+                    {
+                        return Err(reject(
+                            "raw callback carries owned memory or a forbidden substitution",
+                        ));
+                    }
                     if !kind_matches
                         || bound_arguments
                             .as_ref()
@@ -1582,6 +1641,7 @@ impl ReferenceState<'_> {
                 | TypeForm::TaskFunction { .. } => {}
                 TypeForm::Secret
                 | TypeForm::Stream { .. }
+                | TypeForm::ByteBuffer
                 | TypeForm::CapabilityResource { .. }
                 | TypeForm::TypeParameter { .. } => {
                     return Err(reject(

@@ -37,6 +37,10 @@ pub(crate) struct Work {
 }
 
 impl BytePayload {
+    /// Explicit freeze boundary: retain the vector allocation, never copy its octets.
+    pub(super) fn adopt_vec(bytes: Vec<u8>) -> Self {
+        Self(Storage::Buffer(Arc::new(bytes)))
+    }
     /// The owned vector descriptor is a separate allocation from its payload.
     /// Like existing scalar charges, this excludes Arc counters/allocator overhead.
     pub(crate) const DESCRIPTOR_BYTES: u64 = std::mem::size_of::<Vec<u8>>() as u64;
@@ -186,5 +190,26 @@ impl<const N: usize> From<[u8; N]> for BytePayload {
 impl From<&[u8]> for BytePayload {
     fn from(value: &[u8]) -> Self {
         Self::from(Arc::<[u8]>::from(value))
+    }
+}
+
+#[cfg(test)]
+mod adoption_tests {
+    use super::*;
+    #[test]
+    fn byte_buffer_vec_adoption_retains_nonempty_payload_allocation_and_capacity() {
+        let mut vector = Vec::with_capacity(128);
+        vector.extend([0, 255, 128]);
+        let pointer = vector.as_ptr();
+        let capacity = vector.capacity();
+        let payload = BytePayload::adopt_vec(vector);
+        assert_eq!(payload.as_ptr(), pointer);
+        assert_eq!(&*payload, &[0, 255, 128]);
+        let Storage::Buffer(backing) = &payload.0 else {
+            panic!("freeze must adopt the Vec")
+        };
+        assert_eq!(backing.capacity(), capacity);
+        let alias = payload.clone();
+        assert_eq!(alias.as_ptr(), pointer);
     }
 }

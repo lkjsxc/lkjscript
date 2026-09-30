@@ -34,14 +34,21 @@ fn witness_contract_domains_are_closed_and_unique() {
         RelationKind::ALL.len()
     );
     assert_ne!(contract::validator_contract_digest().bytes(), [0_u8; 32]);
-    // Affine feature 9 meters metadata reads and propagates work exhaustion;
-    // evidence from the incomplete predecessor admission must not be reused.
+    // Affine feature 10 separates memory from capability authority. The distinct
+    // owned-buffer feature binds its new transfer, scoped-read, and return rules.
     assert_eq!(
         contract::VALIDATOR_FEATURES
             .iter()
             .find(|feature| feature.name == "affine_capability_resources")
             .map(|feature| feature.version),
-        Some(9)
+        Some(10)
+    );
+    assert_eq!(
+        contract::VALIDATOR_FEATURES
+            .iter()
+            .find(|feature| feature.name == "owned_byte_buffers")
+            .map(|feature| feature.version),
+        Some(1)
     );
     // Byte range/copy signatures extend the closed contract independently of
     // affine resource rules. Neither predecessor certificate is reusable.
@@ -63,7 +70,7 @@ fn witness_contract_domains_are_closed_and_unique() {
     );
     assert_eq!(
         digest,
-        "validator_contract_23773abace3e7235f6f4dd9917ddc197fee1b60ff4e2733f32da88b330fcf9d3"
+        "validator_contract_a4865032b8c53d9472988c166a7bce1d72eba3158026cb4a803482a08c2fc576"
     );
 }
 

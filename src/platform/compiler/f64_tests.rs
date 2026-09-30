@@ -110,9 +110,9 @@ fn f64_literals_lower_and_round_trip_all_scalar_classes() {
                 compiled.unit.bytecode_contract_version,
                 compiled.unit.graph_contract_version
             ),
-            (13, 9, 17)
+            (14, 10, 17)
         );
-        assert_eq!(&compiled.bytes[..8], b"LKJCUN13");
+        assert_eq!(&compiled.bytes[..8], b"LKJCUN14");
         let CompilationPayload::Constant { code, .. } = &compiled.unit.payload else {
             panic!("compiled constant");
         };
@@ -209,7 +209,8 @@ fn f64_rehashed_unit_rejects_noncanonical_nan_payload() {
     assert_eq!(positions.len(), 1);
     bytes[positions[0] + 1] = 1;
     let end = bytes.len() - 32;
-    let mut checksum = blake3::Hasher::new_derive_key("lkjscript.compiler-unit-envelope.v13");
+    let mut checksum =
+        blake3::Hasher::new_derive_key(super::super::unit::COMPILER_UNIT_ENVELOPE_DOMAIN);
     checksum.update(&(end as u64).to_be_bytes());
     checksum.update(&bytes[..end]);
     bytes[end..].copy_from_slice(checksum.finalize().as_bytes());

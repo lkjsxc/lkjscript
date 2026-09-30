@@ -33,6 +33,8 @@ pub(crate) mod transaction_outcome_tests;
 #[path = "transaction_participation_tests.rs"]
 mod transaction_participation_tests;
 
+#[path = "byte_buffer_tests.rs"]
+pub(crate) mod byte_buffer_tests;
 #[path = "bytes_reuse_tests.rs"]
 mod bytes_reuse_tests;
 #[path = "bytes_tests.rs"]

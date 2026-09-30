@@ -18,6 +18,7 @@ use std::sync::Arc;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Class {
     Free,
+    Memory,
     Binding(usize),
     Retained(usize),
     Direct,
@@ -34,6 +35,22 @@ pub(super) struct Value {
 pub(super) type Invocation = (FunctionIndex, Arc<[TypeObjectDigest]>, Vec<Value>);
 
 impl Value {
+    pub(super) fn memory(
+        program: &NormalizedProgram,
+        raw: NormalizedValue,
+    ) -> Result<Self, ExecutionError> {
+        if !matches!(raw, NormalizedValue::ByteBuffer(_)) {
+            return Err(admission_error(
+                "memory constructor requires a sealed token",
+            ));
+        }
+        Ok(Self {
+            raw,
+            origin: program.value_origin,
+            class: Class::Memory,
+        })
+    }
+
     pub(super) fn raw(&self) -> &NormalizedValue {
         &self.raw
     }
@@ -58,6 +75,17 @@ impl Value {
     }
 
     pub(super) fn duplicate(&self, use_mode: ParameterUse) -> Result<Self, ExecutionError> {
+        if self.class == Class::Memory && use_mode == ParameterUse::Borrow {
+            let NormalizedValue::ByteBuffer(buffer) = &self.raw else {
+                return Err(admission_error("memory proof lacks its token"));
+            };
+            return Ok(Self {
+                raw: NormalizedValue::ByteBuffer(buffer.borrow()?),
+                origin: self.origin,
+                class: Class::Memory,
+            });
+        }
+
         if !matches!(
             (self.class, use_mode),
             (Class::Free, ParameterUse::Unrestricted) | (Class::Direct, ParameterUse::Borrow)
@@ -112,7 +140,15 @@ impl Value {
         let target = program.functions.get(function.0 as usize)
             .filter(|_| function.1 == program.value_origin)
             .ok_or_else(|| admission_error("function constructor has a foreign prepared identity; select the exact callable"))?;
-        if target.type_parameters.len() != type_arguments.len()
+        if type_arguments
+            .iter()
+            .any(|ty| !program.buffer_free_types.contains(ty))
+            || !program.buffer_free_types.contains(&target.result)
+            || target
+                .parameters
+                .iter()
+                .any(|p| !program.buffer_free_types.contains(&p.ty))
+            || target.type_parameters.len() != type_arguments.len()
             || type_arguments
                 .iter()
                 .any(|ty| program.substitute_type(*ty, &BTreeMap::new(), 0).is_none())
@@ -309,7 +345,12 @@ impl Value {
             let direct = selected
                 .payload
                 .and_then(|ty| program.types.get(&ty))
-                .is_some_and(|object| matches!(object.form, TypeForm::CapabilityResource { .. }));
+                .is_some_and(|object| {
+                    matches!(
+                        object.form,
+                        TypeForm::ByteBuffer | TypeForm::CapabilityResource { .. }
+                    )
+                });
             if payload.class(program, work)? != if direct { Class::Direct } else { Class::Free } {
                 return Err(admission_error(
                     "variant payload has forbidden affine containment; consume the exact direct owner",
@@ -425,7 +466,12 @@ impl Value {
             .and_then(|v| v.cases.get(case as usize))
             .and_then(|case| case.payload)
             .and_then(|ty| program.types.get(&ty))
-            .is_some_and(|ty| matches!(ty.form, TypeForm::CapabilityResource { .. }));
+            .is_some_and(|ty| {
+                matches!(
+                    ty.form,
+                    TypeForm::ByteBuffer | TypeForm::CapabilityResource { .. }
+                )
+            });
         Ok((
             layout,
             case,
@@ -779,6 +825,7 @@ impl Admission<'_> {
                 | TypeForm::TaskFunction { .. } => {}
                 TypeForm::Secret
                 | TypeForm::Stream { .. }
+                | TypeForm::ByteBuffer
                 | TypeForm::CapabilityResource { .. }
                 | TypeForm::TypeParameter { .. } => {
                     return Err(admission_error(
@@ -1004,7 +1051,10 @@ impl Admission<'_> {
                         (Some(value), Some(ty)) => {
                             self.collection(1)?;
                             let direct = self.program.types.get(&ty).is_some_and(|object| {
-                                matches!(object.form, TypeForm::CapabilityResource { .. })
+                                matches!(
+                                    object.form,
+                                    TypeForm::ByteBuffer | TypeForm::CapabilityResource { .. }
+                                )
                             });
                             children.push((
                                 value.as_ref(),
@@ -1148,6 +1198,19 @@ impl Admission<'_> {
                     {
                         return Err(admission_error(
                             "raw callback has a foreign signature or effect; pass the exact callable kind and effect row",
+                        ));
+                    }
+                    if !self.program.buffer_free_types.contains(&callable.result)
+                        || callable
+                            .parameters
+                            .iter()
+                            .any(|p| !self.program.buffer_free_types.contains(&p.ty))
+                        || type_arguments
+                            .iter()
+                            .any(|ty| !self.program.buffer_free_types.contains(ty))
+                    {
+                        return Err(admission_error(
+                            "raw callback carries owned memory or a forbidden substitution",
                         ));
                     }
                     if type_arguments.iter().any(|ty| {

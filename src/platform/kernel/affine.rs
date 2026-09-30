@@ -95,6 +95,7 @@ pub(crate) fn validate_affine_roots_with_limits<R: ExpressionRead>(
         inner: read,
         meter: &work,
     };
+    let memory_absent = read.byte_buffer_type_known_absent();
     let mut validator = AffineValidator {
         read: &read,
         work: &work,
@@ -109,7 +110,13 @@ pub(crate) fn validate_affine_roots_with_limits<R: ExpressionRead>(
                 continue;
             }
         };
-        if let Err(diagnostic) = validator.validate_owner_shape(owner, &record) {
+        if let Err(diagnostic) = (if memory_absent {
+            Ok(())
+        } else {
+            super::memory::validate_owner(&read, owner, &record)
+        })
+        .and_then(|()| validator.validate_owner_shape(owner, &record))
+        {
             push_diagnostic(diagnostics, diagnostic, limits.maximum_diagnostics)?;
             continue;
         }
@@ -200,6 +207,9 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
     ) -> Result<(), Diagnostic> {
         match record {
             OwnerRecord::Parameter(parameter) => {
+                if super::memory::direct(self.read, parameter.ty)? {
+                    return Ok(());
+                }
                 let resource = self.resource_type(parameter.ty)?;
                 let contains = self.type_contains_resource(parameter.ty)?;
                 match parameter.parent {
@@ -354,7 +364,8 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                     for parameter in &signature.parameters {
                         let parameter = self.parameter(self.read.package_id(), *parameter)?;
                         if self.type_contains_resource(parameter.ty)?
-                            || parameter.use_mode != ParameterUse::Unrestricted
+                            || (parameter.use_mode != ParameterUse::Unrestricted
+                                && !super::memory::direct(self.read, parameter.ty)?)
                             || parameter.resource_requirement.is_some()
                         {
                             return Err(owner_affine_error(
@@ -1450,7 +1461,8 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 for parameter in signature.parameters {
                     let record = self.parameter(reference.package, parameter)?;
                     if self.type_contains_resource(record.ty)?
-                        || record.use_mode != ParameterUse::Unrestricted
+                        || (record.use_mode != ParameterUse::Unrestricted
+                            && !super::memory::direct(self.read, record.ty)?)
                         || record.resource_requirement.is_some()
                     {
                         return Err(owner_affine_error(
@@ -1514,6 +1526,9 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                     ));
                 }
                 None => {
+                    if super::memory::direct(self.read, record.ty)? {
+                        continue;
+                    }
                     if !resources.is_empty() {
                         return Err(owner_affine_error(
                             "kernel_affine_function_resource_order",

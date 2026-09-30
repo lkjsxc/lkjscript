@@ -60,6 +60,12 @@ fn nominal_parts(form: &TypeForm) -> Option<(DeclarationReference, &[TypeObjectD
 pub(crate) trait ExpressionRead {
     fn package_id(&self) -> PackageId;
 
+    /// Only complete immutable type inventories may certify absence. Point readers
+    /// default to checking memory flow; absence never grants a valid type or value.
+    fn byte_buffer_type_known_absent(&self) -> bool {
+        false
+    }
+
     fn owner(&self, owner: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic>;
 
     fn type_object(&self, digest: TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic>;
@@ -85,6 +91,9 @@ pub(crate) struct CheckedExpressionRead<'a, R: ?Sized> {
 }
 
 impl<R: ExpressionRead + ?Sized> ExpressionRead for CheckedExpressionRead<'_, R> {
+    fn byte_buffer_type_known_absent(&self) -> bool {
+        self.read.byte_buffer_type_known_absent()
+    }
     fn package_id(&self) -> PackageId {
         self.read.package_id()
     }
@@ -131,6 +140,22 @@ pub(crate) enum ExpressionValidationExhaustion {
 }
 
 impl ExpressionRead for KernelSnapshot {
+    fn byte_buffer_type_known_absent(&self) -> bool {
+        // The complete canonical inventory admits exactly one buffer identity. Full
+        // validation separately rejects miskeyed or missing type objects. No cached
+        // claim survives mutation of a raw snapshot.
+        static BUFFER: std::sync::OnceLock<Result<TypeObjectDigest, Diagnostic>> =
+            std::sync::OnceLock::new();
+        BUFFER
+            .get_or_init(|| {
+                TypeObject::new(TypeForm::ByteBuffer)
+                    .and_then(|t| super::encode_type_object(&t).map(|(digest, _)| digest))
+            })
+            .as_ref()
+            .is_ok_and(|buffer| {
+                !self.types.contains_key(buffer) && !self.dependency_types.contains_key(buffer)
+            })
+    }
     fn package_id(&self) -> PackageId {
         self.root.package_id
     }
@@ -1547,6 +1572,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 | TypeForm::TaskFunction { .. } => Vec::new(),
                 TypeForm::Secret
                 | TypeForm::Stream { .. }
+                | TypeForm::ByteBuffer
                 | TypeForm::CapabilityResource { .. } => {
                     return Err(type_error(
                         "kernel_type_bind_capture",
@@ -2006,6 +2032,12 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             ));
         }
         for (parameter, supplied) in type_parameters.iter().zip(type_arguments) {
+            if self.type_contains_buffer(*supplied)? {
+                return Err(type_error(
+                    "kernel_buffer_generic",
+                    "ByteBuffer cannot substitute an unrestricted generic parameter",
+                ));
+            }
             self.consume_work()?;
             let owner = if foreign {
                 match self.dependency_owner(
@@ -2644,6 +2676,14 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 ));
             }
         }
+        for child in object.child_types() {
+            if self.type_contains_buffer(child)? {
+                return Err(type_error(
+                    "kernel_buffer_container",
+                    "ByteBuffer cannot occur in a container or callable descriptor",
+                ));
+            }
+        }
         // Admit every syntactic argument before following substituted members. A closed or
         // phantom outer declaration can carry an expanding schema in one of its arguments.
         for child in object.child_types() {
@@ -2659,6 +2699,12 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 ));
             }
             for (parameter, argument) in parameters.iter().zip(arguments) {
+                if self.type_contains_buffer(*argument)? {
+                    return Err(type_error(
+                        "kernel_buffer_generic",
+                        "ByteBuffer cannot be a nominal generic argument",
+                    ));
+                }
                 self.consume_work()?;
                 let owner = if declaration.package == self.read.package_id() {
                     match self.read.owner(OwnerKey::TypeParameter(*parameter))? {
@@ -2700,6 +2746,31 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         Ok(())
     }
 
+    fn type_contains_buffer(&mut self, ty: TypeObjectDigest) -> Result<bool, Diagnostic> {
+        if self.read.byte_buffer_type_known_absent() {
+            return Ok(false);
+        }
+        let mut seen = BTreeSet::new();
+        let mut declarations = BTreeSet::new();
+        let mut pending = vec![ty];
+        while let Some(ty) = pending.pop() {
+            self.consume_work()?;
+            if !seen.insert(ty) {
+                continue;
+            }
+            let object = self.type_object(ty)?;
+            if matches!(object.form, TypeForm::ByteBuffer) {
+                return Ok(true);
+            }
+            pending.extend(object.child_types());
+            if let Some((declaration, arguments)) = nominal_parts(&object.form)
+                && declarations.insert(declaration)
+            {
+                pending.extend(self.nominal_children(declaration, arguments)?);
+            }
+        }
+        Ok(false)
+    }
     fn require_ordinary_application(&mut self, ty: TypeObjectDigest) -> Result<(), Diagnostic> {
         let mut pending = vec![ty];
         let mut visited = BTreeSet::new();
@@ -2710,7 +2781,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             }
             let object = self.type_object(ty)?;
             let children = match &object.form {
-                TypeForm::CapabilityResource { .. } | TypeForm::Stream { .. } => {
+                TypeForm::ByteBuffer
+                | TypeForm::CapabilityResource { .. }
+                | TypeForm::Stream { .. } => {
                     return Err(type_error(
                         "kernel_type_nominal_resource",
                         "applied nominal data cannot contain live resources, including phantom arguments and absent cases",

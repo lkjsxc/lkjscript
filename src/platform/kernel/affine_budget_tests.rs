@@ -22,6 +22,11 @@ impl CountingRead {
 }
 
 impl ExpressionRead for CountingRead {
+    // Forward the complete snapshot absence proof; the independently enumerated
+    // legacy resource reads and budget boundaries below are unchanged.
+    fn byte_buffer_type_known_absent(&self) -> bool {
+        self.snapshot.byte_buffer_type_known_absent()
+    }
     fn package_id(&self) -> PackageId {
         self.snapshot.root.package_id
     }

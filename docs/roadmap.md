@@ -52,10 +52,13 @@ polymorphic resource transfer, resource returns and general memory references re
 These are implementation increments toward the coordinated slice, not substitutes for its
 region/trait/ownership design or evidence of zero-copy payload processing.
 
-Choose a compact contract for a transferable owned region/buffer, a scoped read
-view and a typed callable or trait implementation. Specify creation, borrowing,
-move, result return and cleanup, including failure and cancellation. Keep declared
-ownership/effect meaning separate from physical placement and recomputable analyses.
+The [concrete ByteBuffer increment](spec/owned-byte-buffers.md) implements pure
+creation, scoped synchronous reads, consuming updates, direct owned result transfer
+and lexical/failure cleanup across ordinary generic packages. Capability-resource
+authority remains separate. Extend this boundary toward owned generic constraints,
+typed traits, general lifetimes and region policies; none is supplied by this
+increment. Keep declared ownership/effect meaning separate from physical placement
+and recomputable analyses.
 
 Exercise a generic producer/transformer/consumer across a package boundary.
 Require independent negative cases for duplicate consumption, escaping a borrow,

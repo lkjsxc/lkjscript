@@ -142,6 +142,7 @@ fn json_form<'a>(
     match form {
         TypeForm::Secret
         | TypeForm::Stream { .. }
+        | TypeForm::ByteBuffer
         | TypeForm::CapabilityResource { .. }
         | TypeForm::Function { .. }
         | TypeForm::TaskFunction { .. }
@@ -411,6 +412,7 @@ fn from_json(
                 .map_err(super::runner::execution_diagnostic)
         }
         TypeForm::Secret
+        | TypeForm::ByteBuffer
         | TypeForm::CapabilityResource { .. }
         | TypeForm::Stream { .. }
         | TypeForm::Function { .. }
@@ -625,6 +627,7 @@ fn to_json(
         (
             _,
             TypeForm::Secret
+            | TypeForm::ByteBuffer
             | TypeForm::CapabilityResource { .. }
             | TypeForm::Stream { .. }
             | TypeForm::Function { .. }

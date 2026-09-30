@@ -651,6 +651,7 @@ impl Lowering<'_> {
                 "I64" => "i64",
                 "F64" => "f64",
                 "Text" => "text",
+                "ByteBuffer" => "byte-buffer",
                 "Bytes" => "bytes",
                 "StaticText" => "static-text",
                 "Secret" => "secret",
@@ -658,7 +659,15 @@ impl Lowering<'_> {
             };
             if matches!(
                 primitive,
-                "unit" | "bool" | "i64" | "f64" | "text" | "bytes" | "static-text" | "secret"
+                "byte-buffer"
+                    | "unit"
+                    | "bool"
+                    | "i64"
+                    | "f64"
+                    | "text"
+                    | "bytes"
+                    | "static-text"
+                    | "secret"
             ) || value.starts_with('@')
             {
                 return Ok(primitive.to_owned());

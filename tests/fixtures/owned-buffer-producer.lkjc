@@ -1,0 +1,11 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create source
+    (function create produce (visibility public)
+      (type-parameter create T)
+      (parameter create seed (type T)) (parameter create encode (type (function (T) I64)))
+      (returns ByteBuffer) (effect pure)
+      (body (let (binding b (type ByteBuffer) (call std::buffer-empty))
+        (in (call std::buffer-push (invoke (local encode) (local seed)) (local b))))))))
+declarations.end

@@ -294,7 +294,9 @@ where
 const fn runtime_owner_kind(kind: OwnerKind) -> bool {
     matches!(
         kind,
-        OwnerKind::TaskFunction
+        OwnerKind::PureFunction
+            | OwnerKind::External
+            | OwnerKind::TaskFunction
             | OwnerKind::Component
             | OwnerKind::Record
             | OwnerKind::Variant
@@ -416,7 +418,7 @@ impl ArtifactManifest {
                     self.compiler_contract_version,
                     self.bytecode_contract_version
                 ),
-                (14, 10, 6) | (15, 11, 7) | (16, 12, 8) | (17, 13, 9)
+                (14, 10, 6) | (15, 11, 7) | (16, 12, 8) | (17, 13, 9) | (17, 14, 10)
             )
             || self.compilation_manifest_contract_version != COMPILATION_MANIFEST_CONTRACT_VERSION
         {
@@ -1201,12 +1203,19 @@ pub(crate) enum RuntimeOwnerExpectation {
         cases: Vec<crate::platform::semantic_id::CaseId>,
     },
     ResourceFunction {
+        requirement_parameters: Vec<crate::platform::semantic_id::RequirementParameterId>,
         type_parameters: Vec<TypeParameterId>,
         effect_parameters: Vec<crate::platform::semantic_id::EffectParameterId>,
         effect: FunctionEffect,
         parameters: Vec<ParameterId>,
         result: TypeObjectDigest,
         requirements: Vec<RequirementReference>,
+    },
+    MemoryExternal {
+        type_parameters: Vec<TypeParameterId>,
+        parameters: Vec<ParameterId>,
+        result: TypeObjectDigest,
+        implementation: crate::platform::kernel::ImplementationName,
     },
     TypeParameter {
         declaration: DeclarationId,
@@ -1275,11 +1284,18 @@ pub(crate) enum RuntimePortImplementation {
 impl RuntimeOwnerExpectation {
     pub(crate) const fn kind(&self) -> OwnerKind {
         match self {
+            Self::MemoryExternal { .. } => OwnerKind::External,
             Self::Interface { .. } => OwnerKind::Interface,
             Self::Component { .. } => OwnerKind::Component,
             Self::Record { .. } => OwnerKind::Record,
             Self::Variant { .. } => OwnerKind::Variant,
-            Self::ResourceFunction { .. } => OwnerKind::TaskFunction,
+            Self::ResourceFunction { effect, .. } => {
+                if matches!(effect, FunctionEffect::Pure) {
+                    OwnerKind::PureFunction
+                } else {
+                    OwnerKind::TaskFunction
+                }
+            }
             Self::TypeParameter { .. } => OwnerKind::TypeParameter,
             Self::EffectParameter { .. } => OwnerKind::EffectParameter,
             Self::RequirementParameter { .. } => OwnerKind::RequirementParameter,
@@ -1329,6 +1345,7 @@ impl RuntimeOwnerExpectation {
             }
             (
                 Self::ResourceFunction {
+                    requirement_parameters,
                     type_parameters,
                     effect_parameters,
                     effect,
@@ -1344,16 +1361,27 @@ impl RuntimeOwnerExpectation {
                     if function.type_parameters == *type_parameters
                         && function.effect_parameters == *effect_parameters
                         && function.effect == *effect
-                        && function.requirement_parameters.is_empty()
+                        && function.requirement_parameters == *requirement_parameters
                         && function.parameters == *parameters
                         && function.result == *result
-                        && matches!(
+                        && (matches!(function.effect, FunctionEffect::Pure) && requirements.is_empty() || matches!(
                             &function.effect,
                             FunctionEffect::Task { effect_parameters: _,
                                 requirements: actual,
                             } if actual.iter().filter_map(|r| r.concrete()).collect::<Vec<_>>() == *requirements
-                        )
+                        ))
                 )
+            }
+            (
+                Self::MemoryExternal {
+                    type_parameters,
+                    parameters,
+                    result,
+                    implementation,
+                },
+                OwnerRecord::Declaration(record),
+            ) => {
+                matches!(&record.payload,DeclarationPayload::External(external)if external.type_parameters==*type_parameters && external.parameters==*parameters && external.result==*result && external.implementation==*implementation)
             }
             (
                 Self::TypeParameter {
@@ -1649,17 +1677,10 @@ pub(crate) fn runtime_owner_expectations(
                     }
                 }
             }
-            CompilationPayload::External { signature, .. } => {
-                let declaration = declaration_owner(*owner, "function")?;
-                insert_signature_expectations(
-                    &mut expected,
-                    *package,
-                    declaration,
-                    signature,
-                    unit,
-                )?;
-            }
-            CompilationPayload::Function { signature, .. } => {
+            CompilationPayload::External {
+                signature,
+                implementation,
+            } => {
                 let declaration = declaration_owner(*owner, "function")?;
                 insert_signature_expectations(
                     &mut expected,
@@ -1671,7 +1692,50 @@ pub(crate) fn runtime_owner_expectations(
                 if signature
                     .parameters
                     .iter()
-                    .any(|parameter| parameter.resource_requirement.is_some())
+                    .any(|p| p.use_mode != crate::platform::kernel::ParameterUse::Unrestricted)
+                    || unit.tables.types.get(signature.result as usize)
+                        == Some(
+                            &crate::platform::kernel::encode_type_object(
+                                &crate::platform::kernel::TypeObject::new(TypeForm::ByteBuffer)?,
+                            )?
+                            .0,
+                        )
+                {
+                    insert_runtime_expectation(
+                        &mut expected,
+                        (*package, *owner),
+                        RuntimeOwnerExpectation::MemoryExternal {
+                            type_parameters: signature.type_parameters.clone(),
+                            parameters: signature.parameters.iter().map(|p| p.parameter).collect(),
+                            result: table_value(
+                                &unit.tables.types,
+                                signature.result,
+                                "memory external result",
+                            )?,
+                            implementation: implementation.clone(),
+                        },
+                    )?;
+                }
+            }
+            CompilationPayload::Function { signature, .. } => {
+                let declaration = declaration_owner(*owner, "function")?;
+                insert_signature_expectations(
+                    &mut expected,
+                    *package,
+                    declaration,
+                    signature,
+                    unit,
+                )?;
+                if signature.parameters.iter().any(|parameter| {
+                    parameter.resource_requirement.is_some()
+                        || parameter.use_mode != crate::platform::kernel::ParameterUse::Unrestricted
+                }) || unit.tables.types.get(signature.result as usize)
+                    == Some(
+                        &crate::platform::kernel::encode_type_object(
+                            &crate::platform::kernel::TypeObject::new(TypeForm::ByteBuffer)?,
+                        )?
+                        .0,
+                    )
                 {
                     let parameters = signature
                         .parameters
@@ -1698,6 +1762,7 @@ pub(crate) fn runtime_owner_expectations(
                         &mut expected,
                         (*package, OwnerKey::Declaration(declaration)),
                         RuntimeOwnerExpectation::ResourceFunction {
+                            requirement_parameters: signature.requirement_parameters.clone(),
                             type_parameters: signature.type_parameters.clone(),
                             effect_parameters: signature.effect_parameters.clone(),
                             effect: signature.effect.clone(),
@@ -3141,6 +3206,26 @@ fn validate_artifact_nominal_meaning(
         }
     }
     let mut work = 0usize;
+    let mut affine_roots = BTreeMap::<PackageId, Vec<OwnerKey>>::new();
+    // Type-correct canonical code can still duplicate affine ownership. Admit all
+    // retained owner shapes as well as bodies, including unused metadata and branches.
+    for (package, owner) in runtime
+        .keys()
+        .chain(reference.keys().filter(|key| !runtime.contains_key(key)))
+    {
+        work = work
+            .checked_add(1)
+            .filter(|work| *work <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
+            .ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Resource,
+                    "artifact_affine_work",
+                    "artifact affine root inventory exhausted its existing work budget",
+                )
+            })?;
+        affine_roots.entry(*package).or_default().push(*owner);
+        roots.entry(*package).or_default();
+    }
     for (package, roots) in roots {
         let read = Read {
             package,
@@ -3183,6 +3268,34 @@ fn validate_artifact_nominal_meaning(
             &mut work,
             crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
         )?;
+        let mut diagnostics = Vec::new();
+        let exhausted = crate::platform::kernel::validate_affine_roots_with_limits(
+            &read,
+            affine_roots.remove(&package).unwrap_or_default(),
+            &mut diagnostics,
+            &mut work,
+            crate::platform::kernel::ExpressionValidationLimits {
+                maximum_steps: crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
+                maximum_diagnostics: 1,
+            },
+        );
+        if let Some(error) = diagnostics.into_iter().next() {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_affine_meaning",
+                format!(
+                    "canonical affine meaning is invalid: {}: {}",
+                    error.code, error.message
+                ),
+            ));
+        }
+        if exhausted.is_err() {
+            return Err(artifact_error(
+                DiagnosticClass::Resource,
+                "artifact_affine_work",
+                "artifact affine validation exhausted its existing work budget",
+            ));
+        }
     }
     Ok(())
 }

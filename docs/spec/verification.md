@@ -1487,3 +1487,33 @@ workloads remain bound to candidate acceptance. Matching original readers reject
 consistently rehashed false material. Retrospective regenerated requests do not replace originals,
 and a successful upload or subjob does not establish public acceptance. This introduces no aggregate
 child or proof framework.
+
+## Concrete ByteBuffer ownership
+
+The [ByteBuffer slice](owned-byte-buffers.md) requires independent admission of every
+executable root, unused/phantom substitutions and memory-result descriptors. Exact compiled
+parameter/result metadata and canonical cleanup code must reject forged modes, moves, omitted
+or reordered lexical cleanup and predecessor-generation memory, even after integrity hashes are
+recomputed. Work-read failure retains its exact exhaustion diagnostic. Existing resource and
+proof-budget expectations must remain unchanged. Coherently rehashed canonical and compiled
+function and constant roots with untaken double consumes must reject at affine admission,
+while neutral reconstruction of the original valid artifact remains accepted. The independent
+memory oracle must retain moved identities until lexical exit, including discarded direct
+local reads. Pure memory helper requirement parameters must round-trip exactly; deleting them
+only from runtime metadata must reject.
+
+Both evaluators must produce independently expected octets `0, 255, 128`, preserve both branches
+of an owner chooser, and complete a 16,384-step consuming builder and a borrowed reader with
+bounded activation depth. The reader's wrapper owner must survive its live loans; read-only
+reborrows may tail-transfer. Drop observation must cover lexical continuation, a discarded sequence temporary before its
+successor executes, invalid octets
+and indices, quota refusal, cancellation during live loans and raw adapter-result rejection.
+Raw cloned, borrowed, stale and foreign tokens cannot enter execution. Internal Clone identity
+equality remains reflexive while clones cannot read, borrow or consume, and Debug is opaque.
+Nonempty freeze transfer independently checks the vector pointer and spare capacity.
+
+Fresh public native requests must compose generic producer, consuming transformer and borrowed
+consumer packages through exact transports, unchanged draft re-entry and detached artifacts.
+Execution after removal of source projects must return `{"$bytes":"AP+A"}` with empty grants.
+Primitive discovery, generated standard assets and native capability references must match the
+accepted graph through their maintained authoring/build/export/generation owners.

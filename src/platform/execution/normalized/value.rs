@@ -97,6 +97,7 @@ pub enum NormalizedValue {
     Bool(bool),
     I64(i64),
     F64(Binary64),
+    ByteBuffer(super::byte_buffer::ByteBuffer),
     Bytes(BytePayload),
     Text(Arc<str>),
     StaticText(Arc<str>),
@@ -194,7 +195,7 @@ impl NormalizedValue {
     #[cfg(test)]
     pub fn is_durable(&self) -> bool {
         match self {
-            Self::Function { .. } | Self::Resource(_) => false,
+            Self::ByteBuffer(_) | Self::Function { .. } | Self::Resource(_) => false,
             Self::Record(NormalizedRecord::Nominal { fields, .. }) => {
                 fields.iter().all(Self::is_durable)
             }
@@ -405,7 +406,8 @@ impl RawValueWork {
                     bound_arguments: None,
                     ..
                 }
-                | NormalizedValue::Resource(_) => return,
+                | NormalizedValue::Resource(_)
+                | NormalizedValue::ByteBuffer(_) => return,
                 value => {
                     if let Some(previous) = self.current.replace(value) {
                         self.values.push(previous);

@@ -4,6 +4,9 @@ Status: normative for the typed meaning graph.
 
 ## Representation and evaluation
 
+Concrete owned byte storage and synchronous scoped read borrowing are specified in
+[owned byte buffers](owned-byte-buffers.md).
+
 ### Raw byte observation
 
 `bytes-get(bytes: Bytes, index: I64) -> I64` returns the octet at a zero-based byte

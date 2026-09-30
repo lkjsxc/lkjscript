@@ -251,6 +251,7 @@ pub(super) fn validate<R: SessionShapeRead>(
             TypeForm::StaticText
             | TypeForm::Secret
             | TypeForm::Result { .. }
+            | TypeForm::ByteBuffer
             | TypeForm::CapabilityResource { .. }
             | TypeForm::Stream { .. }
             | TypeForm::Function { .. }

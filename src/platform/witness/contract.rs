@@ -45,7 +45,7 @@ pub struct ValidatorFeatureDescriptor {
 
 /// This list is the executable owner for rules that affect acceptance or safe witness reuse.
 /// Changing one rule requires changing its feature version, which changes the validator digest.
-pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 27] = [
+pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 28] = [
     ValidatorFeatureDescriptor {
         name: "closed_external_signatures",
         version: 4,
@@ -144,7 +144,11 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 27] = [
     },
     ValidatorFeatureDescriptor {
         name: "affine_capability_resources",
-        version: 9,
+        version: 10,
+    },
+    ValidatorFeatureDescriptor {
+        name: "owned_byte_buffers",
+        version: 1,
     },
     ValidatorFeatureDescriptor {
         name: "structured_session_relations",

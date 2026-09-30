@@ -117,6 +117,7 @@ struct Writer {
     requirement_extension: bool,
     outcome_extension: bool,
     f64_extension: bool,
+    buffer_extension: bool,
     declaration_body_extension: bool,
     literal_extension: bool,
 }
@@ -129,13 +130,16 @@ impl Writer {
             requirement_extension: false,
             outcome_extension: false,
             f64_extension: false,
+            buffer_extension: false,
             declaration_body_extension: false,
             literal_extension: false,
         }
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.literal_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+        if self.buffer_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR20");
+        } else if self.literal_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR19");
         } else if self.declaration_body_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR18");
@@ -1249,6 +1253,10 @@ impl Writer {
                 AuthoredType::Unit {} => self.tag(1)?,
                 AuthoredType::Bool {} => self.tag(2)?,
                 AuthoredType::I64 {} => self.tag(3)?,
+                AuthoredType::ByteBuffer {} => {
+                    self.buffer_extension = true;
+                    self.tag(20)?;
+                }
                 AuthoredType::F64 {} => {
                     self.f64_extension = true;
                     self.tag(19)?;

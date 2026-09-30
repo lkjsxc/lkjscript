@@ -239,11 +239,14 @@ transport preserves private graph bodies and exact closed callable descriptors. 
 remain unavailable to public name lookup. Checksums and compiled metadata cannot override the
 canonical constraints or confer deployment grants.
 
-The current graph/owner generation is 17, compiler-unit 13, bytecode 9 and package-interface-owner
+The current graph/owner generation is 17, compiler-unit 14, bytecode 10 and package-interface-owner
 11. Supported predecessors retain Graph 14 / compiler-unit 10 / bytecode 6, Graph 15 /
-compiler-unit 11 / bytecode 7, and Graph 16 / compiler-unit 12 / bytecode 8, with interface-owner
+compiler-unit 11 / bytecode 7, Graph 16 / compiler-unit 12 / bytecode 8, and Graph 17 /
+compiler-unit 13 / bytecode 9, with interface-owner
 10 and 11 as previously admitted. TypeObject 10 and nominal application encodings remain unchanged;
 F64 uses the disjoint version-1 `LKJF6401` type envelope and fixed little-endian binary64 payloads.
+Concrete [ByteBuffer](owned-byte-buffers.md) uses disjoint version-1 `LKJBUF01` and requires
+compiler-unit 14 / bytecode 10 for memory modes, owned results and lexical cleanup.
 task-callable rows use the explicit successor envelope only when symbolic requirement operands
 need it. Canonical re-encoding follows the admitted object's generation, preserving unchanged
 predecessor objects and IDs. Current package/interface wrappers may contain compatible old canonical

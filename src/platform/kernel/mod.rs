@@ -21,6 +21,9 @@ mod id;
 mod implementation;
 mod infer;
 mod interface;
+pub(crate) mod memory;
+#[cfg(test)]
+pub(crate) mod memory_reference;
 mod name;
 mod namespace;
 mod owner;

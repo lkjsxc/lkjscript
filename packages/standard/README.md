@@ -17,6 +17,14 @@ closed semantic-validator/runtime intrinsic inventory before publication or exec
 interfaces own typed operations, failure behavior, idempotency, possible visibility, and limits;
 deployment grants select concrete adapters later.
 
+The pure `buffer-empty`, `buffer-push`, `buffer-get`, `buffer-length`, `buffer-freeze`
+and `buffer-discard` operations own a concrete affine `ByteBuffer`, with consuming
+updates and scoped synchronous read loans. They require no capability or deployment
+grant. The [native request](requests/20260930-owned-buffer.lkjc) adds four graph tests;
+the [normative scope](../../docs/spec/owned-byte-buffers.md) defines exact parameter
+modes, transfer, cleanup and unsupported boundaries. Ordinary immutable Bytes remains
+unrestricted; freeze adopts the owned vector and can retain spare capacity.
+
 The current package also owns exact-interface affine capability resources and canonical operation
 parameter use. `DurableQueue` has nine operations: claim and heartbeat return the nominal
 absent/live `QueueLeaseState`; `lease-info` borrows its live resource; heartbeat, complete, and fail
@@ -54,12 +62,12 @@ Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_7a13416f398fceb35d246500dd02b0f02ab7931347bb21cb7f6841ad8b65556a`;
-- package revision: `package_revision_97275d57a6addc7a574b6114868c5dd736ad471e66b1fa61b2f5a7530b981603`;
-- package transport: `package_transport_1f2b61a31ae16e186014beb8eb30a5609d6ed77176d8063de62d130691d70b78`;
-- artifact manifest: `artifact_manifest_c3123cf64b8d142448b74ff949e20e37c0abf738ef54ae22deb36762282815c8`;
-- artifact bundle: `artifact_bundle_fce7ce9c39b0b899ca12768fedf47c566eede9d8a09b620dd20042254a9161be`;
-- 1,558 live semantic owners, 222 compiler units, and 85 graph tests.
+- semantic revision: `rev_85b2be44a8deca911fc6bdf4efdd4fb7b510f53e4a39723fbee263dff4b3a9b2`;
+- package revision: `package_revision_f42e4c5c8126bb56dc00bc2eaae1782571d84a2b2ec0253b222ec7bc362fddbf`;
+- package transport: `package_transport_51e9d14b3bdaa452aaadf9fedc5f7a35fe137efa2902f30916187bef9655a738`;
+- artifact manifest: `artifact_manifest_66f542016cd6e5f63c92df25a9fee429ea22c2d3e5a4725f66a039519759bed9`;
+- artifact bundle: `artifact_bundle_2597b3294ec83e49c54f8524758b8e7ec32f1eb9b814a0dee21ae83e906959b4`;
+- 1,626 live semantic owners, 232 compiler units, and 89 graph tests.
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose
 ordinary parametric records with pure functions. Mapping invokes the first callback then the second,

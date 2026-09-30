@@ -266,6 +266,7 @@ pub(super) fn complete_controlled(
     program.work.type_objects = program.types.len() as u64;
     program.capture_safe_types = property_types(program, &mut work, Property::Capture)?;
     program.ordinary_types = property_types(program, &mut work, Property::Ordinary)?;
+    program.buffer_free_types = property_types(program, &mut work, Property::BufferFree)?;
     program.comparable_types = property_types(program, &mut work, Property::Equality)?;
     program.application_free_types = property_types(program, &mut work, Property::NoApplication)?;
     let mut bytes = 0usize;
@@ -609,6 +610,7 @@ fn complete_nominal_layouts(
 // dependencies, including every argument/member of a cyclic component. No persistent cache.
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum Property {
+    BufferFree,
     Capture,
     Ordinary,
     Equality,
@@ -641,10 +643,17 @@ fn property_types(
             Ok(())
         };
         match &object.form {
+            TypeForm::ByteBuffer if property == Property::BufferFree => admitted = false,
+            _ if property == Property::BufferFree => {
+                for ty in object.child_types() {
+                    child(ty)?;
+                }
+            }
             TypeForm::Applied { .. } if property == Property::NoApplication => {
                 admitted = false;
             }
-            TypeForm::Secret
+            TypeForm::ByteBuffer
+            | TypeForm::Secret
             | TypeForm::Stream { .. }
             | TypeForm::CapabilityResource { .. }
             | TypeForm::TypeParameter { .. }
@@ -661,6 +670,7 @@ fn property_types(
             TypeForm::Secret if property == Property::Ordinary => {}
             TypeForm::Function { .. }
             | TypeForm::TaskFunction { .. }
+            | TypeForm::ByteBuffer
             | TypeForm::Secret
             | TypeForm::Stream { .. }
             | TypeForm::CapabilityResource { .. }

@@ -28,6 +28,83 @@ impl ReferenceState<'_> {
     ) -> Result<CheckedValue, ExecutionError> {
         self.control.check()?;
         match implementation {
+            "core.buffer.empty" => {
+                if !arguments.is_empty() {
+                    return Err(reference_type_error("buffer empty arity"));
+                }
+                self.charge_allocation(
+                    std::mem::size_of::<super::super::byte_buffer::ByteBuffer>() as u64
+                        + std::mem::size_of::<Vec<u8>>() as u64,
+                )?;
+                self.control.check()?;
+                CheckedValue::memory(
+                    &self.schema,
+                    NormalizedValue::ByteBuffer(super::super::byte_buffer::ByteBuffer::empty(
+                        self.memory_domain,
+                    )),
+                )
+            }
+            "core.buffer.push" => {
+                let [octet, buffer]: [CheckedValue; 2] = arguments
+                    .try_into()
+                    .map_err(|_| reference_type_error("buffer push arity"))?;
+                let (NormalizedValue::I64(octet), NormalizedValue::ByteBuffer(buffer)) =
+                    (octet.release(), buffer.release())
+                else {
+                    return Err(reference_type_error("buffer push types"));
+                };
+                buffer.validate(self.memory_domain, true)?;
+                let control = self.control;
+                let buffer =
+                    buffer.push(octet, control, &mut |bytes| self.charge_allocation(bytes))?;
+                CheckedValue::memory(&self.schema, NormalizedValue::ByteBuffer(buffer))
+            }
+            "core.buffer.length" | "core.buffer.get" => {
+                let expected = if implementation == "core.buffer.get" {
+                    2
+                } else {
+                    1
+                };
+                if arguments.len() != expected {
+                    return Err(reference_type_error("buffer read arity"));
+                }
+                let Some(NormalizedValue::ByteBuffer(buffer)) =
+                    arguments.last().map(CheckedValue::raw)
+                else {
+                    return Err(reference_type_error("buffer read token"));
+                };
+                buffer.validate(self.memory_domain, false)?;
+                if !buffer.is_borrowed() {
+                    return Err(reference_type_error("buffer read requires a scoped loan"));
+                }
+                let value = if implementation == "core.buffer.get" {
+                    let NormalizedValue::I64(index) = arguments[0].raw() else {
+                        return Err(reference_type_error("buffer index type"));
+                    };
+                    buffer.get(*index)? as i64
+                } else {
+                    i64::try_from(buffer.len()?)
+                        .map_err(|_| reference_type_error("buffer length overflow"))?
+                };
+                CheckedValue::primitive(&self.schema, NormalizedValue::I64(value))
+            }
+            "core.buffer.freeze" | "core.buffer.discard" => {
+                let [buffer]: [CheckedValue; 1] = arguments
+                    .try_into()
+                    .map_err(|_| reference_type_error("buffer terminal arity"))?;
+                let NormalizedValue::ByteBuffer(buffer) = buffer.release() else {
+                    return Err(reference_type_error("buffer terminal type"));
+                };
+                buffer.validate(self.memory_domain, true)?;
+                if implementation == "core.buffer.freeze" {
+                    self.charge_allocation(std::mem::size_of::<Vec<u8>>() as u64)?;
+                    self.control.check()?;
+                    CheckedValue::primitive(&self.schema, NormalizedValue::Bytes(buffer.freeze()?))
+                } else {
+                    drop(buffer);
+                    CheckedValue::primitive(&self.schema, NormalizedValue::Unit)
+                }
+            }
             "identity_host" => {
                 let mut values = arguments.into_iter();
                 let value = values.next();
