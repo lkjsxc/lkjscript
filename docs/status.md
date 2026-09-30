@@ -42,8 +42,13 @@ unrestricted semantics.
 The [native guide](guides/native-byte-buffer.md) and
 [normative scope](spec/owned-byte-buffers.md) define authoring and rejection rules.
 The [implementation campaign](campaigns/20260930-owned-buffer.md) owns focused
-verification and preserved failures. Stable full acceptance and integration are
-pending the responsible main assistant; this work does not claim binary publication.
+verification and preserved failures. Source `1f107a0270ed4ec37c6aefc2813769c54b281545`
+passed all 26 full-profile gates freshly, with stable inputs, zero reuse and no
+unrun gates, and reached remote main by normal fast-forward delivery. The workspace
+suite passed 1,393 tests with zero failures and 29 existing ignored cases. Both
+native ByteBuffer public cases also passed against the copied optimized executable,
+including detached three-package execution after source removal with empty grants.
+This is source integration, not binary publication or a running-service upgrade.
 
 ## Development v0.1.61: immutable byte ranges
 

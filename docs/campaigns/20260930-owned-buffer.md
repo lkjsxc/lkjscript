@@ -267,3 +267,58 @@ The imported form consumer expects 66 local/dependency plus 89 standard tests (1
 and the downstream HTTP receiver expects 70 plus 89 (159). Those later expectations
 are updated as well. This first focused run finished in 43.05 seconds with no
 ignored cases and is retained as failed, not relabeled after correction.
+
+## Accepted source and completed mainline delivery
+
+Corrected source `1f107a0270ed4ec37c6aefc2813769c54b281545`, tree
+`f745e81af1e3e75e9fc553bf868c00e7a54bf440`, completed all 26 full-profile gates
+freshly in 668.660740159 seconds. The original receipt is
+`.artifacts/lkjscript-dev/check/1790748602576528573-2505361-0/receipt.json`
+in the isolated worktree. Its exact Git source, all fresh gate statuses, zero
+reuse, zero unrun gates, stable inputs and null failure were checked before
+integration. The input digest is
+`verification_2516f00d519713c86c3efaf303bc909a8709764d08c8c79c1753f9a30cc29b7d`.
+Earlier failed receipts remain unchanged; no expectation correction relabels them.
+
+The workspace suite passed 1,393 tests with zero failures and 29 existing ignored
+cases. This includes 974 library and 172 public CLI passes. Child-process repeats
+of already-counted library tests are excluded from the aggregate. Clippy, formatting,
+optimized build and command lifecycle, offline package transport, inbound/outbound
+and stateful HTTP, pure tail execution, generated references, standard/application
+checks and exact rebuilt assets, service acceptance and policy gates all passed.
+
+The corrected focused form run also passed all six selected cases with zero failures
+or ignored cases in 72.55 seconds. Its log and exit status, and the preceding failed
+12-case alignment run, are copied from `/tmp` into
+`.artifacts/20260930-owned-buffer-final-native/` for retention.
+
+The optimized development executable was copied with the public CLI test executable
+reported by Cargo's completed release-command producer. From `/tmp`, with an empty
+environment and PATH except the explicit candidate selector, both ByteBuffer public
+cases passed in 12.09 seconds: three fresh generic packages, exact transport,
+unchanged draft, source removal, detached `00 ff 80` output with empty grants, and
+invalid intrinsic modes/phantom arguments without publication. Both tests ran;
+171 unrelated tests were filtered, none ignored. The copied product was byte-compared
+with the final full-profile producer after that producer completed. These are
+supplementary optimized-development observations, not final-release-archive acceptance.
+`native.log`, `native.exit` and both copied executables are retained in that same
+artifact directory. The complete checker and supplementary witness terminated
+successfully; no unattended continuation is required for these results.
+
+The three implementation/correction commits were fast-forwarded into the original
+main checkout and normally pushed as lkjsxc. An independent GitHub ref read confirmed
+remote main at exact accepted source `1f107a0270ed4ec37c6aefc2813769c54b281545`.
+The two inherited untracked files, preexisting stash, unrelated worktrees and running
+services were preserved. The detached source/evidence worktree remains at the tested
+commit; it is integrated history, not unmerged replacement work.
+
+Subsequent campaign/status/roadmap edits only report this result and select the next
+owned-generic proof boundary. They do not change the tested product or restamp its
+receipt with a reporting commit. No release, tag, release selector, credential,
+permission, application-data migration or running-service selection was changed.
+Public/latest was independently re-read as immutable v0.1.55. The earlier v0.1.60
+candidate/tag selection remains separate from this newly accepted development source.
+
+The reporting-only descendant passed no-Python and product-surface policies with
+zero violations, generated-reference verification for all eight pages, and
+`git diff --check`. These scoped checks do not claim another full-profile run.

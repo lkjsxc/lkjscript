@@ -109,10 +109,19 @@ Keep code installation, instance activation and data migration separate. Bind
 secrets and operational handles to an instance, not to reusable code metadata.
 Test version coexistence and cancellation during admission as well as normal stop.
 
-Next prioritize the semantic boundary above: an ordinary package-level owned
-producer/transformer/consumer with scoped reads and independent rejection cases.
-Do not turn the initial host into a broad supervisor before the language can express
-its transfer, lifetime and effect contracts. Dynamic CLI admission/removal and
+The concrete ByteBuffer producer/transformer/consumer now has accepted mainline
+source and source-free package evidence. Next generalize its ownership contract:
+an explicitly constrained type parameter should carry an owned value through
+producer, consuming transformation and result return without hiding a copy or
+allowing a read loan to escape. Couple that boundary with exact typed implementation
+witnesses; adding a type name, descriptor or unchecked trait search is insufficient.
+Require both concrete ByteBuffer instantiation and another owned representation,
+independent duplicate-use/escape/wrong-witness failures, and failure cleanup before
+claiming a general ownership abstraction. These are future gates, not current
+capabilities or a commitment to a particular syntax or storage carrier.
+
+Do not turn the initial host into a broad supervisor before those transfer,
+lifetime and effect contracts compose. Dynamic CLI admission/removal and
 component-granular pooling remain separate future extensions.
 
 Reserve queue and destination capacity before transferring ownership. Queue-full,
