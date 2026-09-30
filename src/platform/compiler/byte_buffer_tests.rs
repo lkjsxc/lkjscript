@@ -9,6 +9,69 @@ fn bundle(mut manifest: ArtifactManifest, objects: BTreeMap<ObjectKey, Vec<u8>>)
     super::nominal_session_tests::hostile_bundle(&manifest, &objects)
 }
 #[test]
+fn byte_buffer_affine_admission_preserves_elided_ordinary_annotations() {
+    use crate::platform::execution::normalized::tests::byte_buffer_tests::author_only;
+    let boolean = encode_type_object(&TypeObject::new(TypeForm::Bool).unwrap())
+        .unwrap()
+        .0;
+    let buffer = encode_type_object(&TypeObject::new(TypeForm::ByteBuffer).unwrap())
+        .unwrap()
+        .0;
+    for memory in [false, true] {
+        let extra = if memory {
+            "(external create empty (visibility private) (implementation core.buffer.empty) (returns ByteBuffer))"
+        } else {
+            ""
+        };
+        let binding = if memory {
+            "(binding storage (type ByteBuffer) (call empty))"
+        } else {
+            ""
+        };
+        let input = format!(
+            r#"declarations.begin
+(units (module create annotations
+  {extra}
+  (function create answer (visibility public) (returns I64) (effect pure)
+    (body (let {binding}
+      (binding flag (type Bool) (bool true))
+      (in (if (local flag) (i64 1) (i64 0))))))))
+declarations.end"#
+        );
+        let snapshot = author_only(&input).unwrap();
+        assert!(snapshot.types.contains_key(&boolean));
+        let directory = tempfile::tempdir().unwrap();
+        let repository =
+            GraphRepository::create(&directory.path().join("annotations"), &snapshot, None)
+                .unwrap()
+                .repository;
+        let built = build_clean(&repository, OptimizationPolicy::DeterministicBaseline).unwrap();
+        let linked = link_artifact(&repository, built.manifest_digest, &[]).unwrap();
+        let loaded = load_artifact(&linked.artifact.bytes).unwrap();
+        assert!(
+            !loaded
+                .objects
+                .contains_key(&ObjectKey::from_digest(ObjectDomain::Type, boolean.bytes())),
+            "literal Bool is inferred; its lexical annotation object is not a runtime type-table input"
+        );
+        assert_eq!(
+            loaded
+                .objects
+                .contains_key(&ObjectKey::from_digest(ObjectDomain::Type, buffer.bytes())),
+            memory
+        );
+        // A real buffer's missing object is never treated as an ordinary annotation.
+        if memory {
+            let mut objects = loaded.objects.clone();
+            objects
+                .remove(&ObjectKey::from_digest(ObjectDomain::Type, buffer.bytes()))
+                .unwrap();
+            assert!(load_artifact(&bundle(loaded.manifest, objects)).is_err());
+        }
+    }
+}
+
+#[test]
 fn byte_buffer_pure_requirement_parameters_keep_exact_artifact_metadata() {
     let snapshot = crate::platform::execution::normalized::tests::byte_buffer_tests::author(
         r#"declarations.begin

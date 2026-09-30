@@ -191,3 +191,52 @@ accept-then-unbuildable path without replacing the accepted source or adding a g
 The implementation, derived assets and regression inputs are frozen together for
 a new dependency-complete full-profile run. Local commit and source acceptance
 remain separate from remote-main delivery and from distribution publication.
+
+## Whole-artifact follow-up and maintained consumers
+
+Implementation source `f9c2630b653ee991beef1f0209b4d018e0c9e002`, tree
+`afbe204ce5fa4216439faf2c7ee6621d9a39d618`, received the next complete full-profile
+attempt. All 26 gates were selected: 19 fresh passes, six failures, one skipped,
+zero reuse, stable inputs, in 554.711650633 seconds. Its original receipt is
+`.artifacts/lkjscript-dev/check/1790744163824494141-2310936-0/receipt.json`
+(`verification_e0af3b64713adcc1989a8c406693854687805d2b51f9836df7834c33e393db6f`).
+Library tests reported 963 passed, ten failed, eight ignored. This committed source
+was not accepted or pushed; the failures remain historical evidence.
+
+The new affine loader exposed one classification regression: ordinary lexical
+annotation objects may be omitted from an execution artifact when canonical
+expression inference reconstructs their types. Requiring every such object merely
+to decide whether a binding is a ByteBuffer rejected valid maintained applications.
+A fresh minimal public project with only an explicitly annotated Bool local, an if
+and an I64 result reproduced acceptance followed by failed linking. It uses no
+buffer or capability at all. Literal request and accepted project remain at
+`/tmp/lkjscript-buffer-annotation-probe-20260930.lkjc` and the matching directory;
+accepted revision is `rev_0a2f38beab75f96154f10fbfcc85f4eaa1c61576f20c9a6d0017b04f86248a73`.
+
+Only lexical ownership selection now compares the annotation with the exact
+canonical ByteBuffer identity; a matching buffer still requires its actual type
+object. Complete expression type validation and initializer ownership validation
+remain separate and mandatory. General signature, containment, resource and type
+read errors remain errors. New regression coverage proves that Bool's ordinary
+annotation object is absent from the valid loaded envelope both without and with
+real buffer storage; removing a real buffer type still rejects. No extra type
+inventory, hidden source dependency, new format or weakened affine gate is added.
+
+The remaining independent gate failures were maintained-consumer expectations:
+distributed HTTP now has 89 standard tests plus one HTTP test (90); the offline
+diamond has 89 plus four (93), and the nominal consumer retains 89. Fresh native
+policy, text-join and web-starter tests likewise count 100, 92 and 121 respectively.
+Pinned historical native-guide/policy suppliers keep their old counts. The service
+oracle's exact artifact binding is updated to the already native-rebuilt lkjournal
+bundle, `590aac1f684791259b041f71bd4a2758d3f64db05595a7ddb7b1bc5d1240d932`;
+its semantic HEAD, selected old standard, protocol, routes and workload are unchanged.
+The service identity check is retained, not replaced by accepting arbitrary bytes.
+
+Focused successor verification completed in
+`/tmp/lkjscript-buffer-annotation-fix-tests1.log`: 25 ByteBuffer cases passed in
+5.31 seconds; 48 artifact-filter cases passed in 31.06 seconds; the explicit
+Graph 14 predecessor-type/nominal-data case passed in 1.74 seconds. Each filter had
+zero failures and zero ignored cases; the filters overlap and are not claimed as
+74 distinct tests. This includes the original maintained-application failures and
+the new nonbuffer/mixed-buffer annotation controls. Integrity-repaired affine
+counterexamples continue to reject. All test builds used the pinned locked toolchain.

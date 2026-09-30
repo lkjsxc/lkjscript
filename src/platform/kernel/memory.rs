@@ -23,6 +23,30 @@ pub(crate) fn direct(
         TypeForm::ByteBuffer
     ))
 }
+fn owned_annotation(
+    read: &(impl ExpressionRead + ?Sized),
+    annotation: Option<TypeObjectDigest>,
+) -> Result<bool, Diagnostic> {
+    let Some(annotation) = annotation else {
+        return Ok(false);
+    };
+    static BUFFER: std::sync::OnceLock<Result<TypeObjectDigest, Diagnostic>> =
+        std::sync::OnceLock::new();
+    let buffer = BUFFER
+        .get_or_init(|| {
+            TypeObject::new(TypeForm::ByteBuffer)
+                .and_then(|object| encode_type_object(&object).map(|(digest, _)| digest))
+        })
+        .as_ref()
+        .map_err(Clone::clone)?;
+    // Artifacts may omit ordinary annotation types reconstructed by expression
+    // inference. Only the exact concrete buffer annotation requests ownership;
+    // that type must still be present, and its initializer is checked separately.
+    if annotation != *buffer {
+        return Ok(false);
+    }
+    direct(read, annotation)
+}
 fn owner(
     read: &(impl ExpressionRead + ?Sized),
     package: PackageId,
@@ -269,11 +293,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                         .value
                         .ok_or_else(|| reject("missing memory binding initializer"))?;
                     // Annotations are semantic contracts, not ownership certificates.
-                    let is_buffer = b
-                        .declared_type
-                        .map(|t| direct(self.read, t))
-                        .transpose()?
-                        .unwrap_or(false);
+                    let is_buffer = owned_annotation(self.read, b.declared_type)?;
                     let acquired = self.eval(
                         value,
                         state,

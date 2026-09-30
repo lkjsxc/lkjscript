@@ -247,7 +247,7 @@ compiler-unit 13 / bytecode 9, with interface-owner
 F64 uses the disjoint version-1 `LKJF6401` type envelope and fixed little-endian binary64 payloads.
 Concrete [ByteBuffer](owned-byte-buffers.md) uses disjoint version-1 `LKJBUF01` and requires
 compiler-unit 14 / bytecode 10 for memory modes, owned results and lexical cleanup.
-task-callable rows use the explicit successor envelope only when symbolic requirement operands
+Task-callable rows use the explicit successor envelope only when symbolic requirement operands
 need it. Canonical re-encoding follows the admitted object's generation, preserving unchanged
 predecessor objects and IDs. Current package/interface wrappers may contain compatible old canonical
 objects and necessarily acquire new wrapper identities. Artifact 21 and its manifest bind the

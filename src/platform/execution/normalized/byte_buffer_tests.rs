@@ -3,13 +3,16 @@ use super::super::prepare::NormalizedEntryPoint;
 use super::*;
 const INPUT: &str = include_str!("../../../../tests/fixtures/owned-byte-buffer.lkjc");
 pub(crate) fn author(extra: &str) -> Result<crate::platform::kernel::KernelSnapshot, String> {
+    author_only(&format!("{INPUT}\n{extra}"))
+}
+pub(crate) fn author_only(input: &str) -> Result<crate::platform::kernel::KernelSnapshot, String> {
     let dir = tempfile::tempdir().unwrap();
     let empty = empty_normalized_snapshot(b"owned-byte-buffer");
     let repo = GraphRepository::create(&dir.path().join("project"), &empty, None)
         .unwrap()
         .repository;
     let base = repo.view_current().unwrap().revision();
-    let input = format!("request base={base}\n{INPUT}\n{extra}");
+    let input = format!("request base={base}\n{input}");
     let decoded = crate::platform::control::decode_compact_change("buffer", input.as_bytes())
         .map_err(|e| format!("{e:?}"))?;
     let plan = repo

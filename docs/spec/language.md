@@ -392,8 +392,8 @@ a literal, constant, decoder, external, pure function, callback, or constructor.
 requirement capability call whose result has the same exact interface may acquire one. The runtime
 value retains that acquiring requirement as authority.
 
-Every parameter has canonical use meaning: `unrestricted`, `borrow`, or `consume`. Nonresource
-parameters must be unrestricted. A direct capability-resource operation parameter must be an
+Every parameter has canonical use meaning: `unrestricted`, `borrow`, or `consume`. Parameters containing neither a capability resource nor the distinct
+[ByteBuffer](owned-byte-buffers.md) must be unrestricted. A direct capability-resource operation parameter must be an
 explicit borrow or consume. A directly named graph-authored task function may instead have
 a contiguous final suffix of direct capability-resource parameters with `borrow` or `consume` use.
 Each parameter carries one canonical `resource_requirement` reference to a requirement in the function effect whose exact
