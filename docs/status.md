@@ -1,6 +1,6 @@
 # Status
 
-Current snapshot: 2026-09-30 (Asia/Tokyo). This page describes current availability
+Current snapshot: 2026-10-01 (Asia/Tokyo). This page describes current availability
 and boundaries; historical measurements and failed attempts stay with their
 [campaign owners](campaigns/) and [release records](release.md).
 
@@ -40,8 +40,24 @@ unchanged drafts and detached execution with empty grants. General traits, owned
 containers, escaping or mutable borrows, asynchronous transfer and task memory
 signatures remain unsupported. See the [specification](spec/owned-generics.md),
 [native guide](guides/native-owned-generics.md) and
-[campaign evidence](campaigns/20260930-owned-generics.md). Frozen-source full acceptance
-and integration are delegated to the independent integrator; this is not a release claim.
+[campaign evidence](campaigns/20260930-owned-generics.md#observed-completed-acceptance--2026-10-01).
+Source `9afa799794ac26fa90bd4b2413e6e4d26886ccb6` passed all 26 full-profile gates
+freshly, with stable inputs, zero reuse and no unrun gates, and reached remote main.
+The workspace gate passed 1,435 tests with zero failures and 29 existing ignored
+cases. This completes source acceptance and integration, not binary publication.
+
+## Development: owned storage admission
+
+ByteBuffer creation now reserves its modeled token, synchronized storage, loan
+bookkeeping and shared-control metadata at the storage owner, rather than in two
+separate evaluator formulas. Both evaluators use the admitted constructor.
+Cancellation during a growth reservation stops before vector allocation.
+The [continuation](campaigns/20261001-owned-storage-admission.md) records the
+48-versus-80-byte predecessor failure on Linux x86-64, independent exact-quota and
+no-construction controls, and focused verification. No limit, language meaning or
+encoding is changed. A fixed allocation policy can now refuse previously uncounted
+work; this is not a measurement of RSS or a live-heap quota. New full-profile
+acceptance remains separate from the completed predecessor proof above.
 
 ## Development: owned byte buffers
 

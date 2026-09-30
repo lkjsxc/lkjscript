@@ -115,9 +115,11 @@ The first-order [Owned implementation](spec/owned-generics.md) now supplies the
 symbolically checked producer/transformer/consumer boundary with explicit witnesses
 for both ByteBuffer and OwnedI64Cell. Its focused native evidence includes exact
 same-Self alternate selection, loan cleanup and source-free package execution.
-Dependency-complete frozen-source acceptance and integration remain separate from
-that implementation evidence. General traits, owned containers, mutable or escaping
-borrows, asynchronous ownership transfer and region placement remain future work.
+Its exact `9afa7997` source completed all 26 frozen-source gates and reached main;
+[status](status.md) separates this accepted implementation from public binaries.
+General traits, owned containers, mutable or escaping borrows, asynchronous ownership
+transfer and region placement remain future work. Prefer an independently tested
+owned-data composition boundary before adding new dispatch or supervisor machinery.
 
 Do not turn the initial host into a broad supervisor before those transfer,
 lifetime and effect contracts compose. Dynamic CLI admission/removal and

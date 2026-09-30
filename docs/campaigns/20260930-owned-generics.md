@@ -538,3 +538,29 @@ profile; they do not combine earlier failed receipts into acceptance. Use two
 checker workers and four Cargo build jobs on the same isolated checkout, respecting
 the maintained producer dependency graph. Main, all other worktrees, immutable
 releases, running services and accepted application/standard HEADs are unchanged.
+
+## Observed completed acceptance — 2026-10-01
+
+The final fourth full-profile receipt was inspected directly on resumption. It binds
+source `9afa799794ac26fa90bd4b2413e6e4d26886ccb6`, tree
+`3f190685967112d9df230fff5872ebf9e4a6e228`, with all 26 gates passed freshly,
+zero reuse, stable inputs and no unrun gates. Elapsed time was
+1,054.047499672 seconds with two checker workers. The original receipt is
+`.artifacts/lkjscript-dev/check/1790777372130651479-3312948-0/receipt.json` in the
+existing owned-generics checkout; the terminal record is in
+`.artifacts/20260930-owned-full4/`. This observation completes the previously
+pending boundary; it does not rewrite the first three failed full receipts.
+
+The workspace gate passed 1,435 top-level tests, zero failures and 29 existing
+ignored cases. Two nested one-test subprocess controls are not counted again in
+that total. Root-library coverage was 1,002 passes and eight ignored; public CLI
+coverage was 181 passes and one ignored. All other selected workspace executables
+completed. Clippy, ordinary resident quota controls, source-free package workflows,
+generated discovery and maintained artifact comparisons also passed in the full
+profile. GitHub's main ref was independently fetched and matched this exact source;
+both main and the isolated checkout had this HEAD at the new continuation's entry.
+
+No binary release or running service was changed by that integration. GitHub still
+reported immutable v0.1.55 as latest on 2026-10-01. Subsequent storage-admission work
+has its own [campaign](20261001-owned-storage-admission.md), source and validation;
+this predecessor receipt is not restamped for those changes.

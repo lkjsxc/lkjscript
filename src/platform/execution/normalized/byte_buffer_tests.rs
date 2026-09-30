@@ -28,6 +28,94 @@ pub(crate) fn author_only(input: &str) -> Result<crate::platform::kernel::Kernel
         .value)
 }
 #[test]
+fn byte_buffer_creation_reserves_complete_owned_storage_before_allocation() {
+    use super::super::byte_buffer::{ByteBuffer, StorageObservation};
+    use std::mem::size_of;
+    use std::sync::Mutex;
+
+    let source = author("").unwrap();
+    let program = prepare_snapshot(&source);
+    let declaration = declaration_named(&source, "abandoned");
+    // Independently model the token, synchronized (optional Vec, loan count),
+    // and two Arc counters. This is admitted storage, not allocator/RSS usage.
+    let expected = (size_of::<ByteBuffer>()
+        + size_of::<Mutex<(Option<Vec<u8>>, usize)>>()
+        + 2 * size_of::<usize>()) as u64;
+    let mut charges = vec![];
+    for reference in [false, true] {
+        let run = |maximum| {
+            let storage = StorageObservation::start();
+            let policy = NormalizedRunPolicy {
+                maximum_allocated_bytes: maximum,
+                ..NormalizedRunPolicy::foreground()
+            };
+            let control = ExecutionControl::uncancelled();
+            let (result, allocated, calls) = if reference {
+                let observer = Mutex::new(None);
+                let result = NormalizedReferenceInterpreter::new(&source, &program, policy)
+                    .observing_checked(&observer)
+                    .invoke(declaration, vec![], None, &control)
+                    .map(|pair| pair.0);
+                let observed = observer.into_inner().unwrap().unwrap();
+                assert_eq!(observed.live_call_frames_after, 0);
+                assert_eq!(observed.live_transactions_after, 0);
+                assert_eq!(observed.live_handles_after, 0);
+                (result, observed.allocated_bytes, observed.external_calls)
+            } else {
+                let observer = Mutex::new(None);
+                let result = NormalizedVm::new(&program, policy)
+                    .observing_checked(&observer)
+                    .invoke(declaration, vec![], None, &control)
+                    .map(|pair| pair.0);
+                let observed = observer.into_inner().unwrap().unwrap();
+                assert_eq!(observed.live_call_frames_after, 0);
+                assert_eq!(observed.live_operands_after, 0);
+                assert_eq!(observed.live_transactions_after, 0);
+                assert_eq!(observed.live_handles_after, 0);
+                (result, observed.allocated_bytes, observed.external_calls)
+            };
+            assert_eq!(storage.live(), (0, 0));
+            assert!(storage.created() <= 1);
+            (result, allocated, calls, storage.created())
+        };
+        let (value, total, calls, created) = run(None);
+        assert_eq!(value.unwrap(), NormalizedValue::Unit);
+        assert_eq!((calls, created), (1, 1));
+        assert_eq!(run(Some(total)).0.unwrap(), NormalizedValue::Unit);
+
+        // Find creation, not merely successful completion: later stack/result
+        // charges may fail after the allocation. No engine-wide magic quota.
+        let (mut low, mut high) = (1, total);
+        while low < high {
+            let middle = low + (high - low) / 2;
+            let (result, _, _, created) = run(Some(middle));
+            if created == 0 {
+                assert_eq!(
+                    result.unwrap_err().class,
+                    crate::platform::execution::ExecutionFailureClass::Resource
+                );
+                low = middle + 1;
+            } else {
+                high = middle;
+            }
+        }
+        let (refused, before, calls, created) = run(Some(low - 1));
+        assert_eq!(
+            refused.unwrap_err().class,
+            crate::platform::execution::ExecutionFailureClass::Resource
+        );
+        assert_eq!((calls, created), (1, 0));
+        assert_eq!(run(Some(low)).3, 1);
+        charges.push(low - before);
+    }
+    assert_eq!(
+        charges,
+        vec![expected; 2],
+        "VM and source-reference creation charges"
+    );
+}
+
+#[test]
 fn byte_buffer_source_and_vm_have_exact_binary_and_cleanup() {
     let source = author("").unwrap();
     let program = prepare_snapshot(&source);

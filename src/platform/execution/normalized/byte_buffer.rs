@@ -48,12 +48,25 @@ fn reject() -> ExecutionError {
     )
 }
 impl ByteBuffer {
+    // Modeled owned storage, including synchronization and shared-control metadata.
+    // This is not allocator size-class rounding or a measurement of resident memory.
+    const ALLOCATION_BYTES: u64 = (std::mem::size_of::<Mutex<Storage>>()
+        + 2 * std::mem::size_of::<usize>()
+        + std::mem::size_of::<Self>()) as u64;
+
     fn lock(&self) -> MutexGuard<'_, Storage> {
         self.state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
-    pub(super) fn empty(domain: ValueOrigin) -> Self {
+    pub(super) fn create(
+        domain: ValueOrigin,
+        control: &ExecutionControl,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<Self, ExecutionError> {
+        control.check()?;
+        reserve(Self::ALLOCATION_BYTES)?;
+        control.check()?;
         let buffer = Self {
             domain,
             state: Arc::new(Mutex::new(Storage {
@@ -68,7 +81,11 @@ impl ByteBuffer {
                 entries.push(Arc::downgrade(&buffer.state));
             }
         });
-        buffer
+        Ok(buffer)
+    }
+    #[cfg(test)]
+    pub(super) fn empty(domain: ValueOrigin) -> Self {
+        Self::create(domain, &ExecutionControl::uncancelled(), &mut |_| Ok(())).unwrap()
     }
     pub(super) fn validate(
         &self,
@@ -150,13 +167,7 @@ impl ByteBuffer {
                     .max(8)
                     .max(length)
                     .min(super::value::MAXIMUM_VALUE_ALLOCATION_BYTES as usize);
-                reserve(capacity as u64)?;
-                v.try_reserve_exact(capacity - v.len()).map_err(|_| {
-                    ExecutionError::resource(
-                        "normalized_buffer_storage",
-                        "cannot allocate admitted ByteBuffer storage",
-                    )
-                })?;
+                reserve_growth(v, capacity, control, reserve)?;
             }
             control.check()?;
             v.push(octet);
@@ -170,6 +181,27 @@ impl ByteBuffer {
         Ok(BytePayload::adopt_vec(bytes))
     }
 }
+// Keep the capacity admission immediately beside its physical growth. In particular,
+// cancellation during reservation must stop before a Vec allocation, not only push.
+fn reserve_growth(
+    bytes: &mut Vec<u8>,
+    capacity: usize,
+    control: &ExecutionControl,
+    reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+) -> Result<(), ExecutionError> {
+    control.check()?;
+    reserve(capacity as u64)?;
+    control.check()?;
+    bytes
+        .try_reserve_exact(capacity - bytes.len())
+        .map_err(|_| {
+            ExecutionError::resource(
+                "normalized_buffer_storage",
+                "cannot allocate admitted ByteBuffer storage",
+            )
+        })
+}
+
 impl Drop for ByteBuffer {
     fn drop(&mut self) {
         let mut s = self.lock();
@@ -198,6 +230,9 @@ impl StorageObservation {
         });
         Self
     }
+    pub(super) fn created(&self) -> usize {
+        OBSERVED.with(|entries| entries.borrow().as_ref().unwrap().len())
+    }
     pub(super) fn live(&self) -> (usize, usize) {
         OBSERVED.with(|entries| {
             entries
@@ -225,6 +260,114 @@ impl Drop for StorageObservation {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn byte_buffer_creation_admits_before_storage_and_honors_cancellation() {
+        use crate::platform::execution::ExecutionFailureClass;
+        let observed = StorageObservation::start();
+        let domain = ValueOrigin::fresh().unwrap();
+        let expected = (std::mem::size_of::<ByteBuffer>()
+            + std::mem::size_of::<Mutex<(Option<Vec<u8>>, usize)>>()
+            + 2 * std::mem::size_of::<usize>()) as u64;
+        let cancelled = ExecutionControl::uncancelled();
+        cancelled.cancel();
+        let error = ByteBuffer::create(domain, &cancelled, &mut |_| {
+            panic!("pre-cancelled creation must not reserve")
+        })
+        .unwrap_err();
+        assert_eq!(error.class, ExecutionFailureClass::Cancelled);
+        assert_eq!(observed.created(), 0);
+
+        let control = ExecutionControl::uncancelled();
+        let mut charges = vec![];
+        let error = ByteBuffer::create(domain, &control, &mut |bytes| {
+            charges.push(bytes);
+            Err(ExecutionError::resource("test_quota", "refused"))
+        })
+        .unwrap_err();
+        assert_eq!(error.code, "test_quota");
+        assert_eq!(charges, [expected]);
+        assert_eq!(observed.created(), 0);
+
+        let error = ByteBuffer::create(domain, &control, &mut |bytes| {
+            assert_eq!(bytes, expected);
+            control.cancel();
+            Ok(())
+        })
+        .unwrap_err();
+        assert_eq!(error.class, ExecutionFailureClass::Cancelled);
+        assert_eq!(observed.created(), 0);
+        assert_eq!(observed.live(), (0, 0));
+
+        let mut charged = 0;
+        let owner = ByteBuffer::create(domain, &ExecutionControl::uncancelled(), &mut |bytes| {
+            charged += bytes;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(charged, expected);
+        assert_eq!(owner.len().unwrap(), 0);
+        assert_eq!(observed.created(), 1);
+        assert_eq!(observed.live(), (1, 0));
+        drop(owner);
+        assert_eq!(observed.live(), (0, 0));
+    }
+
+    #[test]
+    fn byte_buffer_growth_refusal_and_cancellation_preserve_allocation() {
+        use crate::platform::execution::ExecutionFailureClass;
+        for length in [0, 8] {
+            let mut bytes = Vec::with_capacity(length);
+            bytes.resize(length, 255);
+            let original = bytes.as_ptr();
+            let capacity = bytes.capacity();
+            let requested = (capacity * 2).max(8);
+            let cancelled = ExecutionControl::uncancelled();
+            cancelled.cancel();
+            let error = reserve_growth(&mut bytes, requested, &cancelled, &mut |_| {
+                panic!("pre-cancelled growth must not reserve")
+            })
+            .unwrap_err();
+            assert_eq!(error.class, ExecutionFailureClass::Cancelled);
+            assert_eq!(bytes.capacity(), capacity);
+
+            let control = ExecutionControl::uncancelled();
+            let error = reserve_growth(&mut bytes, requested, &control, &mut |charge| {
+                assert_eq!(charge, requested as u64);
+                Err(ExecutionError::resource("test_quota", "refused"))
+            })
+            .unwrap_err();
+            assert_eq!(error.code, "test_quota");
+            assert_eq!(bytes.capacity(), capacity);
+
+            let error = reserve_growth(&mut bytes, requested, &control, &mut |charge| {
+                assert_eq!(charge, requested as u64);
+                control.cancel();
+                Ok(())
+            })
+            .unwrap_err();
+            assert_eq!(error.class, ExecutionFailureClass::Cancelled);
+            assert_eq!(bytes.capacity(), capacity);
+            assert_eq!(bytes.as_ptr(), original);
+            assert_eq!(bytes, vec![255; length]);
+
+            let mut charges = vec![];
+            reserve_growth(
+                &mut bytes,
+                requested,
+                &ExecutionControl::uncancelled(),
+                &mut |charge| {
+                    charges.push(charge);
+                    Ok(())
+                },
+            )
+            .unwrap();
+            assert_eq!(charges, [requested as u64]);
+            assert!(bytes.capacity() >= requested);
+            assert_eq!(bytes, vec![255; length]);
+        }
+    }
+
     #[test]
     fn byte_buffer_clone_is_inert_and_loans_block_mutation_and_freeze() {
         let domain = ValueOrigin::fresh().unwrap();

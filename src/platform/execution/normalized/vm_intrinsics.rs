@@ -372,17 +372,13 @@ impl Machine<'_> {
                 if !arguments.is_empty() {
                     return Err(type_error("buffer empty arity"));
                 }
-                self.charge_allocation(
-                    std::mem::size_of::<super::super::byte_buffer::ByteBuffer>() as u64
-                        + std::mem::size_of::<Vec<u8>>() as u64,
+                let control = self.control;
+                let buffer = super::super::byte_buffer::ByteBuffer::create(
+                    self.memory_domain,
+                    control,
+                    &mut |bytes| self.charge_allocation(bytes),
                 )?;
-                self.control.check()?;
-                CheckedValue::memory(
-                    self.program,
-                    NormalizedValue::ByteBuffer(super::super::byte_buffer::ByteBuffer::empty(
-                        self.memory_domain,
-                    )),
-                )
+                CheckedValue::memory(self.program, NormalizedValue::ByteBuffer(buffer))
             }
             "core.buffer.push" => {
                 let [octet, buffer]: [CheckedValue; 2] = arguments
