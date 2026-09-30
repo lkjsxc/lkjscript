@@ -1352,7 +1352,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .expect("type reference field form");
     assert_eq!(
         compact_field(type_reference, "syntax"),
-        Some("unit|bool|i64|f64|bytes|text|static-text|secret|@NAME")
+        Some("unit|bool|i64|f64|byte-buffer|bytes|text|static-text|secret|@NAME")
     );
     let query = compact_success(&["capabilities", "query"]);
     assert_eq!(

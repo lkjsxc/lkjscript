@@ -208,7 +208,7 @@ fn native_guides_author_edit_and_run_without_compiler_checkout_or_host_tools() {
     let check = tool.project(&["check"]);
     assert_eq!(
         compact_field(compact_record(&check, "tests"), "passed"),
-        Some("101")
+        Some("105") // 16 freshly authored tests and 89 from the current standard.
     );
     let original = tool.result("diagnostics", &diagnostic_input(), "original");
     let expected = concat!(

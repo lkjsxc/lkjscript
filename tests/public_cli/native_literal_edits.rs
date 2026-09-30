@@ -123,7 +123,7 @@ fn native_literal_edit_keeps_review_identity_and_old_and_new_detached_web_snapsh
     );
     let check = public.cli(&["check"], true);
     let tests = compact_record(&check, "tests");
-    assert_eq!(compact_field(tests, "passed"), "117");
+    assert_eq!(compact_field(tests, "passed"), "121"); // 32 local + 89 standard.
     assert_eq!(compact_field(tests, "failed"), "0");
     assert_eq!(compact_field(tests, "differential"), "equal");
     let after = public.root.path().join("after.lkja");

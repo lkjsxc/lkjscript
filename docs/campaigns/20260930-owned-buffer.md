@@ -240,3 +240,30 @@ zero failures and zero ignored cases; the filters overlap and are not claimed as
 74 distinct tests. This includes the original maintained-application failures and
 the new nonbuffer/mixed-buffer annotation controls. Integrity-repaired affine
 counterexamples continue to reject. All test builds used the pinned locked toolchain.
+
+## Final public-consumer inventory alignment
+
+Source `551f6293e54c43b158c9cba53e69a7e495edbec7` received the next full-profile
+attempt at `.artifacts/lkjscript-dev/check/1790745523205843775-2350173-0/receipt.json`.
+It completed with 25 fresh passing gates, one failed gate, no skipped gates, no
+reuse and stable inputs in 804.281943977 seconds. The library suite passed 974
+cases with eight existing ignored cases. The public CLI suite passed 162 cases,
+failed ten and retained one existing ignored case; this is not full acceptance.
+
+All ten public failures were exact inventory expectations that had not yet been
+updated: one missing `byte-buffer` discovery form and nine observations of the
+four newly added standard tests. Eight test files now retain exact expectations
+for the new inventories. Web snapshot and literal editing expect 32 local plus
+89 standard tests (121); forms expect 65 plus 89 (154); the editor starter expects
+121 plus 89 (210); the paged-list consumer expects 36 plus 89 (125); freshly
+authored native guides expect 16 plus 89 (105). Historical pinned guide/policy
+bundles, data values, execution semantics, source-free assertions and all failure
+checks remain unchanged. No gate is waived and no test is removed.
+
+The focused public run `/tmp/lkjscript-buffer-final-cli-alignment.log` selected
+12 cases, including two additional existing form rejection controls. Eight passed;
+four reached the next stale expectation only after their library checks succeeded.
+The imported form consumer expects 66 local/dependency plus 89 standard tests (155),
+and the downstream HTTP receiver expects 70 plus 89 (159). Those later expectations
+are updated as well. This first focused run finished in 43.05 seconds with no
+ignored cases and is retained as failed, not relabeled after correction.
