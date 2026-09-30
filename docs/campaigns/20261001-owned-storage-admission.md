@@ -91,3 +91,73 @@ all three new regressions executed. Existing exact bytes, scoped loans, source/V
 results, raw boundary refusals, forged artifact rejection and failure cleanup also
 passed in that selection. Formatting and `git diff --check` passed. These focused
 results are not a substitute for the new frozen-source full profile.
+
+## Accepted source and optimized product
+
+Implementation `ac218900c15c886a52418f9309af1a7fb10b7f2d`, tree
+`fc6cbcf277a2f7feae7bd4d8a22cf01c6a367867`, completed the full profile with all
+26 gates passed freshly, zero reused results, stable inputs and no unrun gates.
+The original receipt is
+`.artifacts/lkjscript-dev/check/1790794964348416386-3645743-0/receipt.json`;
+`full1.log` and `full1.exit` retain the launcher terminal (exit 0). Elapsed time
+was 1,156.854956808 seconds with two checker workers. No source file was changed
+between that source freeze and observation of the complete terminal receipt.
+
+Workspace execution passed 1,438 top-level tests with zero failures and 29 existing
+ignored cases. Root-library execution passed 1,005 cases with eight ignored;
+public CLI execution passed 181 with one ignored. Two nested one-test child controls
+are not counted twice in the top-level total. All 26 gates, including offline
+packages, generated discovery, source-free command/HTTP application lifecycles,
+standard/application artifacts and their comparisons, completed successfully.
+
+The optimized product and exact public test executable were separately copied from
+the frozen full run into this campaign's evidence directory. Product
+`native-lkjscript` reports v0.1.61 and has SHA-256
+`89b90289b66cc2e1ceef2068d6167462af20dd346175978aa7412eab49ae56d5`;
+`native-public-cli-tests` has SHA-256
+`8d2e636254269e8ae46baa3fa987396e107a2ff7ac91b402764cff7c4e318ee1`.
+The explicit `LKJSCRIPT_RELEASE_CANDIDATE` selector binds that copied executable.
+From `/tmp`, with the environment cleared and PATH empty, all 11 selected
+`native_owned_` and `native_byte_buffer_` cases passed in 15.62 seconds, zero
+failures/ignored and 171 filtered cases, with two test threads. `native-optimized.log`
+and `.exit` retain this complete result. It covers three-package ownership flow,
+source removal, exact witness selection, unchanged drafts, semantic rejection and
+implementation edits. It is supplementary development-product proof, not a new
+final-distribution candidate or a public v0.1.61 release.
+
+## Separate completed public delivery
+
+The already accepted v0.1.60 candidate was promoted unchanged during this continuation.
+Producer `36617982924/1` remains bound to source `2962c43f`, not this implementation.
+Promotion `36763094941/1`, from pre-existing integrated controller `9afa7997`,
+completed with `immutable_published_and_public_verified`; immutable release
+`400357606` is now public/latest. The [delivery owner](20260930-descendant-inventory.md#completed-v0160-publication)
+records the independently checked original/published inventory and successful
+anonymous installed lifecycle. The tag, scoped selector, immutability setting,
+credentials, protections and original candidate were not changed by this promotion.
+No running application, accepted supplier or operational data was upgraded.
+
+The status page now separates actual public availability, integrated development,
+authority, limitations and proof. Its former detailed chronology remains linked at
+immutable predecessor `9afa7997`; campaign records are retained rather than erased.
+Only README's existing current-limit anchor points into status in the inspected tree,
+and that heading is preserved. The final reporting edits do not change this tested
+language implementation or restamp its receipt. Post-report checks passed:
+formatting, diff whitespace, all 25 tracked relative status-link destinations,
+and `cargo test --locked -p lkjscript-site` (eight library tests and one binary
+test; zero failures or ignored cases). `status-site-check.log` and `.exit` retain
+that targeted presentation result. Status is now 180 lines, with its historical
+snapshot and campaign owners still linked. The status bytes checked here have
+SHA-256 `df15a079fc899d737839988cdca598073a7fdf8cc95c9a6a4c6092a0a68c7c7e`.
+
+## Next selected language boundary
+
+Prefer owned-data composition before expanding dispatch or supervisor machinery.
+A useful first experiment is an owned aggregate that keeps a byte owner together
+with ordinary metadata, so a packet or parser result can move as one value across
+an ordinary library boundary. Establish construction, whole-value transfer,
+consuming decomposition and failure cleanup before permitting partial moves or
+asynchronous handoff. Preserve explicit ownership, exact package identity and an
+independent source evaluator; do not hide copies behind generic convenience.
+This is a selected next experiment, not a claim that aggregates, task-memory
+signatures, mutable references or region placement are already implemented.

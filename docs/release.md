@@ -4,14 +4,15 @@ GitHub Releases are the public binary distribution path. Accept one finalized ca
 its exact producer run and attempt, and promote its unchanged archive, checksum and bootstrap.
 Content identity, behavioral acceptance and publication authority are separate decisions.
 
-Current delivery observation (2026-09-30): immutable public/latest v0.1.55 is
-release `398379899`, published at 00:26:30 JST. Original producer `36419055364/1`
-was accepted at source `320dacc0`; promotion `36442849973/1` subsequently completed
-publication, anonymous acquisition/installed smoke and its terminal decision.
-The [publication observation](campaigns/202609290026.md#completed-v0155-publication)
-records the exact producer, annotated tag and unchanged public inventory. All three
-native generic-resource cases passed against its final archive before promotion.
-No duplicate producer, new build or prior-asset rewrite was used.
+Current delivery observation (2026-10-01): immutable public/latest **v0.1.60** is
+release `400357606`, published at 04:10:53 JST. Original producer `36617982924/1`
+was accepted at source `2962c43f`; promotion `36763094941/1` completed at 04:12:24 JST
+with `immutable_published_and_public_verified`. Anonymous exact/latest acquisition,
+release attestations and the actual installed lifecycle passed. The
+[publication observation](campaigns/20260930-descendant-inventory.md#completed-v0160-publication)
+records the unchanged annotated tag, exact original/public three-asset comparison
+and terminal evidence. No duplicate producer, new build, prior-asset rewrite or
+protection/credential change was used. Later v0.1.61 development is not in this binary.
 
 The earlier [v0.1.52 delivery](campaigns/202609281010.md#already-accepted-v0152-publication-continuation)
 and [v0.1.53 shared-host delivery](campaigns/202609281356.md#completed-v0153-publication)
@@ -34,10 +35,10 @@ are not claimed as executed, and no v0.1.57 tag or promotion is created.
 Source `0f0f4d92` integrates reusable byte storage on top of those corrections and
 passed all 26 full-profile gates freshly with stable inputs and zero reuse. Its
 retained final optimized executable also passed the native byte/map cases. The
-[v0.1.60 notes](releases/v0.1.60.md) define the selected successor. A new candidate
-needs its own exact source/final-archive acceptance and the public-case filters
-recorded in the continuation before ordinary unchanged-asset promotion. Public/latest
-remains v0.1.55. Source acceptance is not publication or acceptance of another tree.
+[v0.1.60 notes](releases/v0.1.60.md) define the selected successor. Its own exact
+source/final-archive acceptance and supplementary public-case filters preceded the
+completed unchanged-asset promotion recorded above. Source acceptance alone is not
+publication or acceptance of another tree.
 After the notes/reporting descendant `89241cd3` reached main, one candidate
 `36605595167/1` was dispatched from that exact source on 2026-09-30 at 02:31:54 JST.
 That original run ended in failure at 03:23:21 JST: 19 source gates passed, while
@@ -55,10 +56,11 @@ and joined installation/recovery. Original asset, archive and extracted executab
 identities agree. All 40 selected supplementary final-archive cases then passed with
 complete termination and no publishing credentials. Annotated object `1ed78aae`
 selects accepted source `2962c43f`; its verbatim notes and remote object were compared,
-and the existing release-only selector was updated and read back. Unchanged-asset
-promotion remains distinct from those completed gates. Public/latest remains v0.1.55;
-see the [delivery continuation](campaigns/20260930-descendant-inventory.md#candidate-acceptance-and-publication-continuation)
-for the latest completed boundary.
+and the existing release-only selector was updated and read back. Those original
+acceptance and selection observations are retained unchanged. The
+[completed delivery](campaigns/20260930-descendant-inventory.md#completed-v0160-publication)
+subsequently promoted the same candidate without rebuilding it; v0.1.60 is now
+immutable public/latest.
 
 Immutable [v0.1.38](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.38) already publishes source
 `7083f9a6d56ed702017942e100c3696fc6f35308`. Publisher

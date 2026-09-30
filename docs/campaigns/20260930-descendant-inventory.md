@@ -232,3 +232,53 @@ promotion procedure, not a change to authentication or repository protection.
 At this checkpoint the tag and selection exist, but no public v0.1.60 release is
 claimed; the ordinary unchanged-asset promotion still owns publication and anonymous
 installed verification.
+
+## Completed v0.1.60 publication
+
+On 2026-10-01 the existing accepted producer, annotated tag and scoped selector were
+reconciled against live GitHub reads before dispatch. Producer `36617982924/1`
+remained successful, with its original unexpired acceptance, assets and verifier.
+Tag object `1ed78aaead92e41c053aa735a1e55fee13137953` still targeted
+`2962c43f0617bda2c5726a96249c8fe53f571747`, reachable from main. The existing
+release-only selector still selected that object; no selector write was needed.
+The read-only immutable-releases endpoint returned `enabled=true`. There was no
+occupied v0.1.60 release before dispatch. The release workflow and trusted controller
+source were unchanged between the accepted producer and integrated main `9afa7997`.
+
+One ordinary `operation=promote` invocation selected producer `36617982924`, attempt
+`1`, from main. Run `36763094941/1` binds controller source
+`9afa799794ac26fa90bd4b2413e6e4d26886ccb6`; it started at 04:04:26 JST and completed
+successfully at 04:12:24 JST. Selection, fresh publication authority/occupancy,
+transferred installed lifecycle, isolated publication, anonymous acquisition,
+attestation verification, actual public installed lifecycle and terminal decision
+all completed successfully. Candidate production was correctly skipped, not rerun.
+The retained terminal reports `immutable_published_and_public_verified`, with
+`latest=selected`, `latest_tag=v0.1.60` and exact latest source `2962c43f`.
+
+Immutable release `400357606` was published at **2026-10-01 04:10:53 JST**.
+Independent tag, exact release-ID and latest reads agreed; it is neither a draft
+nor a prerelease. The original candidate acceptance inventory was downloaded anew
+and compared programmatically with the exact public release inventory by asset
+name, length and SHA-256. All three entries matched:
+
+| Asset | Public asset ID | Bytes | SHA-256 |
+| --- | --- | ---: | --- |
+| `lkjscript-x86_64-unknown-linux-musl.tar.gz` | `601619022` | 12,646,980 | `9bb3c156363671646f119abcf5389a469494dd790e2282357fff3a82e11efdd9` |
+| `SHA256SUMS` | `601619144` | 109 | `a35ca67a8646970fca790151b74dd74305ed58b444cdee1ec64a0c662edb726f` |
+| `install.sh` | `601619255` | 3,566 | `4806c70613c7fb016649ec9dca7bd89f2001d75056bb686213004ef5764a47eb` |
+
+The producer's final executable remains 26,836,352 bytes, SHA-256
+`f0365f4eebf6de18d3730a0c17099f258cc133c9deb20bf537a03a88a50079e2`.
+No asset was rebuilt, no earlier immutable asset or tag was rewritten, and no
+credential, repository-protection or immutability setting was changed. The original
+annotation and selected notes remain unchanged. Existing services, application
+HEADs, dependency selections and data remain untouched.
+
+Promotion terminal artifact `11120195698` is 355 service-archive bytes with digest
+`sha256:418df41714771459e8fad4cfd6058037fa5b5ced9f4de2092a11fda6258b3405`.
+The public diagnostic artifact is `11120300581`, publication `11119653367`,
+selection `11119398176` and trusted controller `11119383195`, all bound to this
+controller run/attempt. Downloaded terminal, original acceptance, public release-ID
+response and exact-inventory comparison are retained in the owned-generics checkout
+under `.artifacts/20261001-buffer-admission/`. This release does not include later
+v0.1.61 byte ranges, ByteBuffer, Owned generics or the [new storage-admission correction](20261001-owned-storage-admission.md).
