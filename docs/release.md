@@ -14,6 +14,18 @@ Select public/latest explicitly; do not infer compatibility or publication from
 numeric ordering. Existing published tags, candidate bytes and source bindings
 remain unchanged. See the [product identity contract](spec/product-surface.md#opaque-three-component-identifiers).
 
+Before freezing a source selection, complete maintained native `check` operations
+for `packages/standard`, `applications/lkjournal`, `tools/native-guides/project`
+and `tools/native-policy/project` with the selected executable. Inspect newly
+materialized packs through their native owner and include required deterministic
+inputs in the reviewed source; do not depend on warmed, untracked local files.
+A tracked-source copy must reproduce the maintained inputs without adding missing
+native packs. Keep the source-stability assertion: do not ignore all packs, raise
+limits or relabel `worktree_changed_during_run` as acceptance. The
+[2026-10-01 cold-source control](campaigns/20261001-version-policy.md#source-only-maintained-input-reproduction)
+records the concrete four-pack inventory correction. This does not freeze general
+compiler caches into source or make generated artifacts editable semantic authority.
+
 Current delivery observation (2026-10-01): immutable public/latest **v0.1.60** is
 release `400357606`, published at 04:10:53 JST. Original producer `36617982924/1`
 was accepted at source `2962c43f`; promotion `36763094941/1` completed at 04:12:24 JST

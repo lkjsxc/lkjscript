@@ -41,6 +41,11 @@ canonical 64-byte `vA.B.C` spelling for production, verifier handoff and install
 Two predecessor regression controls reproduced overlong-tag acceptance in the
 contributor producer and handoff paths while the installer already rejected it.
 The correction preserves exact matching and the existing container admission bound.
+The maintained native packages also include four previously missing first-use packs,
+independently regenerated from tracked source through a copied executable. Their
+274 package tests passed with equal production/reference results and unchanged
+semantic revisions; the [continuation](campaigns/20261001-version-policy.md) records
+the exact input evidence separately from full-source acceptance.
 
 The [identity contract](spec/product-surface.md#opaque-three-component-identifiers),
 [development notes](releases/v0.1.62.md) and [continuation](campaigns/20261001-version-policy.md)
@@ -54,7 +59,13 @@ require re-planning retained review requests after an executable change.
 The [v0.1.61 release notes](releases/v0.1.61.md) select owned data across ordinary
 libraries as the next binary milestone. Candidate `36828457203/1` was dispatched
 on 2026-10-01 at 16:06:45 JST from exact source `c64f42dc66f0e7cc459c66cc83daad5d66821c1a`.
-Its candidate/final-archive acceptance is still pending; public/latest is v0.1.60.
+It ended in failure at 16:48:51 JST: all 20 source gates passed, but the source
+checker rejected `worktree_changed_during_run`. No candidate/final-archive acceptance
+or publication followed. The [current diagnosis](campaigns/20261001-version-policy.md#source-only-maintained-input-reproduction)
+reproduces missing first-use native packs on a clean source copy; development
+v0.1.62 admits the four byte-identical generated inputs without weakening the
+source-stability check. That correction does not accept or relabel the frozen
+failed run. Public/latest remains v0.1.60.
 The [delivery continuation](campaigns/20261001-owned-products.md#mainline-delivery-and-candidate-invocation)
 records the completed source delivery and the observed CI boundary separately.
 

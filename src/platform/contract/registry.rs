@@ -8864,11 +8864,12 @@ mod tests {
         assert_eq!(first, second);
         assert_eq!(first.product_name, "lkjscript");
         assert_eq!(first.product_version, crate::PRODUCT_VERSION);
+        assert_eq!(first.product_version_policy, "opaque-triplet");
         assert_eq!(first.sections.len(), RegistrySection::PUBLIC.len());
         assert!(!first.sections.contains_key(&RegistrySection::Contracts));
         let text = std::str::from_utf8(&first.bytes).expect("capabilities UTF-8");
         assert!(text.starts_with(&format!(
-            "product name=lkjscript version={}\ncapabilities digest=",
+            "product name=lkjscript version={} version-policy=opaque-triplet\ncapabilities digest=",
             crate::PRODUCT_VERSION
         )));
         for forbidden in [
@@ -8891,6 +8892,7 @@ mod tests {
             &[
                 ("name", "lkjscript".to_owned()),
                 ("version", crate::PRODUCT_VERSION.to_owned()),
+                ("version-policy", "opaque-triplet".to_owned()),
             ],
         )
         .expect("product record")

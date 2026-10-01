@@ -107,6 +107,76 @@ SHA-256 `135a4c7acb3d2fa896f400fe4865db2d0156da38b8bbbf18698378a3031a9af5`.
 This is a local Linux host-binary probe, not finalized static-archive acceptance or
 a cross-platform reproducibility/hostile-isolation claim.
 
+## Initial full-source result and test correction
+
+Source `44d0871c629024ef302c8226d5eb072da20b8206`, tree
+`475785c860cc8a013489298f6f9548355ad6fee7`, completed the fresh full profile with
+25 of 26 gates passed, zero reuse and `input_stable=true`. It failed only
+`workspace_tests`: 1030 product-library tests passed, eight existing migration
+cases were ignored and the canonical public-capabilities test still expected the
+old two-field product record. Receipt
+`.artifacts/lkjscript-dev/check/1790842621715822541-368567-0/receipt.json` is 68177
+bytes, digest `verification_a6b4f9c3eefb3cfa397d32c9b354ed07d77367752058f9f273fce8146576c8ef`.
+This is preserved failed acceptance, not a successful source cut.
+
+Correct the independent test's literal header, explicit policy assertion and
+independently assembled digest preimage to include `version-policy=opaque-triplet`.
+Do not remove its complete-digest assertion, hide a public contract or ignore the
+test. Production output and the already generated reference pages are unchanged.
+The subsequent full profile must bind the corrected source after it is committed.
+
+## Authenticated frozen candidate failure
+
+Producer `36828457203/1`, exact source `c64f42dc66f0e7cc459c66cc83daad5d66821c1a`,
+finished with failure on 2026-10-01 at 16:48:51 JST. Independently read job
+`110259357705` shows all 20 source gates passed freshly, but final input admission
+failed with `worktree_changed_during_run` and `input_stable=false`. Candidate
+production/final-archive acceptance did not run; the terminal job's success merely
+reports the failure, not acceptance. Original source receipt is 63481 bytes,
+digest `verification_30f786203cdb8c0f087ef1f1a5c4cf90b85c9a8b9cf26a0bf5de76e6a58ecbe`.
+
+Authenticated diagnostic artifact `11147471503`,
+`candidate-diagnostics-36828457203-1`, contains 52315240 bytes and service SHA-256
+`5ba31590a65f816f7d754d8d6a81af70ce8e4d559ed34412f97254ba2ff3858c`. The downloaded
+archive matches that digest. Observed service expiry is 2026-10-15T07:48:38Z;
+a retained conversation copy is `/mnt/data/candidate-diagnostics-36828457203-1.zip`.
+Only diagnostic data was read, not executed. The initial snapshot has no untracked
+inputs. Its receipt retains different initial/final input digests, but the archive
+does not retain a final path-by-path input manifest. Therefore this evidence alone
+does not identify the exact historical file delta; the independent reproduction
+below establishes the missing-input behavior without inventing that delta.
+
+## Source-only maintained-input reproduction
+
+Export only tracked projects from `44d0871c` into the independent copied-binary
+directory using `git archive`: `packages/standard`, `applications/lkjournal`,
+`tools/native-guides/project` and `tools/native-policy/project`. The four original
+untracked packs are absent. With only PATH and an isolated HOME, run each project's
+public `check` through the copied 0.1.62 executable. No compiler checkout, external
+semantic generator or direct accepted-graph edit is used. All four clean compilation
+passes succeed: standard 89, lkjournal 44, guides 79 and policy 62 tests, 274 total,
+zero failures and equal production/reference results. The original accepted semantic
+revisions remain unchanged.
+
+The following packs are newly produced from that tracked-source copy and match
+the originally retained local files byte for byte (SHA-256 shown):
+
+| Project | Native pack | SHA-256 |
+| --- | --- | --- |
+| `packages/standard` | `pack_fb17e4f7c24f6864c60ff9d33733f75e0fc842b1fe4e85e9ce317b1f7117b13d.lkjp` | `1733355f556cd6d60bccb477039108492cc7b546621173c40ecf165b203fc4e3` |
+| `applications/lkjournal` | `pack_ceb46052f3d0d9c6d10f889da7cdc23ee9f08fcc560bef6429ddbfa3e6b79032.lkjp` | `1c7d812c1240e2c973375888152327e297ef77fc2db086bc66f44536d0236bdf` |
+| `tools/native-guides/project` | `pack_dccd0a25eac5a09c12d5314c0d98295544dd26c0b338ebcd91af616730aafce2.lkjp` | `854b28f205e002ded9ad774a082956067d5a1f1b48ca15a13ee2b810ad3dda02` |
+| `tools/native-policy/project` | `pack_17a92be1b9216cb1c3213f2e4d2eb4b1b8858e9ff740ac27fa2867d5cf2abd5e.lkjp` | `d79813181b78268b6590b9bd7133f0f4b7ac737cbd2a782ba6f1d48e663d258c` |
+
+Reclassify only those four proven native-generated files as missing maintained
+inputs and include them unchanged in the corrective source. This explicitly revises
+the initial decision to leave them untracked; it does not delete or overwrite them.
+No blanket staging, pack ignore rule, snapshot filtering change or relaxed gate is
+used. The first full run's warmed untracked files were stable, but that was not
+proof of a complete tracked cold-checkout input inventory. Corrected acceptance
+starts with these native inputs tracked and no untracked source files. A second
+tracked-source copy checks that this inventory no longer grows on first use.
+
 ## Acceptance and publication boundary
 
 Corrected-source acceptance and exact mainline delivery are recorded below when
