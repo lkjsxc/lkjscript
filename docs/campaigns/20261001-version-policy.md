@@ -177,6 +177,67 @@ proof of a complete tracked cold-checkout input inventory. Corrected acceptance
 starts with these native inputs tracked and no untracked source files. A second
 tracked-source copy checks that this inventory no longer grows on first use.
 
+## Corrected tracked-input copy
+
+Export `b9b49609878da95aacc48f336972dc151fd2c078`, tree
+`f80dc6ca7eb1ec68f00408b1ab17e1f03056cbc3`, into the separate directory
+`/tmp/lkjscript-version-inventory-20261001.tGKOGw`. Inventory every `.lkjp` in all
+four maintained `packs` directories before and after public project checks through
+the copied executable. All 140 path/content records remain equal; both sorted
+SHA-256 inventory files have digest
+`7ef2252f147afd533fe3f5da9b2bd1c67caed0b57e1e1f8cb677898dc5c85f0d`.
+The four observed final checks pass 89/44/79/62 tests, with equal reference results.
+The lkjournal repeat reports reuse; a preceding compound foreground probe timed
+out at the tool boundary and is not counted as accepted completion. Thus this is
+proof of unchanged first-use pack inventory, not a claim that every observed
+compilation was cold. Separate logs retain all final package results.
+
+An additional `tar --compare` helper rejected extraction mode/UID/GID differences.
+It is not a successful archive-metadata test and does not supersede the explicit
+before/after pack-content comparison. No acceptance rule or system permission was
+changed in response. The two Sora Isles processes observed during this work belong
+to unrelated deployments and were left running.
+
+## Second full result and independent fixture diagnosis
+
+The same corrected `b9b49609` source starts with 1335 tracked inputs and no
+untracked source. Its fresh full profile again finishes 25/26 passed, zero reuse,
+`input_stable=true`. Receipt
+`.artifacts/lkjscript-dev/check/1790843805956260001-420703-0/receipt.json` is 68814
+bytes, digest `verification_3f1444b509b810e34ed13f23bb628366c78302c93d2afb100751f92cf265df81`.
+Root library 1031 tests and public CLI 183 tests pass. The contributor library has
+206 passed, 19 existing ignored and one failure in
+`actual_workflow_authority_requires_a_completed_consistent_decision`: its adapter
+invocation file is missing. The assertion discards the captured workflow stderr,
+so the original precise launch cause and case cannot be recovered from that log.
+This failed receipt remains evidence, not accepted completion.
+
+An external bounded, standard-library-only Rust probe extracts the actual unchanged
+workflow step and runs isolated authority adapters: eight workers, at most 768
+cases, stop and join on first failure. Ordinary direct writes pass all 768; the
+original intermittent failure is not reproduced. Holding a writable handle on
+the executed adapter deliberately produces eight startup failures with explicit
+`Text file busy`, no invocation and no state file. This reproduces the failure
+class under a controlled condition, not the missing original stderr. A joined
+`/usr/bin/install` child writing a separate executable inode admits all 768 cases
+even while the parent's staging writers remain open. The probe source and all
+three logs remain under `/tmp/lkjscript-version-policy-20261001.A1cHd9`.
+
+The test-only `workflow_fixture` helper adopts that separate writer boundary and
+checks the produced bytes. The actual authority script, its 24 cases times three
+operations, expected decisions and exact once-only invocation assertion remain
+unchanged. A deterministic Linux control verifies direct held-writer launch fails
+with errno 26 and that independently written identical bytes execute exactly once.
+Missing invocation diagnostics now include operation, case, exit status, stdout
+and stderr. This is a targeted fixture robustness and observability correction;
+it is not a proven reconstruction of the original intermittent fault. There is no
+whole-workflow retry, sleep, relaxed authority rule, test ignore or blanket test
+serialization. Production workflow and release controller code are unchanged.
+The targeted pinned contributor controller test module passes all 19 tests, none
+ignored, including the actual 72-case authority boundary and the new held-writer
+control. `.artifacts/20261001-version-policy/workflow-fixtures.log` retains the
+result; this targeted pass does not replace fresh full-source acceptance.
+
 ## Acceptance and publication boundary
 
 Corrected-source acceptance and exact mainline delivery are recorded below when

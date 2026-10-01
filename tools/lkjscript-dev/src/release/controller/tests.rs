@@ -4,6 +4,9 @@ use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 
+#[path = "workflow_fixture.rs"]
+mod workflow_fixture;
+
 const SOURCE: &str = "1111111111111111111111111111111111111111";
 const CONTROLLER: &str = "2222222222222222222222222222222222222222";
 const TAG_OBJECT: &str = "3333333333333333333333333333333333333333";
@@ -1315,7 +1318,7 @@ fn actual_workflow_authority_requires_a_completed_consistent_decision() {
             let root = temporary.path();
             fs::create_dir(root.join("controller-tool")).expect("fixture controller directory");
             let controller = root.join("controller-tool/lkjscript-release-controller");
-            fs::write(
+            workflow_fixture::write_adapter(
                 &controller,
                 br##"#!/bin/sh
 set -eu
@@ -1330,10 +1333,7 @@ if test -f "$RUNNER_TEMP/fixture-state.json"; then
 fi
 exit "$FIXTURE_EXIT"
 "##,
-            )
-            .expect("independent authority process adapter");
-            fs::set_permissions(&controller, fs::Permissions::from_mode(0o755))
-                .expect("adapter mode");
+            );
             if let Some(state) = state {
                 fs::write(root.join("fixture-state.json"), state)
                     .expect("controller state fixture");
@@ -1362,9 +1362,17 @@ exit "$FIXTURE_EXIT"
             if result.status.success() != expected || actual_output != expected_output {
                 mismatches.push(format!("{operation}/{label}: success={}, output={actual_output:?}, expected success={expected}, output={expected_output:?}", result.status.success()));
             }
+            let invocations = fs::read_to_string(root.join("invocations"));
+            assert!(
+                invocations.is_ok(),
+                "{operation}/{label}: trace={invocations:?}, status={}, stdout={:?}, stderr={:?}",
+                result.status,
+                String::from_utf8_lossy(&result.stdout),
+                String::from_utf8_lossy(&result.stderr)
+            );
             assert_eq!(
-                fs::read_to_string(root.join("invocations"))
-                    .expect("independent invocation trace")
+                invocations
+                    .expect("checked independent trace")
                     .lines()
                     .count(),
                 1
