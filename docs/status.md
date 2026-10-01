@@ -34,8 +34,11 @@ unchanged. Inspect the installed executable with `lkjscript capabilities`.
 ## Development v0.1.61
 
 The [v0.1.61 release notes](releases/v0.1.61.md) select owned data across ordinary
-libraries as the next binary milestone. Its own candidate/final-archive acceptance
-remains separate from source integration; public/latest is still v0.1.60.
+libraries as the next binary milestone. Candidate `36828457203/1` was dispatched
+on 2026-10-01 at 16:06:45 JST from exact source `c64f42dc66f0e7cc459c66cc83daad5d66821c1a`.
+Its candidate/final-archive acceptance is still pending; public/latest is v0.1.60.
+The [delivery continuation](campaigns/20261001-owned-products.md#mainline-delivery-and-candidate-invocation)
+records the completed source delivery and the observed CI boundary separately.
 
 The following capabilities are integrated source development, not a public v0.1.61
 binary or an automatic application upgrade.

@@ -413,3 +413,34 @@ maintained packages/applications, manifests or workflows. The presentation consu
 also passed its eight library tests and one command-line test, zero failures/ignored
 (`report-site.log`, exit 0). These are targeted descendant checks; the full receipt
 continues to name its original tested implementation source.
+
+## Mainline delivery and candidate invocation
+
+The actual remote branch and protections were refreshed before delivery. Main was
+still `87083128`, with no intervening commits, and no required branch check was
+bypassed. The accepted implementation and reporting descendant were fast-forwarded
+normally and pushed as lkjsxc. GitHub's main ref was independently read back as
+`c64f42dc66f0e7cc459c66cc83daad5d66821c1a`, tree
+`ba57510bc3c0ed0892ab8b7cd8f5b30f8d3284c0`. That reporting descendant contains
+exact tested implementation `0dadaed8`; its changes are the four documented Markdown
+owners only. Main's tracked files were clean and local HEAD/origin agreed. The two
+pre-existing untracked files, historical stash, unrelated worktrees and services
+remain unchanged. The isolated checkout retains its four untracked derived cache
+packs and original test artifacts; none was staged as authored source.
+
+Live GitHub run inventory showed no active candidate or duplicate newer producer,
+latest still selected immutable v0.1.60, and no v0.1.61 tag existed. One configured
+`operation=candidate` invocation was dispatched from integrated main. Producer
+`36828457203/1` started at **2026-10-01 16:06:45 JST**, bound to exact event source
+`c64f42dc66f0e7cc459c66cc83daad5d66821c1a` and `.github/workflows/release.yml`.
+The API reports `workflow_dispatch` and `in_progress`. At the observed boundary,
+checkout and pinned host toolchain setup had passed, while immutable host-tool
+production was running. Source-specific acceptance, finalized archive acceptance,
+essential handoff and terminal decision had not completed. Promotion/public jobs
+were intentionally skipped for this non-publishing invocation.
+
+`candidate-dispatch.log` and exit 0 retain the invocation, not candidate acceptance.
+Resume this exact producer/attempt rather than starting a duplicate. After its
+successful candidate terminal, the selected 18-case final-archive test remains
+mandatory before promotion. Public v0.1.60 is unchanged; no v0.1.61 publication,
+service replacement, credentials change or release-selector update is claimed.
