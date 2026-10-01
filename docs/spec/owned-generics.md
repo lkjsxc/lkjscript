@@ -117,7 +117,7 @@ Package interface generation 12 changes method/function layout; interface 10 and
 11 have separate frozen representations. In particular, interface-11 function,
 constant and component bytes are not interpreted using generation-12 enum tags.
 
-Current compilation uses compiler unit 16, bytecode 12 and artifact 23. Derived
+Current compilation uses compiler unit 17, bytecode 13 and artifact 24. Derived
 predecessor artifacts require rebuilding from supported accepted meaning; an old
 proof or compiler artifact does not silently become current permission. Authored
 owned-only requests retain codec 21; product-bearing requests select codec 22.

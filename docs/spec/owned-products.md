@@ -48,7 +48,7 @@ left unused drop at lexical exit; nested children transfer without cloning their
 storage. The operation has no partial-move form or borrowed owned-child projection.
 Unpacking a loan remains invalid.
 
-### Closed ordinary metadata reads (development 0.1.63 candidate)
+### Closed ordinary metadata reads (development 0.1.63)
 
 `(field (local packet) (name tag))` reads a closed ordinary field through a short
 whole-product read loan. The source must be an exact live owning local or a live
@@ -64,8 +64,8 @@ reference to product storage. Owned fields, missing fields, consumed locals and
 non-local product temporaries cannot use this operation. Bind an owned temporary
 explicitly before inspecting it. Ordinary record projections retain their behavior.
 
-The candidate implementation and its incomplete acceptance boundary are recorded
-in the [metadata continuation](../campaigns/20261001-owned-product-metadata.md).
+Accepted source, independent public witnesses and the separate distribution
+boundary are recorded in the [metadata continuation](../campaigns/20261001-owned-product-metadata.md).
 
 Unchanged native drafts retain accepted bodies. Same-kind literal-only edits traverse
 pack fields in authored order and unpack source/body slots, then compare the complete
@@ -116,7 +116,7 @@ when a function body only uses an old Local operation. Owner, package-interface 
 artifact type closures all enforce the generation boundary. Package interface 12
 keeps its existing layout. Old source generations retain their exact readers.
 
-The development 0.1.63 candidate selects compiler unit 17, bytecode 13 and artifact
+Development 0.1.63 uses compiler unit 17, bytecode 13 and artifact
 24 for metadata-read lowering and execution semantics. Graph 19, package interface
 12, authored request 22 and compact request/discovery 26 keep their layouts.
 Predecessor derived artifacts require rebuilding; frozen source acceptance is not
@@ -126,7 +126,7 @@ instruction forms. Authored request 22 and compact request/discovery 26 add expl
 type and operation forms; requests without this extension preserve earlier bytes,
 including empty optional setters. Semantic validator 20 and structural-owned-product
 feature revision 2 invalidate stale ownership proofs for metadata reads. This
-candidate is not an accepted source or public binary release.
+source acceptance does not establish a public binary release.
 
 See the [native guide](../guides/native-owned-products.md) and
 [campaign](../campaigns/20261001-owned-products.md) for literal programs, actual

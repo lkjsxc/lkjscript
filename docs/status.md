@@ -31,9 +31,9 @@ v0.1.60 does **not** include the v0.1.61 owned-memory and byte-range development
 below. Earlier immutable releases and genuine failed or superseded candidates remain
 unchanged. Inspect the installed executable with `lkjscript capabilities`.
 
-## Local candidate v0.1.63: ordinary metadata reads
+## Development v0.1.63: ordinary metadata reads
 
-An isolated, not-mainline candidate adds `(field (local packet) (name tag))` for
+Accepted source development adds `(field (local packet) (name tag))` for
 closed ordinary metadata in an owned product. It borrows the whole live product
 for the read and returns an ordinary value; the original owner is preserved for
 a subsequent move or complete unpack. Owned-child projection and temporary-product
@@ -45,12 +45,30 @@ execution, independent ownership, allocation/cancellation, retained metadata and
 consistently rehashed instruction attacks. A separate public CLI case passes exact
 two-package authoring, canonical drafts and detached execution after source deletion.
 The copied 0.1.62 predecessor rejects the same new literal program during planning.
-These are focused results, not fresh full-source acceptance or final-archive proof.
-Maintained native artifacts and current-envelope controls are regenerated through
-their existing owners before source acceptance. Source acceptance below still binds
-the previous exact 0.1.62 cut until the continuation records a new accepted source.
-All three product-number components retain their opaque identifier-only meaning.
-No public release, application-data migration or running-service change is implied.
+
+Fresh full-source acceptance passed on `c2c50d3adc4ecd17126f0decfac9e0022fe68ad0`
+(tree `fe8d73bbc4db5d8570f0c6104bfa5589db66a229`): all 26 gates freshly passed,
+zero reuse, no unrun gates and stable inputs. The workspace suite passed 1,475
+top-level tests with zero failures and 29 pre-existing ignored cases. The final
+copied host executable also passed all 19 selected owned-memory, byte-range and
+resident-policy cases with an empty environment/PATH except the candidate selector.
+An independently authored ByteBuffer/structured-metadata program preserved its
+metadata after parent consumption and source-moved execution at both I64 extremes.
+
+The four maintained native projects reproduce 144 packs, four unchanged accepted
+HEADs, 274 native tests and four byte-identical artifacts from tracked source.
+The final copied host verifies all eight generated reference pages. Compiler 17,
+bytecode 13 and artifact 24 require rebuilding predecessor derived artifacts;
+graph and application data are not rewritten. The [continuation](campaigns/20261001-owned-product-metadata.md#accepted-source-and-independent-public-witness)
+retains exact receipts and failed predecessors. Subsequent reporting changes do
+not relabel that tested source.
+
+The [0.1.63 notes](releases/v0.1.63.md) select one consolidated candidate for the
+unpublished owned-data, numbering and metadata work. The failed 0.1.61 producer is
+superseded, not accepted. Final-archive acceptance, its 19-case supplementary gate
+and publication remain separate. Public/latest stays v0.1.60; no application-data
+migration or running-service change is implied. All product-number components
+retain their opaque identifier-only meaning.
 
 ## Development v0.1.62: opaque product numbering
 
@@ -87,8 +105,9 @@ This is source acceptance, not a new public release or finalized static-archive 
 
 ## Integrated v0.1.61 language development
 
-The [v0.1.61 release notes](releases/v0.1.61.md) select owned data across ordinary
-libraries as the next binary milestone. Candidate `36828457203/1` was dispatched
+The earlier [v0.1.61 release notes](releases/v0.1.61.md) selected owned data across
+ordinary libraries; consolidated v0.1.63 now owns the next binary candidate.
+Candidate `36828457203/1` was dispatched
 on 2026-10-01 at 16:06:45 JST from exact source `c64f42dc66f0e7cc459c66cc83daad5d66821c1a`.
 It ended in failure at 16:48:51 JST: all 20 source gates passed, but the source
 checker rejected `worktree_changed_during_run`. No candidate/final-archive acceptance

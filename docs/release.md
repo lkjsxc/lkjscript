@@ -390,7 +390,7 @@ A forged summary, omitted/skipped/failed stage, cancellation or incomplete clean
 candidate acceptance. Diagnostic originals need not be relocatable; portability applies to the
 admitted terminal decision under authenticated service provenance, not arbitrary filesystem replay.
 
-## Selected v0.1.61 successor
+## Superseded v0.1.61 candidate
 
 The [owned-data notes](releases/v0.1.61.md) combine byte ranges, concrete affine
 storage, symbolic Owned parameters, exact static witnesses and structural owned
@@ -408,6 +408,32 @@ from that accepted archive, with cleared environment/PATH apart from the explici
 candidate selector. Development-binary results do not satisfy that final-byte gate.
 No selection authorizes changing credentials, protections, immutability or existing
 tags. Candidate dispatch and actual terminal results are recorded by the campaign.
+
+## Selected consolidated 0.1.63 successor
+
+The [0.1.63 notes](releases/v0.1.63.md) consolidate owned storage, byte views,
+explicit Owned abstraction, structural products, opaque numbering, corrected native
+input inventory and ordinary metadata inspection. Source
+`c2c50d3adc4ecd17126f0decfac9e0022fe68ad0` passed all 26 full-profile gates freshly
+with stable inputs, zero reuse, 1,475 workspace tests passed and 29 existing ignored.
+The [continuation](campaigns/20261001-owned-product-metadata.md) retains the failed
+source attempts, exact source/tree, copied-host observations and actual delivery.
+
+The frozen 0.1.61 producer `36828457203/1` failed source stability and supplies no
+accepted final archive. Its separate publication is superseded by this corrected
+consolidated selection; immutable releases and failed evidence are unchanged.
+No 0.1.63 tag, release or healthy matching producer existed at selection.
+
+After mainline integration, dispatch one normal non-publishing candidate at the
+exact event source. It must complete the existing source/final-archive/installation
+workflow. Before promotion, run all **19** cases selected by `native_owned_`,
+`native_byte_buffer_`, `native_byte_ranges_` and `resident_policy` against the exact
+executable extracted from that accepted archive, with cleared environment/PATH
+except its explicit candidate selector. The nineteenth case is the cross-package
+metadata read. Preserve original harness and executable identities; a host-development
+binary or source-only result does not satisfy this final-byte gate. Do not alter
+credentials, protection, immutable tags or prior assets. Public/latest remains
+v0.1.60 until accepted assets are explicitly selected and promoted.
 
 ## Build and accept a candidate
 

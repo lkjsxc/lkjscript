@@ -38,9 +38,9 @@ released at exit. A borrowed product cannot be unpacked or expose an owned child
 
 ## Inspecting metadata without dismantling the owner
 
-Development 0.1.63 has an unaccepted metadata-read candidate. Its focused prototype
-passed, but the extended public workflow and changed contracts still need acceptance;
-see the [continuation](../campaigns/20261001-owned-product-metadata.md).
+Development 0.1.63 adds metadata reads. The [continuation](../campaigns/20261001-owned-product-metadata.md)
+records accepted source, copied-product public workflows and the separate binary
+publication boundary. This feature is not in public v0.1.60.
 
 ```text
 (function create tag (visibility public) (effect pure)
@@ -58,7 +58,7 @@ borrow through a second generic helper. The separate
 [consumer literal](../../tests/fixtures/owned-products-read-consumer.lkjc) exercises
 an imported helper and later consumes the original payload. The added public test
 specifies canonical draft re-entry, exact package transport and detached execution;
-its completion is not yet claimed.
+it passes through the copied optimized development executable.
 
 `(name tag)` is a structural selector. A bare member is a nominal record selector.
 Selecting `payload` here is rejected because it owns memory. Reading metadata from
