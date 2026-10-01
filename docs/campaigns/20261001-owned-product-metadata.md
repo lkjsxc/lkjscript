@@ -176,3 +176,44 @@ archive. Before any promotion, its exact extracted executable must pass the
 19-case supplementary gate in [release policy](../release.md#selected-consolidated-0163-successor).
 Public/latest remains immutable v0.1.60. No running service, operational data,
 credentials, permissions or existing publication identity is changed.
+
+## Completed mainline delivery and candidate invocation
+
+The reporting changes passed their maintained `check changed` selection: all six
+selected gates freshly passed, zero reuse, stable inputs. Receipt
+`.artifacts/lkjscript-dev/check/1790861077741684597-1007780-0/receipt.json`
+is 16,349 bytes, digest
+`verification_8c7257ae1bfc7c36a9c3880a4e3f79ac7822a5c3a5be1d48dd364cb6a934968b`.
+This checks the documentation/reporting worktree over `c2c50d3a`; it does not relabel
+the earlier full-source receipt. Those exact changes became
+`b5d7c75b02212c3acc7404ceff2d97f290c32e46`, tree
+`81a65c729504caeb4de7706ef213b6b26e355685`.
+
+After refreshing origin and observing no required branch protection or active
+ruleset, the main checkout fast-forwarded from `ff7cdce3` to `b5d7c75b`. A normal
+push delivered the three commits without rewriting history. An independent GitHub
+ref read confirmed that exact main SHA; local main and origin/main matched, with
+no tracked changes. The two unrelated untracked files, old stash, other worktrees,
+retained evidence and unrelated running services were preserved.
+
+A fresh release-run and exact-tag inventory still contained no healthy matching
+0.1.63 producer, tag or release. One normal non-publishing dispatch was issued:
+
+```sh
+gh workflow run release.yml --repo lkjsxc/lkjscript --ref main -f operation=candidate
+```
+
+GitHub assigned [run 36869518385](https://github.com/lkjsxc/lkjscript/actions/runs/36869518385),
+attempt 1, created 2026-10-01 at 22:33:11 JST. Independent run metadata confirmed
+workflow `.github/workflows/release.yml`, main event source
+`b5d7c75b02212c3acc7404ceff2d97f290c32e46` and status `in_progress`.
+This is the actual candidate invocation, not candidate acceptance or publication.
+Its event source is a documentation-only descendant of accepted source `c2c50d3a`;
+the source-specific CI proof still belongs to that exact run and attempt.
+
+The final reporting-only descendant records delivery and this observed CI boundary;
+it does not change or restart the frozen producer. On resumption, inspect this
+same run/attempt first. Only an accepted terminal followed by the documented
+19-case exact-final-archive gate can authorize promotion. A failed or interrupted
+run must retain its original failure and be diagnosed at its actual failed boundary.
+No public 0.1.63 release or completed final-archive acceptance is claimed here.
