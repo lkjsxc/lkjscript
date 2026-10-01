@@ -742,6 +742,78 @@ impl Machine<'_> {
                     let value = self.pop()?;
                     self.set_local(local, Some(value))?;
                 }
+                NormalizedInstruction::PackOwned {
+                    product_type,
+                    fields,
+                } => {
+                    let ty = self.resolve_type_arguments(&[product_type])?[0];
+                    let values = self.pop_many(fields.len())?;
+                    let field_types = self.product_field_types(ty)?;
+                    if field_types.len() != fields.len() {
+                        return Err(type_error("product field count mismatch"));
+                    }
+                    self.charge_allocation(super::value::collection_storage_bytes(
+                        fields.len() as u64,
+                        std::mem::size_of::<(u32, NormalizedValue)>() as u64,
+                        "normalized_product_allocation",
+                    )?)?;
+                    self.control.check()?;
+                    let mut ordered = Vec::with_capacity(fields.len());
+                    for (index, value) in fields.iter().copied().zip(values) {
+                        let field_type = *field_types
+                            .get(index as usize)
+                            .ok_or_else(|| type_error("unknown product field"))?;
+                        let value = self.product_child(value.into_raw(), field_type)?;
+                        ordered.push((index, value.into_raw()));
+                    }
+                    ordered.sort_unstable_by_key(|(index, _)| *index);
+                    if ordered
+                        .iter()
+                        .enumerate()
+                        .any(|(i, (j, _))| i != *j as usize)
+                    {
+                        return Err(type_error("duplicate product field"));
+                    }
+                    self.charge_allocation(super::value::collection_storage_bytes(
+                        ordered.len() as u64,
+                        std::mem::size_of::<NormalizedValue>() as u64,
+                        "normalized_product_allocation",
+                    )?)?;
+                    self.control.check()?;
+                    let children = ordered.into_iter().map(|(_, v)| v).collect();
+                    let control = self.control;
+                    let token = super::owned_product::OwnedProduct::create(
+                        self.memory_domain,
+                        ty,
+                        children,
+                        control,
+                        &mut |n| self.charge_allocation(n),
+                    )?;
+                    let value =
+                        CheckedValue::memory(self.program, NormalizedValue::OwnedProduct(token))?;
+                    self.push(value)?;
+                }
+                NormalizedInstruction::UnpackOwned {
+                    product_type,
+                    locals,
+                } => {
+                    let ty = self.resolve_type_arguments(&[product_type])?[0];
+                    let types = self.product_field_types(ty)?;
+                    if types.len() != locals.len() {
+                        return Err(type_error("incomplete product unpack"));
+                    }
+                    let NormalizedValue::OwnedProduct(token) = self.pop()?.into_raw() else {
+                        return Err(type_error("unpack requires product token"));
+                    };
+                    let values = token.unpack(self.memory_domain, ty, self.control)?;
+                    if values.len() != types.len() {
+                        return Err(type_error("product storage shape mismatch"));
+                    }
+                    for ((local, ty), value) in locals.iter().zip(types).zip(values) {
+                        let value = self.product_child(value, ty)?;
+                        self.set_local(*local, Some(value))?;
+                    }
+                }
                 NormalizedInstruction::Drop => {
                     self.pop()?;
                 }
@@ -1197,7 +1269,7 @@ impl Machine<'_> {
                     if let Some(function) = self.current_frame()?.function {
                         let f = &self.program.functions[function.0 as usize];
                         let memory_form = direct_memory_type(
-                            &self.program.types,
+                            self.program,
                             f.result,
                             &self.current_frame()?.type_arguments,
                         )?;
@@ -1243,6 +1315,47 @@ impl Machine<'_> {
                     self.push(result)?;
                 }
             }
+        }
+    }
+
+    fn product_field_types(
+        &mut self,
+        ty: TypeObjectDigest,
+    ) -> Result<Vec<TypeObjectDigest>, ExecutionError> {
+        let Some(crate::platform::kernel::TypeObject {
+            form: TypeForm::OwnedProduct { fields },
+            ..
+        }) = self.program.types.get(&ty)
+        else {
+            return Err(type_error("missing closed product type"));
+        };
+        let count = fields.len();
+        self.charge_allocation(super::value::collection_storage_bytes(
+            count as u64,
+            std::mem::size_of::<TypeObjectDigest>() as u64,
+            "normalized_product_allocation",
+        )?)?;
+        self.control.check()?;
+        let TypeForm::OwnedProduct { fields } = &self.program.types[&ty].form else {
+            return Err(type_error("missing product type"));
+        };
+        Ok(fields.iter().map(|f| f.ty).collect())
+    }
+
+    fn product_child(
+        &mut self,
+        raw: NormalizedValue,
+        ty: TypeObjectDigest,
+    ) -> Result<CheckedValue, ExecutionError> {
+        let expected = direct_memory_type(self.program, ty, &BTreeMap::new())?;
+        if let Some(expected) = expected {
+            if raw.memory_form() != Some(expected) {
+                return Err(type_error("owned product child type mismatch"));
+            }
+            raw.memory_validate(self.memory_domain, true)?;
+            CheckedValue::memory(self.program, raw)
+        } else {
+            self.admit(raw, ty, None, false)
         }
     }
 
@@ -1615,7 +1728,11 @@ impl Machine<'_> {
             .any(|(constraint, ty)| match constraint {
                 crate::platform::kernel::TypeParameterConstraints::Owned => !matches!(
                     self.program.types.get(ty).map(|t| &t.form),
-                    Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell)
+                    Some(
+                        TypeForm::ByteBuffer
+                            | TypeForm::OwnedI64Cell
+                            | TypeForm::OwnedProduct { .. }
+                    )
                 ),
                 crate::platform::kernel::TypeParameterConstraints::None => {
                     !self.program.buffer_free_types.contains(ty)
@@ -1757,7 +1874,7 @@ impl Machine<'_> {
     ) -> Result<(), ExecutionError> {
         let mut uses = BTreeMap::new();
         for (parameter, argument) in function.parameters.iter().zip(arguments) {
-            let memory_form = direct_memory_type(&self.program.types, parameter.ty, substitutions)?;
+            let memory_form = direct_memory_type(self.program, parameter.ty, substitutions)?;
             if memory_form.is_some() {
                 if !matches!(
                     function.effect,
@@ -2410,7 +2527,9 @@ fn value_cost(value: &NormalizedValue) -> Result<(u64, u64), ExecutionError> {
     let mut items = 0_u64;
     while let Some(value) = pending.pop() {
         match value {
-            NormalizedValue::ByteBuffer(_) | NormalizedValue::OwnedI64Cell(_) => {
+            NormalizedValue::ByteBuffer(_)
+            | NormalizedValue::OwnedI64Cell(_)
+            | NormalizedValue::OwnedProduct(_) => {
                 return Err(ExecutionError::resource(
                     "normalized_buffer_boundary",
                     "ByteBuffer cannot cross raw/adapter boundaries",
@@ -3672,18 +3791,26 @@ fn runtime_error(code: &'static str, message: &'static str) -> ExecutionError {
 }
 
 fn direct_memory_type(
-    types: &BTreeMap<TypeObjectDigest, crate::platform::kernel::TypeObject>,
+    program: &NormalizedProgram,
     mut ty: TypeObjectDigest,
     substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
-) -> Result<Option<TypeForm>, ExecutionError> {
+) -> Result<Option<super::value::MemoryForm>, ExecutionError> {
     for _ in 0..=substitutions.len() {
-        match &types
+        match &program
+            .types
             .get(&ty)
             .ok_or_else(|| type_error("missing direct memory type metadata"))?
             .form
         {
-            TypeForm::ByteBuffer => return Ok(Some(TypeForm::ByteBuffer)),
-            TypeForm::OwnedI64Cell => return Ok(Some(TypeForm::OwnedI64Cell)),
+            TypeForm::ByteBuffer => return Ok(Some(super::value::MemoryForm::ByteBuffer)),
+            TypeForm::OwnedI64Cell => return Ok(Some(super::value::MemoryForm::OwnedI64Cell)),
+            TypeForm::OwnedProduct { .. } => {
+                return Ok(Some(super::value::MemoryForm::Product(
+                    program
+                        .substitute_type(ty, substitutions, 0)
+                        .ok_or_else(|| type_error("unclosed product type"))?,
+                )));
+            }
             TypeForm::TypeParameter { parameter } => {
                 ty = *substitutions
                     .get(parameter)

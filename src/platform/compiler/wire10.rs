@@ -669,7 +669,9 @@ impl TryFrom<CompiledInstruction> for CompiledInstruction10 {
             | CompiledInstruction::CommitTransactionOutcome { .. }
             | CompiledInstruction::ImplementationCall { .. }
             | CompiledInstruction::MethodCall { .. }
-            | CompiledInstruction::F64(_) => return Err(extension()),
+            | CompiledInstruction::F64(_)
+            | CompiledInstruction::PackOwned { .. }
+            | CompiledInstruction::UnpackOwned { .. } => return Err(extension()),
         })
     }
 }

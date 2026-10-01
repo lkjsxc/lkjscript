@@ -122,3 +122,7 @@ for the full fresh 26-gate source result, reproducibility, costs and delivery bo
 The Owned-generic compiler refresh regenerates this derived artifact through the
 public build owner while preserving accepted HEAD and its exact standard supplier.
 The generated reference pages continue to be owned by this native program.
+
+The owned-product continuation rebuilds this same accepted program for compiler 16,
+bytecode 12 and artifact 23. Public `capabilities --generate-docs` regenerates the
+reference, including the product syntax and current admission diagnostics.

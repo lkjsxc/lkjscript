@@ -759,6 +759,15 @@ fn validate_interface_dependencies(
             )
         })?;
         for ty in interface.type_objects.values() {
+            if revision.graph_contract_version < 19
+                && matches!(ty.form, TypeForm::OwnedProduct { .. })
+            {
+                return Err(package_error(
+                    DiagnosticClass::Semantic,
+                    "kernel_product_generation",
+                    "owned product package interface requires Graph 19",
+                ));
+            }
             if let TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } = ty.form
             {
                 closure.require_owner(

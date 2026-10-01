@@ -48,16 +48,16 @@ use std::fmt;
 #[path = "artifact_code.rs"]
 mod code_admission;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-22";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-22";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 22;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF22";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART22";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN22";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-23";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-23";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 23;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF23";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART23";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN23";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v22";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v22";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v22";
+    "lkjscript.artifact-manifest-envelope.v23";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v23";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v23";
 pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v18";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
@@ -422,7 +422,13 @@ impl ArtifactManifest {
                     self.compiler_contract_version,
                     self.bytecode_contract_version
                 ),
-                (14, 10, 6) | (15, 11, 7) | (16, 12, 8) | (17, 13, 9) | (17, 14, 10) | (18, 15, 11)
+                (14, 10, 6)
+                    | (15, 11, 7)
+                    | (16, 12, 8)
+                    | (17, 13, 9)
+                    | (17, 14, 10)
+                    | (18, 15, 11)
+                    | (19, 16, 12)
             )
             || self.compilation_manifest_contract_version != COMPILATION_MANIFEST_CONTRACT_VERSION
         {
@@ -1525,6 +1531,7 @@ impl RuntimeOwnerExpectation {
 pub(crate) fn runtime_owner_expectations(
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
     inventory_steps: &mut u64,
+    mut type_object: impl FnMut(TypeObjectDigest) -> Result<TypeObject, Diagnostic>,
     mut checkpoint: impl FnMut() -> Result<(), Diagnostic>,
 ) -> Result<BTreeMap<(PackageId, OwnerKey), RuntimeOwnerExpectation>, Diagnostic> {
     let mut method_targets = BTreeSet::new();
@@ -1766,6 +1773,7 @@ pub(crate) fn runtime_owner_expectations(
                     .any(|p| p.use_mode != crate::platform::kernel::ParameterUse::Unrestricted)
                     || memory_result_type(
                         unit.tables.types.get(signature.result as usize).copied(),
+                        &mut type_object,
                     )?
                 {
                     insert_runtime_expectation(
@@ -1807,6 +1815,7 @@ pub(crate) fn runtime_owner_expectations(
                     })
                     || memory_result_type(
                         unit.tables.types.get(signature.result as usize).copied(),
+                        &mut type_object,
                     )?
                 {
                     let parameters = signature
@@ -2420,6 +2429,7 @@ fn trace_object_closure(
     let mut units = BTreeMap::<(PackageId, OwnerKey), CompilationUnit>::new();
     let mut type_roots = BTreeSet::new();
     let mut predecessor_type_roots = BTreeSet::new();
+    let mut preproduct_type_roots = BTreeSet::new();
     let mut predecessor_packages = BTreeSet::new();
     let mut blobs = BTreeMap::new();
     let mut interfaces = BTreeMap::new();
@@ -2523,6 +2533,9 @@ fn trace_object_closure(
                         ));
                     }
                     type_roots.extend(unit.tables.types.iter().copied());
+                    if unit.graph_contract_version < 19 || revision.graph_contract_version < 19 {
+                        preproduct_type_roots.extend(unit.tables.types.iter().copied());
+                    }
                     if unit.graph_contract_version < 17 || revision.graph_contract_version < 17 {
                         predecessor_type_roots.extend(unit.tables.types.iter().copied());
                     }
@@ -2610,6 +2623,15 @@ fn trace_object_closure(
             &mut store_work,
         )?;
         let object = decode_type_object(&bytes, digest)?;
+        if manifest.graph_contract_version < 19
+            && matches!(object.form, TypeForm::OwnedProduct { .. })
+        {
+            return Err(artifact_error(
+                DiagnosticClass::Semantic,
+                "kernel_product_generation",
+                "owned product artifacts require Graph 19",
+            ));
+        }
         if manifest.graph_contract_version < 17 && matches!(object.form, TypeForm::F64) {
             return Err(f64_generation_error());
         }
@@ -2641,6 +2663,7 @@ fn trace_object_closure(
     }
     validate_loaded_http_route_requirement_closure(&units, &runtime_owners, &types)?;
     validate_predecessor_type_closure(predecessor_type_roots, &types)?;
+    validate_product_generation_closure(preproduct_type_roots, &types)?;
     validate_artifact_nominal_meaning(
         manifest,
         &units,
@@ -3891,7 +3914,20 @@ fn validate_runtime_owners(
     work: &mut StoreWork,
     inventory_steps: &mut u64,
 ) -> Result<BTreeMap<(PackageId, OwnerKey), OwnerRecord>, Diagnostic> {
-    let expected = runtime_owner_expectations(units, inventory_steps, || Ok(()))?;
+    let expected = runtime_owner_expectations(
+        units,
+        inventory_steps,
+        |ty| {
+            let bytes = required_object(
+                store,
+                ObjectKey::from_digest(ObjectDomain::Type, ty.bytes()),
+                "missing runtime result type",
+                work,
+            )?;
+            decode_type_object(&bytes, ty)
+        },
+        || Ok(()),
+    )?;
     let package_ids = manifest
         .packages
         .iter()
@@ -4411,6 +4447,9 @@ fn reference_expression_bindings(operation: &ExpressionOperation) -> Vec<Binding
         ExpressionOperation::Let {
             bindings: declared, ..
         } => bindings.extend(declared.iter().copied()),
+        ExpressionOperation::UnpackOwned { fields, .. } => {
+            bindings.extend(fields.iter().map(|field| field.binding))
+        }
         ExpressionOperation::Match { arms, .. } => bindings.extend(
             arms.iter()
                 .filter_map(|arm| arm.payload_binding)
@@ -4760,18 +4799,58 @@ pub(crate) fn artifact_error(
     Diagnostic::new(class, code, message)
 }
 
-fn memory_result_type(ty: Option<TypeObjectDigest>) -> Result<bool, Diagnostic> {
-    for form in [TypeForm::ByteBuffer, TypeForm::OwnedI64Cell] {
-        if ty
-            == Some(
-                crate::platform::kernel::encode_type_object(
-                    &crate::platform::kernel::TypeObject::new(form)?,
-                )?
-                .0,
-            )
-        {
-            return Ok(true);
+fn memory_result_type(
+    ty: Option<TypeObjectDigest>,
+    read: &mut impl FnMut(TypeObjectDigest) -> Result<TypeObject, Diagnostic>,
+) -> Result<bool, Diagnostic> {
+    let ty = ty.ok_or_else(|| {
+        artifact_error(
+            DiagnosticClass::Corrupt,
+            "artifact_memory_result_type",
+            "missing result type index",
+        )
+    })?;
+    Ok(matches!(
+        read(ty)?.form,
+        TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. }
+    ))
+}
+
+fn validate_product_generation_closure(
+    mut pending: BTreeSet<TypeObjectDigest>,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+) -> Result<(), Diagnostic> {
+    let mut seen = BTreeSet::new();
+    let mut work = 0usize;
+    while let Some(ty) = pending.pop_first() {
+        if !seen.insert(ty) {
+            continue;
         }
+        let object = types.get(&ty).ok_or_else(|| {
+            artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_product_type",
+                "missing graph-bound type",
+            )
+        })?;
+        work = work
+            .checked_add(object.child_type_count() + 1)
+            .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
+            .ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Resource,
+                    "artifact_product_work",
+                    "product generation closure exhausted admission work",
+                )
+            })?;
+        if matches!(object.form, TypeForm::OwnedProduct { .. }) {
+            return Err(artifact_error(
+                DiagnosticClass::Semantic,
+                "kernel_product_generation",
+                "product type closure requires Graph 19 source",
+            ));
+        }
+        pending.extend(object.child_types());
     }
-    Ok(false)
+    Ok(())
 }

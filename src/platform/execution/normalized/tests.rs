@@ -43,6 +43,8 @@ mod bytes_tests;
 mod owned_closure_tests;
 #[path = "owned_generic_tests.rs"]
 mod owned_generic_tests;
+#[path = "owned_product_tests.rs"]
+mod owned_product_tests;
 
 #[path = "local_moves_value_tests.rs"]
 mod local_moves_value_tests;
@@ -86,7 +88,7 @@ fn graph14_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
     );
     assert_eq!(
         crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-        18
+        19
     );
     assert_eq!(
         crate::platform::kernel::contract::TYPE_OBJECT_CONTRACT_VERSION,

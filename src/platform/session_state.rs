@@ -253,6 +253,7 @@ pub(super) fn validate<R: SessionShapeRead>(
             | TypeForm::Result { .. }
             | TypeForm::ByteBuffer
             | TypeForm::OwnedI64Cell
+            | TypeForm::OwnedProduct { .. }
             | TypeForm::CapabilityResource { .. }
             | TypeForm::Stream { .. }
             | TypeForm::Function { .. }

@@ -15,6 +15,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 #[path = "prepared_implementations.rs"]
 mod implementations;
+#[path = "prepared_product_depth.rs"]
+mod product_depth;
 
 type Context = (FunctionIndex, Vec<TypeObjectDigest>);
 type EffectBindings =
@@ -89,7 +91,7 @@ impl<'a> Budget<'a> {
     fn cloned_type(&mut self, object: &TypeObject) -> Result<(), Diagnostic> {
         // Charge variable storage before cloning the canonical expression of a type.
         match &object.form {
-            TypeForm::StructuralRecord { fields } => {
+            TypeForm::StructuralRecord { fields } | TypeForm::OwnedProduct { fields } => {
                 self.reserve::<crate::platform::kernel::StructuralTypeField>(fields.len())?;
                 for field in fields {
                     step(self)?;
@@ -287,6 +289,7 @@ fn complete_budgeted(
         }
     }
     complete_nominal_layouts(program, work)?;
+    product_depth::validate(&program.types, work)?;
     program.work.type_objects = program.types.len() as u64;
     program.capture_safe_types = property_types(program, work, Property::Capture)?;
     program.ordinary_types = property_types(program, work, Property::Ordinary)?;
@@ -667,7 +670,9 @@ fn property_types(
             Ok(())
         };
         match &object.form {
-            TypeForm::ByteBuffer | TypeForm::OwnedI64Cell if property == Property::BufferFree => {
+            TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. }
+                if property == Property::BufferFree =>
+            {
                 admitted = false
             }
             _ if property == Property::BufferFree => {
@@ -680,6 +685,7 @@ fn property_types(
             }
             TypeForm::ByteBuffer
             | TypeForm::OwnedI64Cell
+            | TypeForm::OwnedProduct { .. }
             | TypeForm::Secret
             | TypeForm::Stream { .. }
             | TypeForm::CapabilityResource { .. }
@@ -699,6 +705,7 @@ fn property_types(
             | TypeForm::TaskFunction { .. }
             | TypeForm::ByteBuffer
             | TypeForm::OwnedI64Cell
+            | TypeForm::OwnedProduct { .. }
             | TypeForm::Secret
             | TypeForm::Stream { .. }
             | TypeForm::CapabilityResource { .. }
@@ -783,6 +790,11 @@ fn calls(
 ) -> Result<(), Diagnostic> {
     for instruction in code.instructions.iter() {
         step(work)?;
+        if let NormalizedInstruction::PackOwned { product_type, .. }
+        | NormalizedInstruction::UnpackOwned { product_type, .. } = instruction
+        {
+            substitute(types, *product_type, bindings, 0, work)?;
+        }
         let nominal: Option<(_, _, &[TypeObjectDigest])> = match instruction {
             NormalizedInstruction::Record {
                 layout: Some(layout),
@@ -876,6 +888,18 @@ fn missing() -> Diagnostic {
         "normalized_instantiation_scope",
         "prepared type closure has a missing exact type, function, or substitution",
     )
+}
+
+#[cfg(test)]
+pub(super) fn check_product_substitution(
+    mut types: BTreeMap<TypeObjectDigest, TypeObject>,
+    ty: TypeObjectDigest,
+    bindings: BTreeMap<TypeParameterId, TypeObjectDigest>,
+) -> Result<(), Diagnostic> {
+    let control = crate::platform::execution::ExecutionControl::uncancelled();
+    let mut work = Budget::new(&control);
+    substitute(&mut types, ty, &bindings, 0, &mut work)?;
+    product_depth::validate(&types, &mut work)
 }
 
 /// Effect applications have a finite exact requirement universe. Ordinary type applications
@@ -1062,6 +1086,17 @@ fn close_effect_applications(
                                 self.work,
                             )?;
                         }
+                    }
+                    NormalizedInstruction::PackOwned { product_type, .. }
+                    | NormalizedInstruction::UnpackOwned { product_type, .. } => {
+                        *product_type = substitute_effect_type(
+                            self.types,
+                            *product_type,
+                            bindings,
+                            requirements,
+                            0,
+                            self.work,
+                        )?;
                     }
                     NormalizedInstruction::Record { type_arguments, .. }
                     | NormalizedInstruction::Variant { type_arguments, .. } => {
@@ -1390,7 +1425,7 @@ fn substitute_effect_type(
                 descend(ty)?;
             }
         }
-        TypeForm::StructuralRecord { fields } => {
+        TypeForm::StructuralRecord { fields } | TypeForm::OwnedProduct { fields } => {
             for field in fields {
                 descend(&mut field.ty)?;
             }
@@ -1447,7 +1482,7 @@ fn substitute(
         TypeForm::TypeParameter { parameter } => {
             return bindings.get(parameter).copied().ok_or_else(missing);
         }
-        TypeForm::StructuralRecord { fields } => {
+        TypeForm::StructuralRecord { fields } | TypeForm::OwnedProduct { fields } => {
             for field in fields {
                 descend(&mut field.ty)?;
             }

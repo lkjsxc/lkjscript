@@ -80,6 +80,22 @@ These are cumulative admission charges, not allocator size classes, RSS or
 live-heap measurements. The [continuation](campaigns/20261001-owned-storage-admission.md)
 retains the failed predecessor controls and exact-source verification.
 
+### Structural owned products (integration pending)
+
+The current isolated implementation adds explicit fixed named products, consuming
+construction from live locals and complete lexical decomposition. Products compose
+one or more Owned payloads with closed ordinary metadata, including nested products,
+whole synchronous borrows and exact implementation witnesses. Product ownership is
+explicit; ordinary records and containers retain their existing contracts. Open
+ordinary metadata parameters, partial moves and field borrows remain outside this
+slice. See the [specification](spec/owned-products.md),
+[native guide](guides/native-owned-products.md) and
+[implementation evidence](campaigns/20261001-owned-products.md).
+
+This work has not been integrated or released. Its derived compiler/artifact cut
+requires rebuilding retained source; historical source and immutable releases remain
+unchanged. Final full acceptance belongs to the main integrator.
+
 ## Current authority and maintained consumers
 
 The accepted typed meaning graph is the sole editable program authority. Native

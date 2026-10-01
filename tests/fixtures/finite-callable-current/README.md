@@ -3,7 +3,7 @@
 These two deliberately invalid artifacts preserve the canonical source and
 instructions of `../finite-callable-predecessor/expanding-{direct,named}.lkja`.
 Only derived compiler-unit, compilation-map/manifest, pack and artifact envelopes
-are re-encoded for graph 18 / compiler 15 / bytecode 11 / artifact 22.
+are re-encoded for graph 19 / compiler 16 / bytecode 12 / artifact 23.
 
 The test-only owner is
 `platform::compiler::tests::effect_tests::strict_artifact_rejects_fully_rehashed_expanding_canonical_applications`.

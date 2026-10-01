@@ -34,7 +34,9 @@ impl Value {
     ) -> Result<Self, ExecutionError> {
         if !matches!(
             datum,
-            NormalizedValue::ByteBuffer(_) | NormalizedValue::OwnedI64Cell(_)
+            NormalizedValue::ByteBuffer(_)
+                | NormalizedValue::OwnedI64Cell(_)
+                | NormalizedValue::OwnedProduct(_)
         ) {
             return Err(reject("memory constructor requires a sealed token"));
         }
@@ -296,6 +298,7 @@ impl Value {
                     ty.form,
                     TypeForm::ByteBuffer
                         | TypeForm::OwnedI64Cell
+                        | TypeForm::OwnedProduct { .. }
                         | TypeForm::CapabilityResource { .. }
                 )
             }) {
@@ -510,6 +513,7 @@ impl ReferenceState<'_> {
                         ty.form,
                         TypeForm::ByteBuffer
                             | TypeForm::OwnedI64Cell
+                            | TypeForm::OwnedProduct { .. }
                             | TypeForm::CapabilityResource { .. }
                     )
                 }) {
@@ -842,6 +846,7 @@ impl ReferenceState<'_> {
                                             ty.form,
                                             TypeForm::ByteBuffer
                                                 | TypeForm::OwnedI64Cell
+                                                | TypeForm::OwnedProduct { .. }
                                                 | TypeForm::CapabilityResource { .. }
                                         )
                                     });
@@ -1345,7 +1350,11 @@ impl ReferenceState<'_> {
                 crate::platform::kernel::TypeParameterConstraints::Owned
                     if !matches!(
                         self.schema.types.get(ty).map(|t| &t.form),
-                        Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell)
+                        Some(
+                            TypeForm::ByteBuffer
+                                | TypeForm::OwnedI64Cell
+                                | TypeForm::OwnedProduct { .. }
+                        )
                     ) =>
                 {
                     return Err(reject("Owned requires an exact closed owned type"));
@@ -1669,6 +1678,7 @@ impl ReferenceState<'_> {
                 | TypeForm::Stream { .. }
                 | TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell
+                | TypeForm::OwnedProduct { .. }
                 | TypeForm::CapabilityResource { .. }
                 | TypeForm::TypeParameter { .. } => {
                     return Err(reject(

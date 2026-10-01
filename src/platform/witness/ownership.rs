@@ -216,6 +216,17 @@ pub(crate) fn ownership_contributions(
                 )?;
             }
             match &record.operation {
+                ExpressionOperation::UnpackOwned { fields, .. } => {
+                    for (ordinal, field) in fields.iter().enumerate() {
+                        insert_binding_parent(
+                            &mut ownership,
+                            field.binding,
+                            record.id,
+                            BindingContainerRole::OwnedUnpack,
+                            ordinal,
+                        )?;
+                    }
+                }
                 ExpressionOperation::Let { bindings, .. } => {
                     for (ordinal, binding) in bindings.iter().enumerate() {
                         insert_binding_parent(

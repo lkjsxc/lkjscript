@@ -2,6 +2,81 @@
 use super::*;
 
 #[test]
+fn owned_products_literal_edits_preserve_scope_and_cannot_hide_annotation_changes() {
+    let fixture = Fixture::from_source(
+        r#"declarations.begin
+(units (module create products (as $module)
+  (function create metadata (as $function) (visibility public) (effect pure)
+    (type-parameter create T (constraint owned))
+    (parameter create data (type T) (use consume)) (returns I64)
+    (body (let
+      (binding packet (type (owned-product (field data T) (field tag I64)))
+        (pack-owned (type (owned-product (field data T) (field tag I64)))
+          (field tag (i64 7)) (field data (local data))))
+      (in (unpack-owned (type (owned-product (field data T) (field tag I64))) (local packet)
+        (field data (binding unused (type T))) (field tag (binding tag (type I64)))
+        (in (local tag)))))))
+  (function create neighbor (as $neighbor) (visibility private) (effect pure)
+    (returns Text) (body (text "neighbor")))
+  (constant create marker (as $marker) (visibility private) (type I64) (value (i64 99)))))
+declarations.end"#,
+    );
+    let original = fixture.draft();
+    assert!(original.contains("(field tag I64)"));
+    let changed = original.replace("(i64 7)", "(i64 8)");
+    let invalid = changed.replace("(field tag I64)", "(field tag Bool)");
+    let invalid = decode_compact_change_in_repository(
+        "product-annotation-edit.lkjc",
+        invalid.as_bytes(),
+        &fixture.repository,
+    )
+    .unwrap();
+    assert!(
+        !invalid
+            .semantic
+            .changes
+            .iter()
+            .any(|c| matches!(c, AuthoredChange::SetFunctionLiterals { .. }))
+    );
+    assert!(
+        fixture
+            .repository
+            .prepare_authored_change(&invalid.semantic, invalid.options)
+            .is_err()
+    );
+    assert_eq!(fixture.view().revision(), invalid.semantic.base);
+    let request = decode_compact_change_in_repository(
+        "product-literal-edit.lkjc",
+        changed.as_bytes(),
+        &fixture.repository,
+    )
+    .unwrap();
+    let updates = literals(&request.semantic);
+    assert_eq!(updates.len(), 1);
+    assert!(matches!(
+        updates[0].value,
+        AuthoredLiteralValue::I64 { value: 8 }
+    ));
+    let body = fixture.body(fixture.function);
+    let prepared = fixture
+        .repository
+        .prepare_authored_change(&request.semantic, request.options)
+        .unwrap();
+    assert!(prepared.logical_plan.allocations.is_empty());
+    assert!(prepared.logical_plan.retirements.is_empty());
+    fixture.repository.publish(&prepared.publication).unwrap();
+    assert_eq!(body, fixture.body(fixture.function));
+    assert_eq!(
+        fixture.draft(),
+        changed.replacen(
+            &request.semantic.base.to_string(),
+            &fixture.view().revision().to_string(),
+            1
+        )
+    );
+}
+
+#[test]
 fn literal_edit_equal_values_keep_distinct_owned_positions() {
     let fixture = Fixture::from_source(&SOURCE.replace("(i64 17)", "(i64 7)"));
     let before = inventory(&fixture.view(), fixture.function);

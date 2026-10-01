@@ -66,7 +66,7 @@ mod nominal_encoding_tests {
         .unwrap();
         let owner = OwnerRecord::Expression(expression.clone());
         let (digest, bytes) = encode_owner(&owner).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOWN18");
+        assert_eq!(&bytes[..8], b"LKJOWN19");
         assert_eq!(
             decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
             owner
@@ -448,6 +448,11 @@ pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>)
             super::contract::SCALAR_OWNER_MAGIC,
             super::contract::SCALAR_OWNER_ENVELOPE_DOMAIN,
         )
+    } else if record.header().contract_version == 18 {
+        (
+            super::contract::OWNED_OWNER_MAGIC,
+            super::contract::OWNED_OWNER_ENVELOPE_DOMAIN,
+        )
     } else {
         (OWNER_MAGIC, OWNER_ENVELOPE_DOMAIN)
     };
@@ -536,12 +541,30 @@ pub fn decode_owner(
         }
         record
     } else {
-        packed::decode(
+        // Graph 19 only appends operation/binding tags. All Graph 18 field layouts
+        // and ordinals are frozen; local admission rejects new tags in old owners.
+        let predecessor = bytes.starts_with(&super::contract::OWNED_OWNER_MAGIC);
+        let record: OwnerRecord = packed::decode(
             bytes,
-            OWNER_MAGIC,
-            OWNER_ENVELOPE_DOMAIN,
+            if predecessor {
+                super::contract::OWNED_OWNER_MAGIC
+            } else {
+                OWNER_MAGIC
+            },
+            if predecessor {
+                super::contract::OWNED_OWNER_ENVELOPE_DOMAIN
+            } else {
+                OWNER_ENVELOPE_DOMAIN
+            },
             MAXIMUM_OWNER_OBJECT_BYTES,
-        )?
+        )?;
+        if record.header().contract_version != if predecessor { 18 } else { 19 } {
+            return Err(codec_error(
+                "kernel_owner_encoding_generation",
+                "owner envelope has a foreign generation",
+            ));
+        }
+        record
     };
     record.validate_local()?;
     if record.owner() != expected_owner || record.kind() != expected_kind {
@@ -563,6 +586,15 @@ pub fn decode_owner(
 
 pub fn encode_type_object(object: &TypeObject) -> Result<(TypeObjectDigest, Vec<u8>), Diagnostic> {
     object.validate_local()?;
+    if let super::TypeForm::OwnedProduct { fields } = &object.form {
+        let bytes = packed::encode(
+            super::contract::OWNED_PRODUCT_TYPE_MAGIC,
+            super::contract::OWNED_PRODUCT_TYPE_ENVELOPE_DOMAIN,
+            &(object.contract_version, 1_u8, fields),
+            MAXIMUM_TYPE_OBJECT_BYTES,
+        )?;
+        return Ok((TypeObjectDigest::of(&bytes), bytes));
+    }
     if matches!(object.form, super::TypeForm::OwnedI64Cell) {
         let bytes = packed::encode(
             super::contract::OWNED_CELL_TYPE_MAGIC,
@@ -678,6 +710,34 @@ pub fn decode_type_object(
         TypeObjectDigest::of(bytes).bytes(),
         "type",
     )?;
+    if bytes.starts_with(&super::contract::OWNED_PRODUCT_TYPE_MAGIC) {
+        let (contract_version, tag, fields): (u16, u8, Vec<super::StructuralTypeField>) =
+            packed::decode(
+                bytes,
+                super::contract::OWNED_PRODUCT_TYPE_MAGIC,
+                super::contract::OWNED_PRODUCT_TYPE_ENVELOPE_DOMAIN,
+                MAXIMUM_TYPE_OBJECT_BYTES,
+            )?;
+        if tag != 1 {
+            return Err(codec_error(
+                "kernel_product_type_tag",
+                "unknown OwnedProduct type tag",
+            ));
+        }
+        let object = TypeObject {
+            contract_version,
+            form: super::TypeForm::OwnedProduct { fields },
+        };
+        let (digest, canonical) = encode_type_object(&object)?;
+        verify_canonical(
+            bytes,
+            &canonical,
+            digest.bytes(),
+            expected_digest.bytes(),
+            "type",
+        )?;
+        return Ok(object);
+    }
     if bytes.starts_with(&super::contract::OWNED_CELL_TYPE_MAGIC) {
         let (contract_version, tag): (u16, u8) = packed::decode(
             bytes,

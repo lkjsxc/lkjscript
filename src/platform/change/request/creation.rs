@@ -162,6 +162,9 @@ pub enum AuthoredFunctionEffect {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredType {
+    OwnedProduct {
+        fields: Vec<AuthoredStructuralTypeField>,
+    },
     Unit {},
     Bool {},
     I64 {},
@@ -328,6 +331,16 @@ pub struct AuthoredExpression {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredExpressionOperation {
+    PackOwned {
+        product_type: AuthoredType,
+        fields: Vec<(Name, AuthoredExpression)>,
+    },
+    UnpackOwned {
+        product_type: AuthoredType,
+        source: Box<AuthoredExpression>,
+        fields: Vec<(Name, AuthoredBindingDefinition)>,
+        body: Box<AuthoredExpression>,
+    },
     ImplementationCall {
         function: AuthoredDeclarationReference,
         type_arguments: Vec<AuthoredType>,
@@ -568,6 +581,23 @@ pub(super) fn collect_expression_symbols(
                 stack.push(Visit::Expression(when_true, next));
                 stack.push(Visit::Expression(condition, next));
             }
+            AuthoredExpressionOperation::PackOwned { fields, .. } => {
+                for (_, value) in fields.iter().rev() {
+                    stack.push(Visit::Expression(value, next));
+                }
+            }
+            AuthoredExpressionOperation::UnpackOwned {
+                source,
+                fields,
+                body,
+                ..
+            } => {
+                stack.push(Visit::Expression(body, next));
+                for (_, binding) in fields.iter().rev() {
+                    stack.push(Visit::Binding(&binding.symbol, SymbolKind::LexicalBinding));
+                }
+                stack.push(Visit::Expression(source, next));
+            }
             AuthoredExpressionOperation::Let { bindings, body } => {
                 stack.push(Visit::Expression(body, next));
                 for binding in bindings.iter().rev() {
@@ -794,6 +824,17 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 }
                 lowered.sort_by(|left, right| left.name.cmp(&right.name));
                 TypeForm::StructuralRecord { fields: lowered }
+            }
+            AuthoredType::OwnedProduct { fields } => {
+                let mut lowered = Vec::with_capacity(fields.len());
+                for field in fields {
+                    lowered.push(StructuralTypeField {
+                        name: field.name.clone(),
+                        ty: self.lower_type(&field.ty)?,
+                    });
+                }
+                lowered.sort_by(|a, b| a.name.cmp(&b.name));
+                TypeForm::OwnedProduct { fields: lowered }
             }
             AuthoredType::List { item } => TypeForm::List {
                 item: self.lower_type(item)?,
@@ -1073,6 +1114,59 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 when_true: self.lower_expression(when_true)?,
                 when_false: self.lower_expression(when_false)?,
             },
+            AuthoredExpressionOperation::PackOwned {
+                product_type,
+                fields,
+            } => ExpressionOperation::PackOwned {
+                product_type: self.lower_type(product_type)?,
+                fields: fields
+                    .iter()
+                    .map(|(name, value)| {
+                        Ok(crate::platform::kernel::OwnedProductExpressionField {
+                            name: name.clone(),
+                            value: self.lower_expression(value)?,
+                        })
+                    })
+                    .collect::<Result<_, Diagnostic>>()?,
+            },
+            AuthoredExpressionOperation::UnpackOwned {
+                product_type,
+                source,
+                fields,
+                body,
+            } => {
+                let product_type = self.lower_type(product_type)?;
+                let source = self.lower_expression(source)?;
+                let mut lowered = Vec::new();
+                for (name, binding) in fields {
+                    let id = self.lexical_binding_symbol(&binding.symbol)?;
+                    let declared_type = binding
+                        .declared_type
+                        .as_ref()
+                        .map(|ty| self.lower_type(ty))
+                        .transpose()?;
+                    self.insert_created(OwnerRecord::Binding(
+                        crate::platform::kernel::BindingRecord {
+                            header: OwnerHeader::new(OwnerKey::Binding(id), OwnerKind::Binding),
+                            name: binding.name.clone(),
+                            kind: crate::platform::kernel::BindingKind::OwnedUnpack,
+                            value: None,
+                            declared_type,
+                        },
+                    ))?;
+                    lowered.push(crate::platform::kernel::OwnedProductBinding {
+                        name: name.clone(),
+                        binding: id,
+                    });
+                }
+                lowered.sort_by(|a, b| a.name.cmp(&b.name));
+                ExpressionOperation::UnpackOwned {
+                    product_type,
+                    source,
+                    fields: lowered,
+                    body: self.lower_expression(body)?,
+                }
+            }
             AuthoredExpressionOperation::Let { bindings, body } => {
                 let mut lowered = Vec::with_capacity(bindings.len());
                 for binding in bindings {

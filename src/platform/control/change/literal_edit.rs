@@ -162,6 +162,22 @@ fn substitute(
             }
             pairs.extend(a.iter_mut().zip(x).map(|(a, x)| (&mut a.value, &x.value)));
         }
+        (A::PackOwned { fields: a, .. }, A::PackOwned { fields: x, .. }) => {
+            if a.len() != x.len() {
+                return Ok(false);
+            }
+            pairs.extend(a.iter_mut().zip(x).map(|((_, a), (_, x))| (a, x)));
+        }
+        (
+            A::UnpackOwned {
+                source: a, body: b, ..
+            },
+            A::UnpackOwned {
+                source: x, body: y, ..
+            },
+        ) => {
+            pairs.extend([(a.as_mut(), x.as_ref()), (b.as_mut(), y.as_ref())]);
+        }
         (A::Variant { payload: a, .. }, A::Variant { payload: x, .. }) => match (a, x) {
             (Some(a), Some(x)) => pairs.push((a, x)),
             (None, None) => {}

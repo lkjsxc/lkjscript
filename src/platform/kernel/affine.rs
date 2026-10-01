@@ -445,6 +445,16 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
         self.step(expression, depth)?;
         let record = self.expression(expression)?;
         match record.operation {
+            ExpressionOperation::PackOwned { fields, .. } => {
+                for field in fields {
+                    self.evaluate(field.value, state, depth + 1)?;
+                }
+                Ok(EvaluatedValue::Unrestricted)
+            }
+            ExpressionOperation::UnpackOwned { source, body, .. } => {
+                self.evaluate(source, state, depth + 1)?;
+                self.evaluate(body, state, depth + 1)
+            }
             ExpressionOperation::Unit {}
             | ExpressionOperation::Bool { .. }
             | ExpressionOperation::I64 { .. }

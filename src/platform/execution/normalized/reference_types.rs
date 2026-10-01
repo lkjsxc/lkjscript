@@ -50,6 +50,55 @@ fn index_node<T>(allocated: &mut usize) -> Result<(), ExecutionError> {
 }
 
 impl Closure<'_> {
+    // Independently propagate the greatest reached depth from every product root.
+    // A substitution may add depth to an otherwise valid symbolic product type.
+    fn product_depths(&mut self) -> Result<(), ExecutionError> {
+        let mut queue = VecDeque::new();
+        self.visits = self
+            .visits
+            .checked_add(self.types.len())
+            .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
+            .ok_or_else(|| {
+                ExecutionError::resource(
+                    "reference_instantiation_work",
+                    "product type inventory exceeded its finite work bound",
+                )
+            })?;
+        for (ty, object) in self.types.iter() {
+            self.control.check()?;
+            if matches!(object.form, TypeForm::OwnedProduct { .. }) {
+                allocate::<(TypeObjectDigest, usize)>(&mut self.allocated, 1)?;
+                queue.push_back((*ty, 0usize));
+            }
+        }
+        let mut depths = BTreeMap::new();
+        while let Some((ty, depth)) = queue.pop_front() {
+            self.tick()?;
+            if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+                return Err(ExecutionError::new(
+                    crate::platform::execution::ExecutionFailureClass::Infrastructure,
+                    "reference_product_depth",
+                    "closed owned product exceeds the structural type depth bound",
+                ));
+            }
+            if depths.get(&ty).is_some_and(|previous| *previous >= depth) {
+                continue;
+            }
+            if !depths.contains_key(&ty) {
+                index_node::<(TypeObjectDigest, usize)>(&mut self.allocated)?;
+            }
+            depths.insert(ty, depth);
+            let object = self.types.get(&ty).ok_or_else(failure)?;
+            allocate::<TypeObjectDigest>(&mut self.allocated, object.child_type_count())?;
+            allocate::<(TypeObjectDigest, usize)>(&mut self.allocated, object.child_type_count())?;
+            for child in object.child_types() {
+                self.tick()?;
+                queue.push_back((child, depth + 1));
+            }
+        }
+        Ok(())
+    }
+
     fn tick(&mut self) -> Result<(), ExecutionError> {
         self.control.check()?;
         self.visits = self
@@ -149,6 +198,12 @@ impl Closure<'_> {
                     effect,
                 }
             }
+            TypeForm::OwnedProduct { mut fields } => {
+                for field in &mut fields {
+                    field.ty = self.identity(field.ty, bindings, depth + 1)?;
+                }
+                TypeForm::OwnedProduct { fields }
+            }
             TypeForm::StructuralRecord { mut fields } => {
                 for field in &mut fields {
                     field.ty = self.identity(field.ty, bindings, depth + 1)?;
@@ -238,6 +293,10 @@ impl Closure<'_> {
                 self.types.entry(ty).or_insert(object);
             }
             match record.operation {
+                ExpressionOperation::PackOwned { product_type, .. }
+                | ExpressionOperation::UnpackOwned { product_type, .. } => {
+                    self.identity(product_type, bindings, 0)?;
+                }
                 ExpressionOperation::ImplementationCall {
                     function,
                     type_arguments,
@@ -341,7 +400,7 @@ impl Closure<'_> {
     fn clone_type(&mut self, ty: TypeObjectDigest) -> Result<(), ExecutionError> {
         let object = self.types.get(&ty).ok_or_else(failure)?;
         match &object.form {
-            TypeForm::StructuralRecord { fields } => {
+            TypeForm::StructuralRecord { fields } | TypeForm::OwnedProduct { fields } => {
                 allocate::<crate::platform::kernel::StructuralTypeField>(
                     &mut self.allocated,
                     fields.len(),
@@ -381,6 +440,26 @@ fn failure() -> ExecutionError {
         "reference_instantiation_scope",
         "canonical instantiation has a missing owner, type, or exact substitution",
     )
+}
+
+#[cfg(test)]
+pub(super) fn check_product_substitution(
+    mut types: BTreeMap<TypeObjectDigest, TypeObject>,
+    ty: TypeObjectDigest,
+    bindings: Bindings,
+) -> Result<(), ExecutionError> {
+    let control = crate::platform::execution::ExecutionControl::uncancelled();
+    let mut closure = Closure {
+        snapshots: BTreeMap::new(),
+        types: &mut types,
+        visits: 0,
+        allocated: 0,
+        control: &control,
+        effects: BTreeMap::new(),
+        requirements: BTreeMap::new(),
+    };
+    closure.identity(ty, &bindings, 0)?;
+    closure.product_depths()
 }
 
 pub(super) fn complete(
@@ -567,6 +646,7 @@ pub(super) fn complete(
         &mut schema.record_instances,
         &mut schema.variant_instances,
     )?;
+    closure.product_depths()?;
     allocate::<bool>(&mut closure.allocated, schema.variants.len())?;
     schema.affine_variants.resize(schema.variants.len(), false);
     let mut visits = closure.visits;
@@ -894,13 +974,17 @@ fn property_types(
         control.check()?;
         tick(visits)?;
         if (retention == Retention::BufferFree
-            && !matches!(object.form, TypeForm::ByteBuffer | TypeForm::OwnedI64Cell))
+            && !matches!(
+                object.form,
+                TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. }
+            ))
             || retention == Retention::NoApplication
             || retention != Retention::BufferFree
                 && !matches!(
                     object.form,
                     TypeForm::ByteBuffer
                         | TypeForm::OwnedI64Cell
+                        | TypeForm::OwnedProduct { .. }
                         | TypeForm::Stream { .. }
                         | TypeForm::CapabilityResource { .. }
                         | TypeForm::TypeParameter { .. }
@@ -933,7 +1017,7 @@ fn property_types(
                 Ok(safe.contains(&child))
             };
             let accepted = match &object.form {
-                TypeForm::ByteBuffer | TypeForm::OwnedI64Cell
+                TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. }
                     if retention == Retention::BufferFree =>
                 {
                     false
@@ -948,6 +1032,7 @@ fn property_types(
                 TypeForm::Applied { .. } if retention == Retention::NoApplication => false,
                 TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell
+                | TypeForm::OwnedProduct { .. }
                 | TypeForm::Secret
                 | TypeForm::Stream { .. }
                 | TypeForm::CapabilityResource { .. }

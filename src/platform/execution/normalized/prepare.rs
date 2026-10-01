@@ -89,6 +89,14 @@ pub struct NormalizedCode {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NormalizedInstruction {
+    PackOwned {
+        product_type: TypeObjectDigest,
+        fields: Arc<[u32]>,
+    },
+    UnpackOwned {
+        product_type: TypeObjectDigest,
+        locals: Arc<[u32]>,
+    },
     ImplementationCall {
         function: FunctionIndex,
         type_arguments: Arc<[TypeObjectDigest]>,
@@ -601,6 +609,17 @@ impl NormalizedProgram {
                 let digest = substitutions.get(parameter).copied()?;
                 return self.types.contains_key(&digest).then_some(digest);
             }
+            TypeForm::OwnedProduct { fields } => TypeForm::OwnedProduct {
+                fields: fields
+                    .iter()
+                    .map(|f| {
+                        Some(StructuralTypeField {
+                            name: f.name.clone(),
+                            ty: self.substitute_type(f.ty, substitutions, next)?,
+                        })
+                    })
+                    .collect::<Option<_>>()?,
+            },
             TypeForm::StructuralRecord { fields } => TypeForm::StructuralRecord {
                 fields: fields
                     .iter()
@@ -1498,7 +1517,9 @@ fn validate_normalized_resource_signature(
 ) -> Result<(), Diagnostic> {
     let is_memory = |ty| -> Result<bool, Diagnostic> {
         Ok(match types.get(&ty).map(|t| &t.form) {
-            Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell) => true,
+            Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. }) => {
+                true
+            }
             Some(TypeForm::TypeParameter { parameter }) => {
                 matches!(exact_runtime_owner(owners, declaration.package, OwnerKey::TypeParameter(*parameter), "owned signature type parameter")?, OwnerRecord::TypeParameter(p) if p.constraints == crate::platform::kernel::TypeParameterConstraints::Owned)
             }
@@ -2556,6 +2577,20 @@ fn translate_code(
                 }
             }
             CompiledInstruction::StoreLocal(local) => NormalizedInstruction::StoreLocal(*local),
+            CompiledInstruction::PackOwned {
+                product_type,
+                fields,
+            } => NormalizedInstruction::PackOwned {
+                product_type: index_copy(&unit.tables.types, *product_type, "owned product type")?,
+                fields: fields.clone().into(),
+            },
+            CompiledInstruction::UnpackOwned {
+                product_type,
+                locals,
+            } => NormalizedInstruction::UnpackOwned {
+                product_type: index_copy(&unit.tables.types, *product_type, "owned product type")?,
+                locals: locals.clone().into(),
+            },
             CompiledInstruction::Drop => NormalizedInstruction::Drop,
             CompiledInstruction::JumpIfFalse(target) => NormalizedInstruction::JumpIfFalse(*target),
             CompiledInstruction::Jump(target) => NormalizedInstruction::Jump(*target),

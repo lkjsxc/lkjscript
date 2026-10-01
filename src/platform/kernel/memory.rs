@@ -22,7 +22,7 @@ pub(crate) fn direct(
             .ok_or_else(|| reject("missing memory type"))?
             .form
         {
-            TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => true,
+            TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. } => true,
             TypeForm::TypeParameter { parameter } => matches!(
                 read.owner(OwnerKey::TypeParameter(parameter))?,
                 Some(OwnerRecord::TypeParameter(p)) if p.constraints == TypeParameterConstraints::Owned
@@ -38,24 +38,8 @@ fn owned_annotation(
     let Some(annotation) = annotation else {
         return Ok(false);
     };
-    static BUFFER: std::sync::OnceLock<Result<TypeObjectDigest, Diagnostic>> =
-        std::sync::OnceLock::new();
-    let buffer = BUFFER
-        .get_or_init(|| {
-            TypeObject::new(TypeForm::ByteBuffer)
-                .and_then(|object| encode_type_object(&object).map(|(digest, _)| digest))
-        })
-        .as_ref()
-        .map_err(Clone::clone)?;
-    // Artifacts may omit ordinary annotation types reconstructed by expression
-    // inference. Only the exact concrete buffer annotation requests ownership;
-    // that type must still be present, and its initializer is checked separately.
-    if annotation != *buffer && read.type_object(annotation)?.is_none() {
-        let cell = encode_type_object(&TypeObject::new(TypeForm::OwnedI64Cell)?)?.0;
-        if annotation != cell {
-            return Ok(false);
-        }
-    }
+    // Current derived code retains every annotation root. Missing type metadata
+    // cannot turn an explicit product annotation into ordinary data.
     direct(read, annotation)
 }
 fn owner(
@@ -332,6 +316,119 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 .map(|_| ())
         };
         let owned = match e.operation {
+            ExpressionOperation::PackOwned {
+                product_type,
+                fields,
+            } => {
+                super::owned_product::validate(self.read, product_type, self.scope)?;
+                let TypeForm::OwnedProduct { fields: contract } = self
+                    .read
+                    .type_object(product_type)?
+                    .ok_or_else(|| reject("missing product type"))?
+                    .form
+                else {
+                    return Err(reject("pack operand is not a product"));
+                };
+                if fields.len() != contract.len() {
+                    return Err(reject("incomplete product construction"));
+                }
+                let mut names = BTreeSet::new();
+                for field in fields {
+                    let expected = contract
+                        .iter()
+                        .find(|f| f.name == field.name)
+                        .ok_or_else(|| reject("unknown product field"))?;
+                    if !names.insert(field.name) {
+                        return Err(reject("duplicate product field"));
+                    }
+                    if direct(self.read, expected.ty)? {
+                        let Some(OwnerRecord::Expression(ExpressionRecord {
+                            operation: ExpressionOperation::Local { value },
+                            ..
+                        })) = self.read.owner(OwnerKey::Expression(field.value))?
+                        else {
+                            return Err(reject(
+                                "owned product fields require exact local operands",
+                            ));
+                        };
+                        if !state.contains_key(&value)
+                            || !self.eval(field.value, state, ParameterUse::Consume, next)?
+                        {
+                            return Err(reject("product field has no live owner"));
+                        }
+                    } else {
+                        plain(field.value, state)?;
+                    }
+                }
+                true
+            }
+            ExpressionOperation::UnpackOwned {
+                product_type,
+                source,
+                fields,
+                body,
+            } => {
+                super::owned_product::validate(self.read, product_type, self.scope)?;
+                let Some(OwnerRecord::Expression(ExpressionRecord {
+                    operation: ExpressionOperation::Local { value },
+                    ..
+                })) = self.read.owner(OwnerKey::Expression(source))?
+                else {
+                    return Err(reject("unpack requires an exact local operand"));
+                };
+                if !state.contains_key(&value)
+                    || !self.eval(source, state, ParameterUse::Consume, next)?
+                {
+                    return Err(reject("unpack requires a live owner"));
+                }
+                let TypeForm::OwnedProduct { fields: expected } = self
+                    .read
+                    .type_object(product_type)?
+                    .ok_or_else(|| reject("missing product type"))?
+                    .form
+                else {
+                    return Err(reject("unpack operand is not a product"));
+                };
+                if expected.len() != fields.len() {
+                    return Err(reject("incomplete unpack"));
+                }
+                let mut scoped = Vec::new();
+                for (field, expected) in fields.iter().zip(expected) {
+                    let Some(OwnerRecord::Binding(b)) =
+                        self.read.owner(OwnerKey::Binding(field.binding))?
+                    else {
+                        return Err(reject("missing unpack binding"));
+                    };
+                    if field.name != expected.name
+                        || b.declared_type != Some(expected.ty)
+                        || b.kind != BindingKind::OwnedUnpack
+                        || b.value.is_some()
+                    {
+                        return Err(reject("unpack binding contract mismatch"));
+                    }
+                    if direct(self.read, expected.ty)? {
+                        let local = LocalValueReference::LexicalBinding(field.binding);
+                        if state
+                            .insert(
+                                local,
+                                Slot {
+                                    borrowed: false,
+                                    live: true,
+                                },
+                            )
+                            .is_some()
+                        {
+                            return Err(reject("duplicate unpack local"));
+                        }
+                        scoped.push(local);
+                    }
+                }
+                let result = self.eval(body, state, mode, next)?;
+                for local in scoped {
+                    state.remove(&local);
+                }
+                result
+            }
             ExpressionOperation::Local { value } => {
                 if let Some(slot) = state.get_mut(&value) {
                     if !slot.live
@@ -632,6 +729,11 @@ pub(crate) fn validate_owner(
     key: OwnerKey,
     record: &OwnerRecord,
 ) -> Result<(), Diagnostic> {
+    super::owned_product::require_generation(
+        read,
+        record.type_roots(),
+        record.header().contract_version,
+    )?;
     match record {
         OwnerRecord::TypeParameter(p) if p.constraints == TypeParameterConstraints::Owned => {
             let allowed = match read.owner(OwnerKey::Declaration(p.declaration))? {

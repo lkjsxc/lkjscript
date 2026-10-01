@@ -418,6 +418,18 @@ impl Renderer<'_> {
                     self.row(effect, "row")?
                 )
             }
+            T::OwnedProduct { fields } => {
+                let mut text = "(owned-product".to_owned();
+                for field in fields {
+                    append(
+                        &mut text,
+                        &format!(" (field {} {})", field.name, self.ty(&field.ty)?),
+                        self.maximum,
+                    )?;
+                }
+                text.push(')');
+                text
+            }
             T::StructuralRecord { fields } => {
                 let mut text = "(record".to_owned();
                 for field in fields {
@@ -918,6 +930,61 @@ impl Renderer<'_> {
                 self.expression(when_true, env)?,
                 self.expression(when_false, env)?
             ),
+            E::PackOwned {
+                product_type,
+                fields,
+            } => {
+                let mut text = format!("(pack-owned (type {})", self.ty(product_type)?);
+                for (name, value) in fields {
+                    append(
+                        &mut text,
+                        &format!(" (field {name} {})", self.expression(value, env)?),
+                        self.maximum,
+                    )?;
+                }
+                text.push(')');
+                text
+            }
+            E::UnpackOwned {
+                product_type,
+                source,
+                fields,
+                body,
+            } => {
+                let mut text = format!(
+                    "(unpack-owned (type {}) {}",
+                    self.ty(product_type)?,
+                    self.expression(source, env)?
+                );
+                for (name, b) in fields {
+                    let ty = self.ty(b
+                        .declared_type
+                        .as_ref()
+                        .ok_or_else(|| error("unpack binding requires a type"))?)?;
+                    append(
+                        &mut text,
+                        &format!(
+                            " (field {name} (binding {} (as {}) (type {ty})))",
+                            b.name, b.symbol
+                        ),
+                        self.maximum,
+                    )?;
+                    env.entry(b.name.to_string())
+                        .or_default()
+                        .push(b.symbol.clone());
+                }
+                append(
+                    &mut text,
+                    &format!(" (in {}))", self.expression(body, env)?),
+                    self.maximum,
+                )?;
+                for (_, b) in fields.iter().rev() {
+                    if let Some(v) = env.get_mut(b.name.as_str()) {
+                        v.pop();
+                    }
+                }
+                text
+            }
             E::Let { bindings, body } => {
                 let mut text = "(let".to_owned();
                 for b in bindings {

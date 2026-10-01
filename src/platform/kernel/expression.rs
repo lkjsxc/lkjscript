@@ -69,6 +69,17 @@ impl ExpressionRecord {
                 "implementation operands require Graph 18",
             ));
         }
+        if self.contract_version < 19
+            && matches!(
+                self.operation,
+                ExpressionOperation::PackOwned { .. } | ExpressionOperation::UnpackOwned { .. }
+            )
+        {
+            return Err(expression_error(
+                "kernel_product_generation",
+                "owned products require Graph 19",
+            ));
+        }
         validate_operation(&self.operation)
     }
 
@@ -78,6 +89,8 @@ impl ExpressionRecord {
 
     pub fn type_roots(&self) -> Vec<TypeObjectDigest> {
         match &self.operation {
+            ExpressionOperation::PackOwned { product_type, .. }
+            | ExpressionOperation::UnpackOwned { product_type, .. } => vec![*product_type],
             ExpressionOperation::ImplementationCall { type_arguments, .. }
             | ExpressionOperation::Call { type_arguments, .. }
             | ExpressionOperation::FunctionValue { type_arguments, .. }
@@ -209,6 +222,31 @@ pub enum ExpressionOperation {
         method: crate::platform::semantic_id::MethodId,
         arguments: Vec<ExpressionId>,
     },
+    PackOwned {
+        product_type: TypeObjectDigest,
+        /// Authored evaluation order, independent of canonical type field order.
+        fields: Vec<OwnedProductExpressionField>,
+    },
+    UnpackOwned {
+        product_type: TypeObjectDigest,
+        source: ExpressionId,
+        fields: Vec<OwnedProductBinding>,
+        body: ExpressionId,
+    },
+}
+
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct OwnedProductExpressionField {
+    pub name: Name,
+    pub value: ExpressionId,
+}
+
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct OwnedProductBinding {
+    pub name: Name,
+    pub binding: BindingId,
 }
 
 /// Exact ordinary nominal owners bound by a lexical completion expression.
@@ -358,10 +396,38 @@ pub enum ExpressionChildRole {
     TransactionBody,
     BindCallee,
     BindArgument,
+    OwnedProductField,
+    OwnedProductSource,
+    OwnedProductBody,
 }
 
 fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic> {
     match operation {
+        ExpressionOperation::PackOwned { fields, .. } => {
+            require_count("owned product fields", fields.len(), false)?;
+            if fields
+                .iter()
+                .map(|f| &f.name)
+                .collect::<BTreeSet<_>>()
+                .len()
+                != fields.len()
+            {
+                return Err(expression_error(
+                    "kernel_product_fields",
+                    "duplicate owned product field",
+                ));
+            }
+        }
+        ExpressionOperation::UnpackOwned { fields, .. } => {
+            require_count("owned product bindings", fields.len(), false)?;
+            require_unique("owned product binding", fields.iter().map(|f| f.binding))?;
+            if fields.windows(2).any(|p| p[0].name >= p[1].name) {
+                return Err(expression_error(
+                    "kernel_product_fields",
+                    "unpack fields require unique canonical names",
+                ));
+            }
+        }
         ExpressionOperation::Text { value } | ExpressionOperation::StaticText { value } => {
             validate_text(value)?;
         }
@@ -552,6 +618,30 @@ fn require_unique<T: Ord + Copy>(
 fn expression_children(operation: &ExpressionOperation) -> Vec<ExpressionChild> {
     let mut children = Vec::new();
     match operation {
+        ExpressionOperation::PackOwned { fields, .. } => {
+            for (ordinal, field) in fields.iter().enumerate() {
+                push_child(
+                    &mut children,
+                    field.value,
+                    ExpressionChildRole::OwnedProductField,
+                    u32::try_from(ordinal).unwrap_or(u32::MAX),
+                );
+            }
+        }
+        ExpressionOperation::UnpackOwned { source, body, .. } => {
+            push_child(
+                &mut children,
+                *source,
+                ExpressionChildRole::OwnedProductSource,
+                0,
+            );
+            push_child(
+                &mut children,
+                *body,
+                ExpressionChildRole::OwnedProductBody,
+                0,
+            );
+        }
         ExpressionOperation::If {
             condition,
             when_true,

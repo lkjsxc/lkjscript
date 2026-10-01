@@ -4,7 +4,8 @@ These three fixtures are derived controls, not republished official artifacts.
 Their unchanged originals and provenance remain under `../requirement-predecessor/`,
 `../transaction-outcome-predecessor/` and `../cell-participation-predecessor/`.
 
-Graph 18 deliberately requires rebuilding predecessor compiler units. The offline
+Graph 19 uses compiler 16 / bytecode 12 / artifact 23 and requires rebuilding
+predecessor compiler units. The offline
 workflow therefore distinguishes exact original format refusal from execution of
 the same canonical source with current derived envelopes. It keeps all public
 rebuild/import paths and independent output, store, authority and cleanup checks.

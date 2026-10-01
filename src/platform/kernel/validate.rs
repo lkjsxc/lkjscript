@@ -60,6 +60,7 @@ enum BindingContainerKind {
     Let,
     MatchPayload,
     Transaction,
+    OwnedUnpack,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -253,7 +254,9 @@ fn snapshot_resource_interface(
 
 fn object_child_digests(form: &TypeForm) -> Vec<TypeObjectDigest> {
     match form {
-        TypeForm::StructuralRecord { fields } => fields.iter().map(|field| field.ty).collect(),
+        TypeForm::StructuralRecord { fields } | TypeForm::OwnedProduct { fields } => {
+            fields.iter().map(|field| field.ty).collect()
+        }
         TypeForm::List { item } | TypeForm::Option { item } | TypeForm::Stream { item } => {
             vec![*item]
         }
@@ -435,6 +438,14 @@ impl FullValidator<'_> {
         for (digest, object) in &self.snapshot.types {
             if !self.consume_work() {
                 return;
+            }
+            if self.snapshot.root.graph_contract_version < 19
+                && matches!(object.form, TypeForm::OwnedProduct { .. })
+            {
+                self.error(
+                    "kernel_product_generation",
+                    "owned product types require Graph Contract 19",
+                );
             }
             if self.snapshot.root.graph_contract_version < 17
                 && matches!(object.form, TypeForm::F64)
@@ -1454,15 +1465,22 @@ impl FullValidator<'_> {
             if !self.consume_work() {
                 return;
             }
-            if object.child_types().into_iter().any(|t| {
-                self.snapshot
-                    .types
-                    .get(&t)
-                    .or_else(|| self.snapshot.dependency_types.get(&t))
-                    .is_some_and(|t| {
-                        matches!(t.form, TypeForm::ByteBuffer | TypeForm::OwnedI64Cell)
-                    })
-            }) {
+            if !matches!(object.form, TypeForm::OwnedProduct { .. })
+                && object.child_types().into_iter().any(|t| {
+                    self.snapshot
+                        .types
+                        .get(&t)
+                        .or_else(|| self.snapshot.dependency_types.get(&t))
+                        .is_some_and(|t| {
+                            matches!(
+                                t.form,
+                                TypeForm::ByteBuffer
+                                    | TypeForm::OwnedI64Cell
+                                    | TypeForm::OwnedProduct { .. }
+                            )
+                        })
+                })
+            {
                 self.error("kernel_buffer_container", format!("type object {digest} contains ByteBuffer in an unsupported container or callable descriptor"));
             }
             let forbidden = match &object.form {
@@ -1951,6 +1969,18 @@ impl FullValidator<'_> {
         operation: &ExpressionOperation,
     ) {
         match operation {
+            ExpressionOperation::UnpackOwned { fields, body, .. } => {
+                for field in fields {
+                    self.binding_containers
+                        .entry(field.binding)
+                        .or_default()
+                        .push(BindingContainer {
+                            expression,
+                            scope_roots: vec![*body],
+                            kind: BindingContainerKind::OwnedUnpack,
+                        });
+                }
+            }
             ExpressionOperation::Let { bindings, body } => {
                 for (index, binding) in bindings.iter().enumerate() {
                     let mut scope_roots = bindings[index.saturating_add(1)..]
@@ -2165,6 +2195,7 @@ impl FullValidator<'_> {
                 BindingContainerKind::Let => BindingKind::Let,
                 BindingContainerKind::MatchPayload => BindingKind::MatchPayload,
                 BindingContainerKind::Transaction => BindingKind::Transaction,
+                BindingContainerKind::OwnedUnpack => BindingKind::OwnedUnpack,
             };
             if kind != expected {
                 self.error(
@@ -2582,6 +2613,11 @@ impl FullValidator<'_> {
                     return;
                 };
                 let expected = match reference {
+                    LocalValueReference::LexicalBinding(_)
+                        if container.kind == BindingContainerKind::OwnedUnpack =>
+                    {
+                        BindingContainerKind::OwnedUnpack
+                    }
                     LocalValueReference::LexicalBinding(_) => BindingContainerKind::Let,
                     LocalValueReference::MatchPayload(_) => BindingContainerKind::MatchPayload,
                     LocalValueReference::TransactionBinding(_) => BindingContainerKind::Transaction,

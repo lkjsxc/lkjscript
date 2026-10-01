@@ -1182,6 +1182,17 @@ fn validate_type_closure<S: ImmutableObjectStore + ?Sized>(
                 )
             })?;
         let object = decode_type_object(&bytes, digest)?;
+        if matches!(object.form, TypeForm::OwnedProduct { .. })
+            && owners
+                .get(&source)
+                .is_some_and(|owner| owner.record.header().contract_version < 19)
+        {
+            return Err(interface_error(
+                DiagnosticClass::Semantic,
+                "kernel_product_generation",
+                "owned product interface type closure requires Graph 19 owners",
+            ));
+        }
         validate_interface_type_reference(package, source, &object.form, owners)?;
         for child in object.child_types() {
             pending.push((source, child, depth.saturating_add(1)));
@@ -1331,6 +1342,7 @@ fn validate_interface_type_reference(
         | TypeForm::F64
         | TypeForm::ByteBuffer
         | TypeForm::OwnedI64Cell
+        | TypeForm::OwnedProduct { .. }
         | TypeForm::Bytes
         | TypeForm::Text
         | TypeForm::StaticText

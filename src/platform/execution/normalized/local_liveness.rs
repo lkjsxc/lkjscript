@@ -21,6 +21,7 @@ enum Edges<'a> {
 struct Flow<'a> {
     read: Option<u32>,
     write: Option<u32>,
+    writes: &'a [u32],
     edges: Edges<'a>,
 }
 
@@ -48,6 +49,8 @@ fn flow(instruction: &I) -> Flow<'_> {
         // Without callee proof, preserve the possible continuation's live values.
         I::TailInvoke { .. } => (None, None, Edges::Next),
         I::Unit
+        | I::PackOwned { .. }
+        | I::UnpackOwned { .. }
         | I::Bool(_)
         | I::I64(_)
         | I::F64(_)
@@ -70,7 +73,16 @@ fn flow(instruction: &I) -> Flow<'_> {
         | I::Perform { .. }
         | I::PerformParameter { .. } => (None, None, Edges::Next),
     };
-    Flow { read, write, edges }
+    let writes = match instruction {
+        I::UnpackOwned { locals, .. } => locals.as_ref(),
+        _ => &[],
+    };
+    Flow {
+        read,
+        write,
+        writes,
+        edges,
+    }
 }
 
 fn local(code: &NormalizedCode, local: u32) -> Result<(), Diagnostic> {
@@ -87,6 +99,10 @@ fn validate(code: &NormalizedCode, work: &mut Budget<'_>) -> Result<bool, Diagno
         let access = flow(instruction);
         for operand in [access.read, access.write].into_iter().flatten() {
             local(code, operand)?;
+        }
+        for operand in access.writes {
+            work.step()?;
+            local(code, *operand)?;
         }
         let mut target = |destination: u32| -> Result<(), Diagnostic> {
             work.step()?;
@@ -217,7 +233,14 @@ pub(super) fn derive_with_limits(
                 let Some(out) = live.outgoing(access.edges, pc, word, &mut meter, work)? else {
                     return Ok(false);
                 };
-                let before = (out & !mask(access.write, word)) | mask(access.read, word);
+                let mut kills = mask(access.write, word);
+                for local in access.writes {
+                    if !meter.step(work)? {
+                        return Ok(false);
+                    }
+                    kills |= mask(Some(*local), word);
+                }
+                let before = (out & !kills) | mask(access.read, word);
                 let slot = &mut live.before[pc * words + word];
                 changed |= *slot != before;
                 *slot = before;

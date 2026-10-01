@@ -52,6 +52,10 @@ fn reject() -> ExecutionError {
 }
 
 impl OwnedI64Cell {
+    #[cfg(test)]
+    pub(super) fn allocation_identity(&self) -> usize {
+        Arc::as_ptr(&self.state) as usize
+    }
     pub(super) const ALLOCATION_BYTES: u64 = (std::mem::size_of::<Mutex<Storage>>()
         + 2 * std::mem::size_of::<usize>()
         + std::mem::size_of::<Self>()) as u64;

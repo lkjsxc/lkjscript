@@ -1045,6 +1045,8 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
 
     let expression_section = compact_success(&["capabilities", "--section", "expression"]);
     let expected_expression_forms = [
+        "pack-owned",
+        "unpack-owned",
         "implementation-call",
         "method-call",
         "unit",
@@ -1107,6 +1109,14 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         expected_expression_forms
     );
     for (name, syntax) in [
+        (
+            "pack-owned",
+            "(pack-owned (type TYPE) (field NAME EXPRESSION) ... )",
+        ),
+        (
+            "unpack-owned",
+            "(unpack-owned (type TYPE) (local SOURCE) (field NAME (binding LOCAL (type TYPE))) ... (in BODY))",
+        ),
         ("f64", "(f64 DECIMAL|nan|inf|-inf)"),
         (
             "local",

@@ -813,7 +813,8 @@ fn append_type(
                 format!("{}/{}", interface.package, interface.declaration),
             ));
         }
-        TypeForm::StructuralRecord { fields: structural } => {
+        TypeForm::StructuralRecord { fields: structural }
+        | TypeForm::OwnedProduct { fields: structural } => {
             fields.push(("fields".to_owned(), structural.len().to_string()));
         }
         TypeForm::Function { parameters, .. } | TypeForm::TaskFunction { parameters, .. } => {
@@ -887,7 +888,7 @@ fn append_type(
                 )?;
             }
         }
-        TypeForm::StructuralRecord { fields } => {
+        TypeForm::StructuralRecord { fields } | TypeForm::OwnedProduct { fields } => {
             for (index, field) in fields.iter().enumerate() {
                 let child = format!("{path}.{}", field.name);
                 records.push(DiscoveryRecord::new(
@@ -1031,6 +1032,7 @@ fn type_form_name(form: &TypeForm) -> &'static str {
         TypeForm::F64 => "f64",
         TypeForm::ByteBuffer => "byte-buffer",
         TypeForm::OwnedI64Cell => "owned-i64-cell",
+        TypeForm::OwnedProduct { .. } => "owned-product",
         TypeForm::Bytes => "bytes",
         TypeForm::Text => "text",
         TypeForm::StaticText => "static-text",

@@ -63,10 +63,10 @@ Current identity:
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
 - semantic revision: `rev_85b2be44a8deca911fc6bdf4efdd4fb7b510f53e4a39723fbee263dff4b3a9b2`;
-- package revision: `package_revision_573523e947ac4b65eee9de6b7184361b3a2acf8be52d06db6491ae054821b932`;
-- package transport: `package_transport_5b9f9cb3cd2dc756e0cf98dcadd1e6b48d16044bf4e01753e4240cfc1b8ba0ea`;
-- artifact manifest: `artifact_manifest_181a173820088a532694da64b4553cdc22548853d7b984487b9a9729b5a16f1e`;
-- artifact bundle: `artifact_bundle_4c0df591124fcd3d546e8d090eef68214d4787b4e93e37326a9350bcfc566579`;
+- package revision: `package_revision_e6abf1b493a4ba03c44fde2dbbe2078fc57cc57e4f6fb9956de64057bae1d56f`;
+- package transport: `package_transport_d92998796398b1ac555c1f76fa81cb2d50f711e8f28054176fec2b9785f8678a`;
+- artifact manifest: `artifact_manifest_10b89b748ad54030b55a29e8caa61c7c48d176814a13f5cdee5165b0e5878722`;
+- artifact bundle: `artifact_bundle_19a0739c9228f4e6200066e863a9e2570ce71a3e5c400974dfc52b5a090f8511`;
 - 1,626 live semantic owners, 232 compiler units, and 89 graph tests.
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose
@@ -248,3 +248,8 @@ export/build. Accepted HEAD and all standard operations/tests retain their meani
 The scalar-cell primitives are available as closed externals; this campaign adds
 no standard graph operation. Exact retained older suppliers remain source inputs
 and require current derived artifacts.
+
+The [owned-product refresh](../../docs/campaigns/20261001-owned-products.md) derives
+the current Graph 19 transport and compiler 16 / bytecode 12 / artifact 23 bundle
+through the same public owners. Accepted HEAD and standard program meaning remain
+unchanged; this is a compiler refresh, not product adoption in the standard library.

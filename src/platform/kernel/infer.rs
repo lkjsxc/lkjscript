@@ -738,6 +738,76 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             self.validate_nominal_type(ty, context, 0)?;
         }
         match record.operation {
+            ExpressionOperation::PackOwned {
+                product_type,
+                fields,
+            } => {
+                let TypeForm::OwnedProduct { fields: expected } =
+                    self.type_object(product_type)?.form
+                else {
+                    return Err(super::owned_product::reject(
+                        "pack requires an owned product",
+                    ));
+                };
+                if fields.len() != expected.len() {
+                    return Err(super::owned_product::reject(
+                        "pack must supply every field exactly once",
+                    ));
+                }
+                let mut seen = BTreeSet::new();
+                for field in fields {
+                    let Some(contract) = expected.iter().find(|f| f.name == field.name) else {
+                        return Err(super::owned_product::reject("unknown pack field"));
+                    };
+                    if !seen.insert(field.name) {
+                        return Err(super::owned_product::reject("duplicate pack field"));
+                    }
+                    let actual = self.infer(field.value, context, next)?;
+                    require_same(contract.ty, actual, "kernel_owned_product", "pack field")?;
+                }
+                Ok(product_type)
+            }
+            ExpressionOperation::UnpackOwned {
+                product_type,
+                source,
+                fields,
+                body,
+            } => {
+                let actual = self.infer(source, context, next)?;
+                require_same(
+                    product_type,
+                    actual,
+                    "kernel_owned_product",
+                    "unpack source",
+                )?;
+                let TypeForm::OwnedProduct { fields: expected } =
+                    self.type_object(product_type)?.form
+                else {
+                    return Err(super::owned_product::reject(
+                        "unpack requires an owned product",
+                    ));
+                };
+                if fields.len() != expected.len() {
+                    return Err(super::owned_product::reject("unpack must bind every field"));
+                }
+                for (field, contract) in fields.iter().zip(&expected) {
+                    let Some(OwnerRecord::Binding(binding)) =
+                        self.read.owner(OwnerKey::Binding(field.binding))?
+                    else {
+                        return Err(super::owned_product::reject("missing unpack binding"));
+                    };
+                    if field.name != contract.name
+                        || binding.kind != BindingKind::OwnedUnpack
+                        || binding.value.is_some()
+                        || binding.declared_type != Some(contract.ty)
+                    {
+                        return Err(super::owned_product::reject(
+                            "unpack field, binding kind or type mismatch",
+                        ));
+                    }
+                }
+                self.infer(body, context, next)
+            }
             ExpressionOperation::Unit {} => self.canonical_type(TypeForm::Unit),
             ExpressionOperation::Bool { .. } => self.canonical_type(TypeForm::Bool),
             ExpressionOperation::I64 { .. } => self.canonical_type(TypeForm::I64),
@@ -1604,6 +1674,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 | TypeForm::Stream { .. }
                 | TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell
+                | TypeForm::OwnedProduct { .. }
                 | TypeForm::CapabilityResource { .. } => {
                     return Err(type_error(
                         "kernel_type_bind_capture",
@@ -2735,8 +2806,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 ));
             }
         }
+        if matches!(object.form, TypeForm::OwnedProduct { .. }) {
+            self.owned_read(|read| super::owned_product::validate(read, ty, context.declaration))?;
+        }
         for child in object.child_types() {
-            if self.type_contains_buffer(child)? {
+            if !matches!(object.form, TypeForm::OwnedProduct { .. })
+                && self.type_contains_buffer(child)?
+            {
                 return Err(type_error(
                     "kernel_buffer_container",
                     "ByteBuffer cannot occur in a container or callable descriptor",
@@ -2815,8 +2891,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 continue;
             }
             let object = self.type_object(ty)?;
-            if matches!(object.form, TypeForm::ByteBuffer | TypeForm::OwnedI64Cell)
-                || matches!(object.form, TypeForm::TypeParameter { parameter } if matches!(self.read.owner(OwnerKey::TypeParameter(parameter))?, Some(OwnerRecord::TypeParameter(p)) if p.constraints == super::TypeParameterConstraints::Owned))
+            if matches!(
+                object.form,
+                TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. }
+            ) || matches!(object.form, TypeForm::TypeParameter { parameter } if matches!(self.read.owner(OwnerKey::TypeParameter(parameter))?, Some(OwnerRecord::TypeParameter(p)) if p.constraints == super::TypeParameterConstraints::Owned))
             {
                 return Ok(true);
             }
@@ -2841,6 +2919,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             let children = match &object.form {
                 TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell
+                | TypeForm::OwnedProduct { .. }
                 | TypeForm::CapabilityResource { .. }
                 | TypeForm::Stream { .. } => {
                     return Err(type_error(
@@ -2894,6 +2973,17 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 });
             }
             TypeForm::StructuralRecord { fields } => TypeForm::StructuralRecord {
+                fields: fields
+                    .into_iter()
+                    .map(|field| {
+                        Ok(StructuralTypeField {
+                            name: field.name,
+                            ty: self.substitute(field.ty, substitutions, next)?,
+                        })
+                    })
+                    .collect::<Result<_, Diagnostic>>()?,
+            },
+            TypeForm::OwnedProduct { fields } => TypeForm::OwnedProduct {
                 fields: fields
                     .into_iter()
                     .map(|field| {
@@ -2993,7 +3083,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             Ok(())
         };
         match &mut object.form {
-            TypeForm::StructuralRecord { fields } => {
+            TypeForm::StructuralRecord { fields } | TypeForm::OwnedProduct { fields } => {
                 for field in fields {
                     replace(&mut field.ty)?;
                 }
@@ -3033,7 +3123,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         let (digest, bytes) = super::codec::encode_type_object(&object)?;
         if !self.ephemeral_types.contains_key(&digest) {
             let children = match &object.form {
-                TypeForm::StructuralRecord { fields } => fields.len(),
+                TypeForm::StructuralRecord { fields } | TypeForm::OwnedProduct { fields } => {
+                    fields.len()
+                }
                 TypeForm::Applied { arguments, .. } => arguments.len(),
                 TypeForm::Function { parameters, .. } => parameters.len(),
                 TypeForm::TaskFunction {

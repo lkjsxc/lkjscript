@@ -7,7 +7,8 @@ meaning authority. Native notation, package interfaces, specialization and code
 are checked projections of that graph.
 
 `Owned`, `CaptureSafe` and `None` are distinct constraints. An Owned argument must
-be exactly ByteBuffer, OwnedI64Cell, or an in-scope Owned parameter while checking
+be exactly ByteBuffer, OwnedI64Cell, an explicit [owned product](owned-products.md),
+or an in-scope Owned parameter while checking
 a generic body. Ordinary and CaptureSafe parameters cannot receive an owned type,
 even when the parameter is unused, its container is empty, or the call is in an
 untaken branch. Owned constraints belong only to pure graph functions without
@@ -32,12 +33,13 @@ affine rules as its concrete carrier:
   quotas dispose of all remaining owners and loans. This cleanup invokes no
   user-defined method and confers no capability authority.
 
-Owned containers, mutable borrows, escaping captures, memory-bearing indirect
+General owned containers, mutable borrows, escaping captures, memory-bearing indirect
 function descriptors, task memory signatures and generic implementation schemes
 are outside this increment. Ordinary generic and CaptureSafe contracts retain
-their previous meaning. Ordinary raw-entry structural substitutions and elided
-ordinary lexical annotations remain supported; ownership annotations require
-exact owned type metadata.
+their previous meaning. Graph 19 adds fixed structural owned products with complete
+consuming decomposition. Ordinary raw-entry structural substitutions remain supported.
+Current artifacts retain all lexical annotation roots; an annotation is never an
+ownership certificate.
 
 ## Independent scalar carrier
 
@@ -108,17 +110,19 @@ independently of these prepared instances.
 
 ## Encodings, admission and compatibility
 
-New owned meaning uses graph/owner generation 18. Frozen canonical owner codecs
-preserve generations 14–17, and ordinary base type identities remain unchanged.
+The initial owned-generic increment used graph/owner generation 18. Current
+graph/owner generation 19 adds structural products. Frozen canonical owner codecs
+preserve generations 14–18, and ordinary base type identities remain unchanged.
 Package interface generation 12 changes method/function layout; interface 10 and
 11 have separate frozen representations. In particular, interface-11 function,
 constant and component bytes are not interpreted using generation-12 enum tags.
 
-Current compilation uses compiler unit 15, bytecode 11 and artifact 22. Derived
+Current compilation uses compiler unit 16, bytecode 12 and artifact 23. Derived
 predecessor artifacts require rebuilding from supported accepted meaning; an old
 proof or compiler artifact does not silently become current permission. Authored
-owned requests use codec 21; compact changes use contract 25. The semantic
-validator identity is 18. Public discovery advertises the actual generations.
+owned-only requests retain codec 21; product-bearing requests select codec 22.
+Compact changes use contract 26. The semantic validator identity is 19.
+Public discovery advertises the actual generations.
 Regeneration of maintained artifacts preserves accepted meaning HEADs.
 
 Complete admission includes unused arguments, methods and unreachable expressions.

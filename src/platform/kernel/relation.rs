@@ -981,6 +981,7 @@ where
         }
         | ExpressionOperation::List { .. }
         | ExpressionOperation::Map { .. } => {}
+        ExpressionOperation::PackOwned { .. } | ExpressionOperation::UnpackOwned { .. } => {}
     }
     Ok(())
 }

@@ -54,10 +54,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-25";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 25;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-21";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 21;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-26";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 26;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-22";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 22;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -1643,6 +1643,7 @@ pub(crate) const COMPACT_CHANGE_PRECONDITION_FIELDS: &[CompactChangePrecondition
     },
 ];
 pub const COMPACT_TYPE_FORMS: &[&str] = &[
+    "owned-product",
     "owned-i64-cell",
     "byte-buffer",
     "unit",
@@ -1674,6 +1675,8 @@ pub(crate) const COMPACT_EFFECT_FORM_FIELDS: &[CompactFormField] = &[CompactForm
     syntax: "@NAME",
 }];
 pub const COMPACT_EXPRESSION_FORMS: &[&str] = &[
+    "pack-owned",
+    "unpack-owned",
     "implementation-call",
     "method-call",
     "unit",
@@ -1711,6 +1714,12 @@ pub(crate) struct CompactFormField {
 }
 
 pub(crate) const COMPACT_TYPE_FORM_FIELDS: &[CompactFormField] = &[
+    CompactFormField {
+        form: "owned-product",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
     CompactFormField {
         form: "owned-i64-cell",
         name: "as",
@@ -1930,6 +1939,42 @@ pub(crate) const COMPACT_TYPE_FORM_FIELDS: &[CompactFormField] = &[
 ];
 
 pub(crate) const COMPACT_EXPRESSION_FORM_FIELDS: &[CompactFormField] = &[
+    CompactFormField {
+        form: "pack-owned",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "pack-owned",
+        name: "type",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "unpack-owned",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "unpack-owned",
+        name: "type",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "unpack-owned",
+        name: "source",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "unpack-owned",
+        name: "body",
+        required: true,
+        syntax: "$NAME",
+    },
     CompactFormField {
         form: "implementation-call",
         name: "as",
@@ -2373,6 +2418,80 @@ pub(crate) struct CompactEdgeDescriptor {
 }
 
 pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
+    CompactEdgeDescriptor {
+        name: "expression.owned-field",
+        parent: "expression.pack-owned",
+        child: "expression",
+        fields: &[
+            CompactFormField {
+                form: "expression.owned-field",
+                name: "parent",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "expression.owned-field",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "expression.owned-field",
+                name: "name",
+                required: true,
+                syntax: "name",
+            },
+            CompactFormField {
+                form: "expression.owned-field",
+                name: "value",
+                required: true,
+                syntax: "$NAME",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "expression.owned-binding",
+        parent: "expression.unpack-owned",
+        child: "binding",
+        fields: &[
+            CompactFormField {
+                form: "expression.owned-binding",
+                name: "parent",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "expression.owned-binding",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "expression.owned-binding",
+                name: "field-name",
+                required: true,
+                syntax: "name",
+            },
+            CompactFormField {
+                form: "expression.owned-binding",
+                name: "as",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "expression.owned-binding",
+                name: "name",
+                required: true,
+                syntax: "name",
+            },
+            CompactFormField {
+                form: "expression.owned-binding",
+                name: "type",
+                required: true,
+                syntax: "type-reference",
+            },
+        ],
+    },
     CompactEdgeDescriptor {
         name: "owned.method",
         parent: "owned-contract",
@@ -3271,6 +3390,13 @@ impl Decoder {
                 "expression.binding" => self.insert_indexed_record_edge(
                     record,
                     &["parent", "index", "as", "name", "value", "type"],
+                )?,
+                "expression.owned-field" => {
+                    self.insert_indexed_record_edge(record, &["parent", "index", "name", "value"])?
+                }
+                "expression.owned-binding" => self.insert_indexed_record_edge(
+                    record,
+                    &["parent", "index", "field-name", "as", "name", "type"],
                 )?,
                 "expression.record-field" => self.insert_indexed_record_edge(
                     record,
@@ -4350,7 +4476,7 @@ impl Decoder {
                     interface: self.parse_declaration_reference(&record, "interface")?,
                 }
             }
-            "type.structural-record" => {
+            "type.structural-record" | "type.owned-product" => {
                 check_fields(&record, &["as"])?;
                 let fields = self
                     .ordered_record_edges("type.field", reference)?
@@ -4362,7 +4488,11 @@ impl Decoder {
                         })
                     })
                     .collect::<Result<Vec<_>, Diagnostic>>()?;
-                AuthoredType::StructuralRecord { fields }
+                if record.operation == "type.owned-product" {
+                    AuthoredType::OwnedProduct { fields }
+                } else {
+                    AuthoredType::StructuralRecord { fields }
+                }
             }
             "type.parameter" => {
                 check_fields(&record, &["as", "parameter"])?;
@@ -4588,6 +4718,45 @@ impl Decoder {
                 AuthoredExpressionOperation::Let {
                     bindings,
                     body: Box::new(self.decode_expression(&body)?),
+                }
+            }
+            "expression.pack-owned" => {
+                check_fields(&record, &["as", "type"])?;
+                let product_type = self.decode_type(required(&record, "type")?)?;
+                let mut fields = Vec::new();
+                for edge in self.ordered_record_edges("expression.owned-field", symbol)? {
+                    let value = required(&edge.record, "value")?.to_owned();
+                    fields.push((
+                        parse_name(&edge.record, "name")?,
+                        self.decode_expression(&value)?,
+                    ));
+                }
+                AuthoredExpressionOperation::PackOwned {
+                    product_type,
+                    fields,
+                }
+            }
+            "expression.unpack-owned" => {
+                check_fields(&record, &["as", "type", "source", "body"])?;
+                let product_type = self.decode_type(required(&record, "type")?)?;
+                let source = Box::new(self.decode_expression(required(&record, "source")?)?);
+                let mut fields = Vec::new();
+                for edge in self.ordered_record_edges("expression.owned-binding", symbol)? {
+                    fields.push((
+                        parse_name(&edge.record, "field-name")?,
+                        AuthoredBindingDefinition {
+                            symbol: symbol_field(&edge.record, "as")?,
+                            name: parse_name(&edge.record, "name")?,
+                            declared_type: Some(self.decode_type(required(&edge.record, "type")?)?),
+                        },
+                    ));
+                }
+                let body = Box::new(self.decode_expression(required(&record, "body")?)?);
+                AuthoredExpressionOperation::UnpackOwned {
+                    product_type,
+                    source,
+                    fields,
+                    body,
                 }
             }
             "expression.record" => {

@@ -8,6 +8,7 @@ fn strict_artifact_rejects_fully_rehashed_expanding_canonical_applications() {
     // These complete containers have coherent canonical and compiled applications and all
     // outer hashes. A recorded, temporary rejected-rule producer made them without execution.
     // The independent loader must reject their bodies even when every producer assertion agrees.
+    let mut expected_files = Vec::new();
     for (name, bytes) in [
         (
             "direct",
@@ -54,14 +55,17 @@ fn strict_artifact_rejects_fully_rehashed_expanding_canonical_applications() {
             .as_slice(),
             _ => unreachable!(),
         };
-        assert_eq!(
-            current, retained,
-            "current {name} fixture must preserve exact source and instructions"
-        );
         let error = load_artifact(&current).unwrap_err();
         assert_eq!(error.code, "kernel_callable_expansion", "{name}: {error:?}");
         assert_eq!(error.class, crate::platform::DiagnosticClass::Semantic);
         println!("strict-expanding-artifact {name}: {}", error.code);
+        expected_files.push((name, current, retained));
+    }
+    for (name, current, retained) in expected_files {
+        assert!(
+            current == retained,
+            "current {name} fixture must preserve exact source and instructions"
+        );
     }
 }
 
@@ -229,6 +233,7 @@ pub(super) fn replace_unit(
         13 => (*b"LKJCUN13", "lkjscript.compiler-unit-envelope.v13"),
         14 => (*b"LKJCUN14", "lkjscript.compiler-unit-envelope.v14"),
         15 => (*b"LKJCUN15", "lkjscript.compiler-unit-envelope.v15"),
+        16 => (*b"LKJCUN16", "lkjscript.compiler-unit-envelope.v16"),
         other => panic!("unexpected forged-unit generation {other}"),
     };
     let bytes = crate::platform::packed::encode(
@@ -239,7 +244,7 @@ pub(super) fn replace_unit(
     )
     .unwrap();
     let key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &bytes);
-    if unit.contract_version == 15 {
+    if unit.contract_version == super::super::unit::COMPILER_UNIT_CONTRACT_VERSION {
         CompilationUnit::decode(&bytes, key).expect("structurally valid forged unit");
     } else {
         assert_eq!(

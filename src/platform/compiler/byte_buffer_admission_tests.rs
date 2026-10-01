@@ -75,6 +75,106 @@ fn owned_witness_artifact_rejects_consistently_rehashed_untaken_consumption() {
     reject_source(source, "hostile-buffer", TypeForm::ByteBuffer, "retire");
 }
 
+#[test]
+fn owned_products_artifact_rejects_rehashed_source_code_and_metadata_double_consume() {
+    let source = crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(r#"declarations.begin
+(units (module create hostile
+  (external create empty (visibility private) (implementation core.buffer.empty) (returns ByteBuffer))
+  (function create factory (visibility private) (effect pure) (returns (owned-product (field data ByteBuffer)))
+    (body (let (binding b (type ByteBuffer) (call empty))
+      (in (pack-owned (type (owned-product (field data ByteBuffer))) (field data (local b)))))))
+  (function create retire (visibility private) (effect pure)
+    (parameter create p (type (owned-product (field data ByteBuffer))) (use consume))
+    (returns Unit) (body (unit)))
+  (function create attack (visibility private) (effect pure) (returns Unit)
+    (body (if (bool true) (unit)
+      (let
+        (binding a (type (owned-product (field data ByteBuffer))) (call factory))
+        (binding b (type (owned-product (field data ByteBuffer))) (call factory))
+        (in (sequence (call retire (local a)) (call retire (local b))))))))))
+declarations.end"#).unwrap();
+    let carrier = source
+        .types
+        .values()
+        .find(|t| matches!(t.form, TypeForm::OwnedProduct { .. }))
+        .unwrap()
+        .form
+        .clone();
+    reject_source(source, "attack", carrier, "retire");
+}
+
+#[test]
+fn owned_products_signature_only_artifact_rejects_rehashed_graph_18_package() {
+    // A private Local-only relay gives the loader no public type or new operation
+    // tag on which to rely. The complete compiled type closure still binds Graph 19.
+    let source = crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(
+        r#"declarations.begin
+(units (module create signatures
+  (function create relay (visibility private) (effect pure)
+    (parameter create p (type (owned-product (field data ByteBuffer))) (use consume))
+    (returns (owned-product (field data ByteBuffer))) (body (local p)))))
+declarations.end"#,
+    )
+    .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let repository = GraphRepository::create(&dir.path().join("signatures"), &source, None)
+        .unwrap()
+        .repository;
+    let compilation = build_clean(&repository, OptimizationPolicy::DeterministicBaseline).unwrap();
+    let artifact = link_artifact(&repository, compilation.manifest_digest, &[]).unwrap();
+    let loaded = load_artifact(&artifact.artifact.bytes).unwrap();
+    let mut objects = loaded.objects.clone();
+    let mut manifest = loaded.manifest.clone();
+    assert_eq!(manifest.packages.len(), 1);
+    let package = &mut manifest.packages[0];
+    let old = package.package_revision;
+    let mut revision = crate::platform::package_transport::PackageRevision::decode(
+        &objects
+            .remove(&ObjectKey::from_digest(
+                ObjectDomain::PackageRevision,
+                old.bytes(),
+            ))
+            .unwrap(),
+        old,
+    )
+    .unwrap();
+    revision.graph_contract_version = 18;
+    revision.revision.graph_contract_version = 18;
+    package.semantic_revision = revision.revision.revision_id().unwrap();
+    revision.interface = crate::platform::package_interface::package_interface_digest_for_graph(
+        package.package,
+        package.interface_owners.content_root(),
+        18,
+    )
+    .unwrap();
+    package.interface = revision.interface;
+    let (digest, bytes) = revision.encode().unwrap();
+    package.package_revision = digest;
+    objects.insert(
+        ObjectKey::from_digest(ObjectDomain::PackageRevision, digest.bytes()),
+        bytes,
+    );
+    let mut compilation = CompilationManifest::decode(
+        &objects.remove(&package.compilation.object_key()).unwrap(),
+        package.compilation,
+    )
+    .unwrap();
+    compilation.revision = package.semantic_revision;
+    compilation.package_revision = package.package_revision;
+    compilation.package_interface = package.interface;
+    let (compilation_digest, compilation_bytes) = compilation.encode().unwrap();
+    package.compilation = compilation_digest;
+    objects.insert(compilation_digest.object_key(), compilation_bytes);
+    let (closure, count, length) = super::super::artifact::closure_facts(&objects).unwrap();
+    manifest.closure = closure;
+    manifest.object_count = count;
+    manifest.object_bytes = length;
+    let bytes = nominal_session_tests::hostile_bundle(&manifest, &objects);
+    let error = load_artifact(&bytes).unwrap_err();
+    assert_eq!(error.code, "kernel_product_generation", "{error:?}");
+    assert_eq!(error.class, DiagnosticClass::Semantic);
+}
+
 fn reject_source(snapshot: KernelSnapshot, name: &str, carrier: TypeForm, callee: &str) {
     assert!(crate::platform::kernel::memory_reference::accepts(
         &snapshot
@@ -191,21 +291,29 @@ fn reject_source(snapshot: KernelSnapshot, name: &str, carrier: TypeForm, callee
         })
         .collect();
     let mut exhausted = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK as u64;
-    let failure =
-        super::super::artifact::runtime_owner_expectations(&units, &mut exhausted, || Ok(()))
-            .unwrap_err();
+    let failure = super::super::artifact::runtime_owner_expectations(
+        &units,
+        &mut exhausted,
+        |_| panic!("work exhaustion must precede type reads"),
+        || Ok(()),
+    )
+    .unwrap_err();
     assert_eq!(failure.class, DiagnosticClass::Resource);
     assert_eq!(failure.code, "artifact_owned_contract_work");
     let mut cancelled = 0;
-    let failure =
-        super::super::artifact::runtime_owner_expectations(&units, &mut cancelled, || {
+    let failure = super::super::artifact::runtime_owner_expectations(
+        &units,
+        &mut cancelled,
+        |_| panic!("cancellation must precede type reads"),
+        || {
             Err(crate::platform::diagnostic::Diagnostic::new(
                 DiagnosticClass::Resource,
                 "owned_inventory_cancelled",
                 "cancel before inventory growth",
             ))
-        })
-        .unwrap_err();
+        },
+    )
+    .unwrap_err();
     assert_eq!(failure.code, "owned_inventory_cancelled");
     assert_eq!(cancelled, 0);
     let (old_unit, mut unit) = loaded

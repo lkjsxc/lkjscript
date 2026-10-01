@@ -262,6 +262,71 @@ pub(super) fn layout(
                 minimum(&block, id, args, 1)?;
                 node.children.extend_from_slice(args);
             }
+            "pack-owned" => {
+                minimum(&block, id, args, 2)?;
+                let annotation = clause(&block, args[0], "type")?;
+                arity(&block, args[0], annotation, 1)?;
+                node.record.fields.push(block.field(annotation[0], "type")?);
+                for field in &args[1..] {
+                    let parts = clause(&block, *field, "field")?;
+                    arity(&block, *field, parts, 2)?;
+                    let mut record = member_record(&block, *field);
+                    record.fields.push(block.field(parts[0], "name")?);
+                    node.members.push(record);
+                    node.children.push(parts[1]);
+                }
+            }
+            "unpack-owned" => {
+                minimum(&block, id, args, 4)?;
+                let annotation = clause(&block, args[0], "type")?;
+                arity(&block, args[0], annotation, 1)?;
+                node.record.fields.push(block.field(annotation[0], "type")?);
+                node.children.push(args[1]);
+                let body = clause(&block, args[args.len() - 1], "in")?;
+                arity(&block, args[args.len() - 1], body, 1)?;
+                let mut bindings = Vec::new();
+                for field in &args[2..args.len() - 1] {
+                    let parts = clause(&block, *field, "field")?;
+                    arity(&block, *field, parts, 2)?;
+                    let (binder, explicit) =
+                        binder_alias(&block, clause(&block, parts[1], "binding")?, symbols)?;
+                    arity(&block, parts[1], &binder, 2)?;
+                    let ty = clause(&block, binder[1], "type")?;
+                    arity(&block, binder[1], ty, 1)?;
+                    let local_name = name(&block, binder[0])?.to_string();
+                    let local_symbol = match explicit {
+                        Some(s) => s,
+                        None => symbols.allocate(&block.syntax[binder[0]].location)?,
+                    };
+                    let mut record = member_record(&block, *field);
+                    record.fields.push(block.field(parts[0], "field-name")?);
+                    record.fields.push(block.field(binder[0], "name")?);
+                    record.fields.push(block.field(ty[0], "type")?);
+                    record.fields.push(CompactField {
+                        name: "as".into(),
+                        value: local_symbol.clone(),
+                        location: record.location.clone(),
+                    });
+                    node.members.push(record);
+                    bindings.push((local_name, local_symbol));
+                }
+                node.children.push(body[0]);
+                for (name, _) in &bindings {
+                    work.push(Work::Leave(name.clone()));
+                }
+                work.push(Work::Expression {
+                    id: body[0],
+                    depth: depth + 1,
+                });
+                for (name, symbol) in bindings.into_iter().rev() {
+                    work.push(Work::Enter { name, symbol });
+                }
+                work.push(Work::Expression {
+                    id: args[1],
+                    depth: depth + 1,
+                });
+                scoped = true;
+            }
             "let" => {
                 minimum(&block, id, args, 1)?;
                 let body = clause(&block, args[args.len() - 1], "in")?;
@@ -798,6 +863,38 @@ fn lower_node(
                 AuthoredExpressionOperation::Invoke { callee, arguments }
             } else {
                 AuthoredExpressionOperation::Bind { callee, arguments }
+            }
+        }
+        "expression.pack-owned" => {
+            let product_type = decoder.decode_type(required(record, "type")?)?;
+            let mut fields = Vec::new();
+            for member in &node.members {
+                fields.push((parse_name(member, "name")?, child()?));
+            }
+            AuthoredExpressionOperation::PackOwned {
+                product_type,
+                fields,
+            }
+        }
+        "expression.unpack-owned" => {
+            let product_type = decoder.decode_type(required(record, "type")?)?;
+            let source = Box::new(child()?);
+            let mut fields = Vec::new();
+            for member in &node.members {
+                fields.push((
+                    parse_name(member, "field-name")?,
+                    AuthoredBindingDefinition {
+                        symbol: symbol(member, "as")?,
+                        name: parse_name(member, "name")?,
+                        declared_type: Some(decoder.decode_type(required(member, "type")?)?),
+                    },
+                ));
+            }
+            AuthoredExpressionOperation::UnpackOwned {
+                product_type,
+                source,
+                fields,
+                body: Box::new(child()?),
             }
         }
         "expression.let" => {

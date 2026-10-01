@@ -1,0 +1,37 @@
+declarations.begin
+(units
+  (module create product-independent
+    (function create pair (visibility public)
+      (type-parameter create Left (constraint owned))
+      (type-parameter create Right (constraint owned))
+      (parameter create tag (type I64))
+      (parameter create left (type Left) (use consume))
+      (parameter create right (type Right) (use consume))
+      (returns (owned-product (field left Left) (field right Right) (field tag I64)))
+      (effect pure)
+      (body
+        (pack-owned
+          (type (owned-product (field left Left) (field right Right) (field tag I64)))
+          (field tag (local tag))
+          (field right (local right))
+          (field left (local left)))))
+    (function create take-left (visibility public)
+      (type-parameter create Left (constraint owned))
+      (type-parameter create Right (constraint owned))
+      (parameter create pair
+        (type (owned-product (field left Left) (field right Right) (field tag I64)))
+        (use consume))
+      (returns Left) (effect pure)
+      (body
+        (unpack-owned
+          (type (owned-product (field left Left) (field right Right) (field tag I64)))
+          (local pair)
+          (field left (binding retained (type Left)))
+          (field right (binding discarded (type Right)))
+          (field tag (binding observed (type I64)))
+          (in (local retained)))))
+    (function create relay (visibility public)
+      (type-parameter create Value (constraint owned))
+      (parameter create value (type Value) (use consume))
+      (returns Value) (effect pure) (body (local value)))))
+declarations.end

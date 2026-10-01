@@ -1666,6 +1666,8 @@ mod native_byte_buffer;
 #[path = "native_owned_parameters.rs"]
 mod native_owned_parameters;
 
+#[path = "native_owned_products.rs"]
+mod native_owned_products;
 #[path = "native_owned_witnesses.rs"]
 mod native_owned_witnesses;
 

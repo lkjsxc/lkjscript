@@ -41,7 +41,9 @@ impl Value {
     ) -> Result<Self, ExecutionError> {
         if !matches!(
             raw,
-            NormalizedValue::ByteBuffer(_) | NormalizedValue::OwnedI64Cell(_)
+            NormalizedValue::ByteBuffer(_)
+                | NormalizedValue::OwnedI64Cell(_)
+                | NormalizedValue::OwnedProduct(_)
         ) {
             return Err(admission_error(
                 "memory constructor requires a sealed token",
@@ -351,6 +353,7 @@ impl Value {
                         object.form,
                         TypeForm::ByteBuffer
                             | TypeForm::OwnedI64Cell
+                            | TypeForm::OwnedProduct { .. }
                             | TypeForm::CapabilityResource { .. }
                     )
                 });
@@ -474,6 +477,7 @@ impl Value {
                     ty.form,
                     TypeForm::ByteBuffer
                         | TypeForm::OwnedI64Cell
+                        | TypeForm::OwnedProduct { .. }
                         | TypeForm::CapabilityResource { .. }
                 )
             });
@@ -833,6 +837,7 @@ impl Admission<'_> {
                 | TypeForm::Stream { .. }
                 | TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell
+                | TypeForm::OwnedProduct { .. }
                 | TypeForm::CapabilityResource { .. }
                 | TypeForm::TypeParameter { .. } => {
                     return Err(admission_error(
@@ -1062,6 +1067,7 @@ impl Admission<'_> {
                                     object.form,
                                     TypeForm::ByteBuffer
                                         | TypeForm::OwnedI64Cell
+                                        | TypeForm::OwnedProduct { .. }
                                         | TypeForm::CapabilityResource { .. }
                                 )
                             });

@@ -2293,6 +2293,39 @@ impl DefinitionOracleWalker<'_> {
                     ExpressionChildRole::LetBody,
                 )?;
             }
+            ExpressionOperation::UnpackOwned {
+                source,
+                fields,
+                body,
+                ..
+            } => {
+                self.visit_expression_child(
+                    *source,
+                    owner,
+                    "owned_product_source",
+                    0,
+                    child_depth,
+                    ExpressionChildRole::OwnedProductSource,
+                )?;
+                for (index, field) in fields.iter().enumerate() {
+                    self.visit_binding(
+                        field.binding,
+                        owner,
+                        "owned_product_binding",
+                        oracle_ordinal(index)?,
+                        child_depth,
+                        (BindingKind::OwnedUnpack, BindingContainerRole::OwnedUnpack),
+                    )?;
+                }
+                self.visit_expression_child(
+                    *body,
+                    owner,
+                    "owned_product_body",
+                    0,
+                    child_depth,
+                    ExpressionChildRole::OwnedProductBody,
+                )?;
+            }
             ExpressionOperation::Match { value, arms } => {
                 self.visit_expression_child(
                     *value,
@@ -2710,6 +2743,8 @@ fn oracle_expression_form(operation: &ExpressionOperation) -> &'static str {
         ExpressionOperation::CapabilityCall { .. } => "capability_call",
         ExpressionOperation::Transaction { .. } => "transaction",
         ExpressionOperation::TransactionOutcome { .. } => "transaction_outcome",
+        ExpressionOperation::PackOwned { .. } => "pack_owned",
+        ExpressionOperation::UnpackOwned { .. } => "unpack_owned",
     }
 }
 
@@ -2718,6 +2753,7 @@ fn oracle_binding_kind(kind: BindingKind) -> &'static str {
         BindingKind::Let => "let",
         BindingKind::MatchPayload => "match_payload",
         BindingKind::Transaction => "transaction",
+        BindingKind::OwnedUnpack => "owned_unpack",
     }
 }
 
@@ -2743,6 +2779,9 @@ fn oracle_child_role(role: ExpressionChildRole) -> &'static str {
         ExpressionChildRole::MatchArmBody => "match_arm",
         ExpressionChildRole::CapabilityArgument => "capability_argument",
         ExpressionChildRole::TransactionBody => "transaction_body",
+        ExpressionChildRole::OwnedProductField => "owned_product_field",
+        ExpressionChildRole::OwnedProductSource => "owned_product_source",
+        ExpressionChildRole::OwnedProductBody => "owned_product_body",
     }
 }
 

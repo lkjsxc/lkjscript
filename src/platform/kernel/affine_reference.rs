@@ -60,7 +60,9 @@ struct Reference<'a> {
 impl Reference<'_> {
     fn buffer(&self, ty: TypeObjectDigest) -> bool {
         match self.type_object(ty).map(|t| &t.form) {
-            Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell) => true,
+            Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. }) => {
+                true
+            }
             Some(TypeForm::TypeParameter { parameter }) => {
                 matches!(self.snapshot.owners.get(&OwnerKey::TypeParameter(*parameter)), Some(OwnerRecord::TypeParameter(p)) if p.constraints == super::TypeParameterConstraints::Owned)
             }
@@ -226,6 +228,16 @@ impl Reference<'_> {
             _ => return Err(()),
         };
         match operation {
+            ExpressionOperation::PackOwned { fields, .. } => {
+                for field in fields {
+                    self.plain(field.value, live)?;
+                }
+                Ok(Value::Plain)
+            }
+            ExpressionOperation::UnpackOwned { source, body, .. } => {
+                self.plain(*source, live)?;
+                self.eval(*body, live)
+            }
             ExpressionOperation::ImplementationCall { arguments, .. }
             | ExpressionOperation::MethodCall { arguments, .. } => {
                 for arg in arguments {

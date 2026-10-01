@@ -5197,6 +5197,23 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
         fields.push(("depth", position.depth.to_string()));
         let mut literal_fragments = None;
         match &record.operation {
+            ExpressionOperation::PackOwned {
+                product_type,
+                fields: members,
+            } => {
+                fields.push(("form", "pack_owned".into()));
+                fields.push(("fields", members.len().to_string()));
+                self.add_type_reference("owned_product_type", owner, 0, *product_type)?;
+            }
+            ExpressionOperation::UnpackOwned {
+                product_type,
+                fields: members,
+                ..
+            } => {
+                fields.push(("form", "unpack_owned".into()));
+                fields.push(("fields", members.len().to_string()));
+                self.add_type_reference("owned_product_type", owner, 0, *product_type)?;
+            }
             ExpressionOperation::Unit {} => fields.push(("form", "unit".to_owned())),
             ExpressionOperation::Bool { value } => {
                 fields.push(("form", "bool".to_owned()));
@@ -5610,6 +5627,64 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
 
         let child_depth = definition_child_depth(position.depth)?;
         match record.operation {
+            ExpressionOperation::PackOwned { fields, .. } => {
+                for (index, field) in fields.into_iter().enumerate() {
+                    self.visit_expression_child(
+                        owner,
+                        field.value,
+                        (
+                            ExpressionChildRole::OwnedProductField,
+                            "owned_product_field",
+                        ),
+                        index,
+                        Some(field.name.to_string()),
+                        child_depth,
+                    )?;
+                }
+            }
+            ExpressionOperation::UnpackOwned {
+                source,
+                fields,
+                body,
+                ..
+            } => {
+                self.visit_expression_child(
+                    owner,
+                    source,
+                    (
+                        ExpressionChildRole::OwnedProductSource,
+                        "owned_product_source",
+                    ),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+                for (index, field) in fields.into_iter().enumerate() {
+                    self.visit_binding(
+                        field.binding,
+                        DefinitionPosition {
+                            parent: owner,
+                            ownership_role: OwnershipRole::ExpressionBinding {
+                                role: BindingContainerRole::OwnedUnpack,
+                                ordinal: definition_ordinal(index)?,
+                            },
+                            slot: "owned_product_binding",
+                            index: definition_ordinal(index)?,
+                            label: Some(field.name.to_string()),
+                            depth: child_depth,
+                        },
+                        BindingKind::OwnedUnpack,
+                    )?;
+                }
+                self.visit_expression_child(
+                    owner,
+                    body,
+                    (ExpressionChildRole::OwnedProductBody, "owned_product_body"),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+            }
             ExpressionOperation::If {
                 condition,
                 when_true,
@@ -6678,6 +6753,7 @@ fn definition_binding_kind_name(value: BindingKind) -> &'static str {
         BindingKind::Let => "let",
         BindingKind::MatchPayload => "match_payload",
         BindingKind::Transaction => "transaction",
+        BindingKind::OwnedUnpack => "owned_unpack",
     }
 }
 

@@ -9,7 +9,7 @@ fn bundle(mut manifest: ArtifactManifest, objects: BTreeMap<ObjectKey, Vec<u8>>)
     super::nominal_session_tests::hostile_bundle(&manifest, &objects)
 }
 #[test]
-fn byte_buffer_affine_admission_preserves_elided_ordinary_annotations() {
+fn byte_buffer_affine_admission_retains_all_annotation_roots() {
     use crate::platform::execution::normalized::tests::byte_buffer_tests::author_only;
     let boolean = encode_type_object(&TypeObject::new(TypeForm::Bool).unwrap())
         .unwrap()
@@ -49,10 +49,10 @@ declarations.end"#
         let linked = link_artifact(&repository, built.manifest_digest, &[]).unwrap();
         let loaded = load_artifact(&linked.artifact.bytes).unwrap();
         assert!(
-            !loaded
+            loaded
                 .objects
                 .contains_key(&ObjectKey::from_digest(ObjectDomain::Type, boolean.bytes())),
-            "literal Bool is inferred; its lexical annotation object is not a runtime type-table input"
+            "current units retain ordinary annotations too; absent metadata cannot certify unrestricted storage"
         );
         assert_eq!(
             loaded
@@ -138,7 +138,7 @@ fn byte_buffer_forged_artifact_cannot_erase_modes_results_moves_or_cleanup() {
             loaded.manifest.compiler_contract_version,
             loaded.manifest.bytecode_contract_version
         ),
-        (15, 11)
+        (16, 12)
     );
     let mut checked = 0;
     for (package, record) in loaded.manifest.packages.iter().enumerate() {
@@ -355,7 +355,10 @@ fn byte_buffer_forged_artifact_cannot_erase_modes_results_moves_or_cleanup() {
                 failure.code,
                 if fault == "generation" {
                     "artifact_compiler_unit_binding"
-                } else if fault == "result" && name == "producer" {
+                } else if fault == "result" && matches!(name, "producer" | "main" | "abandoned") {
+                    // All annotation roots are now retained. Selecting the first
+                    // different result can cross the direct-memory boundary even
+                    // for a previously ordinary-result local builder.
                     "artifact_runtime_owner_count"
                 } else if fault == "result" && name == "forward" {
                     "artifact_runtime_owner_semantics"

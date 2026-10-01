@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-15";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 15;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-11";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 11;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN15";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v15";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v15";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-16";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 16;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-12";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 12;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN16";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v16";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v16";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -78,6 +78,10 @@ impl CompilationUnitKey {
             "lkjscript.compiler-unit-key.v12"
         } else if compiler_contract_version == 13 {
             "lkjscript.compiler-unit-key.v13"
+        } else if compiler_contract_version == 14 {
+            "lkjscript.compiler-unit-key.v14"
+        } else if compiler_contract_version == 15 {
+            "lkjscript.compiler-unit-key.v15"
         } else {
             COMPILER_UNIT_KEY_DOMAIN
         });
@@ -396,6 +400,14 @@ pub enum CompiledInstruction {
     },
     /// Fixed little-endian scalar bytes; predecessor instruction ordinals remain unchanged.
     F64(crate::platform::binary64::Binary64),
+    PackOwned {
+        product_type: u32,
+        fields: Vec<u32>,
+    },
+    UnpackOwned {
+        product_type: u32,
+        locals: Vec<u32>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
@@ -483,14 +495,15 @@ impl CompilationUnit {
                 "compiler-unit bytes disagree with their exact object-domain digest",
             ));
         }
-        // Derived generations 10–14 require a rebuild from supported canonical owners.
-        // Reject before decoding: their function layouts are not generation 15 layouts.
+        // Derived generations 10–15 require a rebuild from supported canonical owners.
+        // Refuse before decoding; old bytes never acquire current instruction meaning.
         if [
             b"LKJCUN10",
             b"LKJCUN11",
             b"LKJCUN12",
             b"LKJCUN13",
             b"LKJCUN14",
+            b"LKJCUN15",
         ]
         .iter()
         .any(|magic| bytes.starts_with(*magic))
@@ -526,7 +539,7 @@ impl CompilationUnit {
                 self.bytecode_contract_version,
                 self.graph_contract_version
             ),
-            (15, 11, 18)
+            (16, 12, 19)
         ) {
             return Err(unit_error(
                 DiagnosticClass::Source,
@@ -1266,6 +1279,41 @@ impl CompiledInstruction {
             }
         }
         match self {
+            Self::PackOwned {
+                product_type,
+                fields,
+            } => {
+                require_index("owned product type", *product_type, tables.types.len())?;
+                require_item_count("owned product fields", fields.len(), false)?;
+                let unique: BTreeSet<_> = fields.iter().copied().collect();
+                if unique.len() != fields.len() || unique.iter().copied().ne(0..fields.len() as u32)
+                {
+                    return Err(unit_error(
+                        DiagnosticClass::Corrupt,
+                        "compiler_product_fields",
+                        "product field permutation is incomplete",
+                    ));
+                }
+                Ok(())
+            }
+            Self::UnpackOwned {
+                product_type,
+                locals,
+            } => {
+                require_index("owned product type", *product_type, tables.types.len())?;
+                require_item_count("owned product locals", locals.len(), false)?;
+                for local in locals {
+                    require_index("owned product local", *local, code.local_count as usize)?;
+                }
+                if locals.iter().collect::<BTreeSet<_>>().len() != locals.len() {
+                    return Err(unit_error(
+                        DiagnosticClass::Corrupt,
+                        "compiler_product_locals",
+                        "product local destinations repeat",
+                    ));
+                }
+                Ok(())
+            }
             Self::Text(index) | Self::StaticText(index) => {
                 require_index("text constant", *index, tables.texts.len())
             }
@@ -1745,6 +1793,8 @@ fn stack_effect(instruction: &CompiledInstruction) -> Result<(usize, usize), Dia
         })
     };
     Ok(match instruction {
+        CompiledInstruction::PackOwned { fields, .. } => (fields.len(), 1),
+        CompiledInstruction::UnpackOwned { .. } => (1, 0),
         CompiledInstruction::Unit
         | CompiledInstruction::Bool(_)
         | CompiledInstruction::I64(_)

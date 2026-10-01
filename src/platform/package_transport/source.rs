@@ -309,6 +309,8 @@ impl PackageContainer {
                     != Some(crate::platform::kernel::contract::TRANSACTION_OWNER_MAGIC.as_slice())
                 && object.get(..8)
                     != Some(crate::platform::kernel::contract::SCALAR_OWNER_MAGIC.as_slice())
+                && object.get(..8)
+                    != Some(crate::platform::kernel::contract::OWNED_OWNER_MAGIC.as_slice())
             {
                 return Err(package_error(
                     DiagnosticClass::Source,
@@ -1111,6 +1113,7 @@ mod tests {
     use crate::platform::publication::GraphRepository;
 
     include!("f64_admission_tests.rs");
+    include!("owned_product_admission_tests.rs");
     fn standard_source() -> AdmittedClosure {
         let repository = GraphRepository::open(
             &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard"),

@@ -5977,6 +5977,7 @@ fn authored_type_builder_interns_every_unrestricted_graph_nine_type_form() {
             TypeForm::TaskFunction { .. } => "task_function",
             TypeForm::OwnedI64Cell => "owned_i64_cell",
             TypeForm::ByteBuffer => "byte_buffer",
+            TypeForm::OwnedProduct { .. } => "owned_product",
         });
     }
     assert_eq!(observed.len(), 16);

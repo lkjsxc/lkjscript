@@ -116,6 +116,8 @@ fn derive_linear(code: &mut NormalizedCode, work: &mut Budget<'_>) -> Result<(),
                 None
             }
             I::Unit
+            | I::PackOwned { .. }
+            | I::UnpackOwned { .. }
             | I::Bool(_)
             | I::I64(_)
             | I::F64(_)

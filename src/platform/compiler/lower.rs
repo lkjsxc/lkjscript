@@ -924,7 +924,9 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
         let read = self.canonical.code_type(ty)?;
         self.work.canonical.add(read.work);
         Ok(match read.value.map(|t| t.form) {
-            Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell) => true,
+            Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. }) => {
+                true
+            }
             Some(TypeForm::TypeParameter { parameter }) => matches!(
                 self.required_owner(OwnerKey::TypeParameter(parameter), "owned local parameter")?,
                 OwnerRecord::TypeParameter(p) if p.constraints == crate::platform::kernel::TypeParameterConstraints::Owned
@@ -1397,6 +1399,65 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         use_mode: ParameterUse,
     ) -> Result<(), Diagnostic> {
         match operation {
+            ExpressionOperation::PackOwned {
+                product_type,
+                fields,
+            } => {
+                let read = self.unit.canonical.code_type(product_type)?;
+                self.unit.work.canonical.add(read.work);
+                let object = read.value.ok_or_else(|| {
+                    compiler_corrupt("compiler_product_type", "missing product type")
+                })?;
+                let TypeForm::OwnedProduct { fields: expected } = object.form else {
+                    return Err(compiler_corrupt(
+                        "compiler_product_type",
+                        "pack requires product type",
+                    ));
+                };
+                let mut order = Vec::new();
+                for field in fields {
+                    let position = expected
+                        .iter()
+                        .position(|f| f.name == field.name)
+                        .ok_or_else(|| {
+                            compiler_corrupt("compiler_product_field", "unknown product field")
+                        })?;
+                    self.expression(field.value, depth)?;
+                    order.push(position as u32);
+                }
+                let product_type = self.unit.tables.ty(product_type)?;
+                self.push(CompiledInstruction::PackOwned {
+                    product_type,
+                    fields: order,
+                })?;
+            }
+            ExpressionOperation::UnpackOwned {
+                product_type,
+                source,
+                fields,
+                body,
+            } => {
+                self.expression_with_use(source, depth, ParameterUse::Consume)?;
+                let mut locals = Vec::new();
+                let mut scoped = Vec::new();
+                for field in fields {
+                    self.binding(field.binding, BindingKind::OwnedUnpack)?;
+                    let reference = LocalValueReference::LexicalBinding(field.binding);
+                    locals.push(self.bind(reference)?);
+                    scoped.push(reference);
+                }
+                let product_type = self.unit.tables.ty(product_type)?;
+                self.push(CompiledInstruction::UnpackOwned {
+                    product_type,
+                    locals: locals.clone(),
+                })?;
+                self.expression(body, depth)?;
+                for local in locals {
+                    self.push(CompiledInstruction::Unit)?;
+                    self.push(CompiledInstruction::StoreLocal(local))?;
+                }
+                self.unbind_all(&scoped);
+            }
             ExpressionOperation::Unit {} => {
                 self.push(CompiledInstruction::Unit)?;
             }
@@ -1481,6 +1542,9 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 let mut scoped = Vec::with_capacity(bindings.len());
                 for binding in bindings {
                     let record = self.binding(binding, BindingKind::Let)?;
+                    if let Some(ty) = record.declared_type {
+                        self.unit.tables.ty(ty)?;
+                    }
                     let value = record.value.ok_or_else(|| {
                         compiler_corrupt(
                             "compiler_let_value",

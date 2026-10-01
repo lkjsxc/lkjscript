@@ -119,6 +119,7 @@ struct Writer {
     f64_extension: bool,
     buffer_extension: bool,
     owned_extension: bool,
+    product_extension: bool,
     declaration_body_extension: bool,
     literal_extension: bool,
 }
@@ -133,13 +134,16 @@ impl Writer {
             f64_extension: false,
             buffer_extension: false,
             owned_extension: false,
+            product_extension: false,
             declaration_body_extension: false,
             literal_extension: false,
         }
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.owned_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+        if self.product_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR22");
+        } else if self.owned_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR21");
         } else if self.buffer_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR20");
@@ -1428,6 +1432,12 @@ impl Writer {
                     self.length(fields.len())?;
                     pending.push(Frame::Fields(fields, next));
                 }
+                AuthoredType::OwnedProduct { fields } => {
+                    self.product_extension = true;
+                    self.tag(22)?;
+                    self.length(fields.len())?;
+                    pending.push(Frame::Fields(fields, next));
+                }
                 AuthoredType::List { item }
                 | AuthoredType::Option { item }
                 | AuthoredType::Stream { item } => {
@@ -1739,6 +1749,38 @@ impl Writer {
                 self.expression(condition, definitions, next)?;
                 self.expression(when_true, definitions, next)?;
                 self.expression(when_false, definitions, next)
+            }
+            AuthoredExpressionOperation::PackOwned {
+                product_type,
+                fields,
+            } => {
+                self.product_extension = true;
+                self.tag(32)?;
+                self.authored_type(product_type, definitions, 1)?;
+                self.list(fields, |w, (name, value)| {
+                    w.name(name)?;
+                    w.expression(value, definitions, next)
+                })
+            }
+            AuthoredExpressionOperation::UnpackOwned {
+                product_type,
+                source,
+                fields,
+                body,
+            } => {
+                self.product_extension = true;
+                self.tag(33)?;
+                self.authored_type(product_type, definitions, 1)?;
+                self.expression(source, definitions, next)?;
+                self.list(fields, |w, (name, b)| {
+                    w.name(name)?;
+                    w.symbol(&b.symbol, definitions)?;
+                    w.name(&b.name)?;
+                    w.optional(b.declared_type.as_ref(), |w, ty| {
+                        w.authored_type(ty, definitions, 1)
+                    })
+                })?;
+                self.expression(body, definitions, next)
             }
             AuthoredExpressionOperation::Let { bindings, body } => {
                 self.tag(9)?;

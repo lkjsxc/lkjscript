@@ -69,6 +69,7 @@ pub enum BindingContainerRole {
     Let,
     MatchPayload,
     Transaction,
+    OwnedUnpack,
 }
 
 #[derive(Clone, Copy, Debug, Decode, Encode, Eq, Ord, PartialEq, PartialOrd)]

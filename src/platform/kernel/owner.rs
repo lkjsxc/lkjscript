@@ -749,6 +749,14 @@ impl BindingRecord {
     fn validate_local(&self) -> Result<(), Diagnostic> {
         validate_header_domain(self.header, OwnerKind::Binding)?;
         validate_names([&self.name])?;
+        if self.kind == BindingKind::OwnedUnpack
+            && (self.header.contract_version < 19 || self.declared_type.is_none())
+        {
+            return Err(owner_error(
+                "kernel_product_binding",
+                "unpack bindings require Graph 19 and exact type annotations",
+            ));
+        }
         if matches!(self.kind, BindingKind::Let) != self.value.is_some() {
             return Err(owner_error(
                 "kernel_binding_value",
@@ -765,6 +773,7 @@ pub enum BindingKind {
     Let,
     MatchPayload,
     Transaction,
+    OwnedUnpack,
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]

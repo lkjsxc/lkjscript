@@ -753,6 +753,30 @@ impl Lowering<'_> {
                 }
                 format!("type.{form}")
             }
+            "owned-product" => {
+                for (index, field) in args.into_iter().enumerate() {
+                    let (head, parts) = self.parts(field)?;
+                    let parts = parts.to_vec();
+                    if head != "field" || parts.len() != 2 {
+                        return Err(
+                            self.error(field, "owned product type requires (field NAME TYPE)")
+                        );
+                    }
+                    let name = self.block.atom(parts[0])?.to_owned();
+                    let ty = self.ty(parts[1], scope, depth + 1)?;
+                    self.record(
+                        field,
+                        "type.field",
+                        vec![
+                            ("parent", label.clone()),
+                            ("index", index.to_string()),
+                            ("name", name),
+                            ("type", ty),
+                        ],
+                    )?;
+                }
+                "type.owned-product".to_owned()
+            }
             "record" => {
                 for (index, field) in args.into_iter().enumerate() {
                     let (name, types) = self.parts(field)?;

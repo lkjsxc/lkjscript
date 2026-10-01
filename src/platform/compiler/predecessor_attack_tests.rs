@@ -84,9 +84,9 @@ fn current_derived_fixture_from_source(
             .unwrap()
             .current()
         };
-        unit.contract_version = 15;
-        unit.graph_contract_version = 18;
-        unit.bytecode_contract_version = 11;
+        unit.contract_version = super::super::unit::COMPILER_UNIT_CONTRACT_VERSION;
+        unit.graph_contract_version = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+        unit.bytecode_contract_version = super::super::unit::BYTECODE_CONTRACT_VERSION;
         unit.key = CompilationUnitKey::derive(&unit.source, unit.optimization).unwrap();
         let (new, encoded) = unit.encode().unwrap();
         objects.remove(&key).unwrap();
@@ -102,9 +102,16 @@ fn current_derived_fixture_from_source(
         // Runtime metadata is derived too. Its current exact owner inventory may
         // differ, but every selected record must already exist in the frozen source
         // or runtime map. Never synthesize or edit a canonical owner to admit a fixture.
-        let expected =
-            super::super::artifact::runtime_owner_expectations(&current_units, &mut 0, || Ok(()))
-                .unwrap();
+        let expected = super::super::artifact::runtime_owner_expectations(
+            &current_units,
+            &mut 0,
+            |ty| {
+                let key = ObjectKey::from_digest(ObjectDomain::Type, ty.bytes());
+                crate::platform::kernel::decode_type_object(&objects[&key], ty)
+            },
+            || Ok(()),
+        )
+        .unwrap();
         for package in &mut manifest.packages {
             let mut available = package
                 .runtime_owners
@@ -238,9 +245,10 @@ fn current_derived_fixture_from_source(
             ));
         }
         compilation.units = replace_artifact_map(&mut objects, entries);
-        compilation.graph_contract_version = 18;
-        compilation.compiler_contract_version = 15;
-        compilation.bytecode_contract_version = 11;
+        compilation.graph_contract_version =
+            crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+        compilation.compiler_contract_version = super::super::unit::COMPILER_UNIT_CONTRACT_VERSION;
+        compilation.bytecode_contract_version = super::super::unit::BYTECODE_CONTRACT_VERSION;
         let (digest, encoded) = compilation.encode().unwrap();
         package.compilation = digest;
         objects.insert(digest.object_key(), encoded);
@@ -279,10 +287,10 @@ fn current_derived_fixture_from_source(
             key.domain != ObjectDomain::MapPage || retained.contains(&key.digest.bytes())
         });
     }
-    manifest.contract_version = 22;
-    manifest.graph_contract_version = 18;
-    manifest.compiler_contract_version = 15;
-    manifest.bytecode_contract_version = 11;
+    manifest.contract_version = super::super::artifact::ARTIFACT_CONTRACT_VERSION;
+    manifest.graph_contract_version = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+    manifest.compiler_contract_version = super::super::unit::COMPILER_UNIT_CONTRACT_VERSION;
+    manifest.bytecode_contract_version = super::super::unit::BYTECODE_CONTRACT_VERSION;
     let (closure, count, length) = super::super::artifact::closure_facts(&objects).unwrap();
     manifest.closure = closure;
     manifest.object_count = count;
@@ -372,8 +380,8 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
     }
     for (name, path, current) in expected_files {
         let retained = std::fs::read(path).expect("retained current-envelope fixture");
-        assert_eq!(
-            current, retained,
+        assert!(
+            current == retained,
             "{name}: canonical source and instructions changed"
         );
     }

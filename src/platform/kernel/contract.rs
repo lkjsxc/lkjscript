@@ -1,13 +1,15 @@
 //! Supported graph generations, current type-object codec, and hostile-decoder limits.
 
-pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph-18";
-pub const GRAPH_CONTRACT_VERSION: u16 = 18;
+pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph-19";
+pub const GRAPH_CONTRACT_VERSION: u16 = 19;
+pub const OWNED_GRAPH_CONTRACT_VERSION: u16 = 18;
 pub const SCALAR_GRAPH_CONTRACT_VERSION: u16 = 17;
 pub const TRANSACTION_GRAPH_CONTRACT_VERSION: u16 = 16;
 pub const REQUIREMENT_GRAPH_CONTRACT_VERSION: u16 = 15;
 pub const PREDECESSOR_GRAPH_CONTRACT_VERSION: u16 = 14;
 pub const fn supported_graph_contract(version: u16) -> bool {
     version == GRAPH_CONTRACT_VERSION
+        || version == OWNED_GRAPH_CONTRACT_VERSION
         || version == SCALAR_GRAPH_CONTRACT_VERSION
         || version == TRANSACTION_GRAPH_CONTRACT_VERSION
         || version == REQUIREMENT_GRAPH_CONTRACT_VERSION
@@ -16,6 +18,10 @@ pub const fn supported_graph_contract(version: u16) -> bool {
 /// Existing base type bytes and identities stay unchanged; extensions use disjoint envelopes.
 pub const TYPE_OBJECT_CONTRACT_IDENTITY: &str = "lkjscript-type-object-10";
 pub const TYPE_OBJECT_CONTRACT_VERSION: u16 = 10;
+pub const OWNED_PRODUCT_TYPE_CONTRACT_VERSION: u16 = 1;
+pub const OWNED_PRODUCT_TYPE_MAGIC: [u8; 8] = *b"LKJPRD01";
+pub const OWNED_PRODUCT_TYPE_ENVELOPE_DOMAIN: &str =
+    "lkjscript.kernel.owned-product-type-envelope.v1";
 pub const OWNED_CELL_TYPE_CONTRACT_VERSION: u16 = 1;
 pub const OWNED_CELL_TYPE_MAGIC: [u8; 8] = *b"LKJCEL01";
 pub const OWNED_CELL_TYPE_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owned-cell-type-envelope.v1";
@@ -37,7 +43,8 @@ pub const NOMINAL_APPLICATION_ENVELOPE_DOMAIN: &str =
     "lkjscript.kernel.nominal-application-envelope.v1";
 pub const SEMANTIC_STATE_CONTRACT_VERSION: u16 = 1;
 
-pub const OWNER_MAGIC: [u8; 8] = *b"LKJOWN18";
+pub const OWNER_MAGIC: [u8; 8] = *b"LKJOWN19";
+pub const OWNED_OWNER_MAGIC: [u8; 8] = *b"LKJOWN18";
 pub const SCALAR_OWNER_MAGIC: [u8; 8] = *b"LKJOWN17";
 pub const TRANSACTION_OWNER_MAGIC: [u8; 8] = *b"LKJOWN16";
 pub const REQUIREMENT_OWNER_MAGIC: [u8; 8] = *b"LKJOWN15";
@@ -47,7 +54,8 @@ pub const ROOT_MAGIC: [u8; 8] = *b"LKJSMR01";
 pub const DEPENDENCY_MAGIC: [u8; 8] = *b"LKJDEP14";
 pub const RETIREMENT_MAGIC: [u8; 8] = *b"LKJRET14";
 
-pub const OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v18";
+pub const OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v19";
+pub const OWNED_OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v18";
 pub const SCALAR_OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v17";
 pub const TRANSACTION_OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v16";
 pub const REQUIREMENT_OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v15";

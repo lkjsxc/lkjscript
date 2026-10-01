@@ -159,6 +159,17 @@ impl<'a> Reader<'a> {
             TypeForm::F64 => AuthoredType::F64 {},
             TypeForm::ByteBuffer => AuthoredType::ByteBuffer {},
             TypeForm::OwnedI64Cell => AuthoredType::OwnedI64Cell {},
+            TypeForm::OwnedProduct { fields } => AuthoredType::OwnedProduct {
+                fields: fields
+                    .into_iter()
+                    .map(|f| {
+                        Ok(AuthoredStructuralTypeField {
+                            name: f.name,
+                            ty: self.ty_at(f.ty, depth + 1)?,
+                        })
+                    })
+                    .collect::<Result<_, Diagnostic>>()?,
+            },
             TypeForm::Bytes => AuthoredType::Bytes {},
             TypeForm::Text => AuthoredType::Text {},
             TypeForm::StaticText => AuthoredType::StaticText {},
@@ -317,6 +328,41 @@ impl<'a> Reader<'a> {
                 when_true: Box::new(self.expression_at(when_true, depth + 1)?),
                 when_false: Box::new(self.expression_at(when_false, depth + 1)?),
             },
+            E::PackOwned {
+                product_type,
+                fields,
+            } => A::PackOwned {
+                product_type: self.ty(product_type)?,
+                fields: fields
+                    .into_iter()
+                    .map(|f| Ok((f.name, self.expression_at(f.value, depth + 1)?)))
+                    .collect::<Result<_, Diagnostic>>()?,
+            },
+            E::UnpackOwned {
+                product_type,
+                source,
+                fields,
+                body,
+            } => {
+                let mut authored = Vec::new();
+                for f in fields {
+                    let b = self.binding(f.binding)?;
+                    authored.push((
+                        f.name,
+                        AuthoredBindingDefinition {
+                            symbol: binding_symbol(f.binding),
+                            name: b.name,
+                            declared_type: b.declared_type.map(|ty| self.ty(ty)).transpose()?,
+                        },
+                    ));
+                }
+                A::UnpackOwned {
+                    product_type: self.ty(product_type)?,
+                    source: Box::new(self.expression_at(source, depth + 1)?),
+                    fields: authored,
+                    body: Box::new(self.expression_at(body, depth + 1)?),
+                }
+            }
             E::Let { bindings, body } => {
                 let mut authored = Vec::new();
                 for id in bindings {

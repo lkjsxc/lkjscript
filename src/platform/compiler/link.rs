@@ -264,6 +264,23 @@ pub(super) fn link_prepared(
     for ((package, owner), expectation) in runtime_owner_expectations(
         &local_units,
         &mut work.implementation_inventory_steps,
+        |ty| {
+            let bytes = store
+                .read(
+                    ObjectKey::from_digest(ObjectDomain::Type, ty.bytes()),
+                    ObjectDomain::Type.maximum_bytes(),
+                    &mut work.store,
+                )
+                .map_err(store_diagnostic)?
+                .ok_or_else(|| {
+                    link_error(
+                        DiagnosticClass::Corrupt,
+                        "artifact_link_memory_type",
+                        "missing exact result type",
+                    )
+                })?;
+            decode_type_object(&bytes, ty)
+        },
         || view.validation_checkpoint(),
     )? {
         if package != view.package_id() {
@@ -629,6 +646,9 @@ fn reference_expression_bindings(
         ExpressionOperation::Let {
             bindings: declared, ..
         } => bindings.extend(declared.iter().copied()),
+        ExpressionOperation::UnpackOwned { fields, .. } => {
+            bindings.extend(fields.iter().map(|field| field.binding))
+        }
         ExpressionOperation::Match { arms, .. } => {
             bindings.extend(arms.iter().filter_map(|arm| arm.payload_binding));
         }

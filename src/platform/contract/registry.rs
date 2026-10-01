@@ -105,14 +105,22 @@ use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-18";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 18;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-19";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 19;
 pub const CLI_CONTRACT_VERSION: u16 = 34;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
 
 const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
+    (
+        "pack-owned",
+        "(pack-owned (type TYPE) (field NAME EXPRESSION) ... )",
+    ),
+    (
+        "unpack-owned",
+        "(unpack-owned (type TYPE) (local SOURCE) (field NAME (binding LOCAL (type TYPE))) ... (in BODY))",
+    ),
     (
         "implementation-call",
         "(implementation-call FUNCTION (types TYPE...) (implementations OPERAND...) EXPR...)",
@@ -172,8 +180,8 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
 ];
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-function-definition-projection-9";
-pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 9;
+    "lkjscript-function-definition-projection-10";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 10;
 pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
 pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
 pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -715,8 +723,8 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
             magic_values: &[
-                "LKJOWN18", "LKJOWN17", "LKJOWN16", "LKJOWN15", "LKJOWN14", "LKJSMR01", "LKJDEP14",
-                "LKJRET14",
+                "LKJOWN19", "LKJOWN18", "LKJOWN17", "LKJOWN16", "LKJOWN15", "LKJOWN14", "LKJSMR01",
+                "LKJDEP14", "LKJRET14",
             ],
             digest_domains: &[
                 super::super::kernel::contract::OWNER_ENVELOPE_DOMAIN,
@@ -742,12 +750,13 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
-            magic_values: &["LKJTYP10", "LKJF6401", "LKJBUF01", "LKJCEL01"],
+            magic_values: &["LKJTYP10", "LKJF6401", "LKJBUF01", "LKJCEL01", "LKJPRD01"],
             digest_domains: &[
                 super::super::kernel::contract::TYPE_OBJECT_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::F64_TYPE_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::BYTE_BUFFER_TYPE_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::OWNED_CELL_TYPE_ENVELOPE_DOMAIN,
+                super::super::kernel::contract::OWNED_PRODUCT_TYPE_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::TYPE_OBJECT_DIGEST_DOMAIN,
             ],
         },
@@ -931,7 +940,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             predecessor_policy: REJECT,
             magic_values: &[
                 "LKJACR14", "LKJACR15", "LKJACR16", "LKJACR17", "LKJACR18", "LKJACR19", "LKJACR20",
-                "LKJACR21", "LKJABG01",
+                "LKJACR21", "LKJACR22", "LKJABG01",
             ],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
@@ -1076,7 +1085,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
-            magic_values: &["LKJCUN15"],
+            magic_values: &["LKJCUN16"],
             digest_domains: &[
                 COMPILER_UNIT_ENVELOPE_DOMAIN,
                 COMPILER_UNIT_KEY_DOMAIN,
@@ -1098,7 +1107,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJAMF22"],
+            magic_values: &["LKJAMF23"],
             digest_domains: &[
                 ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
                 storage_contract::ARTIFACT_MANIFEST_DIGEST_DOMAIN,
@@ -1112,7 +1121,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJART22", "LKJAEN22"],
+            magic_values: &["LKJART23", "LKJAEN23"],
             digest_domains: &[
                 ARTIFACT_BUNDLE_DIGEST_DOMAIN,
                 ARTIFACT_BUNDLE_CHECKSUM_DOMAIN,
@@ -3248,6 +3257,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         extraction_semantic_diagnostic("change_extract_multiple"),
         extraction_semantic_diagnostic("change_extract_multiple_resources"),
         extraction_resource_diagnostic("change_extract_ordinal"),
+        extraction_semantic_diagnostic("change_extract_owned_product"),
         extraction_semantic_diagnostic("change_extract_recursive_target"),
         extraction_resource_diagnostic("change_extract_requirement_limit"),
         extraction_semantic_diagnostic("change_extract_resource_ambiguity"),
@@ -4119,19 +4129,103 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "artifact_buffer_generation",
             DiagnosticClass::Corrupt,
             "Predecessor compiled control refers to an owned memory contract.",
-            "Rebuild from accepted meaning with compiler unit 15 and bytecode 11.",
+            "Rebuild from accepted meaning with compiler unit 16 and bytecode 12.",
         ),
         diagnostic(
             "compiler_unit_buffer_generation",
             DiagnosticClass::Corrupt,
             "A predecessor compiler unit contains the ByteBuffer type digest.",
-            "Rebuild from accepted meaning with compiler unit 15 and bytecode 11.",
+            "Rebuild from accepted meaning with compiler unit 16 and bytecode 12.",
         ),
         diagnostic(
             "kernel_owned_contract",
             DiagnosticClass::Semantic,
             "An owned method contract, implementation map or explicit witness is not exact.",
             "Check nominal contract identity, Owned Self, all monomorphic pure method signatures and lexical witness scope.",
+        ),
+        diagnostic(
+            "kernel_owned_product",
+            DiagnosticClass::Semantic,
+            "An explicit owned product has an invalid field type, annotation, scope or closed metadata proof.",
+            "Use unique fixed fields, at least one direct owned field and closed ordinary metadata; consume exact live locals and bind every field once.",
+        ),
+        diagnostic(
+            "kernel_product_generation",
+            DiagnosticClass::Semantic,
+            "A predecessor graph, owner or package contains an owned product in its type closure.",
+            "Author product meaning under Graph 19 and rebuild derived artifacts from that admitted source.",
+        ),
+        diagnostic(
+            "normalized_product_depth",
+            DiagnosticClass::Semantic,
+            "Generic substitution produces a closed owned product beyond the structural type depth bound.",
+            "Use a shallower finite product type; increasing preparation work or runtime allocation quotas does not admit this shape.",
+        ),
+        diagnostic(
+            "kernel_product_binding",
+            DiagnosticClass::Semantic,
+            "An unpack binding lacks its exact type or current graph authority.",
+            "Use Graph 19 unpack bindings with explicit field types and body-only scope.",
+        ),
+        diagnostic(
+            "kernel_product_type_tag",
+            DiagnosticClass::Corrupt,
+            "The disjoint owned product envelope contains an unknown type tag.",
+            "Preserve the input and regenerate canonical meaning through current authoring.",
+        ),
+        diagnostic(
+            "normalized_product_token",
+            DiagnosticClass::Resource,
+            "A product token is stale, foreign, inert or borrowed for consumption.",
+            "Preserve exact live ownership; only an owning local with no outstanding loans can be unpacked.",
+        ),
+        diagnostic(
+            "normalized_product_allocation",
+            DiagnosticClass::Resource,
+            "Product field storage size arithmetic overflowed before allocation.",
+            "Reduce the product size; allocation refusal does not roll back independent effects.",
+        ),
+        diagnostic(
+            "reference_product_depth",
+            DiagnosticClass::Infrastructure,
+            "Independent source derivation found a closed product beyond the structural depth bound.",
+            "Use a shallower finite product and preserve any disagreement with production admission.",
+        ),
+        diagnostic(
+            "artifact_product_type",
+            DiagnosticClass::Corrupt,
+            "Artifact generation admission cannot find an exact graph-bound product child type.",
+            "Preserve the artifact and rebuild its complete closure from admitted source.",
+        ),
+        diagnostic(
+            "artifact_product_work",
+            DiagnosticClass::Resource,
+            "Product generation closure exhausted finite artifact admission work.",
+            "Reduce the source closure and rebuild; work exhaustion does not establish invalid meaning.",
+        ),
+        diagnostic(
+            "compiler_product_type",
+            DiagnosticClass::Corrupt,
+            "Product lowering cannot find the exact annotated product type.",
+            "Preserve the source and report the compiler invariant failure.",
+        ),
+        diagnostic(
+            "compiler_product_field",
+            DiagnosticClass::Corrupt,
+            "Product lowering cannot bind an authored field to its exact type field.",
+            "Preserve the source and report the compiler invariant failure.",
+        ),
+        diagnostic(
+            "compiler_product_fields",
+            DiagnosticClass::Corrupt,
+            "A compiled product field permutation does not cover every field exactly once.",
+            "Rebuild from admitted canonical source with current compiler contracts.",
+        ),
+        diagnostic(
+            "compiler_product_locals",
+            DiagnosticClass::Corrupt,
+            "Compiled unpack destinations repeat a local slot.",
+            "Rebuild from admitted canonical source with disjoint unpack bindings.",
         ),
         diagnostic(
             "kernel_owned_parameter_owner",
@@ -8065,7 +8159,7 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         ),
         (
             "types",
-            "Unit|Bool|I64|F64|Text|Bytes|StaticText|Secret|ByteBuffer|OwnedI64Cell|NAME|(NAME TYPE...)|(list TYPE)|(map TYPE TYPE)|(result TYPE TYPE)|(option TYPE)|(stream TYPE)|(record (NAME TYPE)...)|(function (TYPE...) TYPE)|(task-function (TYPE...) TYPE ROW)|(resource INTERFACE)|(parameter-type EXACT_PARAMETER)",
+            "Unit|Bool|I64|F64|Text|Bytes|StaticText|Secret|ByteBuffer|OwnedI64Cell|NAME|(NAME TYPE...)|(list TYPE)|(map TYPE TYPE)|(result TYPE TYPE)|(option TYPE)|(stream TYPE)|(record (NAME TYPE)...)|(owned-product (field NAME TYPE)...)|(function (TYPE...) TYPE)|(task-function (TYPE...) TYPE ROW)|(resource INTERFACE)|(parameter-type EXACT_PARAMETER)",
             "Inline composition; (type-alias NAME TYPE) is scoped notation and is admitted even when unused.",
         ),
         (
@@ -8825,9 +8919,9 @@ mod tests {
             .expect("definition projection contract");
         assert_eq!(
             contract.identity,
-            "lkjscript-function-definition-projection-9"
+            "lkjscript-function-definition-projection-10"
         );
-        assert_eq!(contract.version, 9);
+        assert_eq!(contract.version, 10);
         assert_eq!(
             contract_descriptors()
                 .iter()

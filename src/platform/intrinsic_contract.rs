@@ -650,6 +650,11 @@ fn kernel_type<R: ExpressionRead + ?Sized>(
         TypeForm::F64 => IntrinsicType::F64,
         TypeForm::ByteBuffer => IntrinsicType::ByteBuffer,
         TypeForm::OwnedI64Cell => IntrinsicType::OwnedI64Cell,
+        TypeForm::OwnedProduct { .. } => {
+            return Err(signature_error(
+                "owned products are not intrinsic boundary types",
+            ));
+        }
         TypeForm::Bytes => IntrinsicType::Bytes,
         TypeForm::Text => IntrinsicType::Text,
         TypeForm::StaticText => IntrinsicType::StaticText,

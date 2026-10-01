@@ -263,11 +263,17 @@ pub(crate) fn validate_implementation(
     implementation.validate_local()?;
     if !matches!(
         read.type_object(implementation.self_type)?.map(|t| t.form),
-        Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell)
+        Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. })
     ) {
         return Err(reject(
-            "implementation Self must be a closed concrete owned primitive",
+            "implementation Self must be a closed concrete owned type",
         ));
+    }
+    if matches!(
+        read.type_object(implementation.self_type)?.map(|t| t.form),
+        Some(TypeForm::OwnedProduct { .. })
+    ) {
+        super::owned_product::validate(read, implementation.self_type, None)?;
     }
     let contract = contract_record(read, implementation.contract)?;
     validate_contract_at(read, implementation.contract, &contract)?;
@@ -514,7 +520,7 @@ fn validate_contract_at(
     Ok(())
 }
 
-fn ordinary_closed(
+pub(crate) fn ordinary_closed(
     read: &(impl ExpressionRead + ?Sized),
     ty: TypeObjectDigest,
 ) -> Result<bool, Diagnostic> {
@@ -542,6 +548,7 @@ fn ordinary_closed(
             TypeForm::CapabilityResource { .. }
             | TypeForm::ByteBuffer
             | TypeForm::OwnedI64Cell
+            | TypeForm::OwnedProduct { .. }
             | TypeForm::Secret
             | TypeForm::Stream { .. }
             | TypeForm::Function { .. }

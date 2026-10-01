@@ -57,7 +57,11 @@ creation, scoped synchronous reads, consuming updates, direct owned result trans
 and lexical/failure cleanup across ordinary generic packages. Capability-resource
 authority remains separate. The [first-order owned abstraction](spec/owned-generics.md)
 implements rank-one Owned constraints and explicit nominal implementation witnesses
-for ByteBuffer and an independent scalar cell. Extend this boundary toward
+for ByteBuffer and an independent scalar cell. The
+[structural product slice](spec/owned-products.md), pending integration, composes
+explicit affine fields with closed ordinary metadata and complete consuming
+decomposition. Generic abstraction is deliberately over Owned payloads; open
+ordinary metadata parameters require a future first-order data proof. Extend this boundary toward
 typed traits, general lifetimes and region policies; none is supplied by this
 increment. Keep declared ownership/effect meaning separate from physical placement
 and recomputable analyses.

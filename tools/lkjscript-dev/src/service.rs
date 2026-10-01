@@ -50,7 +50,7 @@ const WORKER_BORROWER_FUNCTION: &str = "decl_08eec4f6b013dea79cfed578f85b7db9";
 const WORKER_QUEUE_REQUIREMENT: &str = "req_0cebded5cb056cda5484e39aa40594ad";
 const SERVICE_ARTIFACT_RELATIVE: &str = "generated/lkjournal.lkja";
 const SERVICE_ARTIFACT_SHA256: &str =
-    "353a0ba322961ebc5b6303bc23065d00fd052845b093f900c8313e75289b0931";
+    "9016d1167bc58c65203cdcf8ca508694025e8066ff6909d7de5871d993dd1711";
 const HTTP_REQUEST_TYPE: &str =
     "type_object_b84486b5e78230fd2b9c4bdcedc6f4ee1fb08838bc3b178aab0d3fb5967a6a44";
 const HTTP_RESPONSE_TYPE: &str =

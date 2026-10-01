@@ -314,6 +314,17 @@ impl NormalizedReferenceSchema {
                 let resolved = substitutions.get(parameter)?;
                 return self.types.contains_key(resolved).then_some(*resolved);
             }
+            TypeForm::OwnedProduct { fields } => TypeForm::OwnedProduct {
+                fields: fields
+                    .iter()
+                    .map(|f| {
+                        Some(StructuralTypeField {
+                            name: f.name.clone(),
+                            ty: descend(f.ty)?,
+                        })
+                    })
+                    .collect::<Option<_>>()?,
+            },
             TypeForm::StructuralRecord { fields } => TypeForm::StructuralRecord {
                 fields: fields
                     .iter()

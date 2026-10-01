@@ -1153,6 +1153,23 @@ impl ReferenceState<'_> {
         result
     }
 
+    fn product_child(
+        &mut self,
+        raw: NormalizedValue,
+        ty: TypeObjectDigest,
+    ) -> Result<CheckedValue, ExecutionError> {
+        let expected = direct_memory_type(&self.schema, ty, &BTreeMap::new())?;
+        if let Some(expected) = expected {
+            if raw.memory_form() != Some(expected) {
+                return Err(reference_type_error("owned product child type mismatch"));
+            }
+            raw.memory_validate(self.memory_domain, true)?;
+            CheckedValue::memory(&self.schema, raw)
+        } else {
+            self.admit_raw(raw, ty, &BTreeMap::new(), None, false)
+        }
+    }
+
     fn resolve_type_arguments(
         &self,
         type_arguments: &[TypeObjectDigest],
@@ -1421,7 +1438,11 @@ impl ReferenceState<'_> {
             .any(|(constraint, ty)| match constraint {
                 crate::platform::kernel::TypeParameterConstraints::Owned => !matches!(
                     self.schema.types.get(ty).map(|t| &t.form),
-                    Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell)
+                    Some(
+                        TypeForm::ByteBuffer
+                            | TypeForm::OwnedI64Cell
+                            | TypeForm::OwnedProduct { .. }
+                    )
                 ),
                 crate::platform::kernel::TypeParameterConstraints::None => {
                     !self.schema.buffer_free_types.contains(ty)
@@ -1513,7 +1534,7 @@ impl ReferenceState<'_> {
         let result = result.and_then(|step| {
             if let ReferenceStep::Value(value) = &step {
                 let memory_form = direct_memory_type(
-                    &self.schema.types,
+                    &self.schema,
                     target.function.result,
                     self.type_scopes
                         .last()
@@ -1556,7 +1577,7 @@ impl ReferenceState<'_> {
     ) -> Result<(), ExecutionError> {
         let mut resource_seen = false;
         for (index, (parameter, argument)) in parameters.iter().zip(arguments).enumerate() {
-            let memory_form = direct_memory_type(&self.schema.types, parameter.ty, substitutions)?;
+            let memory_form = direct_memory_type(&self.schema, parameter.ty, substitutions)?;
             if memory_form.is_some() {
                 if parameter.resource_requirement.is_some()
                     || parameter.use_mode == ParameterUse::Unrestricted
@@ -1970,6 +1991,125 @@ impl ReferenceState<'_> {
             (std::mem::size_of::<CheckedValue>() - std::mem::size_of::<NormalizedValue>()) as u64,
         )?;
         match operation {
+            ExpressionOperation::PackOwned {
+                product_type,
+                fields,
+            } => {
+                let ty = self.resolve_type_arguments(&[product_type])?[0];
+                let Some(TypeForm::OwnedProduct { fields: expected }) =
+                    self.schema.types.get(&ty).map(|o| &o.form)
+                else {
+                    return Err(reference_type_error("pack requires a closed product type"));
+                };
+                if fields.len() != expected.len() {
+                    return Err(reference_type_error("incomplete product construction"));
+                }
+                self.charge_allocation(super::value::collection_storage_bytes(
+                    fields.len() as u64,
+                    std::mem::size_of::<(usize, NormalizedValue)>() as u64,
+                    "normalized_product_allocation",
+                )?)?;
+                self.control.check()?;
+                let mut children = Vec::with_capacity(fields.len());
+                for field in fields {
+                    let TypeForm::OwnedProduct { fields: expected } = &self.schema.types[&ty].form
+                    else {
+                        return Err(reference_type_error("missing product shape"));
+                    };
+                    let (index, expected) = expected
+                        .iter()
+                        .enumerate()
+                        .find(|(_, f)| f.name == field.name)
+                        .ok_or_else(|| reference_type_error("unknown product field"))?;
+                    let expected = expected.ty;
+                    let value = self.evaluate(field.value, locals)?.release();
+                    children.push((index, self.product_child(value, expected)?.release()));
+                }
+                children.sort_unstable_by_key(|(i, _)| *i);
+                if children.iter().enumerate().any(|(i, (j, _))| i != *j) {
+                    return Err(reference_type_error("duplicate product field"));
+                }
+                self.charge_allocation(super::value::collection_storage_bytes(
+                    children.len() as u64,
+                    std::mem::size_of::<NormalizedValue>() as u64,
+                    "normalized_product_allocation",
+                )?)?;
+                self.control.check()?;
+                let fields = children.into_iter().map(|(_, value)| value).collect();
+                let control = self.control;
+                let token = super::owned_product::OwnedProduct::create(
+                    self.memory_domain,
+                    ty,
+                    fields,
+                    control,
+                    &mut |n| self.charge_allocation(n),
+                )?;
+                CheckedValue::memory(&self.schema, NormalizedValue::OwnedProduct(token))
+            }
+            ExpressionOperation::UnpackOwned {
+                product_type,
+                source,
+                fields,
+                body,
+            } => {
+                let ty = self.resolve_type_arguments(&[product_type])?[0];
+                let Some(TypeForm::OwnedProduct { fields: expected }) =
+                    self.schema.types.get(&ty).map(|o| &o.form)
+                else {
+                    return Err(reference_type_error(
+                        "unpack requires a closed product type",
+                    ));
+                };
+                if expected.len() != fields.len()
+                    || expected.iter().zip(&fields).any(|(a, b)| a.name != b.name)
+                {
+                    return Err(reference_type_error("unpack field coverage mismatch"));
+                }
+                self.charge_allocation(super::value::collection_storage_bytes(
+                    fields.len() as u64,
+                    (std::mem::size_of::<LocalValueReference>()
+                        + std::mem::size_of::<CheckedValue>()) as u64,
+                    "normalized_product_allocation",
+                )?)?;
+                self.control.check()?;
+                let NormalizedValue::OwnedProduct(token) = self.evaluate(source, locals)?.release()
+                else {
+                    return Err(reference_type_error("unpack requires product token"));
+                };
+                let values = token.unpack(self.memory_domain, ty, self.control)?;
+                if values.len() != fields.len() {
+                    return Err(reference_type_error("product storage count mismatch"));
+                }
+                let result = (|| {
+                    for (index, (field, value)) in fields.iter().zip(values).enumerate() {
+                        let TypeForm::OwnedProduct { fields: expected } =
+                            &self.schema.types[&ty].form
+                        else {
+                            return Err(reference_type_error("missing product shape"));
+                        };
+                        let expected = expected[index].ty;
+                        let binding = self.binding(field.binding, BindingKind::OwnedUnpack)?;
+                        let declared = binding
+                            .declared_type
+                            .ok_or_else(|| reference_type_error("unpack binding lacks type"))?;
+                        if self.resolve_type_arguments(&[declared])?[0] != expected {
+                            return Err(reference_type_error("unpack local type mismatch"));
+                        }
+                        let value = self.product_child(value, expected)?;
+                        if locals
+                            .insert(LocalValueReference::LexicalBinding(field.binding), value)
+                            .is_some()
+                        {
+                            return Err(reference_type_error("duplicate unpack local"));
+                        }
+                    }
+                    self.evaluate(body, locals)
+                })();
+                for field in fields {
+                    locals.remove(&LocalValueReference::LexicalBinding(field.binding));
+                }
+                result
+            }
             ExpressionOperation::ImplementationCall {
                 function,
                 type_arguments,
@@ -2015,7 +2155,9 @@ impl ReferenceState<'_> {
                 if locals.get(&value).is_some_and(|v| {
                     matches!(
                         v.raw(),
-                        NormalizedValue::ByteBuffer(_) | NormalizedValue::OwnedI64Cell(_)
+                        NormalizedValue::ByteBuffer(_)
+                            | NormalizedValue::OwnedI64Cell(_)
+                            | NormalizedValue::OwnedProduct(_)
                     )
                 }) {
                     let result = locals
@@ -4582,7 +4724,9 @@ fn reference_value_cost(value: &NormalizedValue) -> Result<(u64, u64), Execution
     let mut items = 0_u64;
     while let Some(value) = pending.pop() {
         match value {
-            NormalizedValue::ByteBuffer(_) | NormalizedValue::OwnedI64Cell(_) => {
+            NormalizedValue::ByteBuffer(_)
+            | NormalizedValue::OwnedI64Cell(_)
+            | NormalizedValue::OwnedProduct(_) => {
                 return Err(ExecutionError::resource(
                     "normalized_buffer_boundary",
                     "ByteBuffer cannot cross raw/adapter boundaries",
@@ -4763,18 +4907,26 @@ pub(super) fn reference_error(code: &'static str, message: impl Into<String>) ->
 }
 
 fn direct_memory_type(
-    types: &BTreeMap<TypeObjectDigest, crate::platform::kernel::TypeObject>,
+    schema: &BoundReferenceSchema,
     mut ty: TypeObjectDigest,
     substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
-) -> Result<Option<TypeForm>, ExecutionError> {
+) -> Result<Option<super::value::MemoryForm>, ExecutionError> {
     for _ in 0..=substitutions.len() {
-        match &types
+        match &schema
+            .types
             .get(&ty)
             .ok_or_else(|| reference_type_error("missing direct memory type metadata"))?
             .form
         {
-            TypeForm::ByteBuffer => return Ok(Some(TypeForm::ByteBuffer)),
-            TypeForm::OwnedI64Cell => return Ok(Some(TypeForm::OwnedI64Cell)),
+            TypeForm::ByteBuffer => return Ok(Some(super::value::MemoryForm::ByteBuffer)),
+            TypeForm::OwnedI64Cell => return Ok(Some(super::value::MemoryForm::OwnedI64Cell)),
+            TypeForm::OwnedProduct { .. } => {
+                return Ok(Some(super::value::MemoryForm::Product(
+                    schema
+                        .substitute_type(ty, substitutions, 0)
+                        .ok_or_else(|| reference_type_error("unclosed product type"))?,
+                )));
+            }
             TypeForm::TypeParameter { parameter } => {
                 ty = *substitutions
                     .get(parameter)

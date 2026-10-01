@@ -84,6 +84,10 @@ impl ByteBuffer {
         Ok(buffer)
     }
     #[cfg(test)]
+    pub(super) fn allocation_identity(&self) -> usize {
+        self.lock().bytes.as_ref().unwrap().as_ptr() as usize
+    }
+    #[cfg(test)]
     pub(super) fn empty(domain: ValueOrigin) -> Self {
         Self::create(domain, &ExecutionControl::uncancelled(), &mut |_| Ok(())).unwrap()
     }

@@ -1,0 +1,32 @@
+declarations.begin
+(units
+  (module create product
+    (external create cell (visibility private) (implementation core.cell.create)
+      (parameter create n (type I64)) (returns OwnedI64Cell))
+    (external create extract (visibility private) (implementation core.cell.extract)
+      (parameter create c (type OwnedI64Cell) (use consume)) (returns I64))
+    (function create pack (visibility public) (effect pure)
+      (type-parameter create T (constraint owned))
+      (parameter create tag (type I64))
+      (parameter create payload (type T) (use consume))
+      (returns (owned-product (field payload T) (field tag I64)))
+      (body (pack-owned (type (owned-product (field payload T) (field tag I64)))
+        (field tag (local tag)) (field payload (local payload)))))
+    (function create unpack (visibility public) (effect pure)
+      (type-parameter create T (constraint owned))
+      (parameter create packet (type (owned-product (field payload T) (field tag I64))) (use consume))
+      (returns T)
+      (body (unpack-owned (type (owned-product (field payload T) (field tag I64)))
+        (local packet)
+        (field payload (binding data (type T)))
+        (field tag (binding tag (type I64)))
+        (in (local data)))))
+    (function create main (visibility public) (effect pure)
+      (parameter create n (type I64)) (returns I64)
+      (body (let
+        (binding a (type OwnedI64Cell) (call cell (local n)))
+        (binding p (type (owned-product (field payload OwnedI64Cell) (field tag I64)))
+          (call pack (types OwnedI64Cell) (i64 7) (local a)))
+        (binding b (type OwnedI64Cell) (call unpack (types OwnedI64Cell) (local p)))
+        (in (call extract (local b))))))))
+declarations.end

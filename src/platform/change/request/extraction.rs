@@ -557,6 +557,12 @@ fn walk_expression<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
 
     let next = depth.saturating_add(1);
     match record.operation {
+        ExpressionOperation::PackOwned { .. } | ExpressionOperation::UnpackOwned { .. } => {
+            return Err(extract_error(
+                "change_extract_owned_product",
+                "function extraction of owned product scopes is unsupported",
+            ));
+        }
         ExpressionOperation::Let { bindings, body } => {
             for (ordinal, binding) in bindings.into_iter().enumerate() {
                 walk_binding(
@@ -746,6 +752,7 @@ fn walk_binding<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         BindingContainerRole::Let => BindingKind::Let,
         BindingContainerRole::MatchPayload => BindingKind::MatchPayload,
         BindingContainerRole::Transaction => BindingKind::Transaction,
+        BindingContainerRole::OwnedUnpack => BindingKind::OwnedUnpack,
     };
     if record.kind != expected_kind {
         return Err(extract_corrupt(
@@ -1437,6 +1444,12 @@ fn replace_expression_reference(
         }
     };
     match operation {
+        ExpressionOperation::PackOwned { .. } | ExpressionOperation::UnpackOwned { .. } => {
+            return Err(extract_corrupt(
+                "change_extract_owned_product",
+                "owned product extraction is unsupported",
+            ));
+        }
         ExpressionOperation::If {
             condition,
             when_true,
@@ -1829,7 +1842,9 @@ fn resource_class<B: CanonicalBaseRead + ?Sized>(
     })?;
     let result = match object.form {
         TypeForm::CapabilityResource { interface } => ResourceClass::Direct(interface),
-        TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => ResourceClass::Memory,
+        TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. } => {
+            ResourceClass::Memory
+        }
         TypeForm::Named { declaration } => {
             let key = (declaration.package, declaration.declaration);
             if !active_declarations.insert(key) {

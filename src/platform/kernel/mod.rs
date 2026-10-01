@@ -27,6 +27,7 @@ pub(crate) mod memory_reference;
 mod name;
 mod namespace;
 mod owned_contract;
+pub(crate) mod owned_product;
 mod owner;
 pub use owned_contract::*;
 pub(crate) mod interface11;

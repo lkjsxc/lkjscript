@@ -23,8 +23,8 @@ Current normalized identity:
 - semantic revision: `rev_a1d97c5d7deda1ece8e2e3383bd7a58ae1e267838368ec5b42678e40c9eb1640`;
 - semantic state: `semantic_state_3832cd12c3fee672d0bdfb975cb363cbc457f6ef45f15cb44a62d40ab47f2dee`;
 - package revision: `package_revision_ff8273529489c6bcbb57f4c4becd37b0fdcfacd092adfc81d008f3e624e65cd1`;
-- artifact manifest: `artifact_manifest_2628047a859a2bdc08eeabc668948f6a94ba52e75dff9b9f21b67547c08d2b9f`;
-- artifact bundle: `artifact_bundle_173b97a463b061f608cccb27fe3352109f0e7d30caae4f657497f4617f710b22`;
+- artifact manifest: `artifact_manifest_d719552ceab63386b2e3207e78bb9f0d5cea4c17a71a8e63d5f67512bd833055`;
+- artifact bundle: `artifact_bundle_98b945da9d6613b08ba87be9b0efcba34d40069154968281d00a937626ce60b3`;
 - 2,044 live root semantic owners and one exact built-in standard dependency.
 
 The original Graph 13 materialization preserved all existing application owner identities and behavior.
@@ -93,9 +93,9 @@ empty 404 and invokes none of them.
 
 ## Current service, interactive, and worker boundary
 
-All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,374,493-byte
+All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,375,404-byte
 artifact bundle above (SHA-256
-`b5dac63fd8951d27816add46b9ca19a6b27a9559f0068007bd43f1485daaddc9`). The service descriptor
+`9016d1167bc58c65203cdcf8ca508694025e8066ff6909d7de5871d993dd1711`). The service descriptor
 resolves `serve`, the worker descriptor resolves `work`, and `live.deployment.json` resolves
 `lkjournal-live-1`. Preparation strictly loads the standalone bundle,
 validates the runner, route-indexed handler and component requirement closure, grants, secrets, and adapters, and emits
@@ -206,3 +206,7 @@ application helper, public import path, or permanent dual reader/writer.
 The Owned-generic compiler refresh rebuilds the derived artifact through public
 build with compiler unit 15, bytecode 11 and artifact 22. It preserves accepted
 HEAD, exact standard selection, application owners and operational data.
+
+The owned-product continuation rebuilds the current bundle for compiler unit 16,
+bytecode 12 and artifact 23 through public build, preserving those accepted inputs.
+It neither deploys this application nor changes operational state.

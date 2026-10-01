@@ -920,6 +920,17 @@ pub(crate) fn aggregation_children(
                 )
             }));
             match &record.operation {
+                ExpressionOperation::UnpackOwned { fields, .. } => {
+                    for (ordinal, field) in fields.iter().enumerate() {
+                        children.push((
+                            OwnershipRole::ExpressionBinding {
+                                role: BindingContainerRole::OwnedUnpack,
+                                ordinal: summary_ordinal(ordinal)?,
+                            },
+                            OwnerKey::Binding(field.binding),
+                        ));
+                    }
+                }
                 ExpressionOperation::Let { bindings, .. } => {
                     for (ordinal, binding) in bindings.iter().enumerate() {
                         children.push((

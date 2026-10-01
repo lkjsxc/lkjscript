@@ -77,7 +77,9 @@ contracts; planning an untouched draft is unchanged.
 The [recursive fixture](../../tests/fixtures/owned-witness-recursion.lkjc) forwards
 both consume and read witnesses and restores an outer selection after a nested
 call using another implementation. Ownership failures, missing or wrong witnesses,
-task-as-pure methods, escaping loans and containers reject before publication.
-ByteBuffer and cell tokens cannot be JSON command inputs, persisted values,
+task-as-pure methods, escaping loans and ordinary owned-element containers reject before publication.
+Explicit [structural owned products](native-owned-products.md) compose multiple
+Owned payloads with closed metadata and complete consuming decomposition.
+ByteBuffer, cell and product tokens cannot be JSON command inputs, persisted values,
 callback captures or ordinary returned raw values. Expose ordinary results at
 application boundaries.

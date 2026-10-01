@@ -193,7 +193,13 @@ impl CompilationManifest {
                     self.compiler_contract_version,
                     self.bytecode_contract_version
                 ),
-                (14, 10, 6) | (15, 11, 7) | (16, 12, 8) | (17, 13, 9) | (17, 14, 10) | (18, 15, 11)
+                (14, 10, 6)
+                    | (15, 11, 7)
+                    | (16, 12, 8)
+                    | (17, 13, 9)
+                    | (17, 14, 10)
+                    | (18, 15, 11)
+                    | (19, 16, 12)
             )
         {
             return Err(manifest_error(
