@@ -1,4 +1,7 @@
 //! Direct owned-memory flow, independent of capability-resource provenance.
+#[cfg(test)]
+#[path = "memory_work_tests.rs"]
+mod work_tests;
 use super::infer::ExpressionRead;
 use super::*;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -22,7 +25,10 @@ pub(crate) fn direct(
             .ok_or_else(|| reject("missing memory type"))?
             .form
         {
-            TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. } => true,
+            TypeForm::ByteBuffer
+            | TypeForm::OwnedI64Cell
+            | TypeForm::OwnedProduct { .. }
+            | TypeForm::OwnedChoice { .. } => true,
             TypeForm::TypeParameter { parameter } => matches!(
                 read.owner(OwnerKey::TypeParameter(parameter))?,
                 Some(OwnerRecord::TypeParameter(p)) if p.constraints == TypeParameterConstraints::Owned
@@ -276,11 +282,19 @@ struct Slot {
     live: bool,
 }
 type State = BTreeMap<LocalValueReference, Slot>;
-fn join(a: &mut State, b: &State) -> Result<(), Diagnostic> {
+fn fork(read: &(impl ExpressionRead + ?Sized), state: &State) -> Result<State, Diagnostic> {
+    // Admit the complete fixed-size slot inventory before cloning its map nodes.
+    for _ in 0..state.len() {
+        read.validation_work()?;
+    }
+    Ok(state.clone())
+}
+fn join(read: &(impl ExpressionRead + ?Sized), a: &mut State, b: &State) -> Result<(), Diagnostic> {
     if a.len() != b.len() {
         return Err(reject("memory scope disagreement at join"));
     }
     for (key, slot) in a {
+        read.validation_work()?;
         let other = b
             .get(key)
             .ok_or_else(|| reject("memory scope disagreement at join"))?;
@@ -316,6 +330,124 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 .map(|_| ())
         };
         let owned = match e.operation {
+            ExpressionOperation::ChooseOwned {
+                choice_type,
+                case,
+                value,
+            } => {
+                super::owned_product::validate(self.read, choice_type, self.scope)?;
+                let TypeForm::OwnedChoice { cases } = self
+                    .read
+                    .type_object(choice_type)?
+                    .ok_or_else(|| reject("missing owned choice type"))?
+                    .form
+                else {
+                    return Err(reject("choice construction requires an owned choice"));
+                };
+                let mut payload = None;
+                for candidate in cases {
+                    self.read.validation_work()?;
+                    if candidate.name == case {
+                        payload = Some(candidate.ty);
+                    }
+                }
+                let payload = payload.ok_or_else(|| reject("unknown owned choice case"))?;
+                if direct(self.read, payload)? {
+                    let Some(OwnerRecord::Expression(ExpressionRecord {
+                        operation: ExpressionOperation::Local { value: local },
+                        ..
+                    })) = self.read.owner(OwnerKey::Expression(value))?
+                    else {
+                        return Err(reject(
+                            "owned choice payload requires an exact local operand",
+                        ));
+                    };
+                    if !state.contains_key(&local)
+                        || !self.eval(value, state, ParameterUse::Consume, next)?
+                    {
+                        return Err(reject("owned choice payload has no live owner"));
+                    }
+                } else {
+                    plain(value, state)?;
+                }
+                true
+            }
+            ExpressionOperation::MatchOwned {
+                choice_type,
+                source,
+                arms,
+            } => {
+                super::owned_product::validate(self.read, choice_type, self.scope)?;
+                let Some(OwnerRecord::Expression(ExpressionRecord {
+                    operation: ExpressionOperation::Local { value },
+                    ..
+                })) = self.read.owner(OwnerKey::Expression(source))?
+                else {
+                    return Err(reject("owned match requires an exact local operand"));
+                };
+                if !state.contains_key(&value)
+                    || !self.eval(source, state, ParameterUse::Consume, next)?
+                {
+                    return Err(reject("owned match requires a live owner"));
+                }
+                let TypeForm::OwnedChoice { cases } = self
+                    .read
+                    .type_object(choice_type)?
+                    .ok_or_else(|| reject("missing owned choice type"))?
+                    .form
+                else {
+                    return Err(reject("owned match source is not a choice"));
+                };
+                if cases.len() != arms.len() || arms.is_empty() {
+                    return Err(reject("owned match must cover every case exactly once"));
+                }
+                let mut joined: Option<(State, bool)> = None;
+                for (arm, case) in arms.into_iter().zip(cases) {
+                    self.read.validation_work()?;
+                    let Some(OwnerRecord::Binding(b)) =
+                        self.read.owner(OwnerKey::Binding(arm.binding))?
+                    else {
+                        return Err(reject("missing owned choice binding"));
+                    };
+                    if arm.name != case.name
+                        || b.declared_type != Some(case.ty)
+                        || b.kind != BindingKind::OwnedChoicePayload
+                        || b.value.is_some()
+                    {
+                        return Err(reject("owned choice binding contract mismatch"));
+                    }
+                    let mut branch = fork(self.read, state)?;
+                    let local = LocalValueReference::LexicalBinding(arm.binding);
+                    if direct(self.read, case.ty)?
+                        && branch
+                            .insert(
+                                local,
+                                Slot {
+                                    borrowed: false,
+                                    live: true,
+                                },
+                            )
+                            .is_some()
+                    {
+                        return Err(reject("duplicate owned choice local"));
+                    }
+                    let result = self.eval(arm.body, &mut branch, mode, next)?;
+                    branch.remove(&local);
+                    if let Some((prior, prior_result)) = &mut joined {
+                        if *prior_result != result {
+                            return Err(reject(
+                                "owned match result ownership disagrees between cases",
+                            ));
+                        }
+                        join(self.read, prior, &branch)?;
+                    } else {
+                        joined = Some((branch, result));
+                    }
+                }
+                let (joined, result) = joined.ok_or_else(|| reject("empty owned match"))?;
+                *state = joined;
+                result
+            }
             ExpressionOperation::PackOwned {
                 product_type,
                 fields,
@@ -500,14 +632,14 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 when_false,
             } => {
                 plain(condition, state)?;
-                let mut a = state.clone();
-                let mut b = state.clone();
+                let mut a = fork(self.read, state)?;
+                let mut b = fork(self.read, state)?;
                 let av = self.eval(when_true, &mut a, mode, next)?;
                 let bv = self.eval(when_false, &mut b, mode, next)?;
                 if av != bv {
                     return Err(reject("buffer result ownership must agree at branch join"));
                 }
-                join(&mut a, &b)?;
+                join(self.read, &mut a, &b)?;
                 *state = a;
                 av
             }
@@ -731,16 +863,16 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
             }
             ExpressionOperation::Match { value, arms } => {
                 plain(value, state)?;
-                let before = state.clone();
+                let before = fork(self.read, state)?;
                 let mut joined = None;
                 for arm in arms {
-                    let mut branch = before.clone();
+                    let mut branch = fork(self.read, &before)?;
                     let result = self.eval(arm.body, &mut branch, mode, next)?;
                     if let Some((prior, v)) = &mut joined {
                         if *v != result {
                             return Err(reject("buffer match result ownership join"));
                         }
-                        join(prior, &branch)?;
+                        join(self.read, prior, &branch)?;
                     } else {
                         joined = Some((branch, result));
                     }

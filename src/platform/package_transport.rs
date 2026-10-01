@@ -759,6 +759,15 @@ fn validate_interface_dependencies(
             )
         })?;
         for ty in interface.type_objects.values() {
+            if revision.graph_contract_version < 20
+                && matches!(ty.form, TypeForm::OwnedChoice { .. })
+            {
+                return Err(package_error(
+                    DiagnosticClass::Semantic,
+                    "kernel_choice_generation",
+                    "owned choice package interface requires Graph 20",
+                ));
+            }
             if revision.graph_contract_version < 19
                 && matches!(ty.form, TypeForm::OwnedProduct { .. })
             {

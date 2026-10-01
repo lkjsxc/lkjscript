@@ -738,6 +738,85 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             self.validate_nominal_type(ty, context, 0)?;
         }
         match record.operation {
+            ExpressionOperation::ChooseOwned {
+                choice_type,
+                case,
+                value,
+            } => {
+                let TypeForm::OwnedChoice { cases } = self.type_object(choice_type)?.form else {
+                    return Err(type_error(
+                        "kernel_owned_choice",
+                        "choice construction requires an owned choice type",
+                    ));
+                };
+                let mut payload = None;
+                for candidate in cases {
+                    self.consume_work()?;
+                    if candidate.name == case {
+                        payload = Some(candidate.ty);
+                    }
+                }
+                let payload = payload.ok_or_else(|| {
+                    type_error("kernel_owned_choice", "unknown owned choice case")
+                })?;
+                let actual = self.infer(value, context, next)?;
+                require_same(payload, actual, "kernel_owned_choice", "selected payload")?;
+                Ok(choice_type)
+            }
+            ExpressionOperation::MatchOwned {
+                choice_type,
+                source,
+                arms,
+            } => {
+                let actual = self.infer(source, context, next)?;
+                require_same(choice_type, actual, "kernel_owned_choice", "choice source")?;
+                let TypeForm::OwnedChoice { cases } = self.type_object(choice_type)?.form else {
+                    return Err(type_error(
+                        "kernel_owned_choice",
+                        "owned match requires an owned choice type",
+                    ));
+                };
+                if cases.len() != arms.len() || arms.is_empty() {
+                    return Err(type_error(
+                        "kernel_owned_choice",
+                        "owned match must cover every case exactly once",
+                    ));
+                }
+                let mut result = None;
+                for (arm, case) in arms.into_iter().zip(cases) {
+                    self.consume_work()?;
+                    let Some(OwnerRecord::Binding(binding)) =
+                        self.read.owner(OwnerKey::Binding(arm.binding))?
+                    else {
+                        return Err(type_error(
+                            "kernel_owned_choice",
+                            "missing owned choice binding",
+                        ));
+                    };
+                    if arm.name != case.name
+                        || binding.kind != BindingKind::OwnedChoicePayload
+                        || binding.value.is_some()
+                        || binding.declared_type != Some(case.ty)
+                    {
+                        return Err(type_error(
+                            "kernel_owned_choice",
+                            "owned choice case, binding kind or payload type mismatch",
+                        ));
+                    }
+                    let actual = self.infer(arm.body, context, next)?;
+                    if let Some(expected) = result {
+                        require_same(
+                            expected,
+                            actual,
+                            "kernel_owned_choice",
+                            "owned choice arm result",
+                        )?;
+                    } else {
+                        result = Some(actual);
+                    }
+                }
+                result.ok_or_else(|| type_error("kernel_owned_choice", "owned match has no result"))
+            }
             ExpressionOperation::PackOwned {
                 product_type,
                 fields,
@@ -1679,6 +1758,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 | TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
+                | TypeForm::OwnedChoice { .. }
                 | TypeForm::CapabilityResource { .. } => {
                     return Err(type_error(
                         "kernel_type_bind_capture",
@@ -2810,12 +2890,17 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 ));
             }
         }
-        if matches!(object.form, TypeForm::OwnedProduct { .. }) {
+        if matches!(
+            object.form,
+            TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. }
+        ) {
             self.owned_read(|read| super::owned_product::validate(read, ty, context.declaration))?;
         }
         for child in object.child_types() {
-            if !matches!(object.form, TypeForm::OwnedProduct { .. })
-                && self.type_contains_buffer(child)?
+            if !matches!(
+                object.form,
+                TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. }
+            ) && self.type_contains_buffer(child)?
             {
                 return Err(type_error(
                     "kernel_buffer_container",
@@ -2897,7 +2982,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             let object = self.type_object(ty)?;
             if matches!(
                 object.form,
-                TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. }
+                TypeForm::ByteBuffer
+                    | TypeForm::OwnedI64Cell
+                    | TypeForm::OwnedProduct { .. }
+                    | TypeForm::OwnedChoice { .. }
             ) || matches!(object.form, TypeForm::TypeParameter { parameter } if matches!(self.read.owner(OwnerKey::TypeParameter(parameter))?, Some(OwnerRecord::TypeParameter(p)) if p.constraints == super::TypeParameterConstraints::Owned))
             {
                 return Ok(true);
@@ -2924,6 +3012,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
+                | TypeForm::OwnedChoice { .. }
                 | TypeForm::CapabilityResource { .. }
                 | TypeForm::Stream { .. } => {
                     return Err(type_error(
@@ -2983,6 +3072,17 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         Ok(StructuralTypeField {
                             name: field.name,
                             ty: self.substitute(field.ty, substitutions, next)?,
+                        })
+                    })
+                    .collect::<Result<_, Diagnostic>>()?,
+            },
+            TypeForm::OwnedChoice { cases } => TypeForm::OwnedChoice {
+                cases: cases
+                    .into_iter()
+                    .map(|case| {
+                        Ok(StructuralTypeField {
+                            name: case.name,
+                            ty: self.substitute(case.ty, substitutions, next)?,
                         })
                     })
                     .collect::<Result<_, Diagnostic>>()?,
@@ -3087,7 +3187,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             Ok(())
         };
         match &mut object.form {
-            TypeForm::StructuralRecord { fields } | TypeForm::OwnedProduct { fields } => {
+            TypeForm::StructuralRecord { fields }
+            | TypeForm::OwnedProduct { fields }
+            | TypeForm::OwnedChoice { cases: fields } => {
                 for field in fields {
                     replace(&mut field.ty)?;
                 }
@@ -3127,9 +3229,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         let (digest, bytes) = super::codec::encode_type_object(&object)?;
         if !self.ephemeral_types.contains_key(&digest) {
             let children = match &object.form {
-                TypeForm::StructuralRecord { fields } | TypeForm::OwnedProduct { fields } => {
-                    fields.len()
-                }
+                TypeForm::StructuralRecord { fields }
+                | TypeForm::OwnedProduct { fields }
+                | TypeForm::OwnedChoice { cases: fields } => fields.len(),
                 TypeForm::Applied { arguments, .. } => arguments.len(),
                 TypeForm::Function { parameters, .. } => parameters.len(),
                 TypeForm::TaskFunction {

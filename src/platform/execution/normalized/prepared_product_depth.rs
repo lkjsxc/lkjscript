@@ -10,7 +10,10 @@ pub(super) fn validate(
     let mut pending = Vec::new();
     for (root, object) in types {
         step(work)?;
-        if !matches!(object.form, TypeForm::OwnedProduct { .. }) {
+        if !matches!(
+            object.form,
+            TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. }
+        ) {
             continue;
         }
         work.reserve::<(TypeObjectDigest, bool)>(1)?;

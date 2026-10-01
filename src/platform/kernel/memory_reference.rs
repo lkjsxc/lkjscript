@@ -29,7 +29,12 @@ impl Oracle<'_> {
                 .get(&t)
                 .or_else(|| self.0.dependency_types.get(&t))
                 .map(|t| &t.form),
-            Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. })
+            Some(
+                TypeForm::ByteBuffer
+                    | TypeForm::OwnedI64Cell
+                    | TypeForm::OwnedProduct { .. }
+                    | TypeForm::OwnedChoice { .. }
+            )
         ) || matches!(self.0.types.get(&t).or_else(|| self.0.dependency_types.get(&t)).map(|t| &t.form), Some(TypeForm::TypeParameter { parameter }) if matches!(self.0.owners.get(&OwnerKey::TypeParameter(*parameter)), Some(OwnerRecord::TypeParameter(p)) if p.constraints == TypeParameterConstraints::Owned))
     }
     fn contains(&self, t: TypeObjectDigest) -> bool {
@@ -140,7 +145,9 @@ impl Oracle<'_> {
     }
     fn owned_type_in_scope(&self, ty: TypeObjectDigest) -> bool {
         match self.form(ty) {
-            Some(TypeForm::OwnedProduct { .. }) => self.product_shape(ty),
+            Some(TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. }) => {
+                self.product_shape(ty)
+            }
             Some(TypeForm::TypeParameter { parameter }) => self
                 .type_parameter(self.0.root.package_id, *parameter)
                 .is_some_and(|p| {
@@ -186,7 +193,9 @@ impl Oracle<'_> {
             if !checked.insert(ty) {
                 continue;
             }
-            let Some(TypeForm::OwnedProduct { fields }) = self.form(ty) else {
+            let Some(TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields }) =
+                self.form(ty)
+            else {
                 return false;
             };
             if fields.is_empty()
@@ -198,7 +207,7 @@ impl Oracle<'_> {
             let mut owned = false;
             for field in fields {
                 match self.form(field.ty) {
-                    Some(TypeForm::OwnedProduct { .. }) => {
+                    Some(TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. }) => {
                         owned = true;
                         pending.push((field.ty, depth + 1));
                     }
@@ -407,6 +416,96 @@ impl Oracle<'_> {
                 .map(|_| ())
         };
         let output = match self.expression(id)? {
+            ExpressionOperation::ChooseOwned {
+                choice_type,
+                case,
+                value,
+            } => {
+                if !self.product_shape(*choice_type) {
+                    return None;
+                }
+                let TypeForm::OwnedChoice { cases } = self.form(*choice_type)? else {
+                    return None;
+                };
+                let selected = cases.iter().find(|item| &item.name == case)?;
+                if self.buffer(selected.ty) {
+                    let ExpressionOperation::Local { value: local } = self.expression(*value)?
+                    else {
+                        return None;
+                    };
+                    if self.local_type(*local) != Some(selected.ty)
+                        || !self.run(*value, rights, true, depth + 1)?
+                    {
+                        return None;
+                    }
+                } else {
+                    plain(*value, rights)?;
+                }
+                true
+            }
+            ExpressionOperation::MatchOwned {
+                choice_type,
+                source,
+                arms,
+            } => {
+                if !self.product_shape(*choice_type) {
+                    return None;
+                }
+                let TypeForm::OwnedChoice { cases } = self.form(*choice_type)? else {
+                    return None;
+                };
+                let ExpressionOperation::Local { value } = self.expression(*source)? else {
+                    return None;
+                };
+                if self.local_type(*value) != Some(*choice_type)
+                    || arms.len() != cases.len()
+                    || arms.is_empty()
+                    || !self.run(*source, rights, true, depth + 1)?
+                {
+                    return None;
+                }
+                let before = rights.clone();
+                let mut names = BTreeSet::new();
+                let mut bindings = BTreeSet::new();
+                let mut outcome = None;
+                for arm in arms {
+                    let case = cases.iter().find(|case| case.name == arm.name)?;
+                    let OwnerRecord::Binding(binding) =
+                        self.0.owners.get(&OwnerKey::Binding(arm.binding))?
+                    else {
+                        return None;
+                    };
+                    if !names.insert(&arm.name)
+                        || !bindings.insert(arm.binding)
+                        || binding.kind != BindingKind::OwnedChoicePayload
+                        || binding.value.is_some()
+                        || binding.declared_type != Some(case.ty)
+                    {
+                        return None;
+                    }
+                    let local = LocalValueReference::LexicalBinding(arm.binding);
+                    if before.memory.contains(&local) {
+                        return None;
+                    }
+                    let mut branch = before.clone();
+                    if self.buffer(case.ty) {
+                        branch.memory.insert(local);
+                        branch.owned.insert(local);
+                    }
+                    let output = self.run(arm.body, &mut branch, take, depth + 1)?;
+                    branch.memory.remove(&local);
+                    branch.owned.remove(&local);
+                    if branch.memory != before.memory
+                        || branch.borrowed != before.borrowed
+                        || outcome.is_some_and(|prior| prior != output)
+                    {
+                        return None;
+                    }
+                    outcome = Some(output);
+                    rights.owned.retain(|owner| branch.owned.contains(owner));
+                }
+                outcome?
+            }
             ExpressionOperation::PackOwned {
                 product_type,
                 fields,
@@ -762,7 +861,17 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
         {
             return false;
         }
-        if snapshot.root.graph_contract_version >= 19 && owner.header().contract_version >= 19 {
+        if let OwnerRecord::Expression(e) = owner
+            && let ExpressionOperation::MatchOwned { arms, .. } = &e.operation
+            && arms.iter().any(|arm| !product_bindings.insert(arm.binding))
+        {
+            return false;
+        }
+        let generation = snapshot
+            .root
+            .graph_contract_version
+            .min(owner.header().contract_version);
+        if generation >= 20 {
             continue;
         }
         let mut pending = owner.type_roots();
@@ -778,7 +887,9 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
             else {
                 return false;
             };
-            if matches!(object.form, TypeForm::OwnedProduct { .. }) {
+            if matches!(object.form, TypeForm::OwnedChoice { .. })
+                || generation < 19 && matches!(object.form, TypeForm::OwnedProduct { .. })
+            {
                 return false;
             }
             pending.extend(object.child_types());
@@ -789,8 +900,10 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
         .values()
         .chain(snapshot.dependency_types.values())
         .any(|t| {
-            !matches!(t.form, TypeForm::OwnedProduct { .. })
-                && t.child_types().iter().any(|t| oracle.contains(*t))
+            !matches!(
+                t.form,
+                TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. }
+            ) && t.child_types().iter().any(|t| oracle.contains(*t))
         })
     {
         return false;

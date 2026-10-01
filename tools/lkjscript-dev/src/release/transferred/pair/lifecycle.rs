@@ -1073,41 +1073,89 @@ fn structural_capabilities(records: &[CompactRecord]) -> Result<(), DevError> {
             && value(records, "change.expression-block", "end")? == "expression.end",
         "installed route does not advertise structural blocks",
     )?;
-    let forms = records
-        .iter()
-        .filter(|record| record.operation == "change.expression-syntax")
-        .map(|record| field_value(record, "name"))
-        .collect::<Result<Vec<_>, _>>()?;
+    // The transferred verifier is built from authenticated producer source. Its
+    // maintained registry owns the exact expected inventory, not a second grammar
+    // list and never the candidate's own claimed inventory. Literal lifecycle
+    // behavior below remains independently checked.
+    let registry = lkjscript::platform::contract::registry_snapshot().map_err(DevError::corrupt)?;
+    let section = registry
+        .section(lkjscript::platform::contract::RegistrySection::Change)
+        .ok_or_else(|| DevError::corrupt("verifier source omits the change contract"))?;
+    let expected = lkjscript::platform::control::parse_records(
+        "verifier source change contract",
+        &section.bytes,
+    )
+    .map_err(|_| DevError::corrupt("verifier source change contract is not canonical records"))?;
     require(
-        forms
-            == [
-                "unit",
-                "bool",
-                "i64",
-                "f64",
-                "text",
-                "static-text",
-                "local",
-                "constant",
-                "if",
-                "sequence",
-                "call",
-                "function-value",
-                "invoke",
-                "bind",
-                "let",
-                "record",
-                "variant",
-                "field",
-                "list",
-                "map",
-                "match",
-                "capability-call",
-                "transaction",
-                "transaction-outcome",
-            ],
+        structural_forms(records)? == structural_forms(&expected)?,
         "installed route structural form inventory differs",
     )
+}
+
+fn structural_forms(records: &[CompactRecord]) -> Result<Vec<(&str, &str)>, DevError> {
+    records
+        .iter()
+        .filter(|record| record.operation == "change.expression-syntax")
+        .map(|record| Ok((field_value(record, "name")?, field_value(record, "syntax")?)))
+        .collect()
+}
+
+#[cfg(test)]
+mod structural_inventory_tests {
+    use super::*;
+    use lkjscript::platform::{
+        contract::{RegistrySection, registry_snapshot},
+        control::parse_records,
+    };
+
+    #[test]
+    fn installed_structural_inventory_rejects_missing_duplicate_reordered_and_altered_forms() {
+        let registry = registry_snapshot().unwrap();
+        let records = parse_records(
+            "source change contract",
+            &registry.section(RegistrySection::Change).unwrap().bytes,
+        )
+        .unwrap();
+        structural_capabilities(&records)
+            .expect("current installed forms must match their maintained source owner");
+        let indices = records
+            .iter()
+            .enumerate()
+            .filter_map(|(i, r)| (r.operation == "change.expression-syntax").then_some(i))
+            .collect::<Vec<_>>();
+        assert!(indices.len() >= 2);
+        for attack in 0..5 {
+            let mut altered = records.clone();
+            match attack {
+                0 => {
+                    altered.remove(indices[0]);
+                }
+                1 => altered.push(altered[indices[0]].clone()),
+                2 => altered.swap(indices[0], indices[1]),
+                3 => {
+                    altered[indices[0]]
+                        .fields
+                        .iter_mut()
+                        .find(|f| f.name == "syntax")
+                        .unwrap()
+                        .value = "(unit)".to_owned()
+                }
+                4 => {
+                    altered[indices[0]]
+                        .fields
+                        .iter_mut()
+                        .find(|f| f.name == "name")
+                        .unwrap()
+                        .value = "foreign".to_owned()
+                }
+                _ => unreachable!(),
+            }
+            assert!(
+                structural_capabilities(&altered).is_err(),
+                "structural inventory attack {attack}"
+            );
+        }
+    }
 }
 
 fn numerical_capabilities(records: &[CompactRecord]) -> Result<(), DevError> {

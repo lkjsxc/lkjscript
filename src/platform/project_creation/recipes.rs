@@ -650,6 +650,17 @@ fn authored_type(
         TypeForm::F64 => AuthoredType::F64 {},
         TypeForm::ByteBuffer => AuthoredType::ByteBuffer {},
         TypeForm::OwnedI64Cell => AuthoredType::OwnedI64Cell {},
+        TypeForm::OwnedChoice { cases } => AuthoredType::OwnedChoice {
+            cases: cases
+                .iter()
+                .map(|case| {
+                    Ok(AuthoredStructuralTypeField {
+                        name: case.name.clone(),
+                        ty: authored_type(interner, case.ty)?,
+                    })
+                })
+                .collect::<Result<_, Diagnostic>>()?,
+        },
         TypeForm::OwnedProduct { fields } => AuthoredType::OwnedProduct {
             fields: fields
                 .iter()

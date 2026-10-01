@@ -419,6 +419,7 @@ fn decode_value(
         TypeForm::ByteBuffer => Err(unsupported("ByteBuffer")),
         TypeForm::OwnedI64Cell => Err(unsupported("OwnedI64Cell")),
         TypeForm::OwnedProduct { .. } => Err(unsupported("OwnedProduct")),
+        TypeForm::OwnedChoice { .. } => Err(unsupported("OwnedChoice")),
         TypeForm::CapabilityResource { .. } => Err(unsupported("CapabilityResource")),
         TypeForm::Stream { .. } => Err(unsupported("Stream")),
         TypeForm::Function { .. } | TypeForm::TaskFunction { .. } => Err(unsupported("Function")),
@@ -541,6 +542,7 @@ fn describe_layout(
         TypeForm::ByteBuffer
         | TypeForm::OwnedI64Cell
         | TypeForm::OwnedProduct { .. }
+        | TypeForm::OwnedChoice { .. }
         | TypeForm::CapabilityResource { .. } => {
             return Err(unsupported("CapabilityResource"));
         }

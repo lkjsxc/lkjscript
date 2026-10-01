@@ -262,6 +262,65 @@ pub(super) fn layout(
                 minimum(&block, id, args, 1)?;
                 node.children.extend_from_slice(args);
             }
+            "choose-owned" => {
+                arity(&block, id, args, 3)?;
+                let annotation = clause(&block, args[0], "type")?;
+                arity(&block, args[0], annotation, 1)?;
+                node.record.fields.push(block.field(annotation[0], "type")?);
+                let case = clause(&block, args[1], "case")?;
+                arity(&block, args[1], case, 1)?;
+                node.record.fields.push(block.field(case[0], "case")?);
+                node.children.push(args[2]);
+            }
+            "match-owned" => {
+                minimum(&block, id, args, 3)?;
+                let annotation = clause(&block, args[0], "type")?;
+                arity(&block, args[0], annotation, 1)?;
+                node.record.fields.push(block.field(annotation[0], "type")?);
+                node.children.push(args[1]);
+                let mut branches = Vec::new();
+                for arm in &args[2..] {
+                    let parts = clause(&block, *arm, "case")?;
+                    arity(&block, *arm, parts, 3)?;
+                    let (binder, explicit) =
+                        binder_alias(&block, clause(&block, parts[1], "binding")?, symbols)?;
+                    arity(&block, parts[1], &binder, 2)?;
+                    let ty = clause(&block, binder[1], "type")?;
+                    arity(&block, binder[1], ty, 1)?;
+                    let body = clause(&block, parts[2], "in")?;
+                    arity(&block, parts[2], body, 1)?;
+                    let local_name = name(&block, binder[0])?.to_string();
+                    let local_symbol = match explicit {
+                        Some(symbol) => symbol,
+                        None => symbols.allocate(&block.syntax[binder[0]].location)?,
+                    };
+                    let mut record = member_record(&block, *arm);
+                    record.fields.push(block.field(parts[0], "case")?);
+                    record.fields.push(block.field(binder[0], "name")?);
+                    record.fields.push(block.field(ty[0], "type")?);
+                    record.fields.push(CompactField {
+                        name: "as".into(),
+                        value: local_symbol.clone(),
+                        location: record.location.clone(),
+                    });
+                    node.members.push(record);
+                    node.children.push(body[0]);
+                    branches.push((local_name, local_symbol, body[0]));
+                }
+                for (name, symbol, body) in branches.into_iter().rev() {
+                    work.push(Work::Leave(name.clone()));
+                    work.push(Work::Expression {
+                        id: body,
+                        depth: depth + 1,
+                    });
+                    work.push(Work::Enter { name, symbol });
+                }
+                work.push(Work::Expression {
+                    id: args[1],
+                    depth: depth + 1,
+                });
+                scoped = true;
+            }
             "pack-owned" => {
                 minimum(&block, id, args, 2)?;
                 let annotation = clause(&block, args[0], "type")?;
@@ -863,6 +922,32 @@ fn lower_node(
                 AuthoredExpressionOperation::Invoke { callee, arguments }
             } else {
                 AuthoredExpressionOperation::Bind { callee, arguments }
+            }
+        }
+        "expression.choose-owned" => AuthoredExpressionOperation::ChooseOwned {
+            choice_type: decoder.decode_type(required(record, "type")?)?,
+            case: parse_name(record, "case")?,
+            value: Box::new(child()?),
+        },
+        "expression.match-owned" => {
+            let choice_type = decoder.decode_type(required(record, "type")?)?;
+            let source = Box::new(child()?);
+            let mut arms = Vec::new();
+            for member in &node.members {
+                arms.push((
+                    parse_name(member, "case")?,
+                    AuthoredBindingDefinition {
+                        symbol: symbol(member, "as")?,
+                        name: parse_name(member, "name")?,
+                        declared_type: Some(decoder.decode_type(required(member, "type")?)?),
+                    },
+                    child()?,
+                ));
+            }
+            AuthoredExpressionOperation::MatchOwned {
+                choice_type,
+                source,
+                arms,
             }
         }
         "expression.pack-owned" => {

@@ -145,6 +145,7 @@ fn json_form<'a>(
         | TypeForm::ByteBuffer
         | TypeForm::OwnedI64Cell
         | TypeForm::OwnedProduct { .. }
+        | TypeForm::OwnedChoice { .. }
         | TypeForm::CapabilityResource { .. }
         | TypeForm::Function { .. }
         | TypeForm::TaskFunction { .. }
@@ -417,6 +418,7 @@ fn from_json(
         | TypeForm::ByteBuffer
         | TypeForm::OwnedI64Cell
         | TypeForm::OwnedProduct { .. }
+        | TypeForm::OwnedChoice { .. }
         | TypeForm::CapabilityResource { .. }
         | TypeForm::Stream { .. }
         | TypeForm::Function { .. }
@@ -634,6 +636,7 @@ fn to_json(
             | TypeForm::ByteBuffer
             | TypeForm::OwnedI64Cell
             | TypeForm::OwnedProduct { .. }
+            | TypeForm::OwnedChoice { .. }
             | TypeForm::CapabilityResource { .. }
             | TypeForm::Stream { .. }
             | TypeForm::Function { .. }

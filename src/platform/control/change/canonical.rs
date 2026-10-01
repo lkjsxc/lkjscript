@@ -159,6 +159,17 @@ impl<'a> Reader<'a> {
             TypeForm::F64 => AuthoredType::F64 {},
             TypeForm::ByteBuffer => AuthoredType::ByteBuffer {},
             TypeForm::OwnedI64Cell => AuthoredType::OwnedI64Cell {},
+            TypeForm::OwnedChoice { cases } => AuthoredType::OwnedChoice {
+                cases: cases
+                    .into_iter()
+                    .map(|case| {
+                        Ok(AuthoredStructuralTypeField {
+                            name: case.name,
+                            ty: self.ty_at(case.ty, depth + 1)?,
+                        })
+                    })
+                    .collect::<Result<_, Diagnostic>>()?,
+            },
             TypeForm::OwnedProduct { fields } => AuthoredType::OwnedProduct {
                 fields: fields
                     .into_iter()
@@ -328,6 +339,42 @@ impl<'a> Reader<'a> {
                 when_true: Box::new(self.expression_at(when_true, depth + 1)?),
                 when_false: Box::new(self.expression_at(when_false, depth + 1)?),
             },
+            E::ChooseOwned {
+                choice_type,
+                case,
+                value,
+            } => A::ChooseOwned {
+                choice_type: self.ty(choice_type)?,
+                case,
+                value: Box::new(self.expression_at(value, depth + 1)?),
+            },
+            E::MatchOwned {
+                choice_type,
+                source,
+                arms,
+            } => {
+                let mut authored = Vec::new();
+                for arm in arms {
+                    let binding = self.binding(arm.binding)?;
+                    authored.push((
+                        arm.name,
+                        AuthoredBindingDefinition {
+                            symbol: binding_symbol(arm.binding),
+                            name: binding.name,
+                            declared_type: binding
+                                .declared_type
+                                .map(|ty| self.ty(ty))
+                                .transpose()?,
+                        },
+                        self.expression_at(arm.body, depth + 1)?,
+                    ));
+                }
+                A::MatchOwned {
+                    choice_type: self.ty(choice_type)?,
+                    source: Box::new(self.expression_at(source, depth + 1)?),
+                    arms: authored,
+                }
+            }
             E::PackOwned {
                 product_type,
                 fields,

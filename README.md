@@ -20,7 +20,9 @@ remain available. Promotion [36763094941/1](https://github.com/lkjsxc/lkjscript/
 completed immutable publication and anonymous installed verification with the original
 accepted bytes. Owned-memory and owned-product development is not in this binary.
 [Current status](docs/status.md) separates available releases, development source
-and unproved properties.
+and unproved properties. Development 0.1.64 adds [recoverable owned outcomes](docs/guides/native-owned-choices.md):
+a declined operation can return its original owned payload, with exhaustive consuming
+case analysis and exact generic-library contracts. This is not in the public binary.
 
 Product versions are **opaque `A.B.C` identifiers**. All three components have the
 same role: none denotes compatibility, stability, change size or a feature milestone.

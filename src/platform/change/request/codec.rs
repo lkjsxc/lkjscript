@@ -120,6 +120,7 @@ struct Writer {
     buffer_extension: bool,
     owned_extension: bool,
     product_extension: bool,
+    choice_extension: bool,
     declaration_body_extension: bool,
     literal_extension: bool,
 }
@@ -135,13 +136,16 @@ impl Writer {
             buffer_extension: false,
             owned_extension: false,
             product_extension: false,
+            choice_extension: false,
             declaration_body_extension: false,
             literal_extension: false,
         }
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.product_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+        if self.choice_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR23");
+        } else if self.product_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR22");
         } else if self.owned_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR21");
@@ -1432,6 +1436,12 @@ impl Writer {
                     self.length(fields.len())?;
                     pending.push(Frame::Fields(fields, next));
                 }
+                AuthoredType::OwnedChoice { cases } => {
+                    self.choice_extension = true;
+                    self.tag(23)?;
+                    self.length(cases.len())?;
+                    pending.push(Frame::Fields(cases, next));
+                }
                 AuthoredType::OwnedProduct { fields } => {
                     self.product_extension = true;
                     self.tag(22)?;
@@ -1749,6 +1759,36 @@ impl Writer {
                 self.expression(condition, definitions, next)?;
                 self.expression(when_true, definitions, next)?;
                 self.expression(when_false, definitions, next)
+            }
+            AuthoredExpressionOperation::ChooseOwned {
+                choice_type,
+                case,
+                value,
+            } => {
+                self.choice_extension = true;
+                self.tag(34)?;
+                self.authored_type(choice_type, definitions, 1)?;
+                self.name(case)?;
+                self.expression(value, definitions, next)
+            }
+            AuthoredExpressionOperation::MatchOwned {
+                choice_type,
+                source,
+                arms,
+            } => {
+                self.choice_extension = true;
+                self.tag(35)?;
+                self.authored_type(choice_type, definitions, 1)?;
+                self.expression(source, definitions, next)?;
+                self.list(arms, |w, (name, binding, body)| {
+                    w.name(name)?;
+                    w.symbol(&binding.symbol, definitions)?;
+                    w.name(&binding.name)?;
+                    w.optional(binding.declared_type.as_ref(), |w, ty| {
+                        w.authored_type(ty, definitions, 1)
+                    })?;
+                    w.expression(body, definitions, next)
+                })
             }
             AuthoredExpressionOperation::PackOwned {
                 product_type,

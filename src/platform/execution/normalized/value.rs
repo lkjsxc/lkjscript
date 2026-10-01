@@ -93,6 +93,7 @@ pub enum NormalizedRecord {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NormalizedValue {
+    OwnedChoice(super::owned_choice::OwnedChoice),
     OwnedProduct(super::owned_product::OwnedProduct),
     Unit,
     Bool(bool),
@@ -133,6 +134,7 @@ pub(super) enum MemoryForm {
     ByteBuffer,
     OwnedI64Cell,
     Product(TypeObjectDigest),
+    Choice(TypeObjectDigest),
 }
 
 impl NormalizedValue {
@@ -141,6 +143,7 @@ impl NormalizedValue {
             Self::ByteBuffer(_) => Some(MemoryForm::ByteBuffer),
             Self::OwnedI64Cell(_) => Some(MemoryForm::OwnedI64Cell),
             Self::OwnedProduct(p) => Some(MemoryForm::Product(p.ty())),
+            Self::OwnedChoice(p) => Some(MemoryForm::Choice(p.ty())),
             _ => None,
         }
     }
@@ -154,6 +157,7 @@ impl NormalizedValue {
             Self::ByteBuffer(token) => token.validate(domain, consume),
             Self::OwnedI64Cell(token) => token.validate(domain, consume),
             Self::OwnedProduct(token) => token.validate(domain, consume),
+            Self::OwnedChoice(token) => token.validate(domain, consume),
             _ => Err(crate::platform::execution::ExecutionError::resource(
                 "normalized_memory_token",
                 "expected a sealed owned-memory token",
@@ -166,6 +170,7 @@ impl NormalizedValue {
             Self::ByteBuffer(token) => token.borrow().map(Self::ByteBuffer),
             Self::OwnedI64Cell(token) => token.borrow().map(Self::OwnedI64Cell),
             Self::OwnedProduct(token) => token.borrow().map(Self::OwnedProduct),
+            Self::OwnedChoice(token) => token.borrow().map(Self::OwnedChoice),
             _ => Err(crate::platform::execution::ExecutionError::resource(
                 "normalized_memory_token",
                 "expected a sealed owned-memory token",
@@ -178,6 +183,7 @@ impl NormalizedValue {
             Self::ByteBuffer(token) => token.is_borrowed(),
             Self::OwnedI64Cell(token) => token.is_borrowed(),
             Self::OwnedProduct(token) => token.is_borrowed(),
+            Self::OwnedChoice(token) => token.is_borrowed(),
             _ => false,
         }
     }
@@ -187,6 +193,7 @@ impl NormalizedValue {
             Self::ByteBuffer(token) => token.owns_live_loans(),
             Self::OwnedI64Cell(token) => token.owns_live_loans(),
             Self::OwnedProduct(token) => token.owns_live_loans(),
+            Self::OwnedChoice(token) => token.owns_live_loans(),
             _ => false,
         }
     }
@@ -260,6 +267,7 @@ impl NormalizedValue {
     pub fn is_durable(&self) -> bool {
         match self {
             Self::OwnedProduct(_)
+            | Self::OwnedChoice(_)
             | Self::OwnedI64Cell(_)
             | Self::ByteBuffer(_)
             | Self::Function { .. }
@@ -477,7 +485,8 @@ impl RawValueWork {
                 | NormalizedValue::Resource(_)
                 | NormalizedValue::ByteBuffer(_)
                 | NormalizedValue::OwnedI64Cell(_)
-                | NormalizedValue::OwnedProduct(_) => return,
+                | NormalizedValue::OwnedProduct(_)
+                | NormalizedValue::OwnedChoice(_) => return,
                 value => {
                     if let Some(previous) = self.current.replace(value) {
                         self.values.push(previous);

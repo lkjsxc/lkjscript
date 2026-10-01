@@ -60,9 +60,12 @@ struct Reference<'a> {
 impl Reference<'_> {
     fn buffer(&self, ty: TypeObjectDigest) -> bool {
         match self.type_object(ty).map(|t| &t.form) {
-            Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. }) => {
-                true
-            }
+            Some(
+                TypeForm::ByteBuffer
+                | TypeForm::OwnedI64Cell
+                | TypeForm::OwnedProduct { .. }
+                | TypeForm::OwnedChoice { .. },
+            ) => true,
             Some(TypeForm::TypeParameter { parameter }) => {
                 matches!(self.snapshot.owners.get(&OwnerKey::TypeParameter(*parameter)), Some(OwnerRecord::TypeParameter(p)) if p.constraints == super::TypeParameterConstraints::Owned)
             }
@@ -228,6 +231,29 @@ impl Reference<'_> {
             _ => return Err(()),
         };
         match operation {
+            ExpressionOperation::ChooseOwned { value, .. } => {
+                self.plain(*value, live)?;
+                Ok(Value::Plain)
+            }
+            ExpressionOperation::MatchOwned { source, arms, .. } => {
+                self.plain(*source, live)?;
+                let before = live.clone();
+                let mut joined = None;
+                for arm in arms {
+                    let mut branch = before.clone();
+                    let value = self.eval(arm.body, &mut branch)?;
+                    match &joined {
+                        Some((prior, prior_value)) if prior != &branch || prior_value != &value => {
+                            return Err(());
+                        }
+                        Some(_) => {}
+                        None => joined = Some((branch, value)),
+                    }
+                }
+                let (after, value) = joined.ok_or(())?;
+                *live = after;
+                Ok(value)
+            }
             ExpressionOperation::PackOwned { fields, .. } => {
                 for field in fields {
                     self.plain(field.value, live)?;

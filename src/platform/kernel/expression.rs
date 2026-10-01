@@ -80,6 +80,17 @@ impl ExpressionRecord {
                 "owned products require Graph 19",
             ));
         }
+        if self.contract_version < 20
+            && matches!(
+                self.operation,
+                ExpressionOperation::ChooseOwned { .. } | ExpressionOperation::MatchOwned { .. }
+            )
+        {
+            return Err(expression_error(
+                "kernel_choice_generation",
+                "owned choices require Graph 20",
+            ));
+        }
         validate_operation(&self.operation)
     }
 
@@ -89,6 +100,8 @@ impl ExpressionRecord {
 
     pub fn type_roots(&self) -> Vec<TypeObjectDigest> {
         match &self.operation {
+            ExpressionOperation::ChooseOwned { choice_type, .. }
+            | ExpressionOperation::MatchOwned { choice_type, .. } => vec![*choice_type],
             ExpressionOperation::PackOwned { product_type, .. }
             | ExpressionOperation::UnpackOwned { product_type, .. } => vec![*product_type],
             ExpressionOperation::ImplementationCall { type_arguments, .. }
@@ -233,6 +246,24 @@ pub enum ExpressionOperation {
         fields: Vec<OwnedProductBinding>,
         body: ExpressionId,
     },
+    ChooseOwned {
+        choice_type: TypeObjectDigest,
+        case: Name,
+        value: ExpressionId,
+    },
+    MatchOwned {
+        choice_type: TypeObjectDigest,
+        source: ExpressionId,
+        arms: Vec<OwnedChoiceArm>,
+    },
+}
+
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct OwnedChoiceArm {
+    pub name: Name,
+    pub binding: BindingId,
+    pub body: ExpressionId,
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
@@ -399,10 +430,24 @@ pub enum ExpressionChildRole {
     OwnedProductField,
     OwnedProductSource,
     OwnedProductBody,
+    OwnedChoiceValue,
+    OwnedChoiceSource,
+    OwnedChoiceArmBody,
 }
 
 fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic> {
     match operation {
+        ExpressionOperation::ChooseOwned { .. } => {}
+        ExpressionOperation::MatchOwned { arms, .. } => {
+            require_count("owned choice arms", arms.len(), false)?;
+            require_unique("owned choice binding", arms.iter().map(|arm| arm.binding))?;
+            if arms.windows(2).any(|pair| pair[0].name >= pair[1].name) {
+                return Err(expression_error(
+                    "kernel_choice_arms",
+                    "owned choice arms require unique canonical names",
+                ));
+            }
+        }
         ExpressionOperation::PackOwned { fields, .. } => {
             require_count("owned product fields", fields.len(), false)?;
             if fields
@@ -618,6 +663,30 @@ fn require_unique<T: Ord + Copy>(
 fn expression_children(operation: &ExpressionOperation) -> Vec<ExpressionChild> {
     let mut children = Vec::new();
     match operation {
+        ExpressionOperation::ChooseOwned { value, .. } => {
+            push_child(
+                &mut children,
+                *value,
+                ExpressionChildRole::OwnedChoiceValue,
+                0,
+            );
+        }
+        ExpressionOperation::MatchOwned { source, arms, .. } => {
+            push_child(
+                &mut children,
+                *source,
+                ExpressionChildRole::OwnedChoiceSource,
+                0,
+            );
+            for (ordinal, arm) in arms.iter().enumerate() {
+                push_child(
+                    &mut children,
+                    arm.body,
+                    ExpressionChildRole::OwnedChoiceArmBody,
+                    u32::try_from(ordinal).unwrap_or(u32::MAX),
+                );
+            }
+        }
         ExpressionOperation::PackOwned { fields, .. } => {
             for (ordinal, field) in fields.iter().enumerate() {
                 push_child(

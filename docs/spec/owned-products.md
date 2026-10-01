@@ -128,6 +128,13 @@ including empty optional setters. Semantic validator 20 and structural-owned-pro
 feature revision 2 invalidate stale ownership proofs for metadata reads. This
 source acceptance does not establish a public binary release.
 
+Development 0.1.64 also admits [owned choices](owned-choices.md) as explicit owned
+product children. Both composite forms share bounded mixed-depth validation and
+iterative cleanup; ordinary record/Option/Result containment remains rejected.
+The current compiler/bytecode/artifact cut is 18/14/25; the historical 0.1.63
+encoding paragraph above describes that increment's exact source, not current
+permission to execute its derived artifacts.
+
 See the [native guide](../guides/native-owned-products.md) and
 [campaign](../campaigns/20261001-owned-products.md) for literal programs, actual
 verification and remaining work. Public v0.1.60 is unchanged.

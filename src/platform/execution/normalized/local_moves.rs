@@ -109,6 +109,12 @@ fn derive_linear(code: &mut NormalizedCode, work: &mut Budget<'_>) -> Result<(),
                 edge(&mut ends, index, *target, work)?;
                 None
             }
+            I::MatchOwned { cases, .. } => {
+                for case in cases.iter() {
+                    edge(&mut ends, index, case.target, work)?;
+                }
+                None
+            }
             I::SwitchVariant(jumps) => {
                 for jump in jumps.iter() {
                     edge(&mut ends, index, jump.target, work)?;
@@ -116,6 +122,7 @@ fn derive_linear(code: &mut NormalizedCode, work: &mut Budget<'_>) -> Result<(),
                 None
             }
             I::Unit
+            | I::ChooseOwned { .. }
             | I::PackOwned { .. }
             | I::UnpackOwned { .. }
             | I::Bool(_)

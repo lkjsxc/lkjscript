@@ -46,6 +46,45 @@ fn native_resource_suffix_allows_repeated_shared_borrow() {
     check_program(&program);
 }
 
+#[test]
+fn native_owned_choices_keep_task_resource_consumption_exact() {
+    let old = "(body (sequence\n        (capability-call queue::jobs std::DurableQueue::complete\n          (local lease) (i64 0) (local result))\n        (local value))))";
+    for selected in ["accepted", "rejected"] {
+        let payload = if selected == "accepted" {
+            "(unit)"
+        } else {
+            "(local buffer)"
+        };
+        let terminal = "(sequence (capability-call queue::jobs std::DurableQueue::complete (local lease) (i64 0) (local result)) (local value))";
+        let body = format!("(body (let
+          (binding buffer (type ByteBuffer) (call empty))
+          (binding outcome (type (owned-choice (case accepted Unit) (case rejected ByteBuffer)))
+            (choose-owned (type (owned-choice (case accepted Unit) (case rejected ByteBuffer))) (case {selected}) {payload}))
+          (in (match-owned (type (owned-choice (case accepted Unit) (case rejected ByteBuffer))) (local outcome)
+            (case accepted (binding unused (type Unit)) (in {terminal}))
+            (case rejected (binding returned (type ByteBuffer)) (in {terminal})))))))");
+        assert!(PROGRAM.contains(old));
+        let program = PROGRAM.replacen("(module create generic-queue (as $module)",
+            "(module create generic-queue (as $module)\n(external create empty (visibility private) (implementation core.buffer.empty) (returns ByteBuffer))", 1)
+            .replacen(old, &body, 1);
+        check_program(&program);
+        let invalid = program.replacen(&format!("(in {terminal})"), "(in (local value))", 1);
+        let public = Native::template("command");
+        let before = public.revision();
+        let input = public.input(
+            "incomplete-choice-consumption.lkjc",
+            &format!("request base={before}\n{invalid}"),
+        );
+        let result = public.plan(&input, false);
+        assert!(
+            result.iter().any(|record| record.operation == "diagnostic"
+                && compact_field(record, "code") == "kernel_affine_branch_join"),
+            "{result:?}"
+        );
+        assert_eq!(public.revision(), before);
+    }
+}
+
 fn check_program(program: &str) {
     let public = Native::template("command");
     let input = public.input(

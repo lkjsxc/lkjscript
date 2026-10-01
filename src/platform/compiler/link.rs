@@ -646,6 +646,9 @@ fn reference_expression_bindings(
         ExpressionOperation::Let {
             bindings: declared, ..
         } => bindings.extend(declared.iter().copied()),
+        ExpressionOperation::MatchOwned { arms, .. } => {
+            bindings.extend(arms.iter().map(|arm| arm.binding))
+        }
         ExpressionOperation::UnpackOwned { fields, .. } => {
             bindings.extend(fields.iter().map(|field| field.binding))
         }

@@ -89,6 +89,14 @@ pub struct NormalizedCode {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NormalizedInstruction {
+    ChooseOwned {
+        choice_type: TypeObjectDigest,
+        case: u32,
+    },
+    MatchOwned {
+        choice_type: TypeObjectDigest,
+        cases: Arc<[NormalizedOwnedChoiceJump]>,
+    },
     PackOwned {
         product_type: TypeObjectDigest,
         fields: Arc<[u32]>,
@@ -238,6 +246,12 @@ pub enum NormalizedFieldSelector {
         offset: u32,
     },
     Structural(Name),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NormalizedOwnedChoiceJump {
+    pub target: u32,
+    pub binding_local: u32,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -609,6 +623,17 @@ impl NormalizedProgram {
                 let digest = substitutions.get(parameter).copied()?;
                 return self.types.contains_key(&digest).then_some(digest);
             }
+            TypeForm::OwnedChoice { cases } => TypeForm::OwnedChoice {
+                cases: cases
+                    .iter()
+                    .map(|case| {
+                        Some(StructuralTypeField {
+                            name: case.name.clone(),
+                            ty: self.substitute_type(case.ty, substitutions, next)?,
+                        })
+                    })
+                    .collect::<Option<_>>()?,
+            },
             TypeForm::OwnedProduct { fields } => TypeForm::OwnedProduct {
                 fields: fields
                     .iter()
@@ -1517,9 +1542,12 @@ fn validate_normalized_resource_signature(
 ) -> Result<(), Diagnostic> {
     let is_memory = |ty| -> Result<bool, Diagnostic> {
         Ok(match types.get(&ty).map(|t| &t.form) {
-            Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. }) => {
-                true
-            }
+            Some(
+                TypeForm::ByteBuffer
+                | TypeForm::OwnedI64Cell
+                | TypeForm::OwnedProduct { .. }
+                | TypeForm::OwnedChoice { .. },
+            ) => true,
             Some(TypeForm::TypeParameter { parameter }) => {
                 matches!(exact_runtime_owner(owners, declaration.package, OwnerKey::TypeParameter(*parameter), "owned signature type parameter")?, OwnerRecord::TypeParameter(p) if p.constraints == crate::platform::kernel::TypeParameterConstraints::Owned)
             }
@@ -2577,6 +2605,25 @@ fn translate_code(
                 }
             }
             CompiledInstruction::StoreLocal(local) => NormalizedInstruction::StoreLocal(*local),
+            CompiledInstruction::ChooseOwned { choice_type, case } => {
+                NormalizedInstruction::ChooseOwned {
+                    choice_type: index_copy(&unit.tables.types, *choice_type, "owned choice type")?,
+                    case: *case,
+                }
+            }
+            CompiledInstruction::MatchOwned { choice_type, cases } => {
+                NormalizedInstruction::MatchOwned {
+                    choice_type: index_copy(&unit.tables.types, *choice_type, "owned choice type")?,
+                    cases: cases
+                        .iter()
+                        .map(|case| NormalizedOwnedChoiceJump {
+                            target: case.target,
+                            binding_local: case.binding_local,
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                }
+            }
             CompiledInstruction::PackOwned {
                 product_type,
                 fields,

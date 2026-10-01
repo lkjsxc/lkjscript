@@ -210,6 +210,7 @@ impl Oracle<'_> {
                 | TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
+                | TypeForm::OwnedChoice { .. }
                 | TypeForm::Secret
                 | TypeForm::Stream { .. } => return false,
                 TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
@@ -335,11 +336,18 @@ impl Oracle<'_> {
         if !self.valid_contract(i.contract)
             || !matches!(
                 self.form(i.self_type),
-                Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. })
+                Some(
+                    TypeForm::ByteBuffer
+                        | TypeForm::OwnedI64Cell
+                        | TypeForm::OwnedProduct { .. }
+                        | TypeForm::OwnedChoice { .. }
+                )
             )
             || i.methods.windows(2).any(|w| w[0].method >= w[1].method)
-            || matches!(self.form(i.self_type), Some(TypeForm::OwnedProduct { .. }))
-                && !Oracle(self.0, None).product_shape(i.self_type)
+            || matches!(
+                self.form(i.self_type),
+                Some(TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. })
+            ) && !Oracle(self.0, None).product_shape(i.self_type)
         {
             return false;
         }

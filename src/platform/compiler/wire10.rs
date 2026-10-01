@@ -671,7 +671,9 @@ impl TryFrom<CompiledInstruction> for CompiledInstruction10 {
             | CompiledInstruction::MethodCall { .. }
             | CompiledInstruction::F64(_)
             | CompiledInstruction::PackOwned { .. }
-            | CompiledInstruction::UnpackOwned { .. } => return Err(extension()),
+            | CompiledInstruction::UnpackOwned { .. }
+            | CompiledInstruction::ChooseOwned { .. }
+            | CompiledInstruction::MatchOwned { .. } => return Err(extension()),
         })
     }
 }

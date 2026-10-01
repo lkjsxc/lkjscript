@@ -557,6 +557,12 @@ fn walk_expression<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
 
     let next = depth.saturating_add(1);
     match record.operation {
+        ExpressionOperation::ChooseOwned { .. } | ExpressionOperation::MatchOwned { .. } => {
+            return Err(extract_error(
+                "change_extract_owned_choice",
+                "function extraction of owned choice scopes is unsupported",
+            ));
+        }
         ExpressionOperation::PackOwned { .. } | ExpressionOperation::UnpackOwned { .. } => {
             return Err(extract_error(
                 "change_extract_owned_product",
@@ -753,6 +759,7 @@ fn walk_binding<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         BindingContainerRole::MatchPayload => BindingKind::MatchPayload,
         BindingContainerRole::Transaction => BindingKind::Transaction,
         BindingContainerRole::OwnedUnpack => BindingKind::OwnedUnpack,
+        BindingContainerRole::OwnedChoicePayload => BindingKind::OwnedChoicePayload,
     };
     if record.kind != expected_kind {
         return Err(extract_corrupt(
@@ -1444,6 +1451,12 @@ fn replace_expression_reference(
         }
     };
     match operation {
+        ExpressionOperation::ChooseOwned { .. } | ExpressionOperation::MatchOwned { .. } => {
+            return Err(extract_error(
+                "change_extract_owned_choice",
+                "function extraction of owned choice scopes is unsupported",
+            ));
+        }
         ExpressionOperation::PackOwned { .. } | ExpressionOperation::UnpackOwned { .. } => {
             return Err(extract_corrupt(
                 "change_extract_owned_product",
@@ -1842,9 +1855,10 @@ fn resource_class<B: CanonicalBaseRead + ?Sized>(
     })?;
     let result = match object.form {
         TypeForm::CapabilityResource { interface } => ResourceClass::Direct(interface),
-        TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. } => {
-            ResourceClass::Memory
-        }
+        TypeForm::ByteBuffer
+        | TypeForm::OwnedI64Cell
+        | TypeForm::OwnedProduct { .. }
+        | TypeForm::OwnedChoice { .. } => ResourceClass::Memory,
         TypeForm::Named { declaration } => {
             let key = (declaration.package, declaration.declaration);
             if !active_declarations.insert(key) {

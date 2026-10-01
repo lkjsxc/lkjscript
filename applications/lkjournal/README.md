@@ -95,7 +95,7 @@ empty 404 and invokes none of them.
 
 All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,375,404-byte
 artifact bundle above (SHA-256
-`40c7c2760e2cfe38bd07a0e733d0193391c53f83afbfbf70327281756e9a9601`). The service descriptor
+`6d454495b6102320f354dfeb106af65bfd45378e43f00a68e9bc514b3b73c450`). The service descriptor
 resolves `serve`, the worker descriptor resolves `work`, and `live.deployment.json` resolves
 `lkjournal-live-1`. Preparation strictly loads the standalone bundle,
 validates the runner, route-indexed handler and component requirement closure, grants, secrets, and adapters, and emits

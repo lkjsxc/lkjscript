@@ -66,7 +66,10 @@ impl Closure<'_> {
             })?;
         for (ty, object) in self.types.iter() {
             self.control.check()?;
-            if matches!(object.form, TypeForm::OwnedProduct { .. }) {
+            if matches!(
+                object.form,
+                TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. }
+            ) {
                 allocate::<(TypeObjectDigest, usize)>(&mut self.allocated, 1)?;
                 queue.push_back((*ty, 0usize));
             }
@@ -198,6 +201,12 @@ impl Closure<'_> {
                     effect,
                 }
             }
+            TypeForm::OwnedChoice { mut cases } => {
+                for case in &mut cases {
+                    case.ty = self.identity(case.ty, bindings, depth + 1)?;
+                }
+                TypeForm::OwnedChoice { cases }
+            }
             TypeForm::OwnedProduct { mut fields } => {
                 for field in &mut fields {
                     field.ty = self.identity(field.ty, bindings, depth + 1)?;
@@ -294,7 +303,15 @@ impl Closure<'_> {
             }
             match record.operation {
                 ExpressionOperation::PackOwned { product_type, .. }
-                | ExpressionOperation::UnpackOwned { product_type, .. } => {
+                | ExpressionOperation::UnpackOwned { product_type, .. }
+                | ExpressionOperation::ChooseOwned {
+                    choice_type: product_type,
+                    ..
+                }
+                | ExpressionOperation::MatchOwned {
+                    choice_type: product_type,
+                    ..
+                } => {
                     self.identity(product_type, bindings, 0)?;
                 }
                 ExpressionOperation::ImplementationCall {
@@ -400,7 +417,9 @@ impl Closure<'_> {
     fn clone_type(&mut self, ty: TypeObjectDigest) -> Result<(), ExecutionError> {
         let object = self.types.get(&ty).ok_or_else(failure)?;
         match &object.form {
-            TypeForm::StructuralRecord { fields } | TypeForm::OwnedProduct { fields } => {
+            TypeForm::StructuralRecord { fields }
+            | TypeForm::OwnedProduct { fields }
+            | TypeForm::OwnedChoice { cases: fields } => {
                 allocate::<crate::platform::kernel::StructuralTypeField>(
                     &mut self.allocated,
                     fields.len(),
@@ -976,7 +995,10 @@ fn property_types(
         if (retention == Retention::BufferFree
             && !matches!(
                 object.form,
-                TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. }
+                TypeForm::ByteBuffer
+                    | TypeForm::OwnedI64Cell
+                    | TypeForm::OwnedProduct { .. }
+                    | TypeForm::OwnedChoice { .. }
             ))
             || retention == Retention::NoApplication
             || retention != Retention::BufferFree
@@ -985,6 +1007,7 @@ fn property_types(
                     TypeForm::ByteBuffer
                         | TypeForm::OwnedI64Cell
                         | TypeForm::OwnedProduct { .. }
+                        | TypeForm::OwnedChoice { .. }
                         | TypeForm::Stream { .. }
                         | TypeForm::CapabilityResource { .. }
                         | TypeForm::TypeParameter { .. }
@@ -1017,7 +1040,10 @@ fn property_types(
                 Ok(safe.contains(&child))
             };
             let accepted = match &object.form {
-                TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. }
+                TypeForm::ByteBuffer
+                | TypeForm::OwnedI64Cell
+                | TypeForm::OwnedProduct { .. }
+                | TypeForm::OwnedChoice { .. }
                     if retention == Retention::BufferFree =>
                 {
                     false
@@ -1033,6 +1059,7 @@ fn property_types(
                 TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
+                | TypeForm::OwnedChoice { .. }
                 | TypeForm::Secret
                 | TypeForm::Stream { .. }
                 | TypeForm::CapabilityResource { .. }

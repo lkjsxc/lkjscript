@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-17";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 17;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-13";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 13;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN17";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v17";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v17";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-18";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 18;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-14";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 14;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN18";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v18";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v18";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -84,6 +84,8 @@ impl CompilationUnitKey {
             "lkjscript.compiler-unit-key.v15"
         } else if compiler_contract_version == 16 {
             "lkjscript.compiler-unit-key.v16"
+        } else if compiler_contract_version == 17 {
+            "lkjscript.compiler-unit-key.v17"
         } else {
             COMPILER_UNIT_KEY_DOMAIN
         });
@@ -410,6 +412,20 @@ pub enum CompiledInstruction {
         product_type: u32,
         locals: Vec<u32>,
     },
+    ChooseOwned {
+        choice_type: u32,
+        case: u32,
+    },
+    MatchOwned {
+        choice_type: u32,
+        cases: Vec<CompiledOwnedChoiceJump>,
+    },
+}
+
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+pub struct CompiledOwnedChoiceJump {
+    pub target: u32,
+    pub binding_local: u32,
 }
 
 #[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
@@ -497,7 +513,7 @@ impl CompilationUnit {
                 "compiler-unit bytes disagree with their exact object-domain digest",
             ));
         }
-        // Derived generations 10–15 require a rebuild from supported canonical owners.
+        // Derived generations 10–17 require a rebuild from supported canonical owners.
         // Refuse before decoding; old bytes never acquire current instruction meaning.
         if [
             b"LKJCUN10",
@@ -506,6 +522,8 @@ impl CompilationUnit {
             b"LKJCUN13",
             b"LKJCUN14",
             b"LKJCUN15",
+            b"LKJCUN16",
+            b"LKJCUN17",
         ]
         .iter()
         .any(|magic| bytes.starts_with(*magic))
@@ -541,7 +559,7 @@ impl CompilationUnit {
                 self.bytecode_contract_version,
                 self.graph_contract_version
             ),
-            (17, 13, 19)
+            (18, 14, 20)
         ) {
             return Err(unit_error(
                 DiagnosticClass::Source,
@@ -1281,6 +1299,34 @@ impl CompiledInstruction {
             }
         }
         match self {
+            Self::ChooseOwned { choice_type, case } => {
+                require_index("owned choice type", *choice_type, tables.types.len())?;
+                require_index(
+                    "owned choice case",
+                    *case,
+                    crate::platform::kernel::contract::MAXIMUM_CHILDREN,
+                )
+            }
+            Self::MatchOwned { choice_type, cases } => {
+                require_index("owned choice type", *choice_type, tables.types.len())?;
+                require_item_count("owned choice cases", cases.len(), false)?;
+                let mut locals = BTreeSet::new();
+                for case in cases {
+                    require_index("owned choice target", case.target, code.instructions.len())?;
+                    require_index(
+                        "owned choice payload local",
+                        case.binding_local,
+                        code.local_count as usize,
+                    )?;
+                    if !locals.insert(case.binding_local) {
+                        return Err(unit_corrupt(
+                            "compiler_unit_choice_local",
+                            "owned choice arms repeat a payload local",
+                        ));
+                    }
+                }
+                Ok(())
+            }
             Self::PackOwned {
                 product_type,
                 fields,
@@ -1766,6 +1812,13 @@ fn verify_stack(code: &CompiledCode) -> Result<(), Diagnostic> {
                 pending.push((*target as usize, next_depth, next_binding));
                 pending.push((instruction_index + 1, next_depth, next_binding));
             }
+            CompiledInstruction::MatchOwned { cases, .. } => {
+                pending.extend(
+                    cases
+                        .iter()
+                        .map(|case| (case.target as usize, next_depth, next_binding)),
+                );
+            }
             CompiledInstruction::SwitchVariant(arms) => {
                 pending.extend(
                     arms.iter()
@@ -1795,6 +1848,8 @@ fn stack_effect(instruction: &CompiledInstruction) -> Result<(usize, usize), Dia
         })
     };
     Ok(match instruction {
+        CompiledInstruction::ChooseOwned { .. } => (1, 1),
+        CompiledInstruction::MatchOwned { .. } => (1, 0),
         CompiledInstruction::PackOwned { fields, .. } => (fields.len(), 1),
         CompiledInstruction::UnpackOwned { .. } => (1, 0),
         CompiledInstruction::Unit

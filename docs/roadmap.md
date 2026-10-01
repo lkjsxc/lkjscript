@@ -72,14 +72,23 @@ repacking the payload. A short whole-product loan returns an ordinary immutable
 value, not an owned-child reference. This supplies inspection before a transfer
 decision; it does not replace the next recoverable-outcome experiment.
 
-The next preferred composition experiment is an owned choice/outcome: success may
-transfer an owner, while a rejected operation can return its still-owned payload.
-Ordinary unrestricted Option/Result containers are not an implicit escape hatch.
-Require complete consuming case analysis, exact generic/package witnesses and
-single-owner failure cleanup before using this boundary for asynchronous queues.
-This is a selected experiment, not implemented syntax or a new release-number
-milestone. Its purpose is to make recoverable failure compositional before growing
-shared-host supervision or introducing more concrete memory carriers.
+The [owned choice/outcome continuation](campaigns/20261002-owned-choices.md) implements
+an explicit affine sum and complete consuming case analysis. Ordinary success and
+still-owned rejection results compose across exact generic libraries and independent
+carriers. Closed choice Self implementations, recursive transfer and opaque reborrows
+use existing contracts. Ordinary unrestricted Option/Result is not an escape hatch.
+Source tests and delivery remain distinct from a finalized or published binary.
+
+The next preferred boundary is a small structured task-owned transfer contract,
+not an asynchronous queue bolted onto pure-function ownership. First define how
+owned memory and exact capability-resource parameters coexist without merging their
+authority, how task-local owners survive suspended work, and which synchronous loans
+must end before suspension or transfer. Exercise one explicit successful transfer,
+a declined transfer returning the original owner, cancellation before/after acceptance
+and receiver failure with exactly one defined cleanup owner. Only then add a bounded
+in-process channel and independent CPU-parallel producer/consumer workload. Reserve
+capacity before transfer; queue acceptance is not completion or exactly-once delivery.
+This is a revisable experiment, not implemented task signatures or a new supervisor.
 
 Exercise a generic producer/transformer/consumer across a package boundary.
 Require independent negative cases for duplicate consumption, escaping a borrow,

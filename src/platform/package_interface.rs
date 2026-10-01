@@ -1182,6 +1182,17 @@ fn validate_type_closure<S: ImmutableObjectStore + ?Sized>(
                 )
             })?;
         let object = decode_type_object(&bytes, digest)?;
+        if matches!(object.form, TypeForm::OwnedChoice { .. })
+            && owners
+                .get(&source)
+                .is_some_and(|owner| owner.record.header().contract_version < 20)
+        {
+            return Err(interface_error(
+                DiagnosticClass::Semantic,
+                "kernel_choice_generation",
+                "owned choice interface type closure requires Graph 20 owners",
+            ));
+        }
         if matches!(object.form, TypeForm::OwnedProduct { .. })
             && owners
                 .get(&source)
@@ -1343,6 +1354,7 @@ fn validate_interface_type_reference(
         | TypeForm::ByteBuffer
         | TypeForm::OwnedI64Cell
         | TypeForm::OwnedProduct { .. }
+        | TypeForm::OwnedChoice { .. }
         | TypeForm::Bytes
         | TypeForm::Text
         | TypeForm::StaticText

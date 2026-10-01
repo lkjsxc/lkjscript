@@ -1442,6 +1442,7 @@ impl ReferenceState<'_> {
                         TypeForm::ByteBuffer
                             | TypeForm::OwnedI64Cell
                             | TypeForm::OwnedProduct { .. }
+                            | TypeForm::OwnedChoice { .. }
                     )
                 ),
                 crate::platform::kernel::TypeParameterConstraints::None => {
@@ -1991,6 +1992,95 @@ impl ReferenceState<'_> {
             (std::mem::size_of::<CheckedValue>() - std::mem::size_of::<NormalizedValue>()) as u64,
         )?;
         match operation {
+            ExpressionOperation::ChooseOwned {
+                choice_type,
+                case,
+                value,
+            } => {
+                let ty = self.resolve_type_arguments(&[choice_type])?[0];
+                let Some(TypeForm::OwnedChoice { cases }) =
+                    self.schema.types.get(&ty).map(|object| &object.form)
+                else {
+                    return Err(reference_type_error(
+                        "choice requires a closed owned choice type",
+                    ));
+                };
+                let (index, selected) = cases
+                    .iter()
+                    .enumerate()
+                    .find(|(_, candidate)| candidate.name == case)
+                    .ok_or_else(|| reference_type_error("unknown owned choice case"))?;
+                let payload_type = selected.ty;
+                let raw = self.evaluate(value, locals)?.release();
+                let raw = self.product_child(raw, payload_type)?.release();
+                let control = self.control;
+                let token = super::owned_choice::OwnedChoice::create(
+                    self.memory_domain,
+                    ty,
+                    index as u32,
+                    raw,
+                    control,
+                    &mut |bytes| self.charge_allocation(bytes),
+                )?;
+                CheckedValue::memory(&self.schema, NormalizedValue::OwnedChoice(token))
+            }
+            ExpressionOperation::MatchOwned {
+                choice_type,
+                source,
+                arms,
+            } => {
+                let ty = self.resolve_type_arguments(&[choice_type])?[0];
+                let Some(TypeForm::OwnedChoice { cases }) =
+                    self.schema.types.get(&ty).map(|object| &object.form)
+                else {
+                    return Err(reference_type_error(
+                        "owned match requires a closed owned choice type",
+                    ));
+                };
+                if cases.len() != arms.len()
+                    || cases
+                        .iter()
+                        .zip(&arms)
+                        .any(|(case, arm)| case.name != arm.name)
+                {
+                    return Err(reference_type_error("owned match case coverage mismatch"));
+                }
+                self.charge_allocation(
+                    (std::mem::size_of::<LocalValueReference>()
+                        + std::mem::size_of::<CheckedValue>()) as u64,
+                )?;
+                self.control.check()?;
+                let NormalizedValue::OwnedChoice(token) = self.evaluate(source, locals)?.release()
+                else {
+                    return Err(reference_type_error("owned match requires a choice token"));
+                };
+                let (selected, payload) = token.select(self.memory_domain, ty, self.control)?;
+                let arm = arms
+                    .get(selected as usize)
+                    .ok_or_else(|| reference_type_error("invalid selected choice arm"))?;
+                let TypeForm::OwnedChoice { cases } = &self.schema.types[&ty].form else {
+                    return Err(reference_type_error("missing choice shape"));
+                };
+                let payload_type = cases[selected as usize].ty;
+                let binding = self.binding(arm.binding, BindingKind::OwnedChoicePayload)?;
+                let declared = binding
+                    .declared_type
+                    .ok_or_else(|| reference_type_error("owned choice binding lacks type"))?;
+                if self.resolve_type_arguments(&[declared])?[0] != payload_type {
+                    return Err(reference_type_error("owned choice payload type mismatch"));
+                }
+                let local = LocalValueReference::LexicalBinding(arm.binding);
+                if locals.contains_key(&local) {
+                    return Err(reference_type_error(
+                        "owned choice binding aliases a live local",
+                    ));
+                }
+                let payload = self.product_child(payload, payload_type)?;
+                locals.insert(local, payload);
+                let result = self.evaluate(arm.body, locals);
+                locals.remove(&local);
+                result
+            }
             ExpressionOperation::PackOwned {
                 product_type,
                 fields,
@@ -2158,6 +2248,7 @@ impl ReferenceState<'_> {
                         NormalizedValue::ByteBuffer(_)
                             | NormalizedValue::OwnedI64Cell(_)
                             | NormalizedValue::OwnedProduct(_)
+                            | NormalizedValue::OwnedChoice(_)
                     )
                 }) {
                     let result = locals
@@ -4770,7 +4861,8 @@ fn reference_value_cost(value: &NormalizedValue) -> Result<(u64, u64), Execution
         match value {
             NormalizedValue::ByteBuffer(_)
             | NormalizedValue::OwnedI64Cell(_)
-            | NormalizedValue::OwnedProduct(_) => {
+            | NormalizedValue::OwnedProduct(_)
+            | NormalizedValue::OwnedChoice(_) => {
                 return Err(ExecutionError::resource(
                     "normalized_buffer_boundary",
                     "ByteBuffer cannot cross raw/adapter boundaries",
@@ -4964,6 +5056,13 @@ fn direct_memory_type(
         {
             TypeForm::ByteBuffer => return Ok(Some(super::value::MemoryForm::ByteBuffer)),
             TypeForm::OwnedI64Cell => return Ok(Some(super::value::MemoryForm::OwnedI64Cell)),
+            TypeForm::OwnedChoice { .. } => {
+                return Ok(Some(super::value::MemoryForm::Choice(
+                    schema
+                        .substitute_type(ty, substitutions, 0)
+                        .ok_or_else(|| reference_type_error("unclosed choice type"))?,
+                )));
+            }
             TypeForm::OwnedProduct { .. } => {
                 return Ok(Some(super::value::MemoryForm::Product(
                     schema

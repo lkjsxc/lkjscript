@@ -178,6 +178,25 @@ fn substitute(
         ) => {
             pairs.extend([(a.as_mut(), x.as_ref()), (b.as_mut(), y.as_ref())]);
         }
+        (A::ChooseOwned { value: a, .. }, A::ChooseOwned { value: x, .. }) => pairs.push((a, x)),
+        (
+            A::MatchOwned {
+                source: a, arms: b, ..
+            },
+            A::MatchOwned {
+                source: x, arms: y, ..
+            },
+        ) => {
+            if b.len() != y.len() {
+                return Ok(false);
+            }
+            pairs.push((a, x));
+            pairs.extend(
+                b.iter_mut()
+                    .zip(y)
+                    .map(|((_, _, body), (_, _, other))| (body, other)),
+            );
+        }
         (A::Variant { payload: a, .. }, A::Variant { payload: x, .. }) => match (a, x) {
             (Some(a), Some(x)) => pairs.push((a, x)),
             (None, None) => {}

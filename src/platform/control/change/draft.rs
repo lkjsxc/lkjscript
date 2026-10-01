@@ -418,6 +418,18 @@ impl Renderer<'_> {
                     self.row(effect, "row")?
                 )
             }
+            T::OwnedChoice { cases } => {
+                let mut text = "(owned-choice".to_owned();
+                for case in cases {
+                    append(
+                        &mut text,
+                        &format!(" (case {} {})", case.name, self.ty(&case.ty)?),
+                        self.maximum,
+                    )?;
+                }
+                text.push(')');
+                text
+            }
             T::OwnedProduct { fields } => {
                 let mut text = "(owned-product".to_owned();
                 for field in fields {
@@ -930,6 +942,49 @@ impl Renderer<'_> {
                 self.expression(when_true, env)?,
                 self.expression(when_false, env)?
             ),
+            E::ChooseOwned {
+                choice_type,
+                case,
+                value,
+            } => format!(
+                "(choose-owned (type {}) (case {case}) {})",
+                self.ty(choice_type)?,
+                self.expression(value, env)?,
+            ),
+            E::MatchOwned {
+                choice_type,
+                source,
+                arms,
+            } => {
+                let mut text = format!(
+                    "(match-owned (type {}) {}",
+                    self.ty(choice_type)?,
+                    self.expression(source, env)?
+                );
+                for (name, binding, body) in arms {
+                    let ty = self.ty(binding
+                        .declared_type
+                        .as_ref()
+                        .ok_or_else(|| error("owned choice binding requires a type"))?)?;
+                    env.entry(binding.name.to_string())
+                        .or_default()
+                        .push(binding.symbol.clone());
+                    let body = self.expression(body, env)?;
+                    if let Some(values) = env.get_mut(binding.name.as_str()) {
+                        values.pop();
+                    }
+                    append(
+                        &mut text,
+                        &format!(
+                            " (case {name} (binding {} (as {}) (type {ty})) (in {body}))",
+                            binding.name, binding.symbol,
+                        ),
+                        self.maximum,
+                    )?;
+                }
+                text.push(')');
+                text
+            }
             E::PackOwned {
                 product_type,
                 fields,

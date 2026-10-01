@@ -91,7 +91,9 @@ impl<'a> Budget<'a> {
     fn cloned_type(&mut self, object: &TypeObject) -> Result<(), Diagnostic> {
         // Charge variable storage before cloning the canonical expression of a type.
         match &object.form {
-            TypeForm::StructuralRecord { fields } | TypeForm::OwnedProduct { fields } => {
+            TypeForm::StructuralRecord { fields }
+            | TypeForm::OwnedProduct { fields }
+            | TypeForm::OwnedChoice { cases: fields } => {
                 self.reserve::<crate::platform::kernel::StructuralTypeField>(fields.len())?;
                 for field in fields {
                     step(self)?;
@@ -670,7 +672,10 @@ fn property_types(
             Ok(())
         };
         match &object.form {
-            TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. }
+            TypeForm::ByteBuffer
+            | TypeForm::OwnedI64Cell
+            | TypeForm::OwnedProduct { .. }
+            | TypeForm::OwnedChoice { .. }
                 if property == Property::BufferFree =>
             {
                 admitted = false
@@ -686,6 +691,7 @@ fn property_types(
             TypeForm::ByteBuffer
             | TypeForm::OwnedI64Cell
             | TypeForm::OwnedProduct { .. }
+            | TypeForm::OwnedChoice { .. }
             | TypeForm::Secret
             | TypeForm::Stream { .. }
             | TypeForm::CapabilityResource { .. }
@@ -706,6 +712,7 @@ fn property_types(
             | TypeForm::ByteBuffer
             | TypeForm::OwnedI64Cell
             | TypeForm::OwnedProduct { .. }
+            | TypeForm::OwnedChoice { .. }
             | TypeForm::Secret
             | TypeForm::Stream { .. }
             | TypeForm::CapabilityResource { .. }
@@ -791,7 +798,15 @@ fn calls(
     for instruction in code.instructions.iter() {
         step(work)?;
         if let NormalizedInstruction::PackOwned { product_type, .. }
-        | NormalizedInstruction::UnpackOwned { product_type, .. } = instruction
+        | NormalizedInstruction::UnpackOwned { product_type, .. }
+        | NormalizedInstruction::ChooseOwned {
+            choice_type: product_type,
+            ..
+        }
+        | NormalizedInstruction::MatchOwned {
+            choice_type: product_type,
+            ..
+        } = instruction
         {
             substitute(types, *product_type, bindings, 0, work)?;
         }
@@ -1088,7 +1103,15 @@ fn close_effect_applications(
                         }
                     }
                     NormalizedInstruction::PackOwned { product_type, .. }
-                    | NormalizedInstruction::UnpackOwned { product_type, .. } => {
+                    | NormalizedInstruction::UnpackOwned { product_type, .. }
+                    | NormalizedInstruction::ChooseOwned {
+                        choice_type: product_type,
+                        ..
+                    }
+                    | NormalizedInstruction::MatchOwned {
+                        choice_type: product_type,
+                        ..
+                    } => {
                         *product_type = substitute_effect_type(
                             self.types,
                             *product_type,
@@ -1425,7 +1448,9 @@ fn substitute_effect_type(
                 descend(ty)?;
             }
         }
-        TypeForm::StructuralRecord { fields } | TypeForm::OwnedProduct { fields } => {
+        TypeForm::StructuralRecord { fields }
+        | TypeForm::OwnedProduct { fields }
+        | TypeForm::OwnedChoice { cases: fields } => {
             for field in fields {
                 descend(&mut field.ty)?;
             }
@@ -1482,7 +1507,9 @@ fn substitute(
         TypeForm::TypeParameter { parameter } => {
             return bindings.get(parameter).copied().ok_or_else(missing);
         }
-        TypeForm::StructuralRecord { fields } | TypeForm::OwnedProduct { fields } => {
+        TypeForm::StructuralRecord { fields }
+        | TypeForm::OwnedProduct { fields }
+        | TypeForm::OwnedChoice { cases: fields } => {
             for field in fields {
                 descend(&mut field.ty)?;
             }

@@ -15,7 +15,7 @@ pub(crate) fn require_generation(
     roots: Vec<TypeObjectDigest>,
     generation: u16,
 ) -> Result<(), Diagnostic> {
-    if generation >= 19 {
+    if generation >= 20 {
         return Ok(());
     }
     let mut pending = roots;
@@ -28,7 +28,14 @@ pub(crate) fn require_generation(
         let object = read
             .type_object(ty)?
             .ok_or_else(|| reject("missing graph-bound type"))?;
-        if matches!(object.form, TypeForm::OwnedProduct { .. }) {
+        if matches!(object.form, TypeForm::OwnedChoice { .. }) {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Semantic,
+                "kernel_choice_generation",
+                "owned choice type closure requires Graph 20",
+            ));
+        }
+        if generation < 19 && matches!(object.form, TypeForm::OwnedProduct { .. }) {
             return Err(Diagnostic::new(
                 DiagnosticClass::Semantic,
                 "kernel_product_generation",
@@ -45,6 +52,16 @@ pub(crate) fn validate(
     ty: TypeObjectDigest,
     scope: Option<DeclarationId>,
 ) -> Result<(), Diagnostic> {
+    read.validation_work()?;
+    let code = if matches!(
+        read.type_object(ty)?.map(|t| t.form),
+        Some(TypeForm::OwnedChoice { .. })
+    ) {
+        "kernel_owned_choice"
+    } else {
+        "kernel_owned_product"
+    };
+    let reject = |message| Diagnostic::new(DiagnosticClass::Semantic, code, message);
     // A digest first reached through a short path may occur on a longer path
     // later. A plain visited set is not a depth proof for a shared type DAG.
     let mut depths = BTreeMap::new();
@@ -86,9 +103,11 @@ pub(crate) fn validate(
         let object = read
             .type_object(ty)?
             .ok_or_else(|| reject("missing owned product type"))?;
-        let TypeForm::OwnedProduct { fields } = object.form else {
+        let (TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields }) =
+            object.form
+        else {
             return Err(reject(
-                "explicit product operand requires an owned product type",
+                "explicit composite operand requires an owned product or choice type",
             ));
         };
         let mut owned = false;
@@ -98,7 +117,7 @@ pub(crate) fn validate(
                 .type_object(field.ty)?
                 .ok_or_else(|| reject("missing owned product field type"))?;
             match child.form {
-                TypeForm::OwnedProduct { .. } => {
+                TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. } => {
                     owned = true;
                     pending.push((field.ty, depth + 1));
                 }
@@ -131,7 +150,7 @@ pub(crate) fn validate(
                 }
                 _ if !super::owned_contract::ordinary_closed(read, field.ty)? => {
                     return Err(reject(
-                        "product metadata must be closed ordinary first-order data",
+                        "ordinary composite children must be closed first-order data",
                     ));
                 }
                 _ => {}
@@ -139,7 +158,7 @@ pub(crate) fn validate(
         }
         if !owned {
             return Err(reject(
-                "owned product requires at least one direct owned field",
+                "owned structure requires at least one direct owned field or case",
             ));
         }
     }

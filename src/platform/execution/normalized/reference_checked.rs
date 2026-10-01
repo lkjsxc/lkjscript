@@ -37,6 +37,7 @@ impl Value {
             NormalizedValue::ByteBuffer(_)
                 | NormalizedValue::OwnedI64Cell(_)
                 | NormalizedValue::OwnedProduct(_)
+                | NormalizedValue::OwnedChoice(_)
         ) {
             return Err(reject("memory constructor requires a sealed token"));
         }
@@ -299,6 +300,7 @@ impl Value {
                     TypeForm::ByteBuffer
                         | TypeForm::OwnedI64Cell
                         | TypeForm::OwnedProduct { .. }
+                        | TypeForm::OwnedChoice { .. }
                         | TypeForm::CapabilityResource { .. }
                 )
             }) {
@@ -514,6 +516,7 @@ impl ReferenceState<'_> {
                         TypeForm::ByteBuffer
                             | TypeForm::OwnedI64Cell
                             | TypeForm::OwnedProduct { .. }
+                            | TypeForm::OwnedChoice { .. }
                             | TypeForm::CapabilityResource { .. }
                     )
                 }) {
@@ -847,6 +850,7 @@ impl ReferenceState<'_> {
                                             TypeForm::ByteBuffer
                                                 | TypeForm::OwnedI64Cell
                                                 | TypeForm::OwnedProduct { .. }
+                                                | TypeForm::OwnedChoice { .. }
                                                 | TypeForm::CapabilityResource { .. }
                                         )
                                     });
@@ -1354,6 +1358,7 @@ impl ReferenceState<'_> {
                             TypeForm::ByteBuffer
                                 | TypeForm::OwnedI64Cell
                                 | TypeForm::OwnedProduct { .. }
+                                | TypeForm::OwnedChoice { .. }
                         )
                     ) =>
                 {
@@ -1679,6 +1684,7 @@ impl ReferenceState<'_> {
                 | TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
+                | TypeForm::OwnedChoice { .. }
                 | TypeForm::CapabilityResource { .. }
                 | TypeForm::TypeParameter { .. } => {
                     return Err(reject(

@@ -114,6 +114,14 @@ pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
 
 const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
     (
+        "choose-owned",
+        "(choose-owned (type TYPE) (case NAME) EXPRESSION)",
+    ),
+    (
+        "match-owned",
+        "(match-owned (type TYPE) (local SOURCE) (case NAME (binding LOCAL (type TYPE)) (in BODY)) ...)",
+    ),
+    (
         "pack-owned",
         "(pack-owned (type TYPE) (field NAME EXPRESSION) ... )",
     ),
@@ -723,8 +731,8 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
             magic_values: &[
-                "LKJOWN19", "LKJOWN18", "LKJOWN17", "LKJOWN16", "LKJOWN15", "LKJOWN14", "LKJSMR01",
-                "LKJDEP14", "LKJRET14",
+                "LKJOWN20", "LKJOWN19", "LKJOWN18", "LKJOWN17", "LKJOWN16", "LKJOWN15", "LKJOWN14",
+                "LKJSMR01", "LKJDEP14", "LKJRET14",
             ],
             digest_domains: &[
                 super::super::kernel::contract::OWNER_ENVELOPE_DOMAIN,
@@ -750,13 +758,16 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
-            magic_values: &["LKJTYP10", "LKJF6401", "LKJBUF01", "LKJCEL01", "LKJPRD01"],
+            magic_values: &[
+                "LKJTYP10", "LKJF6401", "LKJBUF01", "LKJCEL01", "LKJPRD01", "LKJCHO01",
+            ],
             digest_domains: &[
                 super::super::kernel::contract::TYPE_OBJECT_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::F64_TYPE_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::BYTE_BUFFER_TYPE_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::OWNED_CELL_TYPE_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::OWNED_PRODUCT_TYPE_ENVELOPE_DOMAIN,
+                super::super::kernel::contract::OWNED_CHOICE_TYPE_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::TYPE_OBJECT_DIGEST_DOMAIN,
             ],
         },
@@ -940,7 +951,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             predecessor_policy: REJECT,
             magic_values: &[
                 "LKJACR14", "LKJACR15", "LKJACR16", "LKJACR17", "LKJACR18", "LKJACR19", "LKJACR20",
-                "LKJACR21", "LKJACR22", "LKJABG01",
+                "LKJACR21", "LKJACR22", "LKJACR23", "LKJABG01",
             ],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
@@ -3258,6 +3269,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         extraction_semantic_diagnostic("change_extract_multiple_resources"),
         extraction_resource_diagnostic("change_extract_ordinal"),
         extraction_semantic_diagnostic("change_extract_owned_product"),
+        extraction_semantic_diagnostic("change_extract_owned_choice"),
         extraction_semantic_diagnostic("change_extract_recursive_target"),
         extraction_resource_diagnostic("change_extract_requirement_limit"),
         extraction_semantic_diagnostic("change_extract_resource_ambiguity"),
@@ -4142,6 +4154,60 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Semantic,
             "An owned method contract, implementation map or explicit witness is not exact.",
             "Check nominal contract identity, Owned Self, all monomorphic pure method signatures and lexical witness scope.",
+        ),
+        diagnostic(
+            "kernel_owned_choice",
+            DiagnosticClass::Semantic,
+            "An owned choice violates its exact payload, case coverage, scope or ownership contract.",
+            "Use a fixed nonempty set of named cases with at least one owned payload; consume an exact live local and cover every case exactly once with its annotated body-only binding.",
+        ),
+        diagnostic(
+            "kernel_choice_generation",
+            DiagnosticClass::Semantic,
+            "A predecessor graph, owner or package contains an owned choice in its type closure.",
+            "Author choice meaning under Graph 20 and rebuild derived artifacts from accepted source.",
+        ),
+        diagnostic(
+            "kernel_choice_binding",
+            DiagnosticClass::Semantic,
+            "An owned choice payload binding lacks its exact type or current graph authority.",
+            "Use Graph 20 payload bindings with explicit types and body-only scope.",
+        ),
+        diagnostic(
+            "kernel_choice_arms",
+            DiagnosticClass::Semantic,
+            "Owned choice arms repeat names or are not in canonical order.",
+            "Use each case exactly once and rebuild canonical meaning through native authoring.",
+        ),
+        diagnostic(
+            "kernel_choice_type_tag",
+            DiagnosticClass::Corrupt,
+            "The disjoint owned choice envelope contains an unknown type tag.",
+            "Preserve the input and regenerate canonical meaning through current authoring.",
+        ),
+        diagnostic(
+            "normalized_choice_token",
+            DiagnosticClass::Resource,
+            "An owned choice does not have exactly one selected payload.",
+            "Preserve the input; report any disagreement between admitted meaning and sealed runtime storage.",
+        ),
+        diagnostic(
+            "compiler_choice_type",
+            DiagnosticClass::Corrupt,
+            "Owned choice compilation cannot resolve its exact choice type.",
+            "Rebuild from accepted Graph 20 meaning and retain disagreement evidence.",
+        ),
+        diagnostic(
+            "compiler_choice_case",
+            DiagnosticClass::Corrupt,
+            "Owned choice compilation cannot resolve the selected case.",
+            "Use a case declared by the exact choice type and retain disagreement evidence.",
+        ),
+        diagnostic(
+            "compiler_unit_choice_local",
+            DiagnosticClass::Corrupt,
+            "A compiled owned choice repeats a payload local across arms.",
+            "Rebuild from accepted meaning; each arm has an independent payload binding.",
         ),
         diagnostic(
             "kernel_owned_product",
@@ -8163,7 +8229,7 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         ),
         (
             "types",
-            "Unit|Bool|I64|F64|Text|Bytes|StaticText|Secret|ByteBuffer|OwnedI64Cell|NAME|(NAME TYPE...)|(list TYPE)|(map TYPE TYPE)|(result TYPE TYPE)|(option TYPE)|(stream TYPE)|(record (NAME TYPE)...)|(owned-product (field NAME TYPE)...)|(function (TYPE...) TYPE)|(task-function (TYPE...) TYPE ROW)|(resource INTERFACE)|(parameter-type EXACT_PARAMETER)",
+            "Unit|Bool|I64|F64|Text|Bytes|StaticText|Secret|ByteBuffer|OwnedI64Cell|NAME|(NAME TYPE...)|(list TYPE)|(map TYPE TYPE)|(result TYPE TYPE)|(option TYPE)|(stream TYPE)|(record (NAME TYPE)...)|(owned-product (field NAME TYPE)...)|(owned-choice (case NAME TYPE)...)|(function (TYPE...) TYPE)|(task-function (TYPE...) TYPE ROW)|(resource INTERFACE)|(parameter-type EXACT_PARAMETER)",
             "Inline composition; (type-alias NAME TYPE) is scoped notation and is admitted even when unused.",
         ),
         (

@@ -813,6 +813,9 @@ fn append_type(
                 format!("{}/{}", interface.package, interface.declaration),
             ));
         }
+        TypeForm::OwnedChoice { cases } => {
+            fields.push(("cases".to_owned(), cases.len().to_string()));
+        }
         TypeForm::StructuralRecord { fields: structural }
         | TypeForm::OwnedProduct { fields: structural } => {
             fields.push(("fields".to_owned(), structural.len().to_string()));
@@ -888,11 +891,18 @@ fn append_type(
                 )?;
             }
         }
-        TypeForm::StructuralRecord { fields } | TypeForm::OwnedProduct { fields } => {
+        TypeForm::StructuralRecord { fields }
+        | TypeForm::OwnedProduct { fields }
+        | TypeForm::OwnedChoice { cases: fields } => {
+            let edge = if matches!(ty.form, TypeForm::OwnedChoice { .. }) {
+                "type.case"
+            } else {
+                "type.field"
+            };
             for (index, field) in fields.iter().enumerate() {
                 let child = format!("{path}.{}", field.name);
                 records.push(DiscoveryRecord::new(
-                    "type.field",
+                    edge,
                     [
                         ("parent", path.to_owned()),
                         ("index", index.to_string()),
@@ -1033,6 +1043,7 @@ fn type_form_name(form: &TypeForm) -> &'static str {
         TypeForm::ByteBuffer => "byte-buffer",
         TypeForm::OwnedI64Cell => "owned-i64-cell",
         TypeForm::OwnedProduct { .. } => "owned-product",
+        TypeForm::OwnedChoice { .. } => "owned-choice",
         TypeForm::Bytes => "bytes",
         TypeForm::Text => "text",
         TypeForm::StaticText => "static-text",

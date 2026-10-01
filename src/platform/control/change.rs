@@ -54,10 +54,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-26";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 26;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-22";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 22;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-27";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 27;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-23";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 23;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -1643,6 +1643,7 @@ pub(crate) const COMPACT_CHANGE_PRECONDITION_FIELDS: &[CompactChangePrecondition
     },
 ];
 pub const COMPACT_TYPE_FORMS: &[&str] = &[
+    "owned-choice",
     "owned-product",
     "owned-i64-cell",
     "byte-buffer",
@@ -1675,6 +1676,8 @@ pub(crate) const COMPACT_EFFECT_FORM_FIELDS: &[CompactFormField] = &[CompactForm
     syntax: "@NAME",
 }];
 pub const COMPACT_EXPRESSION_FORMS: &[&str] = &[
+    "choose-owned",
+    "match-owned",
     "pack-owned",
     "unpack-owned",
     "implementation-call",
@@ -1714,6 +1717,12 @@ pub(crate) struct CompactFormField {
 }
 
 pub(crate) const COMPACT_TYPE_FORM_FIELDS: &[CompactFormField] = &[
+    CompactFormField {
+        form: "owned-choice",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
     CompactFormField {
         form: "owned-product",
         name: "as",
@@ -1939,6 +1948,48 @@ pub(crate) const COMPACT_TYPE_FORM_FIELDS: &[CompactFormField] = &[
 ];
 
 pub(crate) const COMPACT_EXPRESSION_FORM_FIELDS: &[CompactFormField] = &[
+    CompactFormField {
+        form: "choose-owned",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "choose-owned",
+        name: "type",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "choose-owned",
+        name: "case",
+        required: true,
+        syntax: "name",
+    },
+    CompactFormField {
+        form: "choose-owned",
+        name: "value",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "match-owned",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "match-owned",
+        name: "type",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "match-owned",
+        name: "source",
+        required: true,
+        syntax: "$NAME",
+    },
     CompactFormField {
         form: "pack-owned",
         name: "as",
@@ -2450,6 +2501,55 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
         ],
     },
     CompactEdgeDescriptor {
+        name: "expression.choice-arm",
+        parent: "expression.match-owned",
+        child: "binding-and-body",
+        fields: &[
+            CompactFormField {
+                form: "expression.choice-arm",
+                name: "parent",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "expression.choice-arm",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "expression.choice-arm",
+                name: "case",
+                required: true,
+                syntax: "name",
+            },
+            CompactFormField {
+                form: "expression.choice-arm",
+                name: "as",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "expression.choice-arm",
+                name: "name",
+                required: true,
+                syntax: "name",
+            },
+            CompactFormField {
+                form: "expression.choice-arm",
+                name: "type",
+                required: true,
+                syntax: "type-reference",
+            },
+            CompactFormField {
+                form: "expression.choice-arm",
+                name: "body",
+                required: true,
+                syntax: "$NAME",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
         name: "expression.owned-binding",
         parent: "expression.unpack-owned",
         child: "binding",
@@ -2784,6 +2884,37 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
             },
             CompactFormField {
                 form: "type.argument",
+                name: "type",
+                required: true,
+                syntax: "type-reference",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "type.case",
+        parent: "owned-choice-type",
+        child: "choice-case",
+        fields: &[
+            CompactFormField {
+                form: "type.case",
+                name: "parent",
+                required: true,
+                syntax: "@NAME",
+            },
+            CompactFormField {
+                form: "type.case",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "type.case",
+                name: "name",
+                required: true,
+                syntax: "name",
+            },
+            CompactFormField {
+                form: "type.case",
                 name: "type",
                 required: true,
                 syntax: "type-reference",
@@ -3331,7 +3462,7 @@ impl Decoder {
                 }
                 "expression.argument" => self.insert_indexed_edge(&record, "expression", false)?,
                 "type.argument" => self.insert_indexed_edge(&record, "type", true)?,
-                "type.field" => {
+                "type.field" | "type.case" => {
                     self.insert_indexed_record_edge(record, &["parent", "index", "name", "type"])?
                 }
                 "effect.row" => {
@@ -3405,10 +3536,11 @@ impl Decoder {
                 "expression.map-entry" => {
                     self.insert_indexed_record_edge(record, &["parent", "index", "key", "value"])?
                 }
-                "expression.match-arm" => self.insert_indexed_record_edge(
-                    record,
-                    &["parent", "index", "case", "as", "name", "type", "body"],
-                )?,
+                "expression.match-arm" | "expression.choice-arm" => self
+                    .insert_indexed_record_edge(
+                        record,
+                        &["parent", "index", "case", "as", "name", "type", "body"],
+                    )?,
                 operation if operation.starts_with("type.") => {
                     let label = required(&record, "as")?.to_owned();
                     validate_local_label(&record, "as", &label, '@')?;
@@ -4476,10 +4608,15 @@ impl Decoder {
                     interface: self.parse_declaration_reference(&record, "interface")?,
                 }
             }
-            "type.structural-record" | "type.owned-product" => {
+            "type.structural-record" | "type.owned-product" | "type.owned-choice" => {
                 check_fields(&record, &["as"])?;
+                let edge = if record.operation == "type.owned-choice" {
+                    "type.case"
+                } else {
+                    "type.field"
+                };
                 let fields = self
-                    .ordered_record_edges("type.field", reference)?
+                    .ordered_record_edges(edge, reference)?
                     .iter()
                     .map(|edge| {
                         Ok(AuthoredStructuralTypeField {
@@ -4488,7 +4625,9 @@ impl Decoder {
                         })
                     })
                     .collect::<Result<Vec<_>, Diagnostic>>()?;
-                if record.operation == "type.owned-product" {
+                if record.operation == "type.owned-choice" {
+                    AuthoredType::OwnedChoice { cases: fields }
+                } else if record.operation == "type.owned-product" {
                     AuthoredType::OwnedProduct { fields }
                 } else {
                     AuthoredType::StructuralRecord { fields }
@@ -4718,6 +4857,36 @@ impl Decoder {
                 AuthoredExpressionOperation::Let {
                     bindings,
                     body: Box::new(self.decode_expression(&body)?),
+                }
+            }
+            "expression.choose-owned" => {
+                check_fields(&record, &["as", "type", "case", "value"])?;
+                AuthoredExpressionOperation::ChooseOwned {
+                    choice_type: self.decode_type(required(&record, "type")?)?,
+                    case: parse_name(&record, "case")?,
+                    value: Box::new(self.decode_expression(required(&record, "value")?)?),
+                }
+            }
+            "expression.match-owned" => {
+                check_fields(&record, &["as", "type", "source"])?;
+                let choice_type = self.decode_type(required(&record, "type")?)?;
+                let source = Box::new(self.decode_expression(required(&record, "source")?)?);
+                let mut arms = Vec::new();
+                for edge in self.ordered_record_edges("expression.choice-arm", symbol)? {
+                    arms.push((
+                        parse_name(&edge.record, "case")?,
+                        AuthoredBindingDefinition {
+                            symbol: symbol_field(&edge.record, "as")?,
+                            name: parse_name(&edge.record, "name")?,
+                            declared_type: Some(self.decode_type(required(&edge.record, "type")?)?),
+                        },
+                        self.decode_expression(required(&edge.record, "body")?)?,
+                    ));
+                }
+                AuthoredExpressionOperation::MatchOwned {
+                    choice_type,
+                    source,
+                    arms,
                 }
             }
             "expression.pack-owned" => {

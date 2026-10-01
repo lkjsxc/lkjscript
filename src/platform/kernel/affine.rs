@@ -445,6 +445,48 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
         self.step(expression, depth)?;
         let record = self.expression(expression)?;
         match record.operation {
+            ExpressionOperation::ChooseOwned { value, .. } => {
+                self.require_unrestricted(value, state, depth + 1, "owned choice payload")?;
+                Ok(EvaluatedValue::Unrestricted)
+            }
+            ExpressionOperation::MatchOwned { source, arms, .. } => {
+                self.require_unrestricted(source, state, depth + 1, "owned choice source")?;
+                let before = self.fork_state(state)?;
+                let mut joined: Option<(FlowState, EvaluatedValue)> = None;
+                for arm in arms {
+                    self.read.validation_work()?;
+                    let mut branch = self.fork_state(&before)?;
+                    let value = self.evaluate(arm.body, &mut branch, depth + 1)?;
+                    let mut output = FlowState::new();
+                    let value = if let Some((prior, prior_value)) = &joined {
+                        self.merge_many_branches(
+                            expression,
+                            &before,
+                            [prior, &branch].into_iter(),
+                            &mut output,
+                        )?;
+                        merge_values(expression, *prior_value, value)?
+                    } else {
+                        self.merge_many_branches(
+                            expression,
+                            &before,
+                            std::iter::once(&branch),
+                            &mut output,
+                        )?;
+                        value
+                    };
+                    joined = Some((output, value));
+                }
+                let (output, value) = joined.ok_or_else(|| {
+                    affine_error(
+                        "kernel_affine_branch_value",
+                        expression,
+                        "owned match requires a nonempty case inventory",
+                    )
+                })?;
+                *state = output;
+                Ok(value)
+            }
             ExpressionOperation::PackOwned { fields, .. } => {
                 for field in fields {
                     self.evaluate(field.value, state, depth + 1)?;
@@ -493,10 +535,10 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 when_false,
             } => {
                 self.require_unrestricted(condition, state, depth + 1, "if condition")?;
-                let before = state.clone();
-                let mut true_state = before.clone();
+                let before = self.fork_state(state)?;
+                let mut true_state = self.fork_state(&before)?;
                 let true_value = self.evaluate(when_true, &mut true_state, depth + 1)?;
-                let mut false_state = before.clone();
+                let mut false_state = self.fork_state(&before)?;
                 let false_value = self.evaluate(when_false, &mut false_state, depth + 1)?;
                 self.merge_branches(expression, &before, &true_state, &false_state, state)?;
                 merge_values(expression, true_value, false_value)
@@ -650,11 +692,11 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
             }
             ExpressionOperation::Match { value, arms } => {
                 let matched = self.evaluate_match_value(value, state, depth + 1)?;
-                let before = state.clone();
+                let before = self.fork_state(state)?;
                 let mut branch_states = Vec::with_capacity(arms.len());
                 let mut branch_values = Vec::with_capacity(arms.len());
                 for arm in arms {
-                    let mut branch = before.clone();
+                    let mut branch = self.fork_state(&before)?;
                     let case = self.case(arm.case.package, arm.case.case)?;
                     let payload_resource = case
                         .payload
@@ -715,7 +757,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                     branch_states.push(branch);
                     branch_values.push(value);
                 }
-                self.merge_many_branches(expression, &before, &branch_states, state)?;
+                self.merge_many_branches(expression, &before, branch_states.iter(), state)?;
                 merge_many_values(expression, &branch_values)
             }
             ExpressionOperation::CapabilityCall {
@@ -1010,6 +1052,13 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
         }
     }
 
+    fn fork_state(&self, state: &FlowState) -> Result<FlowState, Diagnostic> {
+        for _ in 0..state.len() {
+            self.read.validation_work()?;
+        }
+        Ok(state.clone())
+    }
+
     fn merge_branches(
         &self,
         expression: ExpressionId,
@@ -1018,26 +1067,30 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
         right: &FlowState,
         output: &mut FlowState,
     ) -> Result<(), Diagnostic> {
-        self.merge_many_branches(expression, before, &[left.clone(), right.clone()], output)
+        self.merge_many_branches(expression, before, [left, right].into_iter(), output)
     }
 
-    fn merge_many_branches(
+    fn merge_many_branches<'s>(
         &self,
         expression: ExpressionId,
         before: &FlowState,
-        branches: &[FlowState],
+        branches: impl Iterator<Item = &'s FlowState> + Clone,
         output: &mut FlowState,
     ) -> Result<(), Diagnostic> {
-        *output = before.clone();
+        *output = self.fork_state(before)?;
         for (owner, prior) in before {
-            let Some(first) = branches.first().and_then(|branch| branch.get(owner)) else {
+            self.read.validation_work()?;
+            let Some(first) = branches.clone().next().and_then(|branch| branch.get(owner)) else {
                 continue;
             };
-            if first.value != prior.value
-                || branches
-                    .iter()
-                    .any(|branch| branch.get(owner).map(|slot| slot.live) != Some(first.live))
-            {
+            let mut equal = first.value == prior.value;
+            for branch in branches.clone() {
+                self.read.validation_work()?;
+                equal &= branch
+                    .get(owner)
+                    .is_some_and(|slot| slot.live == first.live && slot.value == prior.value);
+            }
+            if !equal {
                 return Err(affine_error(
                     "kernel_affine_branch_join",
                     expression,

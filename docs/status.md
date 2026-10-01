@@ -1,6 +1,6 @@
 # Status
 
-Current snapshot: 2026-10-01 (Asia/Tokyo). Availability, source acceptance and
+Current snapshot: 2026-10-02 (Asia/Tokyo). Availability, source acceptance and
 running deployments are separate. Historical measurements and failed attempts
 belong to the [campaigns](campaigns/) and [release records](release.md), not to a
 second list of pending obligations.
@@ -30,6 +30,38 @@ or a whole-program zero-copy or timing/RSS claim.
 v0.1.60 does **not** include the v0.1.61 owned-memory and byte-range development
 below. Earlier immutable releases and genuine failed or superseded candidates remain
 unchanged. Inspect the installed executable with `lkjscript capabilities`.
+
+## Development v0.1.64: recoverable owned outcomes
+
+Explicit fixed named `OwnedChoice` types compose ordinary success values with
+still-owned rejected payloads. `choose-owned` constructs one case; `match-owned`
+consumes the parent and requires every case with disjoint body-only payload bindings.
+Choices nest with owned products, compose across exact generic libraries and may
+serve as closed static implementation Self types. Recursive transfer and whole-owner
+synchronous reborrowing retain the existing contracts. Ordinary Option/Result,
+raw adapter values, persistence and callable capture do not gain ownership escape.
+See the [guide](guides/native-owned-choices.md), [specification](spec/owned-choices.md)
+and [continuation](campaigns/20261002-owned-choices.md).
+
+The bootstrap runtime reuses the sealed composite storage owner for one selected
+payload. Mixed products/choices use iterative cleanup, and reservation failure or
+cancellation releases the payload. Semantic branch-state copying and joins now
+consume finite proof work; owned case analysis does not retain one capability-flow
+state for every case. These are source changes, not a zero-copy or RSS claim.
+
+Graph 20 preserves supported historical graph readers. Compiler 18, bytecode 14
+and artifact 25 require rebuilding predecessor derived artifacts; authored request
+23, compact discovery 27 and semantic validator 21 expose the new contracts.
+Operational data and running services are unchanged. The source-specific acceptance
+and mainline observations are recorded in the continuation; they must not be
+confused with finalized archive acceptance or a public 0.1.64 release.
+
+The frozen 0.1.63 producer `36869518385/1` failed after its source gates and joined
+installed bootstrap. Its installed structural-discovery verifier used a stale
+private syntax inventory. The 0.1.64 verification owner compares exact names, order
+and syntax against its authenticated source registry instead, retaining independent
+omission/duplicate/reorder/mutation controls. That repair does not retroactively
+accept the failed producer. Public/latest remains immutable v0.1.60.
 
 ## Development v0.1.63: ordinary metadata reads
 
@@ -63,10 +95,12 @@ graph and application data are not rewritten. The [continuation](campaigns/20261
 retains exact receipts and failed predecessors. Subsequent reporting changes do
 not relabel that tested source.
 
-The [0.1.63 notes](releases/v0.1.63.md) select one consolidated candidate for the
-unpublished owned-data, numbering and metadata work. The failed 0.1.61 producer is
-superseded, not accepted. Final-archive acceptance, its 19-case supplementary gate
-and publication remain separate. Public/latest stays v0.1.60; no application-data
+The [0.1.63 notes](releases/v0.1.63.md) selected one consolidated candidate for the
+unpublished owned-data, numbering and metadata work. Producer `36869518385/1` has
+failed at installed structural-discovery verification; no accepted final archive
+or publication followed. Its [diagnosis](campaigns/20261002-owned-choices.md#frozen-0163-producer-diagnosis)
+preserves the original evidence. Source development continues as 0.1.64 rather than
+mutating that frozen producer. Public/latest stays v0.1.60; no application-data
 migration or running-service change is implied. All product-number components
 retain their opaque identifier-only meaning.
 
@@ -242,7 +276,7 @@ to retry. See the [deployment contract](spec/deployment-security.md).
   cross-package borrow/consume contracts; general resource returns,
   requirement-polymorphic resource transfer and asynchronous borrowing remain absent.
   Ambiguous name-only grants reject; exact package/requirement selectors disambiguate.
-- Fixed structural owned products are integrated development, not in public v0.1.60.
+- Fixed structural owned products and choices are source development, not in public v0.1.60.
   General owned containers, partial moves, field borrows and structured asynchronous
   memory transfer remain future work. Anonymous closures, automatic capture/generic
   inference, a native-code language

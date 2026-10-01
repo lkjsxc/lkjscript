@@ -2293,6 +2293,47 @@ impl DefinitionOracleWalker<'_> {
                     ExpressionChildRole::LetBody,
                 )?;
             }
+            ExpressionOperation::ChooseOwned { value, .. } => {
+                self.visit_expression_child(
+                    *value,
+                    owner,
+                    "owned_choice_value",
+                    0,
+                    child_depth,
+                    ExpressionChildRole::OwnedChoiceValue,
+                )?;
+            }
+            ExpressionOperation::MatchOwned { source, arms, .. } => {
+                self.visit_expression_child(
+                    *source,
+                    owner,
+                    "owned_choice_source",
+                    0,
+                    child_depth,
+                    ExpressionChildRole::OwnedChoiceSource,
+                )?;
+                for (index, arm) in arms.iter().enumerate() {
+                    self.visit_binding(
+                        arm.binding,
+                        owner,
+                        "owned_choice_binding",
+                        oracle_ordinal(index)?,
+                        child_depth,
+                        (
+                            BindingKind::OwnedChoicePayload,
+                            BindingContainerRole::OwnedChoicePayload,
+                        ),
+                    )?;
+                    self.visit_expression_child(
+                        arm.body,
+                        owner,
+                        "owned_choice_arm_body",
+                        oracle_ordinal(index)?,
+                        child_depth,
+                        ExpressionChildRole::OwnedChoiceArmBody,
+                    )?;
+                }
+            }
             ExpressionOperation::UnpackOwned {
                 source,
                 fields,
@@ -2745,6 +2786,8 @@ fn oracle_expression_form(operation: &ExpressionOperation) -> &'static str {
         ExpressionOperation::TransactionOutcome { .. } => "transaction_outcome",
         ExpressionOperation::PackOwned { .. } => "pack_owned",
         ExpressionOperation::UnpackOwned { .. } => "unpack_owned",
+        ExpressionOperation::ChooseOwned { .. } => "choose_owned",
+        ExpressionOperation::MatchOwned { .. } => "match_owned",
     }
 }
 
@@ -2754,6 +2797,7 @@ fn oracle_binding_kind(kind: BindingKind) -> &'static str {
         BindingKind::MatchPayload => "match_payload",
         BindingKind::Transaction => "transaction",
         BindingKind::OwnedUnpack => "owned_unpack",
+        BindingKind::OwnedChoicePayload => "owned_choice_payload",
     }
 }
 
@@ -2782,6 +2826,9 @@ fn oracle_child_role(role: ExpressionChildRole) -> &'static str {
         ExpressionChildRole::OwnedProductField => "owned_product_field",
         ExpressionChildRole::OwnedProductSource => "owned_product_source",
         ExpressionChildRole::OwnedProductBody => "owned_product_body",
+        ExpressionChildRole::OwnedChoiceValue => "owned_choice_value",
+        ExpressionChildRole::OwnedChoiceSource => "owned_choice_source",
+        ExpressionChildRole::OwnedChoiceArmBody => "owned_choice_arm_body",
     }
 }
 

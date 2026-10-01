@@ -225,8 +225,29 @@ pub(super) fn replace_unit(
     unit: &CompilationUnit,
     extra: Vec<(ObjectKey, Vec<u8>)>,
 ) -> Vec<u8> {
+    replace_unit_checked(loaded, old, unit, extra, None)
+}
+
+pub(super) fn replace_rejected_unit(
+    loaded: &LoadedArtifact,
+    old: ObjectKey,
+    unit: &CompilationUnit,
+    expected: &str,
+) -> Vec<u8> {
+    replace_unit_checked(loaded, old, unit, vec![], Some(expected))
+}
+
+fn replace_unit_checked(
+    loaded: &LoadedArtifact,
+    old: ObjectKey,
+    unit: &CompilationUnit,
+    extra: Vec<(ObjectKey, Vec<u8>)>,
+    structural_rejection: Option<&str>,
+) -> Vec<u8> {
     // Neutral envelope construction deliberately bypasses the production compiler and writer's
     // admission. Every changed enclosing digest is recomputed before the strict reader runs.
+    // An explicitly rejected-unit control also carries invalid code through the full
+    // rehashed bundle. Ordinary callers still require neutral unit-level admission.
     let (magic, domain) = match unit.contract_version {
         11 => (*b"LKJCUN11", "lkjscript.compiler-unit-envelope.v11"),
         12 => (*b"LKJCUN12", "lkjscript.compiler-unit-envelope.v12"),
@@ -235,6 +256,7 @@ pub(super) fn replace_unit(
         15 => (*b"LKJCUN15", "lkjscript.compiler-unit-envelope.v15"),
         16 => (*b"LKJCUN16", "lkjscript.compiler-unit-envelope.v16"),
         17 => (*b"LKJCUN17", "lkjscript.compiler-unit-envelope.v17"),
+        18 => (*b"LKJCUN18", "lkjscript.compiler-unit-envelope.v18"),
         other => panic!("unexpected forged-unit generation {other}"),
     };
     let bytes = crate::platform::packed::encode(
@@ -245,7 +267,12 @@ pub(super) fn replace_unit(
     )
     .unwrap();
     let key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &bytes);
-    if unit.contract_version == super::super::unit::COMPILER_UNIT_CONTRACT_VERSION {
+    if let Some(expected) = structural_rejection {
+        assert_eq!(
+            CompilationUnit::decode(&bytes, key).unwrap_err().code,
+            expected
+        );
+    } else if unit.contract_version == super::super::unit::COMPILER_UNIT_CONTRACT_VERSION {
         CompilationUnit::decode(&bytes, key).expect("structurally valid forged unit");
     } else {
         assert_eq!(

@@ -924,9 +924,12 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
         let read = self.canonical.code_type(ty)?;
         self.work.canonical.add(read.work);
         Ok(match read.value.map(|t| t.form) {
-            Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. }) => {
-                true
-            }
+            Some(
+                TypeForm::ByteBuffer
+                | TypeForm::OwnedI64Cell
+                | TypeForm::OwnedProduct { .. }
+                | TypeForm::OwnedChoice { .. },
+            ) => true,
             Some(TypeForm::TypeParameter { parameter }) => matches!(
                 self.required_owner(OwnerKey::TypeParameter(parameter), "owned local parameter")?,
                 OwnerRecord::TypeParameter(p) if p.constraints == crate::platform::kernel::TypeParameterConstraints::Owned
@@ -1423,6 +1426,70 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         use_mode: ParameterUse,
     ) -> Result<(), Diagnostic> {
         match operation {
+            ExpressionOperation::ChooseOwned {
+                choice_type,
+                case,
+                value,
+            } => {
+                let read = self.unit.canonical.code_type(choice_type)?;
+                self.unit.work.canonical.add(read.work);
+                let object = read.value.ok_or_else(|| {
+                    compiler_corrupt("compiler_choice_type", "missing choice type")
+                })?;
+                let TypeForm::OwnedChoice { cases } = object.form else {
+                    return Err(compiler_corrupt(
+                        "compiler_choice_type",
+                        "owned choice operand is not a choice",
+                    ));
+                };
+                let case = cases
+                    .iter()
+                    .position(|candidate| candidate.name == case)
+                    .ok_or_else(|| {
+                        compiler_corrupt("compiler_choice_case", "unknown owned choice case")
+                    })?;
+                self.expression(value, depth)?;
+                let choice_type = self.unit.tables.ty(choice_type)?;
+                self.push(CompiledInstruction::ChooseOwned {
+                    choice_type,
+                    case: u32_count("choice case", case)?,
+                })?;
+            }
+            ExpressionOperation::MatchOwned {
+                choice_type,
+                source,
+                arms,
+            } => {
+                self.expression_with_use(source, depth, ParameterUse::Consume)?;
+                let choice_type = self.unit.tables.ty(choice_type)?;
+                let switch = self.push(CompiledInstruction::MatchOwned {
+                    choice_type,
+                    cases: Vec::new(),
+                })?;
+                let mut cases = Vec::with_capacity(arms.len());
+                let mut exits = Vec::with_capacity(arms.len());
+                for arm in arms {
+                    let target = self.next_instruction()?;
+                    self.binding(arm.binding, BindingKind::OwnedChoicePayload)?;
+                    let reference = LocalValueReference::LexicalBinding(arm.binding);
+                    let binding_local = self.bind(reference)?;
+                    self.expression(arm.body, depth)?;
+                    self.push(CompiledInstruction::Unit)?;
+                    self.push(CompiledInstruction::StoreLocal(binding_local))?;
+                    self.locals.remove(&reference);
+                    cases.push(super::unit::CompiledOwnedChoiceJump {
+                        target,
+                        binding_local,
+                    });
+                    exits.push(self.push(CompiledInstruction::Jump(u32::MAX))?);
+                }
+                let end = self.next_instruction()?;
+                for exit in exits {
+                    self.instructions[exit as usize] = CompiledInstruction::Jump(end);
+                }
+                self.instructions[switch as usize] =
+                    CompiledInstruction::MatchOwned { choice_type, cases };
+            }
             ExpressionOperation::PackOwned {
                 product_type,
                 fields,

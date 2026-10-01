@@ -2,7 +2,7 @@
 //! Stores kill the previous value; switch payload writes kill only their edge.
 //! A fixed point handles cycles. An unfinished proof never authorizes a move.
 
-use super::super::prepare::NormalizedVariantJump;
+use super::super::prepare::{NormalizedOwnedChoiceJump, NormalizedVariantJump};
 use super::{Budget, Diagnostic, I, NormalizedCode, ParameterUse, corrupt};
 use std::sync::Arc;
 
@@ -15,6 +15,7 @@ enum Edges<'a> {
     Jump(u32),
     Branch(u32),
     Switch(&'a [NormalizedVariantJump]),
+    Choice(&'a [NormalizedOwnedChoiceJump]),
     Exit,
 }
 
@@ -44,11 +45,13 @@ fn flow(instruction: &I) -> Flow<'_> {
         I::Jump(target) => (None, None, Edges::Jump(*target)),
         I::JumpIfFalse(target) => (None, None, Edges::Branch(*target)),
         I::SwitchVariant(jumps) => (None, None, Edges::Switch(jumps)),
+        I::MatchOwned { cases, .. } => (None, None, Edges::Choice(cases)),
         I::Return | I::TailCall { .. } => (None, None, Edges::Exit),
         // Dynamic external callees return to this frame; graph callees transfer.
         // Without callee proof, preserve the possible continuation's live values.
         I::TailInvoke { .. } => (None, None, Edges::Next),
         I::Unit
+        | I::ChooseOwned { .. }
         | I::PackOwned { .. }
         | I::UnpackOwned { .. }
         | I::Bool(_)
@@ -124,6 +127,12 @@ fn validate(code: &NormalizedCode, work: &mut Budget<'_>) -> Result<bool, Diagno
                     }
                 }
             }
+            Edges::Choice(cases) => {
+                for case in cases {
+                    target(case.target)?;
+                    local(code, case.binding_local)?;
+                }
+            }
             Edges::Next | Edges::Exit => {}
         }
     }
@@ -183,6 +192,16 @@ impl Live {
                         return Ok(None);
                     }
                     out |= at(jump.target as usize) & !mask(jump.binding_local, word);
+                }
+                out
+            }
+            Edges::Choice(cases) => {
+                let mut out = 0;
+                for case in cases {
+                    if !meter.step(work)? {
+                        return Ok(None);
+                    }
+                    out |= at(case.target as usize) & !mask(Some(case.binding_local), word);
                 }
                 out
             }

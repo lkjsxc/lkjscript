@@ -431,7 +431,10 @@ fn visit_expression(
         panic!("projected expression has another owner kind")
     };
     match &record.operation {
-        ExpressionOperation::PackOwned { .. } | ExpressionOperation::UnpackOwned { .. } => {
+        ExpressionOperation::PackOwned { .. }
+        | ExpressionOperation::UnpackOwned { .. }
+        | ExpressionOperation::ChooseOwned { .. }
+        | ExpressionOperation::MatchOwned { .. } => {
             panic!("owned products are outside the ordinary web template projection");
         }
         ExpressionOperation::If {

@@ -742,6 +742,38 @@ impl Machine<'_> {
                     let value = self.pop()?;
                     self.set_local(local, Some(value))?;
                 }
+                NormalizedInstruction::ChooseOwned { choice_type, case } => {
+                    let ty = self.resolve_type_arguments(&[choice_type])?[0];
+                    let payload_type = self.choice_payload_type(ty, case, None)?;
+                    let raw = self.pop()?.into_raw();
+                    let raw = self.product_child(raw, payload_type)?.into_raw();
+                    let control = self.control;
+                    let token = super::owned_choice::OwnedChoice::create(
+                        self.memory_domain,
+                        ty,
+                        case,
+                        raw,
+                        control,
+                        &mut |bytes| self.charge_allocation(bytes),
+                    )?;
+                    let value =
+                        CheckedValue::memory(self.program, NormalizedValue::OwnedChoice(token))?;
+                    self.push(value)?;
+                }
+                NormalizedInstruction::MatchOwned { choice_type, cases } => {
+                    let ty = self.resolve_type_arguments(&[choice_type])?[0];
+                    let NormalizedValue::OwnedChoice(token) = self.pop()?.into_raw() else {
+                        return Err(type_error("owned match requires a choice token"));
+                    };
+                    let (case, payload) = token.select(self.memory_domain, ty, self.control)?;
+                    let payload_type = self.choice_payload_type(ty, case, Some(cases.len()))?;
+                    let arm = cases
+                        .get(case as usize)
+                        .ok_or_else(|| type_error("missing owned choice arm"))?;
+                    let value = self.product_child(payload, payload_type)?;
+                    self.set_local(arm.binding_local, Some(value))?;
+                    self.jump(arm.target)?;
+                }
                 NormalizedInstruction::PackOwned {
                     product_type,
                     fields,
@@ -1319,6 +1351,31 @@ impl Machine<'_> {
         }
     }
 
+    fn choice_payload_type(
+        &self,
+        ty: TypeObjectDigest,
+        case: u32,
+        count: Option<usize>,
+    ) -> Result<TypeObjectDigest, ExecutionError> {
+        self.control.check()?;
+        let Some(crate::platform::kernel::TypeObject {
+            form: TypeForm::OwnedChoice { cases },
+            ..
+        }) = self.program.types.get(&ty)
+        else {
+            return Err(type_error("missing closed owned choice type"));
+        };
+        if count.is_some_and(|count| cases.len() != count) {
+            return Err(type_error(
+                "owned match does not cover the exact choice type",
+            ));
+        }
+        cases
+            .get(case as usize)
+            .map(|case| case.ty)
+            .ok_or_else(|| type_error("unknown owned choice case"))
+    }
+
     fn product_field_types(
         &mut self,
         ty: TypeObjectDigest,
@@ -1767,6 +1824,7 @@ impl Machine<'_> {
                         TypeForm::ByteBuffer
                             | TypeForm::OwnedI64Cell
                             | TypeForm::OwnedProduct { .. }
+                            | TypeForm::OwnedChoice { .. }
                     )
                 ),
                 crate::platform::kernel::TypeParameterConstraints::None => {
@@ -2564,7 +2622,8 @@ fn value_cost(value: &NormalizedValue) -> Result<(u64, u64), ExecutionError> {
         match value {
             NormalizedValue::ByteBuffer(_)
             | NormalizedValue::OwnedI64Cell(_)
-            | NormalizedValue::OwnedProduct(_) => {
+            | NormalizedValue::OwnedProduct(_)
+            | NormalizedValue::OwnedChoice(_) => {
                 return Err(ExecutionError::resource(
                     "normalized_buffer_boundary",
                     "ByteBuffer cannot cross raw/adapter boundaries",
@@ -3839,6 +3898,13 @@ fn direct_memory_type(
         {
             TypeForm::ByteBuffer => return Ok(Some(super::value::MemoryForm::ByteBuffer)),
             TypeForm::OwnedI64Cell => return Ok(Some(super::value::MemoryForm::OwnedI64Cell)),
+            TypeForm::OwnedChoice { .. } => {
+                return Ok(Some(super::value::MemoryForm::Choice(
+                    program
+                        .substitute_type(ty, substitutions, 0)
+                        .ok_or_else(|| type_error("unclosed choice type"))?,
+                )));
+            }
             TypeForm::OwnedProduct { .. } => {
                 return Ok(Some(super::value::MemoryForm::Product(
                     program

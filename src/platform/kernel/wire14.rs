@@ -748,7 +748,9 @@ impl TryFrom<super::ExpressionOperation> for ExpressionOperation14 {
             super::ExpressionOperation::TransactionOutcome { .. }
             | super::ExpressionOperation::F64 { .. }
             | super::ExpressionOperation::PackOwned { .. }
-            | super::ExpressionOperation::UnpackOwned { .. } => return Err(extension()),
+            | super::ExpressionOperation::UnpackOwned { .. }
+            | super::ExpressionOperation::ChooseOwned { .. }
+            | super::ExpressionOperation::MatchOwned { .. } => return Err(extension()),
         })
     }
 }

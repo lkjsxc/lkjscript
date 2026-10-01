@@ -263,7 +263,12 @@ pub(crate) fn validate_implementation(
     implementation.validate_local()?;
     if !matches!(
         read.type_object(implementation.self_type)?.map(|t| t.form),
-        Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. })
+        Some(
+            TypeForm::ByteBuffer
+                | TypeForm::OwnedI64Cell
+                | TypeForm::OwnedProduct { .. }
+                | TypeForm::OwnedChoice { .. }
+        )
     ) {
         return Err(reject(
             "implementation Self must be a closed concrete owned type",
@@ -271,7 +276,7 @@ pub(crate) fn validate_implementation(
     }
     if matches!(
         read.type_object(implementation.self_type)?.map(|t| t.form),
-        Some(TypeForm::OwnedProduct { .. })
+        Some(TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. })
     ) {
         super::owned_product::validate(read, implementation.self_type, None)?;
     }
@@ -549,6 +554,7 @@ pub(crate) fn ordinary_closed(
             | TypeForm::ByteBuffer
             | TypeForm::OwnedI64Cell
             | TypeForm::OwnedProduct { .. }
+            | TypeForm::OwnedChoice { .. }
             | TypeForm::Secret
             | TypeForm::Stream { .. }
             | TypeForm::Function { .. }

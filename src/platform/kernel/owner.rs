@@ -749,6 +749,14 @@ impl BindingRecord {
     fn validate_local(&self) -> Result<(), Diagnostic> {
         validate_header_domain(self.header, OwnerKind::Binding)?;
         validate_names([&self.name])?;
+        if self.kind == BindingKind::OwnedChoicePayload
+            && (self.header.contract_version < 20 || self.declared_type.is_none())
+        {
+            return Err(owner_error(
+                "kernel_choice_binding",
+                "owned choice bindings require Graph 20 and exact type annotations",
+            ));
+        }
         if self.kind == BindingKind::OwnedUnpack
             && (self.header.contract_version < 19 || self.declared_type.is_none())
         {
@@ -774,6 +782,7 @@ pub enum BindingKind {
     MatchPayload,
     Transaction,
     OwnedUnpack,
+    OwnedChoicePayload,
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]

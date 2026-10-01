@@ -39,6 +39,14 @@ pub(crate) mod byte_buffer_tests;
 mod bytes_reuse_tests;
 #[path = "bytes_tests.rs"]
 mod bytes_tests;
+#[path = "owned_choice_boundary_tests.rs"]
+mod owned_choice_boundary_tests;
+#[path = "owned_choice_generic_tests.rs"]
+mod owned_choice_generic_tests;
+#[path = "owned_choice_tests.rs"]
+mod owned_choice_tests;
+#[path = "owned_choice_token_tests.rs"]
+mod owned_choice_token_tests;
 #[path = "owned_closure_tests.rs"]
 mod owned_closure_tests;
 #[path = "owned_generic_tests.rs"]

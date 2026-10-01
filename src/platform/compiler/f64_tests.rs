@@ -110,9 +110,9 @@ fn f64_literals_lower_and_round_trip_all_scalar_classes() {
                 compiled.unit.bytecode_contract_version,
                 compiled.unit.graph_contract_version
             ),
-            (17, 13, 19)
+            (18, 14, 20)
         );
-        assert_eq!(&compiled.bytes[..8], b"LKJCUN17");
+        assert_eq!(&compiled.bytes[..8], b"LKJCUN18");
         let CompilationPayload::Constant { code, .. } = &compiled.unit.payload else {
             panic!("compiled constant");
         };
@@ -251,7 +251,7 @@ fn owned_generation_requires_rebuilding_authentic_predecessor_artifacts() {
 #[test]
 fn f64_artifact_admission_preserves_literal_observation_bits() {
     let (loaded, owner) = literal_artifact(Binary64::from_bits(0).unwrap());
-    assert_eq!(loaded.manifest.contract_version, 24);
+    assert_eq!(loaded.manifest.contract_version, 25);
     let (old, original) = loaded
         .objects
         .iter()

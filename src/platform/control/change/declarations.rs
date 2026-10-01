@@ -753,6 +753,28 @@ impl Lowering<'_> {
                 }
                 format!("type.{form}")
             }
+            "owned-choice" => {
+                for (index, case) in args.into_iter().enumerate() {
+                    let (head, parts) = self.parts(case)?;
+                    let parts = parts.to_vec();
+                    if head != "case" || parts.len() != 2 {
+                        return Err(self.error(case, "owned choice type requires (case NAME TYPE)"));
+                    }
+                    let name = self.block.atom(parts[0])?.to_owned();
+                    let ty = self.ty(parts[1], scope, depth + 1)?;
+                    self.record(
+                        case,
+                        "type.case",
+                        vec![
+                            ("parent", label.clone()),
+                            ("index", index.to_string()),
+                            ("name", name),
+                            ("type", ty),
+                        ],
+                    )?;
+                }
+                "type.owned-choice".to_owned()
+            }
             "owned-product" => {
                 for (index, field) in args.into_iter().enumerate() {
                     let (head, parts) = self.parts(field)?;

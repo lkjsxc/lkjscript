@@ -51,7 +51,12 @@ impl ReferenceState<'_> {
                 .types
                 .get(&implementation.self_type)
                 .map(|t| &t.form),
-            Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. })
+            Some(
+                TypeForm::ByteBuffer
+                    | TypeForm::OwnedI64Cell
+                    | TypeForm::OwnedProduct { .. }
+                    | TypeForm::OwnedChoice { .. }
+            )
         ) {
             return Err(reference_type_error("implementation has a non-owned Self"));
         }
@@ -389,6 +394,7 @@ impl ReferenceState<'_> {
                 | TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
+                | TypeForm::OwnedChoice { .. }
                 | TypeForm::Secret
                 | TypeForm::Stream { .. } => return Ok(false),
                 TypeForm::StructuralRecord { fields } => fields.len(),
@@ -427,6 +433,7 @@ impl ReferenceState<'_> {
                 | TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
+                | TypeForm::OwnedChoice { .. }
                 | TypeForm::Secret
                 | TypeForm::Stream { .. } => return Ok(false),
                 TypeForm::TypeParameter { parameter } => {

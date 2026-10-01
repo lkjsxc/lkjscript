@@ -162,6 +162,9 @@ pub enum AuthoredFunctionEffect {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredType {
+    OwnedChoice {
+        cases: Vec<AuthoredStructuralTypeField>,
+    },
     OwnedProduct {
         fields: Vec<AuthoredStructuralTypeField>,
     },
@@ -331,6 +334,16 @@ pub struct AuthoredExpression {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredExpressionOperation {
+    ChooseOwned {
+        choice_type: AuthoredType,
+        case: Name,
+        value: Box<AuthoredExpression>,
+    },
+    MatchOwned {
+        choice_type: AuthoredType,
+        source: Box<AuthoredExpression>,
+        arms: Vec<(Name, AuthoredBindingDefinition, AuthoredExpression)>,
+    },
     PackOwned {
         product_type: AuthoredType,
         fields: Vec<(Name, AuthoredExpression)>,
@@ -581,6 +594,16 @@ pub(super) fn collect_expression_symbols(
                 stack.push(Visit::Expression(when_true, next));
                 stack.push(Visit::Expression(condition, next));
             }
+            AuthoredExpressionOperation::ChooseOwned { value, .. } => {
+                stack.push(Visit::Expression(value, next));
+            }
+            AuthoredExpressionOperation::MatchOwned { source, arms, .. } => {
+                for (_, binding, body) in arms.iter().rev() {
+                    stack.push(Visit::Expression(body, next));
+                    stack.push(Visit::Binding(&binding.symbol, SymbolKind::LexicalBinding));
+                }
+                stack.push(Visit::Expression(source, next));
+            }
             AuthoredExpressionOperation::PackOwned { fields, .. } => {
                 for (_, value) in fields.iter().rev() {
                     stack.push(Visit::Expression(value, next));
@@ -824,6 +847,17 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 }
                 lowered.sort_by(|left, right| left.name.cmp(&right.name));
                 TypeForm::StructuralRecord { fields: lowered }
+            }
+            AuthoredType::OwnedChoice { cases } => {
+                let mut lowered = Vec::with_capacity(cases.len());
+                for case in cases {
+                    lowered.push(StructuralTypeField {
+                        name: case.name.clone(),
+                        ty: self.lower_type(&case.ty)?,
+                    });
+                }
+                lowered.sort_by(|a, b| a.name.cmp(&b.name));
+                TypeForm::OwnedChoice { cases: lowered }
             }
             AuthoredType::OwnedProduct { fields } => {
                 let mut lowered = Vec::with_capacity(fields.len());
@@ -1114,6 +1148,52 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 when_true: self.lower_expression(when_true)?,
                 when_false: self.lower_expression(when_false)?,
             },
+            AuthoredExpressionOperation::ChooseOwned {
+                choice_type,
+                case,
+                value,
+            } => ExpressionOperation::ChooseOwned {
+                choice_type: self.lower_type(choice_type)?,
+                case: case.clone(),
+                value: self.lower_expression(value)?,
+            },
+            AuthoredExpressionOperation::MatchOwned {
+                choice_type,
+                source,
+                arms,
+            } => {
+                let choice_type = self.lower_type(choice_type)?;
+                let source = self.lower_expression(source)?;
+                let mut lowered = Vec::with_capacity(arms.len());
+                for (name, binding, body) in arms {
+                    let id = self.lexical_binding_symbol(&binding.symbol)?;
+                    let declared_type = binding
+                        .declared_type
+                        .as_ref()
+                        .map(|ty| self.lower_type(ty))
+                        .transpose()?;
+                    self.insert_created(OwnerRecord::Binding(
+                        crate::platform::kernel::BindingRecord {
+                            header: OwnerHeader::new(OwnerKey::Binding(id), OwnerKind::Binding),
+                            name: binding.name.clone(),
+                            kind: crate::platform::kernel::BindingKind::OwnedChoicePayload,
+                            value: None,
+                            declared_type,
+                        },
+                    ))?;
+                    lowered.push(crate::platform::kernel::OwnedChoiceArm {
+                        name: name.clone(),
+                        binding: id,
+                        body: self.lower_expression(body)?,
+                    });
+                }
+                lowered.sort_by(|a, b| a.name.cmp(&b.name));
+                ExpressionOperation::MatchOwned {
+                    choice_type,
+                    source,
+                    arms: lowered,
+                }
+            }
             AuthoredExpressionOperation::PackOwned {
                 product_type,
                 fields,

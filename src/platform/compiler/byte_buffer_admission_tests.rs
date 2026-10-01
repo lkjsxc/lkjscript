@@ -76,6 +76,130 @@ fn owned_witness_artifact_rejects_consistently_rehashed_untaken_consumption() {
 }
 
 #[test]
+fn owned_choice_artifact_rejects_rehashed_case_targets_bindings_tags_and_loan_modes() {
+    let source = crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(
+        include_str!("../../../tests/fixtures/owned-choices.lkjc"),
+    )
+    .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let repository = GraphRepository::create(&dir.path().join("choices"), &source, None)
+        .unwrap()
+        .repository;
+    let compilation = build_clean(&repository, OptimizationPolicy::DeterministicBaseline).unwrap();
+    let artifact = link_artifact(&repository, compilation.manifest_digest, &[]).unwrap();
+    let loaded = load_artifact(&artifact.artifact.bytes).unwrap();
+    for name in ["restore", "route"] {
+        let owner = OwnerKey::Declaration(declaration_named(&source, name));
+        let (key, unit) = loaded
+            .objects
+            .iter()
+            .filter(|(key, _)| key.domain == ObjectDomain::CompilerUnit)
+            .map(|(key, bytes)| (*key, CompilationUnit::decode(bytes, *key).unwrap()))
+            .find(|(_, unit)| unit.source.owner == owner)
+            .unwrap();
+        load_artifact(&effect_tests::replace_unit(&loaded, key, &unit, vec![])).unwrap();
+        let attacks = if name == "restore" { 6 } else { 2 };
+        for attack in 0..attacks {
+            let mut changed = unit.clone();
+            let CompilationPayload::Function { code, .. } = &mut changed.payload else {
+                panic!("choice function");
+            };
+            if name == "restore" {
+                let index = code
+                    .instructions
+                    .iter()
+                    .position(|i| matches!(i, CompiledInstruction::MatchOwned { .. }))
+                    .unwrap();
+                if attack < 4 {
+                    let CompiledInstruction::MatchOwned { cases, .. } =
+                        &mut code.instructions[index]
+                    else {
+                        unreachable!();
+                    };
+                    assert_eq!(cases.len(), 2);
+                    match attack {
+                        0 => cases.swap(0, 1),
+                        1 => cases[1].binding_local = cases[0].binding_local,
+                        2 => cases[0].target = cases[1].target,
+                        3 => {
+                            cases.pop();
+                        }
+                        _ => unreachable!(),
+                    }
+                } else {
+                    let CompiledInstruction::LoadLocal { use_mode, .. } =
+                        &mut code.instructions[index - 1]
+                    else {
+                        panic!("direct owning match source");
+                    };
+                    assert_eq!(*use_mode, ParameterUse::Consume);
+                    *use_mode = if attack == 4 {
+                        ParameterUse::Borrow
+                    } else {
+                        ParameterUse::Unrestricted
+                    };
+                }
+            } else {
+                let instruction = code
+                    .instructions
+                    .iter_mut()
+                    .find(|i| matches!(i, CompiledInstruction::ChooseOwned { .. }))
+                    .unwrap();
+                let CompiledInstruction::ChooseOwned { case, .. } = instruction else {
+                    unreachable!();
+                };
+                *case = if attack == 0 { 1 - *case } else { 2 };
+            }
+            let bytes = if name == "restore" && (1..=3).contains(&attack) {
+                effect_tests::replace_rejected_unit(
+                    &loaded,
+                    key,
+                    &changed,
+                    if attack == 1 {
+                        "compiler_unit_choice_local"
+                    } else {
+                        "compiler_unit_unreachable_instruction"
+                    },
+                )
+            } else {
+                effect_tests::replace_unit(&loaded, key, &changed, vec![])
+            };
+            let error = load_artifact(&bytes)
+                .expect_err("consistent rehash cannot change checked choice meaning");
+            println!("owned choice {name} attack {attack}: {}", error.code);
+        }
+    }
+}
+
+#[test]
+fn owned_choice_artifact_rejects_coherent_untaken_double_consumption() {
+    let source = crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(r#"declarations.begin
+(units (module create hostile
+  (external create empty (visibility private) (implementation core.buffer.empty) (returns ByteBuffer))
+  (function create factory (visibility private) (effect pure) (returns (owned-choice (case accepted Unit) (case rejected ByteBuffer)))
+    (body (let (binding b (type ByteBuffer) (call empty))
+      (in (choose-owned (type (owned-choice (case accepted Unit) (case rejected ByteBuffer))) (case rejected) (local b))))))
+  (function create retire (visibility private) (effect pure)
+    (parameter create p (type (owned-choice (case accepted Unit) (case rejected ByteBuffer))) (use consume))
+    (returns Unit) (body (unit)))
+  (function create attack (visibility private) (effect pure) (returns Unit)
+    (body (if (bool true) (unit)
+      (let
+        (binding a (type (owned-choice (case accepted Unit) (case rejected ByteBuffer))) (call factory))
+        (binding b (type (owned-choice (case accepted Unit) (case rejected ByteBuffer))) (call factory))
+        (in (sequence (call retire (local a)) (call retire (local b))))))))))
+declarations.end"#).unwrap();
+    let carrier = source
+        .types
+        .values()
+        .find(|t| matches!(t.form, TypeForm::OwnedChoice { .. }))
+        .unwrap()
+        .form
+        .clone();
+    reject_source(source, "attack", carrier, "retire");
+}
+
+#[test]
 fn owned_products_artifact_rejects_rehashed_source_code_and_metadata_double_consume() {
     let source = crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(r#"declarations.begin
 (units (module create hostile

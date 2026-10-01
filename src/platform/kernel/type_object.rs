@@ -20,7 +20,9 @@ pub struct TypeObject {
 impl TypeObject {
     pub fn new(form: TypeForm) -> Result<Self, Diagnostic> {
         let object = Self {
-            contract_version: if matches!(form, TypeForm::OwnedProduct { .. }) {
+            contract_version: if matches!(form, TypeForm::OwnedChoice { .. }) {
+                super::contract::OWNED_CHOICE_TYPE_CONTRACT_VERSION
+            } else if matches!(form, TypeForm::OwnedProduct { .. }) {
                 super::contract::OWNED_PRODUCT_TYPE_CONTRACT_VERSION
             } else if matches!(form, TypeForm::OwnedI64Cell) {
                 super::contract::OWNED_CELL_TYPE_CONTRACT_VERSION
@@ -42,7 +44,9 @@ impl TypeObject {
     }
 
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
-        let expected = if matches!(self.form, TypeForm::OwnedProduct { .. }) {
+        let expected = if matches!(self.form, TypeForm::OwnedChoice { .. }) {
+            super::contract::OWNED_CHOICE_TYPE_CONTRACT_VERSION
+        } else if matches!(self.form, TypeForm::OwnedProduct { .. }) {
             super::contract::OWNED_PRODUCT_TYPE_CONTRACT_VERSION
         } else if matches!(self.form, TypeForm::OwnedI64Cell) {
             super::contract::OWNED_CELL_TYPE_CONTRACT_VERSION
@@ -70,7 +74,9 @@ impl TypeObject {
             TypeForm::Applied { arguments, .. } => {
                 require_count("nominal type arguments", arguments.len(), false)?;
             }
-            TypeForm::StructuralRecord { fields } | TypeForm::OwnedProduct { fields } => {
+            TypeForm::StructuralRecord { fields }
+            | TypeForm::OwnedProduct { fields }
+            | TypeForm::OwnedChoice { cases: fields } => {
                 require_count("structural fields", fields.len(), false)?;
                 if fields.windows(2).any(|pair| pair[0].name >= pair[1].name) {
                     return Err(type_error(
@@ -113,9 +119,9 @@ impl TypeObject {
     pub fn child_type_count(&self) -> usize {
         match &self.form {
             TypeForm::Applied { arguments, .. } => arguments.len(),
-            TypeForm::StructuralRecord { fields } | TypeForm::OwnedProduct { fields } => {
-                fields.len()
-            }
+            TypeForm::StructuralRecord { fields }
+            | TypeForm::OwnedProduct { fields }
+            | TypeForm::OwnedChoice { cases: fields } => fields.len(),
             TypeForm::List { .. } | TypeForm::Option { .. } | TypeForm::Stream { .. } => 1,
             TypeForm::Map { .. } | TypeForm::Result { .. } => 2,
             TypeForm::Function { parameters, .. } | TypeForm::TaskFunction { parameters, .. } => {
@@ -128,7 +134,9 @@ impl TypeObject {
     pub fn child_types(&self) -> Vec<TypeObjectDigest> {
         match &self.form {
             TypeForm::Applied { arguments, .. } => arguments.clone(),
-            TypeForm::StructuralRecord { fields } | TypeForm::OwnedProduct { fields } => {
+            TypeForm::StructuralRecord { fields }
+            | TypeForm::OwnedProduct { fields }
+            | TypeForm::OwnedChoice { cases: fields } => {
                 fields.iter().map(|field| field.ty).collect()
             }
             TypeForm::List { item } | TypeForm::Option { item } | TypeForm::Stream { item } => {
@@ -228,6 +236,11 @@ pub enum TypeForm {
     /// Explicit affine structure; never encoded in the ordinary base type envelope.
     OwnedProduct {
         fields: Vec<StructuralTypeField>,
+    },
+    /// An explicit affine sum. Exactly one named case carries one typed payload.
+    /// Its ownership is invariant under case selection and generic substitution.
+    OwnedChoice {
+        cases: Vec<StructuralTypeField>,
     },
 }
 

@@ -1,0 +1,26 @@
+declarations.begin
+(units
+  (module create outcomes
+    (function create attempt (visibility public) (effect pure)
+      (type-parameter create T (constraint owned))
+      (implementation-parameter implparam_20000000000000000000000000000001 ops abstraction::Storage T)
+      (parameter create accepted (type Bool))
+      (parameter create payload (type T) (use consume))
+      (returns (owned-choice (case accepted I64) (case rejected T)))
+      (body (if (local accepted)
+        (choose-owned (type (owned-choice (case accepted I64) (case rejected T))) (case accepted)
+          (implementation-call abstraction::read-helper (types T)
+            (implementations parameter@attempt@implparam_20000000000000000000000000000001) (local payload)))
+        (choose-owned (type (owned-choice (case accepted I64) (case rejected T))) (case rejected)
+          (local payload)))))
+    (function create recover (visibility public) (effect pure)
+      (type-parameter create T (constraint owned))
+      (implementation-parameter implparam_20000000000000000000000000000002 ops abstraction::Storage T)
+      (parameter create result (type (owned-choice (case accepted I64) (case rejected T))) (use consume))
+      (returns I64)
+      (body (match-owned (type (owned-choice (case accepted I64) (case rejected T))) (local result)
+        (case accepted (binding value (type I64)) (in (local value)))
+        (case rejected (binding original (type T))
+          (in (implementation-call abstraction::consume (types T)
+            (implementations parameter@recover@implparam_20000000000000000000000000000002) (local original)))))))))
+declarations.end

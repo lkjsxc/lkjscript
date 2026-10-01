@@ -48,16 +48,16 @@ use std::fmt;
 #[path = "artifact_code.rs"]
 mod code_admission;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-24";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-24";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 24;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF24";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART24";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN24";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-25";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-25";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 25;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF25";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART25";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN25";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v24";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v24";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v24";
+    "lkjscript.artifact-manifest-envelope.v25";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v25";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v25";
 pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v18";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
@@ -430,6 +430,7 @@ impl ArtifactManifest {
                     | (18, 15, 11)
                     | (19, 16, 12)
                     | (19, 17, 13)
+                    | (20, 18, 14)
             )
             || self.compilation_manifest_contract_version != COMPILATION_MANIFEST_CONTRACT_VERSION
         {
@@ -2431,6 +2432,7 @@ fn trace_object_closure(
     let mut type_roots = BTreeSet::new();
     let mut predecessor_type_roots = BTreeSet::new();
     let mut preproduct_type_roots = BTreeSet::new();
+    let mut prechoice_type_roots = BTreeSet::new();
     let mut predecessor_packages = BTreeSet::new();
     let mut blobs = BTreeMap::new();
     let mut interfaces = BTreeMap::new();
@@ -2534,6 +2536,9 @@ fn trace_object_closure(
                         ));
                     }
                     type_roots.extend(unit.tables.types.iter().copied());
+                    if unit.graph_contract_version < 20 || revision.graph_contract_version < 20 {
+                        prechoice_type_roots.extend(unit.tables.types.iter().copied());
+                    }
                     if unit.graph_contract_version < 19 || revision.graph_contract_version < 19 {
                         preproduct_type_roots.extend(unit.tables.types.iter().copied());
                     }
@@ -2624,6 +2629,15 @@ fn trace_object_closure(
             &mut store_work,
         )?;
         let object = decode_type_object(&bytes, digest)?;
+        if manifest.graph_contract_version < 20
+            && matches!(object.form, TypeForm::OwnedChoice { .. })
+        {
+            return Err(artifact_error(
+                DiagnosticClass::Semantic,
+                "kernel_choice_generation",
+                "owned choice artifacts require Graph 20",
+            ));
+        }
         if manifest.graph_contract_version < 19
             && matches!(object.form, TypeForm::OwnedProduct { .. })
         {
@@ -2664,7 +2678,8 @@ fn trace_object_closure(
     }
     validate_loaded_http_route_requirement_closure(&units, &runtime_owners, &types)?;
     validate_predecessor_type_closure(predecessor_type_roots, &types)?;
-    validate_product_generation_closure(preproduct_type_roots, &types)?;
+    validate_product_generation_closure(preproduct_type_roots, &types, 18)?;
+    validate_product_generation_closure(prechoice_type_roots, &types, 19)?;
     validate_artifact_nominal_meaning(
         manifest,
         &units,
@@ -4448,6 +4463,9 @@ fn reference_expression_bindings(operation: &ExpressionOperation) -> Vec<Binding
         ExpressionOperation::Let {
             bindings: declared, ..
         } => bindings.extend(declared.iter().copied()),
+        ExpressionOperation::MatchOwned { arms, .. } => {
+            bindings.extend(arms.iter().map(|arm| arm.binding))
+        }
         ExpressionOperation::UnpackOwned { fields, .. } => {
             bindings.extend(fields.iter().map(|field| field.binding))
         }
@@ -4813,13 +4831,17 @@ fn memory_result_type(
     })?;
     Ok(matches!(
         read(ty)?.form,
-        TypeForm::ByteBuffer | TypeForm::OwnedI64Cell | TypeForm::OwnedProduct { .. }
+        TypeForm::ByteBuffer
+            | TypeForm::OwnedI64Cell
+            | TypeForm::OwnedProduct { .. }
+            | TypeForm::OwnedChoice { .. }
     ))
 }
 
 fn validate_product_generation_closure(
     mut pending: BTreeSet<TypeObjectDigest>,
     types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    generation: u16,
 ) -> Result<(), Diagnostic> {
     let mut seen = BTreeSet::new();
     let mut work = 0usize;
@@ -4844,7 +4866,14 @@ fn validate_product_generation_closure(
                     "product generation closure exhausted admission work",
                 )
             })?;
-        if matches!(object.form, TypeForm::OwnedProduct { .. }) {
+        if matches!(object.form, TypeForm::OwnedChoice { .. }) {
+            return Err(artifact_error(
+                DiagnosticClass::Semantic,
+                "kernel_choice_generation",
+                "choice type closure requires Graph 20 source",
+            ));
+        }
+        if generation < 19 && matches!(object.form, TypeForm::OwnedProduct { .. }) {
             return Err(artifact_error(
                 DiagnosticClass::Semantic,
                 "kernel_product_generation",

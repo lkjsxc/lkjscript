@@ -453,6 +453,11 @@ pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>)
             super::contract::OWNED_OWNER_MAGIC,
             super::contract::OWNED_OWNER_ENVELOPE_DOMAIN,
         )
+    } else if record.header().contract_version == 19 {
+        (
+            super::contract::PRODUCT_OWNER_MAGIC,
+            super::contract::PRODUCT_OWNER_ENVELOPE_DOMAIN,
+        )
     } else {
         (OWNER_MAGIC, OWNER_ENVELOPE_DOMAIN)
     };
@@ -541,24 +546,26 @@ pub fn decode_owner(
         }
         record
     } else {
-        // Graph 19 only appends operation/binding tags. All Graph 18 field layouts
+        // Graphs 19 and 20 append operation/binding tags. Earlier field layouts
         // and ordinals are frozen; local admission rejects new tags in old owners.
-        let predecessor = bytes.starts_with(&super::contract::OWNED_OWNER_MAGIC);
-        let record: OwnerRecord = packed::decode(
-            bytes,
-            if predecessor {
-                super::contract::OWNED_OWNER_MAGIC
-            } else {
-                OWNER_MAGIC
-            },
-            if predecessor {
-                super::contract::OWNED_OWNER_ENVELOPE_DOMAIN
-            } else {
-                OWNER_ENVELOPE_DOMAIN
-            },
-            MAXIMUM_OWNER_OBJECT_BYTES,
-        )?;
-        if record.header().contract_version != if predecessor { 18 } else { 19 } {
+        let (magic, domain, generation) = if bytes.starts_with(&super::contract::OWNED_OWNER_MAGIC)
+        {
+            (
+                super::contract::OWNED_OWNER_MAGIC,
+                super::contract::OWNED_OWNER_ENVELOPE_DOMAIN,
+                18,
+            )
+        } else if bytes.starts_with(&super::contract::PRODUCT_OWNER_MAGIC) {
+            (
+                super::contract::PRODUCT_OWNER_MAGIC,
+                super::contract::PRODUCT_OWNER_ENVELOPE_DOMAIN,
+                19,
+            )
+        } else {
+            (OWNER_MAGIC, OWNER_ENVELOPE_DOMAIN, 20)
+        };
+        let record: OwnerRecord = packed::decode(bytes, magic, domain, MAXIMUM_OWNER_OBJECT_BYTES)?;
+        if record.header().contract_version != generation {
             return Err(codec_error(
                 "kernel_owner_encoding_generation",
                 "owner envelope has a foreign generation",
@@ -586,6 +593,15 @@ pub fn decode_owner(
 
 pub fn encode_type_object(object: &TypeObject) -> Result<(TypeObjectDigest, Vec<u8>), Diagnostic> {
     object.validate_local()?;
+    if let super::TypeForm::OwnedChoice { cases } = &object.form {
+        let bytes = packed::encode(
+            super::contract::OWNED_CHOICE_TYPE_MAGIC,
+            super::contract::OWNED_CHOICE_TYPE_ENVELOPE_DOMAIN,
+            &(object.contract_version, 1_u8, cases),
+            MAXIMUM_TYPE_OBJECT_BYTES,
+        )?;
+        return Ok((TypeObjectDigest::of(&bytes), bytes));
+    }
     if let super::TypeForm::OwnedProduct { fields } = &object.form {
         let bytes = packed::encode(
             super::contract::OWNED_PRODUCT_TYPE_MAGIC,
@@ -710,6 +726,34 @@ pub fn decode_type_object(
         TypeObjectDigest::of(bytes).bytes(),
         "type",
     )?;
+    if bytes.starts_with(&super::contract::OWNED_CHOICE_TYPE_MAGIC) {
+        let (contract_version, tag, cases): (u16, u8, Vec<super::StructuralTypeField>) =
+            packed::decode(
+                bytes,
+                super::contract::OWNED_CHOICE_TYPE_MAGIC,
+                super::contract::OWNED_CHOICE_TYPE_ENVELOPE_DOMAIN,
+                MAXIMUM_TYPE_OBJECT_BYTES,
+            )?;
+        if tag != 1 {
+            return Err(codec_error(
+                "kernel_choice_type_tag",
+                "unknown OwnedChoice type tag",
+            ));
+        }
+        let object = TypeObject {
+            contract_version,
+            form: super::TypeForm::OwnedChoice { cases },
+        };
+        let (digest, canonical) = encode_type_object(&object)?;
+        verify_canonical(
+            bytes,
+            &canonical,
+            digest.bytes(),
+            expected_digest.bytes(),
+            "type",
+        )?;
+        return Ok(object);
+    }
     if bytes.starts_with(&super::contract::OWNED_PRODUCT_TYPE_MAGIC) {
         let (contract_version, tag, fields): (u16, u8, Vec<super::StructuralTypeField>) =
             packed::decode(

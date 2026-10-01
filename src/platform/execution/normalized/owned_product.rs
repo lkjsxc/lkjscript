@@ -166,6 +166,7 @@ impl OwnedProduct {
                 NormalizedValue::ByteBuffer(_)
                 | NormalizedValue::OwnedI64Cell(_)
                 | NormalizedValue::OwnedProduct(_)
+                | NormalizedValue::OwnedChoice(_)
                 | NormalizedValue::Resource(_)
                 | NormalizedValue::Function { .. } => return Err(reject()),
                 _ => break,
@@ -202,7 +203,7 @@ impl OwnedProduct {
         });
         Ok(fields)
     }
-    fn revoke(&mut self) -> Option<Vec<NormalizedValue>> {
+    pub(super) fn revoke(&mut self) -> Option<Vec<NormalizedValue>> {
         if self.mode != Mode::Owner {
             return None;
         }
@@ -227,6 +228,7 @@ fn allocation_identities(fields: &[NormalizedValue]) -> Vec<usize> {
             NormalizedValue::ByteBuffer(buffer) => buffer.allocation_identity(),
             NormalizedValue::OwnedI64Cell(cell) => cell.allocation_identity(),
             NormalizedValue::OwnedProduct(product) => Arc::as_ptr(&product.storage) as usize,
+            NormalizedValue::OwnedChoice(choice) => Arc::as_ptr(&choice.storage.storage) as usize,
             _ => 0,
         })
         .collect()
@@ -303,6 +305,12 @@ impl Drop for OwnedProduct {
             match value {
                 Some(NormalizedValue::OwnedProduct(mut product)) => {
                     if let Some(fields) = product.revoke() {
+                        depth += 1;
+                        stack[depth] = Some(fields.into_iter());
+                    }
+                }
+                Some(NormalizedValue::OwnedChoice(mut choice)) => {
+                    if let Some(fields) = choice.storage.revoke() {
                         depth += 1;
                         stack[depth] = Some(fields.into_iter());
                     }

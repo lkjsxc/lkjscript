@@ -5197,6 +5197,20 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
         fields.push(("depth", position.depth.to_string()));
         let mut literal_fragments = None;
         match &record.operation {
+            ExpressionOperation::ChooseOwned {
+                choice_type, case, ..
+            } => {
+                fields.push(("form", "choose_owned".into()));
+                fields.push(("case", case.to_string()));
+                self.add_type_reference("owned_choice_type", owner, 0, *choice_type)?;
+            }
+            ExpressionOperation::MatchOwned {
+                choice_type, arms, ..
+            } => {
+                fields.push(("form", "match_owned".into()));
+                fields.push(("cases", arms.len().to_string()));
+                self.add_type_reference("owned_choice_type", owner, 0, *choice_type)?;
+            }
             ExpressionOperation::PackOwned {
                 product_type,
                 fields: members,
@@ -5627,6 +5641,57 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
 
         let child_depth = definition_child_depth(position.depth)?;
         match record.operation {
+            ExpressionOperation::ChooseOwned { value, .. } => {
+                self.visit_expression_child(
+                    owner,
+                    value,
+                    (ExpressionChildRole::OwnedChoiceValue, "owned_choice_value"),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+            }
+            ExpressionOperation::MatchOwned { source, arms, .. } => {
+                self.visit_expression_child(
+                    owner,
+                    source,
+                    (
+                        ExpressionChildRole::OwnedChoiceSource,
+                        "owned_choice_source",
+                    ),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+                for (index, arm) in arms.into_iter().enumerate() {
+                    self.visit_binding(
+                        arm.binding,
+                        DefinitionPosition {
+                            parent: owner,
+                            ownership_role: OwnershipRole::ExpressionBinding {
+                                role: BindingContainerRole::OwnedChoicePayload,
+                                ordinal: definition_ordinal(index)?,
+                            },
+                            slot: "owned_choice_binding",
+                            index: definition_ordinal(index)?,
+                            label: Some(arm.name.to_string()),
+                            depth: child_depth,
+                        },
+                        BindingKind::OwnedChoicePayload,
+                    )?;
+                    self.visit_expression_child(
+                        owner,
+                        arm.body,
+                        (
+                            ExpressionChildRole::OwnedChoiceArmBody,
+                            "owned_choice_arm_body",
+                        ),
+                        index,
+                        Some(arm.name.to_string()),
+                        child_depth,
+                    )?;
+                }
+            }
             ExpressionOperation::PackOwned { fields, .. } => {
                 for (index, field) in fields.into_iter().enumerate() {
                     self.visit_expression_child(
@@ -6754,6 +6819,7 @@ fn definition_binding_kind_name(value: BindingKind) -> &'static str {
         BindingKind::MatchPayload => "match_payload",
         BindingKind::Transaction => "transaction",
         BindingKind::OwnedUnpack => "owned_unpack",
+        BindingKind::OwnedChoicePayload => "owned_choice_payload",
     }
 }
 

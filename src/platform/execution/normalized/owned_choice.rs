@@ -1,0 +1,74 @@
+//! A selected payload with the same sealed, loan-aware storage as owned products.
+use super::owned_product::OwnedProduct;
+use super::value::{NormalizedValue, ValueOrigin};
+use crate::platform::execution::{ExecutionControl, ExecutionError};
+use crate::platform::kernel::TypeObjectDigest;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OwnedChoice {
+    pub(super) storage: OwnedProduct,
+    case: u32,
+}
+impl OwnedChoice {
+    pub(super) fn create(
+        origin: ValueOrigin,
+        ty: TypeObjectDigest,
+        case: u32,
+        payload: NormalizedValue,
+        control: &ExecutionControl,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<Self, ExecutionError> {
+        control.check()?;
+        // The selected case is inline; its payload vector and control block are charged.
+        reserve(
+            (std::mem::size_of::<NormalizedValue>() + std::mem::size_of::<Self>()
+                - std::mem::size_of::<OwnedProduct>()) as u64,
+        )?;
+        control.check()?;
+        let storage = OwnedProduct::create(origin, ty, vec![payload], control, reserve)?;
+        Ok(Self { storage, case })
+    }
+    pub(super) fn ty(&self) -> TypeObjectDigest {
+        self.storage.ty()
+    }
+    pub(super) fn validate(
+        &self,
+        origin: ValueOrigin,
+        consume: bool,
+    ) -> Result<(), ExecutionError> {
+        self.storage.validate(origin, consume)
+    }
+    pub(super) fn borrow(&self) -> Result<Self, ExecutionError> {
+        Ok(Self {
+            storage: self.storage.borrow()?,
+            case: self.case,
+        })
+    }
+    pub(super) fn is_borrowed(&self) -> bool {
+        self.storage.is_borrowed()
+    }
+    pub(super) fn owns_live_loans(&self) -> bool {
+        self.storage.owns_live_loans()
+    }
+    pub(super) fn select(
+        self,
+        origin: ValueOrigin,
+        ty: TypeObjectDigest,
+        control: &ExecutionControl,
+    ) -> Result<(u32, NormalizedValue), ExecutionError> {
+        let mut payload = self.storage.unpack(origin, ty, control)?;
+        if payload.len() != 1 {
+            return Err(ExecutionError::resource(
+                "normalized_choice_token",
+                "owned choice has no unique selected payload",
+            ));
+        }
+        let payload = payload.pop().ok_or_else(|| {
+            ExecutionError::resource(
+                "normalized_choice_token",
+                "owned choice selected payload is missing",
+            )
+        })?;
+        Ok((self.case, payload))
+    }
+}
