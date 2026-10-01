@@ -34,7 +34,36 @@ Pack expressions evaluate fields in authored order, even though the type sorts
 fields by name. Owned operands are live locals. To destructure, give the exact type,
 source local, all fields and explicitly typed bindings, followed by `(in BODY)`.
 The parent is consumed; the new bindings exist only inside BODY. Unused owners are
-released at exit. A borrowed product has no field projection or unpack operation.
+released at exit. A borrowed product cannot be unpacked or expose an owned child.
+
+## Inspecting metadata without dismantling the owner
+
+Development 0.1.63 has an unaccepted metadata-read candidate. Its focused prototype
+passed, but the extended public workflow and changed contracts still need acceptance;
+see the [continuation](../campaigns/20261001-owned-product-metadata.md).
+
+```text
+(function create tag (visibility public) (effect pure)
+  (type-parameter create T (constraint owned))
+  (parameter create packet
+    (type (owned-product (field payload T) (field tag I64))) (use borrow))
+  (returns I64)
+  (body (field (local packet) (name tag))))
+```
+
+The result is an ordinary I64. Reading it preserves the packet; callers can read
+again and then move or unpack the packet. The complete
+[producer literal](../../tests/fixtures/owned-products-read.lkjc) also forwards the
+borrow through a second generic helper. The separate
+[consumer literal](../../tests/fixtures/owned-products-read-consumer.lkjc) exercises
+an imported helper and later consumes the original payload. The added public test
+specifies canonical draft re-entry, exact package transport and detached execution;
+its completion is not yet claimed.
+
+`(name tag)` is a structural selector. A bare member is a nominal record selector.
+Selecting `payload` here is rejected because it owns memory. Reading metadata from
+an owned temporary requires first binding that temporary to an explicit local.
+These reads are not general field borrowing or lifetime-polymorphic references.
 
 Metadata must be closed first-order data, such as I64, Bytes, or a closed ordinary
 nominal record. An open unconstrained or CaptureSafe parameter is insufficient.

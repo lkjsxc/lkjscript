@@ -125,6 +125,59 @@ impl OwnedProduct {
     pub(super) fn owns_live_loans(&self) -> bool {
         self.mode == Mode::Owner && self.lock().loans != 0
     }
+    /// Callers resolve the index from this token's exact type and independently
+    /// admit the returned closed ordinary value. No child ownership is transferred.
+    pub(super) fn read_metadata(
+        &self,
+        origin: ValueOrigin,
+        index: usize,
+        control: &ExecutionControl,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<NormalizedValue, ExecutionError> {
+        self.validate(origin, false)?;
+        if self.mode != Mode::Read {
+            return Err(reject());
+        }
+        control.check()?;
+        let storage = self.lock();
+        let value = storage
+            .fields
+            .as_ref()
+            .and_then(|fields| fields.get(index))
+            .ok_or_else(reject)?;
+        // Records, lists, maps, text and bytes share immutable backing. Only the
+        // inline sum/option spine allocates during an ordinary value clone.
+        let mut current = value;
+        let mut bytes = 0_u64;
+        loop {
+            control.check()?;
+            current = match current {
+                NormalizedValue::Variant {
+                    payload: Some(child),
+                    ..
+                }
+                | NormalizedValue::Option(Some(child))
+                | NormalizedValue::Result { value: child, .. } => {
+                    bytes = bytes
+                        .checked_add(std::mem::size_of::<NormalizedValue>() as u64)
+                        .ok_or_else(reject)?;
+                    child
+                }
+                NormalizedValue::ByteBuffer(_)
+                | NormalizedValue::OwnedI64Cell(_)
+                | NormalizedValue::OwnedProduct(_)
+                | NormalizedValue::Resource(_)
+                | NormalizedValue::Function { .. } => return Err(reject()),
+                _ => break,
+            };
+        }
+        if bytes != 0 {
+            reserve(bytes)?;
+        }
+        control.check()?;
+        Ok(value.clone())
+    }
+
     pub(super) fn unpack(
         self,
         origin: ValueOrigin,

@@ -45,8 +45,27 @@ consumes the parent, binds every field exactly once, and introduces simultaneous
 disjoint lexical identities visible only in its body. Binding annotations must
 match the complete product shape. The consumed parent cannot be used again. Fields
 left unused drop at lexical exit; nested children transfer without cloning their
-storage. The operation has no partial-move form or borrowed-field projection.
-Field access on a loan is invalid. Ordinary field projections do not apply.
+storage. The operation has no partial-move form or borrowed owned-child projection.
+Unpacking a loan remains invalid.
+
+### Closed ordinary metadata reads (development 0.1.63 candidate)
+
+`(field (local packet) (name tag))` reads a closed ordinary field through a short
+whole-product read loan. The source must be an exact live owning local or a live
+borrowed parameter of the exact product type. A generic product can contain scoped
+Owned parameters while its selected metadata remains closed ordinary data. Direct
+reads, helper calls and synchronous reborrows leave the original ownership rights
+unchanged. A later complete move or unpack remains possible after the read returns.
+
+The result is an ordinary value, not a child borrow. It can outlive consumption or
+destruction of the parent under the existing immutable ordinary-value rules. This
+does not expose an Owned field, introduce a partial move or give a lifetime-bearing
+reference to product storage. Owned fields, missing fields, consumed locals and
+non-local product temporaries cannot use this operation. Bind an owned temporary
+explicitly before inspecting it. Ordinary record projections retain their behavior.
+
+The candidate implementation and its incomplete acceptance boundary are recorded
+in the [metadata continuation](../campaigns/20261001-owned-product-metadata.md).
 
 Unchanged native drafts retain accepted bodies. Same-kind literal-only edits traverse
 pack fields in authored order and unpack source/body slots, then compare the complete
@@ -74,8 +93,12 @@ Construction and decomposition check ordinary child admission and exact memory-c
 origin, type and ownership. Raw metadata cannot confer authority.
 
 Storage accounting reserves field vectors, token and control storage before growth;
-cancellation is checked before allocation and detachment. Nested product cleanup
-uses a bounded iterative traversal. Cleanup never calls user-defined methods, and
+cancellation is checked before allocation and detachment. Metadata reads validate
+the exact invocation origin, live read mode, selected ordinary type and output.
+They reserve the inline Option/Result/variant box spine before cloning. Shared
+immutable backing remains shared; no owned child storage is cloned. Cancellation
+checks bracket reservation and copying, and a failed read does not move the owner.
+Nested product cleanup uses a bounded iterative traversal. Cleanup never calls user-defined methods, and
 does not roll back independent effects. Quota or proof-work exhaustion remains
 distinct from semantic invalidity. No bound is increased for this feature.
 
@@ -93,13 +116,17 @@ when a function body only uses an old Local operation. Owner, package-interface 
 artifact type closures all enforce the generation boundary. Package interface 12
 keeps its existing layout. Old source generations retain their exact readers.
 
-Current derived execution uses compiler unit 16, bytecode 12 and artifact 23.
+The development 0.1.63 candidate selects compiler unit 17, bytecode 13 and artifact
+24 for metadata-read lowering and execution semantics. Graph 19, package interface
+12, authored request 22 and compact request/discovery 26 keep their layouts.
 Predecessor derived artifacts require rebuilding; frozen source acceptance is not
 permission to execute them. Original hostile fixtures remain unchanged. The test-only
 fixture owner can produce current controls from their exact retained source and
 instruction forms. Authored request 22 and compact request/discovery 26 add explicit
 type and operation forms; requests without this extension preserve earlier bytes,
-including empty optional setters. Semantic validator 19 invalidates stale proof reuse.
+including empty optional setters. Semantic validator 20 and structural-owned-product
+feature revision 2 invalidate stale ownership proofs for metadata reads. This
+candidate is not an accepted source or public binary release.
 
 See the [native guide](../guides/native-owned-products.md) and
 [campaign](../campaigns/20261001-owned-products.md) for literal programs, actual

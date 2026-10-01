@@ -2389,7 +2389,22 @@ impl ReferenceState<'_> {
                 self.variant_value(layout, tag, payload)
             }
             ExpressionOperation::Field { value, selector } => {
-                let value = self.evaluate(value, locals)?;
+                let product_local = match self.owner(OwnerKey::Expression(value))? {
+                    Some(OwnerRecord::Expression(record)) => match record.operation {
+                        ExpressionOperation::Local { value: local } => {
+                            locals.get(&local).is_some_and(|value| {
+                                matches!(value.raw(), NormalizedValue::OwnedProduct(_))
+                            })
+                        }
+                        _ => false,
+                    },
+                    _ => false,
+                };
+                let value = if product_local {
+                    self.evaluate_with_use(value, locals, ParameterUse::Borrow)?
+                } else {
+                    self.evaluate(value, locals)?
+                };
                 self.field(value, selector)
             }
             ExpressionOperation::List { items, .. } => {
@@ -2952,11 +2967,40 @@ impl ReferenceState<'_> {
     }
 
     fn field(
-        &self,
+        &mut self,
         value: CheckedValue,
         selector: FieldSelector,
     ) -> Result<CheckedValue, ExecutionError> {
-        value.project_field(selector, &self.schema)
+        if let (NormalizedValue::OwnedProduct(token), FieldSelector::Structural(name)) =
+            (value.raw(), &selector)
+        {
+            let Some(crate::platform::kernel::TypeObject {
+                form: TypeForm::OwnedProduct { fields },
+                ..
+            }) = self.schema.types.get(&token.ty())
+            else {
+                return Err(reference_type_error("product metadata has no exact type"));
+            };
+            // Independent linear lookup rather than the VM's canonical binary search.
+            let (index, field) = fields
+                .iter()
+                .enumerate()
+                .find(|(_, field)| &field.name == name)
+                .ok_or_else(|| reference_type_error("unknown product metadata field"))?;
+            let ty = field.ty;
+            if !self.schema.ordinary_types.contains(&ty) {
+                return Err(reference_type_error(
+                    "product field read cannot expose owned children",
+                ));
+            }
+            let control = self.control;
+            let raw = token.read_metadata(self.memory_domain, index, control, &mut |bytes| {
+                self.charge_allocation(bytes)
+            })?;
+            self.admit_raw(raw, ty, &BTreeMap::new(), None, false)
+        } else {
+            value.project_field(selector, &self.schema)
+        }
     }
 
     fn record_layout(

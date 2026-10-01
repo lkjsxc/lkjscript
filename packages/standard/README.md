@@ -250,6 +250,8 @@ no standard graph operation. Exact retained older suppliers remain source inputs
 and require current derived artifacts.
 
 The [owned-product refresh](../../docs/campaigns/20261001-owned-products.md) derives
-the current Graph 19 transport and compiler 16 / bytecode 12 / artifact 23 bundle
-through the same public owners. Accepted HEAD and standard program meaning remain
-unchanged; this is a compiler refresh, not product adoption in the standard library.
+the Graph 19 transport and compiler 16 / bytecode 12 / artifact 23 bundle
+through the same public owners. The [metadata continuation](../../docs/campaigns/20261001-owned-product-metadata.md)
+refreshes the current derived bundle to compiler 17 / bytecode 13 / artifact 24.
+Accepted HEAD and standard program meaning remain unchanged; this is a compiler
+refresh, not product adoption in the standard library.

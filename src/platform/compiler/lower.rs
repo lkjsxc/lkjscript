@@ -1338,6 +1338,30 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         self.expression_with_use(expression, depth, ParameterUse::Unrestricted)
     }
 
+    fn local_is_memory(&mut self, value: LocalValueReference) -> Result<bool, Diagnostic> {
+        let key = match value {
+            LocalValueReference::FunctionParameter(p) => Some(OwnerKey::Parameter(p)),
+            LocalValueReference::LexicalBinding(b) | LocalValueReference::MatchPayload(b) => {
+                Some(OwnerKey::Binding(b))
+            }
+            _ => None,
+        };
+        let ty = if let Some(key) = key {
+            match self.unit.required_owner(key, "local ownership type")? {
+                OwnerRecord::Parameter(p) => Some(p.ty),
+                OwnerRecord::Binding(b) => b.declared_type,
+                _ => None,
+            }
+        } else {
+            None
+        };
+        if let Some(ty) = ty {
+            self.unit.owned_local_type(ty)
+        } else {
+            Ok(false)
+        }
+    }
+
     fn expression_with_use(
         &mut self,
         expression: ExpressionId,
@@ -1485,26 +1509,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                         "validated exact local reference is outside the compiled lexical scope",
                     )
                 })?;
-                let key = match value {
-                    LocalValueReference::FunctionParameter(p) => Some(OwnerKey::Parameter(p)),
-                    LocalValueReference::LexicalBinding(b)
-                    | LocalValueReference::MatchPayload(b) => Some(OwnerKey::Binding(b)),
-                    _ => None,
-                };
-                let ty = if let Some(key) = key {
-                    match self.unit.required_owner(key, "local ownership type")? {
-                        OwnerRecord::Parameter(p) => Some(p.ty),
-                        OwnerRecord::Binding(b) => b.declared_type,
-                        _ => None,
-                    }
-                } else {
-                    None
-                };
-                let memory = if let Some(ty) = ty {
-                    self.unit.owned_local_type(ty)?
-                } else {
-                    false
-                };
+                let memory = self.local_is_memory(value)?;
                 let use_mode = if memory && use_mode == ParameterUse::Unrestricted {
                     ParameterUse::Consume
                 } else {
@@ -1775,8 +1780,18 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 })?;
             }
             ExpressionOperation::Field { value, selector } => {
+                let use_mode = match self
+                    .unit
+                    .required_owner(OwnerKey::Expression(value), "field source expression")?
+                {
+                    OwnerRecord::Expression(ExpressionRecord {
+                        operation: ExpressionOperation::Local { value: local },
+                        ..
+                    }) if self.local_is_memory(local)? => ParameterUse::Borrow,
+                    _ => ParameterUse::Unrestricted,
+                };
                 let selector = self.field_selector(selector)?;
-                self.expression(value, depth)?;
+                self.expression_with_use(value, depth, use_mode)?;
                 self.push(CompiledInstruction::Field(selector))?;
             }
             ExpressionOperation::List { item_type, items } => {

@@ -98,5 +98,6 @@ The Owned-generic compiler refresh rebuilds the retained policy artifact through
 public build, preserving its accepted HEAD and exact standard supplier. No native
 policy meaning is changed; older derived artifact generations require rebuilding.
 
-The owned-product continuation repeats this public build for compiler 16, bytecode 12
-and artifact 23, with the same accepted policy HEAD and exact supplier meaning.
+The owned-product metadata continuation repeats this public build for compiler 17,
+bytecode 13 and artifact 24, with the same accepted policy HEAD and exact supplier
+meaning.

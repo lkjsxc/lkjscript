@@ -234,6 +234,7 @@ pub(super) fn replace_unit(
         14 => (*b"LKJCUN14", "lkjscript.compiler-unit-envelope.v14"),
         15 => (*b"LKJCUN15", "lkjscript.compiler-unit-envelope.v15"),
         16 => (*b"LKJCUN16", "lkjscript.compiler-unit-envelope.v16"),
+        17 => (*b"LKJCUN17", "lkjscript.compiler-unit-envelope.v17"),
         other => panic!("unexpected forged-unit generation {other}"),
     };
     let bytes = crate::platform::packed::encode(

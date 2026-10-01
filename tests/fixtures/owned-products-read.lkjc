@@ -1,0 +1,33 @@
+declarations.begin
+(units
+  (module create product-read
+    (external create cell (visibility private) (implementation core.cell.create)
+      (parameter create n (type I64)) (returns OwnedI64Cell))
+    (external create extract (visibility private) (implementation core.cell.extract)
+      (parameter create c (type OwnedI64Cell) (use consume)) (returns I64))
+    (function create tag (visibility public) (effect pure)
+      (type-parameter create T (constraint owned))
+      (parameter create packet (type (owned-product (field payload T) (field tag I64))) (use borrow))
+      (returns I64) (body (field (local packet) (name tag))))
+    (function create forwarded-tag (visibility public) (effect pure)
+      (type-parameter create T (constraint owned))
+      (parameter create packet (type (owned-product (field payload T) (field tag I64))) (use borrow))
+      (returns I64) (body (call tag (types T) (local packet))))
+    (function create main (visibility public) (effect pure)
+      (parameter create n (type I64)) (returns (record (direct I64) (forwarded I64) (payload I64)))
+      (body (let
+        (binding c (type OwnedI64Cell) (call cell (local n)))
+        (binding p (type (owned-product (field payload OwnedI64Cell) (field tag I64)))
+          (pack-owned (type (owned-product (field payload OwnedI64Cell) (field tag I64)))
+            (field tag (local n)) (field payload (local c))))
+        (binding direct (type I64) (field (local p) (name tag)))
+        (binding forwarded (type I64) (call forwarded-tag (types OwnedI64Cell) (local p)))
+        (in (unpack-owned (type (owned-product (field payload OwnedI64Cell) (field tag I64)))
+          (local p)
+          (field payload (binding child (type OwnedI64Cell)))
+          (field tag (binding ignored (type I64)))
+          (in (record structural
+            (field direct (local direct))
+            (field forwarded (local forwarded))
+            (field payload (call extract (local child))))))))))))
+declarations.end

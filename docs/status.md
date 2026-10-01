@@ -31,6 +31,27 @@ v0.1.60 does **not** include the v0.1.61 owned-memory and byte-range development
 below. Earlier immutable releases and genuine failed or superseded candidates remain
 unchanged. Inspect the installed executable with `lkjscript capabilities`.
 
+## Local candidate v0.1.63: ordinary metadata reads
+
+An isolated, not-mainline candidate adds `(field (local packet) (name tag))` for
+closed ordinary metadata in an owned product. It borrows the whole live product
+for the read and returns an ordinary value; the original owner is preserved for
+a subsequent move or complete unpack. Owned-child projection and temporary-product
+projection remain rejected. The [continuation](campaigns/20261001-owned-product-metadata.md)
+records the exact scope and current limitations.
+
+The resumed focused suite passes 27 owned-product tests, including VM/reference
+execution, independent ownership, allocation/cancellation, retained metadata and
+consistently rehashed instruction attacks. A separate public CLI case passes exact
+two-package authoring, canonical drafts and detached execution after source deletion.
+The copied 0.1.62 predecessor rejects the same new literal program during planning.
+These are focused results, not fresh full-source acceptance or final-archive proof.
+Maintained native artifacts and current-envelope controls are regenerated through
+their existing owners before source acceptance. Source acceptance below still binds
+the previous exact 0.1.62 cut until the continuation records a new accepted source.
+All three product-number components retain their opaque identifier-only meaning.
+No public release, application-data migration or running-service change is implied.
+
 ## Development v0.1.62: opaque product numbering
 
 The owner's 2026-10-01 decision gives all three `A.B.C` components the same

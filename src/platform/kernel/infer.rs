@@ -1452,10 +1452,14 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             }
             FieldSelector::Structural(name) => {
                 let object = self.type_object(value_type)?;
-                let TypeForm::StructuralRecord { fields } = object.form else {
+                // Ownership admission separately restricts products to an exact local
+                // read loan and a closed ordinary metadata field.
+                let (TypeForm::StructuralRecord { fields } | TypeForm::OwnedProduct { fields }) =
+                    object.form
+                else {
                     return Err(type_error(
                         "kernel_type_structural_field",
-                        "structural field selection requires a structural record",
+                        "structural field selection requires a structural record or owned product",
                     ));
                 };
                 fields

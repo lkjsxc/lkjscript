@@ -207,6 +207,7 @@ The Owned-generic compiler refresh rebuilds the derived artifact through public
 build with compiler unit 15, bytecode 11 and artifact 22. It preserves accepted
 HEAD, exact standard selection, application owners and operational data.
 
-The owned-product continuation rebuilds the current bundle for compiler unit 16,
-bytecode 12 and artifact 23 through public build, preserving those accepted inputs.
+The owned-product metadata continuation rebuilds the current bundle for compiler
+unit 17, bytecode 13 and artifact 24 through public build, preserving those accepted
+inputs. This does not update running deployments or migrate application data.
 It neither deploys this application nor changes operational state.

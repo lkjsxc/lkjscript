@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-16";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 16;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-12";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 12;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN16";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v16";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v16";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-17";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 17;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-13";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 13;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN17";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v17";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v17";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -82,6 +82,8 @@ impl CompilationUnitKey {
             "lkjscript.compiler-unit-key.v14"
         } else if compiler_contract_version == 15 {
             "lkjscript.compiler-unit-key.v15"
+        } else if compiler_contract_version == 16 {
+            "lkjscript.compiler-unit-key.v16"
         } else {
             COMPILER_UNIT_KEY_DOMAIN
         });
@@ -539,7 +541,7 @@ impl CompilationUnit {
                 self.bytecode_contract_version,
                 self.graph_contract_version
             ),
-            (16, 12, 19)
+            (17, 13, 19)
         ) {
             return Err(unit_error(
                 DiagnosticClass::Source,

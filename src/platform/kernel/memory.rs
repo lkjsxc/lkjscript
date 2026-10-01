@@ -664,8 +664,56 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 }
                 false
             }
-            ExpressionOperation::Field { value, .. } => {
-                plain(value, state)?;
+            ExpressionOperation::Field { value, selector } => {
+                if let Some(OwnerRecord::Expression(ExpressionRecord {
+                    operation: ExpressionOperation::Local { value: local },
+                    ..
+                })) = self.read.owner(OwnerKey::Expression(value))?
+                    && state.contains_key(&local)
+                {
+                    let ty = match local {
+                        LocalValueReference::FunctionParameter(p) => {
+                            match self.read.owner(OwnerKey::Parameter(p))? {
+                                Some(OwnerRecord::Parameter(p)) => Some(p.ty),
+                                _ => None,
+                            }
+                        }
+                        LocalValueReference::LexicalBinding(b) => {
+                            match self.read.owner(OwnerKey::Binding(b))? {
+                                Some(OwnerRecord::Binding(b)) => b.declared_type,
+                                _ => None,
+                            }
+                        }
+                        _ => None,
+                    }
+                    .ok_or_else(|| reject("product metadata requires an exact typed local"))?;
+                    let object = self
+                        .read
+                        .type_object(ty)?
+                        .ok_or_else(|| reject("missing product metadata source type"))?;
+                    let (TypeForm::OwnedProduct { fields }, FieldSelector::Structural(name)) =
+                        (object.form, selector)
+                    else {
+                        return Err(reject("only structural product metadata can be read"));
+                    };
+                    let mut selected = None;
+                    for field in fields {
+                        self.read.validation_work()?;
+                        if field.name == name {
+                            selected = Some(field.ty);
+                            break;
+                        }
+                    }
+                    let selected =
+                        selected.ok_or_else(|| reject("unknown product metadata field"))?;
+                    if !super::owned_contract::ordinary_closed(self.read, selected)? {
+                        return Err(reject("product field reads cannot expose owned children"));
+                    }
+                    self.eval(value, state, ParameterUse::Borrow, next)?;
+                } else {
+                    // In particular, an owned temporary cannot silently become a loan.
+                    plain(value, state)?;
+                }
                 false
             }
             ExpressionOperation::List { items, .. } => {

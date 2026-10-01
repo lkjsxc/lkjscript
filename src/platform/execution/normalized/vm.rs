@@ -1016,7 +1016,8 @@ impl Machine<'_> {
                 }
                 NormalizedInstruction::Field(field) => {
                     let value = self.pop()?;
-                    self.push(value.field(&field, self.program)?)?;
+                    let field = self.project_field(value, &field)?;
+                    self.push(field)?;
                 }
                 NormalizedInstruction::List { items } => {
                     let items = self.pop_many(items as usize)?;
@@ -1340,6 +1341,40 @@ impl Machine<'_> {
             return Err(type_error("missing product type"));
         };
         Ok(fields.iter().map(|f| f.ty).collect())
+    }
+
+    fn project_field(
+        &mut self,
+        value: CheckedValue,
+        selector: &NormalizedFieldSelector,
+    ) -> Result<CheckedValue, ExecutionError> {
+        if let (NormalizedValue::OwnedProduct(token), NormalizedFieldSelector::Structural(name)) =
+            (value.raw(), selector)
+        {
+            let Some(crate::platform::kernel::TypeObject {
+                form: TypeForm::OwnedProduct { fields },
+                ..
+            }) = self.program.types.get(&token.ty())
+            else {
+                return Err(type_error("product metadata has no exact type"));
+            };
+            let index = fields
+                .binary_search_by(|field| field.name.cmp(name))
+                .map_err(|_| type_error("unknown product metadata field"))?;
+            let ty = fields[index].ty;
+            if !self.program.ordinary_types.contains(&ty) {
+                return Err(type_error(
+                    "product field read cannot expose owned children",
+                ));
+            }
+            let control = self.control;
+            let raw = token.read_metadata(self.memory_domain, index, control, &mut |bytes| {
+                self.charge_allocation(bytes)
+            })?;
+            self.admit(raw, ty, None, false)
+        } else {
+            value.field(selector, self.program)
+        }
     }
 
     fn product_child(

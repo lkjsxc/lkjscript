@@ -680,8 +680,30 @@ impl Oracle<'_> {
                 }
                 false
             }
-            ExpressionOperation::Field { value, .. } => {
-                plain(*value, rights)?;
+            ExpressionOperation::Field { value, selector } => {
+                if let ExpressionOperation::Local { value: local } = self.expression(*value)?
+                    && rights.memory.contains(local)
+                {
+                    if !rights.owned.contains(local) && !rights.borrowed.contains(local) {
+                        return None;
+                    }
+                    let ty = self.local_type(*local)?;
+                    if !self.product_shape(ty) {
+                        return None;
+                    }
+                    let (TypeForm::OwnedProduct { fields }, FieldSelector::Structural(name)) =
+                        (self.form(ty)?, selector)
+                    else {
+                        return None;
+                    };
+                    let field = fields.iter().find(|f| &f.name == name)?;
+                    if !self.ordinary(field.ty) {
+                        return None;
+                    }
+                    // A read grants no new owner and leaves the original rights intact.
+                } else {
+                    plain(*value, rights)?;
+                }
                 false
             }
             ExpressionOperation::CapabilityCall { arguments, .. } => {

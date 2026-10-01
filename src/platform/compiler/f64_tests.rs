@@ -110,9 +110,9 @@ fn f64_literals_lower_and_round_trip_all_scalar_classes() {
                 compiled.unit.bytecode_contract_version,
                 compiled.unit.graph_contract_version
             ),
-            (16, 12, 19)
+            (17, 13, 19)
         );
-        assert_eq!(&compiled.bytes[..8], b"LKJCUN16");
+        assert_eq!(&compiled.bytes[..8], b"LKJCUN17");
         let CompilationPayload::Constant { code, .. } = &compiled.unit.payload else {
             panic!("compiled constant");
         };

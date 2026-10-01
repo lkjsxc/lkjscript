@@ -66,6 +66,12 @@ typed traits, general lifetimes and region policies; none is supplied by this
 increment. Keep declared ownership/effect meaning separate from physical placement
 and recomputable analyses.
 
+The [ordinary metadata-read continuation](campaigns/20261001-owned-product-metadata.md)
+lets a synchronous generic helper inspect a product's closed tag without moving or
+repacking the payload. A short whole-product loan returns an ordinary immutable
+value, not an owned-child reference. This supplies inspection before a transfer
+decision; it does not replace the next recoverable-outcome experiment.
+
 The next preferred composition experiment is an owned choice/outcome: success may
 transfer an owner, while a rejected operation can return its still-owned payload.
 Ordinary unrestricted Option/Result containers are not an implicit escape hatch.

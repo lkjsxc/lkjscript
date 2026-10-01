@@ -498,6 +498,240 @@ declarations.end"#;
 }
 
 #[test]
+fn owned_products_metadata_read_preserves_owner_across_reborrow() {
+    use super::super::value::NormalizedRecord;
+    let source = byte_buffer_tests::author_only(include_str!(
+        "../../../../tests/fixtures/owned-products-read.lkjc"
+    ))
+    .unwrap();
+    assert!(crate::platform::kernel::memory_reference::accepts(&source));
+    let program = prepare_snapshot(&source);
+    let main = declaration_named(&source, "main");
+    let control = ExecutionControl::uncancelled();
+    for reference in [false, true] {
+        for n in [i64::MIN, -257, 0, 128, i64::MAX] {
+            let cells = super::super::owned_i64_cell::StorageObservation::start();
+            let products = super::super::owned_product::StorageObservation::start();
+            let result = if reference {
+                NormalizedReferenceInterpreter::new(
+                    &source,
+                    &program,
+                    NormalizedRunPolicy::foreground(),
+                )
+                .invoke(main, vec![NormalizedValue::I64(n)], None, &control)
+                .unwrap()
+                .0
+            } else {
+                NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                    .invoke(main, vec![NormalizedValue::I64(n)], None, &control)
+                    .unwrap()
+                    .0
+            };
+            let expected = NormalizedValue::Record(NormalizedRecord::Structural {
+                fields: Arc::new(
+                    ["direct", "forwarded", "payload"]
+                        .into_iter()
+                        .map(|name| (Name::new(name).unwrap(), NormalizedValue::I64(n)))
+                        .collect(),
+                ),
+            });
+            assert_eq!(result, expected, "reference={reference}");
+            assert_eq!(products.created(), 1);
+            products.assert_transfers_preserve_allocations();
+            assert_eq!(products.live(), (0, 0));
+            assert_eq!(cells.live(), (0, 0));
+        }
+    }
+}
+
+#[test]
+fn owned_products_metadata_rejects_owned_fields_and_consumed_parents() {
+    use crate::platform::kernel::{ExpressionOperation, FieldSelector, OwnerRecord};
+    let literal = include_str!("../../../../tests/fixtures/owned-products-read.lkjc");
+    let mut source = byte_buffer_tests::author_only(literal).unwrap();
+    let mut changed = 0;
+    for owner in source.owners.values_mut() {
+        if let OwnerRecord::Expression(expression) = owner
+            && let ExpressionOperation::Field { selector, .. } = &mut expression.operation
+        {
+            *selector = FieldSelector::Structural(Name::new("payload").unwrap());
+            changed += 1;
+        }
+    }
+    assert_eq!(changed, 2);
+    assert!(!crate::platform::kernel::memory_reference::accepts(&source));
+    for (original, replacement) in [
+        (
+            "(field (local packet) (name tag))",
+            "(field (local packet) (name payload))",
+        ),
+        (
+            "(field (local packet) (name tag))",
+            "(field (local packet) (name absent))",
+        ),
+        (
+            "(field direct (local direct))",
+            "(field direct (field (local p) (name tag)))",
+        ),
+        (
+            "(field (local p) (name tag))",
+            "(field (if (bool true) (local p) (local p)) (name tag))",
+        ),
+    ] {
+        assert!(literal.contains(original));
+        let error =
+            byte_buffer_tests::author_only(&literal.replace(original, replacement)).unwrap_err();
+        assert!(
+            error.contains("kernel_buffer_ownership")
+                || error.contains("kernel_type_structural_field_missing"),
+            "{error}"
+        );
+    }
+}
+
+#[test]
+fn owned_products_metadata_token_checks_before_read_or_copy() {
+    use super::super::{owned_product::OwnedProduct, value::ValueOrigin};
+    let origin = ValueOrigin::fresh().unwrap();
+    let control = ExecutionControl::uncancelled();
+    let value = NormalizedValue::Option(Some(Box::new(NormalizedValue::Option(Some(Box::new(
+        NormalizedValue::I64(73),
+    ))))));
+    // Raw storage control, intentionally separate from canonical product-type admission.
+    let owner = OwnedProduct::create(
+        origin,
+        TypeObjectDigest::of(b"metadata-storage-control"),
+        vec![value.clone()],
+        &control,
+        &mut |_| Ok(()),
+    )
+    .unwrap();
+    assert!(
+        owner
+            .read_metadata(origin, 0, &control, &mut |_| panic!("owner read allocated"))
+            .is_err()
+    );
+    let inert = owner.clone();
+    assert!(
+        inert
+            .read_metadata(origin, 0, &control, &mut |_| panic!("inert read allocated"))
+            .is_err()
+    );
+    let loan = owner.borrow().unwrap();
+    assert!(
+        loan.read_metadata(ValueOrigin::fresh().unwrap(), 0, &control, &mut |_| panic!(
+            "foreign read allocated"
+        ))
+        .is_err()
+    );
+    assert!(
+        loan.read_metadata(origin, 1, &control, &mut |_| panic!(
+            "missing field allocated"
+        ))
+        .is_err()
+    );
+    let expected = 2 * std::mem::size_of::<NormalizedValue>() as u64;
+    let error = loan
+        .read_metadata(origin, 0, &control, &mut |bytes| {
+            assert_eq!(bytes, expected);
+            Err(ExecutionError::resource(
+                "test_metadata_quota",
+                "deny before cloning boxes",
+            ))
+        })
+        .unwrap_err();
+    assert_eq!(error.code, "test_metadata_quota");
+    let mut reserved = 0;
+    let retained = loan
+        .read_metadata(origin, 0, &control, &mut |bytes| {
+            reserved += bytes;
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(reserved, expected);
+    assert_eq!(retained, value);
+    for checks in 0..5 {
+        let cancelled = ExecutionControl::cancel_after_checks(checks);
+        let error = loan
+            .read_metadata(origin, 0, &cancelled, &mut |bytes| {
+                assert_eq!(bytes, expected);
+                Ok(())
+            })
+            .unwrap_err();
+        assert_eq!(error.code, "execution_cancelled");
+        owner.validate(origin, false).unwrap();
+    }
+    let cancelled = ExecutionControl::uncancelled();
+    let error = loan
+        .read_metadata(origin, 0, &cancelled, &mut |_| {
+            cancelled.cancel();
+            Ok(())
+        })
+        .unwrap_err();
+    assert_eq!(error.code, "execution_cancelled");
+    assert!(owner.validate(origin, true).is_err());
+    drop(loan);
+    owner.validate(origin, true).unwrap();
+    let loan = owner.borrow().unwrap();
+    drop(owner);
+    assert!(
+        loan.read_metadata(origin, 0, &control, &mut |_| panic!("stale read allocated"))
+            .is_err()
+    );
+    drop(loan);
+    assert_eq!(retained, value);
+}
+
+#[test]
+fn owned_products_metadata_outlives_consumed_parent() {
+    let source = byte_buffer_tests::author_only(r#"declarations.begin
+(units (module create retained
+  (record create Meta (visibility private) (field create tag (type I64)))
+  (external create cell (visibility private) (implementation core.cell.create)
+    (parameter create n (type I64)) (returns OwnedI64Cell))
+  (function create take-meta (visibility private) (effect pure)
+    (parameter create p (type (owned-product (field child OwnedI64Cell) (field meta Meta))) (use consume))
+    (returns Meta) (body (field (local p) (name meta))))
+  (function create main (visibility public) (effect pure)
+    (parameter create n (type I64)) (returns I64)
+    (body (let
+      (binding c (type OwnedI64Cell) (call cell (i64 0)))
+      (binding p (type (owned-product (field child OwnedI64Cell) (field meta Meta)))
+        (pack-owned (type (owned-product (field child OwnedI64Cell) (field meta Meta)))
+          (field meta (record Meta (field Meta::tag (local n)))) (field child (local c))))
+      (binding meta (type Meta) (call take-meta (local p)))
+      (in (field (local meta) Meta::tag)))))))
+declarations.end"#).unwrap();
+    assert!(crate::platform::kernel::memory_reference::accepts(&source));
+    let program = prepare_snapshot(&source);
+    let main = declaration_named(&source, "main");
+    for reference in [false, true] {
+        let cells = super::super::owned_i64_cell::StorageObservation::start();
+        let products = super::super::owned_product::StorageObservation::start();
+        let control = ExecutionControl::uncancelled();
+        let value = if reference {
+            NormalizedReferenceInterpreter::new(
+                &source,
+                &program,
+                NormalizedRunPolicy::foreground(),
+            )
+            .invoke(main, vec![NormalizedValue::I64(-257)], None, &control)
+            .unwrap()
+            .0
+        } else {
+            NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                .invoke(main, vec![NormalizedValue::I64(-257)], None, &control)
+                .unwrap()
+                .0
+        };
+        assert_eq!(value, NormalizedValue::I64(-257));
+        assert_eq!(products.created(), 1);
+        assert_eq!(products.live(), (0, 0));
+        assert_eq!(cells.live(), (0, 0));
+    }
+}
+
+#[test]
 fn owned_products_native_generic_cell_roundtrip() {
     let source = byte_buffer_tests::author_only(include_str!(
         "../../../../tests/fixtures/owned-products.lkjc"

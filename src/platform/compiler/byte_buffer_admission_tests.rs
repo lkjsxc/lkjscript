@@ -104,6 +104,73 @@ declarations.end"#).unwrap();
 }
 
 #[test]
+fn owned_products_metadata_artifact_rejects_rehashed_loan_mode_changes() {
+    let source = crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(
+        include_str!("../../../tests/fixtures/owned-products-read.lkjc"),
+    )
+    .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let repository = GraphRepository::create(&dir.path().join("metadata"), &source, None)
+        .unwrap()
+        .repository;
+    let compilation = build_clean(&repository, OptimizationPolicy::DeterministicBaseline).unwrap();
+    let artifact = link_artifact(&repository, compilation.manifest_digest, &[]).unwrap();
+    let loaded = load_artifact(&artifact.artifact.bytes).unwrap();
+    let owner = OwnerKey::Declaration(declaration_named(&source, "tag"));
+    let (key, unit) = loaded
+        .objects
+        .iter()
+        .filter(|(key, _)| key.domain == ObjectDomain::CompilerUnit)
+        .map(|(key, bytes)| (*key, CompilationUnit::decode(bytes, *key).unwrap()))
+        .find(|(_, unit)| unit.source.owner == owner)
+        .unwrap();
+    // Rehashing a neutral replacement must preserve admission: rejection below
+    // is about instruction meaning, not a stale digest or an invalid container.
+    load_artifact(&effect_tests::replace_unit(&loaded, key, &unit, vec![])).unwrap();
+    let CompilationPayload::Function { code, .. } = &unit.payload else {
+        panic!("metadata helper function");
+    };
+    let indices = code
+        .instructions
+        .windows(2)
+        .enumerate()
+        .filter_map(|(i, pair)| {
+            matches!(
+                pair,
+                [
+                    CompiledInstruction::LoadLocal {
+                        use_mode: ParameterUse::Borrow,
+                        ..
+                    },
+                    CompiledInstruction::Field(_),
+                ]
+            )
+            .then_some(i)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        indices.len(),
+        1,
+        "the read borrows exactly one whole product"
+    );
+    for mode in [ParameterUse::Unrestricted, ParameterUse::Consume] {
+        let mut changed = unit.clone();
+        let CompilationPayload::Function { code, .. } = &mut changed.payload else {
+            unreachable!();
+        };
+        let CompiledInstruction::LoadLocal { use_mode, .. } = &mut code.instructions[indices[0]]
+        else {
+            unreachable!();
+        };
+        *use_mode = mode;
+        let bytes = effect_tests::replace_unit(&loaded, key, &changed, vec![]);
+        let error = load_artifact(&bytes)
+            .expect_err("rehashed metadata read must not copy or move its source");
+        println!("metadata read {mode:?} forgery: {}", error.code);
+    }
+}
+
+#[test]
 fn owned_products_signature_only_artifact_rejects_rehashed_graph_18_package() {
     // A private Local-only relay gives the loader no public type or new operation
     // tag on which to rely. The complete compiled type closure still binds Graph 19.

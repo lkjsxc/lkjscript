@@ -1,0 +1,33 @@
+declarations.begin
+(units
+  (module create read-consumer
+    (external create cell (visibility private) (implementation core.cell.create)
+      (parameter create n (type I64)) (returns OwnedI64Cell))
+    (external create extract (visibility private) (implementation core.cell.extract)
+      (parameter create c (type OwnedI64Cell) (use consume)) (returns I64))
+    (function create main (visibility public) (effect pure)
+      (parameter create n (type I64))
+      (returns (record (direct I64) (forwarded I64) (payload I64)))
+      (body (let
+        (binding c (type OwnedI64Cell) (call cell (local n)))
+        (binding p (type (owned-product (field payload OwnedI64Cell) (field tag I64)))
+          (pack-owned (type (owned-product (field payload OwnedI64Cell) (field tag I64)))
+            (field payload (local c)) (field tag (local n))))
+        (binding tag (type I64) (call product-read::forwarded-tag (types OwnedI64Cell) (local p)))
+        (binding again (type I64) (field (local p) (name tag)))
+        (in (unpack-owned (type (owned-product (field payload OwnedI64Cell) (field tag I64)))
+          (local p)
+          (field payload (binding child (type OwnedI64Cell)))
+          (field tag (binding ignored (type I64)))
+          (in (record structural
+            (field direct (local again))
+            (field forwarded (local tag))
+            (field payload (call extract (local child))))))))))
+    (test create example (visibility private)
+      (actual (call main (i64 -257)))
+      (expected (record structural
+        (field direct (i64 -257)) (field forwarded (i64 -257)) (field payload (i64 -257)))))
+    (component create command (visibility private)
+      (port create main (type (function (I64) (record (direct I64) (forwarded I64) (payload I64)))) (function main))))
+  (target create metadata-read (component read-consumer::command) (runner command) (port read-consumer::command::main)))
+declarations.end
