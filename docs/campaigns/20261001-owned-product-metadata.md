@@ -66,6 +66,37 @@ Logs, generated fixture candidates and copied executables belong under
 Subsequent observations below bind their actual source rather than relabelling
 earlier failed or incomplete attempts.
 
+## First frozen-source full run and correction
+
+The isolated implementation was committed as
+`fc11fcfaf41ca1a6ee85793b6f58330d9fa69b1a`, tree
+`a0f487510e203ea5e83c6b399d59377eef994c14`. It includes the generated native
+artifacts, four new native first-use packs and five current-envelope fixtures.
+`full-01.log` records a completed fresh full run: 24 of 26 gates passed, zero
+reuse. Receipt `.artifacts/lkjscript-dev/check/1790856817189373973-835869-0/receipt.json`
+(68,789 bytes, `verification_61af51688fa411be5042457c04a0820762fa097bb0e4809d4c3eeb6cd1f834d7`)
+remains failed. The workspace library ran 1,032 passing tests, four failing tests
+and eight existing ignored cases; later workspace test executables were not reached.
+
+Three failing assertions still expected artifact 23 rather than the deliberately
+selected artifact 24. The fourth still expected structural-owned-product feature
+revision 1 instead of 2. Correct those explicit expectations, not the historical
+fixture inputs or the new semantic contracts. The second failed gate was service
+acceptance: its independently pinned lkjournal artifact SHA-256 was still the prior
+artifact's digest. This same run had already rebuilt and byte-compared both maintained
+standard and lkjournal artifacts successfully. Bind service acceptance and its current
+README to the regenerated 1,375,404-byte lkjournal artifact:
+`40c7c2760e2cfe38bd07a0e733d0193391c53f83afbfbf70327281756e9a9601`.
+Historical source and release records retain the earlier digest. This pin change
+is not itself proof of service behavior; the corrected full run must execute it.
+
+The focused correction run passed all 29 `f64_` cases, including the three prior
+failures. The witness control then reached its next obsolete expectation: the exact
+validator digest still named the predecessor feature inventory. Preserve that
+predecessor digest as an explicit non-reuse assertion and bind the new exact digest,
+while retaining the feature-by-feature checks. `witness-corrected.log` records this
+intermediate failure. Full source acceptance must be renewed after these corrections.
+
 ## Acceptance and delivery
 
 Pending at this source-writing point. Full fresh source acceptance, copied-product
