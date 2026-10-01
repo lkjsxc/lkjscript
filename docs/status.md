@@ -54,6 +54,16 @@ public v0.1.62 release. Graph, compiler, artifact and application-data encodings
 are not changed by this numbering increment; refreshed capability digests still
 require re-planning retained review requests after an executable change.
 
+Fresh full-source acceptance passed on `62c30b763047afc70816e48ce397178bdad70c29`
+(tree `96ac58d4eea29443257b9444cb9f0ccc31c2ccb4`): 26/26 gates freshly passed,
+zero reused, no unrun gates and stable inputs. The ordinary workspace suite passes
+1469 tests, fails none and retains 29 pre-existing ignored cases; two additional
+focused controls also pass. The final copied host executable reproduces all eight
+reference pages outside the checkout. The [continuation](campaigns/20261001-version-policy.md#acceptance-and-publication-boundary)
+retains exact receipts, failed predecessors, native-input controls and limits.
+The reporting-only descendant updates observations, not tested executable code.
+This is source acceptance, not a new public release or finalized static-archive proof.
+
 ## Integrated v0.1.61 language development
 
 The [v0.1.61 release notes](releases/v0.1.61.md) select owned data across ordinary

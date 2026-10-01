@@ -240,9 +240,45 @@ result; this targeted pass does not replace fresh full-source acceptance.
 
 ## Acceptance and publication boundary
 
-Corrected-source acceptance and exact mainline delivery are recorded below when
-observed. Source checks do not accept a finalized archive or publish a release.
-Keep the existing v0.1.61 candidate independent. A new v0.1.62 distribution is
+Exact corrected source `62c30b763047afc70816e48ce397178bdad70c29`, tree
+`96ac58d4eea29443257b9444cb9f0ccc31c2ccb4`, passes
+`lkjscript-dev check full --fresh --jobs 2 --machine` with pinned Rust 1.98.0:
+26/26 gates freshly passed, zero reused, none unrun and no failure. Initial and
+final source input digest are both
+`verification_b2610ec45bf659bcf584cf523f0bf1ea9109aed83d3e8609a3d3c9da29663239`;
+`input_stable=true`, 1336 tracked inputs and no untracked source. The independent
+failed predecessor receipts above remain unchanged.
+
+The final receipt is
+`.artifacts/lkjscript-dev/check/1790845529023463152-527749-0/receipt.json`, 65363
+bytes, digest `verification_523332a9f414ee6f8aa1e37c4e027023ff63a9696066d454ad216ffec29b3e78`.
+The workspace log contains 1471 passing executions, zero failures and 29 existing
+ignored cases: 1469 ordinary workspace tests plus two separately invoked focused
+controls. The ordinary suite includes 1031 root-library, 183 public-CLI and 208
+contributor-library passes. No ignore was added. Full source acceptance also
+includes release-command lifecycle, generated guides, exact product surface,
+distributed/outbound/stateful HTTP, offline packages, pure-tail and service gates.
+Fresh means no prior gate result is reused; it does not disable Cargo compilation
+caches or assert every native package compilation is cold.
+
+The final release-profile host executable has SHA-256
+`118aa5492a836cb5b47abc4e7598e79c0a3104e21cbd6fd30813979defedc373`, distinct from
+the earlier focused binary. Copy those actual final bytes to
+`/tmp/lkjscript-version-inventory-20261001.tGKOGw/lkjscript-final` and independently
+confirm the same hash. Under an isolated HOME and minimal PATH outside the checkout,
+it reports `lkjscript 0.1.62`, returns `version-policy=opaque-triplet` with the same
+complete capabilities digest and `unchanged=true`, and generates all eight
+reference pages. `diff -qr` against the tracked generated directory reports exact
+content equality. This final-boundary probe does not claim bit-reproducible builds,
+static musl distribution acceptance or untested platform support.
+
+The final reporting-only descendant changes this continuation and `docs/status.md`;
+production code, tests, native packs, generated references and dependency selections
+remain those of the accepted source. Normal mainline delivery must preserve the
+two unrelated main-checkout files, old stash, worktrees and running services and
+must independently confirm the GitHub ref; no force push or release relabeling is
+part of this increment. Source checks do not accept a finalized archive or publish
+a release. Keep the existing failed v0.1.61 candidate independent. A new v0.1.62 distribution is
 deferred until the next selected product milestone or an explicit release request,
 with its own exact-source and finalized-archive acceptance; do not rebuild or
 relabel the frozen candidate merely to change numbering policy.
