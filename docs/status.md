@@ -31,7 +31,25 @@ v0.1.60 does **not** include the v0.1.61 owned-memory and byte-range development
 below. Earlier immutable releases and genuine failed or superseded candidates remain
 unchanged. Inspect the installed executable with `lkjscript capabilities`.
 
-## Development v0.1.61
+## Development v0.1.62: opaque product numbering
+
+The owner's 2026-10-01 decision gives all three `A.B.C` components the same
+identifier-only role. None denotes stability, compatibility, change size or feature
+availability. Development capability discovery declares `version-policy=opaque-triplet`;
+exact `--version` output is unchanged. One release-container validator now owns the
+canonical 64-byte `vA.B.C` spelling for production, verifier handoff and installation.
+Two predecessor regression controls reproduced overlong-tag acceptance in the
+contributor producer and handoff paths while the installer already rejected it.
+The correction preserves exact matching and the existing container admission bound.
+
+The [identity contract](spec/product-surface.md#opaque-three-component-identifiers),
+[development notes](releases/v0.1.62.md) and [continuation](campaigns/20261001-version-policy.md)
+separate this work from the frozen v0.1.61 candidate. Source selection is not a
+public v0.1.62 release. Graph, compiler, artifact and application-data encodings
+are not changed by this numbering increment; refreshed capability digests still
+require re-planning retained review requests after an executable change.
+
+## Integrated v0.1.61 language development
 
 The [v0.1.61 release notes](releases/v0.1.61.md) select owned data across ordinary
 libraries as the next binary milestone. Candidate `36828457203/1` was dispatched
@@ -87,9 +105,9 @@ These are cumulative admission charges, not allocator size classes, RSS or
 live-heap measurements. The [continuation](campaigns/20261001-owned-storage-admission.md)
 retains the failed predecessor controls and exact-source verification.
 
-### Structural owned products (integration pending)
+### Structural owned products
 
-The current isolated implementation adds explicit fixed named products, consuming
+The integrated implementation adds explicit fixed named products, consuming
 construction from live locals and complete lexical decomposition. Products compose
 one or more Owned payloads with closed ordinary metadata, including nested products,
 whole synchronous borrows and exact implementation witnesses. Product ownership is
@@ -99,9 +117,10 @@ slice. See the [specification](spec/owned-products.md),
 [native guide](guides/native-owned-products.md) and
 [implementation evidence](campaigns/20261001-owned-products.md).
 
-This work has not been integrated or released. Its derived compiler/artifact cut
-requires rebuilding retained source; historical source and immutable releases remain
-unchanged. Final full acceptance belongs to the main integrator.
+This work reached main at `0dadaed8` and passed the source acceptance recorded below;
+it is not in public v0.1.60. Its derived compiler/artifact cut requires rebuilding
+retained source; historical source and immutable releases remain unchanged. The
+separate v0.1.61 candidate owns final-distribution acceptance.
 
 ## Current authority and maintained consumers
 
@@ -162,8 +181,10 @@ to retry. See the [deployment contract](spec/deployment-security.md).
   cross-package borrow/consume contracts; general resource returns,
   requirement-polymorphic resource transfer and asynchronous borrowing remain absent.
   Ambiguous name-only grants reject; exact package/requirement selectors disambiguate.
-- Owned aggregates and structured asynchronous memory transfer remain future work.
-  Anonymous closures, automatic capture/generic inference, a native-code language
+- Fixed structural owned products are integrated development, not in public v0.1.60.
+  General owned containers, partial moves, field borrows and structured asynchronous
+  memory transfer remain future work. Anonymous closures, automatic capture/generic
+  inference, a native-code language
   backend, SIMD and a browser/Wasm backend are not established by current features.
 - Arbitrary outbound URLs/methods, outbound WebSockets and Nostr signing/replay are
   not provided by the relay-information recipe. Callable effects, current allowances

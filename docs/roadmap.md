@@ -58,13 +58,22 @@ and lexical/failure cleanup across ordinary generic packages. Capability-resourc
 authority remains separate. The [first-order owned abstraction](spec/owned-generics.md)
 implements rank-one Owned constraints and explicit nominal implementation witnesses
 for ByteBuffer and an independent scalar cell. The
-[structural product slice](spec/owned-products.md), pending integration, composes
+[structural product slice](spec/owned-products.md), now integrated in development, composes
 explicit affine fields with closed ordinary metadata and complete consuming
 decomposition. Generic abstraction is deliberately over Owned payloads; open
 ordinary metadata parameters require a future first-order data proof. Extend this boundary toward
 typed traits, general lifetimes and region policies; none is supplied by this
 increment. Keep declared ownership/effect meaning separate from physical placement
 and recomputable analyses.
+
+The next preferred composition experiment is an owned choice/outcome: success may
+transfer an owner, while a rejected operation can return its still-owned payload.
+Ordinary unrestricted Option/Result containers are not an implicit escape hatch.
+Require complete consuming case analysis, exact generic/package witnesses and
+single-owner failure cleanup before using this boundary for asynchronous queues.
+This is a selected experiment, not implemented syntax or a new release-number
+milestone. Its purpose is to make recoverable failure compositional before growing
+shared-host supervision or introducing more concrete memory carriers.
 
 Exercise a generic producer/transformer/consumer across a package boundary.
 Require independent negative cases for duplicate consumption, escaping a borrow,

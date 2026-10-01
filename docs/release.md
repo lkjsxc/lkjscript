@@ -4,6 +4,16 @@ GitHub Releases are the public binary distribution path. Accept one finalized ca
 its exact producer run and attempt, and promote its unchanged archive, checksum and bootstrap.
 Content identity, behavioral acceptance and publication authority are separate decisions.
 
+Product tags are exact `vA.B.C` identifiers, not Semantic Versioning promises.
+All three decimal components have the same role: none denotes compatibility,
+stability, change size or a feature milestone. The root Cargo package owns the
+whole version; do not introduce a second version file or synchronize unrelated
+contract generations. Preserve canonical spelling and the 64-byte tag bound at
+the shared release-container validator. Match the entire product/tag identity.
+Select public/latest explicitly; do not infer compatibility or publication from
+numeric ordering. Existing published tags, candidate bytes and source bindings
+remain unchanged. See the [product identity contract](spec/product-surface.md#opaque-three-component-identifiers).
+
 Current delivery observation (2026-10-01): immutable public/latest **v0.1.60** is
 release `400357606`, published at 04:10:53 JST. Original producer `36617982924/1`
 was accepted at source `2962c43f`; promotion `36763094941/1` completed at 04:12:24 JST
@@ -415,9 +425,9 @@ VERIFIER=/absolute/immutable/lkjscript-dev
   --candidate /absolute/new/lkjscript \
   --cargo-about /absolute/pinned/cargo-about \
   --cargo-about-archive /absolute/pinned/cargo-about.tar.gz \
-  --output /absolute/new/assets --tag vMAJOR.MINOR.PATCH
+  --output /absolute/new/assets --tag vA.B.C
 "$VERIFIER" release verifier prepare --executable "$VERIFIER" \
-  --output /absolute/new/verifier --tag vMAJOR.MINOR.PATCH --commit EXACT_PRODUCT_SHA
+  --output /absolute/new/verifier --tag vA.B.C --commit EXACT_PRODUCT_SHA
 /absolute/new/verifier/lkjscript-dev release candidate accept \
   --assets /absolute/new/assets \
   --source-receipt /absolute/repository/.artifacts/lkjscript-dev/check/RUN/receipt.json \

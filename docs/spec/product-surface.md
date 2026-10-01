@@ -14,15 +14,47 @@ not replace exact semantic revisions, content digests, package revisions, target
 SHAs, dependency versions, or external tool versions. Those values retain accurately labeled
 identity domains.
 
+### Opaque three-component identifiers
+
+Owner decision: 2026-10-01 (Asia/Tokyo). Product versions use `A.B.C`; all three
+components are decimal identifiers with the same role. None denotes change size,
+stability, compatibility, a language edition, feature availability or support.
+This is not Semantic Versioning. In particular, a leading `0` does not designate
+instability and a leading `1` does not promise stability. Changing only `C` may
+break a contract; changing `A` or `B` need not. No component is a special milestone.
+There is no fixed component width, mandatory carry threshold or compatibility range.
+
+The release spelling is exactly `vA.B.C`, with three nonempty ASCII decimal
+components, no leading zero except the single digit `0`, and at most 64 bytes
+including `v` and dots. Signs, whitespace, suffixes, build metadata, ranges and
+wildcards reject. These are canonical identity and containment rules, not a
+compatibility claim. Tag validation does not parse machine integers or privilege
+one component. A matching product selection requires the whole exact identifier.
+The single release-container validator owns this spelling for production,
+verifier handoff and runtime installation.
+
+Use exact contract identities and their declared admission rules, accepted package
+closures, executable capability discovery and actual tested behavior to determine
+support. Neither a shared numeric prefix nor a numerically larger identifier is
+compatibility evidence. Public `latest` is an explicitly selected distribution,
+not a runtime version range; local inventory ordering does not select it. Published
+identities remain immutable. The root Cargo package remains the single product
+version owner; Cargo's format/resolver rules for external dependencies are not
+changed by this product policy.
+
 A source package version alone does not imply a tag or public release. The current availability
 and verification findings belong to [status](../status.md). Older tags, releases, assets, and
 metadata continue to identify their original snapshots.
 
 ## Public projection
 
-Default and focused capability discovery begins with product name/version and an opaque
-capabilities digest. It then reports stable operations, grammar, fields, limits, diagnostics,
-authority effects, project requirements, and security nonclaims. The digest binds the executable's
+Default, focused and cached capability discovery begins with a product record
+containing `name`, `version` and `version-policy=opaque-triplet`, followed by an opaque
+capabilities digest. The policy field describes every component, not another version.
+It is included in the complete capability digest; clients must admit this field and
+refresh stale capability caches. The exact `--version` output remains unchanged.
+Discovery then reports operations, grammar, fields, limits, diagnostics, authority
+effects, project requirements, and security nonclaims. The digest binds the executable's
 complete capability projection, is deterministic, and is cache evidence rather than program
 meaning.
 
@@ -65,7 +97,8 @@ immutable bundle and descriptor for recovery; executable updates do not migrate 
 project-independent operations. Project/runner flags, duplicate/unknown flags and missing values
 reject before mutation. No project discovery, application invocation, grants or secrets are involved.
 Only Linux x86-64 admits the static `x86_64-unknown-linux-musl` container. Tags are exact canonical
-stable `vMAJOR.MINOR.PATCH` values; SHA-256 is exactly 64 lowercase hexadecimal characters.
+`vA.B.C` identifiers under the opaque policy above; SHA-256 is exactly 64 lowercase
+hexadecimal characters.
 The default prefix is absolute `$HOME/.local`; absent/nonabsolute HOME requires explicit absolute
 `--prefix`. PATH and shell profiles are never edited. Paths are at most 4096 bytes/64 components.
 

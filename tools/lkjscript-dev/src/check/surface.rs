@@ -355,7 +355,7 @@ fn inspect_outputs(
             DevError::corrupt(format!("product-surface output '{label}' is not UTF-8"))
         })?;
         let prefix = format!(
-            "product name=lkjscript version={}\ncapabilities digest=",
+            "product name=lkjscript version={} version-policy=opaque-triplet\ncapabilities digest=",
             lkjscript::PRODUCT_VERSION
         );
         if !text.starts_with(&prefix) {

@@ -5,11 +5,15 @@ Date: 2026-08-29 UTC.
 ## Status
 
 Accepted and implemented for the static 0.1.8 Linux distribution cutover.
+Amended by the owner's 2026-10-01 decision: all three product-version components
+are opaque identifiers, with no Semantic Versioning roles. The single-owner
+and independently owned contract decisions below remain in force.
 
 ## Decision
 
 The version of the root `lkjscript` Cargo package is the human-facing product release snapshot. It
-owns the matching annotated `vMAJOR.MINOR.PATCH` tag. That version identifies one distributed
+owns the matching annotated `vA.B.C` tag. All components have the same identifier-only
+role; no component denotes compatibility, change size or stability. That version identifies one distributed
 product selection; it is not a language edition or a compatibility version for the meaning graph,
 CLI, executable registry, project, artifact, deployment, runtime, standard package, repository, or
 contributor tooling.
@@ -33,7 +37,8 @@ the root package version and executable-owned contract identities directly.
 
 ## Consequences and reversal
 
-A product patch may leave every language and storage contract unchanged, while an independently
+A product release may change any component while leaving every language and storage contract
+unchanged, or change only its last component while breaking a contract. An independently
 owned contract may advance without forcing unrelated package versions to match. Release validation
 rejects a tag that differs from the root package version and rejects a candidate whose executable
 contract identities differ from its manifest.

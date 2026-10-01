@@ -7639,6 +7639,7 @@ fn capabilities_response_writer(
         &[
             ("name", snapshot.product_name.to_owned()),
             ("version", snapshot.product_version.to_owned()),
+            ("version-policy", snapshot.product_version_policy.to_owned()),
         ],
     )?;
     let mut fields = vec![("digest", snapshot.digest.clone())];

@@ -718,28 +718,8 @@ fn quoted_assignment(line: &str, key: &str) -> Result<Option<String>, DevError> 
 }
 
 fn validate_strict_tag(tag: &str, product_version: &str) -> Result<(), DevError> {
-    let expected = format!("v{product_version}");
-    if tag != expected {
-        return Err(DevError::corrupt(format!(
-            "release tag '{tag}' does not equal product version tag '{expected}'"
-        )));
-    }
-    let version = tag
-        .strip_prefix('v')
-        .ok_or_else(|| DevError::corrupt("release tag must start with 'v'"))?;
-    let parts = version.split('.').collect::<Vec<_>>();
-    if parts.len() != 3
-        || parts.iter().any(|part| {
-            part.is_empty()
-                || !part.bytes().all(|byte| byte.is_ascii_digit())
-                || (part.len() > 1 && part.starts_with('0'))
-        })
-    {
-        return Err(DevError::corrupt(format!(
-            "release tag '{tag}' is not strict vMAJOR.MINOR.PATCH"
-        )));
-    }
-    Ok(())
+    lkjscript::release_container::validate_strict_tag(tag, product_version)
+        .map_err(|error| DevError::corrupt(error.message))
 }
 
 fn toolchain_facts(repository: &Path) -> Result<ToolchainIdentity, DevError> {
@@ -1195,7 +1175,21 @@ mod tests {
     }
 
     #[test]
-    fn release_strict_tag_accepts_only_matching_plain_semver() {
+    fn release_tag_length_matches_container_admission() {
+        let version = format!("{}.0.0", "9".repeat(59));
+        let tag = format!("v{version}");
+        assert_eq!(tag.len(), 64);
+        assert!(validate_strict_tag(&tag, &version).is_ok());
+        assert!(lkjscript::release_container::validate_strict_tag(&tag, &version).is_ok());
+        let version = format!("{}.0.0", "9".repeat(60));
+        let tag = format!("v{version}");
+        assert_eq!(tag.len(), 65);
+        assert!(lkjscript::release_container::validate_strict_tag(&tag, &version).is_err());
+        assert!(validate_strict_tag(&tag, &version).is_err());
+    }
+
+    #[test]
+    fn release_strict_tag_accepts_only_matching_opaque_triplets() {
         assert!(validate_strict_tag("v0.1.0", "0.1.0").is_ok());
         for tag in ["0.1.0", "v01.1.0", "v0.1", "v0.1.0-rc.1", "v0.1.1"] {
             assert!(validate_strict_tag(tag, "0.1.0").is_err(), "accepted {tag}");

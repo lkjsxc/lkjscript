@@ -925,6 +925,56 @@ fn product_version_is_exact_and_has_no_alias_or_mixed_form() {
 }
 
 #[test]
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn runtime_selection_uses_opaque_exact_tags_without_prefix_or_range_fallback() {
+    let directory = tempfile::tempdir().expect("isolated runtime policy directory");
+    let prefix = directory.path().join("installation");
+    let prefix_text = prefix.to_str().expect("UTF-8 temporary prefix");
+    for tag in ["v0.0.0", "v0.1.61", "v0.2.0", "v1.0.0", "v1.1.0", "v7.8.9"] {
+        let output = compact_failure_output(command(&[
+            "runtime",
+            "select",
+            tag,
+            "--prefix",
+            prefix_text,
+        ]));
+        assert_eq!(
+            compact_field(compact_record(&output, "diagnostic"), "code"),
+            Some("runtime_not_installed"),
+            "canonical identity {tag} must reach exact installation lookup"
+        );
+        assert!(!prefix.exists(), "lookup created an installation for {tag}");
+    }
+    let oversized = format!("v{}.0.0", "9".repeat(60));
+    for tag in [
+        "latest",
+        "^1.0.0",
+        "~1.0.0",
+        ">=1.0.0",
+        "v1.*",
+        "v1.0.0-rc.1",
+        &oversized,
+    ] {
+        let output = compact_failure_output(command(&[
+            "runtime",
+            "select",
+            tag,
+            "--prefix",
+            prefix_text,
+        ]));
+        assert_eq!(
+            compact_field(compact_record(&output, "diagnostic"), "code"),
+            Some("runtime_tag"),
+            "not an exact bounded identity: {tag}"
+        );
+        assert!(
+            !prefix.exists(),
+            "invalid identity touched installation: {tag}"
+        );
+    }
+}
+
+#[test]
 fn capabilities_discovery_is_compact_focused_and_exportable() {
     let capabilities = compact_success(&["capabilities"]);
     assert_eq!(capabilities[0].operation, "product");
@@ -932,7 +982,8 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         compact_record_values(&capabilities[0]),
         vec![
             ("name", "lkjscript"),
-            ("version", lkjscript::PRODUCT_VERSION)
+            ("version", lkjscript::PRODUCT_VERSION),
+            ("version-policy", "opaque-triplet")
         ]
     );
     assert_eq!(
@@ -973,6 +1024,10 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         Some("true")
     );
     assert_eq!(cached.len(), 3);
+    assert_eq!(
+        compact_field(compact_record(&cached, "product"), "version-policy"),
+        Some("opaque-triplet")
+    );
     let stale_digest = if capabilities_digest == "0".repeat(64) {
         "1".repeat(64)
     } else {

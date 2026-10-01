@@ -120,8 +120,7 @@ pub fn resolve_prefix(explicit: Option<&str>) -> Result<PathBuf, Diagnostic> {
 }
 
 pub fn validate_tag(tag: &str) -> Result<(), Diagnostic> {
-    container::validate_strict_tag(tag, tag.strip_prefix('v').unwrap_or(""))
-        .map_err(|error| source("runtime_tag", error.message))
+    container::validate_tag(tag).map_err(|error| source("runtime_tag", error.message))
 }
 fn host() -> Result<(), Diagnostic> {
     if !cfg!(all(target_os = "linux", target_arch = "x86_64")) {

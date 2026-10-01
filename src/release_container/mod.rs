@@ -4,11 +4,13 @@
 mod elf;
 mod encoding;
 pub mod model;
+mod tag;
 pub use elf::inspect_static_elf_bytes;
 use model::{ReleaseManifest, Sha256Digest};
 use sha2::{Digest, Sha256};
 use std::io::Read;
 use std::ops::Range;
+pub use tag::{MAXIMUM_TAG_BYTES, validate_strict_tag, validate_tag};
 
 pub const TARGET_TRIPLE: &str = "x86_64-unknown-linux-musl";
 pub const ARCHIVE_NAME: &str = "lkjscript-x86_64-unknown-linux-musl.tar.gz";
@@ -287,31 +289,6 @@ pub fn validate_manifest(manifest: &ReleaseManifest) -> Result<(), ContainerErro
         return Err(ContainerError::corrupt(
             "release manifest contains an invalid measured identity",
         ));
-    }
-    Ok(())
-}
-
-pub fn validate_strict_tag(tag: &str, product_version: &str) -> Result<(), ContainerError> {
-    let expected = format!("v{product_version}");
-    if tag.len() > 64 || tag != expected {
-        return Err(ContainerError::corrupt(format!(
-            "release tag '{tag}' does not equal product version tag '{expected}'"
-        )));
-    }
-    let version = tag
-        .strip_prefix('v')
-        .ok_or_else(|| ContainerError::corrupt("release tag must start with 'v'"))?;
-    let parts = version.split('.').collect::<Vec<_>>();
-    if parts.len() != 3
-        || parts.iter().any(|part| {
-            part.is_empty()
-                || !part.bytes().all(|byte| byte.is_ascii_digit())
-                || (part.len() > 1 && part.starts_with('0'))
-        })
-    {
-        return Err(ContainerError::corrupt(format!(
-            "release tag '{tag}' is not strict vMAJOR.MINOR.PATCH"
-        )));
     }
     Ok(())
 }

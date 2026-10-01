@@ -193,6 +193,14 @@ agents exercise delegated engineering judgment. Apache-2.0 remains the license.
 Official-mainline governance does not alter the license or third-party permissions.
 There is no current stability, compatibility, user-acquisition or support promise.
 
+The owner's 2026-10-01 numbering decision applies equally to all three components
+of `A.B.C`: they are identifiers, not major/minor/patch classifications. Neither
+`0` nor `1` in the first component denotes a maturity stage. Do not infer change
+size, compatibility, required migration or supported features from any component.
+The [product identity contract](spec/product-surface.md#opaque-three-component-identifiers)
+owns exact spelling, machine discovery and selection; separately owned semantic
+and storage contracts continue to determine actual admission.
+
 The owner permits breaking changes without a required migration path, including
 resetting owner-authorized experimental lkjscript data. Do not reintroduce a blanket
 product-level confirmation or backwards-compatibility requirement. This permission

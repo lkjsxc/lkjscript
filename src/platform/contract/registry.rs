@@ -2332,8 +2332,8 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "runtime_tag",
             DiagnosticClass::Source,
-            "The tag is not exact canonical stable semver.",
-            "Use an installed exact vMAJOR.MINOR.PATCH tag.",
+            "The tag is not an exact canonical three-component product identifier.",
+            "Use an installed exact vA.B.C tag; no component implies compatibility.",
         ),
         diagnostic(
             "runtime_sha256",
@@ -6315,6 +6315,7 @@ pub struct RegistrySnapshot {
 pub struct CapabilitiesSnapshot {
     pub product_name: &'static str,
     pub product_version: &'static str,
+    pub product_version_policy: &'static str,
     pub digest: String,
     pub bytes: Vec<u8>,
     pub sections: BTreeMap<RegistrySection, RegistrySectionSnapshot>,
@@ -6391,11 +6392,13 @@ pub fn capabilities_snapshot() -> Result<CapabilitiesSnapshot, String> {
     let registry = registry_snapshot()?;
     let product_name = "lkjscript";
     let product_version = crate::PRODUCT_VERSION;
+    let product_version_policy = crate::PRODUCT_VERSION_POLICY;
     let product = compact_record(
         "product",
         &[
             ("name", product_name.to_owned()),
             ("version", product_version.to_owned()),
+            ("version-policy", product_version_policy.to_owned()),
         ],
     )?
     .into_bytes();
@@ -6432,6 +6435,7 @@ pub fn capabilities_snapshot() -> Result<CapabilitiesSnapshot, String> {
     Ok(CapabilitiesSnapshot {
         product_name,
         product_version,
+        product_version_policy,
         digest,
         bytes,
         sections,

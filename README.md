@@ -10,15 +10,23 @@ The graph is the sole editable authority. Stable identities preserve declaration
 through edits, while names remain useful, changeable locators. Pure functions,
 tasks, exact libraries and standalone application bundles share this model.
 
-**Public:** [v0.1.48](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.48),
-with immutable deployment rebuilds, the editable native [web starter](docs/guides/native-web.md),
-native authoring, offline libraries, general byte conversion and the facilities used by the ordinary
-[form codec](docs/guides/native-forms.md) and [durable browser editor](docs/guides/native-editor.md).
-Promotion [36214860067/1](https://github.com/lkjsxc/lkjscript/actions/runs/36214860067) completed
-immutable publication and anonymous installed verification using the original accepted bytes.
-Older v0.1.45 does not contain the byte operations required by these examples.
+**Public:** [v0.1.60](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.60),
+with recursive cross-package [resource contracts](docs/guides/native-resources.md),
+explicit deployment grants, reusable immutable-value storage and the in-process
+[shared service host](docs/spec/shared-runtime.md). Native authoring, offline
+libraries, immutable deployment rebuilds, the [web starter](docs/guides/native-web.md),
+[form codec](docs/guides/native-forms.md) and [durable browser editor](docs/guides/native-editor.md)
+remain available. Promotion [36763094941/1](https://github.com/lkjsxc/lkjscript/actions/runs/36763094941)
+completed immutable publication and anonymous installed verification with the original
+accepted bytes. Owned-memory and owned-product development is not in this binary.
 [Current status](docs/status.md) separates available releases, development source
 and unproved properties.
+
+Product versions are **opaque `A.B.C` identifiers**. All three components have the
+same role: none denotes compatibility, stability, change size or a feature milestone.
+A leading `1` is not a stability promise. Use exact executable contracts and capability
+discovery, not version prefixes, to determine support. See the
+[version policy](docs/spec/product-surface.md#opaque-three-component-identifiers).
 
 ## Download and install
 
@@ -29,10 +37,10 @@ executing it. The exact URL below remains pinned even when a newer release appea
 ```sh
 curl -q --fail --location --proto '=https' --proto-redir '=https' \
   --connect-timeout 15 --max-time 180 --max-filesize 16384 \
-  --output install-v0.1.48.sh \
-  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.48/install.sh
-cat install-v0.1.48.sh
-sh install-v0.1.48.sh --prefix "$HOME/.local"
+  --output install-v0.1.60.sh \
+  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.60/install.sh
+cat install-v0.1.60.sh
+sh install-v0.1.60.sh --prefix "$HOME/.local"
 export PATH="$HOME/.local/bin:$PATH"
 lkjscript --version
 lkjscript runtime list
@@ -111,15 +119,15 @@ The [web editing loop](docs/guides/native-web.md) and [build contract](docs/spec
 cover retained old versions, independent data roots and failures. Check the selected
 binary's `capabilities build`; this command is not retroactively added to older releases.
 
-### Shared service host in development
+### Shared service host in the public binary
 
-The development v0.1.53 executable accepts repeated `serve --deployment DESCRIPTOR`
-arguments to host HTTP and interactive services in one process. Equal exact bundles
-share immutable prepared code; instance configuration, secrets, grants, data adapters
-and cancellation remain private. Different exact versions can coexist. The
+Public v0.1.60 accepts repeated `serve --deployment DESCRIPTOR` arguments to host
+HTTP and interactive services in one process. Equal exact bundles share immutable
+prepared code; instance configuration, secrets, grants, data adapters and cancellation
+remain private. Different exact versions can coexist. The
 [shared-runtime contract](docs/spec/shared-runtime.md) defines startup, joined stop,
-limits and nonclaims. This is not in the public v0.1.52 binary and does not introduce
-hot reload, automatic data migration or an OS-process isolation boundary.
+limits and nonclaims. This does not introduce hot reload, automatic data migration
+or an OS-process isolation boundary.
 
 ### Nostr relay information from the public binary
 

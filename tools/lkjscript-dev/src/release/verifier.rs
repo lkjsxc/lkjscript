@@ -372,22 +372,8 @@ fn require_absent_output(path: &Path) -> Result<(), DevError> {
 }
 
 pub(super) fn validate_tag(tag: &str) -> Result<(), DevError> {
-    let Some(version) = tag.strip_prefix('v') else {
-        return Err(DevError::usage("verifier handoff tag must start with 'v'"));
-    };
-    let parts = version.split('.').collect::<Vec<_>>();
-    if parts.len() != 3
-        || parts.iter().any(|part| {
-            part.is_empty()
-                || !part.bytes().all(|byte| byte.is_ascii_digit())
-                || (part.len() > 1 && part.starts_with('0'))
-        })
-    {
-        return Err(DevError::usage(
-            "verifier handoff tag must be exact vMAJOR.MINOR.PATCH",
-        ));
-    }
-    Ok(())
+    lkjscript::release_container::validate_tag(tag)
+        .map_err(|error| DevError::usage(format!("verifier handoff: {error}")))
 }
 
 #[cfg(test)]
@@ -418,6 +404,17 @@ mod tests {
         );
         assert!(validate_executable_bytes(0).is_err());
         assert!(validate_executable_bytes(384 * 1024 * 1024).is_ok());
+    }
+
+    #[test]
+    fn verifier_tag_length_matches_container_admission() {
+        let tag = format!("v{}.0.0", "9".repeat(59));
+        assert_eq!(tag.len(), 64);
+        assert!(validate_tag(&tag).is_ok());
+        let tag = format!("v{}.0.0", "9".repeat(60));
+        assert_eq!(tag.len(), 65);
+        assert!(lkjscript::release_container::validate_strict_tag(&tag, &tag[1..]).is_err());
+        assert!(validate_tag(&tag).is_err());
     }
 
     #[test]
