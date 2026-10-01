@@ -326,3 +326,90 @@ three-package source-removal workflow, exact discovery and existing allocation/
 operational policy controls without increased limits. The inherited and integrator
 observations now select the coherent source for one frozen full-profile acceptance;
 no combination of focused receipts is presented as that complete proof.
+
+## Accepted frozen source
+
+Implementation `0dadaed890d7425509a37d746088500650be1fb7`, tree
+`48e1d8382c3c254cf59e19214a35352ea042a425`, passed all 26 full-profile gates
+freshly, with stable inputs, zero reused results and no unrun gates. The complete
+receipt is `.artifacts/lkjscript-dev/check/1790836958149502354-176519-0/receipt.json`
+in the existing owned-generics worktree. Elapsed time was 1,111.207868922 seconds,
+with two checker workers and four Cargo build jobs. `full-1.log` and `.exit` retain
+the launcher record. No tracked source was edited during that run.
+
+Workspace execution passed 1,461 top-level tests, with zero failures and 29 existing
+ignored cases. The root library passed 1,027 with eight ignored; public CLI passed
+182 with one ignored. Two nested one-test subprocess controls are not counted twice.
+Every selected gate completed, including Clippy, offline predecessor/current controls,
+distributed and stateful HTTP, resident service lifecycle, generated discovery,
+standard/application tests and their independent artifact reproduction/comparison.
+This completes the previously pending source-acceptance boundary, not binary release
+acceptance. The original inherited failure remains preserved.
+
+## Copied optimized executable and independent public witness
+
+The copied optimized `native-lkjscript` reports v0.1.61 and has SHA-256
+`5aec812736d4d620d6ab0cdf5b572eb49084ae40b8ab7697afe9d9274df8ea9c`.
+The public test executable was copied from Cargo's reported output during the same
+frozen source run, not selected by a guessed filename; its SHA-256 is
+`4ea56e5fd3f6ee39801084f71aec74866503e544dc3060b191beafa03500e53d`.
+Both remain under `.artifacts/20261001-owned-products-integration/`.
+With an empty environment/PATH except the explicit `LKJSCRIPT_RELEASE_CANDIDATE`
+selector, execution from `/tmp` passed all 18 cases selected by `native_owned_`,
+`native_byte_buffer_`, `native_byte_ranges_` and `resident_policy`. Zero cases failed
+or were ignored, 165 were filtered, and two test threads completed in 27.83 seconds.
+`native-optimized.log` and exit 0 retain the complete result. This observes the
+optimized development product, not an executable extracted from a distribution.
+
+A separate directly authored packet program exercises two owned children, ordinary
+text/integer metadata, authored field order and unpack bindings that shadow outer
+names. Its two branches independently require:
+
+```json
+{"outer":7,"packet":{"bytes":{"$bytes":"/w=="},"label":"north","scalar":129,"tag":128}}
+{"outer":7,"packet":{"bytes":{"$bytes":"gA=="},"label":"south","scalar":-257,"tag":128}}
+```
+
+Both results passed through project execution and again through detached execution
+after the authoring directory and original proposal were moved aside. The canonical
+draft was unchanged; the generated descriptor retained empty grants. Every product
+command ran from a separate directory with an empty environment/PATH. Literal input,
+observed base/plan, expected results, draft, original project and all four outputs
+remain in `/tmp/lkjscript-owned-product-shadow.LTSyyk`; the literal and terminal are
+also retained as `independent-shadow.lkjc`, `.log` and exit 0 in the campaign evidence.
+This is a designed supplementary witness, not an additional maintained test count.
+The maintained three-package public test separately covers source/transport removal.
+
+The first supplementary launcher used a compound command where the background tool
+required an executable; it rejected `cd` with exit 127 before any test started.
+The subsequent explicit script invocation completed. That launcher failure is not
+semantic rejection evidence. A later nonessential combined status/release-document
+inspection was blocked by the tool's safety check and was not retried by another
+route; it is not counted as executed verification. No protections or permissions
+were changed. Completed tests and source evidence remain separate from that inspection.
+
+## v0.1.61 candidate selection
+
+The source now supplies the previously selected owned aggregate across ordinary
+libraries, rather than merely a new carrier or a compiler-internal helper. Together
+with immutable byte ranges, concrete memory, symbolic Owned parameters and explicit
+witnesses, it is a coherent successor to public v0.1.60. The new
+[v0.1.61 notes](../releases/v0.1.61.md) select that milestone. Its release and tag were
+unoccupied when queried on 2026-10-01. Public v0.1.60 and its accepted producer remain
+unchanged. No owned-product data or running deployment is implicitly migrated.
+
+After normal mainline delivery, use one configured candidate invocation at the exact
+integrated source. It must complete its own 20 source gates, finalized archive,
+six target owners, pinned userlands and installed recovery. The supplementary final-
+archive selection is the same 18 public cases above, run against that archive's
+exact extracted executable with no publishing credentials. Only after that acceptance
+may the ordinary unchanged-asset promotion be selected. A tag, main push or successful
+source profile is not a binary publication claim.
+
+The post-acceptance reporting changes touch only this campaign, current status,
+release procedure and new version notes. Formatting and diff checks passed, and
+comparison against `0dadaed8` confirmed no changes to language source, tests, tools,
+maintained packages/applications, manifests or workflows. The presentation consumer
+also passed its eight library tests and one command-line test, zero failures/ignored
+(`report-site.log`, exit 0). These are targeted descendant checks; the full receipt
+continues to name its original tested implementation source.

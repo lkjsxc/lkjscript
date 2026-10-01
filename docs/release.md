@@ -368,6 +368,25 @@ A forged summary, omitted/skipped/failed stage, cancellation or incomplete clean
 candidate acceptance. Diagnostic originals need not be relocatable; portability applies to the
 admitted terminal decision under authenticated service provenance, not arbitrary filesystem replay.
 
+## Selected v0.1.61 successor
+
+The [owned-data notes](releases/v0.1.61.md) combine byte ranges, concrete affine
+storage, symbolic Owned parameters, exact static witnesses and structural owned
+products. Source `0dadaed890d7425509a37d746088500650be1fb7` passed all 26 full-profile
+gates freshly with stable inputs and zero reuse; its workspace suite passed 1,461
+tests with 29 existing ignored cases. The [campaign](campaigns/20261001-owned-products.md#accepted-frozen-source)
+retains exact-source and copied-product results. No v0.1.61 tag or release existed
+at selection. This does not change public v0.1.60 or its immutable assets.
+
+Following normal mainline integration, one candidate must complete the existing
+source/final-archive/installed-recovery workflow at its exact event source. Before
+promotion, run all 18 cases selected by `native_owned_`, `native_byte_buffer_`,
+`native_byte_ranges_` and `resident_policy` against the exact executable extracted
+from that accepted archive, with cleared environment/PATH apart from the explicit
+candidate selector. Development-binary results do not satisfy that final-byte gate.
+No selection authorizes changing credentials, protections, immutability or existing
+tags. Candidate dispatch and actual terminal results are recorded by the campaign.
+
 ## Build and accept a candidate
 
 The maintained `Release` workflow uses explicit `workflow_dispatch` on main. It has no tag-triggered

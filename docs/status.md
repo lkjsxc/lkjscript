@@ -33,6 +33,10 @@ unchanged. Inspect the installed executable with `lkjscript capabilities`.
 
 ## Development v0.1.61
 
+The [v0.1.61 release notes](releases/v0.1.61.md) select owned data across ordinary
+libraries as the next binary milestone. Its own candidate/final-archive acceptance
+remains separate from source integration; public/latest is still v0.1.60.
+
 The following capabilities are integrated source development, not a public v0.1.61
 binary or an automatic application upgrade.
 
@@ -178,19 +182,22 @@ the [roadmap](roadmap.md) contains revisable choices, not promised implementatio
 
 ## Verification
 
-Source `ac218900c15c886a52418f9309af1a7fb10b7f2d`, tree
-`fc6cbcf277a2f7feae7bd4d8a22cf01c6a367867`, passed all 26 full-profile gates freshly,
+Source `0dadaed890d7425509a37d746088500650be1fb7`, tree
+`48e1d8382c3c254cf59e19214a35352ea042a425`, passed all 26 full-profile gates freshly,
 with stable inputs, zero reused results and no unrun gates. Workspace execution
-passed 1,438 top-level tests, with zero failures and 29 existing ignored cases.
+passed 1,461 top-level tests, with zero failures and 29 existing ignored cases.
 Two nested one-test subprocess controls are not counted twice.
-The copied optimized v0.1.61 executable separately passed all 11 selected owned-memory
-native cases from `/tmp` with an empty environment/PATH except its explicit candidate
-selector. This is development-product verification, not distribution acceptance.
+The copied optimized v0.1.61 executable separately passed all 18 selected owned-memory,
+byte-range and resident-policy cases from `/tmp` with an empty environment/PATH
+except its explicit candidate selector. An independently authored packet/shadowing
+witness passed both branches through project and source-moved detached execution.
+These results bind the [owned-product source](campaigns/20261001-owned-products.md#accepted-frozen-source),
+not a finalized distribution or another source revision.
 
 [Verification obligations](spec/verification.md) distinguish full source checks,
 20-gate release-source acceptance, six final-archive behavioral owners, pinned
 userlands, installed recovery, authenticated transfer and anonymous public acquisition.
-The [current campaign](campaigns/20261001-owned-storage-admission.md) binds the exact
+The [current campaign](campaigns/20261001-owned-products.md) binds the exact
 source, retained original logs and copied binaries. Reporting-only descendants do
 not relabel a tested source. The [previous detailed snapshot](https://github.com/lkjsxc/lkjscript/blob/9afa799794ac26fa90bd4b2413e6e4d26886ccb6/docs/status.md)
 preserves milestone chronology; current instructions live in the linked guides.
