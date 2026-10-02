@@ -82,6 +82,36 @@ not a fabricated accepted package: actual package publication and detached use
 remain the four-package public test's responsibility. The original 3-pass/1-fail
 run is retained, and the corrected source requires fresh execution.
 
+## Fixed source and public deployment correction
+
+Implementation `8279edca3fe05b0d258266bc2c15302c69e56bfe`, tree
+`fa87a746d67bff8e15fb0fea0eb2b208d694b5e1`, fixes the imported constraint scope.
+The fresh `focused-import-scope.log` reports **7 unit tests passed, 0 failed,
+0 ignored** (1,061 unrelated filtered, 1.11 seconds), including the new exact-package
+collision probe. The public selection reports 3 passed, 1 failed, exit 101.
+
+The actual optimized source executable is copied before subsequent build producers:
+`/tmp/lkjscript-task-owned-20261002/lkjscript-8279edca`, SHA-256
+`0b9185c929c6c7476360ea8841559c9235ad69f24eb91ee75696eb2d2bbe37f0`.
+The corresponding initial public harness SHA-256 is
+`b660967c5c0ee90c9d6fb7c80e7668e917a41fec10fd117517654aa5592ad5e1`.
+The enumerated 25-case copied-host selection runs outside the checkout with an
+empty environment/PATH except the candidate path: **24 passed, 1 failed, 0 ignored**,
+166 unrelated filtered, 44.64 seconds, exit 101. This is not passing acceptance.
+`8279edca-copied-host.log` and the separately targeted
+`8279edca-package-diagnostic.log` retain the complete failure.
+
+The remaining failure is after successful publication, import checking and artifact
+construction: the four-package fixture incorrectly uses source-only `run owned-tasks`
+for an empty-row task target. The existing runner correctly returns
+`normalized_runner_grants_required`. Correct the test, not the authority boundary:
+explicitly assert that source-only execution fails without publishing a result,
+then use the existing empty-grant deployment for both before-removal and source-free
+artifact execution. No product code changes after `8279edca` for this correction.
+The queued `full-8279edca.log` invocation was interrupted with exit 130 while waiting
+for Cargo's lock, before its harness/DAG started, so it supplies no full-gate result.
+The corrected test and frozen source require fresh public and full verification.
+
 ## Acceptance boundary
 
 The selected tests include actual resource use and source-free public artifacts,

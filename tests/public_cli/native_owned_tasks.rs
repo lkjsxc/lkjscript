@@ -129,11 +129,23 @@ fn native_owned_tasks_four_packages_keep_witnesses_and_source_free_execution() {
                     .root
                     .path()
                     .join(format!("result-{detached}-{n}-{accepted}.json"));
-                let mut args = if detached {
-                    vec!["run", "--deployment", path(&deployment)]
-                } else {
-                    vec!["run", "owned-tasks"]
-                };
+                if !detached && n == i64::MIN && !accepted {
+                    let rejected = consumer.cli(
+                        &[
+                            "run",
+                            "owned-tasks",
+                            "--arguments-file",
+                            path(&arguments),
+                            "--result-file",
+                            path(&output),
+                        ],
+                        false,
+                    );
+                    assert!(rejected.iter().any(|r| r.operation == "diagnostic"
+                        && compact_field(r, "code") == "normalized_runner_grants_required"));
+                    assert!(!output.exists());
+                }
+                let mut args = vec!["run", "--deployment", path(&deployment)];
                 args.extend([
                     "--arguments-file",
                     path(&arguments),
