@@ -1139,6 +1139,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         "capability-call",
         "transaction",
         "transaction-outcome",
+        "parallel",
     ];
     assert_eq!(
         expression_section
@@ -1213,6 +1214,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "transaction-outcome",
             "(transaction-outcome REQUIREMENT (types TYPE) (outcome OUTCOME REASON COMMITTED ABORTED CONDITION-FAILED CONFLICT) (binding NAME) BODY)",
         ),
+        ("parallel", "(parallel LEFT-CALL RIGHT-CALL)"),
     ] {
         assert!(change_section.iter().any(|record| {
             record.operation == "change.expression-syntax"
@@ -1259,6 +1261,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "root-ownership",
             "delayed-references",
             "occurrences-and-order",
+            "structured-parallel-tasks",
             "normalization",
             "capacity",
             "compatibility",

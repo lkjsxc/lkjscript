@@ -294,7 +294,7 @@ fn f64_successor_checks_stages_and_rebuilds_genuine_graph16_transaction_library(
             .collect::<Vec<_>>();
         let linked = compile_immutable(package, &container.objects, &dependencies).unwrap();
         let artifact = load_artifact(&linked.artifact.bytes).unwrap();
-        assert_eq!(artifact.manifest.contract_version, 25);
+        assert_eq!(artifact.manifest.contract_version, 26);
         assert_eq!(
             artifact.manifest.root_package,
             package.snapshot.root.package_id

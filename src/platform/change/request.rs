@@ -7,6 +7,7 @@ mod extraction;
 mod literal;
 mod precondition;
 mod references;
+mod test_retention;
 
 pub use literal::{AuthoredLiteralUpdate, AuthoredLiteralValue};
 
@@ -1056,6 +1057,8 @@ pub(crate) fn lower_authored_changes_with_source_owners<
                 };
                 let actual = lowerer.lower_expression(actual)?;
                 let expected = lowerer.lower_expression(expected)?;
+                let retained = test_retention::retain(&mut lowerer, old, [actual, expected])?;
+                let [actual, expected] = if retained { old } else { [actual, expected] };
                 if let OwnerRecord::Declaration(record) = lowerer.candidate_mut(owner)? {
                     record.payload = crate::platform::kernel::DeclarationPayload::Test {
                         actual,
@@ -1063,8 +1066,10 @@ pub(crate) fn lower_authored_changes_with_source_owners<
                         comparison: crate::platform::kernel::ComparisonPolicy::Exact,
                     };
                 }
-                for root in old {
-                    deletion::retire_replaced_expression_tree(&mut lowerer, root)?;
+                if !retained {
+                    for root in old {
+                        deletion::retire_replaced_expression_tree(&mut lowerer, root)?;
+                    }
                 }
             }
             AuthoredChange::SetFunctionLiterals { function, literals } => {

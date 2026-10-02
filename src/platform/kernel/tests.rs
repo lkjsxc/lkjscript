@@ -1787,9 +1787,17 @@ fn canonical_kernel_codec_manifest_is_frozen() {
     let (mut snapshot, _) = historical_prototype_snapshot();
     assert_eq!(
         manifest(&snapshot, contract::GRAPH_CONTRACT_IDENTITY),
-        "b0f6857c991aa8a44d679d4ccdcb612e5fa49396d9fe50c86c3c7f9463f2d439"
+        "f2fe441b13f5b6a20612ac4a37aaf164d232548669cb283e9dc997161674b111"
     );
     // Preserve genuine predecessor identities under their own exact generations.
+    snapshot.root.graph_contract_version = 20;
+    for owner in snapshot.owners.values_mut() {
+        owner.set_encoding_for_edit(20);
+    }
+    assert_eq!(
+        manifest(&snapshot, "lkjscript-meaning-graph-20"),
+        "b0f6857c991aa8a44d679d4ccdcb612e5fa49396d9fe50c86c3c7f9463f2d439"
+    );
     snapshot.root.graph_contract_version = 19;
     for owner in snapshot.owners.values_mut() {
         owner.set_encoding_for_edit(19);
