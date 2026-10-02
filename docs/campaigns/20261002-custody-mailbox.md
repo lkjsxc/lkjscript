@@ -121,3 +121,46 @@ through independent native producer/consumer packages with source-deleted
 execution and cancellation at each acceptance phase. The mutex/notification
 implementation is revisable; task semantics must not depend on a particular
 scheduler or on weakening origin isolation to make transport appear complete.
+
+## Accepted source and copied-executable continuation
+
+The resumed run retained source `7ea18ac9239ae99ddac892d44ad576b32b1afcdb`
+unchanged while its existing full verification completed. Run
+`1790950628132729917-93446-0` passed all 26 gates freshly, with stable inputs,
+zero reuse and no unrun gates. The all-target/all-feature workspace suites
+passed 1,538 tests, with zero failures and 29 unchanged ignored cases. Two
+nested subprocess probes passed separately and are not counted twice.
+Elapsed full-run time was 1,493.71 seconds. Its 65,469-byte receipt has digest
+`verification_0bce04fe432006be7e801fac4bfb3dd6e6c7face423bc7e8541cd6a6908cb807`.
+The original receipt and logs remain under
+`.artifacts/lkjscript-dev/check/1790950628132729917-93446-0/` in the implementation
+worktree. The earlier `full-01.log` retains its shell startup/PATH failure;
+it is not relabeled as a completed source check.
+
+After the full run's final producer, the Cargo-selected release public-test
+executable passed all three `native_owned_task_methods` cases and the exact
+`copied_binary_authors_builds_and_serves_interactive_topology_from_minimal` case
+against a regular copy at
+`/tmp/lkjscript-custody-candidate-7ea18ac9-Nf7Bnq/lkjscript`. The copied executable
+and producer were byte-identical before and after execution, with distinct
+inodes, 28,657,672 bytes and SHA-256
+`eaa6e9d7711756612b6b05f6fdb3b7e120ea3123b286c26bc4357586cf3337e3`.
+The cleared-environment harness uses fresh external authoring locations. The
+original commands, Cargo executable selection and results remain in
+`.artifacts/20261002-custody-mailbox/copied-candidate-check.sh`,
+`public-test-build.jsonl` and `copied-final.log`. This is development-executable
+acceptance, not final release-archive acceptance or publication.
+
+Independent review found no blocking custody or notification defect. It also
+identified a useful additional production-driver regression: receiver closure
+inside a successful graph callback. That new test is being developed separately;
+it is not retroactively included in the 1,538-test result above. The review
+distinguishes direct batch-helper tests from end-to-end observation of that race.
+
+Mainline integration uses the exact accepted source, by ordinary fast-forward;
+the following campaign/release-procedure correction is reporting-only. Public
+v0.1.64, its immutable assets, running applications, unrelated worktrees and the
+unintegrated history stash remain unchanged. The owner has since explicitly
+requested tackling the fundamental task-transfer and structured-execution
+boundaries in this same session; that continuation does not reopen this accepted
+runtime baseline or convert it into a public graph-level handoff claim.

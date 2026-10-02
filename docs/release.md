@@ -26,7 +26,13 @@ limits or relabel `worktree_changed_during_run` as acceptance. The
 records the concrete four-pack inventory correction. This does not freeze general
 compiler caches into source or make generated artifacts editable semantic authority.
 
-Current delivery observation (2026-10-01): immutable public/latest **v0.1.60** is
+Current public availability belongs to [status](status.md#public-binary-v0164).
+The completed v0.1.64 publication is recorded in the
+[owned-choice continuation](campaigns/20261002-owned-choices.md#completed-v0164-publication).
+Historical selections below retain their original sources and evidence; they are
+not instructions to restart completed releases.
+
+Historical delivery observation (2026-10-01): **v0.1.60** was immutable public/latest,
 release `400357606`, published at 04:10:53 JST. Original producer `36617982924/1`
 was accepted at source `2962c43f`; promotion `36763094941/1` completed at 04:12:24 JST
 with `immutable_published_and_public_verified`. Anonymous exact/latest acquisition,
@@ -81,8 +87,8 @@ selects accepted source `2962c43f`; its verbatim notes and remote object were co
 and the existing release-only selector was updated and read back. Those original
 acceptance and selection observations are retained unchanged. The
 [completed delivery](campaigns/20260930-descendant-inventory.md#completed-v0160-publication)
-subsequently promoted the same candidate without rebuilding it; v0.1.60 is now
-immutable public/latest.
+subsequently promoted the same candidate without rebuilding it; v0.1.60 became
+immutable public/latest at that observation.
 
 Immutable [v0.1.38](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.38) already publishes source
 `7083f9a6d56ed702017942e100c3696fc6f35308`. Publisher
