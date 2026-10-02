@@ -166,6 +166,9 @@ impl StorageObservation {
         });
         Self
     }
+    pub(super) fn created(&self) -> usize {
+        OBSERVED.with(|entries| entries.borrow().as_ref().unwrap().len())
+    }
     pub(super) fn live(&self) -> (usize, usize) {
         OBSERVED.with(|entries| {
             entries

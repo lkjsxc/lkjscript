@@ -107,6 +107,93 @@ fn exact_package_resource_signatures_agree_with_the_disjoint_flow_oracle() {
     }
 }
 
+#[test]
+fn owned_task_imported_constraints_ignore_same_identity_caller_records() {
+    use crate::platform::kernel::{TypeParameterConstraints, memory};
+    let (source, revision, _, _) = imported_helper(false, false, false);
+    let package = source
+        .dependencies
+        .values()
+        .find(|d| d.package_revision == revision)
+        .unwrap()
+        .package;
+    let key = *source.dependency_interfaces[&revision]
+        .iter()
+        .find_map(|(key, record)| {
+            matches!(record, PackageInterfaceRecord::TypeParameter(_)).then_some(key)
+        })
+        .unwrap();
+    let OwnerKey::TypeParameter(parameter) = key else {
+        unreachable!()
+    };
+    let ty = source
+        .types
+        .iter()
+        .chain(&source.dependency_types)
+        .find_map(|(digest, ty)| {
+            (ty.form == TypeForm::TypeParameter { parameter }).then_some(*digest)
+        })
+        .unwrap();
+    for local_owned in [false, true] {
+        for foreign_owned in [false, true] {
+            let mut snapshot = source.clone();
+            let OwnerRecord::TypeParameter(p) = snapshot.owners.get_mut(&key).unwrap() else {
+                unreachable!()
+            };
+            p.constraints = if local_owned {
+                TypeParameterConstraints::Owned
+            } else {
+                TypeParameterConstraints::None
+            };
+            let PackageInterfaceRecord::TypeParameter(p) = snapshot
+                .dependency_interfaces
+                .get_mut(&revision)
+                .unwrap()
+                .get_mut(&key)
+                .unwrap()
+            else {
+                unreachable!()
+            };
+            p.constraints = if foreign_owned {
+                TypeParameterConstraints::Owned
+            } else {
+                TypeParameterConstraints::None
+            };
+            assert_eq!(
+                memory::direct_in(&snapshot, package, ty).unwrap(),
+                foreign_owned
+            );
+            assert_eq!(
+                Reference {
+                    snapshot: &snapshot
+                }
+                .buffer_in(package, ty),
+                foreign_owned
+            );
+            assert_eq!(memory::direct(&snapshot, ty).unwrap(), local_owned);
+            assert_eq!(
+                Reference {
+                    snapshot: &snapshot
+                }
+                .buffer(ty),
+                local_owned
+            );
+            snapshot
+                .dependency_interfaces
+                .get_mut(&revision)
+                .unwrap()
+                .remove(&key);
+            assert!(!memory::direct_in(&snapshot, package, ty).unwrap());
+            assert!(
+                !Reference {
+                    snapshot: &snapshot
+                }
+                .buffer_in(package, ty)
+            );
+        }
+    }
+}
+
 fn assert_flow(snapshot: &KernelSnapshot, expected: bool, case: &str) {
     assert_eq!(production_accepts(snapshot), expected, "production: {case}");
     assert_eq!(

@@ -19,6 +19,15 @@ pub(crate) fn direct(
     read: &(impl ExpressionRead + ?Sized),
     ty: TypeObjectDigest,
 ) -> Result<bool, Diagnostic> {
+    direct_in(read, read.package_id(), ty)
+}
+
+/// A type parameter's constraint belongs to its defining package, not its caller.
+pub(crate) fn direct_in(
+    read: &(impl ExpressionRead + ?Sized),
+    package: PackageId,
+    ty: TypeObjectDigest,
+) -> Result<bool, Diagnostic> {
     Ok(
         match read
             .type_object(ty)?
@@ -29,10 +38,15 @@ pub(crate) fn direct(
             | TypeForm::OwnedI64Cell
             | TypeForm::OwnedProduct { .. }
             | TypeForm::OwnedChoice { .. } => true,
-            TypeForm::TypeParameter { parameter } => matches!(
-                read.owner(OwnerKey::TypeParameter(parameter))?,
-                Some(OwnerRecord::TypeParameter(p)) if p.constraints == TypeParameterConstraints::Owned
-            ),
+            TypeForm::TypeParameter { parameter } => {
+                if package == read.package_id() {
+                    matches!(read.owner(OwnerKey::TypeParameter(parameter))?,
+                        Some(OwnerRecord::TypeParameter(p)) if p.constraints == TypeParameterConstraints::Owned)
+                } else {
+                    matches!(read.package_interface_owner(package, OwnerKey::TypeParameter(parameter))?,
+                        Some(PackageInterfaceRecord::TypeParameter(p)) if p.constraints == TypeParameterConstraints::Owned)
+                }
+            }
             _ => false,
         },
     )
@@ -243,35 +257,48 @@ fn admit_signature(read: &(impl ExpressionRead + ?Sized), s: &Signature) -> Resu
     let mut memory = false;
     let mut capability = false;
     for p in &s.parameters {
-        capability |= p.resource_requirement.is_some();
         if direct(read, p.ty)? {
+            if capability {
+                return Err(reject("owned memory must precede the resource suffix"));
+            }
             memory = true;
-            if !s.pure
-                || p.use_mode == ParameterUse::Unrestricted
-                || p.resource_requirement.is_some()
-            {
+            if p.use_mode == ParameterUse::Unrestricted || p.resource_requirement.is_some() {
                 return Err(reject(
-                    "ByteBuffer parameters require pure borrow/consume with no requirement",
+                    "owned parameters require an explicit use and no requirement",
                 ));
             }
+            if !s.pure && p.use_mode != ParameterUse::Consume {
+                return Err(reject(
+                    "task owned parameters must consume; memory loans are synchronous",
+                ));
+            }
+        } else if matches!(
+            read.type_object(p.ty)?.map(|t| t.form),
+            Some(TypeForm::CapabilityResource { .. })
+        ) {
+            // Resource provenance, effects and use modes retain their independent
+            // affine admission; a memory owner never supplies resource authority.
+            capability = true;
         } else {
             if contains(read, p.ty)? {
                 return Err(reject(
-                    "ByteBuffer cannot occur in a parameter container or descriptor",
+                    "owned memory cannot occur in a parameter container or descriptor",
                 ));
             }
-            if memory {
-                return Err(reject("memory parameters must form a final suffix"));
+            if memory || capability {
+                return Err(reject(
+                    "ordinary parameters must precede owned memory and resources",
+                ));
             }
         }
     }
     let result = direct(read, s.result)?;
-    if (!result && contains(read, s.result)?) || (result && !s.pure) {
-        return Err(reject("only a direct pure result can transfer ByteBuffer"));
+    if !result && contains(read, s.result)? {
+        return Err(reject("only a direct owned result can transfer memory"));
     }
-    if capability && (memory || result) {
+    if s.pure && capability && (memory || result) {
         return Err(reject(
-            "mixed capability/memory function signatures are unsupported",
+            "pure memory helpers cannot carry capability resources",
         ));
     }
     Ok(())
@@ -926,8 +953,7 @@ pub(crate) fn validate_owner(
                             }
                     }
                     DeclarationPayload::Function(f) => {
-                        matches!(f.effect, FunctionEffect::Pure)
-                            && f.effect_parameters.is_empty()
+                        f.effect_parameters.is_empty()
                             && f.requirement_parameters.is_empty()
                             && matches!(key, OwnerKey::TypeParameter(id) if f.type_parameters.contains(&id))
                     }
@@ -939,7 +965,7 @@ pub(crate) fn validate_owner(
                 return Err(Diagnostic::new(
                     DiagnosticClass::Semantic,
                     "kernel_owned_parameter_owner",
-                    "Owned requires an exact pure graph-function parameter or owned contract Self",
+                    "Owned requires an exact first-order graph-function parameter or owned contract Self",
                 ));
             }
         }

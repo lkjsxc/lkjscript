@@ -395,10 +395,7 @@ impl Oracle<'_> {
         if f.implementation_parameters.is_empty() {
             return true;
         }
-        if !matches!(f.effect, FunctionEffect::Pure)
-            || !f.effect_parameters.is_empty()
-            || !f.requirement_parameters.is_empty()
-        {
+        if !f.effect_parameters.is_empty() || !f.requirement_parameters.is_empty() {
             return false;
         }
         let mut ids = BTreeSet::new();

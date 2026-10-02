@@ -1969,10 +1969,11 @@ impl Machine<'_> {
         for (parameter, argument) in function.parameters.iter().zip(arguments) {
             let memory_form = direct_memory_type(self.program, parameter.ty, substitutions)?;
             if memory_form.is_some() {
-                if !matches!(
+                if (!matches!(
                     function.effect,
                     crate::platform::kernel::FunctionEffect::Pure
-                ) || parameter.resource_requirement.is_some()
+                ) && parameter.use_mode != ParameterUse::Consume)
+                    || parameter.resource_requirement.is_some()
                     || parameter.use_mode == ParameterUse::Unrestricted
                     || argument.class(self.program, &mut self.observation.value_work)?
                         != Class::Memory

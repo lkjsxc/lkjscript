@@ -68,8 +68,10 @@ These reads are not general field borrowing or lifetime-polymorphic references.
 Metadata must be closed first-order data, such as I64, Bytes, or a closed ordinary
 nominal record. An open unconstrained or CaptureSafe parameter is insufficient.
 Every product needs at least one owned field. General lists/maps of products,
-ordinary record escape, task memory signatures, retained captures and persistence
-remain unsupported. Products introduce no grants or user-defined destructors.
+ordinary record escape, retained captures and persistence remain unsupported.
+Named task helpers may consume and return products under
+[same-task transfer](../spec/owned-task-transfers.md); they cannot borrow memory
+across the task call. Products introduce no grants or user-defined destructors.
 
 Exact product Self implementations use the existing explicit witness syntax; see
 the [selection literal](../../tests/fixtures/owned-products-witness.lkjc). Semantics

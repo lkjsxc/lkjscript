@@ -53,6 +53,10 @@ mod owned_closure_tests;
 mod owned_generic_tests;
 #[path = "owned_product_tests.rs"]
 mod owned_product_tests;
+#[path = "owned_task_boundary_tests.rs"]
+mod owned_task_boundary_tests;
+#[path = "owned_task_tests.rs"]
+mod owned_task_tests;
 
 #[path = "local_moves_value_tests.rs"]
 mod local_moves_value_tests;

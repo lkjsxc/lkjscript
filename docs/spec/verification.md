@@ -1533,6 +1533,36 @@ Execution after removal of source projects must return `{"$bytes":"AP+A"}` with 
 Primitive discovery, generated standard assets and native capability references must match the
 accepted graph through their maintained authoring/build/export/generation owners.
 
+## Same-invocation task-owned transfer
+
+The [same-task contract](owned-task-transfers.md) must be proved through public
+native authoring, full package re-admission, canonical drafts, compilation and
+source-free execution. A locally accepted plan alone cannot establish imported
+Owned task parameters, task implementation operands or exact resource composition.
+
+Exercise both concrete and Owned-generic task helpers with an actual final
+capability-resource suffix and its original exact requirement. Separately compose
+four packages for a generic task library, two independently stored carriers and a
+consumer. Preserve explicit same-Self implementation selection, signed I64 extremes,
+owned product and choice custody, success and owner-returning rejection paths.
+Both VM and source interpretation need independently computed ordinary outputs,
+allocation counts and zero surviving owned storage or loans. Raw owner ingress,
+raw owner results, traps, cancellation and refused allocation must fail cleanly
+and permit a subsequent valid invocation.
+
+Reject unused task memory loans, unrestricted owned parameters, ordinary data
+after memory, memory after resources, duplicate consumption, wrong witnesses and
+pure callers of empty-row tasks. Independently mutate otherwise admitted source
+parameters to borrowing/unrestricted modes; the independent ownership oracle and
+full source schema must reject. Rehash a task artifact's source and compiled code
+consistently to duplicate a transfer in an untaken branch; loader admission must
+still reject it. Existing capability-effect, grant and source-closure tests remain
+required and are not replaced by the new memory tests.
+
+These obligations cover a single invocation and its named calls. They establish
+neither asynchronous handoff nor cross-invocation origin rebinding, channel
+acceptance, fairness, an exactly-once external effect or a shared scheduler.
+
 ## First-order Owned generics and static implementations
 
 The [Owned contract](owned-generics.md) requires a generic-only native package with

@@ -4297,7 +4297,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_owned_parameter_owner",
             DiagnosticClass::Semantic,
             "An Owned constraint belongs to an unsupported declaration or foreign scope.",
-            "Use Owned only on a pure graph function without effect/requirement parameters or on the exact owned-contract Self.",
+            "Use Owned on an exact first-order graph function without effect/requirement parameters, or the exact owned-contract Self; task memory inputs must consume.",
         ),
         diagnostic(
             "normalized_cell_token",
@@ -4309,7 +4309,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_buffer_ownership",
             DiagnosticClass::Semantic,
             "Direct owned memory, scoped read borrowing, or supported signature shape is invalid.",
-            "Keep exact owned locals and pure final borrow/consume suffixes; move each owner once and prevent loan escape.",
+            "Order data, owned memory, then exact resources. Tasks consume memory; only pure synchronous helpers may borrow. Move each owner once and prevent loan escape.",
         ),
         diagnostic(
             "kernel_buffer_container",
@@ -4321,7 +4321,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_buffer_generic",
             DiagnosticClass::Semantic,
             "An ordinary generic substitution contains owned memory, including a phantom argument.",
-            "Use ordinary data/callback arguments or an explicit Owned parameter with a direct final memory suffix/result.",
+            "Use ordinary data/callback arguments or an explicit Owned parameter; keep memory direct, before any exact resource suffix.",
         ),
         diagnostic(
             "kernel_buffer_type_tag",

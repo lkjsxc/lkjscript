@@ -59,6 +59,9 @@ struct Reference<'a> {
 
 impl Reference<'_> {
     fn buffer(&self, ty: TypeObjectDigest) -> bool {
+        self.buffer_in(self.snapshot.root.package_id, ty)
+    }
+    fn buffer_in(&self, package: PackageId, ty: TypeObjectDigest) -> bool {
         match self.type_object(ty).map(|t| &t.form) {
             Some(
                 TypeForm::ByteBuffer
@@ -67,7 +70,12 @@ impl Reference<'_> {
                 | TypeForm::OwnedChoice { .. },
             ) => true,
             Some(TypeForm::TypeParameter { parameter }) => {
-                matches!(self.snapshot.owners.get(&OwnerKey::TypeParameter(*parameter)), Some(OwnerRecord::TypeParameter(p)) if p.constraints == super::TypeParameterConstraints::Owned)
+                let key = OwnerKey::TypeParameter(*parameter);
+                if package == self.snapshot.root.package_id {
+                    matches!(self.snapshot.owners.get(&key), Some(OwnerRecord::TypeParameter(p)) if p.constraints == super::TypeParameterConstraints::Owned)
+                } else {
+                    matches!(self.foreign_owner(package, key), Some(PackageInterfaceRecord::TypeParameter(p)) if p.constraints == super::TypeParameterConstraints::Owned)
+                }
             }
             _ => false,
         }
@@ -650,7 +658,7 @@ impl Reference<'_> {
                     });
                 }
                 Some((Shape::Variant, _)) => return Err(()),
-                None if self.buffer(record.ty) => continue,
+                None if self.buffer_in(reference.package, record.ty) => continue,
                 None => {
                     if !resources.is_empty()
                         || self.contains_resource(record.ty, &mut BTreeSet::new())
@@ -694,7 +702,7 @@ impl Reference<'_> {
         if parameters.iter().any(|parameter| {
             self.parameter(package, *parameter).is_none_or(|parameter| {
                 self.contains_resource(parameter.ty, &mut BTreeSet::new())
-                    || (!self.buffer(parameter.ty)
+                    || (!self.buffer_in(package, parameter.ty)
                         && parameter.use_mode != ParameterUse::Unrestricted)
                     || parameter.resource_requirement.is_some()
             })

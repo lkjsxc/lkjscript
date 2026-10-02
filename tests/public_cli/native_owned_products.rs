@@ -5,6 +5,8 @@ use serde_json::json;
 
 #[path = "native_owned_choices.rs"]
 mod owned_choices;
+#[path = "native_owned_tasks.rs"]
+mod owned_tasks;
 
 #[test]
 fn native_owned_metadata_cross_package_draft_and_detached_execution() {

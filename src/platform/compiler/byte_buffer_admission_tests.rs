@@ -41,6 +41,26 @@ fn byte_buffer_constant_artifact_rejects_rehashed_untaken_double_consume() {
     reject_untaken_double_consume("affine-constant");
 }
 
+#[test]
+fn owned_task_artifact_rejects_consistently_rehashed_untaken_double_transfer() {
+    let source = crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(r#"
+declarations.begin
+(units (module create task-artifact
+  (external create empty (visibility private) (implementation core.buffer.empty) (returns ByteBuffer))
+  (function create transfer (visibility private) (effect (task))
+    (parameter create owner (type ByteBuffer) (use consume))
+    (returns Unit) (body (unit)))
+  (function create attack (visibility private) (effect (task)) (returns Unit)
+    (body (if (bool true) (unit)
+      (let
+        (binding a (type ByteBuffer) (call empty))
+        (binding b (type ByteBuffer) (call empty))
+        (in (sequence (call transfer (local a)) (call transfer (local b))))))))))
+declarations.end
+"#).unwrap();
+    reject_source(source, "attack", TypeForm::ByteBuffer, "transfer");
+}
+
 fn expression(snapshot: &KernelSnapshot, id: ExpressionId) -> &ExpressionOperation {
     let OwnerRecord::Expression(record) = &snapshot.owners[&OwnerKey::Expression(id)] else {
         panic!("fixture expression");

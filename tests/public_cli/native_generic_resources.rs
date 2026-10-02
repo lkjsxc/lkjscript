@@ -14,6 +14,8 @@ mod recursion;
 mod rejections;
 #[path = "native_resource_suffix.rs"]
 mod suffix;
+#[path = "native_task_owned.rs"]
+mod task_owned;
 
 #[test]
 fn native_type_generic_resources_survive_drafting_and_detached_queue_execution() {

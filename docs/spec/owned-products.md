@@ -13,7 +13,7 @@ functions, streams, secrets, capabilities and open ordinary parameters. Neither
 None nor CaptureSafe proves this closed property. No Data constraint is introduced.
 Ordinary nominal and structural records and ordinary containers remain unrestricted
 and cannot contain products. Generic functions can abstract over one or more Owned
-payloads. Product parameters must occur in their exact pure function scope.
+payloads. Product parameters must occur in their exact function scope. Pure helpers may borrow; named tasks may only consume under [same-task transfer](owned-task-transfers.md).
 
 ## Meaning and scope
 
@@ -77,10 +77,10 @@ Whole products follow the existing direct-memory consume/borrow parameter suffix
 and synchronous borrow/reborrow contracts. Borrowed values cannot escape or unpack.
 Owned parameters may instantiate to products; exact monomorphic owned implementations
 may select a closed product as Self under the existing first-order witness rules.
-There is no implicit witness search or capability grant. Task signatures, indirect
-callable signatures, capture, async transfer, general owned-element containers,
-nominal owned declarations and function extraction of product scopes remain outside
-this increment. A task body can create and dispose of products locally.
+There is no implicit witness search or capability grant. Named tasks may consume
+and return products under [same-task transfer](owned-task-transfers.md). Indirect
+callable signatures, capture, asynchronous transfer, general owned-element containers,
+nominal owned declarations and function extraction of product scopes remain unsupported.
 
 ## Runtime and boundaries
 

@@ -1282,7 +1282,7 @@ impl ReferenceState<'_> {
                         .copied()
                         .zip(type_arguments.iter().copied())
                         .collect();
-                    self.validate_call_resources(&parameters, &types, &arguments)?;
+                    self.validate_call_resources(&parameters, &types, &arguments, true)?;
                     if type_arguments.len() != external.type_parameters.len()
                         || !effect_arguments.is_empty()
                         || !requirement_arguments.is_empty()
@@ -1478,7 +1478,12 @@ impl ReferenceState<'_> {
             .copied()
             .zip(types.iter().copied())
             .collect::<BTreeMap<_, _>>();
-        self.validate_call_resources(&parameters, &types, &arguments)?;
+        self.validate_call_resources(
+            &parameters,
+            &types,
+            &arguments,
+            matches!(function.effect, FunctionEffect::Pure),
+        )?;
         if types.len() != function.type_parameters.len() {
             return Err(reference_type_error(
                 "function type parameters are not unique",
@@ -1575,12 +1580,15 @@ impl ReferenceState<'_> {
         parameters: &[ParameterRecord],
         substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
         arguments: &[CheckedValue],
+        pure: bool,
     ) -> Result<(), ExecutionError> {
         let mut resource_seen = false;
         for (index, (parameter, argument)) in parameters.iter().zip(arguments).enumerate() {
             let memory_form = direct_memory_type(&self.schema, parameter.ty, substitutions)?;
             if memory_form.is_some() {
-                if parameter.resource_requirement.is_some()
+                if resource_seen
+                    || (!pure && parameter.use_mode != ParameterUse::Consume)
+                    || parameter.resource_requirement.is_some()
                     || parameter.use_mode == ParameterUse::Unrestricted
                     || argument.ownership(&self.schema, &mut self.observation.value_work)?
                         != Ownership::Memory

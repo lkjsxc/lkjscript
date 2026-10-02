@@ -1610,24 +1610,59 @@ fn validate_normalized_resource_signature(
         memory |= is_memory(p.ty)?;
     }
     if memory {
-        if !direct.is_empty() || !task_requirements.is_empty() {
-            return Err(runtime_corrupt(
-                "normalized_buffer_signature",
-                "mixed capability and memory signature",
-            ));
-        }
-        if let OwnerRecord::Declaration(record) = exact_runtime_owner(
+        let OwnerRecord::Declaration(record) = exact_runtime_owner(
             owners,
             declaration.package,
             OwnerKey::Declaration(declaration.declaration),
             "memory function",
-        )? && let DeclarationPayload::Function(f) = &record.payload
-            && !matches!(f.effect, FunctionEffect::Pure)
-        {
+        )?
+        else {
             return Err(runtime_corrupt(
                 "normalized_buffer_signature",
-                "task memory signature unsupported",
+                "wrong memory owner kind",
             ));
+        };
+        let task = match &record.payload {
+            DeclarationPayload::Function(f) => !matches!(f.effect, FunctionEffect::Pure),
+            DeclarationPayload::External(_) => false,
+            _ => {
+                return Err(runtime_corrupt(
+                    "normalized_buffer_signature",
+                    "wrong memory callable kind",
+                ));
+            }
+        };
+        if !task && (!direct.is_empty() || !task_requirements.is_empty()) {
+            return Err(runtime_corrupt(
+                "normalized_buffer_signature",
+                "pure memory helper carries authority",
+            ));
+        }
+        let mut phase = 0;
+        for p in parameters {
+            let next = if is_memory(p.ty)? {
+                if task && p.use_mode != ParameterUse::Consume {
+                    return Err(runtime_corrupt(
+                        "normalized_buffer_signature",
+                        "task memory parameter is not consuming",
+                    ));
+                }
+                1
+            } else if matches!(
+                types.get(&p.ty).map(|t| &t.form),
+                Some(TypeForm::CapabilityResource { .. })
+            ) {
+                2
+            } else {
+                0
+            };
+            if next < phase {
+                return Err(runtime_corrupt(
+                    "normalized_buffer_signature",
+                    "memory/resource parameter order is invalid",
+                ));
+            }
+            phase = next;
         }
     }
     if direct.is_empty() {

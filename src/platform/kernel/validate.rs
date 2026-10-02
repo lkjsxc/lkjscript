@@ -572,7 +572,7 @@ impl FullValidator<'_> {
                         "type parameter",
                     );
                     if parameter.constraints == super::TypeParameterConstraints::Owned
-                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::OwnedContract(_)) || matches!(&declaration.payload, DeclarationPayload::Function(f) if matches!(f.effect, FunctionEffect::Pure) && f.effect_parameters.is_empty() && f.requirement_parameters.is_empty()))
+                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::OwnedContract(_)) || matches!(&declaration.payload, DeclarationPayload::Function(f) if f.effect_parameters.is_empty() && f.requirement_parameters.is_empty()))
                     {
                         self.error(
                             "kernel_owned_parameter_owner",
@@ -2361,18 +2361,19 @@ impl FullValidator<'_> {
     }
 
     fn validate_implementation_operand(&mut self, operand: super::ImplementationOperand) {
-        let (reference, kind) = match operand {
+        let (reference, kinds): (_, &[OwnerKind]) = match operand {
             super::ImplementationOperand::Concrete { implementation } => {
-                (implementation, OwnerKind::OwnedImplementation)
+                (implementation, &[OwnerKind::OwnedImplementation])
             }
-            super::ImplementationOperand::Parameter { function, .. } => {
-                (function, OwnerKind::PureFunction)
-            }
+            super::ImplementationOperand::Parameter { function, .. } => (
+                function,
+                &[OwnerKind::PureFunction, OwnerKind::TaskFunction],
+            ),
         };
         self.require_exact_kind(
             reference.package,
             OwnerKey::Declaration(reference.declaration),
-            &[kind],
+            kinds,
             "static implementation operand",
         );
     }
@@ -2405,7 +2406,7 @@ impl FullValidator<'_> {
                 self.require_exact_kind(
                     function.package,
                     OwnerKey::Declaration(function.declaration),
-                    &[OwnerKind::PureFunction],
+                    &[OwnerKind::PureFunction, OwnerKind::TaskFunction],
                     "implementation callee",
                 );
                 for operand in implementations {

@@ -1532,7 +1532,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                     let record = self.parameter(reference.package, parameter)?;
                     if self.type_contains_resource(record.ty)?
                         || (record.use_mode != ParameterUse::Unrestricted
-                            && !super::memory::direct(self.read, record.ty)?)
+                            && !super::memory::direct_in(self.read, reference.package, record.ty)?)
                         || record.resource_requirement.is_some()
                     {
                         return Err(owner_affine_error(
@@ -1596,7 +1596,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                     ));
                 }
                 None => {
-                    if super::memory::direct(self.read, record.ty)? {
+                    if super::memory::direct_in(self.read, reference.package, record.ty)? {
                         continue;
                     }
                     if !resources.is_empty() {

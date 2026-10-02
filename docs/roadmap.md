@@ -79,16 +79,20 @@ carriers. Closed choice Self implementations, recursive transfer and opaque rebo
 use existing contracts. Ordinary unrestricted Option/Result is not an escape hatch.
 Source tests and delivery remain distinct from a finalized or published binary.
 
-The next preferred boundary is a small structured task-owned transfer contract,
-not an asynchronous queue bolted onto pure-function ownership. First define how
-owned memory and exact capability-resource parameters coexist without merging their
-authority, how task-local owners survive suspended work, and which synchronous loans
-must end before suspension or transfer. Exercise one explicit successful transfer,
-a declined transfer returning the original owner, cancellation before/after acceptance
-and receiver failure with exactly one defined cleanup owner. Only then add a bounded
-in-process channel and independent CPU-parallel producer/consumer workload. Reserve
-capacity before transfer; queue acceptance is not completion or exactly-once delivery.
-This is a revisable experiment, not implemented task signatures or a new supervisor.
+The [same-task continuation](campaigns/20261002-task-owned-transfer.md) implements
+the first call boundary: consume-only owned task arguments/results before an exact
+capability-resource suffix, generic task hosts and explicit static witnesses. It
+retains separate authority, scoped pure loans and the existing invocation origin.
+This is not yet asynchronous transfer or a new supervisor; current source evidence
+and public binary availability remain separated in [status](status.md).
+
+The next preferred boundary is a small structured in-process handoff. Exercise
+explicit acceptance, declined transfer returning the original owner, cancellation
+before/after acceptance and receiver failure with exactly one cleanup custodian.
+Only then add a bounded channel and independent CPU-parallel producer/consumer
+workload. Reserve destination capacity before transfer; acceptance is not completion
+or exactly-once delivery. Define joined cancellation rather than assuming that
+dropping a future cleans up a receiver or a blocking native operation.
 The [structured-transfer decision](decisions/20261002-structured-owned-transfer.md)
 selects consume-only task memory parameters before the exact resource suffix as
 its first language slice. Its independent finite custody model checks reservation,

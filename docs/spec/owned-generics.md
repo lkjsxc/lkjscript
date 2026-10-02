@@ -11,18 +11,19 @@ be exactly ByteBuffer, OwnedI64Cell, an explicit [owned product](owned-products.
 or an in-scope Owned parameter while checking
 a generic body. Ordinary and CaptureSafe parameters cannot receive an owned type,
 even when the parameter is unused, its container is empty, or the call is in an
-untaken branch. Owned constraints belong only to pure graph functions without
-effect or requirement parameters, and to the one Self parameter of an owned
-contract. Nominal records, variants, externals and task declarations cannot
-advertise Owned parameters.
+untaken branch. Owned constraints belong to exact first-order graph functions
+without effect or requirement parameters, and to the one Self parameter of an
+owned contract. Named tasks may use them under [same-task transfer](owned-task-transfers.md).
+Nominal records, variants and externals cannot advertise Owned parameters.
 
 A generic body is checked symbolically before any concrete application exists.
 Instantiation checks the exact substituted type, constraint and parameter modes
 again. A direct Owned parameter, result or annotated lexical local has the same
 affine rules as its concrete carrier:
 
-- Memory parameters form the final signature suffix and declare `consume` or
-  synchronous read `borrow`. Ordinary parameters precede them.
+- Ordinary parameters precede memory parameters; exact capability resources, when
+  present, form a final suffix after memory. Tasks must `consume` memory; only pure
+  helpers may declare synchronous read `borrow`.
 - Every memory call argument is an exact local. Repeated reads may reborrow;
   any alias involving a consume rejects, in either argument order.
 - Consumption transfers the one owner. A moved local cannot be used again.

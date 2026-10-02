@@ -65,10 +65,10 @@ parameters/results. Exact static implementation parameters and cross-package
 forwarding retain their existing contracts. A closed choice may serve as an exact
 implementation Self where its complete method signatures satisfy those contracts.
 Whole-choice synchronous borrowing/reborrowing is permitted; a loan cannot select,
-move, expose or return its payload. This increment adds no borrowed case inspection,
-escaping or mutable reference, partial move, implicit witness search or task-owned
-memory signature. Task bodies may construct and dispose of local choices under
-their existing effect and resource rules.
+move, expose or return its payload. Borrowed case inspection, escaping or mutable
+references, partial moves and implicit witness search remain unsupported. Named
+tasks may consume and return choices under [same-task transfer](owned-task-transfers.md),
+while preserving their independently checked effects and resource requirements.
 
 Canonical native drafts retain the accepted type and operation metadata. Unchanged
 re-entry preserves identities. Literal-only edits visit selected construction

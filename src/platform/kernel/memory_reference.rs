@@ -298,22 +298,33 @@ impl Oracle<'_> {
         s: &(Vec<ParameterRecord>, TypeObjectDigest, bool, Option<String>),
     ) -> bool {
         let (parameters, result, pure, implementation) = s;
-        let mut suffix = false;
+        // Independently classify the complete ordered inventory: data, memory,
+        // resource. No production signature classifier participates in this oracle.
+        let mut classes = Vec::new();
         for p in parameters {
-            if self.buffer(p.ty) {
-                suffix = true;
-                if !pure
-                    || p.resource_requirement.is_some()
+            let class = if self.buffer(p.ty) {
+                if p.resource_requirement.is_some()
                     || p.use_mode == ParameterUse::Unrestricted
+                    || (!pure && p.use_mode != ParameterUse::Consume)
                 {
                     return false;
                 }
-            } else if suffix || self.contains(p.ty) {
-                return false;
-            }
+                1
+            } else if matches!(self.form(p.ty), Some(TypeForm::CapabilityResource { .. })) {
+                2
+            } else {
+                if self.contains(p.ty) {
+                    return false;
+                }
+                0
+            };
+            classes.push(class);
         }
-        let memory = suffix || self.buffer(*result);
-        if memory && (!pure || parameters.iter().any(|p| p.resource_requirement.is_some())) {
+        if classes.windows(2).any(|pair| pair[0] > pair[1]) {
+            return false;
+        }
+        let memory = classes.contains(&1) || self.buffer(*result);
+        if memory && *pure && classes.contains(&2) {
             return false;
         }
         if !self.buffer(*result) && self.contains(*result) {
@@ -920,9 +931,10 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                     DeclarationPayload::OwnedContract(c)
                         if *key == OwnerKey::TypeParameter(c.self_parameter) => {}
                     DeclarationPayload::Function(f)
-                        if matches!(f.effect, FunctionEffect::Pure)
-                            && f.effect_parameters.is_empty()
-                            && f.requirement_parameters.is_empty() => {}
+                        if f.effect_parameters.is_empty()
+                            && f.requirement_parameters.is_empty()
+                            && matches!(key, OwnerKey::TypeParameter(id) if f.type_parameters.contains(id)) =>
+                        {}
                     _ => return false,
                 }
             }

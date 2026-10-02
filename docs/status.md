@@ -31,6 +31,26 @@ v0.1.60 does **not** include the v0.1.61 owned-memory and byte-range development
 below. Earlier immutable releases and genuine failed or superseded candidates remain
 unchanged. Inspect the installed executable with `lkjscript capabilities`.
 
+## Development v0.1.65: same-task owned calls
+
+Named task helpers can consume and return owned buffers, cells, products and
+choices within one invocation. First-order Owned parameters and exact static
+implementation witnesses compose with tasks; ordinary arguments precede owned
+memory, and exact capability resources form a final suffix. A task cannot borrow
+memory across its call boundary. Pure synchronous helpers still provide scoped
+read borrowing, and resource grants remain independently checked.
+
+The [specification](spec/owned-task-transfers.md) and
+[continuation](campaigns/20261002-task-owned-transfer.md) distinguish this implemented
+call boundary from asynchronous handoff, channels and a shared scheduler. Semantic
+validator 22 invalidates old proof reuse; graph, request, instruction and artifact
+wire formats remain unchanged. Current focused execution covers both evaluators,
+exact outputs and allocation counts, raw boundaries, unused-loan mutations, traps,
+cancellation/quota cleanup and consistently rehashed untaken duplicate transfers.
+Fresh full-source acceptance and final copied-host evidence are not inferred from
+those focused results; their exact completion records belong to the continuation.
+This development is not a public v0.1.65 binary or a running-service deployment.
+
 ## Development v0.1.64: recoverable owned outcomes
 
 The accepted development source supports fixed, named `OwnedChoice` types composing
