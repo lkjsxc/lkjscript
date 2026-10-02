@@ -3,6 +3,10 @@
 Date: 2026-10-02 (Asia/Tokyo). Entry source: `1fe15ce864edce4fbb004e83dec36d962307abd9`.
 Product identifier: development `0.1.66`. This campaign is not a public release.
 
+## Initial mandate (verbatim)
+
+> lkjscriptについて進めるようよろしくお願いします。必要であれば大幅なスタイルの変更も許容します。あらゆる判断において、過去ではなく、今のあなたに委ねます。全ての判断をあらかじめ許可します。最も筋の良い方向に進むために、限界まで深く考えてほしい。超長期的な視点からお願いしたい。どれだけ時間がかかっても構いません。
+
 ## Selected language boundary
 
 The owner delegates current technical decisions and prioritizes language-design
@@ -108,3 +112,39 @@ same-kind row-mismatch test was added for the full suite. These focused observat
 are not full-source acceptance, optimized final-artifact proof or publication.
 The authoritative broad result and exact tested source belong to the completion
 record appended after the maintained verification owners finish.
+
+## First full run and corrections
+
+The first full run used source `605a7cf8478c957e6928352b0c5fea8df29df444`,
+tree `539f2171911785243301d7ee04340108f8e6b779`, and stable inputs. Run
+`1790939383180010859-1290789-0` completed 23 fresh gates, failed workspace tests
+and generated public guides, and correctly left the dependent product-surface
+audit unrun. It is not source acceptance. Its 69,037-byte receipt digest is
+`verification_eb31d91afd7411eec6efb6c7f4c46fd3f799d7732fb32c7669d282ec59d890e5`.
+
+Workspace totals were 1,516 passed, five failed and 29 intentionally ignored.
+Three failures were the same stale generated-reference boundary: the generated
+document unit test and two public guide comparisons. Regenerating all eight files
+through `lkjscript capabilities --generate-docs docs/generated` adds 13 lines
+and removes 12, including discovery digests. The maintained native guide artifact,
+standard artifact/transport and lkjournal artifact independently remained identical.
+
+Two additional failures were existing process-test fixture races under concurrent
+load, not a language-admission relaxation. The cancellation watcher could read an
+empty just-created PID file and inspect `/proc//stat`, then unwrap a nonexistent
+process-stat delimiter. The fixture now publishes its PID by rename and validates
+the numeric PID and delimiter before observing the zombie. In the silent-descendant
+fixture, the existing 80 ms deadline expired before the expected parent-exit
+classification (observed elapsed 92.20 ms). The test now requires either the exact
+surviving-descendant infrastructure reason or an actual elapsed deadline with the
+exact timeout reason; every other status, including success, remains forbidden.
+It still independently requires the observed descendant to be stopped. No deadline,
+output bound, supervision implementation or cleanup obligation was increased,
+removed or retried. These are corrections to the test fixture's observation logic.
+
+Before those corrections, a regular optimized product copy outside the checkout
+passed all three focused public cases in 58.94 seconds. Both the producer and copy
+had SHA-256 `e9e888a192845089cee11a5cfcec62771d2817cf1677a5458789783fbc1c668c`.
+The preserved first-run logs and focused observations remain under `.artifacts/`
+and `/tmp/lkjscript-owned-methods-*`; they do not substitute for renewed full
+acceptance of the corrected source.

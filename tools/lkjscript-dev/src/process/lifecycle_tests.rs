@@ -127,7 +127,7 @@ fn cancellation_remains_observable_after_direct_child_exit() {
     let mut spec = fixture(
         root.path(),
         "cancel",
-        "printf '%s' $$ > direct; sleep 0.8 & exit 0",
+        "printf '%s' $$ > direct.pending; mv direct.pending direct; sleep 0.8 & exit 0",
     );
     spec.timeout = Duration::from_secs(3);
     let direct = root.path().join("direct");
@@ -136,9 +136,11 @@ fn cancellation_remains_observable_after_direct_child_exit() {
     let watcher = std::thread::spawn(move || {
         let began = Instant::now();
         loop {
-            if let Ok(pid) = std::fs::read_to_string(&direct)
+            if let Ok(text) = std::fs::read_to_string(&direct)
+                && let Ok(pid) = text.parse::<u32>()
                 && let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat"))
-                && stat.rsplit_once(") ").unwrap().1.starts_with('Z')
+                && let Some((_, state)) = stat.rsplit_once(") ")
+                && state.starts_with('Z')
             {
                 trigger.kill();
                 return;
@@ -166,12 +168,24 @@ fn silent_sampled_survivor_is_not_a_clean_success() {
         "setsid sleep 0.8 >/dev/null 2>&1 & echo $! > survivor; sleep 0.04; exit 0",
     );
     let result = run(&spec, root.path());
-    assert_eq!(
-        result.status,
-        ProcessStatus::InfrastructureFailure,
-        "{result:?}"
-    );
-    assert!(result.reason.unwrap().contains("descendants survived"));
+    // The same 80 ms deadline can win before parent exit on a loaded runner.
+    // Preserve that primary timeout; neither outcome permits a pass or survivor.
+    match result.status {
+        ProcessStatus::InfrastructureFailure => {
+            assert!(
+                result
+                    .reason
+                    .as_deref()
+                    .unwrap()
+                    .contains("descendants survived")
+            );
+        }
+        ProcessStatus::Timeout => {
+            assert_eq!(result.reason.as_deref(), Some("timeout"));
+            assert!(result.elapsed_nanoseconds >= spec.timeout.as_nanos());
+        }
+        _ => panic!("silent survivor was not rejected: {result:?}"),
+    }
     assert_stopped(
         std::fs::read_to_string(root.path().join("survivor"))
             .unwrap()

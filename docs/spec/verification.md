@@ -1563,6 +1563,34 @@ These obligations cover a single invocation and its named calls. They establish
 neither asynchronous handoff nor cross-invocation origin rebinding, channel
 acceptance, fairness, an exactly-once external effect or a shared scheduler.
 
+## Closed-effect Owned task methods
+
+A nominal Owned method may be pure or a named task with an exact closed concrete
+requirement row. A selected monomorphic implementation must match callable kind,
+row, substituted parameter types, use modes and result. Task Self arguments must
+consume even when unused. Empty-row tasks are not pure. Method selection, caller
+effect allowance and deployment grants remain separately checked boundaries.
+
+Maintained evidence must cover omitted/explicit pure authored-intent equivalence,
+distinct empty-task intent, unchanged task-method drafts, and public inspection of
+method kind and exact requirements. Unused contracts with open or dangling rows,
+borrowed task Self, wrong witnesses, pure callers, missing caller effects and
+same-kind implementation row mismatches must be rejected. Independent memory and
+reference-schema readers must reject forged implementation metadata without
+relying on the compiler or executed body as their only oracle.
+
+The literal producer/consumer family must use both generic witness forwarding and
+direct concrete task methods across three exact public packages. A separate
+contract-only export must retain a requirement owned by a private component without
+a public function carrying it accidentally. A copied executable must retain values
+and exact operation counts after all source projects and transports are deleted;
+missing grants must fail without producing a result. Controlled unit adapters may
+observe both evaluators independently, but must never replay live effects. Check
+one scalar and buffer allocation, no remaining owners or loans, precise quota
+failures, and cancellation immediately after one physical effect with no replay.
+These observations establish same-invocation task composition, not joined child
+tasks, an asynchronous channel or cross-task ownership transfer.
+
 ## First-order Owned generics and static implementations
 
 The [Owned contract](owned-generics.md) requires a generic-only native package with
