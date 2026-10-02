@@ -15,6 +15,36 @@ Memory safety and avoidance of unnecessary copying are baseline requirements.
 Immediate Rust benchmark superiority, extreme memory minimization, compatibility
 migration and external adoption are not prerequisites for this research phase.
 
+The [2026-10-02 priority clarification](campaigns/20261002-language-priority.md)
+places language-design quality before AI development effectiveness; the latter
+remains important, but personal application completion is not a success criterion.
+Do not turn an AI editing benchmark or another application starter into a gate that
+blocks otherwise coherent language work. Keep the graph-first, agent-native and
+ordinary-public-consumption requirements unchanged.
+
+Use a maintained cross-package producer/transformer/consumer family as the primary
+representative workload. Begin with owned buffers and an independent owned scalar
+carrier, exact generic implementations, pure scoped reads, task effects and resource
+grants. Advance through recoverable refusal, actual structured handoff and CPU
+parallelism with independent negative and cleanup expectations. Existing lkjournal
+and web consumers remain integration/regression witnesses, not the product roadmap.
+
+The primary evaluation is explicit: record newly expressible compositions, rejected
+invalid cases, static and dynamic contract boundaries, package independence,
+proof-work exhaustion behavior, cancellation and resource completion. Test a feature
+through independent carriers and libraries rather than selecting it by syntax count
+or one privileged host implementation. Execution/preparation cost and scalability
+remain measured tradeoffs, not substitutes for language correctness.
+
+The secondary AI evaluation should measure completion of repeated changes without
+regressions, alongside time and resource use. It need not precede structured owned
+transfer or a coherent type-system increment. Initial execution experiments use
+one existing authorized Linux x86-64 host, several admitted instances and a small
+owned-data pipeline. Initial concurrent-author evidence starts with two independent
+revision-bound candidates, then two to four agents when available within authorized
+resources. This is a first experiment, not a scale ceiling, purchase authorization,
+current implementation claim or a new requirement for distributed infrastructure.
+
 A genuine shared runtime is a central requirement. Do not defer it behind a complete
 new type system, collector, JIT, AOT backend or web framework. Conversely, do not
 call a process launcher, shared installation or unverified shared mutable heap a

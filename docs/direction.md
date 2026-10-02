@@ -1,10 +1,45 @@
 # Language-first project direction
 
-Owner decision: 2026-09-28 (Asia/Tokyo), reaffirmed by the 2026-09-29 repository-target correction. The owner clarified that the later Rust-only and lkjstr.lkjsxc.com request concerned lkjsxc/lkjstr, not this repository. The numbered owner answers are retained in
+Owner decision: 2026-09-28 (Asia/Tokyo), reaffirmed by the 2026-09-29 repository-target correction and clarified by the 2026-10-02 priority decision. The owner clarified that the later Rust-only and lkjstr.lkjsxc.com request concerned lkjsxc/lkjstr, not this repository. The numbered owner answers are retained in
 [the mandate](campaigns/202609281300.md). This document separates binding direction
 from delegated, revisable engineering selections. [Status](status.md) describes
 implemented behavior; [the roadmap](roadmap.md) selects the next work. A selected
 design is not a claim of implementation, performance, proof or publication.
+
+## Success criteria: language design first
+
+The [2026-10-02 owner clarification](campaigns/20261002-language-priority.md)
+orders the goals explicitly. First improve the language's type, generic, trait,
+ownership, lifetime, effect and concurrency design, including their sound
+composition. Reliable AI creation, modification and maintenance remains an important
+secondary objective. Building the owner's desired applications entirely in
+lkjscript is not a project success criterion. This is not a rejection of general
+usefulness, ordinary public consumption or the long-term self-hosting direction.
+
+Do not require immediate model-token savings, AI benchmark superiority or a personal
+application milestone before accepting a coherent language advance. Conversely,
+research ambition is not evidence of soundness or a reason to add unrelated feature
+names. Specify what can be expressed, which invalid programs reject, how contracts
+compose across packages and what remains unsupported. Compare actual capabilities
+and tradeoffs rather than claiming general superiority over another language.
+
+Representative workloads, metrics and initial scale were delegated. Select a small
+cross-package producer/transformer/consumer family as the principal language
+witness, with distinct owned carriers, exact implementation witnesses, scoped
+loans, effectful tasks and explicit failure/cancellation boundaries. Extend it into
+structured handoff and CPU-parallel work as those capabilities become implemented.
+Retain application consumers as regression and integration evidence, not as a
+feature backlog that sets language priorities.
+
+Judge progress primarily by soundness and failure behavior, compositional
+expressiveness, explicit independently checkable contracts and bounded checking.
+Record execution and preparation costs without requiring an immediate speed win.
+For the secondary AI objective, prefer regression-free completion of repeated
+changes; record time and resource use separately. Initial execution evidence should
+fit one authorized Linux x86-64 host. Initial future parallel-author evidence uses
+two independent candidates before a two-to-four-agent experiment; it neither
+claims current concurrent editing nor authorizes new paid agents or infrastructure.
+These experiment choices remain revisable under the primary goal.
 
 ## Non-negotiable authority and priorities
 
