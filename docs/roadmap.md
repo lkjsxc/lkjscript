@@ -14,11 +14,12 @@ safety, bounded checking and avoidance of unnecessary copying are baseline requi
 
 ## 1. Complete the structured-parallel boundary
 
-Finish current 0.1.68 verification and normal mainline/release delivery under the
+Complete the selected 0.1.68 distribution acceptance and publication under the
 [existing procedure](release.md#selected-structured-parallel-successor-v0168).
-Prove public cross-package owned computation, exact artifact admission, actual child
-overlap, invocation-wide quotas and joined failure cleanup separately. Preserve task
-kind independently of an empty effect row throughout authoring, extraction and execution.
+[Status](status.md) records the accepted mainline source and pending producer. Retain
+the completed source, cross-package, artifact, overlap, quota and cleanup evidence;
+renew proof when its bindings change. Preserve task kind independently of an empty
+effect row throughout authoring, extraction and execution.
 
 Use the [current pair contract](spec/structured-parallel.md) as a small coherent
 foundation. General channels, task handles or effectful children are not prerequisites

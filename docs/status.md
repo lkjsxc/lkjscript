@@ -50,23 +50,36 @@ checks now isolate site/documentation and checker-only work while retaining full
 acceptance for product changes. Campaigns remain historical originals, not required
 task prompts.
 
-**Verification is pending for the current development source.** Focused checks are
-development feedback; fresh full-source acceptance and copied-executable package
-computation are still required. [Current evidence](campaigns/20261002-structured-parallel.md)
-retains completed checks and original failures. The last accepted predecessor is
-`7ea18ac9239ae99ddac892d44ad576b32b1afcdb`: 26 fresh gates, 1,538 passing workspace
-tests and four copied-product cases. Its [exact acceptance record](campaigns/20261002-custody-mailbox.md#accepted-source-and-copied-executable-continuation)
-does not certify later changes.
+**Accepted source is on main:**
+[`aa9883f0d073a0d7eaf1f44716ac7e2a5ef5b2fd`](https://github.com/lkjsxc/lkjscript/commit/aa9883f0d073a0d7eaf1f44716ac7e2a5ef5b2fd).
+Fresh full acceptance passed all 26 gates with zero reused or unrun gates and stable
+inputs. Workspace tests passed 1,637 cases, with zero failures and 29 existing ignored
+cases; two nested child-harness executions are separate. The source-matched copied
+release host also passed the three-package parallel author/edit/detached-execution
+witness with a cleared environment. This is development-host evidence, not finalized
+distribution-byte acceptance.
+
+Original full run: `.artifacts/lkjscript-dev/check/1790963982625792190-2932798-0/`.
+Receipt: `verification_d2da25acbe5a3c72913d850274927b1bece97d0a17fe43e5b12bf383b07bcbd1`.
+The copied host and harness identities, public witness, failed predecessor run and
+subsequent fixes remain under `.artifacts/20261002-structured-parallel/`; start with
+`full-02.jsonl`, `generator-host-05/identity.json` and `stabilization-index.json`.
+Reporting-only descendants do not relabel this exact tested source.
 
 Integration checkout: `/home/coder/workspace/lkjscript-structured-handoff-20261002`,
 branch `dev/custody-mailbox-20261002`. Current integration logs live in
 `.artifacts/20261002-structured-parallel/`; preserve this checkout and its ignored
 evidence until delivery and release acceptance finish.
 
-[v0.1.68](releases/v0.1.68.md) is the selected publication successor. After source
-acceptance and mainline delivery, the [release procedure](release.md#selected-structured-parallel-successor-v0168)
-requires finalized-candidate, installed and exact extracted-executable acceptance,
-then unchanged-asset promotion and anonymous verification. Selection is not publication.
+[v0.1.68](releases/v0.1.68.md) is the selected publication successor. Candidate
+[run 37046478616](https://github.com/lkjsxc/lkjscript/actions/runs/37046478616), attempt 1,
+was dispatched from the exact accepted source above at 2026-10-02 18:17:55 UTC;
+last observed queued at 18:18 UTC. Mainline delivery is complete; release acceptance
+is pending. Resume this producer before dispatching another. Once it reaches
+`candidate_accepted`, run the exact extracted-executable supplement specified in the
+[release procedure](release.md#selected-structured-parallel-successor-v0168), then
+unchanged-asset promotion and anonymous verification. Public/latest stays v0.1.64
+until those boundaries finish. No v0.1.68 tag or release has been published.
 
 ## Compatibility and authority
 
