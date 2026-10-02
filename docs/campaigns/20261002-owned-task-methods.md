@@ -148,3 +148,47 @@ had SHA-256 `e9e888a192845089cee11a5cfcec62771d2817cf1677a5458789783fbc1c668c`.
 The preserved first-run logs and focused observations remain under `.artifacts/`
 and `/tmp/lkjscript-owned-methods-*`; they do not substitute for renewed full
 acceptance of the corrected source.
+
+## Corrected-source acceptance
+
+The early renewal `1790941560197319166-934843-0` began before the focused fixture
+compile finished. It caught a u64/u128 deadline-comparison mismatch, was changed
+during execution, and is not acceptance: five gates passed, Clippy failed, the
+owned downstream lifecycle group was terminated and joined, and 19 gates were
+unrun. Its receipt records `input_stable=false`. The comparison now widens the
+observation without narrowing the deadline. All seven focused lifecycle fixtures
+then passed in 0.80 seconds; neither failed full attempt was relabeled or reused.
+
+Source `9e21bbbf6046fc524a0f806be7b45ccd769c758e`, tree
+`9ebd8c55d1cbe96cad5db2e07cb0b8c34022cb74`, passes the maintained command
+`lkjscript-dev check full --fresh --machine --jobs 2`. Run
+`1790941841723611405-1424303-0` finished in 778.106250366 seconds with all **26**
+gates freshly passed, zero reuse, stable inputs and no unrun gates. The 65,623-byte
+receipt digest is
+`verification_aceca45d1340dce3ad652d69653feada8802c864c73698c7528ba7a4a4cbe7ba`.
+
+Top-level all-target/all-feature workspace suites pass **1,519** tests, with zero
+failures and 29 pre-existing ignored cases. Two nested subprocess probes also pass;
+adding their summaries gives 1,521 successful executions, not 1,521 distinct top-level
+tests. The initial 1,516-pass aggregate above likewise included those two probes.
+All seven new unit cases and all three public task-method cases are included.
+The release lifecycle, exact maintained artifacts/transports, all eight generated
+references, product-surface audit, offline packages, HTTP and service owners pass.
+These are host-source observations, not a new pinned-userland release archive.
+
+After the last executable producer completed, its 28,657,608-byte regular executable
+was copied to `/tmp/lkjscript-owned-methods-candidate-9e21bbbf/lkjscript`. Distinct
+inodes and equal SHA-256 were checked again after the full terminal result:
+`e9e888a192845089cee11a5cfcec62771d2817cf1677a5458789783fbc1c668c`.
+The producer-selected release test executable independently passes all **three**
+`native_owned_task_methods` public cases against that exact copy in **12.78 seconds**,
+with `LKJSCRIPT_RELEASE_CANDIDATE` selecting the regular outside-checkout file.
+Subprocesses use the maintained copied-binary, cleared-environment harness, including
+source/transport removal and explicit missing-grant rejection. The log is
+`/tmp/lkjscript-owned-methods-final-optimized.log`.
+
+This completion report changes only this record and `docs/status.md`; it does not
+change the accepted executable implementation. Mainline delivery uses ordinary
+fast-forward history, never a force push. Existing worktrees, prior evidence,
+untracked files and unrelated running services are retained. Public/latest remains
+v0.1.64; no release workflow, tag, archive publication or service deployment is selected.

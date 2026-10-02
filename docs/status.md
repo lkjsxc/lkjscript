@@ -72,6 +72,20 @@ invalidates predecessor proof reuse. Existing graph, method-field, compiler and
 artifact wire layouts remain unchanged. Pure-only authored intent retains its
 previous bytes. This source increment has not replaced public v0.1.64.
 
+Source `9e21bbbf6046fc524a0f806be7b45ccd769c758e` passes all **26 full-source gates
+freshly**, with stable inputs, zero reuse and no unrun gates. Its top-level
+all-target/all-feature workspace suites pass **1,519 tests**, with zero failures
+and 29 unchanged ignored cases; two nested subprocess probes also pass separately.
+This includes seven new unit cases and three public task-method cases, three-package
+source-free execution, exact operation counts, independent negative admission and
+cleanup after cancellation or quota failure. Generated references and maintained
+artifacts match their executable owners. The [acceptance record](campaigns/20261002-owned-task-methods.md#corrected-source-acceptance)
+retains the failed predecessors and exact source/receipt identities. After the final
+executable producer, an exact regular copy outside the checkout independently passes
+all **three** selected task-method public cases with the cleared-environment harness.
+Only this status/report prose follows the tested source; no public binary or running
+application has been replaced.
+
 The preceding 0.1.65 extension allows named task helpers to consume and return
 owned buffers, cells, products and choices
 within one invocation. First-order Owned parameters and exact static implementation
@@ -86,7 +100,7 @@ from asynchronous handoff, channels and a shared scheduler. Semantic validator 2
 invalidates old proof reuse; graph, request, instruction and artifact wire formats
 are unchanged by this increment. No ambient shared memory origin was introduced.
 
-Source `fbac03b256b351fba44cd94f1960acf042f000c7` passes all **26 full-source gates
+The preceding 0.1.65 source `fbac03b256b351fba44cd94f1960acf042f000c7` passes all **26 full-source gates
 freshly**, with stable inputs, zero reuse and no unrun gates. Its all-target/all-feature
 workspace suite passes **1,511 tests**, zero failures and 29 existing ignored cases.
 The final optimized copied host separately passes all **25** selected ownership,
