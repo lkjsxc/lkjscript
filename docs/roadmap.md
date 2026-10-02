@@ -89,6 +89,13 @@ and receiver failure with exactly one defined cleanup owner. Only then add a bou
 in-process channel and independent CPU-parallel producer/consumer workload. Reserve
 capacity before transfer; queue acceptance is not completion or exactly-once delivery.
 This is a revisable experiment, not implemented task signatures or a new supervisor.
+The [structured-transfer decision](decisions/20261002-structured-owned-transfer.md)
+selects consume-only task memory parameters before the exact resource suffix as
+its first language slice. Its independent finite custody model checks reservation,
+irrevocable acceptance, explicit owner-returning retry and reachable joined cleanup.
+That model is not an implementation, a fairness proof or permission to bypass the
+current per-invocation memory-origin checks. An actual handoff must separately
+admit nested owned payloads at its destination without duplicating custody.
 
 Exercise a generic producer/transformer/consumer across a package boundary.
 Require independent negative cases for duplicate consumption, escaping a borrow,
