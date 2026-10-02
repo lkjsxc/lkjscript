@@ -1086,6 +1086,15 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             && compact_field(record, "name") == Some("structural-record")
     }));
 
+    assert_eq!(
+        type_section
+            .iter()
+            .filter(|record| record.operation == "type.form"
+                && compact_field(record, "name") == Some("owned-choice"))
+            .count(),
+        1
+    );
+
     let owner_section = compact_success(&["capabilities", "--section", "owners"]);
     assert!(owner_section.iter().any(|record| {
         record.operation == "owner.kind" && compact_field(record, "name") == Some("module")
@@ -1100,6 +1109,8 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
 
     let expression_section = compact_success(&["capabilities", "--section", "expression"]);
     let expected_expression_forms = [
+        "choose-owned",
+        "match-owned",
         "pack-owned",
         "unpack-owned",
         "implementation-call",
@@ -1164,6 +1175,14 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         expected_expression_forms
     );
     for (name, syntax) in [
+        (
+            "choose-owned",
+            "(choose-owned (type TYPE) (case NAME) EXPRESSION)",
+        ),
+        (
+            "match-owned",
+            "(match-owned (type TYPE) (local SOURCE) (case NAME (binding LOCAL (type TYPE)) (in BODY)) ...)",
+        ),
         (
             "pack-owned",
             "(pack-owned (type TYPE) (field NAME EXPRESSION) ... )",

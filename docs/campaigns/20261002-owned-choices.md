@@ -234,8 +234,78 @@ owned-memory, byte-range and resident-policy public cases against the final acce
 archive executable before promotion. The two new owned-choice cases are included;
 source or copied-host checks cannot satisfy that final-byte obligation.
 
+## Second frozen source and complete failure collection
+
+Source `000fe29597446562c0c1f6e7c93c86b7dd6348dc` (tree
+`2564c06b64d778b7bb4b0eab85bf09b08597efd9`) completed another fresh full run:
+`.artifacts/lkjscript-dev/check/1790913899621253518-2592968-0/receipt.json`
+(SHA-256 `1667b3e3a53f949e98a72539b2f8bbe579da942cc7260efb2064c9e85b73d0d9`).
+Inputs remained stable, all 26 gates ran, 25 passed freshly, zero reused, and the
+workspace gate failed. Library tests now passed 1,053 with zero failures and eight
+existing ignored cases. The subsequently reached public CLI suite passed 185,
+failed one and ignored one: its literal expression-form inventory still omitted
+`choose-owned` and `match-owned`. Cargo stopped before the later workspace suites.
+HTTP, packages, tail execution, service acceptance, release command lifecycle,
+generated references and the remaining full-profile gates passed independently.
+
+A copied release harness reproduces that exact discovery failure with exit 101
+outside the checkout and a cleared environment. Correct both complete ordered
+expression/syntax inventories, add exact literal syntax expectations for the two
+forms, and require exactly one advertised owned-choice type. Do not replace the
+complete equality checks with partial membership or weaken the public contract.
+The frozen failed receipt and copied-harness failure log remain unchanged.
+
+The workspace verification owner now uses Cargo `--no-fail-fast`: a failing test
+target must not prevent observing subsequent independent targets. Failure still
+propagates as a nonzero gate result; no test, quota, dependency or required gate is
+removed. A registry control fixes the complete command for both full/release-source
+profiles and proves the fail-fast predecessor has a different profile identity.
+An isolated dependency-free Cargo 1.98.0 experiment first runs a failing target and
+then an independent successful marker target. Both invocations exit 101, while only
+`--no-fail-fast` reaches `later-target-reached`. Original logs are retained at
+`/tmp/lkjscript-owned-retry-20261002.AqFyZz/cargo-control/{fast,complete}.log`.
+This change improves failure coverage; it cannot turn a failed run into acceptance.
+The focused discovery and registry controls both pass in
+`discovery-corrected.log` and `collection-policy-corrected.log`; the next frozen
+full run still owns complete acceptance.
+
+## Independent retry and tracked-source controls
+
+The separate directory `/tmp/lkjscript-owned-retry-20261002.AqFyZz` retains literal
+requests, logs and artifacts for a native command project authored solely through
+ordinary new/status/change/check/build operations. It declines an owned scalar,
+consumes the rejected choice, retries with
+the same original owner, and consumes the accepted result. The two unexpected arms
+contain division-by-zero traps. Minimum I64, zero and maximum I64 all return their
+original value; native check passes 93 tests including dependencies with VM/reference
+equality. A separate request first extracts that owner and then tries to resend it:
+planning rejects `kernel_buffer_ownership` and preserves the accepted base revision.
+No retry is automatic and this pure example does not establish rollback of effects.
+
+The initial authoring/build copy has SHA-256
+`e2d86fc26e879de0791b875c2a7d7ca1a20f6dcb2d22984eac0fea0b80adaebe`.
+The 909,467-byte application has SHA-256
+`7f0ebbc5356c11f24379cdecf4466fa2def885505606236d790c2c385d8c5deb`.
+After deleting only this newly created authoring project, all three command results
+remain byte-identical under an empty PATH and isolated HOME. The copied 28,627,560-byte
+host built at `000fe295`, SHA-256
+`a65c6bbc4c8946a91221924c78e99dd27641560ac881f2d21ba3b45a753256e3`, separately executes
+the same detached artifact at all three values. This distinguishes the original
+literal producer from the current host consumer instead of relabeling their bytes.
+
+Two separate tracked-only archives of `000fe295` contain the maintained standard,
+application, native-guide and native-policy projects without warmed compiler caches.
+The current host freshly checks 89 + 44 + 79 + 62 native tests, all differential-equal,
+and builds four artifacts byte-identical to the initial host's independently rebuilt
+outputs. All tracked native pack bytes and four accepted HEADs remain unchanged.
+The exact-source/current-host log is
+`.artifacts/20261002-owned-choice/cold-source-current.log`; the earlier copied-host
+run remains separately recorded as `cold-source-resumed.log`. Neither control
+modifies the frozen checkout or substitutes for full-source or final-archive gates.
+
 ## Acceptance and delivery boundary
 
-Focused worktree results above do not establish full-source acceptance, mainline
-delivery, a finalized distribution or a deployed application. Exact final-source
-verification and delivery observations are appended after their actual operations.
+The failed source runs and focused controls above do not establish full-source
+acceptance, mainline delivery, a finalized distribution or a deployed application.
+Exact successful-source verification and delivery observations are appended after
+their actual operations.

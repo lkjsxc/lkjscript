@@ -337,6 +337,7 @@ pub(crate) fn base_registry(
                 "--all-targets",
                 "--all-features",
                 "--locked",
+                "--no-fail-fast",
             ],
             &["clippy", "release_build"],
         ),
@@ -874,6 +875,57 @@ fn path_string(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn workspace_test_gate_collects_all_target_results_without_reusing_fail_fast_identity() {
+        let temporary = tempfile::tempdir().expect("temporary registry repository");
+        let mut registry =
+            base_registry(temporary.path(), temporary.path(), Path::new("/bin/true"))
+                .expect("maintained registry");
+        let workspace = registry.gate("workspace_tests").expect("workspace gate");
+        assert_eq!(
+            workspace
+                .command
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            [
+                "cargo",
+                "test",
+                "--workspace",
+                "--all-targets",
+                "--all-features",
+                "--locked",
+                "--no-fail-fast"
+            ]
+        );
+        for name in ["full", "release-source"] {
+            assert!(
+                registry
+                    .closure(&profile(name).expect("maintained profile"))
+                    .expect("profile closure")
+                    .iter()
+                    .any(|gate| gate == "workspace_tests")
+            );
+        }
+        let full = profile("full").expect("full profile");
+        let complete = registry
+            .profile_digest("full", &full)
+            .expect("complete identity");
+        registry
+            .gates
+            .iter_mut()
+            .find(|gate| gate.name == "workspace_tests")
+            .expect("workspace gate")
+            .command
+            .retain(|argument| argument != "--no-fail-fast");
+        assert_ne!(
+            complete,
+            registry
+                .profile_digest("full", &full)
+                .expect("fail-fast identity")
+        );
+    }
 
     #[test]
     fn registry_rejects_missing_dependencies_cycles_and_equivalent_nodes() {

@@ -173,7 +173,7 @@ numbering and metadata work. Inspecting remote runs found no healthy pending pro
 exact 0.1.63 release lookup returned 404, and its remote tag was absent. The normal
 read-only candidate workflow must still accept its own event source and finalized
 archive. Before any promotion, its exact extracted executable must pass the
-19-case supplementary gate in [release policy](../release.md#selected-consolidated-0163-successor).
+19-case supplementary gate in [release policy](../release.md#superseded-consolidated-0163-candidate).
 Public/latest remains immutable v0.1.60. No running service, operational data,
 credentials, permissions or existing publication identity is changed.
 
