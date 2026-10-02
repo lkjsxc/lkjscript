@@ -53,7 +53,26 @@ meaning. Authored request 23, compact discovery 27 and semantic validator 21 exp
 the relevant public contracts. Operational data and running services are not migrated.
 Installing this release does not replace accepted applications or exact dependencies.
 
-## Development v0.1.66: task methods and same-task owned calls
+## Development v0.1.67: explicit runtime mailbox custody
+
+The [runtime mailbox continuation](campaigns/20261002-custody-mailbox.md) implements
+preallocated, reservation-inclusive capacity and one serialized close/commit boundary.
+A close before commit refuses and returns only a never-accepted runtime message;
+a lost completion after commit cannot restore that message. Receiver termination
+reclaims queued values without waiting for the last sender, while active consumers
+still require joined cleanup. The existing structured-session writer now uses this
+mailbox instead of treating a library capacity permit as logical acceptance.
+
+This is an internal runtime increment, not a graph-level owned channel or a change
+to per-invocation origins, type/effect contracts or wire formats. The
+[session contract](spec/structured-sessions.md#phases-and-atomic-transition) distinguishes
+reservation, acceptance, transport delivery and completion observation. Nested
+exact-type/destination admission and public native cross-task producer/consumer
+execution remain the next separate language boundary. Source acceptance for this
+increment is recorded in its continuation, not inherited from 0.1.66. Public/latest
+remains immutable v0.1.64; no running application has been replaced.
+
+## Preceding development v0.1.66: task methods and same-task owned calls
 
 The [task-method continuation](campaigns/20261002-owned-task-methods.md) removes the
 pure-only restriction from explicit Owned
@@ -221,8 +240,10 @@ preserves the old chronology without presenting its publication checkpoints as c
 
 [Verification obligations](spec/verification.md) distinguish source checks,
 final-archive behavior, pinned userlands, installed recovery, authenticated transfer
-and anonymous acquisition. Current development proof belongs to the
-[task-method continuation](campaigns/20261002-owned-task-methods.md), with the
-[preceding task-owned evidence](campaigns/20261002-task-owned-transfer.md) retained.
+and anonymous acquisition. Current development evidence belongs to the
+[runtime mailbox continuation](campaigns/20261002-custody-mailbox.md). The accepted
+[task-method continuation](campaigns/20261002-owned-task-methods.md) and
+[preceding task-owned evidence](campaigns/20261002-task-owned-transfer.md) remain
+proof of their exact earlier sources, not substitutes for the new runtime checks.
 Reporting-only
 descendants never relabel the source or bytes that were actually tested.

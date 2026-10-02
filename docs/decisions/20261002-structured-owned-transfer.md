@@ -5,8 +5,13 @@ Date: 2026-10-02 (Asia/Tokyo).
 ## Status and authority
 
 The first same-task call boundary is implemented and source-accepted in development
-0.1.65. The subsequent structured channel remains an experiment with a finite
-executable custody model, **not an implemented queue runtime or cross-task handoff**.
+0.1.65. Development 0.1.67 implements the next runtime building block: a preallocated
+single-receiver custody mailbox, adopted by the existing structured-session writer.
+The [runtime continuation](../campaigns/20261002-custody-mailbox.md) and
+[session contract](../spec/structured-sessions.md#phases-and-atomic-transition) own
+its implementation and evidence. The graph-level structured channel remains an
+experiment, **not an implemented cross-invocation owned handoff**. Its finite
+executable design model remains independent of the concrete mailbox.
 The [task-owned contract](../spec/owned-task-transfers.md) and
 [accepted source](../campaigns/20261002-task-owned-transfer.md#accepted-source-and-mainline-delivery)
 own the implemented behavior. This decision does not add another syntax authority,
@@ -205,13 +210,24 @@ only `sync`. Reproduction uses `cargo +1.98.0 build --locked --offline`, then
 `env -i ./target/debug/lkjscript-reservation-probe`. This is an exploratory library
 probe, not a maintained language test or evidence of an implemented channel.
 
-The next implementation must own logical admission and close/commit serialization
-independently of a library capacity permit. Reserve destination bookkeeping before
-acceptance, then publish custody at one nonfallible commit point. A genuine refusal
-may return the never-accepted owner; cancellation after commitment cannot do so.
+Development 0.1.67 owns logical admission and close/commit serialization independently
+of a library capacity permit. A fixed preallocated queue counts reservations and
+committed entries against the same limit; a shared custody lock makes close-before-
+commit refusal and commit-before-close acceptance mutually exclusive. Cancellation
+of a waiting send drops its never-accepted argument; cancelling completion observation
+cannot return an accepted argument. Receiver close detaches queued values under the
+lock and destroys them outside it. Outstanding permits keep producer liveness but
+cannot defer receiver-close disposal or reopen admission. The existing session writer
+is a maintained consumer, not an invented graph-language producer/consumer workload.
+The mailbox uses a mutex and wake-all capacity notifications; no lock-freedom, waiter
+fairness or scheduler-scalability claim is selected.
+
+The next owned-language implementation still needs a sealed custodian during fallible
+preparation and separate exact-type/destination-origin admission for nested payloads.
+The internal mailbox deliberately does not supply either certificate: storage-level
+tests retain foreign-origin and active-loan rejection at the existing token boundary.
 Joined shutdown must also reclaim send operations and reservations, not merely drop
-the receiver. Keep the original payload in a sealed custodian during fallible
-preparation, and separately validate any nested destination-origin adoption before
-claiming cross-invocation transfer. This does not authorize a global ambient origin,
-ordinary data encoding of owners, an extra mutable program authority, or an
-unobserved zero-copy/parallelism claim.
+the receiver. This does not authorize a global ambient origin, ordinary data encoding
+of owners, an extra mutable program authority, or an unobserved zero-copy/parallelism
+claim. Preserve the earlier finite model and Tokio probe as their original evidence,
+not as a proof of this implementation's wake-ups or arbitrary schedules.

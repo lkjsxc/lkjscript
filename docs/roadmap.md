@@ -137,8 +137,14 @@ selects consume-only task memory parameters before the exact resource suffix as
 its first language slice. Its independent finite custody model checks reservation,
 irrevocable acceptance, explicit owner-returning retry and reachable joined cleanup.
 That model is not an implementation, a fairness proof or permission to bypass the
-current per-invocation memory-origin checks. An actual handoff must separately
-admit nested owned payloads at its destination without duplicating custody.
+current per-invocation memory-origin checks. The [runtime mailbox continuation](campaigns/20261002-custody-mailbox.md)
+implements preallocated reservation-inclusive capacity and serialized close/commit,
+with immediate queued-value cleanup and adoption by the existing session writer.
+This closes a concrete runtime obligation without introducing a premature graph API.
+An actual owned-language handoff must still separately admit exact nested payloads
+at a selected destination without duplicating custody, then expose and verify that
+boundary through native producer/consumer packages. Internal mailbox movement alone
+is not a cross-invocation origin certificate or CPU-parallel language proof.
 
 Exercise a generic producer/transformer/consumer across a package boundary.
 Require independent negative cases for duplicate consumption, escaping a borrow,

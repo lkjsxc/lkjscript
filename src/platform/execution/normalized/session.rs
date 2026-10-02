@@ -11,7 +11,7 @@ use super::value::{
 };
 use crate::platform::builtin_standard::BuiltinStandard;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
-use crate::platform::execution::{ExecutionError, ExecutionFailureClass};
+use crate::platform::execution::{ExecutionError, ExecutionFailureClass, mailbox};
 use crate::platform::http::{
     HttpHeader, HttpResponse, encode_live_response, safe_error_response, static_response,
 };
@@ -38,6 +38,10 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use tokio::net::TcpListener;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc, oneshot, watch};
+
+#[cfg(test)]
+#[path = "session_mailbox_tests.rs"]
+mod mailbox_tests;
 
 #[path = "session_stop.rs"]
 mod stop;
@@ -494,10 +498,17 @@ async fn run_parent_session(
     initial_messages: Vec<SessionOutbound>,
     _session: ActiveSessionGuard,
 ) {
+    let Ok((writer_tx, writer_rx)) = mailbox::channel(1) else {
+        application
+            .admission
+            .counters
+            .failed_sessions
+            .fetch_add(1, Ordering::AcqRel);
+        return;
+    };
     let (sink, stream) = socket.split();
     let (inbound_tx, mut inbound_rx) =
         mpsc::channel(application.limits.maximum_inbound_mailbox_items);
-    let (writer_tx, writer_rx) = mpsc::channel(1);
     let inbound_bytes = Arc::new(Semaphore::new(
         application.limits.maximum_inbound_mailbox_bytes,
     ));
@@ -543,7 +554,7 @@ async fn run_parent_session(
 
 async fn session_driver(
     application: Arc<NormalizedSessionApplication>,
-    writer: &mpsc::Sender<WriterCommand>,
+    writer: &mailbox::Sender<WriterCommand>,
     inbound: &mut mpsc::Receiver<InboundEvent>,
     mut state: NormalizedValue,
     initial_messages: Vec<SessionOutbound>,
@@ -815,14 +826,14 @@ async fn session_driver(
 
 async fn invoke_reserved(
     application: &NormalizedSessionApplication,
-    writer: &mpsc::Sender<WriterCommand>,
+    writer: &mailbox::Sender<WriterCommand>,
     state: NormalizedValue,
     input: SessionInput,
-) -> Result<(DecodedDecision, mpsc::OwnedPermit<WriterCommand>), ExecutionError> {
-    // Reserving the only transition-batch slot before graph execution makes queue-capacity
-    // failure impossible after an effectful callback. The caller retains this exact permit until
-    // it commits the fully validated batch.
-    let permit = writer.clone().reserve_owned().await.map_err(|_| {
+) -> Result<(DecodedDecision, mailbox::Permit<WriterCommand>), ExecutionError> {
+    // Preallocated capacity prevents queue growth after the callback. Reservation
+    // is not acceptance: a writer that closes meanwhile must still refuse commit.
+    // Callback effects are not rolled back or replayed when that happens.
+    let permit = writer.reserve().await.map_err(|_| {
         session_execution(
             "session_writer_closed",
             "session writer closed before transition admission",
@@ -835,18 +846,20 @@ async fn invoke_reserved(
 }
 
 async fn send_reserved(
-    reservation: mpsc::OwnedPermit<WriterCommand>,
+    reservation: mailbox::Permit<WriterCommand>,
     messages: Vec<SessionOutbound>,
     close: Option<CloseFrame>,
     timeout: Duration,
 ) -> Result<(), ()> {
     let (finished, completion) = oneshot::channel();
-    let _ = reservation.send(WriterCommand {
-        messages,
-        close,
-        flush_peer_close: false,
-        finished,
-    });
+    reservation
+        .send(WriterCommand {
+            messages,
+            close,
+            flush_peer_close: false,
+            finished,
+        })
+        .map_err(|_| ())?;
     match tokio::time::timeout(timeout, completion).await {
         Ok(Ok(true)) => Ok(()),
         Ok(Ok(false)) | Ok(Err(_)) | Err(_) => Err(()),
@@ -854,7 +867,7 @@ async fn send_reserved(
 }
 
 async fn flush_peer_close_reply(
-    writer: &mpsc::Sender<WriterCommand>,
+    writer: &mailbox::Sender<WriterCommand>,
     timeout: Duration,
 ) -> Result<(), ()> {
     let (finished, completion) = oneshot::channel();
@@ -874,7 +887,7 @@ async fn flush_peer_close_reply(
 }
 
 async fn close_failed(
-    writer: &mpsc::Sender<WriterCommand>,
+    writer: &mailbox::Sender<WriterCommand>,
     code: u16,
     reason: &'static str,
     limits: &SessionLimits,
@@ -893,7 +906,7 @@ async fn close_failed(
 }
 
 async fn send_writer(
-    writer: &mpsc::Sender<WriterCommand>,
+    writer: &mailbox::Sender<WriterCommand>,
     messages: Vec<SessionOutbound>,
     close: Option<CloseFrame>,
     timeout: Duration,
@@ -1003,7 +1016,7 @@ async fn enqueue_message(
 
 async fn session_writer(
     mut sink: SplitSink<WebSocket, Message>,
-    mut receiver: mpsc::Receiver<WriterCommand>,
+    mut receiver: mailbox::Receiver<WriterCommand>,
     mut cancelled: watch::Receiver<bool>,
 ) {
     loop {

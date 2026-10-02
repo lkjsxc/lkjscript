@@ -74,4 +74,6 @@ pub(crate) use worker::NormalizedWorkerApplication;
 #[cfg(test)]
 mod lkjournal_tests;
 #[cfg(test)]
+mod owned_mailbox_tests;
+#[cfg(test)]
 pub(crate) mod tests;

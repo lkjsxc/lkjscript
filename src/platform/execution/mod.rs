@@ -1,6 +1,7 @@
 //! Representation-neutral execution controls and normalized Graph 10 execution.
 
 mod control;
+pub(crate) mod mailbox;
 pub(crate) mod normalized;
 
 pub(crate) use control::cumulative_charge;

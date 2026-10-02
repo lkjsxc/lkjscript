@@ -78,11 +78,35 @@ status or close value, foreign runtime shape, or retained-state violation produc
 diagnostic and never becomes next state.
 
 At most one graph transition runs for a session. Before the next event observes a result, the
-runtime validates the entire next state and output batch, commits the entire batch to capacity that
-was reserved before the callback, and only then installs the next state. Callback failure,
-cancellation, deadline or work exhaustion, invalid output, or protocol failure installs neither
-state nor partial output and terminates the session. Effects that were already possibly visible are
-not replayed.
+runtime validates the entire next state and output batch and commits the entire batch to capacity
+reserved before the callback. A continuing transition installs its next state only after
+successful writer completion.
+Callback failure, cancellation, deadline or work exhaustion, or invalid output before batch
+acceptance installs neither next state nor an output batch and terminates the session. Independent
+callback effects that were already possibly visible are neither rolled back nor replayed.
+
+Development 0.1.67 uses the runtime's preallocated custody mailbox for writer batches. Its logical
+capacity includes queued entries and outstanding reservations. Reservation is not acceptance:
+receiver close and commit share one serialization point, so close before commit refuses even an
+existing reservation. A refused continuing transition disposes of the never-accepted batch and
+fails instead of installing next state; the preceding callback is not retried. Terminal close
+and peer-close cleanup remain best effort and do not prove delivery of a close frame.
+Queue storage is allocated before children start, not while committing a validated batch. Allocation failure at setup fails the admitted session without
+spawning transport children.
+
+Acceptance is irrevocable and is distinct from socket delivery and completion observation.
+After commit, transport failure, cancellation or a missing acknowledgement may occur after some
+or all messages have been sent. They do not restore an original sender owner, prove rollback,
+or justify retry. Receiver termination closes admission and releases queued batches promptly,
+without keeping them alive until the last sender or reservation is dropped. A dequeued batch
+belongs to the active writer until it finishes or is cancelled and joined. Payload destructors
+run outside the custody lock. The transport's existing bounded child-join path remains required;
+dropping a completion future alone does not join the writer.
+
+This mailbox is an internal runtime transport, not a graph-level owned channel. It does not
+admit a foreign invocation origin, transfer capability grants, or change any graph, artifact or
+authored-request encoding. Payload validation and byte accounting remain the session's
+responsibility; a slot bound alone does not bound pending senders, active payloads, heap or RSS.
 
 ## Structured parent and bounds
 
