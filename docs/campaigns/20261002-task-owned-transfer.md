@@ -164,3 +164,20 @@ is inferred. Its run is `1790929589978816249-3271642-0`, with the original outpu
 incorrect background-shell entry point failed with exit 127 before checking; that
 separate `full-0d850de5.log` is also retained. The corrected source now requires
 focused proof followed by one dependency-complete full acceptance run.
+
+The first corrected focused run passes eight library controls and fails the remaining
+witness golden-digest assertion; its public target is unrun because Cargo stopped at
+the failed library target. The literal 0.1.64 digest becomes an explicit non-reuse
+control, while the new literal digest pins the independently enumerated updated
+feature inventory. The original `focused-continuation.log` remains a failure, not
+an accepted run. The resumed focused command collects both test targets.
+
+The corrected focused command completes with **9 library tests and 5 public CLI tests
+passing**, zero failures and zero ignored selections. It includes the complete
+four-package source-free task/witness lifecycle, concrete and generic resource/memory
+composition, illegal ordering/effect rows, unchanged resource-copy rejection and the
+new positive product-consumption control. Cargo-reported test executables are
+`target/debug/deps/lkjscript-26a9856cbc97ee55` and
+`target/debug/deps/public_cli-04f06cd51021249e`; the original log is
+`.artifacts/20261002-task-owned/focused-corrected.log`. This feedback is not yet
+full acceptance or a proof of the final optimized copied host.

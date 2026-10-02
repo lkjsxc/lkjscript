@@ -101,9 +101,14 @@ fn witness_contract_domains_are_closed_and_unique() {
         digest,
         "validator_contract_5feac3ec9b83c140c8a18c7808f0d8eeaa8604bbb8fd40bd898f8979770f94bd"
     );
-    assert_eq!(
+    // The published 0.1.64 inventory cannot certify the new task boundary.
+    assert_ne!(
         digest,
         "validator_contract_589efdddc2378a9ff40b8d316b16a4fc37b8991ce629f17e01dc54ea3f43c050"
+    );
+    assert_eq!(
+        digest,
+        "validator_contract_8b4ed8dacac7c8ce269a2a46b097e0fc4b41dc33983e05bd8b0c619d92ff7c3f"
     );
 }
 
