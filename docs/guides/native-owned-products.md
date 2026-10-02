@@ -40,7 +40,7 @@ released at exit. A borrowed product cannot be unpacked or expose an owned child
 
 Development 0.1.63 adds metadata reads. The [continuation](../campaigns/20261001-owned-product-metadata.md)
 records accepted source, copied-product public workflows and the separate binary
-publication boundary. This feature is not in public v0.1.60.
+publication boundary. This feature is public in v0.1.64.
 
 ```text
 (function create tag (visibility public) (effect pure)

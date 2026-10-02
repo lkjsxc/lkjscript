@@ -137,4 +137,5 @@ permission to execute its derived artifacts.
 
 See the [native guide](../guides/native-owned-products.md) and
 [campaign](../campaigns/20261001-owned-products.md) for literal programs, actual
-verification and remaining work. Public v0.1.60 is unchanged.
+verification and remaining work. These products are public in v0.1.64; its
+immutable predecessor v0.1.60 remains unchanged.

@@ -430,3 +430,49 @@ and installed-lifecycle terminal. This continuation creates no annotated tag,
 changes no publication selector or credential, and dispatches no duplicate producer.
 Public/latest remains v0.1.60 at this observation; candidate acceptance alone does
 not establish a public 0.1.64 release.
+
+## Completed v0.1.64 publication
+
+The authorized continuation on 2026-10-02 verifies the completed original producer
+`36966111016/1`, its required 21-case final-byte supplement, mainline ancestry,
+repository immutability and empty tag/release occupancy. No new candidate is built.
+Normal annotated tag `v0.1.64`, object `6bfc0ca146469945ae350fdb120277cf6d924e0a`,
+points to exact accepted source `0048ae1ee2e4678b409c782e02044b038bf60052`.
+Its public notes describe the consolidated 0.1.61–0.1.64 capabilities without
+claiming development 0.1.65 task-owned signatures. The independently read GitHub tag
+message matches the original annotation byte-for-byte.
+
+The documented release-only variable `LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA`
+is advanced from completed 0.1.60 object `1ed78aaead92e41c053aa735a1e55fee13137953`
+to the new exact tag object. No credentials, access controls, branch protections
+or repository immutability settings are changed. Promotion `36984555849/1` is
+invoked once at 17:31:57 JST with `operation=promote`, `producer_run=36966111016`,
+`producer_attempt=1`, and trusted controller source
+`e887fad9f88da1cd016a40daba12bcccc7d77449`. Candidate execution is not repeated in
+the publisher's credential-bearing boundary.
+
+The maintained controller completes authenticated selection, small installed transfer,
+immutable publication and anonymous acquisition/installed verification. The original
+terminal declares `immutable_published_and_public_verified`, `latest=selected`,
+`latest_tag=v0.1.64`, and the exact original product source. Its GitHub artifact is
+`11217925178` (`release-terminal-36984555849-1`), retained locally under the main
+checkout's `.artifacts/20261002-public-0164/terminal/`. The terminal is an observed
+completed workflow result, not inferred from one green subjob.
+
+Independent GitHub reads confirm release `401655238`, public/latest `v0.1.64`,
+`draft=false`, `prerelease=false`, `immutable=true`, published at **17:39:02 JST**.
+Its three assets have the same lengths and SHA-256 digests as the locally retained
+accepted producer originals:
+
+| Asset | Public asset ID | Bytes | SHA-256 |
+| --- | --- | --- | --- |
+| install.sh | 605181833 | 3566 | `88c13e05c11e0c2e73d926b373567bce0c7d618b0c64922fe62f7ca5aa8a340a` |
+| lkjscript-x86_64-unknown-linux-musl.tar.gz | 605181729 | 13434329 | `74674b5a0872d471264c274a251f6d7c3faf47fcc56385f2c59df9af41d98547` |
+| SHA256SUMS | 605181775 | 109 | `f3da31dd0940d0946ce2a7dd54c3d7e7a699a21c5c1907c1e2a6981000d7eab9` |
+
+The README installer is now pinned to that public version. Status is condensed into
+current availability, development, supported consumers and explicit limits; its linked
+historical snapshot and original campaigns retain earlier failures and measurements.
+No running application, dependency selection or operational data is changed. Later
+mainline reporting or 0.1.65 development does not relabel this accepted source or
+rebuild the immutable public assets.

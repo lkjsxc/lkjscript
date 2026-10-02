@@ -10,19 +10,21 @@ The graph is the sole editable authority. Stable identities preserve declaration
 through edits, while names remain useful, changeable locators. Pure functions,
 tasks, exact libraries and standalone application bundles share this model.
 
-**Public:** [v0.1.60](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.60),
-with recursive cross-package [resource contracts](docs/guides/native-resources.md),
-explicit deployment grants, reusable immutable-value storage and the in-process
-[shared service host](docs/spec/shared-runtime.md). Native authoring, offline
-libraries, immutable deployment rebuilds, the [web starter](docs/guides/native-web.md),
-[form codec](docs/guides/native-forms.md) and [durable browser editor](docs/guides/native-editor.md)
-remain available. Promotion [36763094941/1](https://github.com/lkjsxc/lkjscript/actions/runs/36763094941)
-completed immutable publication and anonymous installed verification with the original
-accepted bytes. Owned-memory and owned-product development is not in this binary.
-[Current status](docs/status.md) separates available releases, development source
-and unproved properties. Development 0.1.64 adds [recoverable owned outcomes](docs/guides/native-owned-choices.md):
-a declined operation can return its original owned payload, with exhaustive consuming
-case analysis and exact generic-library contracts. This is not in the public binary.
+**Public:** [v0.1.64](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.64),
+with [owned storage and exact generic libraries](docs/guides/native-owned-generics.md),
+[owned products](docs/guides/native-owned-products.md), immutable byte ranges and
+[recoverable owned outcomes](docs/guides/native-owned-choices.md). A declined operation
+can return its original owned payload through exhaustive consuming case analysis.
+Recursive cross-package [resource contracts](docs/guides/native-resources.md), explicit
+execution grants and the in-process [shared service host](docs/spec/shared-runtime.md)
+remain separate from memory ownership. Native authoring, offline libraries,
+[web starters](docs/guides/native-web.md), [forms](docs/guides/native-forms.md) and the
+[durable editor](docs/guides/native-editor.md) remain available.
+Promotion [36984555849/1](https://github.com/lkjsxc/lkjscript/actions/runs/36984555849)
+completed immutable publication and anonymous installed verification with the unchanged
+accepted assets. [Current status](docs/status.md) separates public capabilities from
+development 0.1.65 [same-task owned calls](docs/spec/owned-task-transfers.md).
+Task-owned signatures and asynchronous ownership transfer are not in public v0.1.64.
 
 Product versions are **opaque `A.B.C` identifiers**. All three components have the
 same role: none denotes compatibility, stability, change size or a feature milestone.
@@ -39,10 +41,10 @@ executing it. The exact URL below remains pinned even when a newer release appea
 ```sh
 curl -q --fail --location --proto '=https' --proto-redir '=https' \
   --connect-timeout 15 --max-time 180 --max-filesize 16384 \
-  --output install-v0.1.60.sh \
-  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.60/install.sh
-cat install-v0.1.60.sh
-sh install-v0.1.60.sh --prefix "$HOME/.local"
+  --output install-v0.1.64.sh \
+  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.64/install.sh
+cat install-v0.1.64.sh
+sh install-v0.1.64.sh --prefix "$HOME/.local"
 export PATH="$HOME/.local/bin:$PATH"
 lkjscript --version
 lkjscript runtime list
@@ -123,7 +125,7 @@ binary's `capabilities build`; this command is not retroactively added to older 
 
 ### Shared service host in the public binary
 
-Public v0.1.60 accepts repeated `serve --deployment DESCRIPTOR` arguments to host
+Public v0.1.64 accepts repeated `serve --deployment DESCRIPTOR` arguments to host
 HTTP and interactive services in one process. Equal exact bundles share immutable
 prepared code; instance configuration, secrets, grants, data adapters and cancellation
 remain private. Different exact versions can coexist. The
