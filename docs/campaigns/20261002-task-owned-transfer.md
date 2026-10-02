@@ -128,3 +128,39 @@ No asynchronous channel, structured child task, receiver-origin rebinding, fairn
 parallel scheduler, transaction spanning adapters, automatic retry or rollback is
 introduced. Public binary publication and running-service deployment are separate;
 the accepted original 0.1.64 assets must not be replaced by a 0.1.65 local build.
+
+## Resumed full-suite diagnosis
+
+The resumed workspace is clean at `0d850de52fda5baee66a37a97abf337028d69020`,
+tree `bca467e6185d91e237496c2a5279f6148594b834`. The independently reread main is
+`e887fad9f88da1cd016a40daba12bcccc7d77449`; neither implementation descendant has
+been delivered to main yet. The retained full receipt
+`.artifacts/lkjscript-dev/check/1790924635227406330-3049196-0/receipt.json`
+reports stable source inputs, 25 freshly passed gates, zero reuse and no unrun gates,
+but `workspace_tests` fails. Its complete workspace run has two library failures
+(1,058 passed, two failed, eight ignored) and one public CLI failure (189 passed,
+one failed, one ignored). Other workspace targets retain their own original results.
+This is not full acceptance.
+
+The product-negative test still expected a consuming task OwnedProduct parameter to
+be forbidden. Preserve that exact newly valid shape as an independently classified
+positive control, and test a task product **borrow** as the negative instead. The
+witness test still expected predecessor memory and generic/witness feature versions;
+it now asserts the explicitly selected updated feature inventory, including the
+separate same-task feature. Historical proof rejection checks are preserved.
+
+The resource-only generic attack remains invalid, but the new memory signature
+checker intercepted its resource ordering before the existing affine resource-copy
+diagnostic. Restrict that ordinary-parameter ordering check to signatures where an
+owned-memory parameter has occurred. Resource-only admission and its exact diagnostic
+remain at the affine owner; memory-after-resource and ordinary-after-memory still
+reject. The original public test is unchanged, including its no-publication and
+complete-project-inventory assertions.
+
+A fresh full invocation was mistakenly started before this retained failed receipt
+was found. Its owned checker was interrupted and joined with exit 130; no full pass
+is inferred. Its run is `1790929589978816249-3271642-0`, with the original output in
+`.artifacts/20261002-task-owned/full-0d850de5-fresh.log`. An earlier launch with an
+incorrect background-shell entry point failed with exit 127 before checking; that
+separate `full-0d850de5.log` is also retained. The corrected source now requires
+focused proof followed by one dependency-complete full acceptance run.

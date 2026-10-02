@@ -285,7 +285,9 @@ fn admit_signature(read: &(impl ExpressionRead + ?Sized), s: &Signature) -> Resu
                     "owned memory cannot occur in a parameter container or descriptor",
                 ));
             }
-            if memory || capability {
+            // Resource-only signatures keep their independent affine diagnostics.
+            // This checker owns ordering only once an owned-memory input occurs.
+            if memory {
                 return Err(reject(
                     "ordinary parameters must precede owned memory and resources",
                 ));

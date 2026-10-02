@@ -823,6 +823,16 @@ fn owned_products_generic_only_and_closed_metadata_rejections() {
             .any(|t| matches!(t.form, TypeForm::ByteBuffer | TypeForm::OwnedI64Cell))
     );
     prepare_snapshot(&generic);
+    // Task helpers may now consume complete products, but cannot receive loans.
+    // Keep the newly valid predecessor input as a positive admission control.
+    let task_product = byte_buffer_tests::author_only(
+        "declarations.begin\n(units (module create task-product (function create consume (visibility private) (effect (task)) (parameter create p (type (owned-product (field data ByteBuffer))) (use consume)) (returns Unit) (body (unit)))))\ndeclarations.end",
+    )
+    .unwrap();
+    assert!(crate::platform::kernel::memory_reference::accepts(
+        &task_product
+    ));
+    prepare_snapshot(&task_product);
     for declaration in [
         "(function create bad (visibility private) (effect pure) (parameter create p (type (owned-product (field tag I64))) (use consume)) (returns Unit) (body (unit)))",
         "(function create bad (visibility private) (effect pure) (type-parameter create T) (parameter create p (type (owned-product (field data ByteBuffer) (field meta T))) (use consume)) (returns Unit) (body (unit)))",
@@ -834,7 +844,7 @@ fn owned_products_generic_only_and_closed_metadata_rejections() {
         "(function create bad (visibility private) (effect pure) (parameter create p (type (owned-product (field data ByteBuffer) (field meta (function () I64)))) (use consume)) (returns Unit) (body (unit)))",
         "(record create bad (visibility private) (field create p (type (owned-product (field data ByteBuffer)))))",
         "(function create bad (visibility private) (effect pure) (parameter create p (type (list (owned-product (field data ByteBuffer))))) (returns Unit) (body (unit)))",
-        "(function create bad (visibility private) (effect (task)) (parameter create p (type (owned-product (field data ByteBuffer))) (use consume)) (returns Unit) (body (unit)))",
+        "(function create bad (visibility private) (effect (task)) (parameter create p (type (owned-product (field data ByteBuffer))) (use borrow)) (returns Unit) (body (unit)))",
         "(function create ordinary (visibility private) (type-parameter create T) (effect pure) (returns Unit) (body (unit))) (function create bad (visibility private) (effect pure) (returns Unit) (body (call ordinary (types (owned-product (field data ByteBuffer))))))",
     ] {
         let error = byte_buffer_tests::author_only(&format!(

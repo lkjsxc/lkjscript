@@ -34,8 +34,8 @@ fn witness_contract_domains_are_closed_and_unique() {
         RelationKind::ALL.len()
     );
     assert_ne!(contract::validator_contract_digest().bytes(), [0_u8; 32]);
-    // Affine feature 10 separates memory from capability authority. The distinct
-    // owned-buffer feature binds its new transfer, scoped-read, and return rules.
+    // Affine feature 10 keeps capability authority separate. Owned-memory feature
+    // 2 admits same-task consumption/returns, but still forbids task input loans.
     assert_eq!(
         contract::VALIDATOR_FEATURES
             .iter()
@@ -48,7 +48,7 @@ fn witness_contract_domains_are_closed_and_unique() {
             .iter()
             .find(|feature| feature.name == "owned_byte_buffers")
             .map(|feature| feature.version),
-        Some(1)
+        Some(2)
     );
     // Byte range/copy signatures extend the closed contract independently of
     // affine resource rules. Neither predecessor certificate is reusable.
@@ -75,8 +75,9 @@ fn witness_contract_domains_are_closed_and_unique() {
     for (name, version) in [
         ("structural_owned_choices", 1),
         ("structural_owned_products", 2),
-        ("symbolic_owned_parameters", 1),
-        ("explicit_owned_implementation_witnesses", 2),
+        ("symbolic_owned_parameters", 2),
+        ("explicit_owned_implementation_witnesses", 3),
+        ("same_task_owned_transfer", 1),
         ("sealed_owned_i64_cells", 1),
     ] {
         assert_eq!(
