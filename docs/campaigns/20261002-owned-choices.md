@@ -303,9 +303,74 @@ The exact-source/current-host log is
 run remains separately recorded as `cold-source-resumed.log`. Neither control
 modifies the frozen checkout or substitutes for full-source or final-archive gates.
 
-## Acceptance and delivery boundary
+## Accepted source and mainline delivery
 
-The failed source runs and focused controls above do not establish full-source
-acceptance, mainline delivery, a finalized distribution or a deployed application.
-Exact successful-source verification and delivery observations are appended after
-their actual operations.
+Source `0048ae1ee2e4678b409c782e02044b038bf60052` (tree
+`711291f3cad9cfa45c5a494c05525ba4cbd84a62`) completes fresh full-source acceptance.
+The exact receipt is
+`.artifacts/lkjscript-dev/check/1790915456257383440-2687767-0/receipt.json`,
+SHA-256 `4c1195337ab19a37380e5ad1cc985a6f302effb5ffe7b05ca7dcf91c7f2db4f9`;
+its worktree identity is
+`verification_ceb95261dc870e76e495178b8b344e2a7399acd944e30eb68518b1300d4701bf`.
+All 26 required gates pass freshly, zero reused, no failed or unrun gates, and
+inputs remain stable. The workspace process runs every target with `--no-fail-fast`:
+1,496 top-level tests pass, zero fail and the existing 29 ignored cases remain
+explicitly ignored. This includes all 186 public CLI cases and 210 developer-tool
+unit cases; subprocess result lines are not double-counted as extra top-level tests.
+The maintained HTTP, offline package, tail-call, service, native-project, generated
+reference, format, lint and Rust-only owners also pass. The full log is
+`.artifacts/20261002-owned-choice/full-source-final.log`.
+
+After the configured release-lifecycle compilation, its host and reported public
+harness were copied into the separate witness directory as `host-0048ae1e` and
+`public-cli-0048ae1e`. The 28,627,560-byte host is the same `e2d86fc2...` executable
+identity recorded above. The source-matched 22,201,352-byte harness has SHA-256
+`cf6c15d6f7217f26044da32dc256ca21bd25065d9b291ea02641021dbecacf90`.
+Outside the checkout, `env -i PATH=` plus only `LKJSCRIPT_RELEASE_CANDIDATE`
+selects the copied host. All 21 enumerated owned-memory, byte-range and resident
+policy cases pass with zero ignored or failed selections, using two test threads.
+The log `.artifacts/20261002-owned-choice/copied-host-0048.log` has SHA-256
+`30c59e1faf861ba205fea018cddabb85ad2906c98ae6516511552b8c8a673a72`.
+Retain these immutable copies rather than inferring executable identity from a
+shared Cargo output path. This is host-binary evidence, not final-archive acceptance.
+
+The runtime, manifests, maintained native projects and generated references are
+unchanged from the independently cold-checked `000fe295` source; the successor
+changes public-test expectations, verification collection and reporting only.
+That narrow equality preserves the scope of the earlier native controls without
+relabeling their exact source or copying the failed full receipt as acceptance.
+
+Remote main and branch protection were refreshed, the clean detached source was
+preserved, and all three implementation/correction commits were fast-forwarded into
+the main checkout and normally pushed from `20d78b69` to `0048ae1e`. An independent
+GitHub ref read and `git ls-remote` both confirm that exact accepted commit on main. The original two
+untracked files, stash, other worktrees, ignored evidence and running deployments
+are preserved. Subsequent changes to this campaign and status are reporting-only
+descendants; they do not rename the tested source.
+
+### Candidate and next boundary
+
+Before dispatch, the live inventory showed no active release producer, no v0.1.64
+release and no v0.1.64 tag. The existing read-only candidate operation was dispatched
+once from the just-verified mainline source. Producer `36966111016/1`, created on
+2026-10-02 at 13:47:50 JST, is independently confirmed as `workflow_dispatch` for
+`0048ae1ee2e4678b409c782e02044b038bf60052`. Its `Accept final candidate` job is in
+progress at the last read, building immutable host tools after successful checkout
+and pinned-toolchain setup. Source-specific CI acceptance, finalized-archive and
+installed target acceptance, and the final terminal result remain pending. Preserve
+this exact producer instead of dispatching a duplicate while it is healthy.
+
+Public/latest remains immutable v0.1.60. No 0.1.64 annotation/tag, scoped publication
+selection, release, deployment or application-data migration is performed. After
+this producer finishes, inspect its exact original attempt and terminal boundary.
+Only an accepted final archive can supply the executable for the separately required
+21-case final-byte supplement, followed by any explicitly authorized selection and
+promotion of those same accepted assets. The copied-host supplement above does not
+satisfy that remaining archive-bound requirement.
+
+The next language experiment remains structured task-owned transfer: first compose
+owned memory with exact resource parameters and define suspension/loan/cleanup
+boundaries, then exercise acceptance, owner-returning refusal, cancellation and
+receiver failure before introducing a bounded in-process channel. Owned choices
+now supply the result contract; they do not themselves implement asynchronous
+transfer, rollback, exactly-once delivery or a new shared-runtime supervisor.

@@ -33,9 +33,10 @@ unchanged. Inspect the installed executable with `lkjscript capabilities`.
 
 ## Development v0.1.64: recoverable owned outcomes
 
-Explicit fixed named `OwnedChoice` types compose ordinary success values with
-still-owned rejected payloads. `choose-owned` constructs one case; `match-owned`
-consumes the parent and requires every case with disjoint body-only payload bindings.
+The accepted development source supports fixed, named `OwnedChoice` types composing
+ordinary success values with still-owned rejected payloads. `choose-owned` constructs
+one case; `match-owned` consumes the parent and requires every case, with disjoint
+body-only payload bindings.
 Choices nest with owned products, compose across exact generic libraries and may
 serve as closed static implementation Self types. Recursive transfer and whole-owner
 synchronous reborrowing retain the existing contracts. Ordinary Option/Result,
@@ -52,9 +53,24 @@ state for every case. These are source changes, not a zero-copy or RSS claim.
 Graph 20 preserves supported historical graph readers. Compiler 18, bytecode 14
 and artifact 25 require rebuilding predecessor derived artifacts; authored request
 23, compact discovery 27 and semantic validator 21 expose the new contracts.
-Operational data and running services are unchanged. The source-specific acceptance
-and mainline observations are recorded in the continuation; they must not be
-confused with finalized archive acceptance or a public 0.1.64 release.
+Operational data and running services are unchanged.
+
+Fresh full-source acceptance passes at `0048ae1ee2e4678b409c782e02044b038bf60052`:
+all 26 gates freshly pass, zero reuse, stable inputs and no unrun gates. Workspace
+tests pass 1,496 with zero failures and 29 existing ignored cases. An immutable
+copied host and its source-matched public harness separately pass all 21 selected
+owned-memory, byte-range and resident-policy cases outside the checkout with a
+cleared environment. Normal mainline push and an independent GitHub ref read confirm
+the exact accepted source. Reporting-only descendants do not relabel that proof.
+The [acceptance and delivery](campaigns/20261002-owned-choices.md#accepted-source-and-mainline-delivery)
+retain exact identities, original failures and independent native controls.
+
+Candidate `36966111016/1` was dispatched once from that exact source on 2026-10-02
+at 13:47:50 JST. Its final-candidate job is in progress at the last read; source-specific
+CI, finalized-archive/installed acceptance and its terminal result remain pending.
+No final archive or public 0.1.64 release is accepted by the local source/host proofs.
+The archive's exact extracted executable still owes the 21-case supplement before
+any authorized promotion. Public/latest remains immutable v0.1.60.
 
 The frozen 0.1.63 producer `36869518385/1` failed after its source gates and joined
 installed bootstrap. Its installed structural-discovery verifier used a stale
