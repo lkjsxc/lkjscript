@@ -182,7 +182,7 @@ fn silent_sampled_survivor_is_not_a_clean_success() {
         }
         ProcessStatus::Timeout => {
             assert_eq!(result.reason.as_deref(), Some("timeout"));
-            assert!(result.elapsed_nanoseconds >= spec.timeout.as_nanos());
+            assert!(u128::from(result.elapsed_nanoseconds) >= spec.timeout.as_nanos());
         }
         _ => panic!("silent survivor was not rejected: {result:?}"),
     }
