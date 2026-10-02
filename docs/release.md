@@ -466,6 +466,13 @@ selector. A copied host-development executable is supplementary evidence, not
 substitute final-archive acceptance. A future selector change must revise this
 obligation explicitly rather than silently reducing coverage.
 
+Original producer `36966111016/1` for `0048ae1ee2e4678b409c782e02044b038bf60052`
+now completes candidate acceptance, and its exact final extracted executable passes
+all 21 selected supplementary cases with no failures or ignored selections. The
+[completed final-byte record](campaigns/20261002-owned-choices.md#final-candidate-and-exact-archive-supplement-completed)
+retains original asset/receipt identities and the authenticated resumption window.
+Do not rebuild those assets or substitute a later development source for promotion.
+
 The failed 0.1.61 and 0.1.63 producers and all immutable releases remain unchanged.
 Public/latest remains v0.1.60 until accepted original assets are explicitly selected
 and promoted; no 0.1.64 tag or publication is implied by source integration.

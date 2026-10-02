@@ -374,3 +374,59 @@ boundaries, then exercise acceptance, owner-returning refusal, cancellation and
 receiver failure before introducing a bounded in-process channel. Owned choices
 now supply the result contract; they do not themselves implement asynchronous
 transfer, rollback, exactly-once delivery or a new shared-runtime supervisor.
+
+### Final candidate and exact-archive supplement completed
+
+Continuation on 2026-10-02 independently reads original producer `36966111016/1`
+for source `0048ae1ee2e4678b409c782e02044b038bf60052`. `Accept final candidate`
+(job `110710116498`) completes successfully at 14:57:50 JST; the terminal job
+`110725636544` completes at 14:57:58 JST with `candidate_accepted`. Publication,
+selection and anonymous public verification are explicitly skipped, not passed.
+The earlier in-progress observations above remain their historical observations.
+
+Authenticated original Actions artifacts are assets `11212026449`, acceptance
+`11211981507`, and terminal `11212056213`. Their downloaded ZIP SHA-256 values,
+checked against GitHub's independently returned digests, are respectively:
+
+```text
+d51f0e0eccc2ebbe2d2412028d3a44f02b60847ae9154e4420920964e68f5b53
+13467377a55e9e2aec6deebb1aad5444ffb6c8a2b98713962b310d0e74ef9f23
+ab47fe93329af7ff06685f036329a2f1d35475123cd69804e81c2ba2f717824b
+```
+
+The original receipt is complete, reports all 20 source gates, six target owners,
+two userlands, successful installed recovery and joined cleanup, and has no failure.
+The archive `lkjscript-x86_64-unknown-linux-musl.tar.gz` is 13,434,329 bytes,
+SHA-256 `74674b5a0872d471264c274a251f6d7c3faf47fcc56385f2c59df9af41d98547`.
+Its actual extracted 28,777,888-byte executable has SHA-256
+`01e6d3fdba1b1d0e30922bf94faacee6f2cf89886df110530111e2cb6189e554`;
+the embedded manifest has SHA-256
+`fc2453cb39b0060003ab40d548be89cdc632075077032faf16a302a3c1469683`.
+These identities match the authenticated acceptance receipt and original asset
+checksum inventory. No local rebuild replaces the accepted executable.
+
+The original `public-cli-0048ae1e` harness recorded above is rehashed unchanged.
+Its enumerated `native_owned_`, `native_byte_buffer_`, `native_byte_ranges_` and
+`resident_policy` selection contains exactly 21 tests. Outside the compiler
+checkout, with an empty environment/PATH except `LKJSCRIPT_RELEASE_CANDIDATE`,
+that harness runs against the exact extracted final executable: **21 passed,
+0 failed, 0 ignored**, 166 unrelated cases filtered, 46.73 seconds, exit 0.
+This satisfies the separately required final-byte supplement in `docs/release.md`;
+the current task-owned development source and its tests are not substituted.
+
+Originals are retained in `/tmp/lkjscript-final-0164-20261002/`. The supplement
+`final-byte-supplement.log` has SHA-256
+`6372d7ac5ea90fce4aa009ea832e396f4c04d01f4e16db9e97f5102c9957a4b2`.
+`acceptance/release-receipt.json` has SHA-256
+`89edd27a07ac8dda56562ca7505445a80f42343f63c9c8ba6221d27dae04ce16`;
+`terminal/release-terminal.json` has SHA-256
+`57a2f0a900cd9552be258195f425fa13f428b7a10d5cf5558c08bf67a6e993e0`.
+The original remote artifacts report expiry around 2026-10-16 14:57 JST. Local
+copies retain resumption evidence but do not extend that remote retention contract.
+
+The remaining publication action is explicit authorized selection/promotion of
+these original accepted assets, followed by the maintained anonymous acquisition
+and installed-lifecycle terminal. This continuation creates no annotated tag,
+changes no publication selector or credential, and dispatches no duplicate producer.
+Public/latest remains v0.1.60 at this observation; candidate acceptance alone does
+not establish a public 0.1.64 release.

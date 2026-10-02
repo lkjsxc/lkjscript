@@ -65,12 +65,15 @@ the exact accepted source. Reporting-only descendants do not relabel that proof.
 The [acceptance and delivery](campaigns/20261002-owned-choices.md#accepted-source-and-mainline-delivery)
 retain exact identities, original failures and independent native controls.
 
-Candidate `36966111016/1` was dispatched once from that exact source on 2026-10-02
-at 13:47:50 JST. Its final-candidate job is in progress at the last read; source-specific
-CI, finalized-archive/installed acceptance and its terminal result remain pending.
-No final archive or public 0.1.64 release is accepted by the local source/host proofs.
-The archive's exact extracted executable still owes the 21-case supplement before
-any authorized promotion. Public/latest remains immutable v0.1.60.
+Original candidate `36966111016/1` completed at 14:57:58 JST on 2026-10-02 with
+`candidate_accepted`: source-specific CI, finalized-archive, installed and pinned-userland
+acceptance succeeded. The authenticated final archive's exact extracted executable
+also passes all 21 required supplemental cases outside the checkout with a cleared
+environment, no failed or ignored selections. The
+[completed archive proof](campaigns/20261002-owned-choices.md#final-candidate-and-exact-archive-supplement-completed)
+retains original artifact, executable, receipt and log identities. Publication and
+anonymous public verification remain separate and unperformed; no tag or selection
+is changed by this observation. Public/latest remains immutable v0.1.60.
 
 The frozen 0.1.63 producer `36869518385/1` failed after its source gates and joined
 installed bootstrap. Its installed structural-discovery verifier used a stale
