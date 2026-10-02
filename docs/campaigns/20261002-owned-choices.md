@@ -192,6 +192,48 @@ that fails to consume the lease, without changing the accepted program revision.
 `clippy-preflight.log` passes all workspace targets/features with warnings denied.
 These are focused worktree checks; the next exact source commit owns full acceptance.
 
+## Resumed full-suite diagnosis and historical controls
+
+The next delegated continuation finds main still at `20d78b69`, with committed
+implementation `5847e02145a7c23143a26eb9c96cb6b2c6562942` only in the existing
+detached worktree. The original full receipt
+`.artifacts/lkjscript-dev/check/1790873745205323091-1483331-0/receipt.json`
+reports stable inputs, 25 fresh gates passed and one failed workspace gate. Its
+library process passed 1,045 tests, failed seven and ignored eight; Cargo stopped
+there, so those observations do not establish completion of later workspace suites.
+The original receipt and individually reproduced failures in `legacy-failures.log`
+remain unchanged.
+
+All seven failures start at outdated current-generation assertions: compiler and
+bytecode 17/13 instead of 18/14, owner envelope/graph 19 instead of 20, or rebuilt
+artifact 24 instead of 25. Align only those successor expectations. Preserve the
+Graph 19 codec fingerprint under its explicit historical generation instead of
+replacing its evidence; retain the existing Graph 15–18 fingerprints and immutable
+historical fixture identities. Add scalar-owner round trips for every Graph 17–20
+envelope and owned-contract/implementation round trips for Graph 18 and 19. Existing
+foreign identity and pre-feature generation rejection controls remain enforced.
+`generation-resumed.log` passes all seven selected tests with zero failures.
+No production decoder, validation condition or resource bound is weakened.
+
+A new independently expected selected-arm failure control runs both evaluators
+at I64 minimum, zero and maximum. Each accepted/rejected arm first traps on integer
+division by zero, then succeeds on the same prepared executor with trapping disabled.
+In the rejected arm the trap happens while its payload cell is still owned, before
+extraction. All 12 failures retain the evaluator's precise diagnostic, all 12
+subsequent calls return the original integer, and no cell/composite remains live.
+The allocation-identity observer also checks all completed transfers. The focused
+`arm-failure-resumed.log` passes; the successor full suite rechecks the final source.
+This is invocation cleanup/reuse, not catching a trap inside the language, rollback
+or automatic operation retry.
+
+Live release inventory still reports immutable v0.1.60. The latest two producers
+are the completed failed 0.1.63 and 0.1.61 attempts, not active work. The
+[release procedure](../release.md#selected-consolidated-0164-successor) now selects
+0.1.64 as their consolidated successor and explicitly requires all 21 enumerated
+owned-memory, byte-range and resident-policy public cases against the final accepted
+archive executable before promotion. The two new owned-choice cases are included;
+source or copied-host checks cannot satisfy that final-byte obligation.
+
 ## Acceptance and delivery boundary
 
 Focused worktree results above do not establish full-source acceptance, mainline

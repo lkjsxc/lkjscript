@@ -28,11 +28,21 @@ fn owned_contract_owner_domains_are_canonical_and_exact() {
         }
         seen += 1;
         let (digest, bytes) = encode_owner(record).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOWN19");
+        assert_eq!(&bytes[..8], b"LKJOWN20");
         assert_eq!(
             decode_owner(&bytes, record.owner(), record.kind(), digest).unwrap(),
             *record
         );
+        for generation in [18, 19] {
+            let mut historical = record.clone();
+            historical.set_encoding_for_edit(generation);
+            let (digest, bytes) = encode_owner(&historical).unwrap();
+            assert_eq!(&bytes[..8], format!("LKJOWN{generation}").as_bytes());
+            assert_eq!(
+                decode_owner(&bytes, historical.owner(), historical.kind(), digest).unwrap(),
+                historical
+            );
+        }
         let OwnerRecord::Declaration(mut forged) = record.clone() else {
             unreachable!()
         };

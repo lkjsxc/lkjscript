@@ -146,3 +146,75 @@ declarations.end"#;
     );
     assert!(!crate::platform::kernel::memory_reference::accepts(&source));
 }
+
+#[test]
+fn owned_choice_selected_arm_failure_cleans_up_and_does_not_poison_reused_execution() {
+    let literal = SOURCE
+        .replacen(
+            "    (function create attempt",
+            "    (external create divide (visibility private) (implementation core.i64.divide)\n      (parameter create lhs (type I64)) (parameter create rhs (type I64)) (returns I64))\n    (function create attempt",
+            1,
+        )
+        .replacen(
+            "(parameter create allowed (type Bool)) (returns I64)",
+            "(parameter create allowed (type Bool)) (parameter create fail (type Bool)) (returns I64)",
+            1,
+        )
+        .replacen(
+            "(in (local value))",
+            "(in (if (local fail) (call divide (local value) (i64 0)) (local value)))",
+            1,
+        )
+        .replacen(
+            "(in (call extract (local original)))",
+            "(in (if (local fail) (call divide (i64 1) (i64 0)) (call extract (local original))))",
+            1,
+        );
+    let source = byte_buffer_tests::author_only(&literal).unwrap();
+    assert!(crate::platform::kernel::memory_reference::accepts(&source));
+    let program = prepare_snapshot(&source);
+    let entry = declaration_named(&source, "main");
+    let control = ExecutionControl::uncancelled();
+    let policy = NormalizedRunPolicy::foreground();
+    let vm = NormalizedVm::new(&program, policy);
+    let interpreter = NormalizedReferenceInterpreter::new(&source, &program, policy);
+    for reference in [false, true] {
+        let composites = super::super::owned_product::StorageObservation::start();
+        let cells = super::super::owned_i64_cell::StorageObservation::start();
+        for n in [i64::MIN, 0, i64::MAX] {
+            for allowed in [false, true] {
+                // The same prepared executor succeeds immediately after either arm fails.
+                // In the rejected arm, failure precedes extraction of the live owned cell.
+                for fail in [true, false] {
+                    let arguments = vec![
+                        NormalizedValue::I64(n),
+                        NormalizedValue::Bool(allowed),
+                        NormalizedValue::Bool(fail),
+                    ];
+                    let result = if reference {
+                        interpreter
+                            .invoke(entry, arguments, None, &control)
+                            .map(|p| p.0)
+                    } else {
+                        vm.invoke(entry, arguments, None, &control).map(|p| p.0)
+                    };
+                    if fail {
+                        assert_eq!(
+                            result.unwrap_err().code,
+                            if reference {
+                                "reference_integer_division"
+                            } else {
+                                "normalized_integer_division"
+                            }
+                        );
+                    } else {
+                        assert_eq!(result.unwrap(), NormalizedValue::I64(n));
+                    }
+                    assert_eq!(cells.live(), (0, 0));
+                    assert_eq!(composites.live(), (0, 0));
+                    composites.assert_transfers_preserve_allocations();
+                }
+            }
+        }
+    }
+}

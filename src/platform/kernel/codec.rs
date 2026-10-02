@@ -66,11 +66,22 @@ mod nominal_encoding_tests {
         .unwrap();
         let owner = OwnerRecord::Expression(expression.clone());
         let (digest, bytes) = encode_owner(&owner).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOWN19");
+        assert_eq!(&bytes[..8], b"LKJOWN20");
         assert_eq!(
             decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
             owner
         );
+        // Scalar meaning remains readable in each supported scalar-era envelope.
+        for generation in [17, 18, 19, 20] {
+            expression.contract_version = generation;
+            let historical = OwnerRecord::Expression(expression.clone());
+            let (digest, bytes) = encode_owner(&historical).unwrap();
+            assert_eq!(&bytes[..8], format!("LKJOWN{generation}").as_bytes());
+            assert_eq!(
+                decode_owner(&bytes, historical.owner(), historical.kind(), digest).unwrap(),
+                historical
+            );
+        }
         for (generation, magic, domain) in [
             (
                 15,

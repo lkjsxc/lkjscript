@@ -409,7 +409,7 @@ candidate selector. Development-binary results do not satisfy that final-byte ga
 No selection authorizes changing credentials, protections, immutability or existing
 tags. Candidate dispatch and actual terminal results are recorded by the campaign.
 
-## Selected consolidated 0.1.63 successor
+## Superseded consolidated 0.1.63 candidate
 
 The [0.1.63 notes](releases/v0.1.63.md) consolidate owned storage, byte views,
 explicit Owned abstraction, structural products, opaque numbering, corrected native
@@ -424,9 +424,9 @@ accepted final archive. Its separate publication is superseded by this corrected
 consolidated selection; immutable releases and failed evidence are unchanged.
 No 0.1.63 tag, release or healthy matching producer existed at selection.
 
-After mainline integration, dispatch one normal non-publishing candidate at the
-exact event source. It must complete the existing source/final-archive/installation
-workflow. Before promotion, run all **19** cases selected by `native_owned_`,
+The original selection required one normal non-publishing candidate at the
+exact event source and the existing source/final-archive/installation workflow.
+Its supplemental final-byte gate required all **19** cases selected by `native_owned_`,
 `native_byte_buffer_`, `native_byte_ranges_` and `resident_policy` against the exact
 executable extracted from that accepted archive, with cleared environment/PATH
 except its explicit candidate selector. The nineteenth case is the cross-package
@@ -434,6 +434,41 @@ metadata read. Preserve original harness and executable identities; a host-devel
 binary or source-only result does not satisfy this final-byte gate. Do not alter
 credentials, protection, immutable tags or prior assets. Public/latest remains
 v0.1.60 until accepted assets are explicitly selected and promoted.
+
+The resulting frozen producer `36869518385/1` failed installed structural discovery
+because its verifier retained a stale private syntax inventory. It was not accepted
+or published. The [diagnosis](campaigns/20261002-owned-choices.md#frozen-0163-producer-diagnosis)
+retains the original evidence; source development repairs that verification owner
+without rewriting or retrying the frozen failed producer.
+
+## Selected consolidated 0.1.64 successor
+
+The [0.1.64 notes](releases/v0.1.64.md) consolidate the unpublished owned-memory,
+byte-range, numbering and metadata work with recoverable owned choices. The
+[continuation](campaigns/20261002-owned-choices.md) binds the actual source acceptance
+and delivery. A selected version alone is neither accepted source nor a published
+binary. No new runtime, application data or deployment is selected by these notes.
+
+After accepted source reaches main, dispatch one normal non-publishing candidate
+from that exact event source. Preserve the existing source, finalized-archive,
+installed lifecycle, pinned-userland and original-reader obligations. The installed
+syntax inventory now comes from the authenticated verifier source registry; the
+literal lifecycle and independent mutation controls remain required.
+
+Before promotion, use the original source-matched public test harness to run all
+cases selected by `native_owned_`, `native_byte_buffer_`, `native_byte_ranges_` and
+`resident_policy` against the exact executable extracted from the accepted archive.
+This source contains 21 such cases, including both the four-package owned-choice
+witness and exact task-resource consumption. Record the actual enumerated inventory
+and require no ignored or skipped selected case. Run outside the compiler checkout
+with cleared environment/PATH except the explicit `LKJSCRIPT_RELEASE_CANDIDATE`
+selector. A copied host-development executable is supplementary evidence, not
+substitute final-archive acceptance. A future selector change must revise this
+obligation explicitly rather than silently reducing coverage.
+
+The failed 0.1.61 and 0.1.63 producers and all immutable releases remain unchanged.
+Public/latest remains v0.1.60 until accepted original assets are explicitly selected
+and promoted; no 0.1.64 tag or publication is implied by source integration.
 
 ## Build and accept a candidate
 
