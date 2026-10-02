@@ -68,14 +68,22 @@ from asynchronous handoff, channels and a shared scheduler. Semantic validator 2
 invalidates old proof reuse; graph, request, instruction and artifact wire formats
 are unchanged by this increment. No ambient shared memory origin was introduced.
 
-Focused execution covers both evaluators, exact values and allocation counts,
-four-package source-free execution, explicit witness selection, raw boundaries,
-unused-loan mutations, traps, cancellation/quota cleanup and consistently rehashed
-untaken duplicate transfers. A prior full run has three failed assertions across
-two test targets despite 25 passing gates; its original evidence is preserved.
-The continuation corrects the stale tests and resource-diagnostic precedence.
-Full source acceptance and final copied-host acceptance remain pending at this
-snapshot. This is not a public v0.1.65 binary or a running-service deployment.
+Source `fbac03b256b351fba44cd94f1960acf042f000c7` passes all **26 full-source gates
+freshly**, with stable inputs, zero reuse and no unrun gates. Its all-target/all-feature
+workspace suite passes **1,511 tests**, zero failures and 29 existing ignored cases.
+The final optimized copied host separately passes all **25** selected ownership,
+task-owned, byte-range and resident-policy cases outside the checkout with a cleared
+environment. Normal fast-forward delivery and an independent GitHub ref read confirm
+that exact accepted source on main. The [acceptance record](campaigns/20261002-task-owned-transfer.md#accepted-source-and-mainline-delivery)
+retains exact identities, failed predecessors and the unexecuted mismatching copy;
+reporting-only descendants do not change the source actually tested.
+
+Coverage includes both evaluators, exact values and allocation counts, four-package
+source-free execution, explicit witnesses, raw boundaries, unused-loan mutations,
+traps, cancellation/quota cleanup and consistently rehashed untaken duplicate transfers.
+The original failed full run is not relabeled: stale test expectations and resource
+diagnostic precedence were corrected before fresh acceptance. Public/latest remains
+v0.1.64. No 0.1.65 binary publication or running-service deployment is implied.
 
 The next distinct boundary is a bounded structured in-process handoff: reserve
 capacity before irrevocable acceptance, return ownership only on an actual refusal,

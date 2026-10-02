@@ -181,3 +181,69 @@ new positive product-consumption control. Cargo-reported test executables are
 `target/debug/deps/public_cli-04f06cd51021249e`; the original log is
 `.artifacts/20261002-task-owned/focused-corrected.log`. This feedback is not yet
 full acceptance or a proof of the final optimized copied host.
+
+## Accepted source and mainline delivery
+
+Fresh full acceptance completes on exact source
+`fbac03b256b351fba44cd94f1960acf042f000c7`, tree
+`6f3a34d7a72ab7de8582980b71f7b0582efb023d`, using pinned Rust 1.98.0 on the Linux
+x86-64 workspace, `CARGO_BUILD_JOBS=4` and checker `--jobs 2`. The original
+`.artifacts/lkjscript-dev/check/1790931338572084651-3370767-0/receipt.json`
+reports **26/26 freshly passed gates**, zero reuse, stable inputs and no unrun gates.
+Initial and final input identities are both
+`verification_9e136a687aad5e072fbe91bd29659cb5ced526900f07a49c6e0c908307137147`.
+The checker and wrapper join with exit zero. The preserved outer log is
+`.artifacts/20261002-task-owned/full-fbac03b2.log`.
+
+The complete all-target/all-feature workspace command passes **1,511 tests** with
+zero failures and 29 pre-existing ignored cases. This includes 1,060 library and
+190 public CLI passes, the independent custody model, contributor tooling and the
+native documentation-site targets. The separate optimized command lifecycle,
+offline packages, HTTP/stateful/service owners, generated references, product
+surface and maintained native package/artifact comparisons also pass. Historical
+failed runs above remain failures; no quota or acceptance gate was waived.
+
+A separately copied optimized executable and the Cargo-reported, source-matched
+`target/debug/deps/public_cli-035dfc3eafbe52c5` harness execute outside the checkout
+under `env -i`, with only `LKJSCRIPT_RELEASE_CANDIDATE` selecting the product.
+All **25** selected owned-memory, task-owned, byte-range and resident-policy tests
+pass, zero failures/ignored cases. Four new task-owned public cases extend the
+previous 21-case supplement. The exact invocation uses `--test-threads=2` and
+filters `native_owned_ native_task_owned_ native_byte_buffer_ native_byte_ranges_
+resident_policy`; `selected-tests.list` independently records the 25 selections.
+
+These originals remain in `/tmp/lkjscript-final-0165-fbac03b2-20261002/`:
+`lkjscript-verified` is 28,640,936 bytes, SHA-256
+`e9433ea17d84beb50f6034be28331eeaff46da96a40b888b0db988f2b2770860`;
+`public-cli` is 528,370,800 bytes, SHA-256
+`590ad07edcde289f3c8fee542e5a5a0f0adb541c20ef7af17bd0e7980497c3ef`.
+The completed `copied-host.log` has SHA-256
+`cf5b9c93aeb6a3ab69f3633889fb048cde86ba40d758435a82a658a73aa20a20`.
+The final full-run product still compares byte-for-byte with that accepted copy.
+This is optimized host proof, not final musl-archive acceptance or a public 0.1.65 release.
+
+The first attempted product copy failed `cmp` at byte 813 before any execution;
+its original `lkjscript` copy is retained in the same directory with SHA-256
+`66bc5a86cd8fac54b9c0c3bc4097f3cb6f37a7fb2f9a6cbcd5ee178db27699eb`.
+The source release output was being generated concurrently, but the exact cause of
+the mismatch is not established. No claim is made for that unexecuted copy.
+A later explicit byte copy binds matching source digests before/after copying and
+an equal destination digest, then passes the public supplement above. It does not
+rewrite the initial mismatch as success.
+
+After refreshing main and its unprotected branch state, a normal fast-forward
+integrates the accepted source from `e887fad9f88da1cd016a40daba12bcccc7d77449` and
+pushes main to `fbac03b256b351fba44cd94f1960acf042f000c7`. An independent GitHub ref
+read confirms that exact result; local main and origin agree. The two original
+untracked main files, existing stash, other worktrees and unrelated services remain
+untouched. Subsequent status/decision reporting must not relabel this tested source.
+
+Public/latest is separately completed immutable **v0.1.64**, accepted from source
+`0048ae1ee2e4678b409c782e02044b038bf60052` by original producer `36966111016/1` and
+promotion `36984555849/1`. The [publication record](20261002-owned-choices.md#completed-v0164-publication)
+retains its independently checked unchanged assets and anonymous installed verification.
+Development 0.1.65 is not selected for a second immediate binary publication; it
+remains integrated source. The next language experiment is the joined bounded
+handoff, not an ambient memory origin or a detached task API. Its
+[reservation refinement](../decisions/20261002-structured-owned-transfer.md#bootstrap-channel-reservations-are-not-acceptance)
+records the independent library observations and their limits.

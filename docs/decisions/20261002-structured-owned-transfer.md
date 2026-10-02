@@ -4,27 +4,28 @@ Date: 2026-10-02 (Asia/Tokyo).
 
 ## Status and authority
 
-Selected next experiment, with a finite executable custody model; **not an
-implemented language feature or queue runtime**. This decision does not relax
-current admission, add public syntax, select a scheduler, change running services,
-or rename the already frozen 0.1.64 candidate. The meaning graph remains the sole
-program authority. The [roadmap](../roadmap.md) and
-[owned-choice continuation](../campaigns/20261002-owned-choices.md) own sequence
-and observed delivery.
+The first same-task call boundary is implemented and source-accepted in development
+0.1.65. The subsequent structured channel remains an experiment with a finite
+executable custody model, **not an implemented queue runtime or cross-task handoff**.
+The [task-owned contract](../spec/owned-task-transfers.md) and
+[accepted source](../campaigns/20261002-task-owned-transfer.md#accepted-source-and-mainline-delivery)
+own the implemented behavior. This decision does not add another syntax authority,
+select a scheduler or change running services. Public v0.1.64 and its original assets
+are unchanged by this development. The meaning graph remains the sole program authority;
+the [roadmap](../roadmap.md) records the revisable sequence.
 
-The inspected product source is `0048ae1ee2e4678b409c782e02044b038bf60052`.
-Its task bodies can create and dispose of owned choices while independently
+The original decision inspected source `0048ae1ee2e4678b409c782e02044b038bf60052`.
+That predecessor's task bodies can create and dispose of owned choices while independently
 consuming exact capability resources, as witnessed by
 [native task-resource cases](../../tests/public_cli/native_generic_resources.rs).
-Its [memory signature validator](../../src/platform/kernel/memory.rs) still
-requires pure owned parameters/results, a final memory suffix and no mixed
-memory/resource signatures. This is a real missing composition boundary, not a
-reason to introduce a second ownership system.
+Its memory signature validator required pure owned parameters/results, a final
+memory suffix and no mixed memory/resource signatures. Development 0.1.65 closes
+that composition gap through the existing ownership system, not a parallel one.
 
 ## First language boundary: task-local composition
 
-Implement direct named task helpers before a channel or detached task API.
-Select the initial parameter order as ordinary unrestricted parameters, then
+Development 0.1.65 implements direct named task helpers before a channel or detached
+task API. The selected parameter order is ordinary unrestricted parameters, then
 zero or more owned consume parameters, then the existing exact capability-resource
 borrow/consume suffix. Require explicit use modes and exact resource requirements.
 This preserves ordinary argument evaluation before transfer and keeps existing
@@ -163,8 +164,8 @@ There is no deduplication/transaction guarantee for independently repeated messa
 
 ## Implementation acceptance before broader concurrency
 
-Implement and admit mixed task-local signatures first. Then refine the model into
-the actual handoff boundary with two independent native producer/consumer packages
+Mixed task-local signatures are now accepted and integrated. Next refine the model
+into the actual handoff boundary with two independent native producer/consumer packages
 and copied-executable, source-deleted execution. Force cancellation before reservation,
 between reservation and acceptance, after acceptance before observation, after dequeue,
 and during receiver shutdown. Check borrowed/foreign-origin/wrong-type rejection,
@@ -175,3 +176,42 @@ then real multithreaded stress and a CPU-parallel workload. Distinguish abstract
 model, implementation tests and public language evidence in every report.
 Only after that evidence should scheduler work-stealing, multiple receivers,
 cross-instance channels or dynamic instance supervision become the next experiment.
+
+## Bootstrap channel reservations are not acceptance
+
+An isolated probe against the repository's locked **Tokio 1.53.1**, built with pinned
+Rust 1.98.0 and offline dependencies, identifies a concrete refinement obligation.
+Tokio documents that an outstanding [Permit](https://docs.rs/tokio/1.53.1/tokio/sync/mpsc/struct.Permit.html)
+can send after `Receiver::close`, and that [receiver termination](https://docs.rs/tokio/1.53.1/tokio/sync/mpsc/struct.Receiver.html#method.close)
+waits for outstanding reservations to be sent or released. Thus a direct mapping
+`reserve -> close -> permit.send` does not implement this decision's selected
+close-before-commit refusal. This is a contract mismatch, not a claimed Tokio bug.
+
+The four-case, clear-environment probe observes: a reserved send remains receivable
+after close; an unused owned permit delays the disconnected observation; a late
+permit send after dropping the receiver retains its payload until the remaining
+sender is dropped; and dropping an unpolled ordinary send future disposes of its
+captured payload without delivering it. The third case initially expected immediate
+disposal and failed (observed zero drops, expected one). Both that original failure
+and the corrected four-case passing observation are retained, rather than claiming
+that receiver destruction alone proves cleanup. These observations cover only the
+listed deterministic library operations, not arbitrary interleavings or fairness.
+
+Original manifest, lockfile, source, failed assumption and both logs are retained at
+`.artifacts/20261002-task-owned/reservation-probe/` in the implementation worktree;
+the independently built original remains at `/tmp/lkjscript-reservation-probe-20261002/`.
+The manifest selects exactly `tokio = 1.53.1`, with default features disabled and
+only `sync`. Reproduction uses `cargo +1.98.0 build --locked --offline`, then
+`env -i ./target/debug/lkjscript-reservation-probe`. This is an exploratory library
+probe, not a maintained language test or evidence of an implemented channel.
+
+The next implementation must own logical admission and close/commit serialization
+independently of a library capacity permit. Reserve destination bookkeeping before
+acceptance, then publish custody at one nonfallible commit point. A genuine refusal
+may return the never-accepted owner; cancellation after commitment cannot do so.
+Joined shutdown must also reclaim send operations and reservations, not merely drop
+the receiver. Keep the original payload in a sealed custodian during fallible
+preparation, and separately validate any nested destination-origin adoption before
+claiming cross-invocation transfer. This does not authorize a global ambient origin,
+ordinary data encoding of owners, an extra mutable program authority, or an
+unobserved zero-copy/parallelism claim.
