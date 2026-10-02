@@ -101,3 +101,8 @@ policy meaning is changed; older derived artifact generations require rebuilding
 The owned-product metadata continuation repeats this public build for compiler 17,
 bytecode 13 and artifact 24, with the same accepted policy HEAD and exact supplier
 meaning.
+
+The [structured parallel compiler refresh](../../docs/campaigns/20261002-structured-parallel.md)
+rebuilds the retained policy for compiler 19, bytecode 15 and artifact 26 through
+public check/build. All 62 tests pass with equal production/reference results;
+accepted HEAD, exact supplier and policy meaning are unchanged.

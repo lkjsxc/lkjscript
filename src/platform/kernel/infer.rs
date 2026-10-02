@@ -33,6 +33,7 @@ struct ExecutionContext {
     pure: bool,
     requirements: BTreeSet<super::RequirementOperand>,
     effect_parameters: BTreeSet<super::EffectParameterReference>,
+    bindings: BTreeMap<BindingId, (BindingKind, TypeObjectDigest)>,
 }
 
 #[derive(Clone, Debug)]
@@ -239,6 +240,7 @@ pub(crate) fn validate_expression_roots_with_limits<R: ExpressionRead>(
         ephemeral_types: BTreeMap::new(),
         admitted_nominals: BTreeSet::new(),
         type_metadata_bytes: 0,
+        selected_expression: None,
     };
     validator.validate_roots(roots);
     validator.exhaustion.map_or(Ok(()), Err)
@@ -254,6 +256,47 @@ pub(crate) fn infer_function_expression_type<R: ExpressionRead>(
     work: &mut usize,
     maximum_steps: usize,
 ) -> Result<TypeObjectDigest, Diagnostic> {
+    infer_function_expression(
+        read,
+        declaration,
+        expression,
+        effect,
+        work,
+        maximum_steps,
+        |_, digest| Ok(digest),
+    )
+}
+
+/// Returns the inferred root shape, including recomputable callable types that
+/// have no persisted type object. This does not add objects to accepted meaning.
+pub(crate) fn infer_function_expression_type_object<R: ExpressionRead>(
+    read: &R,
+    declaration: DeclarationId,
+    expression: ExpressionId,
+    effect: &FunctionEffect,
+    work: &mut usize,
+    maximum_steps: usize,
+) -> Result<TypeObject, Diagnostic> {
+    infer_function_expression(
+        read,
+        declaration,
+        expression,
+        effect,
+        work,
+        maximum_steps,
+        |validator, digest| validator.type_object(digest),
+    )
+}
+
+fn infer_function_expression<R: ExpressionRead, T>(
+    read: &R,
+    declaration: DeclarationId,
+    expression: ExpressionId,
+    effect: &FunctionEffect,
+    work: &mut usize,
+    maximum_steps: usize,
+    result: impl FnOnce(&ExpressionValidator<'_, '_, R>, TypeObjectDigest) -> Result<T, Diagnostic>,
+) -> Result<T, Diagnostic> {
     let (pure, requirements) = match effect {
         FunctionEffect::Pure => (true, BTreeSet::new()),
         FunctionEffect::Task {
@@ -274,17 +317,47 @@ pub(crate) fn infer_function_expression_type<R: ExpressionRead>(
         ephemeral_types: BTreeMap::new(),
         admitted_nominals: BTreeSet::new(),
         type_metadata_bytes: 0,
+        selected_expression: Some((expression, None)),
+    };
+    validator.consume_work()?;
+    let body = match read.owner(OwnerKey::Declaration(declaration))? {
+        Some(OwnerRecord::Declaration(record)) => match record.payload {
+            DeclarationPayload::Function(function) => function.body,
+            _ => {
+                return Err(type_error(
+                    "kernel_type_parameter_scope",
+                    "inference requires an exact graph function context",
+                ));
+            }
+        },
+        _ => {
+            return Err(type_error(
+                "kernel_type_parameter_scope",
+                "inference function context is missing",
+            ));
+        }
     };
     validator.infer(
-        expression,
+        body,
         &ExecutionContext {
             declaration: Some(declaration),
             pure,
             requirements,
             effect_parameters: effect.row().parameters.into_iter().collect(),
+            bindings: BTreeMap::new(),
         },
         0,
-    )
+    )?;
+    let inferred = validator
+        .selected_expression
+        .and_then(|(_, ty)| ty)
+        .ok_or_else(|| {
+            type_error(
+                "kernel_full_lexical_scope",
+                "selected expression is outside the exact function body",
+            )
+        })?;
+    result(&validator, inferred)
 }
 
 struct ExpressionValidator<'a, 'b, R> {
@@ -296,6 +369,7 @@ struct ExpressionValidator<'a, 'b, R> {
     ephemeral_types: BTreeMap<TypeObjectDigest, TypeObject>,
     admitted_nominals: BTreeSet<DeclarationReference>,
     type_metadata_bytes: usize,
+    selected_expression: Option<(ExpressionId, Option<TypeObjectDigest>)>,
 }
 
 impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
@@ -356,6 +430,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             pure,
                             requirements,
                             effect_parameters: symbolic,
+                            bindings: BTreeMap::new(),
                         };
                         self.compare_root_type(
                             function.body,
@@ -454,6 +529,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         pure: false,
                         requirements,
                         effect_parameters: BTreeSet::new(),
+                        bindings: BTreeMap::new(),
                     };
                     if let Err(diagnostic) =
                         self.validate_call_effect(&signature, &component_context)
@@ -466,6 +542,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         pure: !signature.task,
                         requirements: signature.requirements,
                         effect_parameters: BTreeSet::new(),
+                        bindings: BTreeMap::new(),
                     };
                     match port.implementation {
                         PortImplementation::Expression(expression) => self.compare_root_type(
@@ -500,28 +577,11 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     let Some(target_port) = target.port else {
                         continue;
                     };
-                    if target.component.package == self.read.package_id()
-                        && target_port.package == self.read.package_id()
+                    if let Err(diagnostic) =
+                        self.validate_target_port(target.component, target_port)
                     {
-                        match self
-                            .read
-                            .owner(OwnerKey::Declaration(target.component.declaration))
-                        {
-                            Ok(Some(OwnerRecord::Declaration(component))) => {
-                                if !matches!(
-                                    component.payload,
-                                    DeclarationPayload::Component { ref ports, .. }
-                                        if ports.contains(&target_port.port)
-                                ) {
-                                    self.error(
-                                        "kernel_full_target_port_owner",
-                                        "target port does not belong to its component",
-                                    );
-                                }
-                            }
-                            Ok(_) => {}
-                            Err(diagnostic) => self.push_diagnostic(diagnostic),
-                        }
+                        self.push_diagnostic(diagnostic);
+                        continue;
                     }
                     if target_port.package != self.read.package_id() {
                         continue;
@@ -698,7 +758,8 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         context: &ExecutionContext,
         depth: usize,
     ) -> Result<TypeObjectDigest, Diagnostic> {
-        self.infer_at(expression, context, depth)
+        let inferred = self
+            .infer_at(expression, context, depth)
             .map_err(|mut error| {
                 if !error
                     .notes
@@ -708,7 +769,92 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     error.notes.push(format!("expression owner: {expression}"));
                 }
                 error
-            })
+            })?;
+        if let Some((selected, ty)) = &mut self.selected_expression
+            && *selected == expression
+        {
+            *ty = Some(inferred);
+        }
+        Ok(inferred)
+    }
+
+    fn scoped_context(
+        &mut self,
+        context: &ExecutionContext,
+    ) -> Result<ExecutionContext, Diagnostic> {
+        self.consume_work()?;
+        for _ in context.bindings.keys() {
+            self.consume_work()?;
+        }
+        for _ in &context.requirements {
+            self.consume_work()?;
+        }
+        for _ in &context.effect_parameters {
+            self.consume_work()?;
+        }
+        Ok(context.clone())
+    }
+
+    fn validate_target_port(
+        &mut self,
+        component: DeclarationReference,
+        port: super::PortReference,
+    ) -> Result<(), Diagnostic> {
+        self.consume_work()?;
+        if component.package != port.package {
+            return Err(type_error(
+                "kernel_full_target_package",
+                "target component and port must belong to one package",
+            ));
+        }
+        let ports = if component.package == self.read.package_id() {
+            match self
+                .read
+                .owner(OwnerKey::Declaration(component.declaration))?
+            {
+                Some(OwnerRecord::Declaration(record)) => match record.payload {
+                    DeclarationPayload::Component { ports, .. } => ports,
+                    _ => Vec::new(),
+                },
+                _ => Vec::new(),
+            }
+        } else {
+            match self.dependency_owner(
+                component.package,
+                OwnerKey::Declaration(component.declaration),
+                "target component",
+            )? {
+                PackageInterfaceRecord::Declaration(record) => match record.payload {
+                    PackageInterfaceDeclarationPayload::Component { ports, .. } => ports,
+                    _ => Vec::new(),
+                },
+                _ => Vec::new(),
+            }
+        };
+        self.consume_work()?;
+        let parent = if port.package == self.read.package_id() {
+            match self.read.owner(OwnerKey::Port(port.port))? {
+                Some(OwnerRecord::Port(record)) => Some(record.declaration),
+                _ => None,
+            }
+        } else {
+            match self.dependency_owner(port.package, OwnerKey::Port(port.port), "target port")? {
+                PackageInterfaceRecord::Port(record) => Some(record.declaration),
+                _ => None,
+            }
+        };
+        let mut listed = false;
+        for candidate in ports {
+            self.consume_work()?;
+            listed |= candidate == port.port;
+        }
+        if !listed || parent != Some(component.declaration) {
+            return Err(type_error(
+                "kernel_full_target_port_owner",
+                "target port does not belong to its component",
+            ));
+        }
+        Ok(())
     }
 
     fn infer_at(
@@ -803,7 +949,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             "owned choice case, binding kind or payload type mismatch",
                         ));
                     }
-                    let actual = self.infer(arm.body, context, next)?;
+                    let mut scoped = self.scoped_context(context)?;
+                    self.consume_work()?;
+                    scoped.bindings.insert(arm.binding, (binding.kind, case.ty));
+                    let actual = self.infer(arm.body, &scoped, next)?;
                     if let Some(expected) = result {
                         require_same(
                             expected,
@@ -869,7 +1018,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 if fields.len() != expected.len() {
                     return Err(super::owned_product::reject("unpack must bind every field"));
                 }
+                let mut scoped = self.scoped_context(context)?;
                 for (field, contract) in fields.iter().zip(&expected) {
+                    self.consume_work()?;
                     let Some(OwnerRecord::Binding(binding)) =
                         self.read.owner(OwnerKey::Binding(field.binding))?
                     else {
@@ -884,8 +1035,11 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             "unpack field, binding kind or type mismatch",
                         ));
                     }
+                    scoped
+                        .bindings
+                        .insert(field.binding, (binding.kind, contract.ty));
                 }
-                self.infer(body, context, next)
+                self.infer(body, &scoped, next)
             }
             ExpressionOperation::Unit {} => self.canonical_type(TypeForm::Unit),
             ExpressionOperation::Bool { .. } => self.canonical_type(TypeForm::Bool),
@@ -919,7 +1073,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 Ok(when_true)
             }
             ExpressionOperation::Let { bindings, body } => {
+                let mut scoped = self.scoped_context(context)?;
                 for binding in bindings {
+                    self.consume_work()?;
                     let binding_record = match self.read.owner(OwnerKey::Binding(binding))? {
                         Some(OwnerRecord::Binding(record)) => record,
                         _ => {
@@ -938,12 +1094,14 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     let value = binding_record.value.ok_or_else(|| {
                         type_error("kernel_type_binding_value", "let binding has no value")
                     })?;
-                    let actual = self.infer(value, context, next)?;
+                    let actual = self.infer(value, &scoped, next)?;
                     if let Some(expected) = binding_record.declared_type {
                         require_same(expected, actual, "kernel_type_binding", "let binding value")?;
                     }
+                    self.consume_work()?;
+                    scoped.bindings.insert(binding, (BindingKind::Let, actual));
                 }
-                self.infer(body, context, next)
+                self.infer(body, &scoped, next)
             }
             ExpressionOperation::Sequence { items } => {
                 let mut result = None;
@@ -955,6 +1113,45 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         "kernel_type_sequence_empty",
                         "sequence has no result expression",
                     )
+                })
+            }
+            ExpressionOperation::Parallel { left, right } => {
+                if context.pure {
+                    return Err(type_error(
+                        "kernel_parallel_context",
+                        "parallel requires a task context even when both effect rows are empty",
+                    ));
+                }
+                let left_call = self.owned_read(|read| super::parallel::admit_call(read, left))?;
+                let right_call =
+                    self.owned_read(|read| super::parallel::admit_call(read, right))?;
+                // Both complete argument trees remain part of ordinary exact type,
+                // scope and effect validation, including unreachable expressions.
+                let left_type = self.infer(left, context, next)?;
+                let right_type = self.infer(right, context, next)?;
+                require_same(
+                    left_call.result,
+                    left_type,
+                    "kernel_parallel_result",
+                    "left child result",
+                )?;
+                require_same(
+                    right_call.result,
+                    right_type,
+                    "kernel_parallel_result",
+                    "right child result",
+                )?;
+                self.canonical_type(TypeForm::StructuralRecord {
+                    fields: vec![
+                        StructuralTypeField {
+                            name: super::Name::new("left")?,
+                            ty: left_type,
+                        },
+                        StructuralTypeField {
+                            name: super::Name::new("right")?,
+                            ty: right_type,
+                        },
+                    ],
                 })
             }
             ExpressionOperation::ImplementationCall {
@@ -1202,8 +1399,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     ));
                 }
                 self.requirement_constraint(requirement)?;
-                self.transaction_binding_type(binding)?;
-                self.infer(body, context, next)
+                let ty = self.transaction_binding_type(binding)?;
+                let mut scoped = self.scoped_context(context)?;
+                self.consume_work()?;
+                scoped
+                    .bindings
+                    .insert(binding, (BindingKind::Transaction, ty));
+                self.infer(body, &scoped, next)
             }
             ExpressionOperation::TransactionOutcome {
                 requirement,
@@ -1235,8 +1437,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         "transaction-outcome requires the exact DataStore transaction operation",
                     ));
                 }
-                self.transaction_binding_type(binding)?;
-                let actual = self.infer(body, context, next)?;
+                let ty = self.transaction_binding_type(binding)?;
+                let mut scoped = self.scoped_context(context)?;
+                self.consume_work()?;
+                scoped
+                    .bindings
+                    .insert(binding, (BindingKind::Transaction, ty));
+                let actual = self.infer(body, &scoped, next)?;
                 require_same(
                     type_argument,
                     actual,
@@ -1340,7 +1547,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         &mut self,
         reference: LocalValueReference,
         context: &ExecutionContext,
-        depth: usize,
+        _depth: usize,
     ) -> Result<TypeObjectDigest, Diagnostic> {
         match reference {
             LocalValueReference::FunctionParameter(parameter) => {
@@ -1383,7 +1590,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         "operation-parameter reference names a function parameter",
                     ));
                 }
-                Ok(record.ty)
+                Err(type_error(
+                    "kernel_type_parameter_scope",
+                    "operation parameter has no executable operation context",
+                ))
             }
             LocalValueReference::LexicalBinding(binding)
             | LocalValueReference::MatchPayload(binding) => {
@@ -1396,18 +1606,40 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         ));
                     }
                 };
-                if let Some(ty) = record.declared_type {
-                    return Ok(ty);
+                let Some((kind, ty)) = context.bindings.get(&binding).copied() else {
+                    return Err(type_error(
+                        "kernel_full_lexical_scope",
+                        "local binding is outside its exact lexical scope",
+                    ));
+                };
+                let valid_domain = match reference {
+                    LocalValueReference::LexicalBinding(_) => matches!(
+                        kind,
+                        BindingKind::Let
+                            | BindingKind::OwnedUnpack
+                            | BindingKind::OwnedChoicePayload
+                    ),
+                    LocalValueReference::MatchPayload(_) => kind == BindingKind::MatchPayload,
+                    _ => false,
+                };
+                if !valid_domain || record.kind != kind {
+                    return Err(type_error(
+                        "kernel_full_local_binding_domain",
+                        "local reference uses the wrong binding domain",
+                    ));
                 }
-                if let Some(value) = record.value {
-                    return self.infer(value, context, depth);
-                }
-                Err(type_error(
-                    "kernel_type_binding_annotation",
-                    "non-value binding lacks an exact inferred type",
-                ))
+                Ok(ty)
             }
             LocalValueReference::TransactionBinding(binding) => {
+                if !matches!(
+                    context.bindings.get(&binding),
+                    Some((BindingKind::Transaction, _))
+                ) {
+                    return Err(type_error(
+                        "kernel_full_lexical_scope",
+                        "transaction binding is outside its exact lexical scope",
+                    ));
+                }
                 self.transaction_binding_type(binding)
             }
         }
@@ -1597,6 +1829,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         }
         let mut result = None;
         for arm in arms {
+            let mut scoped = self.scoped_context(context)?;
             let case = self.case_record(arm.case.package, arm.case.case)?;
             if case.declaration != declaration.declaration {
                 return Err(type_error(
@@ -1621,6 +1854,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             "match payload binding lacks the exact case payload type",
                         ));
                     }
+                    self.consume_work()?;
+                    scoped
+                        .bindings
+                        .insert(binding, (BindingKind::MatchPayload, expected));
                 }
                 (None, None) => {}
                 _ => {
@@ -1630,7 +1867,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     ));
                 }
             }
-            let body = self.infer(arm.body, context, depth)?;
+            let body = self.infer(arm.body, &scoped, depth)?;
             if let Some(previous) = result {
                 require_same(previous, body, "kernel_type_match_arms", "match arms")?;
             }
@@ -2301,9 +2538,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             *parameter =
                 self.substitute_effects(*parameter, &effects, &requirements_substitution, 0)?;
             *parameter = self.substitute(*parameter, &substitutions, 0)?;
+            self.validate_nominal_type(*parameter, context, 0)?;
         }
         let result = self.substitute_effects(result, &effects, &requirements_substitution, 0)?;
         let result = self.substitute(result, &substitutions, 0)?;
+        // Substitution can form an application that has no persisted TypeObject,
+        // including a discarded phantom result or a function-value signature.
+        self.validate_nominal_type(result, context, 0)?;
         Ok(FunctionSignature {
             target: Some(reference),
             parameters: parameter_types,
@@ -3550,6 +3791,7 @@ fn pure_context(declaration: Option<DeclarationId>) -> ExecutionContext {
         pure: true,
         requirements: BTreeSet::new(),
         effect_parameters: BTreeSet::new(),
+        bindings: BTreeMap::new(),
     }
 }
 

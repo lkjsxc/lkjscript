@@ -908,6 +908,11 @@ impl Renderer<'_> {
         self.reader.check()?;
         use AuthoredExpressionOperation as E;
         let value = match &expression.operation {
+            E::Parallel { left, right } => format!(
+                "(parallel {} {})",
+                self.expression(left, env)?,
+                self.expression(right, env)?,
+            ),
             E::Unit {} => "(unit)".to_owned(),
             E::Bool { value } => format!("(bool {value})"),
             E::I64 { value } => format!("(i64 {value})"),

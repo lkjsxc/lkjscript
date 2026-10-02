@@ -7,7 +7,7 @@ mod site_inputs;
 use super::model::{
     ExecutableProof, InputEntry, InputSnapshot, InputSource, PlatformIdentity, RuntimeIdentity,
 };
-use super::registry;
+use super::{registry, surface};
 use crate::error::DevError;
 use crate::evidence::{self, FileKind, VerificationDigest};
 use crate::process;
@@ -38,6 +38,11 @@ pub(crate) fn capture(repository: &Path) -> Result<InputSnapshot, DevError> {
     {
         paths.entry(path).or_insert(InputSource::Untracked);
     }
+    // Surface policy reads these entries independently of Git visibility. Empty
+    // directories and ignored files must invalidate the same source proof.
+    for path in surface::input_paths(repository)? {
+        paths.entry(path).or_insert(InputSource::Untracked);
+    }
 
     let mut entries = Vec::with_capacity(paths.len());
     let mut total_bytes = 0_u64;
@@ -47,7 +52,7 @@ pub(crate) fn capture(repository: &Path) -> Result<InputSnapshot, DevError> {
         total_bytes = total_bytes
             .checked_add(proof.bytes.unwrap_or(0))
             .ok_or_else(|| DevError::infrastructure("input snapshot byte count overflow"))?;
-        let gitlink_head = if proof.kind == FileKind::Directory {
+        let gitlink_head = if proof.kind == FileKind::Directory && source == InputSource::Tracked {
             let path_text = path.to_string_lossy().into_owned();
             Some(checked_text(
                 repository,
@@ -192,7 +197,50 @@ pub(super) fn validate_runtime(
     Ok(())
 }
 
+pub(crate) fn capture_profile(
+    repository: &Path,
+    profile: &str,
+) -> Result<(InputSnapshot, Vec<String>), DevError> {
+    capture_profile_between_samples(repository, profile, || Ok(()))
+}
+
+fn capture_profile_between_samples(
+    repository: &Path,
+    profile: &str,
+    after_selection: impl FnOnce() -> Result<(), DevError>,
+) -> Result<(InputSnapshot, Vec<String>), DevError> {
+    let paths = (profile == "changed")
+        .then(|| changed_paths(repository))
+        .transpose()?;
+    let initial = capture(repository)?;
+    let requested = if let Some(paths) = &paths {
+        select_changed_paths(paths.iter().cloned())?
+    } else {
+        registry::profile(profile)
+            .ok_or_else(|| DevError::usage(format!("unknown check profile '{profile}'")))?
+    };
+    // The checkpoint lets tests mutate real inputs at the former selection/capture
+    // gap without timing a race. Production supplies no observer or mutation.
+    after_selection()?;
+    let after = capture(repository)?;
+    let paths_stable = match paths {
+        Some(before) => changed_paths(repository)? == before,
+        None => true,
+    };
+    if after.digest != initial.digest || !paths_stable {
+        return Err(DevError::infrastructure(
+            "source or changed-path selection changed during verification admission",
+        ));
+    }
+    Ok((initial, requested))
+}
+
+#[cfg(test)]
 pub(crate) fn changed_profile(repository: &Path) -> Result<Vec<String>, DevError> {
+    select_changed_paths(changed_paths(repository)?)
+}
+
+fn changed_paths(repository: &Path) -> Result<BTreeSet<String>, DevError> {
     let output = checked_bytes(
         repository,
         &[
@@ -227,7 +275,10 @@ pub(crate) fn changed_profile(repository: &Path) -> Result<Vec<String>, DevError
         }
         index += 1;
     }
+    Ok(paths)
+}
 
+fn select_changed_paths(paths: impl IntoIterator<Item = String>) -> Result<Vec<String>, DevError> {
     let full = registry::profile("full")
         .ok_or_else(|| DevError::infrastructure("full profile is absent"))?;
     let product = registry::profile("product")
@@ -253,6 +304,7 @@ pub(crate) fn changed_profile(repository: &Path) -> Result<Vec<String>, DevError
             || path == "tools/lkjscript-dev/Cargo.toml"
         {
             selected.insert("checker_self_test".to_owned());
+            selected.insert("checker_library_tests".to_owned());
         } else if path.starts_with("tools/lkjscript-dev/src/service") {
             selected.extend(service.iter().cloned());
         } else if path.starts_with("tools/lkjscript-dev/src/scale")
@@ -262,9 +314,9 @@ pub(crate) fn changed_profile(repository: &Path) -> Result<Vec<String>, DevError
         {
             widen_full = true;
         } else if site_inputs::embeds(&path) {
-            // Published Markdown is executable input to the Rust site. Reuse the
-            // existing workspace obligation rather than duplicating its tests.
-            selected.insert("workspace_tests".to_owned());
+            // Published Markdown is executable input to this package. Development
+            // checks need its actual renderer/router tests, not a product release.
+            selected.insert("site_tests".to_owned());
         } else if path.starts_with("docs/")
             || path.starts_with("prompts/")
             || matches!(path.as_str(), "README.md" | "AGENTS.md")
@@ -276,10 +328,15 @@ pub(crate) fn changed_profile(repository: &Path) -> Result<Vec<String>, DevError
     if widen_full {
         return Ok(full);
     }
-    Ok(full
+    let mut ordered: Vec<_> = full
         .into_iter()
-        .filter(|name| selected.contains(name))
-        .collect())
+        .filter(|name| selected.remove(name))
+        .collect();
+    // Keep established full-profile ordering, then include development-only
+    // obligations deterministically. Full acceptance already covers these tests
+    // through workspace_tests and must not repeat them as separate DAG nodes.
+    ordered.extend(selected);
+    Ok(ordered)
 }
 
 fn environment_identity() -> Result<(VerificationDigest, Vec<String>), DevError> {

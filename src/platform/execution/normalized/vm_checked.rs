@@ -592,6 +592,7 @@ impl Value {
 }
 
 pub(super) struct Admission<'a> {
+    pub shared_budget: Option<&'a super::super::shared_budget::SharedBudget>,
     pub program: &'a NormalizedProgram,
     pub substitutions:
         &'a BTreeMap<crate::platform::semantic_id::TypeParameterId, TypeObjectDigest>,
@@ -928,7 +929,7 @@ impl Admission<'_> {
         }
     }
 
-    fn inspect(
+    pub(super) fn inspect(
         &mut self,
         raw: &NormalizedValue,
         ty: TypeObjectDigest,
@@ -1510,6 +1511,9 @@ impl Admission<'_> {
             "normalized_allocation",
             "value admission exceeds cumulative allocated bytes; reduce the input",
         )?;
+        if let Some(budget) = self.shared_budget {
+            budget.reserve(bytes, 0)?;
+        }
         *self.allocated = next;
         if bytes != 0 {
             *self.allocation_charges = self.allocation_charges.saturating_add(1);
@@ -1532,6 +1536,9 @@ impl Admission<'_> {
             "normalized_collection_items",
             "value admission exceeds aggregate collection items; reduce the input",
         )?;
+        if let Some(budget) = self.shared_budget {
+            budget.reserve(0, count as u64)?;
+        }
         *self.items = next;
         // Raw payload storage and both bounded traversal worklists are charged before growth.
         let unit = std::mem::size_of::<NormalizedValue>()

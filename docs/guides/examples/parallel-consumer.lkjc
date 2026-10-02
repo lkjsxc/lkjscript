@@ -1,0 +1,47 @@
+declarations.begin
+(units
+  (module create parallel-consumer
+    (function create main (visibility public)
+      (parameter create n (type I64)) (parameter create seed (type I64))
+      (parameter create scalar (type Bool))
+      (returns (record (simple (record (left I64) (right I64)))
+        (aggregate (record (left I64) (right I64)))))
+      (effect (task))
+      (body (let
+        (binding buffer (type ByteBuffer) (call parallel-workers::buffer (i64 3)))
+        (binding cell (type OwnedI64Cell) (call parallel-workers::cell (local seed)))
+        (binding simple (type (record (left I64) (right I64)))
+          (parallel
+            (call parallel-workers::buffer-job (i64 31) (local buffer))
+            (call parallel-workers::cell-job (local n) (local cell))))
+        (binding packet-octets (type ByteBuffer) (call parallel-workers::buffer (i64 3)))
+        (binding packet-scalar (type OwnedI64Cell) (call parallel-workers::cell (local seed)))
+        (binding packet
+          (type (owned-product (field octets ByteBuffer) (field scalar OwnedI64Cell) (field tag I64)))
+          (pack-owned
+            (type (owned-product (field octets ByteBuffer) (field scalar OwnedI64Cell) (field tag I64)))
+            (field tag (i64 11))
+            (field octets (local packet-octets))
+            (field scalar (local packet-scalar))))
+        (binding choice (type (owned-choice (case scalar OwnedI64Cell) (case octets ByteBuffer)))
+          (if (local scalar)
+            (let (binding chosen (type OwnedI64Cell) (call parallel-workers::cell (local seed)))
+              (in (choose-owned (type (owned-choice (case scalar OwnedI64Cell) (case octets ByteBuffer)))
+                (case scalar) (local chosen))))
+            (let (binding chosen (type ByteBuffer) (call parallel-workers::buffer (i64 5)))
+              (in (choose-owned (type (owned-choice (case scalar OwnedI64Cell) (case octets ByteBuffer)))
+                (case octets) (local chosen))))))
+        (binding aggregate (type (record (left I64) (right I64)))
+          (parallel
+            (call parallel-workers::product-job (local n) (local packet))
+            (call parallel-workers::choice-job (local n) (local choice))))
+        (in (record structural (field simple (local simple)) (field aggregate (local aggregate)))))))
+    (component create command (visibility private)
+      (port create main
+        (type (task-function (I64 I64 Bool)
+          (record (simple (record (left I64) (right I64)))
+            (aggregate (record (left I64) (right I64)))) (row)))
+        (function main))))
+  (target create parallel (component parallel-consumer::command)
+    (runner command) (port parallel-consumer::command::main)))
+declarations.end

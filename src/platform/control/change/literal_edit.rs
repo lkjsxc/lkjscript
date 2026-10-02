@@ -179,6 +179,9 @@ fn substitute(
             pairs.extend([(a.as_mut(), x.as_ref()), (b.as_mut(), y.as_ref())]);
         }
         (A::ChooseOwned { value: a, .. }, A::ChooseOwned { value: x, .. }) => pairs.push((a, x)),
+        (A::Parallel { left: a, right: b }, A::Parallel { left: x, right: y }) => {
+            pairs.extend([(a.as_mut(), x.as_ref()), (b.as_mut(), y.as_ref())]);
+        }
         (
             A::MatchOwned {
                 source: a, arms: b, ..

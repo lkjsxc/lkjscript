@@ -50,6 +50,40 @@ impl OwnedChoice {
     pub(super) fn owns_live_loans(&self) -> bool {
         self.storage.owns_live_loans()
     }
+    pub(super) fn case(&self) -> u32 {
+        self.case
+    }
+    pub(super) fn inspect_transfer<R>(
+        &self,
+        source: ValueOrigin,
+        inspect: impl FnOnce(&NormalizedValue) -> Result<R, ExecutionError>,
+    ) -> Result<R, ExecutionError> {
+        self.storage.inspect_transfer(source, |fields| {
+            let [payload] = fields else {
+                return Err(ExecutionError::resource(
+                    "normalized_choice_token",
+                    "owned choice has no unique selected payload",
+                ));
+            };
+            inspect(payload)
+        })
+    }
+    pub(super) fn adopt_transfer(
+        &mut self,
+        source: ValueOrigin,
+        destination: ValueOrigin,
+        adopt: impl FnOnce(&mut NormalizedValue) -> Result<(), ExecutionError>,
+    ) -> Result<(), ExecutionError> {
+        self.storage.adopt_transfer(source, destination, |fields| {
+            let [payload] = fields else {
+                return Err(ExecutionError::resource(
+                    "normalized_choice_token",
+                    "owned choice has no unique selected payload",
+                ));
+            };
+            adopt(payload)
+        })
+    }
     pub(super) fn select(
         self,
         origin: ValueOrigin,

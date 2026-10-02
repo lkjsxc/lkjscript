@@ -2,6 +2,33 @@
 
 Status: normative.
 
+## Structured parallel ownership
+
+The [parallel contract](structured-parallel.md) requires independent canonical,
+ownership and reference admission, including unused children and hidden authority
+in unselected cases or nominal arguments. Flat and structural requests must produce
+the same typed intent; drafts and child-argument edits must retain intended identities.
+Pure enclosing functions and non-task, effectful, borrowed or dynamic children reject
+before publication. Rehashed compiled target swaps and erased parallel instructions
+must fail strict loading independently of the producer.
+
+Sealed custody tests observe original buffer/cell allocations and nested carrier
+metadata through a real thread handoff. Foreign origins, wrong destinations, inert
+clones, active loans, invalid metadata and cancellation during recursive adoption
+must leave no live transferred storage while preserving an unrelated owner's storage.
+Controlled rendezvous inside the actual production child evaluator must demonstrate
+distinct threads and memory identities with a finite test timeout. Scheduler-only
+tests and serial reference agreement do not substitute for that observation.
+
+Exercise nested groups, caller fallback with occupied worker capacity, quota refusal
+just below measured aggregate work/storage/items and exact-limit success. Ancestor
+call depth and finite structured nesting remain enforced. Trap, cancellation and host
+unwind must join started children before releasing worker capacity. A copied public
+executable must author separate worker/consumer packages, perform independently
+checked CPU reductions and run a source-deleted artifact with the resident task limit
+set to one. Report public worker counts separately from the controlled overlap proof;
+neither establishes speedup, scheduler fairness or hostile-code containment.
+
 ## Independent correctness mechanisms
 
 Deployment grant selection is checked against fixed exact-reference tables with
@@ -1045,13 +1072,16 @@ The contributor owner is:
 cargo run --locked -p lkjscript-dev -- check PROFILE
 ```
 
-`focused` runs narrow format/library/public checks. `changed` selects by exact changed inputs and
-widening rules. `product` builds release and verifies copied-binary workflows, maintained typed
-meaning graph consumers, generated docs, and built-in/generated assets. `service` owns isolated
-standalone artifact bundle HTTP/interactive/worker service acceptance. The data cutover additionally requires the
-contributor PostgreSQL differential/resource receipt. `full` owns formatting, lints, workspace
-targets, all tests, release/product/service classification, and diff checks; final full evidence
-must be fresh. `release-source` is the separately identified fresh 20-gate source tier above;
+`focused` runs narrow format/library/public checks. `changed` selects development checks from
+current Git-status paths and widening rules; it does not select a committed revision range.
+A clean-tree selection does not prove committed implementation. `product` builds release and
+verifies copied-binary workflows, maintained typed meaning graph consumers, generated docs,
+and built-in/generated assets. `service` owns isolated standalone artifact bundle
+HTTP/interactive/worker service acceptance. The data cutover additionally requires the
+contributor PostgreSQL differential/resource receipt. The 26-gate `full` profile owns
+formatting, lints, workspace targets, all tests, release/product/service classification,
+and diff checks; final full evidence must be fresh. `release-source` is the separately
+identified fresh 20-gate source tier above;
 it excludes only the six external application owners moved to final candidate admission. The
 ordinary focused default tests remain available, while release-source retains the existing default
 release lifecycle and all-feature workspace proof without adding duplicate source test suites.
@@ -1079,10 +1109,37 @@ embedded creation recipes and tested deployment inputs, not documentation-only t
 Any changed path within that directory selects the complete `full` profile, including
 untracked additions, staged/unstaged edits, deletion and either side of a rename.
 Unknown file types there still require the surface audit rather than being ignored.
-Ordinary prose outside that directory keeps the lightweight documentation selection;
-similar names such as `docs/guides/examples.md` do not match the directory boundary.
+Similar names such as `docs/guides/examples.md` do not match the directory boundary.
+The site's maintained publication catalog, `tools/lkjscript-site/src/documents.rs`,
+also owns the checker's exact embedded-document path inventory. Embedded prose such
+as `docs/status.md` must run the site's renderer/router tests. Other prose retains
+the two baseline `rust_only_tooling` and `diff_check` gates.
+
+Development selection includes each requested gate's complete dependency closure:
+
+| Changed inputs, without a path that requires broader checks | Complete gates |
+| --- | --- |
+| Catalog-listed embedded documents only | `fmt`, `site_clippy`, `site_tests`, `rust_only_tooling`, `diff_check` |
+| `tools/lkjscript-dev/src/check/` or `tools/lkjscript-dev/Cargo.toml` only | `fmt`, `checker_self_test`, `checker_library_tests`, `rust_only_tooling`, `diff_check` |
+
+The site gates run locked, all-target/all-feature package Clippy and tests for
+`lkjscript-site`. `checker_library_tests` runs the locked, all-feature `lkjscript-dev`
+library tests, including policy negative fixtures and Git-status selection regressions;
+the synthetic process/DAG/cache self-test alone does not cover them. Both test gates
+collect all selected target results with `--no-fail-fast`.
+
+Selection covers untracked additions, staged/unstaged edits, deletion and both paths
+of a rename without requiring the old file to remain present. Mixed changes retain
+the union of their obligations. Rust product source, tests, workspace manifests,
+executable examples and unclassified tool inputs still widen to full; site
+source/catalog edits also widen to full. Existing application/package and service
+routing retains its product/service dependencies.
+Development-only gates must survive selection independently of the full-profile
+inventory. Fresh full and release-source acceptance already cover these packages
+through workspace Clippy/tests and do not duplicate the development-only nodes.
 Input fingerprints already bind the complete tracked/relevant-untracked snapshot;
-this selection rule adds no separate hash inventory or receipt format.
+these selection rules add no dependency-scoped reuse, separate hash inventory or
+receipt format. They do not replace fresh final acceptance or exact-candidate proof.
 
 The harness owns gate dependencies, exact fingerprints, bounded child logs, required outputs,
 timeouts, and fresh/reused/skipped/unavailable/failed classification. Reuse is valid only when the
@@ -1192,7 +1249,7 @@ It invokes that admission's frozen verifier, removes each independently named be
 empties required nominal observations and preparation counters, and recomputes the enclosing child
 hashes. Every fault must reject; the unchanged baseline and restored receipt must pass. Original
 receipt bytes are restored before assertions, temporary logs are removed, and a bounded
-`nominal-receipt-faults.json` retains the actual outcomes. This mandatory campaign proof is separate
+`nominal-receipt-faults.json` retains the actual outcomes. This required target-receipt proof is separate
 from ordinary workspace tests; its ignored annotation never establishes a passed disposition.
 
 Finite-recursive-nominal acceptance extends offline receipt 5 with a separately authored reusable

@@ -30,6 +30,9 @@ impl Machine<'_> {
         )?;
         // A refused reservation changes neither ledger. Earlier successful work is
         // cumulative even when a later path node or final cancellation check fails.
+        if let Some(budget) = &self.shared_budget {
+            budget.reserve(charge.bytes, charge.slots)?;
+        }
         self.observation.collection_items = items;
         self.observation.allocated_bytes = bytes;
         if charge.bytes != 0 {
@@ -75,6 +78,9 @@ impl Machine<'_> {
             "normalized_collection_items",
             "persistent list storage exceeds collection items",
         )?;
+        if let Some(budget) = &self.shared_budget {
+            budget.reserve(0, charge.slots)?;
+        }
         self.observation.collection_items = next;
         self.charge_allocation(charge.bytes)
     }
@@ -115,6 +121,7 @@ impl Machine<'_> {
         substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
     ) -> Result<CheckedValue, ExecutionError> {
         checked::Admission {
+            shared_budget: self.shared_budget.as_deref(),
             substitutions,
             program: self.program,
             resources: self.resources,
@@ -161,6 +168,7 @@ impl Machine<'_> {
             }
             if *constraint == crate::platform::kernel::TypeParameterConstraints::CaptureSafe {
                 checked::Admission {
+                    shared_budget: self.shared_budget.as_deref(),
                     substitutions: &BTreeMap::new(),
                     program: self.program,
                     resources: self.resources,

@@ -986,6 +986,7 @@ where
         | ExpressionOperation::If { .. }
         | ExpressionOperation::Let { .. }
         | ExpressionOperation::Sequence { .. }
+        | ExpressionOperation::Parallel { .. }
         | ExpressionOperation::Invoke { .. }
         | ExpressionOperation::Bind { .. }
         | ExpressionOperation::Field {

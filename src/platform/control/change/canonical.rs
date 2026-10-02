@@ -300,6 +300,10 @@ impl<'a> Reader<'a> {
         use AuthoredExpressionOperation as A;
         use k::ExpressionOperation as E;
         let operation = match expression.operation {
+            E::Parallel { left, right } => A::Parallel {
+                left: Box::new(self.expression_at(left, depth + 1)?),
+                right: Box::new(self.expression_at(right, depth + 1)?),
+            },
             E::Unit {} => A::Unit {},
             E::Bool { value } => A::Bool { value },
             E::I64 { value } => A::I64 { value },

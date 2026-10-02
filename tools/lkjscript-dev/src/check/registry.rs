@@ -341,6 +341,49 @@ pub(crate) fn base_registry(
             ],
             &["clippy", "release_build"],
         ),
+        // Development-only obligations. Full/release-source already run these
+        // packages through clippy/workspace_tests without duplicating the work.
+        cargo_gate(
+            "site_clippy",
+            &[
+                "clippy",
+                "-p",
+                "lkjscript-site",
+                "--all-targets",
+                "--all-features",
+                "--locked",
+                "--",
+                "-D",
+                "warnings",
+            ],
+            &["fmt"],
+        ),
+        cargo_gate(
+            "site_tests",
+            &[
+                "test",
+                "-p",
+                "lkjscript-site",
+                "--all-targets",
+                "--all-features",
+                "--locked",
+                "--no-fail-fast",
+            ],
+            &["site_clippy"],
+        ),
+        cargo_gate(
+            "checker_library_tests",
+            &[
+                "test",
+                "-p",
+                "lkjscript-dev",
+                "--lib",
+                "--all-features",
+                "--locked",
+                "--no-fail-fast",
+            ],
+            &["fmt"],
+        ),
     ];
     let mut release = cargo_gate(
         "release_build",
@@ -877,6 +920,92 @@ mod tests {
     use super::*;
 
     #[test]
+    fn development_gates_run_real_package_checks_without_duplicating_full_acceptance() {
+        let temporary = tempfile::tempdir().expect("temporary registry repository");
+        let registry = base_registry(temporary.path(), temporary.path(), Path::new("/bin/true"))
+            .expect("maintained registry");
+        let cases: &[(&str, &[&str], &[&str])] = &[
+            (
+                "site_clippy",
+                &[
+                    "cargo",
+                    "clippy",
+                    "-p",
+                    "lkjscript-site",
+                    "--all-targets",
+                    "--all-features",
+                    "--locked",
+                    "--",
+                    "-D",
+                    "warnings",
+                ],
+                &["fmt"],
+            ),
+            (
+                "site_tests",
+                &[
+                    "cargo",
+                    "test",
+                    "-p",
+                    "lkjscript-site",
+                    "--all-targets",
+                    "--all-features",
+                    "--locked",
+                    "--no-fail-fast",
+                ],
+                &["site_clippy"],
+            ),
+            (
+                "checker_library_tests",
+                &[
+                    "cargo",
+                    "test",
+                    "-p",
+                    "lkjscript-dev",
+                    "--lib",
+                    "--all-features",
+                    "--locked",
+                    "--no-fail-fast",
+                ],
+                &["fmt"],
+            ),
+        ];
+        for (name, command, dependencies) in cases {
+            let gate = registry.gate(name).expect("development gate");
+            assert_eq!(gate.command, *command, "{name}");
+            assert_eq!(gate.identity_command(), *command, "{name}: identity");
+            assert_eq!(gate.dependencies, *dependencies, "{name}: dependencies");
+            assert!(
+                gate.required_outputs.is_empty(),
+                "{name}: no release output producer"
+            );
+        }
+        for profile_name in ["full", "release-source"] {
+            let closure = registry
+                .closure(&profile(profile_name).expect("maintained profile"))
+                .expect("profile closure");
+            for required in [
+                "fmt",
+                "clippy",
+                "workspace_tests",
+                "release_build",
+                "checker_self_test",
+            ] {
+                assert!(
+                    closure.iter().any(|name| name == required),
+                    "{profile_name}: {required}"
+                );
+            }
+            for (development, _, _) in cases {
+                assert!(
+                    !closure.iter().any(|name| name.as_str() == *development),
+                    "{profile_name} duplicates {development}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn workspace_test_gate_collects_all_target_results_without_reusing_fail_fast_identity() {
         let temporary = tempfile::tempdir().expect("temporary registry repository");
         let mut registry =
@@ -973,7 +1102,7 @@ mod tests {
             .expect("first maintained registry");
         let second = base_registry(temporary.path(), &second_run, Path::new("/bin/true"))
             .expect("second maintained registry");
-        assert_eq!(first.gates.len(), 29);
+        assert_eq!(first.gates.len(), 32);
         for profile_name in ["focused", "product", "service", "full"] {
             let requested = profile(profile_name).expect("maintained profile");
             assert!(requested.iter().any(|name| name == "rust_only_tooling"));

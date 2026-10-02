@@ -497,6 +497,11 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 self.evaluate(source, state, depth + 1)?;
                 self.evaluate(body, state, depth + 1)
             }
+            ExpressionOperation::Parallel { left, right } => {
+                self.require_unrestricted(left, state, depth + 1, "left parallel child")?;
+                self.require_unrestricted(right, state, depth + 1, "right parallel child")?;
+                Ok(EvaluatedValue::Unrestricted)
+            }
             ExpressionOperation::Unit {}
             | ExpressionOperation::Bool { .. }
             | ExpressionOperation::I64 { .. }

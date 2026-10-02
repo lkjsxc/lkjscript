@@ -4,6 +4,16 @@ Date: 2026-10-02 (Asia/Tokyo).
 
 ## Status and authority
 
+The current refinement selects [lexical parallel pairs](../spec/structured-parallel.md)
+in development 0.1.68 before a graph-level channel. Exact child calls, sealed nested
+owned adoption, fresh identities, shared quotas and mandatory join are implemented
+at that separate boundary. This revises the sequencing below: channel semantics
+remain a design, while owned cross-invocation transfer no longer depends on completing
+a general channel API. The [current campaign](../campaigns/20261002-structured-parallel.md)
+owns actual acceptance outcomes; the finite channel model retains its original scope.
+
+The following initial decision is retained as the channel design and its rationale.
+
 The first same-task call boundary is implemented and source-accepted in development
 0.1.65. Development 0.1.67 implements the next runtime building block: a preallocated
 single-receiver custody mailbox, adopted by the existing structured-session writer.

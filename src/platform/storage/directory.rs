@@ -15,7 +15,7 @@ use rustix::fs::{AtFlags, Dir, Mode, OFlags};
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -30,6 +30,10 @@ const PACK_STAGE_PREFIX: &str = ".pack-stage-";
 const INJECTED_INTERRUPTION_CODE: &str = "pack_store_injected_interruption";
 // Optional retention per open store, not an object-admission or catalog-format limit.
 const MAXIMUM_CACHED_CATALOG_BLOCKS: usize = 64;
+
+#[cfg(test)]
+#[path = "footer_admission_tests.rs"]
+mod footer_admission_tests;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CatalogState {
@@ -978,6 +982,18 @@ struct PackScan {
 
 fn scan_pack_metadata(directory: &File) -> Result<PackScan, StoreError> {
     let names = list_directory_names(directory, "pack_directory_scan")?;
+    scan_pack_metadata_with_limit(names, contract::MAXIMUM_CATALOG_ENTRIES, |name| {
+        let file = open_regular_file_at(directory, name, "pack_footer_open")?;
+        let length = regular_file_length(&file, "pack_footer_metadata")?;
+        Ok((file, length))
+    })
+}
+
+fn scan_pack_metadata_with_limit<R: Read + Seek>(
+    names: Vec<String>,
+    maximum_entries: usize,
+    mut open: impl FnMut(&str) -> Result<(R, u64), StoreError>,
+) -> Result<PackScan, StoreError> {
     if names.len() > contract::MAXIMUM_CATALOG_PACKS {
         return Err(resource(
             "catalog_pack_count",
@@ -986,11 +1002,21 @@ fn scan_pack_metadata(directory: &File) -> Result<PackScan, StoreError> {
     }
     let mut metadata = BTreeMap::new();
     let mut bytes_read = 0_u64;
+    let mut remaining_entries = maximum_entries;
     for name in names {
         let pack = PackId::parse_file_name(&name)?;
-        let mut file = open_regular_file_at(directory, &name, "pack_footer_open")?;
-        let length = regular_file_length(&file, "pack_footer_metadata")?;
-        let read = PackMetadata::read_footer(&mut file, length)?;
+        let (mut reader, length) = open(&name)?;
+        let read =
+            PackMetadata::read_footer_with_entry_allowance(&mut reader, length, remaining_entries)?;
+        // Duplicates also consume physical footer storage before catalog reconstruction.
+        remaining_entries = remaining_entries
+            .checked_sub(read.metadata.entries.len())
+            .ok_or_else(|| {
+                resource(
+                    "catalog_entry_count",
+                    "footer reconstruction exceeds the catalog entry bound",
+                )
+            })?;
         bytes_read = bytes_read
             .checked_add(read.bytes_read)
             .ok_or_else(|| resource("catalog_rebuild_work", "footer scan work overflows"))?;
@@ -2015,10 +2041,12 @@ fn open_optional_regular_file_at(
     access: OFlags,
     code: &'static str,
 ) -> Result<Option<File>, StoreError> {
+    // A FIFO must not wait for a writer before descriptor-based type admission.
+    // NONBLOCK does not change regular-file reads.
     let fd = match rustix::fs::openat(
         directory,
         name,
-        access | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        access | OFlags::NONBLOCK | OFlags::NOFOLLOW | OFlags::CLOEXEC,
         Mode::empty(),
     ) {
         Ok(fd) => fd,

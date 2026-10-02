@@ -487,10 +487,31 @@ impl ResidentKernel {
             }
             controls.len()
         };
+        let mut shutdown_failures = Vec::new();
         if !drained_before_cancellation {
             let cancellation_grace =
                 Duration::from_millis(self.inner.limits.cancellation_grace_milliseconds);
-            let _ = tokio::time::timeout(cancellation_grace, self.inner.wait_idle()).await;
+            if tokio::time::timeout(cancellation_grace, self.inner.wait_idle())
+                .await
+                .is_err()
+            {
+                let remaining = self
+                    .inner
+                    .queued
+                    .load(Ordering::Acquire)
+                    .saturating_add(self.inner.active.load(Ordering::Acquire));
+                shutdown_failures.push(ExecutionError::new(
+                    ExecutionFailureClass::Infrastructure,
+                    "resident_cancellation_stalled",
+                    format!(
+                        "resident shutdown exceeded its cancellation grace with {remaining} owned tasks; cleanup waited for their completion"
+                    ),
+                ));
+                // A grace expiry diagnoses failed cooperative cancellation; it is
+                // not permission to close adapters while task scopes still use
+                // them. Retain this shutdown owner until those scopes are idle.
+                self.inner.wait_idle().await;
+            }
         }
         let remaining_tasks = self
             .inner
@@ -508,13 +529,14 @@ impl ResidentKernel {
                 }
             }
         };
+        shutdown_failures.extend(cleanup_failures);
         ShutdownReceipt {
             contract_version: RESIDENT_RUNTIME_CONTRACT_VERSION,
             admission_stopped: true,
             drained_before_cancellation,
             cancellation_requested,
             remaining_tasks,
-            cleanup_failures,
+            cleanup_failures: shutdown_failures,
             elapsed_nanoseconds: duration_nanoseconds(started.elapsed()),
         }
     }

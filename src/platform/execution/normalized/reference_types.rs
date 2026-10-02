@@ -21,6 +21,7 @@ type Calls = VecDeque<Application>;
 const MAXIMUM_METADATA_BYTES: usize = 256 * 1024 * 1024;
 
 struct Closure<'a> {
+    parallel_targets: BTreeSet<DeclarationReference>,
     snapshots: BTreeMap<PackageId, &'a KernelSnapshot>,
     types: &'a mut BTreeMap<TypeObjectDigest, TypeObject>,
     visits: usize,
@@ -237,6 +238,7 @@ impl Closure<'_> {
         root: ExpressionId,
         bindings: &Bindings,
         calls: &mut Calls,
+        task_context: bool,
     ) -> Result<(), ExecutionError> {
         allocate::<ExpressionId>(&mut self.allocated, 1)?;
         let mut pending = vec![root];
@@ -302,6 +304,73 @@ impl Closure<'_> {
                 self.types.entry(ty).or_insert(object);
             }
             match record.operation {
+                ExpressionOperation::Parallel { left, right } => {
+                    if !task_context {
+                        return Err(failure());
+                    }
+                    let mut fields = Vec::new();
+                    allocate::<crate::platform::kernel::StructuralTypeField>(
+                        &mut self.allocated,
+                        2,
+                    )?;
+                    for (name, child) in [("left", left), ("right", right)] {
+                        let OwnerRecord::Expression(child) =
+                            self.owner(package, OwnerKey::Expression(child))?.clone()
+                        else {
+                            return Err(failure());
+                        };
+                        let ExpressionOperation::Call {
+                            function,
+                            type_arguments,
+                            effect_arguments,
+                            requirement_arguments,
+                            arguments,
+                        } = child.operation
+                        else {
+                            return Err(failure());
+                        };
+                        if !type_arguments.is_empty()
+                            || !effect_arguments.is_empty()
+                            || !requirement_arguments.is_empty()
+                        {
+                            return Err(failure());
+                        }
+                        let OwnerRecord::Declaration(declaration) = self
+                            .owner(
+                                function.package,
+                                OwnerKey::Declaration(function.declaration),
+                            )?
+                            .clone()
+                        else {
+                            return Err(failure());
+                        };
+                        let DeclarationPayload::Function(signature) = declaration.payload else {
+                            return Err(failure());
+                        };
+                        if !signature.type_parameters.is_empty()
+                            || !signature.effect_parameters.is_empty()
+                            || !signature.requirement_parameters.is_empty()
+                            || !signature.implementation_parameters.is_empty()
+                            || !matches!(&signature.effect, crate::platform::kernel::FunctionEffect::Task { requirements, effect_parameters } if requirements.is_empty() && effect_parameters.is_empty())
+                            || signature.parameters.len() != arguments.len()
+                        {
+                            return Err(failure());
+                        }
+                        index_node::<DeclarationReference>(&mut self.allocated)?;
+                        self.parallel_targets.insert(function);
+                        let ty = self.identity(signature.result, &BTreeMap::new(), 0)?;
+                        fields.push(crate::platform::kernel::StructuralTypeField {
+                            name: crate::platform::kernel::Name::new(name)
+                                .map_err(|_| failure())?,
+                            ty,
+                        });
+                    }
+                    let object = TypeObject::new(TypeForm::StructuralRecord { fields })
+                        .map_err(|_| failure())?;
+                    let (digest, _) = encode_type_object(&object).map_err(|_| failure())?;
+                    index_node::<(TypeObjectDigest, TypeObject)>(&mut self.allocated)?;
+                    self.types.entry(digest).or_insert(object);
+                }
                 ExpressionOperation::PackOwned { product_type, .. }
                 | ExpressionOperation::UnpackOwned { product_type, .. }
                 | ExpressionOperation::ChooseOwned {
@@ -469,6 +538,7 @@ pub(super) fn check_product_substitution(
 ) -> Result<(), ExecutionError> {
     let control = crate::platform::execution::ExecutionControl::uncancelled();
     let mut closure = Closure {
+        parallel_targets: BTreeSet::new(),
         snapshots: BTreeMap::new(),
         types: &mut types,
         visits: 0,
@@ -487,6 +557,7 @@ pub(super) fn complete(
     control: &crate::platform::execution::ExecutionControl,
 ) -> Result<(), ExecutionError> {
     let mut closure = Closure {
+        parallel_targets: BTreeSet::new(),
         snapshots: snapshots
             .iter()
             .map(|snapshot| (snapshot.root.package_id, *snapshot))
@@ -540,7 +611,8 @@ pub(super) fn complete(
             // Let-binding children belong to their containing function context.
             if matches!(record, OwnerRecord::Declaration(_) | OwnerRecord::Port(_)) {
                 for root in record.expression_roots() {
-                    closure.body(package, root, &empty, &mut calls)?;
+                    let task_context = matches!(record, OwnerRecord::Port(port) if matches!(snapshot.types.get(&port.function_type).map(|t| &t.form), Some(TypeForm::TaskFunction { .. })));
+                    closure.body(package, root, &empty, &mut calls, task_context)?;
                 }
             }
         }
@@ -578,6 +650,7 @@ pub(super) fn complete(
         else {
             return Err(failure());
         };
+        let task_context = matches!(&declaration.payload, DeclarationPayload::Function(function) if matches!(function.effect, crate::platform::kernel::FunctionEffect::Task { .. }));
         let (parameters, types, effect_parameters, requirement_parameters, result, body) =
             match declaration.payload {
                 DeclarationPayload::Function(function) => (
@@ -654,7 +727,7 @@ pub(super) fn complete(
             closure.identity(parameter.ty, &bindings, 0)?;
         }
         if let Some(body) = body {
-            closure.body(function.package, body, &bindings, &mut calls)?;
+            closure.body(function.package, body, &bindings, &mut calls, task_context)?;
         }
     }
     closure.effects.clear();
@@ -666,6 +739,7 @@ pub(super) fn complete(
         &mut schema.variant_instances,
     )?;
     closure.product_depths()?;
+    let parallel_targets = std::mem::take(&mut closure.parallel_targets);
     allocate::<bool>(&mut closure.allocated, schema.variants.len())?;
     schema.affine_variants.resize(schema.variants.len(), false);
     let mut visits = closure.visits;
@@ -700,6 +774,67 @@ pub(super) fn complete(
         control,
         Retention::NoApplication,
     )?;
+    // Recheck canonical signatures against this independent complete data proof.
+    // This includes unused targets and untaken expressions visited by body closure.
+    for target in parallel_targets {
+        control.check()?;
+        visits = visits
+            .checked_add(1)
+            .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
+            .ok_or_else(failure)?;
+        let snapshot = snapshots
+            .iter()
+            .find(|snapshot| snapshot.root.package_id == target.package)
+            .ok_or_else(failure)?;
+        let Some(OwnerRecord::Declaration(declaration)) = snapshot
+            .owners
+            .get(&OwnerKey::Declaration(target.declaration))
+        else {
+            return Err(failure());
+        };
+        let DeclarationPayload::Function(function) = &declaration.payload else {
+            return Err(failure());
+        };
+        if !schema.comparable_types.contains(&function.result) {
+            return Err(failure());
+        }
+        let mut seen_owned = false;
+        for parameter in &function.parameters {
+            control.check()?;
+            visits = visits
+                .checked_add(1)
+                .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
+                .ok_or_else(failure)?;
+            let Some(OwnerRecord::Parameter(parameter)) =
+                snapshot.owners.get(&OwnerKey::Parameter(*parameter))
+            else {
+                return Err(failure());
+            };
+            let owned = matches!(
+                schema.types.get(&parameter.ty).map(|t| &t.form),
+                Some(
+                    TypeForm::ByteBuffer
+                        | TypeForm::OwnedI64Cell
+                        | TypeForm::OwnedProduct { .. }
+                        | TypeForm::OwnedChoice { .. }
+                )
+            );
+            if seen_owned && !owned {
+                return Err(failure());
+            }
+            seen_owned |= owned;
+            if parameter.resource_requirement.is_some()
+                || if owned {
+                    parameter.use_mode != crate::platform::kernel::ParameterUse::Consume
+                } else {
+                    parameter.use_mode != crate::platform::kernel::ParameterUse::Unrestricted
+                        || !schema.comparable_types.contains(&parameter.ty)
+                }
+            {
+                return Err(failure());
+            }
+        }
+    }
     schema.type_derivation_steps = visits as u64;
     schema.type_metadata_bytes = bytes as u64;
     Ok(())

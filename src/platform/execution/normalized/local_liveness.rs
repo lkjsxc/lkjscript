@@ -63,6 +63,7 @@ fn flow(instruction: &I) -> Flow<'_> {
         | I::ImplementationCall { .. }
         | I::MethodCall { .. }
         | I::Call { .. }
+        | I::Parallel { .. }
         | I::FunctionValue { .. }
         | I::Invoke { .. }
         | I::Bind { .. }

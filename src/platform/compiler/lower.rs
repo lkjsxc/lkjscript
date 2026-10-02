@@ -1371,6 +1371,17 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         depth: usize,
         use_mode: ParameterUse,
     ) -> Result<(), Diagnostic> {
+        let operation = self.begin_expression(expression, depth)?;
+        let result = self.operation(operation, depth + 1, use_mode);
+        self.active.remove(&expression);
+        result
+    }
+
+    fn begin_expression(
+        &mut self,
+        expression: ExpressionId,
+        depth: usize,
+    ) -> Result<ExpressionOperation, Diagnostic> {
         if depth > crate::platform::kernel::contract::MAXIMUM_EXPRESSION_DEPTH {
             return Err(compiler_error(
                 DiagnosticClass::Resource,
@@ -1414,7 +1425,54 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 "expression record identity changed during exact lowering",
             ));
         }
-        let result = self.operation(operation, depth + 1, use_mode);
+        Ok(operation)
+    }
+
+    /// Traverse the canonical child Call exactly once, but evaluate only its
+    /// arguments in the parent. The task body belongs to the joined child.
+    fn parallel_call(
+        &mut self,
+        expression: ExpressionId,
+        depth: usize,
+    ) -> Result<(u32, u32), Diagnostic> {
+        let operation = self.begin_expression(expression, depth)?;
+        let result = (|| {
+            let ExpressionOperation::Call {
+                function,
+                arguments,
+                type_arguments,
+                effect_arguments,
+                requirement_arguments,
+            } = operation
+            else {
+                return Err(compiler_corrupt(
+                    "compiler_parallel_call",
+                    "parallel child must be a direct named call",
+                ));
+            };
+            if !type_arguments.is_empty()
+                || !effect_arguments.is_empty()
+                || !requirement_arguments.is_empty()
+            {
+                return Err(compiler_corrupt(
+                    "compiler_parallel_call",
+                    "parallel child must be monomorphic",
+                ));
+            }
+            let uses = self.unit.function_parameter_uses(function)?;
+            if uses.len() != arguments.len() {
+                return Err(compiler_corrupt(
+                    "compiler_parallel_call",
+                    "parallel child arity differs from its exact signature",
+                ));
+            }
+            let function = self.unit.tables.declaration(function)?;
+            let count = u32_count("parallel child arguments", arguments.len())?;
+            for (argument, use_mode) in arguments.into_iter().zip(uses) {
+                self.expression_with_use(argument, depth + 1, use_mode)?;
+            }
+            Ok((function, count))
+        })();
         self.active.remove(&expression);
         result
     }
@@ -1426,6 +1484,16 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         use_mode: ParameterUse,
     ) -> Result<(), Diagnostic> {
         match operation {
+            ExpressionOperation::Parallel { left, right } => {
+                let (left, left_arguments) = self.parallel_call(left, depth)?;
+                let (right, right_arguments) = self.parallel_call(right, depth)?;
+                self.push(CompiledInstruction::Parallel {
+                    left,
+                    left_arguments,
+                    right,
+                    right_arguments,
+                })?;
+            }
             ExpressionOperation::ChooseOwned {
                 choice_type,
                 case,

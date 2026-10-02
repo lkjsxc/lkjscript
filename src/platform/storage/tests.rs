@@ -1,5 +1,9 @@
 //! Generic immutable store and pack conformance tests.
 
+#[cfg(unix)]
+#[path = "fifo_tests.rs"]
+mod fifo_tests;
+
 use super::catalog::{
     CatalogEntry, CatalogHistory, CatalogIndex, CatalogLocation, CatalogManifest, ObjectCatalog,
     PackDescriptor, SegmentId, read_segment_metadata, write_segment,

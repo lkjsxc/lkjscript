@@ -33,6 +33,68 @@ const CURRENT_DIRECTORIES: &[(&str, &str)] = &[
 ];
 const HISTORICAL_FILES: &[&str] = &["docs/spec/semantic-diff-merge.md"];
 
+/// Complete bounded filesystem inventory observed by surface policy, including
+/// missing owners and entries that Git ignores or cannot represent (empty dirs).
+pub(super) fn input_paths(repository: &Path) -> Result<Vec<String>, DevError> {
+    let mut paths = CURRENT_FILES
+        .iter()
+        .map(|path| (*path).to_owned())
+        .collect::<Vec<_>>();
+    for &(directory, _) in CURRENT_DIRECTORIES {
+        paths.push(directory.to_owned());
+        let absolute = repository.join(directory);
+        let metadata = match fs::symlink_metadata(&absolute) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.into()),
+        };
+        // Refuse substituted owners before a nested audited path could follow one.
+        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+            return Err(DevError::infrastructure(format!(
+                "product-surface directory '{}' is not a regular directory",
+                absolute.display()
+            )));
+        }
+        for name in directory_names(&absolute)? {
+            paths.push(format!("{directory}/{name}"));
+        }
+    }
+    paths.sort();
+    paths.dedup();
+    for path in &paths {
+        if let Ok(metadata) = fs::symlink_metadata(repository.join(path))
+            && metadata.is_file()
+            && metadata.len() > MAXIMUM_FILE_BYTES
+        {
+            return Err(DevError::infrastructure(format!(
+                "product-surface input '{path}' exceeds {MAXIMUM_FILE_BYTES} bytes"
+            )));
+        }
+    }
+    Ok(paths)
+}
+
+fn directory_names(absolute: &Path) -> Result<Vec<String>, DevError> {
+    let mut names = Vec::new();
+    for entry in fs::read_dir(absolute)? {
+        if names.len() == MAXIMUM_DIRECTORY_FILES {
+            return Err(DevError::infrastructure(format!(
+                "product-surface directory '{}' exceeds {MAXIMUM_DIRECTORY_FILES} entries",
+                absolute.display()
+            )));
+        }
+        let name = entry?.file_name().into_string().map_err(|_| {
+            DevError::infrastructure(format!(
+                "product-surface directory '{}' contains a non-UTF-8 name",
+                absolute.display()
+            ))
+        })?;
+        names.push(name);
+    }
+    names.sort();
+    Ok(names)
+}
+
 const PUBLIC_COMMANDS: &[&str] = &[
     "capabilities",
     "new",
@@ -174,35 +236,7 @@ fn inspect_files(repository: &Path) -> Result<(Vec<Violation>, usize), DevError>
                 absolute.display()
             )));
         }
-        let mut entries = fs::read_dir(&absolute)
-            .map_err(|error| {
-                DevError::infrastructure(format!(
-                    "read product-surface directory '{}': {error}",
-                    absolute.display()
-                ))
-            })?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| {
-                DevError::infrastructure(format!(
-                    "enumerate product-surface directory '{}': {error}",
-                    absolute.display()
-                ))
-            })?;
-        if entries.len() > MAXIMUM_DIRECTORY_FILES {
-            return Err(DevError::infrastructure(format!(
-                "product-surface directory '{}' exceeds {MAXIMUM_DIRECTORY_FILES} entries",
-                absolute.display()
-            )));
-        }
-        entries.sort_by_key(|entry| entry.file_name());
-        for entry in entries {
-            let file_name = entry.file_name();
-            let file_name = file_name.to_str().ok_or_else(|| {
-                DevError::infrastructure(format!(
-                    "product-surface directory '{}' contains a non-UTF-8 name",
-                    absolute.display()
-                ))
-            })?;
+        for file_name in directory_names(&absolute)? {
             let relative = format!("{directory}/{file_name}");
             // A nested owner is inspected independently, including its directory metadata.
             if CURRENT_DIRECTORIES
@@ -621,6 +655,31 @@ mod tests {
             std::os::unix::fs::symlink(&foreign, &examples).unwrap();
             assert!(inspect_files(root.path()).is_err());
         }
+    }
+
+    #[test]
+    fn snapshot_inventory_and_surface_audit_share_finite_directory_and_file_bounds() {
+        let root = surface_fixture();
+        let examples = root.path().join("docs/guides/examples");
+        // The explicitly owned deployment descriptor occupies the first entry.
+        for index in 1..MAXIMUM_DIRECTORY_FILES {
+            fs::write(
+                examples.join(format!("fixture-{index}.lkjc")),
+                b"request base=BASE\n",
+            )
+            .unwrap();
+        }
+        assert!(input_paths(root.path()).is_ok());
+        assert!(inspect_files(root.path()).is_ok());
+        let extra = examples.join("one-more.lkjc");
+        fs::write(&extra, b"request base=BASE\n").unwrap();
+        assert!(input_paths(root.path()).is_err());
+        assert!(inspect_files(root.path()).is_err());
+        fs::remove_file(extra).unwrap();
+        let oversized = fs::File::create(examples.join("fixture-1.lkjc")).unwrap();
+        oversized.set_len(MAXIMUM_FILE_BYTES + 1).unwrap();
+        assert!(input_paths(root.path()).is_err());
+        assert!(inspect_files(root.path()).is_err());
     }
 
     #[test]

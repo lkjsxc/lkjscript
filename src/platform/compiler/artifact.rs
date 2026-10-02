@@ -48,16 +48,16 @@ use std::fmt;
 #[path = "artifact_code.rs"]
 mod code_admission;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-25";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-25";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 25;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF25";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART25";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN25";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-26";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-26";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 26;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF26";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART26";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN26";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v25";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v25";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v25";
+    "lkjscript.artifact-manifest-envelope.v26";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v26";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v26";
 pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v18";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
@@ -106,6 +106,15 @@ fn artifact_wire(version: u16) -> Result<ArtifactWire, Diagnostic> {
             manifest_domain: "lkjscript.artifact-manifest-envelope.v20",
             digest_domain: "lkjscript.artifact-bundle.v20",
             checksum_domain: "lkjscript.artifact-bundle.complete.v20",
+        }),
+        25 => Ok(ArtifactWire {
+            version,
+            manifest_magic: *b"LKJAMF25",
+            bundle_magic: *b"LKJART25",
+            end_magic: *b"LKJAEN25",
+            manifest_domain: "lkjscript.artifact-manifest-envelope.v25",
+            digest_domain: "lkjscript.artifact-bundle.v25",
+            checksum_domain: "lkjscript.artifact-bundle.complete.v25",
         }),
         ARTIFACT_CONTRACT_VERSION => Ok(ArtifactWire {
             version,
@@ -356,6 +365,8 @@ impl ArtifactManifest {
             19
         } else if bytes.starts_with(b"LKJAMF20") {
             20
+        } else if bytes.starts_with(b"LKJAMF25") {
+            25
         } else {
             ARTIFACT_CONTRACT_VERSION
         })?;
@@ -391,7 +402,7 @@ impl ArtifactManifest {
     fn validate(&self) -> Result<(), Diagnostic> {
         if !matches!(
             self.contract_version,
-            18 | 19 | 20 | ARTIFACT_CONTRACT_VERSION
+            18 | 19 | 20 | 25 | ARTIFACT_CONTRACT_VERSION
         ) || (self.contract_version == 18
             && (
                 self.graph_contract_version,
@@ -416,6 +427,7 @@ impl ArtifactManifest {
                     ),
                     (14, 10, 6) | (15, 11, 7) | (16, 12, 8)
                 ))
+            || (self.contract_version == 25 && self.graph_contract_version > 20)
             || !matches!(
                 (
                     self.graph_contract_version,
@@ -431,6 +443,7 @@ impl ArtifactManifest {
                     | (19, 16, 12)
                     | (19, 17, 13)
                     | (20, 18, 14)
+                    | (21, 19, 15)
             )
             || self.compilation_manifest_contract_version != COMPILATION_MANIFEST_CONTRACT_VERSION
         {
@@ -2434,6 +2447,7 @@ fn trace_object_closure(
     let mut preproduct_type_roots = BTreeSet::new();
     let mut prechoice_type_roots = BTreeSet::new();
     let mut predecessor_packages = BTreeSet::new();
+    let mut source_generations = BTreeMap::new();
     let mut blobs = BTreeMap::new();
     let mut interfaces = BTreeMap::new();
     for package in &manifest.packages {
@@ -2447,13 +2461,17 @@ fn trace_object_closure(
                     "artifact package manifest names a revision outside the logical closure",
                 )
             })?;
+        // A current package envelope/compiler may retain older accepted meaning.
+        // Only the embedded semantic revision owns that meaning's generation.
+        let source_generation = revision.revision.graph_contract_version;
+        source_generations.insert(package.package, source_generation);
         let interface = validate_package_interface(
             package.package,
             package.interface_owners,
             &store,
             &mut store_work,
         )?;
-        if revision.graph_contract_version < 17 {
+        if source_generation < 17 {
             predecessor_packages.insert(package.package);
             if interface
                 .type_objects
@@ -2536,13 +2554,13 @@ fn trace_object_closure(
                         ));
                     }
                     type_roots.extend(unit.tables.types.iter().copied());
-                    if unit.graph_contract_version < 20 || revision.graph_contract_version < 20 {
+                    if unit.graph_contract_version < 20 || source_generation < 20 {
                         prechoice_type_roots.extend(unit.tables.types.iter().copied());
                     }
-                    if unit.graph_contract_version < 19 || revision.graph_contract_version < 19 {
+                    if unit.graph_contract_version < 19 || source_generation < 19 {
                         preproduct_type_roots.extend(unit.tables.types.iter().copied());
                     }
-                    if unit.graph_contract_version < 17 || revision.graph_contract_version < 17 {
+                    if unit.graph_contract_version < 17 || source_generation < 17 {
                         predecessor_type_roots.extend(unit.tables.types.iter().copied());
                     }
                     for text in &unit.tables.texts {
@@ -2680,6 +2698,22 @@ fn trace_object_closure(
     validate_predecessor_type_closure(predecessor_type_roots, &types)?;
     validate_product_generation_closure(preproduct_type_roots, &types, 18)?;
     validate_product_generation_closure(prechoice_type_roots, &types, 19)?;
+    for ((package, _), record) in reference_owners.iter().chain(runtime_owners.iter()) {
+        let source_generation = source_generations.get(package).ok_or_else(|| {
+            artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_package_revision_binding",
+                "canonical artifact owner has no containing logical source",
+            )
+        })?;
+        if record.header().contract_version > *source_generation {
+            return Err(artifact_error(
+                DiagnosticClass::Semantic,
+                "kernel_owner_graph_generation",
+                "canonical artifact owner uses a newer generation than its containing source graph",
+            ));
+        }
+    }
     validate_artifact_nominal_meaning(
         manifest,
         &units,
@@ -2782,6 +2816,7 @@ fn validate_nominal_instruction_inventory(
     // The baseline compiler emits each expression occurrence once (including both branches).
     #[derive(Eq, PartialEq, Ord, PartialOrd)]
     enum Constructor {
+        Parallel,
         Record(
             Option<DeclarationReference>,
             Vec<TypeObjectDigest>,
@@ -2897,6 +2932,7 @@ fn validate_nominal_instruction_inventory(
                 ));
             };
             let constructor = match &record.operation {
+                ExpressionOperation::Parallel { .. } => Some(Constructor::Parallel),
                 ExpressionOperation::Constant { declaration } => Some(Constructor::Call(
                     *declaration,
                     Vec::new(),
@@ -3017,6 +3053,34 @@ fn validate_nominal_instruction_inventory(
             for instruction in &code.instructions {
                 tick()?;
                 let constructor = match instruction {
+                    CompiledInstruction::Parallel {
+                        left,
+                        left_arguments,
+                        right,
+                        right_arguments,
+                    } => {
+                        for (function, arguments) in
+                            [(*left, *left_arguments), (*right, *right_arguments)]
+                        {
+                            tick()?;
+                            let call = Constructor::Call(
+                                table_value(&unit.tables.declarations, function, "parallel task")?,
+                                Vec::new(),
+                                Vec::new(),
+                                Vec::new(),
+                                arguments as usize,
+                            );
+                            let count = actual.entry(call).or_insert(0usize);
+                            *count = count.checked_add(1).ok_or_else(|| {
+                                artifact_error(
+                                    DiagnosticClass::Resource,
+                                    "artifact_nominal_work",
+                                    "parallel call count overflow",
+                                )
+                            })?;
+                        }
+                        Some(Constructor::Parallel)
+                    }
                     CompiledInstruction::Call {
                         function,
                         type_arguments,
@@ -4216,6 +4280,19 @@ fn validate_reference_owners(
                         store_work,
                     )?;
                     let record = decode_owner(&bytes, owner, binding.kind, binding.object)?;
+                    // Every consumer must see the same canonical owner, regardless of which
+                    // inventory it consults first. In particular, signatures alone cannot bind
+                    // the body admitted for affine validation to the body used for lowering.
+                    if runtime_owners
+                        .get(&(package.package, owner))
+                        .is_some_and(|runtime| runtime != &record)
+                    {
+                        return Err(artifact_error(
+                            DiagnosticClass::Corrupt,
+                            "artifact_runtime_owner_semantics",
+                            "artifact runtime and reference inventories disagree on one exact canonical owner",
+                        ));
+                    }
                     if records.insert((package.package, owner), record).is_some() {
                         return Err(artifact_error(
                             DiagnosticClass::Corrupt,
@@ -4301,7 +4378,7 @@ fn validate_reference_owners(
                     return Err(artifact_error(
                         DiagnosticClass::Corrupt,
                         "artifact_reference_declaration_payload",
-                        "reference declaration kind disagrees with its exact compiler unit",
+                        "reference declaration semantics disagree with its exact compiler unit",
                     ));
                 }
                 pending.extend(
@@ -4388,6 +4465,31 @@ fn reference_callable_payload(payload: &CompilationPayload) -> bool {
 fn reference_payload_matches(unit: &CompilationUnit, canonical: &DeclarationPayload) -> bool {
     let compiled = &unit.payload;
     if let (
+        CompilationPayload::External {
+            signature,
+            implementation,
+        },
+        DeclarationPayload::External(external),
+    ) = (compiled, canonical)
+    {
+        // Parameter records and ordered type-parameter constraints are independently matched
+        // by runtime-owner admission. Bind their inventory, result and intrinsic identity here
+        // for ordinary externals as well as memory externals.
+        return signature.implementation_parameters.is_empty()
+            && signature.requirement_parameters.is_empty()
+            && signature.effect_parameters.is_empty()
+            && signature.effect == FunctionEffect::Pure
+            && signature.task_requirements.is_empty()
+            && signature.type_parameters == external.type_parameters
+            && signature
+                .parameters
+                .iter()
+                .map(|p| p.parameter)
+                .eq(external.parameters.iter().copied())
+            && unit.tables.types.get(signature.result as usize) == Some(&external.result)
+            && implementation == &external.implementation;
+    }
+    if let (
         CompilationPayload::Function { signature, .. },
         DeclarationPayload::Function(function),
     ) = (compiled, canonical)
@@ -4406,9 +4508,6 @@ fn reference_payload_matches(unit: &CompilationUnit, canonical: &DeclarationPayl
     matches!(
         (compiled, canonical),
         (
-            CompilationPayload::External { .. },
-            DeclarationPayload::External(_)
-        ) | (
             CompilationPayload::Function { .. },
             DeclarationPayload::Function(_)
         ) | (

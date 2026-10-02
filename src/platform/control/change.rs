@@ -9,6 +9,8 @@ mod literal_edit;
 pub(crate) use draft::render as render_native_draft;
 pub(crate) use draft_selection::NativeDraftSelection;
 #[cfg(test)]
+mod commitment_tests;
+#[cfg(test)]
 mod declaration_tests;
 #[cfg(test)]
 mod literal_edit_tests;
@@ -54,10 +56,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-28";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 28;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-24";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 24;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-29";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 29;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-25";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 25;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -1706,6 +1708,7 @@ pub const COMPACT_EXPRESSION_FORMS: &[&str] = &[
     "capability-call",
     "transaction",
     "transaction-outcome",
+    "parallel",
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1948,6 +1951,24 @@ pub(crate) const COMPACT_TYPE_FORM_FIELDS: &[CompactFormField] = &[
 ];
 
 pub(crate) const COMPACT_EXPRESSION_FORM_FIELDS: &[CompactFormField] = &[
+    CompactFormField {
+        form: "parallel",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "parallel",
+        name: "left",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "parallel",
+        name: "right",
+        required: true,
+        syntax: "$NAME",
+    },
     CompactFormField {
         form: "choose-owned",
         name: "as",
@@ -4807,6 +4828,15 @@ impl Decoder {
                     items: self.decode_expression_edges(symbol)?,
                 }
             }
+            "expression.parallel" => {
+                check_fields(&record, &["as", "left", "right"])?;
+                let left = required(&record, "left")?.to_owned();
+                let right = required(&record, "right")?.to_owned();
+                AuthoredExpressionOperation::Parallel {
+                    left: Box::new(self.decode_expression(&left)?),
+                    right: Box::new(self.decode_expression(&right)?),
+                }
+            }
             "expression.call" => {
                 check_fields(&record, &["as", "function"])?;
                 AuthoredExpressionOperation::Call {
@@ -5280,23 +5310,42 @@ fn change_request_commitment(
     let intent = crate::platform::change::canonical_authored_intent_bytes(request)?;
     let budget = crate::platform::change::canonical_authored_budget_bytes(request.budget)?;
     let mut hasher = blake3::Hasher::new_derive_key(CHANGE_REQUEST_COMMITMENT_DOMAIN);
-    // Codec 15 committed both compatible intent generations under this exact identity.
-    // Adding an expression must not change reviewed request identities for unchanged bytes.
-    let codec_identity = if intent.starts_with(b"LKJACR14") || intent.starts_with(b"LKJACR15") {
-        "lkjscript-authored-change-codec-15"
-    } else if intent.starts_with(b"LKJACR16") {
-        "lkjscript-authored-change-codec-16"
-    } else if intent.starts_with(b"LKJACR17") {
-        "lkjscript-authored-change-codec-17"
-    } else {
-        AUTHORED_CHANGE_CODEC_IDENTITY
-    };
-    hash_digest_field(&mut hasher, codec_identity.as_bytes())?;
+    hash_digest_field(&mut hasher, commitment_codec_identity(&intent).as_bytes())?;
     hash_digest_field(&mut hasher, &intent)?;
     hash_digest_field(&mut hasher, &budget)?;
     hash_optional_digest_field(&mut hasher, options.idempotency_key.as_deref())?;
     hash_optional_digest_field(&mut hasher, options.intent.as_deref())?;
     Ok(ChangeRequestCommitment(*hasher.finalize().as_bytes()))
+}
+
+fn commitment_codec_identity(intent: &[u8]) -> &'static str {
+    // Codec 15 committed both compatible intent generations under this exact identity.
+    // Adding an expression must not change reviewed request identities for unchanged bytes.
+    // Freeze each originally introduced identity, not a later erroneous fallback commitment.
+    if intent.starts_with(b"LKJACR14") || intent.starts_with(b"LKJACR15") {
+        "lkjscript-authored-change-codec-15"
+    } else if intent.starts_with(b"LKJACR16") {
+        "lkjscript-authored-change-codec-16"
+    } else if intent.starts_with(b"LKJACR17") {
+        "lkjscript-authored-change-codec-17"
+    } else if intent.starts_with(b"LKJACR18") {
+        "lkjscript-authored-change-codec-18"
+    } else if intent.starts_with(b"LKJACR19") {
+        "lkjscript-authored-change-codec-19"
+    } else if intent.starts_with(b"LKJACR20") {
+        "lkjscript-authored-change-codec-20"
+    } else if intent.starts_with(b"LKJACR21") {
+        "lkjscript-authored-change-codec-21"
+    } else if intent.starts_with(b"LKJACR22") {
+        "lkjscript-authored-change-codec-22"
+    } else if intent.starts_with(b"LKJACR23") {
+        "lkjscript-authored-change-codec-23"
+    } else if intent.starts_with(b"LKJACR24") {
+        "lkjscript-authored-change-codec-24"
+    } else {
+        // Retain the existing fallback; do not infer identities from unknown/future magics.
+        AUTHORED_CHANGE_CODEC_IDENTITY
+    }
 }
 
 fn hash_optional_digest_field(

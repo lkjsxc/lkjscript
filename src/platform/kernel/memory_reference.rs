@@ -379,6 +379,61 @@ impl Oracle<'_> {
         };
         Some(&e.operation)
     }
+    fn parallel_child(&self, id: ExpressionId) -> Option<()> {
+        let ExpressionOperation::Call {
+            function,
+            arguments,
+            type_arguments,
+            requirement_arguments,
+            effect_arguments,
+        } = self.expression(id)?
+        else {
+            return None;
+        };
+        let signature = self.function(*function)?;
+        if !type_arguments.is_empty()
+            || !requirement_arguments.is_empty()
+            || !effect_arguments.is_empty()
+            || !signature.type_parameters.is_empty()
+            || !signature.requirement_parameters.is_empty()
+            || !signature.effect_parameters.is_empty()
+            || !signature.implementation_parameters.is_empty()
+            || !matches!(&signature.effect, FunctionEffect::Task { requirements, effect_parameters }
+                if requirements.is_empty() && effect_parameters.is_empty())
+            || signature.parameters.len() != arguments.len()
+            || !self.ordinary(signature.result)
+        {
+            return None;
+        }
+        let mut owned = false;
+        for id in signature.parameters {
+            let p = self.parameter(function.package, id)?;
+            if p.parent != ParameterParent::Function(function.declaration)
+                || p.resource_requirement.is_some()
+            {
+                return None;
+            }
+            if matches!(
+                self.form(p.ty),
+                Some(
+                    TypeForm::ByteBuffer
+                        | TypeForm::OwnedI64Cell
+                        | TypeForm::OwnedProduct { .. }
+                        | TypeForm::OwnedChoice { .. }
+                )
+            ) {
+                if p.use_mode != ParameterUse::Consume
+                    || !Oracle(self.0, None).owned_type_in_scope(p.ty)
+                {
+                    return None;
+                }
+                owned = true;
+            } else if owned || p.use_mode != ParameterUse::Unrestricted || !self.ordinary(p.ty) {
+                return None;
+            }
+        }
+        Some(())
+    }
     fn arguments(
         &self,
         parameters: &[(TypeObjectDigest, ParameterUse)],
@@ -698,6 +753,23 @@ impl Oracle<'_> {
                 )?;
                 self.buffer(s.1)
             }
+            ExpressionOperation::Parallel { left, right } => {
+                if let Some(declaration) = self.1
+                    && self
+                        .function(DeclarationReference {
+                            package: self.0.root.package_id,
+                            declaration,
+                        })
+                        .is_none_or(|f| matches!(f.effect, FunctionEffect::Pure))
+                {
+                    return None;
+                }
+                self.parallel_child(*left)?;
+                self.parallel_child(*right)?;
+                plain(*left, rights)?;
+                plain(*right, rights)?;
+                false
+            }
             ExpressionOperation::ImplementationCall {
                 function,
                 type_arguments,
@@ -882,6 +954,11 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
             .root
             .graph_contract_version
             .min(owner.header().contract_version);
+        if generation < 21
+            && matches!(owner, OwnerRecord::Expression(e) if matches!(e.operation, ExpressionOperation::Parallel { .. }))
+        {
+            return false;
+        }
         if generation >= 20 {
             continue;
         }

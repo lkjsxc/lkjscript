@@ -37,8 +37,10 @@ mod checked;
 use checked::{Ownership, Value as CheckedValue};
 #[path = "reference_intrinsics.rs"]
 mod checked_intrinsics;
+#[path = "reference_parallel.rs"]
+mod structured;
 
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, serde::Serialize)]
 pub struct NormalizedReferenceObservation {
     pub expressions: u64,
     pub calls: u64,
@@ -544,6 +546,9 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         let list_work = super::list::Work::current();
         let map_work = super::map::Work::current();
         let mut state = ReferenceState {
+            shared_budget: None,
+            structured_depth: 0,
+            ancestor_depth: 0,
             memory_domain: super::value::ValueOrigin::fresh().ok_or_else(|| {
                 reference_resource(
                     "normalized_buffer_domain",
@@ -689,6 +694,9 @@ struct ReferenceApplication<'a> {
 }
 
 struct ReferenceState<'a> {
+    shared_budget: Option<Arc<super::shared_budget::SharedBudget>>,
+    structured_depth: usize,
+    ancestor_depth: usize,
     memory_domain: super::value::ValueOrigin,
     authority: &'a dyn NormalizedReferenceRead,
     binding: NormalizedReferenceBinding,
@@ -1208,15 +1216,17 @@ impl ReferenceState<'_> {
         let type_arguments = self.resolve_type_arguments(type_arguments)?;
         let effect_arguments = self.resolve_effect_arguments(effect_arguments)?;
         let requirement_arguments = self.resolve_requirement_arguments(requirement_arguments)?;
-        if self.call_depth >= self.policy.maximum_call_depth {
+        if self.call_depth.saturating_add(self.ancestor_depth) >= self.policy.maximum_call_depth {
             return Err(reference_resource(
                 "normalized_reference_call_depth",
                 "reference execution exceeded its call-depth budget",
             ));
         }
         self.call_depth += 1;
-        self.observation.maximum_call_depth =
-            self.observation.maximum_call_depth.max(self.call_depth);
+        self.observation.maximum_call_depth = self
+            .observation
+            .maximum_call_depth
+            .max(self.call_depth.saturating_add(self.ancestor_depth));
         let previous_package = self.active_package;
         self.active_package = reference.package;
         let mut step = self.call_activation(
@@ -1902,15 +1912,18 @@ impl ReferenceState<'_> {
         self.charge_allocation(std::mem::size_of::<AdmittedGraphCall>() as u64)?;
         self.control.check()?;
         if locals.values().any(|v| v.raw().memory_owns_live_loans()) {
-            if self.call_depth >= self.policy.maximum_call_depth {
+            if self.call_depth.saturating_add(self.ancestor_depth) >= self.policy.maximum_call_depth
+            {
                 return Err(reference_resource(
                     "normalized_reference_call_depth",
                     "retained memory owner exceeded call-depth limit",
                 ));
             }
             self.call_depth += 1;
-            self.observation.maximum_call_depth =
-                self.observation.maximum_call_depth.max(self.call_depth);
+            self.observation.maximum_call_depth = self
+                .observation
+                .maximum_call_depth
+                .max(self.call_depth.saturating_add(self.ancestor_depth));
             let package = self.active_package;
             let mut step = self.enter_graph_call(target, false);
             let result = loop {
@@ -1977,6 +1990,9 @@ impl ReferenceState<'_> {
         if let Some(remaining) = &mut self.remaining_expressions {
             *remaining -= 1;
         }
+        if let Some(budget) = &self.shared_budget {
+            budget.step("normalized_reference_expression_steps")?;
+        }
         self.observation.expressions = self.observation.expressions.saturating_add(1);
         match self.owner(OwnerKey::Expression(expression))? {
             Some(OwnerRecord::Expression(record)) => Ok(record.operation),
@@ -2000,6 +2016,7 @@ impl ReferenceState<'_> {
             (std::mem::size_of::<CheckedValue>() - std::mem::size_of::<NormalizedValue>()) as u64,
         )?;
         match operation {
+            ExpressionOperation::Parallel { left, right } => self.parallel(left, right, locals),
             ExpressionOperation::ChooseOwned {
                 choice_type,
                 case,
@@ -3519,13 +3536,17 @@ impl ReferenceState<'_> {
                 "one container exceeds finite item admission",
             ));
         }
-        self.observation.collection_items = crate::platform::execution::cumulative_charge(
+        let next_items = crate::platform::execution::cumulative_charge(
             self.observation.collection_items,
             items as u64,
             self.policy.maximum_collection_items,
             "normalized_reference_collection_items",
             "execution exhausted its collection-item budget",
         )?;
+        if let Some(budget) = &self.shared_budget {
+            budget.reserve(0, items as u64)?;
+        }
+        self.observation.collection_items = next_items;
         let bytes = super::value::collection_storage_bytes(
             items as u64,
             item_bytes as u64,
@@ -3541,13 +3562,17 @@ impl ReferenceState<'_> {
                 "one allocation exceeds finite value storage",
             ));
         }
-        self.observation.allocated_bytes = crate::platform::execution::cumulative_charge(
+        let next_bytes = crate::platform::execution::cumulative_charge(
             self.observation.allocated_bytes,
             bytes,
             self.policy.maximum_allocated_bytes,
             "normalized_reference_allocation",
             "execution exhausted its allocation budget",
         )?;
+        if let Some(budget) = &self.shared_budget {
+            budget.reserve(bytes, 0)?;
+        }
+        self.observation.allocated_bytes = next_bytes;
         if bytes != 0 {
             self.observation.allocation_charges =
                 self.observation.allocation_charges.saturating_add(1);
@@ -3563,13 +3588,17 @@ impl ReferenceState<'_> {
                 "one external value exceeds finite item admission",
             ));
         }
-        self.observation.collection_items = crate::platform::execution::cumulative_charge(
+        let next_items = crate::platform::execution::cumulative_charge(
             self.observation.collection_items,
             items,
             self.policy.maximum_collection_items,
             "normalized_reference_collection_items",
             "external value exceeds the collection-item budget",
         )?;
+        if let Some(budget) = &self.shared_budget {
+            budget.reserve(0, items)?;
+        }
+        self.observation.collection_items = next_items;
         self.charge_allocation(bytes)
     }
 

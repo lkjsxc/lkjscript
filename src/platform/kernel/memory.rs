@@ -741,6 +741,15 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 }
                 direct(self.read, s.result)?
             }
+            ExpressionOperation::Parallel { left, right } => {
+                super::parallel::admit_call(self.read, left)?;
+                super::parallel::admit_call(self.read, right)?;
+                // Admission consumes both argument sets in the same parent state.
+                // No branch-local fork can make one owner available to both children.
+                plain(left, state)?;
+                plain(right, state)?;
+                false
+            }
             ExpressionOperation::MethodCall {
                 witness,
                 contract,

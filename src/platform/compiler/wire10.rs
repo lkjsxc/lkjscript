@@ -673,6 +673,7 @@ impl TryFrom<CompiledInstruction> for CompiledInstruction10 {
             | CompiledInstruction::PackOwned { .. }
             | CompiledInstruction::UnpackOwned { .. }
             | CompiledInstruction::ChooseOwned { .. }
+            | CompiledInstruction::Parallel { .. }
             | CompiledInstruction::MatchOwned { .. } => return Err(extension()),
         })
     }

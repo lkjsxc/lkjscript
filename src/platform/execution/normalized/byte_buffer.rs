@@ -109,6 +109,17 @@ impl ByteBuffer {
     pub(super) fn owns_live_loans(&self) -> bool {
         self.mode == Mode::Owner && self.lock().loans != 0
     }
+    /// Only a sealed runtime custodian may move a validated owner to a fresh task.
+    /// Inert raw clones keep their old domain and never acquire owner mode.
+    pub(super) fn adopt_transfer(
+        &mut self,
+        source: ValueOrigin,
+        destination: ValueOrigin,
+    ) -> Result<(), ExecutionError> {
+        self.validate(source, true)?;
+        self.domain = destination;
+        Ok(())
+    }
     pub(super) fn is_borrowed(&self) -> bool {
         self.mode == Mode::Read
     }

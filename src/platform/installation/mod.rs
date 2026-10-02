@@ -77,6 +77,9 @@ trait Checkpoints {
     fn at(&self, _point: &'static str) -> Result<(), Diagnostic> {
         Ok(())
     }
+    fn sync_versions(&self, versions: &File) -> Result<(), Diagnostic> {
+        fs::sync(versions)
+    }
 }
 struct Ordinary;
 impl Checkpoints for Ordinary {}
@@ -303,12 +306,7 @@ fn install_with(
             root.recheck()?;
             points.at("before-version-publish")?;
             fs::publish(&stage, "version", &root.versions, tag).map_err(io_error)?;
-            let published = (|| {
-                points.at("after-version-publish")?;
-                fs::sync(&root.versions)?;
-                points.at("after-version-sync")
-            })();
-            if let Err(mut error) = published {
+            if let Err(mut error) = points.at("after-version-publish") {
                 error.notes.push(format!("complete version published at {}; selection unchanged; version durability uncertain", root.pinned(tag).display()));
                 return Err(error);
             }
@@ -639,6 +637,19 @@ impl Root {
         points: &dyn Checkpoints,
     ) -> Result<Mutation, Diagnostic> {
         let version = self.retained(tag, true)?.0;
+        // A retained slot may come from an interrupted publish-before-sync. Its
+        // revalidated identity does not establish durability of the versions entry.
+        let synchronized = (|| {
+            points.sync_versions(&self.versions)?;
+            points.at("after-version-sync")
+        })();
+        synchronized.map_err(|mut error| {
+            error.notes.push(format!(
+                "complete version retained at {}; selection unchanged; version durability uncertain",
+                self.pinned(tag).display()
+            ));
+            error
+        })?;
         let (manager, retained_manager) = self.manager()?;
         if activate && previous.as_deref() != Some(tag) {
             self.activate(tag, points)?;

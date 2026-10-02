@@ -1,335 +1,130 @@
-# Evidence-gated roadmap
+# Roadmap
 
-[Project direction](direction.md) records the owner's current choices.
-[Status](status.md) owns availability; [specifications](spec/) own implemented
-contracts; [campaigns](campaigns/) retain attempts and evidence. A roadmap entry
-does not add a capability to an existing executable.
+Improve the language's compositional type, generic, trait, ownership, lifetime,
+effect and concurrency design. Reliable agent development is the secondary objective;
+personal application completion, immediate benchmark wins and new application
+starters do not determine the order. The accepted meaning graph remains the sole
+editable program authority. [Direction](direction.md) contains the durable choices,
+[status](status.md) owns availability, and [specifications](spec/) define implemented
+contracts. Historical prompts are not additional prerequisites.
 
-## Selected priority: language core and shared execution
+These priorities order the next useful experiments, not a waterfall or a feature
+promise. Mechanisms may change when a better complete design has evidence. Memory
+safety, bounded checking and avoidance of unnecessary copying are baseline requirements.
 
-The 2026-09-28 [owner mandate](campaigns/202609281300.md) supersedes the previous
-application-editing-first priority. Preserve meaning-graph primacy and strengthen
-generics, traits, ownership, lifetimes, effects and scalable concurrency.
-Human comprehension and manual participation are not admission criteria.
-Memory safety and avoidance of unnecessary copying are baseline requirements.
-Immediate Rust benchmark superiority, extreme memory minimization, compatibility
-migration and external adoption are not prerequisites for this research phase.
+## 1. Complete the structured-parallel boundary
 
-The [2026-10-02 priority clarification](campaigns/20261002-language-priority.md)
-places language-design quality before AI development effectiveness; the latter
-remains important, but personal application completion is not a success criterion.
-Do not turn an AI editing benchmark or another application starter into a gate that
-blocks otherwise coherent language work. Keep the graph-first, agent-native and
-ordinary-public-consumption requirements unchanged.
+Finish current 0.1.68 verification and normal mainline/release delivery under the
+[existing procedure](release.md#selected-structured-parallel-successor-v0168).
+Prove public cross-package owned computation, exact artifact admission, actual child
+overlap, invocation-wide quotas and joined failure cleanup separately. Preserve task
+kind independently of an empty effect row throughout authoring, extraction and execution.
 
-Use a maintained cross-package producer/transformer/consumer family as the primary
-representative workload. Begin with owned buffers and an independent owned scalar
-carrier, exact generic implementations, pure scoped reads, task effects and resource
-grants. Advance through recoverable refusal, actual structured handoff and CPU
-parallelism with independent negative and cleanup expectations. Existing lkjournal
-and web consumers remain integration/regression witnesses, not the product roadmap.
+Use the [current pair contract](spec/structured-parallel.md) as a small coherent
+foundation. General channels, task handles or effectful children are not prerequisites
+for completing it, and passing one boundary does not certify the others.
 
-The primary evaluation is explicit: record newly expressible compositions, rejected
-invalid cases, static and dynamic contract boundaries, package independence,
-proof-work exhaustion behavior, cancellation and resource completion. Test a feature
-through independent carriers and libraries rather than selecting it by syntax count
-or one privileged host implementation. Execution/preparation cost and scalability
-remain measured tradeoffs, not substitutes for language correctness.
+## 2. Scale structured execution and the shared host
 
-The secondary AI evaluation should measure completion of repeated changes without
-regressions, alongside time and resource use. It need not precede structured owned
-transfer or a coherent type-system increment. Initial execution experiments use
-one existing authorized Linux x86-64 host, several admitted instances and a small
-owned-data pipeline. Initial concurrent-author evidence starts with two independent
-revision-bound candidates, then two to four agents when available within authorized
-resources. This is a first experiment, not a scale ceiling, purchase authorization,
-current implementation claim or a new requirement for distributed infrastructure.
+Evaluate reusable bounded workers, local queues, batching and locality-aware scheduling
+with substantial transform/reduction work beside an independent I/O instance. Keep
+nested execution from waiting for a worker or resident slot held by its ancestor.
+Measure fairness under saturation, cancellation latency, preparation cost and repeated
+start/stop behavior before making scaling claims.
 
-A genuine shared runtime is a central requirement. Do not defer it behind a complete
-new type system, collector, JIT, AOT backend or web framework. Conversely, do not
-call a process launcher, shared installation or unverified shared mutable heap a
-solution. Develop a small end-to-end shared-execution slice with explicit ownership
-and failure boundaries, then extend its language contracts.
+Extend the [in-process shared runtime](spec/shared-runtime.md) with explicit pooling,
+admission, readiness, stop/drain/unload and version coexistence. Share compatible
+immutable code and metadata; retain private state, captures, grants, cancellation
+and accounting. Isolates are authority/lifetime domains, not permanent OS threads.
+Dynamic supervision and component-level pooling require their own evidence.
 
-## First coordinated slice
+Develop typed bounded channels when the task/ownership contract can express exact
+destination admission, capacity reservation, irrevocable acceptance, owner-returning
+refusal and joined receiver cleanup. The existing runtime mailbox is a mechanism,
+not a public channel certificate. Acceptance is not processing completion, and
+in-process transfer establishes no distributed exactly-once guarantee.
 
-### Semantic boundary
+## 3. Broaden ownership, generics, traits and effects together
 
-The first scoped capability borrowing boundary is public in v0.1.54. The
-[type-generic continuation](campaigns/202609281735.md) composes ordinary type
-parameters, data callbacks and results with exact concrete borrowing/consumption.
-The [recursive continuation](campaigns/202609282124.md) admits direct and mutual
-synchronous helpers by checking their declared use contracts compositionally,
-without adding a parallel ownership mechanism or treating termination as safety.
-The [package continuation](campaigns/202609290026.md) extends the exact resource
-contract to public libraries and forwarders, with imported authority explicitly
-named by entry ports and still granted at deployment. Ordinary generic borrowing,
-recursive implementation and final consumption compose across three packages.
-The [exact-selector continuation](campaigns/202609290337.md) closes the same-name
-deployment selection gap using existing package/requirement identities and one
-shared preflight/preparation resolver. Name ambiguity never grants authority by
-elimination, and independent durable roots remain distinct.
-The [multi-resource continuation](campaigns/202609291100.md) composes a contiguous
-final suffix of borrowed/consumed resources, each retaining exact concrete authority.
-Repeated borrows may share an owner; any consuming alias in one helper call rejects.
-Native two-queue and imported-library workloads retain this boundary through
-ordinary generics, recursion, detached execution and independent persisted effects.
-The [effect-callback continuation](campaigns/20260929-effect-resource-callbacks.md)
-allows resource-free task callbacks to carry explicit effect parameters through exact-resource
-helpers. Callback effects and resource authority remain separate: the resource binding stays
-concrete, including across recursive/package calls and repeated-borrow suffixes. Requirement-
-polymorphic resource transfer, resource returns and general memory references remain open.
-These are implementation increments toward the coordinated slice, not substitutes for its
-region/trait/ownership design or evidence of zero-copy payload processing.
+Extend the [Owned library contracts](spec/owned-generics.md), [products](spec/owned-products.md)
+and [choices](spec/owned-choices.md) through one ordinary cross-package composition
+at a time. Prioritize useful owned containers, borrowing/lifetime relationships and
+typed trait methods over disconnected syntax. Explore associated type families,
+higher-ranked borrowing, effect polymorphism and bounded value/region parameters
+where they support a sound abstraction.
 
-The [concrete ByteBuffer increment](spec/owned-byte-buffers.md) implements pure
-creation, scoped synchronous reads, consuming updates, direct owned result transfer
-and lexical/failure cleanup across ordinary generic packages. Capability-resource
-authority remains separate. The [first-order owned abstraction](spec/owned-generics.md)
-implements rank-one Owned constraints and explicit nominal implementation witnesses
-for ByteBuffer and an independent scalar cell. The
-[structural product slice](spec/owned-products.md), now integrated in development, composes
-explicit affine fields with closed ordinary metadata and complete consuming
-decomposition. Generic abstraction is deliberately over Owned payloads; open
-ordinary metadata parameters require a future first-order data proof. Extend this boundary toward
-typed traits, general lifetimes and region policies; none is supplied by this
-increment. Keep declared ownership/effect meaning separate from physical placement
-and recomputable analyses.
+Retain exact implementation identity and explicit coherence, ambiguity and termination
+rules. Local inference must leave independently checkable boundary contracts.
+Proof-search exhaustion is distinct from invalid meaning. Effect allowances,
+implementation witnesses and deployment grants remain separate. Typed failures and
+resource completion must compose with cancellation; retained affine continuations
+cannot be duplicated by an effect handler without a valid ownership contract.
 
-The [ordinary metadata-read continuation](campaigns/20261001-owned-product-metadata.md)
-lets a synchronous generic helper inspect a product's closed tag without moving or
-repacking the payload. A short whole-product loan returns an ordinary immutable
-value, not an owned-child reference. This supplies inspection before a transfer
-decision; it does not replace the next recoverable-outcome experiment.
+## 4. Establish ownership and region memory policies
 
-The [owned choice/outcome continuation](campaigns/20261002-owned-choices.md) implements
-an explicit affine sum and complete consuming case analysis. Ordinary success and
-still-owned rejection results compose across exact generic libraries and independent
-carriers. Closed choice Self implementations, recursive transfer and opaque reborrows
-use existing contracts. Ordinary unrestricted Option/Result is not an escape hatch.
-Source tests and delivery remain distinct from a finalized or published binary.
+Compare unique regions, scoped aliases, local tracing for cyclic data and transitively
+immutable shared segments. Universal Arc-style ownership and a mandatory global
+tracing heap are not the selected end state. Define region escape, cross-region roots,
+freezing, transfer and reclamation before selecting placement mechanisms.
 
-The [same-task continuation](campaigns/20261002-task-owned-transfer.md) implements
-the first call boundary: consume-only owned task arguments/results before an exact
-capability-resource suffix, generic task hosts and explicit static witnesses. It
-retains separate authority, scoped pure loans and the existing invocation origin.
-This is not yet asynchronous transfer or a new supervisor; current source evidence
-and public binary availability remain separated in [status](status.md).
+Relate moving collectors to borrows, handles/pinning, roots and native safepoints.
+GC reclaims storage; it does not commit transactions or complete I/O. Preserve a
+collector-free/no-allocation path where future freestanding effects permit it.
+Compare copying, retained memory, pauses, throughput and preparation on matched
+workloads, including cache/NUMA and large working-set behavior.
 
-The [task-method continuation](campaigns/20261002-owned-task-methods.md) closes a
-concrete composition gap before that handoff:
-owned libraries can now select monomorphic task implementations with identical
-closed effect rows. Pure reading and task consumption remain distinct; neither a
-witness nor a contract row replaces a caller allowance or deployment grant.
-The scalar/buffer producer-consumer family exercises these boundaries through public
-packages and source-free artifacts. Do not grow a full trait or effect calculus as
-a prerequisite for the next runtime experiment.
+## 5. Support concurrent semantic development
 
-The next preferred boundary is a small structured in-process handoff. Exercise
-explicit acceptance, declined transfer returning the original owner, cancellation
-before/after acceptance and receiver failure with exactly one cleanup custodian.
-Only then add a bounded channel and independent CPU-parallel producer/consumer
-workload. Reserve destination capacity before transfer; acceptance is not completion
-or exactly-once delivery. Define joined cancellation rather than assuming that
-dropping a future cleans up a receiver or a blocking native operation.
-The [structured-transfer decision](decisions/20261002-structured-owned-transfer.md)
-selects consume-only task memory parameters before the exact resource suffix as
-its first language slice. Its independent finite custody model checks reservation,
-irrevocable acceptance, explicit owner-returning retry and reachable joined cleanup.
-That model is not an implementation, a fairness proof or permission to bypass the
-current per-invocation memory-origin checks. The [runtime mailbox continuation](campaigns/20261002-custody-mailbox.md)
-implements preallocated reservation-inclusive capacity and serialized close/commit,
-with immediate queued-value cleanup and adoption by the existing session writer.
-This closes a concrete runtime obligation without introducing a premature graph API.
-An actual owned-language handoff must still separately admit exact nested payloads
-at a selected destination without duplicating custody, then expose and verify that
-boundary through native producer/consumer packages. Internal mailbox movement alone
-is not a cross-invocation origin certificate or CPU-parallel language proof.
+Prepare private candidates from immutable revisions concurrently, then revalidate
+semantic dependency footprints at publication. Test disjoint edits and hidden
+conflicts through types, witnesses, effects and references; different edited owners
+alone do not prove independence. A short serialized publication point is acceptable.
+Start with two candidates before a larger agent experiment on authorized resources.
 
-Exercise a generic producer/transformer/consumer across a package boundary.
-Require independent negative cases for duplicate consumption, escaping a borrow,
-wrong implementation witness, effect/grant mismatch and invalid retained capture.
-Do not force every advanced generic feature into the first increment. Preserve
-a coherent extension path for associated type families, higher-ranked borrowing,
-effect polymorphism and region-aware traits.
+Select conventional revision, branch/tag, difference, merge and retained-root semantics.
+Preserve useful stable identities without retaining every recomputable analysis.
+Deletion and compaction need reachability and interruption proofs. Concurrent shell
+commands are not evidence of safe concurrent program modification.
 
-The [affine-work correction](campaigns/20260929-affine-validation-work.md) closes
-unmetered metadata traversal and lost exhaustion reporting in the existing proof
-boundary. Keep bounded proof and invalid meaning distinct while extending ownership;
-this correction does not itself implement the owned-region slice.
+## 6. Advance native execution, storage and self-hosting
 
-The first boundary must be useful from ordinary graph authoring, query, package,
-check and execution paths. A privileged Rust helper or new declaration name alone
-does not establish a language feature. A proof-search limit is reported separately
-from invalid meaning.
+Derive dedicated-runtime programs and native executables from the same accepted meaning.
+Hosted native code may embed required runtime services; freestanding profiles reject
+unsupported services explicitly. Keep Linux x86-64 first and add other targets only
+with execution/distribution evidence. Wasm and other-language interoperability remain
+optional, lower-priority work.
 
-### Small shared host, early
+Own the persistence engine and typed data semantics. Separate durable transactions,
+revision history and heap collection. Investigate SSD layout, batching, recovery and
+bounded caching on concrete workloads without requiring an external database engine.
 
-The first [shared host](spec/shared-runtime.md) is public in v0.1.53:
-repeated `serve --deployment` arguments, exact whole-artifact preparation
-sharing, private instance state/grants/tasks and joined fixed-group termination.
-The [implementation campaign](campaigns/202609281356.md) owns its verification.
-This completes the initial hosting slice, not the coordinated ownership/type slice.
+Move libraries, tools, compiler and runtime toward eventual complete self-hosting,
+including possible removal of Rust. Replace each host boundary when its native
+successor owns the relevant semantics and failure behavior; a rewrite percentage
+or premature deadline is not progress. Native authoring must remain usable without
+an external semantic generator throughout this transition.
 
-Extend this in-process host for multiple admitted program instances with
-shared immutable preparation/code and independent instance state, grants and tasks.
-An initial host may use current execution machinery; advanced region GC and native
-code are not prerequisites. Do not bypass current type/origin/resource admission
-to make code sharing possible.
+## Evidence and development cost
 
-At minimum, prove two instances of one exact program share the intended immutable
-runtime object while retaining different private state, and prove two distinct
-programs can coexist. Bind each instance to its selected version. Cover separate
-arguments/results/captures, authority isolation, handled failure, stop/drain/unload,
-and continued operation of the other instance. Account shared and private storage.
-The public operation must not require opening the author's mutable project.
+Use normal public operations and independently expected successes, failures and cleanup.
+Maintained applications remain regression witnesses, not an application-first backlog.
+Keep source acceptance, final distributable bytes and publication distinct. Reuse
+valid evidence and run the smallest dependency-complete checks for changed inputs;
+do not add overlapping receipts or repeatedly reconstruct completed history.
 
-Single-process hosting does not prove CPU parallelism, hostile-code containment,
-a universal pause bound or survival of a host crash. Never install a second global
-authority for application state or deployment selection.
+Keep current direction, status and priorities at their existing owners, with exact
+logs at verification/release owners. Historical campaigns remain archives, not a
+required prompt-reading sequence. Reduce repeated context and verification work,
+while preserving evidence needed for actual claims. Measure API usage/cost only
+from observed usage; document size alone establishes neither tokens nor money saved.
 
-### Shared-host lifecycle
+Turn retained audit hypotheses into small executed counterexamples before further
+changes. Follow up imported Owned-generic coverage in the independent memory oracle,
+immutable sharing of dependency interfaces, and reuse of admitted expression types
+within one extraction. The new copy-work admission bounds growth but does not remove
+duplicate metadata. Preserve exact source, substitution and effect scopes when sharing.
 
-Define a compatibility/pooling key, instance admission, readiness and joined stop.
-Keep code installation, instance activation and data migration separate. Bind
-secrets and operational handles to an instance, not to reusable code metadata.
-Test version coexistence and cancellation during admission as well as normal stop.
-
-The first-order [Owned implementation](spec/owned-generics.md) now supplies the
-symbolically checked producer/transformer/consumer boundary with explicit witnesses
-for both ByteBuffer and OwnedI64Cell. Its focused native evidence includes exact
-same-Self alternate selection, loan cleanup and source-free package execution.
-Its exact `9afa7997` source completed all 26 frozen-source gates and reached main;
-[status](status.md) separates this accepted implementation from public binaries.
-General traits, owned containers, mutable or escaping borrows, asynchronous ownership
-transfer and region placement remain future work. Prefer an independently tested
-owned-data composition boundary before adding new dispatch or supervisor machinery.
-
-Do not turn the initial host into a broad supervisor before those transfer,
-lifetime and effect contracts compose. Dynamic CLI admission/removal and
-component-granular pooling remain separate future extensions.
-
-Reserve queue and destination capacity before transferring ownership. Queue-full,
-cancelled-send and failed-receiver cases must leave exactly one valid owner or a
-defined cleanup owner. Message acceptance is not application completion or exactly-once
-delivery. A cancelled blocking native call needs an explicit lifecycle solution.
-
-## Following increments, not a waterfall prerequisite
-
-### Ownership and memory-management regions
-
-Terminal ordinary-local transfers avoid a proved unnecessary duplication without
-changing source meaning or resource authority. The
-[control-flow continuation](campaigns/20260929-flow-local-moves.md) extends this to
-exclusive branches and path-specific redefinitions with bounded fixed-point analysis
-and a conservative fallback. Keep this as a disposable execution optimization, not a
-substitute for the region/trait/ownership contract below. The original
-[controlled evidence](campaigns/20260929-terminal-local-moves.md) and its continuation
-distinguish retained payload identity from local-read counts and from any whole-program
-zero-copy claim. [Immutable map-key sharing](campaigns/20260929-shared-map-keys.md)
-removes another concrete copy boundary without changing logical admission or
-language meaning. [Unique byte concatenation storage](campaigns/20260930-byte-buffer-reuse.md)
-uses terminal ordinary transfers to amortize prefix copying while retaining immutable
-aliases, keys and captures. Its extra metadata and spare capacity remain derived;
-it is not the selected language-level ownership or region contract. These bootstrap
-storage choices do not make universal atomic reference counting the future region model.
-[Immutable byte ranges](campaigns/20260930-byte-ranges.md) add strict non-copying
-selection and explicit backing detachment to ordinary Bytes. Their flat carrier and
-retention tests close a concrete binary-processing boundary, not the semantic
-owned-region/scoped-borrow/trait slice selected above. Prefer that semantic slice
-next over treating further carrier optimizations as a replacement for it.
-
-Compare unique/scoped storage, region-local aliases, local tracing and frozen
-shared segments. Support cyclic data without making universal Arc-style ownership
-or a global tracing heap the language's only answer. Connect borrow lifetime,
-region escape, transitive freezing, moving-collector roots and native safepoints.
-Keep externally visible resource completion distinct from GC.
-
-First require semantic and failure correctness, then compare allocation, copying,
-retained memory, pauses, throughput and preparation costs on identical workloads.
-A region's ability to grow without a small toy bound is not a scalability proof.
-Keep a no-collector/no-allocation path for future freestanding use where its effect
-contract permits it; not every hosted application must satisfy that profile.
-
-### Parallel execution within and across applications
-
-Use structured task ownership, typed bounded channels and disjoint-region work.
-Do not equate an isolate with one permanent OS thread or serialize every application
-through one event loop. Start with a real CPU-parallel transform/reduction and an
-independent I/O-heavy instance, then test fairness under a saturated neighbor.
-
-Evaluate work-stealing, local queues, bounded batching and locality-aware placement
-after the semantic contracts exist. Preserve explicit external-effect ordering.
-Cooperative safepoints, native blocking work and fatal host errors need distinct
-claims. Multi-machine transport, durable messaging and distributed consistency are
-separate work; in-process zero-copy observations do not prove them.
-
-### Concurrent AI modification
-
-Make immutable reads and private preparation parallel, with exact-base publication
-and semantic conflict validation. Exercise disjoint edits and hidden dependencies:
-a changed trait implementation, type contract or effect can invalidate a candidate
-even when edited owners differ. A short serialized commit point is acceptable.
-Do not claim concurrent editing merely because two agents can run shell commands.
-
-Select conventional revision/branch/tag/difference/merge and retained-root history
-semantics without retaining every derived analysis forever. Stable identities should
-help exact changes, not force heuristic identity matching or an immutable storage
-layout. History deletion/compaction requires its own reachability and interruption
-proof; it is not ordinary cache eviction.
-
-### Execution and storage horizon
-
-Derive both native executables and dedicated-runtime programs from the same accepted
-meaning. Hosted native executables may embed scheduler/collector services. Later
-freestanding profiles reject unavailable services. Keep Linux x86-64 first; expand
-targets with actual execution and distribution evidence. Wasm remains optional.
-
-Own the persistence engine. Keep durable transactions separate from heap collection
-and program revision history. Study SSD locality, paging/prefetch, batching and
-bounded caches on concrete data workloads rather than promising disk-backed RAM.
-Do not introduce an external database as the required engine.
-
-Advance native libraries/tooling, then compiler/runtime self-hosting toward eventual
-Rust removal. This is a genuine horizon, not a language-percentage acceptance metric.
-The owner corrected the 2026-09-29 Rust-only and custom-domain request to target
-`lkjsxc/lkjstr`; it does not supersede this language's [direction](direction.md).
-Replace supported host boundaries only when native successors can own their
-semantics and failure behavior. Preserve independent language improvements and
-historical evidence rather than broadly reverting them. Other-language compatibility
-and external user acquisition remain low priorities.
-
-## Acceptance and measurement
-
-Each selected increment needs a written semantic boundary, normal public consumption,
-independent success/failure expectations and a complete mainline delivery point.
-Ambition changes which problem is selected; it does not turn prototypes into proofs.
-Keep current verification owners until a deliberate replacement assumes their duty.
-Do not waive a relevant failing gate or add duplicate proof inventories for appearance.
-
-For shared runtime experiments, record actual process topology, code/preparation
-sharing, instance count and workload. Separate cold/warm admission, latency tails,
-CPU throughput, task fairness, compiler preparation, copying, live memory and
-total RSS/PSS. Include a matched separate-process baseline; OS-shared code pages
-already present in that baseline must not be counted as a new runtime saving.
-Include repeated start/stop cycles and a resource-heavy neighbor. Scaling numbers
-require observations, not extrapolation from a two-instance demonstration.
-
-A documentation-only direction change runs relevant documentation/policy checks,
-not a synthetic new runtime acceptance campaign. Later product changes still need
-their dependency-complete source and affected target evidence. No new release is
-required merely to publish these direction choices.
-
-## Prior work and reversal
-
-The previous application-first roadmap remains available at its
-[original revision](https://github.com/lkjsxc/lkjscript/blob/1f63d1197d047012c61e63eb9eb93098e9d7f02b/docs/roadmap.md).
-Native web/editor, form codecs, named drafts, history and deployment lifecycles remain
-useful implemented consumers and regression witnesses, not a compulsory sequence
-of further convenience features. Their failures and release records remain intact.
-
-Keep the graph-first constraint fixed. Revise concrete mechanisms when evidence
-favors a better complete design. The owner permits compatibility cuts without a
-migration promise and resets of owner-authorized experimental data; this does not
-authorize unrelated destruction or changes to historical evidence. State actual
-behavior, unfinished work, retained resources and measured regressions accurately.
+For runtime comparisons, separate cold/warm admission, latency tails, throughput,
+shared/private storage and RSS/PSS. Include a matched separate-process baseline and
+retain slower cases. Compatibility cuts for authorized experimental data remain
+available; they do not authorize unrelated destruction or rewriting failed evidence.

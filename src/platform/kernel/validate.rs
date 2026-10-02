@@ -164,50 +164,6 @@ fn snapshot_type_is_direct_resource(snapshot: &KernelSnapshot, digest: TypeObjec
         .is_some_and(|object| matches!(object.form, TypeForm::CapabilityResource { .. }))
 }
 
-fn snapshot_type_contains_resource(snapshot: &KernelSnapshot, digest: TypeObjectDigest) -> bool {
-    fn visit(
-        snapshot: &KernelSnapshot,
-        digest: TypeObjectDigest,
-        active_types: &mut BTreeSet<TypeObjectDigest>,
-        active_declarations: &mut BTreeSet<(
-            PackageId,
-            crate::platform::semantic_id::DeclarationId,
-        )>,
-    ) -> bool {
-        if !active_types.insert(digest) {
-            return false;
-        }
-        let result = match snapshot
-            .types
-            .get(&digest)
-            .or_else(|| snapshot.dependency_types.get(&digest))
-            .map(|object| &object.form)
-        {
-            Some(TypeForm::CapabilityResource { .. }) => true,
-            Some(TypeForm::Named { declaration }) => {
-                let key = (declaration.package, declaration.declaration);
-                if !active_declarations.insert(key) {
-                    false
-                } else {
-                    let result = snapshot_named_member_types(snapshot, *declaration)
-                        .into_iter()
-                        .any(|member| visit(snapshot, member, active_types, active_declarations));
-                    active_declarations.remove(&key);
-                    result
-                }
-            }
-            Some(object) => object_child_digests(object)
-                .into_iter()
-                .any(|child| visit(snapshot, child, active_types, active_declarations)),
-            None => false,
-        };
-        active_types.remove(&digest);
-        result
-    }
-
-    visit(snapshot, digest, &mut BTreeSet::new(), &mut BTreeSet::new())
-}
-
 fn snapshot_resource_interface(
     snapshot: &KernelSnapshot,
     digest: TypeObjectDigest,
@@ -345,18 +301,82 @@ fn snapshot_named_member_types(
 }
 
 impl FullValidator<'_> {
+    fn type_contains_resource(&mut self, digest: TypeObjectDigest) -> bool {
+        // Reachability is independent of the path. Retain completed nodes so a compact
+        // shared type DAG cannot expand into an exponential tree of validation work.
+        if !self.consume_work() {
+            return false;
+        }
+        let mut pending = vec![digest];
+        let mut seen_types = BTreeSet::new();
+        let mut seen_declarations = BTreeSet::new();
+        while let Some(digest) = pending.pop() {
+            if !self.consume_work() {
+                return false;
+            }
+            if !seen_types.insert(digest) {
+                continue;
+            }
+            let children = match self
+                .snapshot
+                .types
+                .get(&digest)
+                .or_else(|| self.snapshot.dependency_types.get(&digest))
+                .map(|object| &object.form)
+            {
+                Some(TypeForm::CapabilityResource { .. }) => return true,
+                Some(TypeForm::Named { declaration }) => {
+                    if !seen_declarations.insert(*declaration) {
+                        continue;
+                    }
+                    snapshot_named_member_types(self.snapshot, *declaration)
+                }
+                Some(form) => object_child_digests(form),
+                None => Vec::new(),
+            };
+            for child in children {
+                if !self.consume_work() {
+                    return false;
+                }
+                pending.push(child);
+            }
+        }
+        false
+    }
+
     fn validate(&mut self) {
         self.validate_root_and_records();
         if self.exhausted() {
             return;
         }
         self.validate_namespaces();
+        if self.exhausted() {
+            return;
+        }
         self.validate_owner_structure();
+        if self.exhausted() {
+            return;
+        }
         self.validate_http_topology();
+        if self.exhausted() {
+            return;
+        }
         self.validate_expressions();
+        if self.exhausted() {
+            return;
+        }
         self.validate_types();
+        if self.exhausted() {
+            return;
+        }
         self.validate_resource_shapes();
+        if self.exhausted() {
+            return;
+        }
         self.validate_references();
+        if self.exhausted() {
+            return;
+        }
         if self.diagnostics.is_empty() {
             validate_expression_meaning(
                 self.snapshot,
@@ -374,6 +394,9 @@ impl FullValidator<'_> {
                 &mut self.work,
                 self.maximum_work,
             );
+        }
+        if self.exhausted() {
+            return;
         }
         self.validate_relations();
         if self.diagnostics.is_empty()
@@ -1202,11 +1225,23 @@ impl FullValidator<'_> {
             }
             DeclarationPayload::Interface { operations } => {
                 for operation in operations {
+                    if !self.consume_work() {
+                        return;
+                    }
                     self.require_local_kind(
                         OwnerKey::Operation(*operation),
                         &[OwnerKind::Operation],
                         "operation",
                     );
+                    if self
+                        .operation_parent(*operation)
+                        .is_some_and(|parent| parent != declaration_id)
+                    {
+                        self.error(
+                            "kernel_full_parent_mismatch",
+                            "interface lists an operation belonging to another declaration",
+                        );
+                    }
                 }
             }
             DeclarationPayload::External(function) => {
@@ -1503,29 +1538,29 @@ impl FullValidator<'_> {
             let forbidden = match &object.form {
                 TypeForm::StructuralRecord { fields } => fields
                     .iter()
-                    .any(|field| snapshot_type_contains_resource(self.snapshot, field.ty)),
+                    .any(|field| self.type_contains_resource(field.ty)),
                 TypeForm::List { item } | TypeForm::Option { item } | TypeForm::Stream { item } => {
-                    snapshot_type_contains_resource(self.snapshot, *item)
+                    self.type_contains_resource(*item)
                 }
                 TypeForm::Map { key, value }
                 | TypeForm::Result {
                     ok: key,
                     error: value,
-                } => {
-                    snapshot_type_contains_resource(self.snapshot, *key)
-                        || snapshot_type_contains_resource(self.snapshot, *value)
-                }
+                } => self.type_contains_resource(*key) || self.type_contains_resource(*value),
                 TypeForm::Function { parameters, result }
                 | TypeForm::TaskFunction {
                     parameters, result, ..
                 } => {
                     parameters
                         .iter()
-                        .any(|parameter| snapshot_type_contains_resource(self.snapshot, *parameter))
-                        || snapshot_type_contains_resource(self.snapshot, *result)
+                        .any(|parameter| self.type_contains_resource(*parameter))
+                        || self.type_contains_resource(*result)
                 }
                 _ => false,
             };
+            if self.exhausted() {
+                return;
+            }
             if forbidden {
                 self.error(
                     "kernel_affine_resource_container",
@@ -1551,7 +1586,10 @@ impl FullValidator<'_> {
                     if super::memory::direct(self.snapshot, parameter.ty).unwrap_or(false) {
                         continue;
                     }
-                    let contains = snapshot_type_contains_resource(self.snapshot, parameter.ty);
+                    let contains = self.type_contains_resource(parameter.ty);
+                    if self.exhausted() {
+                        return;
+                    }
                     let direct = snapshot_type_is_direct_resource(self.snapshot, parameter.ty);
                     match parameter.parent {
                         ParameterParent::Function(_) => {
@@ -1636,7 +1674,7 @@ impl FullValidator<'_> {
                     }
                 }
                 OwnerRecord::Field(field) => {
-                    if snapshot_type_contains_resource(self.snapshot, field.ty) {
+                    if self.type_contains_resource(field.ty) {
                         self.error(
                             "kernel_affine_record_field",
                             format!("record field {owner:?} cannot contain a capability resource"),
@@ -1645,7 +1683,7 @@ impl FullValidator<'_> {
                 }
                 OwnerRecord::Case(case) => {
                     if let Some(payload) = case.payload
-                        && snapshot_type_contains_resource(self.snapshot, payload)
+                        && self.type_contains_resource(payload)
                         && !snapshot_type_is_direct_resource(self.snapshot, payload)
                     {
                         self.error(
@@ -1697,7 +1735,7 @@ impl FullValidator<'_> {
                         }
                     }
                     DeclarationPayload::External(signature) => {
-                        if snapshot_type_contains_resource(self.snapshot, signature.result) {
+                        if self.type_contains_resource(signature.result) {
                             self.error(
                                 "kernel_affine_external_result",
                                 format!(
@@ -1707,13 +1745,16 @@ impl FullValidator<'_> {
                         }
                     }
                     DeclarationPayload::Function(function) => {
-                        if snapshot_type_contains_resource(self.snapshot, function.result) {
+                        if self.type_contains_resource(function.result) {
                             self.error(
                                 "kernel_affine_function_result",
                                 format!(
                                     "function declaration {owner:?} cannot return a capability resource"
                                 ),
                             );
+                        }
+                        if self.exhausted() {
+                            return;
                         }
                         let resource_parameters = function
                             .parameters
@@ -1821,9 +1862,7 @@ impl FullValidator<'_> {
                             }
                         }
                     }
-                    DeclarationPayload::Constant { ty, .. }
-                        if snapshot_type_contains_resource(self.snapshot, ty) =>
-                    {
+                    DeclarationPayload::Constant { ty, .. } if self.type_contains_resource(ty) => {
                         self.error(
                             "kernel_affine_constant",
                             format!(
@@ -1833,9 +1872,7 @@ impl FullValidator<'_> {
                     }
                     _ => {}
                 },
-                OwnerRecord::Port(port)
-                    if snapshot_type_contains_resource(self.snapshot, port.function_type) =>
-                {
+                OwnerRecord::Port(port) if self.type_contains_resource(port.function_type) => {
                     self.error(
                         "kernel_affine_port_signature",
                         format!("port {owner:?} cannot transfer a capability resource"),
@@ -1953,8 +1990,17 @@ impl FullValidator<'_> {
     fn validate_expressions(&mut self) {
         self.build_expression_ownership();
         self.validate_expression_parent_counts();
+        if self.exhausted() {
+            return;
+        }
         self.validate_expression_cycles_and_depth();
+        if self.exhausted() {
+            return;
+        }
         self.assign_expression_roots();
+        if self.exhausted() {
+            return;
+        }
         self.validate_binding_ownership();
     }
 
@@ -2167,8 +2213,18 @@ impl FullValidator<'_> {
             })
             .collect::<Vec<_>>();
         for (root, owner) in roots {
+            if !self.consume_work() {
+                return;
+            }
             let mut pending = vec![root];
+            let mut visited = BTreeSet::new();
             while let Some(expression) = pending.pop() {
+                if !self.consume_work() {
+                    return;
+                }
+                if !visited.insert(expression) {
+                    continue;
+                }
                 if self
                     .expression_root_owners
                     .insert(expression, owner)
@@ -2349,6 +2405,57 @@ impl FullValidator<'_> {
                                 "kernel_full_target_port_owner",
                                 "target port does not belong to its component",
                             );
+                        }
+                        if port.package == target.component.package
+                            && port.package != self.snapshot.root.package_id
+                        {
+                            if !self.consume_work() {
+                                return;
+                            }
+                            let owners = self.snapshot.dependencies.get(&port.package).and_then(
+                                |dependency| {
+                                    self.snapshot
+                                        .dependency_interfaces
+                                        .get(&dependency.package_revision)
+                                },
+                            );
+                            if let Some(owners) = owners {
+                                let parent = match owners.get(&OwnerKey::Port(port.port)) {
+                                    Some(PackageInterfaceRecord::Port(record)) => {
+                                        Some(record.declaration)
+                                    }
+                                    _ => None,
+                                };
+                                let listed = match owners
+                                    .get(&OwnerKey::Declaration(target.component.declaration))
+                                {
+                                    Some(PackageInterfaceRecord::Declaration(record)) => {
+                                        match &record.payload {
+                                            PackageInterfaceDeclarationPayload::Component {
+                                                ports,
+                                                ..
+                                            } => {
+                                                let mut listed = false;
+                                                for candidate in ports {
+                                                    if !self.consume_work() {
+                                                        return;
+                                                    }
+                                                    listed |= *candidate == port.port;
+                                                }
+                                                listed
+                                            }
+                                            _ => false,
+                                        }
+                                    }
+                                    _ => false,
+                                };
+                                if !listed || parent != Some(target.component.declaration) {
+                                    self.error(
+                                        "kernel_full_target_port_owner",
+                                        "target port does not belong to its component",
+                                    );
+                                }
+                            }
                         }
                     }
                 }
@@ -2626,6 +2733,11 @@ impl FullValidator<'_> {
                     self.error(
                         "kernel_full_local_parameter_domain",
                         "operation-parameter reference names a function parameter",
+                    );
+                } else {
+                    self.error(
+                        "kernel_type_parameter_scope",
+                        "operation parameter has no executable operation context",
                     );
                 }
             }

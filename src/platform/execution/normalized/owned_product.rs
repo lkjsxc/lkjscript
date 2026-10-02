@@ -125,6 +125,38 @@ impl OwnedProduct {
     pub(super) fn owns_live_loans(&self) -> bool {
         self.mode == Mode::Owner && self.lock().loans != 0
     }
+    /// Borrowed inspection cannot expose a child owner beyond the callback.
+    pub(super) fn inspect_transfer<R>(
+        &self,
+        source: ValueOrigin,
+        inspect: impl FnOnce(&[NormalizedValue]) -> Result<R, ExecutionError>,
+    ) -> Result<R, ExecutionError> {
+        if self.origin != source || self.mode != Mode::Owner {
+            return Err(reject());
+        }
+        self.validate(source, true)?;
+        let storage = self.lock();
+        inspect(storage.fields.as_deref().ok_or_else(reject)?)
+    }
+    /// The consuming envelope keeps custody if cancellation interrupts children.
+    /// Destruction does not depend on their possibly mixed intermediate domains.
+    pub(super) fn adopt_transfer(
+        &mut self,
+        source: ValueOrigin,
+        destination: ValueOrigin,
+        adopt: impl FnOnce(&mut [NormalizedValue]) -> Result<(), ExecutionError>,
+    ) -> Result<(), ExecutionError> {
+        if self.origin != source || self.mode != Mode::Owner {
+            return Err(reject());
+        }
+        self.validate(source, true)?;
+        {
+            let mut storage = self.lock();
+            adopt(storage.fields.as_deref_mut().ok_or_else(reject)?)?;
+        }
+        self.origin = destination;
+        Ok(())
+    }
     /// Callers resolve the index from this token's exact type and independently
     /// admit the returned closed ordinary value. No child ownership is transferred.
     pub(super) fn read_metadata(

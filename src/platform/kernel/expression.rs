@@ -91,6 +91,14 @@ impl ExpressionRecord {
                 "owned choices require Graph 20",
             ));
         }
+        if self.contract_version < 21
+            && matches!(self.operation, ExpressionOperation::Parallel { .. })
+        {
+            return Err(expression_error(
+                "kernel_parallel_generation",
+                "structured parallel calls require Graph 21",
+            ));
+        }
         validate_operation(&self.operation)
     }
 
@@ -255,6 +263,12 @@ pub enum ExpressionOperation {
         choice_type: TypeObjectDigest,
         source: ExpressionId,
         arms: Vec<OwnedChoiceArm>,
+    },
+    /// Both children are exact named task calls. Their arguments are prepared in
+    /// authored left-to-right order before either child invocation begins.
+    Parallel {
+        left: ExpressionId,
+        right: ExpressionId,
     },
 }
 
@@ -433,6 +447,8 @@ pub enum ExpressionChildRole {
     OwnedChoiceValue,
     OwnedChoiceSource,
     OwnedChoiceArmBody,
+    ParallelLeft,
+    ParallelRight,
 }
 
 fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic> {
@@ -609,6 +625,7 @@ fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic>
         | ExpressionOperation::Local { .. }
         | ExpressionOperation::Constant { .. }
         | ExpressionOperation::If { .. }
+        | ExpressionOperation::Parallel { .. }
         | ExpressionOperation::Field { .. }
         | ExpressionOperation::Transaction { .. } => {}
         ExpressionOperation::TransactionOutcome { outcome, .. } => outcome.validate_identity()?,
@@ -735,6 +752,10 @@ fn expression_children(operation: &ExpressionOperation) -> Vec<ExpressionChild> 
         }
         ExpressionOperation::Sequence { items } => {
             push_many(&mut children, items, ExpressionChildRole::SequenceItem)
+        }
+        ExpressionOperation::Parallel { left, right } => {
+            push_child(&mut children, *left, ExpressionChildRole::ParallelLeft, 0);
+            push_child(&mut children, *right, ExpressionChildRole::ParallelRight, 0);
         }
         ExpressionOperation::ImplementationCall { arguments, .. }
         | ExpressionOperation::MethodCall { arguments, .. }

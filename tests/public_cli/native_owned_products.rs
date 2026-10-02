@@ -11,6 +11,8 @@ mod owned_task_method_inspection;
 mod owned_task_methods;
 #[path = "native_owned_tasks.rs"]
 mod owned_tasks;
+#[path = "native_parallel.rs"]
+mod parallel;
 
 #[test]
 fn native_owned_metadata_cross_package_draft_and_detached_execution() {

@@ -63,10 +63,10 @@ Current identity:
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
 - semantic revision: `rev_85b2be44a8deca911fc6bdf4efdd4fb7b510f53e4a39723fbee263dff4b3a9b2`;
-- package revision: `package_revision_f3f8ec18df22c7fefbb9dc188a7001ab5282b9534a9c0329995052b59ca24d46`;
-- package transport: `package_transport_453df53b44fa2fa979e8e457d28143825148ddd1b3d3b9fcaa564df8e3e83b95`;
-- artifact manifest: `artifact_manifest_a0a0503e420948adadc5eac056fc0018486d4afb8667e26492067525a0dfc1a7`;
-- artifact bundle: `artifact_bundle_51cb1f106842f3e1477de8b532ab5d50061113e9fd09f7e5d8f87609847f2d69`;
+- package revision: `package_revision_edde167d2c4c875795cd411c7e4bb56f3da63668fd8cb7b585510992f06ed20d`;
+- package transport: `package_transport_8a7b756af561b6d44e0ef279e1d1773f9f19184fb62d6eec12f58256c8d06b00`;
+- artifact manifest: `artifact_manifest_875ddabe9a2ff1bf72a720c340999f4bd29911a6f02d7702704afd90e2239e2f`;
+- artifact bundle: `artifact_bundle_85996ad7f15befccbd842ae29bb255549dfd93ae0e64121bab0cd410fbf7daf2`;
 - 1,626 live semantic owners, 232 compiler units, and 89 graph tests.
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose
@@ -252,6 +252,11 @@ and require current derived artifacts.
 The [owned-product refresh](../../docs/campaigns/20261001-owned-products.md) derives
 the Graph 19 transport and compiler 16 / bytecode 12 / artifact 23 bundle
 through the same public owners. The [metadata continuation](../../docs/campaigns/20261001-owned-product-metadata.md)
-refreshes the current derived bundle to compiler 17 / bytecode 13 / artifact 24.
+refreshed the derived bundle to compiler 17 / bytecode 13 / artifact 24.
 Accepted HEAD and standard program meaning remain unchanged; this is a compiler
 refresh, not product adoption in the standard library.
+
+The [structured parallel refresh](../../docs/campaigns/20261002-structured-parallel.md)
+derives the current Graph 21 transport and compiler 19 / bytecode 15 / artifact 26
+bundle through public export/build. All 89 graph tests agree between production and
+reference execution; accepted HEAD and standard operations retain their meaning.

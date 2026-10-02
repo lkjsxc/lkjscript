@@ -7,7 +7,8 @@ use super::{
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::*;
 use crate::platform::package_interface::{
-    PackageInterfaceOwner, PackageInterfaceSelection, build_package_interface,
+    PackageInterfaceOwner, PackageInterfaceSelection, PackageInterfaceValidation,
+    build_package_interface, interface_owner_validation_visits,
 };
 use crate::platform::persistent_map::{MapRoot, MapWork, PersistentMap};
 use crate::platform::storage::object::{
@@ -311,6 +312,10 @@ impl PackageContainer {
                     != Some(crate::platform::kernel::contract::SCALAR_OWNER_MAGIC.as_slice())
                 && object.get(..8)
                     != Some(crate::platform::kernel::contract::OWNED_OWNER_MAGIC.as_slice())
+                && object.get(..8)
+                    != Some(crate::platform::kernel::contract::PRODUCT_OWNER_MAGIC.as_slice())
+                && object.get(..8)
+                    != Some(crate::platform::kernel::contract::CHOICE_OWNER_MAGIC.as_slice())
             {
                 return Err(package_error(
                     DiagnosticClass::Source,
@@ -722,32 +727,12 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
         let mut snapshot = snapshots
             .remove(&binding.package_revision)
             .ok_or_else(|| corrupt("package_source_snapshot", "source snapshot disappeared"))?;
-        for dependency in snapshot.dependencies.values() {
-            let interface = interfaces
-                .get(&dependency.package_revision)
-                .ok_or_else(|| {
-                    corrupt(
-                        "package_source_dependency",
-                        "direct dependency interface is unavailable",
-                    )
-                })?;
-            snapshot.dependency_interfaces.insert(
-                dependency.package_revision,
-                interface
-                    .owners
-                    .iter()
-                    .map(|(key, owner)| (*key, owner.record.clone()))
-                    .collect(),
-            );
-            snapshot
-                .dependency_types
-                .extend(interface.type_objects.clone());
-        }
+        attach_dependency_interfaces(&mut snapshot, &interfaces, &store)?;
+        // Dependency type copies have already reserved their base visits before growth.
         let projection_visits = snapshot
             .owners
             .len()
             .checked_add(snapshot.types.len())
-            .and_then(|total| total.checked_add(snapshot.dependency_types.len()))
             .ok_or_else(|| limit("validation visits"))? as u64;
         store.charge_visits(projection_visits)?;
         let mut intrinsic_work = 0;
@@ -872,6 +857,67 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
         validation_visits,
         dependency_edges: validated.dependency_edges,
     })
+}
+
+fn attach_dependency_interfaces<S: ?Sized>(
+    snapshot: &mut KernelSnapshot,
+    interfaces: &BTreeMap<PackageRevisionDigest, PackageInterfaceValidation>,
+    store: &CollectingStore<'_, S>,
+) -> Result<(), Diagnostic> {
+    for dependency in snapshot.dependencies.values() {
+        let interface = interfaces
+            .get(&dependency.package_revision)
+            .ok_or_else(|| {
+                corrupt(
+                    "package_source_dependency",
+                    "direct dependency interface is unavailable",
+                )
+            })?;
+        let mut owners = BTreeMap::new();
+        for (key, owner) in &interface.owners {
+            store.charge_visits(interface_owner_validation_visits(owner))?;
+            #[cfg(test)]
+            DEPENDENCY_COPY_COUNTS.with(|counts| {
+                let (owners, types) = counts.get();
+                counts.set((owners + 1, types));
+            });
+            owners.insert(*key, owner.record.clone());
+        }
+        snapshot
+            .dependency_interfaces
+            .insert(dependency.package_revision, owners);
+        for (digest, object) in &interface.type_objects {
+            let children = object.child_type_count();
+            let effect_atoms = match &object.form {
+                TypeForm::TaskFunction { effect, .. } => effect
+                    .requirements
+                    .len()
+                    .checked_add(effect.parameters.len())
+                    .ok_or_else(|| limit("validation visits"))?,
+                _ => 0,
+            };
+            let copy_visits = children
+                .checked_add(effect_atoms)
+                .and_then(|count| count.checked_add(1))
+                .and_then(|count| u64::try_from(count).ok())
+                .ok_or_else(|| limit("validation visits"))?;
+            store.charge_visits(copy_visits)?;
+            #[cfg(test)]
+            DEPENDENCY_COPY_COUNTS.with(|counts| {
+                let (owners, types) = counts.get();
+                counts.set((owners, types + 1));
+            });
+            snapshot.dependency_types.insert(*digest, object.clone());
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+std::thread_local! {
+    static DEPENDENCY_COPY_COUNTS: std::cell::Cell<(usize, usize)> = const {
+        std::cell::Cell::new((0, 0))
+    };
 }
 
 pub(crate) fn required<S: ImmutableObjectStore + ?Sized>(
@@ -1114,6 +1160,36 @@ mod tests {
 
     include!("f64_admission_tests.rs");
     include!("owned_product_admission_tests.rs");
+    include!("dependency_copy_admission_tests.rs");
+
+    #[test]
+    fn source_transport_preserves_supported_product_and_choice_owner_envelopes() {
+        let source = crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(
+            "declarations.begin\n(units (module create historical (function create value (visibility private) (returns I64) (effect pure) (body (i64 37)))))\ndeclarations.end\n",
+        ).unwrap();
+        for generation in [19, 20] {
+            let mut historical = source.clone();
+            for owner in historical.owners.values_mut() {
+                owner.set_encoding_for_edit(generation);
+            }
+            historical.root.graph_contract_version = generation;
+            let directory = tempfile::tempdir().unwrap();
+            let repository =
+                GraphRepository::create(&directory.path().join("history"), &historical, None)
+                    .unwrap()
+                    .repository;
+            let exported = repository.export_package_container().unwrap();
+            let bytes = exported.container.encode().unwrap();
+            let decoded =
+                PackageContainer::decode(&bytes, exported.container.root.transport).unwrap();
+            let admitted = decoded.admit().unwrap();
+            let canonical = &admitted.packages[&admitted.container.root.package_revision].snapshot;
+            assert_eq!(canonical.root.graph_contract_version, generation);
+            assert_eq!(canonical.owners, historical.owners);
+            super::super::oracle::reconstruct(&admitted.container).unwrap();
+        }
+    }
+
     fn standard_source() -> AdmittedClosure {
         let repository = GraphRepository::open(
             &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard"),

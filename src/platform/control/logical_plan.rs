@@ -2,6 +2,9 @@
 
 mod references;
 
+#[cfg(test)]
+mod extraction_tests;
+
 use super::change::ChangeRequestCommitment;
 use super::{CompactRecord, parse_records, render_record};
 use crate::platform::change::{
@@ -547,6 +550,16 @@ impl FromStr for ChangePlanToken {
                 "change_plan_length",
                 "reviewed plan token must contain 128 lowercase hexadecimal characters",
             ));
+        }
+        if let Some(index) = encoded.bytes().position(|byte| lower_hex(byte).is_none()) {
+            // Preserve component diagnostics when byte 64 is a UTF-8 boundary.
+            let component = if index < 64 {
+                encoded.get(..64)
+            } else {
+                encoded.get(64..)
+            }
+            .unwrap_or(encoded);
+            return Err(invalid_plan_hex(component));
         }
         let request = decode_hex_32(&encoded[..64])?;
         let prepared = decode_hex_32(&encoded[64..])?;
@@ -2348,7 +2361,7 @@ impl PlanDecoder {
                 "extraction counts exceed their exact bounds or disagree with generated/body structure",
             ));
         }
-        if (effect == "pure" && requirements != 0) || (effect == "task" && requirements == 0) {
+        if effect == "pure" && requirements != 0 {
             return Err(plan_source_error(
                 "change_plan_file_extraction_effect",
                 "extraction effect and exact requirement count disagree",
@@ -4096,9 +4109,8 @@ fn validate_extraction_evidence(
             "function extraction moved, preserved, changed, and generated owner sets disagree",
         ));
     }
-    if requirements.is_empty() != matches!(extraction.effect, FunctionEffect::Pure)
-        || requirements.iter().copied().collect::<BTreeSet<_>>().len() != requirements.len()
-    {
+    // Task kind is independent of its requirement row; an empty task row remains a task.
+    if requirements.iter().copied().collect::<BTreeSet<_>>().len() != requirements.len() {
         return Err(plan_corrupt(
             "change_logical_plan_extraction_requirements",
             "function extraction effect does not contain one unique exact caller-ordered requirement sequence",
@@ -4339,6 +4351,53 @@ mod tests {
             format!("{expected}0"),
         ] {
             assert!(rejected.parse::<ChangePlanToken>().is_err(), "{rejected}");
+        }
+    }
+
+    #[test]
+    fn reviewed_change_plan_token_rejects_unicode_crossing_component_boundary() {
+        for digit in ["0", "a"] {
+            let payload = format!("{}é{}", digit.repeat(63), digit.repeat(63));
+            assert_eq!(payload.len(), 128);
+            assert!(!payload.is_char_boundary(64));
+
+            let error = format!("plan_{payload}")
+                .parse::<ChangePlanToken>()
+                .unwrap_err();
+            assert_eq!(error.class, DiagnosticClass::Source);
+            assert_eq!(error.code, "change_plan_hex");
+            assert_eq!(
+                error.message,
+                format!(
+                    "reviewed plan token component '{payload}' is not canonical lowercase hexadecimal"
+                )
+            );
+        }
+    }
+
+    #[test]
+    fn reviewed_change_plan_token_preserves_invalid_component_diagnostics() {
+        for index in [0, 63, 64, 127] {
+            for invalid in ["A", "g"] {
+                let mut payload = "0".repeat(128);
+                payload.replace_range(index..index + 1, invalid);
+                let component = if index < 64 {
+                    &payload[..64]
+                } else {
+                    &payload[64..]
+                };
+                let error = format!("plan_{payload}")
+                    .parse::<ChangePlanToken>()
+                    .unwrap_err();
+                assert_eq!(error.class, DiagnosticClass::Source);
+                assert_eq!(error.code, "change_plan_hex");
+                assert_eq!(
+                    error.message,
+                    format!(
+                        "reviewed plan token component '{component}' is not canonical lowercase hexadecimal"
+                    )
+                );
+            }
         }
     }
 

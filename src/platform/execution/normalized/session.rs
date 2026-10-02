@@ -43,6 +43,10 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc, oneshot, watch};
 #[path = "session_mailbox_tests.rs"]
 mod mailbox_tests;
 
+#[cfg(test)]
+#[path = "session_driver_mailbox_tests.rs"]
+mod driver_mailbox_tests;
+
 #[path = "session_stop.rs"]
 mod stop;
 use stop::SessionStop;
@@ -582,30 +586,37 @@ async fn session_driver(
     tokio::pin!(idle_sleep);
     tokio::pin!(tick_sleep);
     loop {
-        let input = tokio::select! {
-            biased;
-            () = application.shutdown.requested() => DriverInput::Shutdown,
-            inbound = inbound.recv() => match inbound {
-                Some(InboundEvent::Message { kind, body, permit }) => {
-                    idle_sleep.as_mut().reset(tokio::time::Instant::now() + idle);
-                    DriverInput::Message { kind, body, _permit: permit }
+        // A successful callback/write can finish after the lifetime deadline.
+        // Every continuation, including the message fast path, must close before
+        // consuming another event or starting another potentially effectful callback.
+        let input = if started.elapsed() >= lifetime {
+            DriverInput::OperationalClose(SESSION_SHUTDOWN_CLOSE, "session lifetime reached")
+        } else {
+            tokio::select! {
+                biased;
+                () = &mut lifetime_sleep => DriverInput::OperationalClose(SESSION_SHUTDOWN_CLOSE, "session lifetime reached"),
+                () = application.shutdown.requested() => DriverInput::Shutdown,
+                inbound = inbound.recv() => match inbound {
+                    Some(InboundEvent::Message { kind, body, permit }) => {
+                        idle_sleep.as_mut().reset(tokio::time::Instant::now() + idle);
+                        DriverInput::Message { kind, body, _permit: permit }
+                    }
+                    Some(InboundEvent::PeerClose { code, reason }) => DriverInput::PeerClose { code, reason },
+                    Some(InboundEvent::TransportFailure) | None => {
+                        return close_failed(
+                            writer,
+                            SESSION_PROTOCOL_CLOSE,
+                            "transport failure",
+                            &application.limits,
+                        )
+                        .await;
+                    }
+                },
+                () = &mut idle_sleep => DriverInput::OperationalClose(SESSION_SHUTDOWN_CLOSE, "session idle limit reached"),
+                () = &mut tick_sleep => {
+                    tick_sleep.as_mut().reset(tokio::time::Instant::now() + tick);
+                    DriverInput::Tick
                 }
-                Some(InboundEvent::PeerClose { code, reason }) => DriverInput::PeerClose { code, reason },
-                Some(InboundEvent::TransportFailure) | None => {
-                    return close_failed(
-                        writer,
-                        SESSION_PROTOCOL_CLOSE,
-                        "transport failure",
-                        &application.limits,
-                    )
-                    .await;
-                }
-            },
-            () = &mut lifetime_sleep => DriverInput::OperationalClose(SESSION_SHUTDOWN_CLOSE, "session lifetime reached"),
-            () = &mut idle_sleep => DriverInput::OperationalClose(SESSION_SHUTDOWN_CLOSE, "session idle limit reached"),
-            () = &mut tick_sleep => {
-                tick_sleep.as_mut().reset(tokio::time::Instant::now() + tick);
-                DriverInput::Tick
             }
         };
         let (session_input, terminal, terminal_close, flush_peer_close) = match input {
@@ -811,15 +822,6 @@ async fn session_driver(
                 return close_failed(writer, code, "session callback failed", &application.limits)
                     .await;
             }
-        }
-        if started.elapsed() >= lifetime {
-            return close_failed(
-                writer,
-                SESSION_SHUTDOWN_CLOSE,
-                "session lifetime reached",
-                &application.limits,
-            )
-            .await;
         }
     }
 }

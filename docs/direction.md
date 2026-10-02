@@ -6,6 +6,14 @@ from delegated, revisable engineering selections. [Status](status.md) describes
 implemented behavior; [the roadmap](roadmap.md) selects the next work. A selected
 design is not a claim of implementation, performance, proof or publication.
 
+The owner also selected lower long-term API costs for lkjscript development on
+2026-10-02. Reduce repeated context reconstruction, duplicate work and avoidable
+retries while retaining necessary correctness and acceptance checks. Prefer a
+small current-state entry point and targeted discovery over accumulating prompts.
+The old ChatGPT-to-Codex prompt handoff is retired: campaigns remain historical
+evidence, with no obligation to create or reread one for each task. API costs require
+actual usage or billing measurements; shorter files alone do not quantify savings.
+
 ## Success criteria: language design first
 
 The [2026-10-02 owner clarification](campaigns/20261002-language-priority.md)

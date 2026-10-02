@@ -22,9 +22,9 @@ Current normalized identity:
 - package: `pkg_20000000000000000000000000000001`;
 - semantic revision: `rev_a1d97c5d7deda1ece8e2e3383bd7a58ae1e267838368ec5b42678e40c9eb1640`;
 - semantic state: `semantic_state_3832cd12c3fee672d0bdfb975cb363cbc457f6ef45f15cb44a62d40ab47f2dee`;
-- package revision: `package_revision_ff8273529489c6bcbb57f4c4becd37b0fdcfacd092adfc81d008f3e624e65cd1`;
-- artifact manifest: `artifact_manifest_d719552ceab63386b2e3207e78bb9f0d5cea4c17a71a8e63d5f67512bd833055`;
-- artifact bundle: `artifact_bundle_98b945da9d6613b08ba87be9b0efcba34d40069154968281d00a937626ce60b3`;
+- package revision: `package_revision_259829d424af326d6a1e38940a95e7f5882fdcf4152bff0470706aa050c7d1fb`;
+- artifact manifest: `artifact_manifest_ed33818d2777889351a93cd31334c9f1327cadb1f4882c3b20752c08dbbbb712`;
+- artifact bundle: `artifact_bundle_2ec896c7faf67ea320fa54b719f826552f93e26eaeb800ddb2957f2f8d0ef374`;
 - 2,044 live root semantic owners and one exact built-in standard dependency.
 
 The original Graph 13 materialization preserved all existing application owner identities and behavior.
@@ -95,7 +95,7 @@ empty 404 and invokes none of them.
 
 All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,375,404-byte
 artifact bundle above (SHA-256
-`6d454495b6102320f354dfeb106af65bfd45378e43f00a68e9bc514b3b73c450`). The service descriptor
+`6a544c4d8a811f820f48a204cc1ebdf28d377a55012f2b1060e3f94c5ec91d21`). The service descriptor
 resolves `serve`, the worker descriptor resolves `work`, and `live.deployment.json` resolves
 `lkjournal-live-1`. Preparation strictly loads the standalone bundle,
 validates the runner, route-indexed handler and component requirement closure, grants, secrets, and adapters, and emits
@@ -207,7 +207,12 @@ The Owned-generic compiler refresh rebuilds the derived artifact through public
 build with compiler unit 15, bytecode 11 and artifact 22. It preserves accepted
 HEAD, exact standard selection, application owners and operational data.
 
-The owned-product metadata continuation rebuilds the current bundle for compiler
+The owned-product metadata continuation rebuilt the derived bundle for compiler
 unit 17, bytecode 13 and artifact 24 through public build, preserving those accepted
 inputs. This does not update running deployments or migrate application data.
 It neither deploys this application nor changes operational state.
+
+The structured parallel compiler refresh rebuilds the current bundle for compiler
+19, bytecode 15 and artifact 26 through public check/build. All 44 application and
+exact-supplier tests agree between production and reference execution. Accepted
+HEAD, dependency selection, application behavior and operational data are unchanged.

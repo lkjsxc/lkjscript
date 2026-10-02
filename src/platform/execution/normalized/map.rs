@@ -64,6 +64,15 @@ thread_local! {
 }
 
 impl Work {
+    /// Join observations from a completed off-thread child into this invocation.
+    pub(super) fn include_joined(child: Self) {
+        WORK.with(|slot| {
+            let mut value = slot.get();
+            macro_rules! add { ($($field:ident),* $(,)?) => { $(value.$field = value.$field.saturating_add(child.$field);)* }; }
+            add!(node_visits, nodes_allocated, entry_handles_allocated, entry_handle_copies, key_bytes_copied);
+            slot.set(value);
+        });
+    }
     pub(super) fn current() -> Self {
         WORK.get()
     }

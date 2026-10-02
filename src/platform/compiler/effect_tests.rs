@@ -257,6 +257,7 @@ fn replace_unit_checked(
         16 => (*b"LKJCUN16", "lkjscript.compiler-unit-envelope.v16"),
         17 => (*b"LKJCUN17", "lkjscript.compiler-unit-envelope.v17"),
         18 => (*b"LKJCUN18", "lkjscript.compiler-unit-envelope.v18"),
+        19 => (*b"LKJCUN19", "lkjscript.compiler-unit-envelope.v19"),
         other => panic!("unexpected forged-unit generation {other}"),
     };
     let bytes = crate::platform::packed::encode(

@@ -346,6 +346,9 @@ impl ReferenceState<'_> {
             "normalized_reference_allocation",
             "map storage exceeds allocated bytes",
         )?;
+        if let Some(budget) = &self.shared_budget {
+            budget.reserve(charge.bytes, charge.slots)?;
+        }
         self.observation.collection_items = items;
         self.observation.allocated_bytes = bytes;
         if charge.bytes != 0 {
@@ -424,6 +427,9 @@ impl ReferenceState<'_> {
             "normalized_reference_collection_items",
             "list storage exceeds collection items",
         )?;
+        if let Some(budget) = &self.shared_budget {
+            budget.reserve(0, charge.slots)?;
+        }
         self.observation.collection_items = slots;
         self.charge_allocation(charge.bytes)
     }
@@ -690,7 +696,7 @@ impl ReferenceState<'_> {
         }
     }
 
-    fn inspect_raw(
+    pub(super) fn inspect_raw(
         &mut self,
         datum: &NormalizedValue,
         expected: TypeObjectDigest,

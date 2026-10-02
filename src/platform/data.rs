@@ -831,6 +831,17 @@ impl DataTransaction {
     where
         F: FnMut(CommitCheckpoint) -> Result<(), Diagnostic>,
     {
+        self.commit_bounded(hook, MAXIMUM_DATA_STORE_OBJECTS)
+    }
+
+    fn commit_bounded<F>(
+        &mut self,
+        hook: &mut F,
+        maximum_objects: usize,
+    ) -> Result<DataCommitOutcome, Diagnostic>
+    where
+        F: FnMut(CommitCheckpoint) -> Result<(), Diagnostic>,
+    {
         if self.expectation_failed {
             return Ok(DataCommitOutcome::ConditionFailed {
                 revision: format_revision(self.base),
@@ -858,7 +869,7 @@ impl DataTransaction {
             });
         }
         self.snapshot.parent = Some(self.base);
-        let bytes = encode_revision(self.store.store_id, &self.snapshot)?;
+        let bytes = encode_revision_bounded(self.store.store_id, &self.snapshot, maximum_objects)?;
         let revision = digest(REVISION_DIGEST_DOMAIN, &bytes);
         hook(CommitCheckpoint::BeforeRevisionStage)?;
         let stage_name = format!(".revision-stage-{}", random_hex()?);
@@ -1435,6 +1446,19 @@ fn rebuild_catalog(root: &Path, store_id: [u8; 32]) -> Result<usize, Diagnostic>
 }
 
 fn encode_revision(store_id: [u8; 32], snapshot: &Snapshot) -> Result<Vec<u8>, Diagnostic> {
+    encode_revision_bounded(store_id, snapshot, MAXIMUM_DATA_STORE_OBJECTS)
+}
+
+fn encode_revision_bounded(
+    store_id: [u8; 32],
+    snapshot: &Snapshot,
+    maximum_objects: usize,
+) -> Result<Vec<u8>, Diagnostic> {
+    admit_revision_counts(
+        snapshot.schemas.len(),
+        snapshot.records.len(),
+        maximum_objects,
+    )?;
     let mut bytes = Vec::new();
     bytes.extend_from_slice(REVISION_MAGIC);
     push_u16(&mut bytes, DATA_STORE_CONTRACT_VERSION);
@@ -1460,7 +1484,7 @@ fn encode_revision(store_id: [u8; 32], snapshot: &Snapshot) -> Result<Vec<u8>, D
         push_key(&mut bytes, &key.key)?;
         push_blob(&mut bytes, &entry.value, "data_value_bytes")?;
         bytes.extend_from_slice(&entry.revision.0);
-        if bytes.len() > MAXIMUM_DATA_REVISION_BYTES {
+        if bytes.len() > MAXIMUM_DATA_REVISION_BYTES - 32 {
             return Err(data_error(
                 DiagnosticClass::Resource,
                 "data_revision_bytes",
@@ -1468,7 +1492,34 @@ fn encode_revision(store_id: [u8; 32], snapshot: &Snapshot) -> Result<Vec<u8>, D
             ));
         }
     }
+    if bytes.len() > MAXIMUM_DATA_REVISION_BYTES - 32 {
+        return Err(data_error(
+            DiagnosticClass::Resource,
+            "data_revision_bytes",
+            "encoded data revision exceeds the physical revision bound",
+        ));
+    }
     Ok(seal(REVISION_ENVELOPE_DOMAIN, bytes))
+}
+
+fn admit_revision_counts(
+    schemas: usize,
+    records: usize,
+    maximum_objects: usize,
+) -> Result<(), Diagnostic> {
+    for (count, code) in [
+        (schemas, "data_schema_count"),
+        (records, "data_record_count"),
+    ] {
+        if count > maximum_objects {
+            return Err(data_error(
+                DiagnosticClass::Resource,
+                code,
+                "data revision count exceeds the physical store object bound",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn read_revision(
@@ -2549,6 +2600,114 @@ mod tests {
             discriminator,
             DataKeyPart::I64(i64::try_from(index).expect("small key index")),
         ])
+    }
+
+    #[test]
+    fn revision_object_limits_reject_before_publication_and_preserve_readable_head() {
+        admit_revision_counts(
+            MAXIMUM_DATA_STORE_OBJECTS,
+            MAXIMUM_DATA_STORE_OBJECTS,
+            MAXIMUM_DATA_STORE_OBJECTS,
+        )
+        .unwrap();
+        for (schemas, records, expected) in [
+            (MAXIMUM_DATA_STORE_OBJECTS + 1, 0, "data_schema_count"),
+            (0, MAXIMUM_DATA_STORE_OBJECTS + 1, "data_record_count"),
+        ] {
+            assert_eq!(
+                admit_revision_counts(schemas, records, MAXIMUM_DATA_STORE_OBJECTS)
+                    .unwrap_err()
+                    .code,
+                expected
+            );
+        }
+        for schemas in [false, true] {
+            let temporary = tempfile::tempdir().unwrap();
+            let root = temporary.path().join("data");
+            DataStore::initialize(&root).unwrap();
+            let store = opened(&root, "limits");
+            let insert = |transaction: &mut DataTransaction, index: i64| {
+                if schemas {
+                    assert!(
+                        transaction
+                            .schema_set(
+                                &format!("space{index}"),
+                                &DataSchemaExpectation::Missing,
+                                DataSchema {
+                                    identity: "schema.v1".to_owned(),
+                                    digest: vec![1; 32],
+                                },
+                            )
+                            .unwrap()
+                    );
+                } else {
+                    transaction
+                        .put(
+                            "records",
+                            &key(vec![DataKeyPart::I64(index)]),
+                            vec![7],
+                            DataExpectation::Missing,
+                        )
+                        .unwrap();
+                }
+            };
+            let mut seed = store.begin().unwrap();
+            insert(&mut seed, 0);
+            insert(&mut seed, 1);
+            // Exercise the production lock/encode/publication pipeline with a
+            // smaller ceiling, without constructing a million-entry test store.
+            assert!(matches!(
+                seed.commit_bounded(&mut |_| Ok(()), 2).unwrap(),
+                DataCommitOutcome::Committed { .. }
+            ));
+            drop(seed);
+            let head = fs::read(root.join(HEAD_FILE)).unwrap();
+            let objects = fs::read_dir(root.join(OBJECTS_DIRECTORY)).unwrap().count();
+            let mut next = store.begin().unwrap();
+            insert(&mut next, 2);
+            let mut publication_reached = false;
+            let error = next
+                .commit_bounded(
+                    &mut |_| {
+                        publication_reached = true;
+                        Ok(())
+                    },
+                    2,
+                )
+                .unwrap_err();
+            assert_eq!(error.class, DiagnosticClass::Resource);
+            assert_eq!(
+                error.code,
+                if schemas {
+                    "data_schema_count"
+                } else {
+                    "data_record_count"
+                }
+            );
+            assert!(!publication_reached);
+            assert_eq!(fs::read(root.join(HEAD_FILE)).unwrap(), head);
+            assert_eq!(
+                fs::read_dir(root.join(OBJECTS_DIRECTORY)).unwrap().count(),
+                objects
+            );
+            let reopened = opened(&root, "limits");
+            let readable = reopened.begin().unwrap();
+            if schemas {
+                assert!(readable.schema_read("space0").unwrap().is_some());
+                assert!(readable.schema_read("space1").unwrap().is_some());
+                assert!(readable.schema_read("space2").unwrap().is_none());
+            } else {
+                for index in 0..3 {
+                    assert_eq!(
+                        readable
+                            .get("records", &key(vec![DataKeyPart::I64(index)]))
+                            .unwrap()
+                            .is_some(),
+                        index < 2,
+                    );
+                }
+            }
+        }
     }
 
     #[derive(Clone, Copy)]

@@ -89,6 +89,12 @@ pub struct NormalizedCode {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NormalizedInstruction {
+    Parallel {
+        left: FunctionIndex,
+        left_arguments: u32,
+        right: FunctionIndex,
+        right_arguments: u32,
+    },
     ChooseOwned {
         choice_type: TypeObjectDigest,
         case: u32,
@@ -2713,6 +2719,21 @@ fn translate_code(
                 method: *method,
                 arguments: *arguments,
             },
+            CompiledInstruction::Parallel {
+                left,
+                left_arguments,
+                right,
+                right_arguments,
+            } => {
+                let left = index_copy(&unit.tables.declarations, *left, "left parallel task")?;
+                let right = index_copy(&unit.tables.declarations, *right, "right parallel task")?;
+                NormalizedInstruction::Parallel {
+                    left: required_index(&indexes.functions, left, "left parallel task")?,
+                    left_arguments: *left_arguments,
+                    right: required_index(&indexes.functions, right, "right parallel task")?,
+                    right_arguments: *right_arguments,
+                }
+            }
             CompiledInstruction::Call {
                 requirement_arguments,
                 effect_arguments,

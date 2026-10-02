@@ -143,16 +143,9 @@ fn run_profile(
     rotate_runs(repository, run_directory, "")?;
     let harness_copy = copy_harness(run_directory)?;
     let registry = registry::base_registry(repository, run_directory, &harness_copy)?;
-    let requested = if options.profile == "changed" {
-        snapshot::changed_profile(repository)?
-    } else {
-        registry::profile(&options.profile).ok_or_else(|| {
-            DevError::usage(format!("unknown check profile '{}'", options.profile))
-        })?
-    };
+    let (initial, requested) = snapshot::capture_profile(repository, &options.profile)?;
     let selected = registry.closure(&requested)?;
     let profile_digest = registry.profile_digest(&options.profile, &requested)?;
-    let initial = snapshot::capture(repository)?;
     let inputs_path = run_directory.join("inputs.json");
     evidence::publish_json(
         &inputs_path,

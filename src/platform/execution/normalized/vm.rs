@@ -30,6 +30,12 @@ mod checked;
 use checked::{Class, Value as CheckedValue};
 #[path = "vm_intrinsics.rs"]
 mod checked_intrinsics;
+#[path = "vm_parallel.rs"]
+mod structured;
+#[path = "vm_transfer.rs"]
+pub(super) mod transfer;
+#[cfg(test)]
+pub(super) use structured::ChildProbe;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NormalizedRunPolicy {
@@ -68,8 +74,10 @@ impl NormalizedRunPolicy {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, serde::Serialize)]
 pub struct NormalizedRunObservation {
+    pub parallel_scopes: u64,
+    pub parallel_workers_spawned: u64,
     pub instructions: u64,
     pub calls: u64,
     pub external_calls: u64,
@@ -364,6 +372,9 @@ impl<'a> NormalizedVm<'a> {
         let list_work = super::list::Work::current();
         let map_work = super::map::Work::current();
         let mut machine = Machine {
+            shared_budget: None,
+            structured_depth: 0,
+            ancestor_depth: 0,
             memory_domain: super::value::ValueOrigin::fresh().ok_or_else(|| {
                 resource_error(
                     "normalized_buffer_domain",
@@ -385,6 +396,8 @@ impl<'a> NormalizedVm<'a> {
             transactions: BTreeMap::new(),
             calls_by_requirement: BTreeMap::new(),
             observation: NormalizedRunObservation {
+                parallel_scopes: 0,
+                parallel_workers_spawned: 0,
                 instructions: 0,
                 calls: 0,
                 external_calls: 0,
@@ -534,6 +547,9 @@ struct ActiveTransaction {
 }
 
 struct Machine<'a> {
+    shared_budget: Option<Arc<super::shared_budget::SharedBudget>>,
+    structured_depth: usize,
+    ancestor_depth: usize,
     memory_domain: super::value::ValueOrigin,
     root_allowance: Option<Arc<[RequirementIndex]>>,
     program: &'a NormalizedProgram,
@@ -694,6 +710,9 @@ impl Machine<'_> {
             if let Some(remaining) = &mut self.remaining_steps {
                 *remaining -= 1;
             }
+            if let Some(budget) = &self.shared_budget {
+                budget.step("normalized_instruction_steps")?;
+            }
             self.observation.instructions = self.observation.instructions.saturating_add(1);
             let instruction = {
                 let frame = self.current_frame_mut()?;
@@ -712,6 +731,22 @@ impl Machine<'_> {
                 instruction
             };
             match instruction {
+                NormalizedInstruction::Parallel {
+                    left,
+                    left_arguments,
+                    right,
+                    right_arguments,
+                } => {
+                    self.charge_allocation(super::value::collection_storage_bytes(
+                        u64::from(left_arguments) + u64::from(right_arguments),
+                        std::mem::size_of::<CheckedValue>() as u64,
+                        "normalized_parallel_arguments",
+                    )?)?;
+                    let right_values = self.pop_many(right_arguments as usize)?;
+                    let left_values = self.pop_many(left_arguments as usize)?;
+                    let value = self.parallel(left, left_values, right, right_values)?;
+                    self.push(value)?;
+                }
                 NormalizedInstruction::ImplementationCall { .. }
                 | NormalizedInstruction::MethodCall { .. } => {
                     return Err(type_error("unclosed implementation instruction"));
@@ -912,6 +947,7 @@ impl Machine<'_> {
                 NormalizedInstruction::BeginBind { arguments } => {
                     let callee = self.pop()?;
                     let value = checked::Admission {
+                        shared_budget: self.shared_budget.as_deref(),
                         substitutions: &BTreeMap::new(),
                         program: self.program,
                         resources: self.resources,
@@ -941,6 +977,7 @@ impl Machine<'_> {
                         })?;
                     let callee = &self.stack[offset];
                     let value = checked::Admission {
+                        shared_budget: self.shared_budget.as_deref(),
                         substitutions: &BTreeMap::new(),
                         program: self.program,
                         resources: self.resources,
@@ -960,6 +997,7 @@ impl Machine<'_> {
                     let arguments = self.pop_many(arguments as usize)?;
                     let callee = self.pop()?;
                     let value = checked::Admission {
+                        shared_budget: self.shared_budget.as_deref(),
                         substitutions: &BTreeMap::new(),
                         program: self.program,
                         resources: self.resources,
@@ -2080,7 +2118,10 @@ impl Machine<'_> {
         if arguments.len() != code.parameter_count as usize {
             return Err(type_error("code argument count is foreign"));
         }
-        if !tail && self.frames.len() >= self.policy.maximum_call_depth {
+        if !tail
+            && self.frames.len().saturating_add(self.ancestor_depth)
+                >= self.policy.maximum_call_depth
+        {
             return Err(resource_error(
                 "normalized_call_depth",
                 "normalized execution exceeded its call-depth budget",
@@ -2121,8 +2162,10 @@ impl Machine<'_> {
             type_arguments,
             stack_base: self.stack.len(),
         });
-        self.observation.maximum_call_depth =
-            self.observation.maximum_call_depth.max(self.frames.len());
+        self.observation.maximum_call_depth = self
+            .observation
+            .maximum_call_depth
+            .max(self.frames.len().saturating_add(self.ancestor_depth));
         self.observation.maximum_live_allowances = self
             .observation
             .maximum_live_allowances
@@ -2360,13 +2403,17 @@ impl Machine<'_> {
                 "one container exceeds finite item admission",
             ));
         }
-        self.observation.collection_items = crate::platform::execution::cumulative_charge(
+        let next_items = crate::platform::execution::cumulative_charge(
             self.observation.collection_items,
             items as u64,
             self.policy.maximum_collection_items,
             "normalized_collection_items",
             "execution exhausted its collection-item budget",
         )?;
+        if let Some(budget) = &self.shared_budget {
+            budget.reserve(0, items as u64)?;
+        }
+        self.observation.collection_items = next_items;
         let bytes = super::value::collection_storage_bytes(
             items as u64,
             item_bytes as u64,
@@ -2382,13 +2429,17 @@ impl Machine<'_> {
                 "one allocation exceeds finite value storage",
             ));
         }
-        self.observation.allocated_bytes = crate::platform::execution::cumulative_charge(
+        let next_bytes = crate::platform::execution::cumulative_charge(
             self.observation.allocated_bytes,
             bytes,
             self.policy.maximum_allocated_bytes,
             "normalized_allocation",
             "execution exhausted its allocation budget",
         )?;
+        if let Some(budget) = &self.shared_budget {
+            budget.reserve(bytes, 0)?;
+        }
+        self.observation.allocated_bytes = next_bytes;
         if bytes != 0 {
             self.observation.allocation_charges =
                 self.observation.allocation_charges.saturating_add(1);
@@ -2404,13 +2455,17 @@ impl Machine<'_> {
                 "one external value exceeds finite item admission",
             ));
         }
-        self.observation.collection_items = crate::platform::execution::cumulative_charge(
+        let next_items = crate::platform::execution::cumulative_charge(
             self.observation.collection_items,
             items,
             self.policy.maximum_collection_items,
             "normalized_collection_items",
             "external value exceeds the collection-item budget",
         )?;
+        if let Some(budget) = &self.shared_budget {
+            budget.reserve(0, items)?;
+        }
+        self.observation.collection_items = next_items;
         self.charge_allocation(bytes)
     }
 

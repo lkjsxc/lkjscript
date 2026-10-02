@@ -17,7 +17,7 @@ use crate::platform::kernel::{
     OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, PackageId, PackageInterfaceDeclarationPayload,
     PackageInterfaceRecord, ParameterParent, ParameterRecord, ParameterUse, RequirementReference,
     TypeForm, TypeObject, TypeObjectDigest, encode_owner, infer_function_expression_type,
-    validate_affine_roots_with_limits,
+    infer_function_expression_type_object, validate_affine_roots_with_limits,
 };
 use crate::platform::semantic_id::{
     BindingId, DeclarationId, ExpressionId, ParameterId, encode_hex,
@@ -168,7 +168,7 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         })?;
     reject_escaping_bindings(&inventory)?;
 
-    let (mut captures, result, mut requirements, analysis_read_work) = {
+    let (mut captures, result, mut requirements, requires_task, analysis_read_work) = {
         let reader = CandidateRead::new(lowerer);
         let mut inference_work = 0_usize;
         let result = infer_function_expression_type(
@@ -213,7 +213,16 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
             usize::try_from(lowerer.budget.validation.maximum_expression_steps)
                 .unwrap_or(usize::MAX),
         )?;
-        let requirements = infer_requirements(&reader, &function, &inventory, &captures)?;
+        let (requirements, requires_task) = infer_requirements(
+            &reader,
+            function_id,
+            &function,
+            &inventory,
+            &captures,
+            &mut inference_work,
+            usize::try_from(lowerer.budget.validation.maximum_expression_steps)
+                .unwrap_or(usize::MAX),
+        )?;
         if u64::try_from(captures.len()).unwrap_or(u64::MAX) > MAXIMUM_FUNCTION_EXTRACTION_CAPTURES
         {
             return Err(extract_resource(
@@ -244,7 +253,7 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
                 ),
             ));
         }
-        (captures, result, requirements, reader.work())
+        (captures, result, requirements, requires_task, reader.work())
     };
     lowerer.work.canonical.add(analysis_read_work);
 
@@ -266,7 +275,7 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         );
         captures.push(capture);
     }
-    let effect = inferred_effect(&function.effect, &requirements)?;
+    let effect = inferred_effect(&function.effect, &requirements, requires_task)?;
     assign_capture_names(&mut captures)?;
 
     let moved_owners = canonical_owners(inventory.selected_owners.iter().copied());
@@ -1207,11 +1216,15 @@ fn require_resource_capture_shape<B: CanonicalBaseRead + ?Sized>(
 
 fn infer_requirements<B: CanonicalBaseRead + ?Sized>(
     reader: &CandidateRead<'_, B>,
+    function_id: DeclarationId,
     function: &FunctionDeclaration,
     inventory: &BodyInventory,
     captures: &[CaptureAnalysis],
-) -> Result<BTreeSet<crate::platform::kernel::RequirementOperand>, Diagnostic> {
+    inference_work: &mut usize,
+    maximum_steps: usize,
+) -> Result<(BTreeSet<crate::platform::kernel::RequirementOperand>, bool), Diagnostic> {
     let mut requirements = BTreeSet::new();
+    let mut requires_task = false;
     for owner in &inventory.selected_owners {
         let OwnerKey::Expression(expression) = owner else {
             continue;
@@ -1233,7 +1246,32 @@ fn infer_requirements<B: CanonicalBaseRead + ?Sized>(
             ExpressionOperation::CapabilityCall { requirement, .. }
             | ExpressionOperation::Transaction { requirement, .. }
             | ExpressionOperation::TransactionOutcome { requirement, .. } => {
+                requires_task = true;
                 requirements.insert(*requirement);
+            }
+            ExpressionOperation::Parallel { .. } => requires_task = true,
+            ExpressionOperation::Invoke { callee, .. } => {
+                let callable = infer_function_expression_type_object(
+                    reader,
+                    function_id,
+                    *callee,
+                    &function.effect,
+                    inference_work,
+                    maximum_steps,
+                )?;
+                match callable.form {
+                    TypeForm::Function { .. } => {}
+                    TypeForm::TaskFunction { effect, .. } if effect.is_closed() => {
+                        requires_task = true;
+                        requirements.extend(effect.requirements);
+                    }
+                    _ => {
+                        return Err(extract_error(
+                            "change_extract_invoke_effect",
+                            "extracted invocation requires a callable with a closed exact effect row",
+                        ));
+                    }
+                }
             }
             ExpressionOperation::Call { function, .. } => {
                 match referenced_function_effect(reader, *function)? {
@@ -1241,7 +1279,10 @@ fn infer_requirements<B: CanonicalBaseRead + ?Sized>(
                     FunctionEffect::Task {
                         effect_parameters: _,
                         requirements: called,
-                    } => requirements.extend(called),
+                    } => {
+                        requires_task = true;
+                        requirements.extend(called);
+                    }
                 }
             }
             _ => {}
@@ -1269,7 +1310,7 @@ fn infer_requirements<B: CanonicalBaseRead + ?Sized>(
             format!("selected subtree requires unavailable task requirement {missing:?}"),
         ));
     }
-    Ok(requirements)
+    Ok((requirements, requires_task))
 }
 
 fn referenced_function_effect<B: CanonicalBaseRead + ?Sized>(
@@ -1314,8 +1355,9 @@ fn referenced_function_effect<B: CanonicalBaseRead + ?Sized>(
 fn inferred_effect(
     caller: &FunctionEffect,
     required: &BTreeSet<crate::platform::kernel::RequirementOperand>,
+    requires_task: bool,
 ) -> Result<FunctionEffect, Diagnostic> {
-    if required.is_empty() {
+    if required.is_empty() && !requires_task {
         return Ok(FunctionEffect::Pure);
     }
     let FunctionEffect::Task {
@@ -1451,6 +1493,10 @@ fn replace_expression_reference(
         }
     };
     match operation {
+        ExpressionOperation::Parallel { left, right } => {
+            replace(left);
+            replace(right);
+        }
         ExpressionOperation::ChooseOwned { .. } | ExpressionOperation::MatchOwned { .. } => {
             return Err(extract_error(
                 "change_extract_owned_choice",

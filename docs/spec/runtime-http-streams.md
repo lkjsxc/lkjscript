@@ -34,10 +34,16 @@ work a rollback, and do not permit detaching its cleanup.
 
 Shutdown atomically stops admission, closes admission/worker semaphores, wakes queued tasks, and
 waits the declared drain grace. If work remains, it requests cooperative cancellation and waits the
-cancellation grace. It then calls every owned adapter's idempotent shutdown exactly once, retains
-that cleanup outcome for repeated shutdown calls, and reports admission stop, whether drain
-preceded cancellation, cancellation count, remaining tasks, cleanup failures, and elapsed time. A
-stalled blocking task is infrastructure failure; possibly visible work is not replayed. Process
+cancellation grace. Expiry records `resident_cancellation_stalled` as an infrastructure failure
+in the shutdown receipt's cleanup failures; shutdown still joins the remaining owned scopes
+before closing adapters or returning. These graces bound cooperative phases, not total stop
+latency: a trusted blocking callback that never returns cannot be safely preempted. Dropping
+the shutdown future does not close adapters; a repeated shutdown must still join those scopes.
+After actual drain it calls every owned adapter's idempotent shutdown exactly once, retains
+that adapter cleanup outcome for repeated shutdown calls, and reports admission stop, whether
+drain preceded cancellation, cancellation count, actual remaining tasks at return, shutdown
+and cleanup failures, and elapsed time. A grace-expiry failure remains reported even when
+the eventual join leaves zero remaining tasks. Possibly visible work is not replayed. Process
 restart reloads artifact and durable adapters and discards tasks/queues/caches.
 
 ## Process-owned termination

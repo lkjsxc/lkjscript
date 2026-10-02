@@ -135,6 +135,7 @@ fn derive_linear(code: &mut NormalizedCode, work: &mut Budget<'_>) -> Result<(),
             | I::ImplementationCall { .. }
             | I::MethodCall { .. }
             | I::Call { .. }
+            | I::Parallel { .. }
             | I::TailCall { .. }
             | I::FunctionValue { .. }
             | I::Invoke { .. }

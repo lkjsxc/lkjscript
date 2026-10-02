@@ -8,7 +8,7 @@ use super::kernel::{
     OperationReference, OwnerKey, OwnerKind, OwnerRecord, PackageInterfaceDeclarationPayload,
     PackageInterfaceRecord, ParameterParent, ParameterUse, RelationEndpoint, RequirementReference,
     TypeForm, TypeObjectDigest, encode_owner, extract_relations, infer_function_expression_type,
-    validate_full,
+    infer_function_expression_type_object, validate_full,
 };
 use super::publication::GraphRepository;
 use super::semantic_id::{DeclarationId, ExpressionId, encode_hex};
@@ -1236,6 +1236,7 @@ fn reconstruct_function_extraction(
         ));
     }
     let mut required = BTreeSet::new();
+    let mut task_computation = false;
     for owner in selected_preorder {
         let OwnerKey::Expression(_) = owner else {
             continue;
@@ -1251,7 +1252,43 @@ fn reconstruct_function_extraction(
             ExpressionOperation::CapabilityCall { requirement, .. }
             | ExpressionOperation::Transaction { requirement, .. }
             | ExpressionOperation::TransactionOutcome { requirement, .. } => {
+                task_computation = true;
                 required.insert(*requirement);
+            }
+            ExpressionOperation::Parallel { .. } => task_computation = true,
+            ExpressionOperation::Invoke { callee, .. } => {
+                let mut work = 0;
+                let object = infer_function_expression_type_object(
+                    snapshot,
+                    function,
+                    *callee,
+                    &function_record.effect,
+                    &mut work,
+                    super::kernel::contract::MAXIMUM_VALIDATION_WORK,
+                )?;
+                match object.form {
+                    TypeForm::Function { .. } => {}
+                    TypeForm::TaskFunction { effect, .. } => {
+                        if !effect.parameters.is_empty()
+                            || effect.requirements.iter().any(|r| r.concrete().is_none())
+                        {
+                            return Err(oracle_error(
+                                DiagnosticClass::Semantic,
+                                "contributor_extraction_effect",
+                                "selected invocation has an open effect row",
+                            ));
+                        }
+                        task_computation = true;
+                        required.extend(effect.requirements);
+                    }
+                    _ => {
+                        return Err(oracle_error(
+                            DiagnosticClass::Semantic,
+                            "contributor_extraction_effect",
+                            "selected invocation has no exact callable type",
+                        ));
+                    }
+                }
             }
             ExpressionOperation::Call {
                 function: called, ..
@@ -1261,6 +1298,7 @@ fn reconstruct_function_extraction(
                     requirements,
                 } = oracle_function_effect(snapshot, *called)?
                 {
+                    task_computation = true;
                     required.extend(requirements);
                 }
             }
@@ -1274,7 +1312,7 @@ fn reconstruct_function_extraction(
             .map(crate::platform::kernel::RequirementOperand::Concrete),
     );
     let requirements = match &function_record.effect {
-        FunctionEffect::Pure if required.is_empty() => Vec::new(),
+        FunctionEffect::Pure if required.is_empty() && !task_computation => Vec::new(),
         FunctionEffect::Pure => {
             return Err(oracle_error(
                 DiagnosticClass::Semantic,
@@ -1303,7 +1341,7 @@ fn reconstruct_function_extraction(
                 .collect()
         }
     };
-    let effect = if requirements.is_empty() {
+    let effect = if requirements.is_empty() && !task_computation {
         "pure"
     } else {
         "task"
@@ -2758,6 +2796,7 @@ fn oracle_operation_parameter_uses(
 
 fn oracle_expression_form(operation: &ExpressionOperation) -> &'static str {
     match operation {
+        ExpressionOperation::Parallel { .. } => "parallel",
         ExpressionOperation::ImplementationCall { .. } => "implementation_call",
         ExpressionOperation::MethodCall { .. } => "method_call",
         ExpressionOperation::Unit {} => "unit",
@@ -2803,6 +2842,8 @@ fn oracle_binding_kind(kind: BindingKind) -> &'static str {
 
 fn oracle_child_role(role: ExpressionChildRole) -> &'static str {
     match role {
+        ExpressionChildRole::ParallelLeft => "parallel_left",
+        ExpressionChildRole::ParallelRight => "parallel_right",
         ExpressionChildRole::Condition => "condition",
         ExpressionChildRole::TrueBranch => "true_branch",
         ExpressionChildRole::FalseBranch => "false_branch",

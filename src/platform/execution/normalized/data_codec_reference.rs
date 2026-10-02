@@ -131,7 +131,7 @@ struct ReferenceBudget<'a> {
 }
 
 impl ReferenceBudget<'_> {
-    fn visit(&mut self, depth: usize) -> Result<(), Diagnostic> {
+    fn visit(&mut self, depth: usize, already_charged: bool) -> Result<(), Diagnostic> {
         if depth > DEPTH_LIMIT {
             return Err(Diagnostic::new(
                 DiagnosticClass::Resource,
@@ -139,7 +139,11 @@ impl ReferenceBudget<'_> {
                 "typed data value exceeds the nesting-depth limit",
             ));
         }
-        self.charge(1)
+        if already_charged {
+            cancelled(self.control)
+        } else {
+            self.charge(1)
+        }
     }
 
     fn charge(&mut self, count: usize) -> Result<(), Diagnostic> {
@@ -160,7 +164,7 @@ fn write_value(
     budget: &mut ReferenceBudget,
     depth: usize,
 ) -> Result<(), Diagnostic> {
-    budget.visit(depth)?;
+    budget.visit(depth, false)?;
     match (form(program, ty)?, value) {
         (TypeForm::Unit, NormalizedValue::Unit) => {}
         (TypeForm::Bool, NormalizedValue::Bool(value)) => write_bytes(output, &[u8::from(*value)])?,
@@ -298,7 +302,18 @@ fn read_value(
     budget: &mut ReferenceBudget,
     depth: usize,
 ) -> Result<NormalizedValue, Diagnostic> {
-    budget.visit(depth)?;
+    read_reserved_value(program, ty, input, budget, depth, false)
+}
+
+fn read_reserved_value(
+    program: &dyn NormalizedValueSchema,
+    ty: TypeObjectDigest,
+    input: &mut ReferenceInput<'_>,
+    budget: &mut ReferenceBudget<'_>,
+    depth: usize,
+    already_charged: bool,
+) -> Result<NormalizedValue, Diagnostic> {
+    budget.visit(depth, already_charged)?;
     match form(program, ty)? {
         TypeForm::Unit => Ok(NormalizedValue::Unit),
         TypeForm::Bool => match input.read_u8("normalized_data_bool")? {
@@ -356,7 +371,14 @@ fn read_value(
             budget.charge(count)?;
             let mut values = Vec::with_capacity(count);
             for _ in 0..count {
-                values.push(read_value(program, *item, input, budget, depth + 1)?);
+                values.push(read_reserved_value(
+                    program,
+                    *item,
+                    input,
+                    budget,
+                    depth + 1,
+                    true,
+                )?);
             }
             Ok(NormalizedValue::list(values).map_err(|error| {
                 Diagnostic::new(
@@ -371,7 +393,7 @@ fn read_value(
             budget.charge(count.saturating_mul(2))?;
             let mut entries = BTreeMap::<NormalizedMapKey, NormalizedValue>::new();
             for _ in 0..count {
-                let key_value = read_value(program, *key, input, budget, depth + 1)?;
+                let key_value = read_reserved_value(program, *key, input, budget, depth + 1, true)?;
                 let map_key = NormalizedMapKey::from_value(key_value).ok_or_else(|| {
                     corrupt_error(
                         "normalized_data_map_key",
@@ -387,7 +409,7 @@ fn read_value(
                         "typed data map keys are duplicate or not in canonical order",
                     ));
                 }
-                let item = read_value(program, *value, input, budget, depth + 1)?;
+                let item = read_reserved_value(program, *value, input, budget, depth + 1, true)?;
                 entries.insert(map_key, item);
             }
             NormalizedValue::map_controlled(entries, budget.control)
@@ -688,7 +710,7 @@ fn write_key(
     budget: &mut ReferenceBudget,
     depth: usize,
 ) -> Result<(), Diagnostic> {
-    budget.visit(depth)?;
+    budget.visit(depth, false)?;
     match (form(program, ty)?, key) {
         (TypeForm::Bool, NormalizedMapKey::Bool(value)) => {
             write_bytes(output, &[u8::from(*value)])?;
@@ -797,7 +819,9 @@ impl<'a> ReferenceInput<'a> {
     }
 
     fn read_blob(&mut self, code: &'static str) -> Result<Vec<u8>, Diagnostic> {
-        let length = self.read_count(code)?;
+        let length = usize::try_from(self.read_u32(code)?).map_err(|_| {
+            resource_error("typed data byte length exceeds the host address domain")
+        })?;
         if length > BYTE_LIMIT {
             return Err(resource_error(
                 "typed data field exceeds the canonical byte limit",

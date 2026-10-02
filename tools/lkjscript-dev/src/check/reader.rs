@@ -276,7 +276,8 @@ mod tests {
             b"independent source fixture\n",
         )
         .expect("lock");
-        fs::write(repository.join(".gitignore"), b".artifacts/\n").expect("ignore evidence");
+        fs::write(repository.join(".gitignore"), b".artifacts/\n*.swp\n").expect("ignore evidence");
+        fs::create_dir_all(repository.join("docs/guides/examples")).expect("audited directory");
         for arguments in [
             vec!["init", "--quiet"],
             vec!["add", "--", "Cargo.lock", ".gitignore"],
@@ -398,6 +399,60 @@ mod tests {
             )
         };
         read(&baseline).expect("genuine original admission");
+        // Surface policy observes these paths even though Git status does not.
+        // Exercise the real source reader and gate cache, not only digest inequality.
+        let gate = registry.gate("first").expect("first fixture gate");
+        cache
+            .store(gate, &baseline.gates[0])
+            .expect("store original passed gate");
+        let probe = |source: &super::super::model::InputSnapshot| {
+            let fingerprint = executor::gate_fingerprint(
+                &repository,
+                gate,
+                source,
+                baseline.runtime.as_ref().expect("runtime"),
+                &BTreeMap::new(),
+            )
+            .expect("actual gate fingerprint");
+            cache.load(
+                gate,
+                &fingerprint,
+                &root.join("probe.stdout"),
+                &root.join("probe.stderr"),
+            )
+        };
+        assert!(probe(&snapshot).cached.is_some());
+        for (name, directory) in [("unowned", true), ("scratch.swp", false)] {
+            let added = repository.join("docs/guides/examples").join(name);
+            if directory {
+                fs::create_dir(&added).expect("untracked empty directory");
+            } else {
+                fs::write(&added, b"ignored policy input\n").expect("ignored file");
+            }
+            let status = std::process::Command::new("git")
+                .args(["status", "--porcelain=v1", "--untracked-files=all"])
+                .current_dir(&repository)
+                .output()
+                .expect("fixture status");
+            assert!(status.status.success() && status.stdout.is_empty());
+            let changed = snapshot::capture(&repository).expect("changed audited inventory");
+            assert_ne!(changed.digest, snapshot.digest);
+            assert!(
+                probe(&changed).cached.is_none(),
+                "stale cache accepted {name}"
+            );
+            let error = read(&baseline).expect_err("stale source receipt must reject");
+            assert!(error.message().contains("input closure no longer matches"));
+            if directory {
+                fs::remove_dir(&added).expect("restore directory inventory");
+            } else {
+                fs::remove_file(&added).expect("restore ignored-file inventory");
+            }
+            let restored = snapshot::capture(&repository).expect("restored source");
+            assert_eq!(restored.digest, snapshot.digest);
+            assert!(probe(&restored).cached.is_some());
+            read(&baseline).expect("original admission recovers after exact restoration");
+        }
         // A later build replacing the mutable output does not replace its preserved original.
         fs::write(&output, b"different later build").expect("replace mutable output");
         read(&baseline).expect("original output retained");

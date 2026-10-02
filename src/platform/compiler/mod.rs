@@ -54,3 +54,6 @@ pub(crate) use unit::{
 
 #[cfg(test)]
 pub(crate) mod tests;
+
+#[cfg(test)]
+mod artifact_correspondence_tests;

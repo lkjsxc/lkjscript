@@ -14,9 +14,9 @@ use super::read_view::RepositoryView;
 use super::{
     AcceptedBinding, HeadRecord, NormalizedTransaction, PreparedAuthoredPublication,
     PreparedInitialPublication, PreparedPublication, PublicationOptions, PublicationReceipt,
-    RevisionRecord, SemanticDiff, prepare_initial_publication,
+    RevisionRecord, SemanticDiff, TransactionBody, prepare_initial_publication,
 };
-use crate::platform::change::{AuthoredChangeSet, PrimitiveEdit};
+use crate::platform::change::{AuthoredChangeSet, CanonicalReadAdmission, PrimitiveEdit};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     KernelSnapshot, SemanticRoot, decode_root, encode_root, semantic_state_digest_from_root,
@@ -25,19 +25,23 @@ use crate::platform::package_transport::{
     PackageRevision, PackageTransport, PackageTransportBinding, PackageTransportClosureValidation,
     validate_package_revision_closure, validate_package_transport_closure_admitted,
 };
-use crate::platform::persistent_map::{MapAdmission, MapWork, MemoryPageStore, OverlayPageStore};
+use crate::platform::persistent_map::{
+    MapAdmission, MapDifference, MapError, MapErrorClass, MapRoot, MapWork, MemoryPageStore,
+    OverlayPageStore, PersistentMap,
+};
 use crate::platform::storage::contract::TARGET_PACK_BYTES;
 #[cfg(test)]
 use crate::platform::storage::directory::SealCheckpoint;
 use crate::platform::storage::directory::{PackDirectoryStore, SealReceipt};
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, StageOutcome, StoreError,
-    StoreErrorClass, StoreWork,
+    StoreErrorClass, StoreReadAdmission, StoreReadLimits, StoreWork,
 };
 use crate::platform::storage::page_store::ObjectPageReader;
 use crate::platform::witness::{ValidationWitnessManifest, encode_witness_manifest};
 use fs2::FileExt;
 use rustix::fs::{AtFlags, Dir, Mode, OFlags};
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::{Read, Write};
@@ -215,6 +219,10 @@ pub enum PublicationPoint {
     AfterHeadFileSynced,
     AfterHeadRenamed,
     AfterHeadDirectorySynced,
+    #[cfg(test)]
+    HeadDirectorySyncFailed,
+    #[cfg(test)]
+    ReferenceAdmission(CanonicalReadAdmission),
     #[cfg(test)]
     Storage(SealCheckpoint),
 }
@@ -857,6 +865,9 @@ impl GraphRepository {
         match classify_publication(&store, current.as_ref(), prepared)?.0 {
             PublicationDecision::Ready => {}
             PublicationDecision::Accepted { accepted, observed } => {
+                // A prior rename may be visible despite an interrupted or failed directory sync.
+                // Complete durability under this same publication lock before acknowledging replay.
+                sync_visible_head(&root_directory, fault)?;
                 return Ok(PublicationOutcome::AlreadyAccepted {
                     accepted: *accepted,
                     observed,
@@ -912,7 +923,19 @@ impl GraphRepository {
             .seal_staged(TARGET_PACK_BYTES, &mut store_work)
             .map_err(store_diagnostic)?;
         inject(fault, PublicationPoint::AfterPacksSealed)?;
-        verify_prepared_closure(&store, prepared, &mut store_work)?;
+        let reference_limits = CanonicalReadAdmission::default();
+        #[cfg(test)]
+        let reference_limits = match fault {
+            Some(PublicationPoint::ReferenceAdmission(limits)) => limits,
+            _ => reference_limits,
+        };
+        verify_prepared_closure(
+            &store,
+            current.as_ref(),
+            prepared,
+            &mut store_work,
+            reference_limits,
+        )?;
         replace_head(&root_directory, &prepared.head_bytes, fault)?;
         let current = read_current_optional(&root_directory, &store)?.ok_or_else(|| {
             repository_error(
@@ -1514,6 +1537,8 @@ fn validate_prepared_repository(prepared: &PreparedPublication) -> Result<(), Di
         || prepared.revision.publication.receipt != prepared.receipt_digest
         || prepared.receipt.transaction != prepared.revision.publication.transaction
         || prepared.receipt.semantic_diff != prepared.revision.publication.semantic_diff
+        || prepared.transaction.result_root() != prepared.authority.semantic.digest
+        || prepared.semantic_diff.result_root() != prepared.authority.semantic.digest
     {
         return Err(repository_error(
             DiagnosticClass::Corrupt,
@@ -1526,8 +1551,10 @@ fn validate_prepared_repository(prepared: &PreparedPublication) -> Result<(), Di
 
 fn verify_prepared_closure(
     store: &PackDirectoryStore,
+    base: Option<&CurrentPublication>,
     prepared: &PreparedPublication,
     work: &mut StoreWork,
+    reference_limits: CanonicalReadAdmission,
 ) -> Result<(), Diagnostic> {
     for (key, expected) in &prepared.objects {
         let observed = store
@@ -1582,6 +1609,7 @@ fn verify_prepared_closure(
             ));
         }
     }
+    verify_candidate_references(store, base, prepared, work, reference_limits)?;
     let reader = ObjectPageReader::new(store);
     let mut map_work = MapWork::default();
     let _ = lookup_idempotency_history(
@@ -1617,6 +1645,400 @@ fn read_required(
                 ),
             )
         })
+}
+
+// Reuse the canonical repository-read engine ceilings for this independent physical check.
+// Map work is shared across all changed roots. Object reads (including pages) share one
+// pre-payload store admission. Reference visits count reads and reserved inventory elements;
+// they are preparation capacity, not semantic validity or an execution quota.
+struct CandidateReferenceAdmission {
+    reads: RefCell<StoreReadAdmission>,
+    remaining_visits: Cell<u64>,
+}
+
+impl CandidateReferenceAdmission {
+    fn new(limits: CanonicalReadAdmission) -> Self {
+        Self {
+            reads: RefCell::new(StoreReadAdmission::new(StoreReadLimits {
+                maximum_catalog_lookups: limits.maximum_catalog_lookups,
+                maximum_objects: limits.maximum_objects,
+                maximum_bytes: limits.maximum_bytes,
+            })),
+            remaining_visits: Cell::new(limits.maximum_decoded_records),
+        }
+    }
+
+    fn admit_visits(&self, count: usize) -> Result<(), Diagnostic> {
+        let count = u64::try_from(count).unwrap_or(u64::MAX);
+        let remaining = self
+            .remaining_visits
+            .get()
+            .checked_sub(count)
+            .ok_or_else(|| {
+                repository_error(
+                    DiagnosticClass::Resource,
+                    "publication_repository_reference_visits_exhausted",
+                    "candidate reference traversal exceeds its aggregate preparation allowance",
+                )
+            })?;
+        self.remaining_visits.set(remaining);
+        Ok(())
+    }
+}
+
+fn read_candidate_required<S: ImmutableObjectStore + ?Sized>(
+    store: &S,
+    domain: ObjectDomain,
+    digest: [u8; 32],
+    work: &mut StoreWork,
+    admission: &CandidateReferenceAdmission,
+) -> Result<Vec<u8>, Diagnostic> {
+    admission.admit_visits(1)?;
+    store
+        .read_admitted(
+            ObjectKey::from_digest(domain, digest),
+            domain.maximum_bytes(),
+            &mut admission.reads.borrow_mut(),
+            work,
+        )
+        .map_err(store_diagnostic)?
+        .ok_or_else(|| {
+            repository_error(
+                DiagnosticClass::Corrupt,
+                "publication_repository_object_missing",
+                format!("candidate references a missing {} object", domain.name()),
+            )
+        })
+}
+
+// Count the existing kernel root projection without allocating it. Reserve the complete
+// projection before type_roots clones vectors or either closure inventory grows.
+fn candidate_owner_type_root_count(record: &crate::platform::kernel::OwnerRecord) -> usize {
+    use crate::platform::kernel::{DeclarationPayload, ExpressionOperation, OwnerRecord};
+    match record {
+        OwnerRecord::Declaration(record) => match &record.payload {
+            DeclarationPayload::External(_)
+            | DeclarationPayload::OwnedImplementation(_)
+            | DeclarationPayload::Constant { .. } => 1,
+            DeclarationPayload::Function(function) => function.implementation_parameters.len() + 1,
+            DeclarationPayload::OwnedContract(contract) => contract
+                .methods
+                .iter()
+                .map(|method| method.parameters.len() + 1)
+                .sum(),
+            _ => 0,
+        },
+        OwnerRecord::Field(_)
+        | OwnerRecord::Operation(_)
+        | OwnerRecord::Parameter(_)
+        | OwnerRecord::Port(_) => 1,
+        OwnerRecord::Case(record) => usize::from(record.payload.is_some()),
+        OwnerRecord::Binding(record) => usize::from(record.declared_type.is_some()),
+        OwnerRecord::Expression(record) => match &record.operation {
+            ExpressionOperation::ChooseOwned { .. }
+            | ExpressionOperation::MatchOwned { .. }
+            | ExpressionOperation::PackOwned { .. }
+            | ExpressionOperation::UnpackOwned { .. }
+            | ExpressionOperation::TransactionOutcome { .. }
+            | ExpressionOperation::List { .. } => 1,
+            ExpressionOperation::ImplementationCall { type_arguments, .. }
+            | ExpressionOperation::Call { type_arguments, .. }
+            | ExpressionOperation::FunctionValue { type_arguments, .. }
+            | ExpressionOperation::Record { type_arguments, .. }
+            | ExpressionOperation::Variant { type_arguments, .. } => type_arguments.len(),
+            ExpressionOperation::Map { .. } => 2,
+            _ => 0,
+        },
+        _ => 0,
+    }
+}
+
+fn verify_candidate_references(
+    store: &PackDirectoryStore,
+    base: Option<&CurrentPublication>,
+    prepared: &PreparedPublication,
+    work: &mut StoreWork,
+    limits: CanonicalReadAdmission,
+) -> Result<(), Diagnostic> {
+    use crate::platform::kernel::{
+        EncodedOwnerKey, decode_dependency_binding, decode_owner, decode_owner_binding,
+        decode_retirement_binding, decode_type_object,
+    };
+    use crate::platform::witness::{SummaryBinding, decode_owner_summary};
+
+    let admission = CandidateReferenceAdmission::new(limits);
+    let reader = ObjectPageReader::new_shared_admission(store, &admission.reads);
+    let mut map_work = MapWork::with_admission(MapAdmission {
+        maximum_pages_read: limits.maximum_map_pages,
+        maximum_bytes_read: limits.maximum_bytes,
+        maximum_entries_visited: limits.maximum_map_entries,
+        maximum_pages_encoded: 0,
+        maximum_bytes_encoded: 0,
+    });
+
+    // The mutable staging inventory is not an authority for which objects are required.
+    // Admit every transaction addition, including type objects not reached by a changed owner.
+    let mut types = BTreeSet::new();
+    if let TransactionBody::Change {
+        owners,
+        type_additions,
+        dependencies,
+        retirements,
+        ..
+    } = &prepared.transaction.body
+    {
+        admission.admit_visits(owners.len())?;
+        for edit in owners {
+            if let Some(digest) = edit.objects.after {
+                read_candidate_required(
+                    store,
+                    ObjectDomain::Owner,
+                    digest.bytes(),
+                    work,
+                    &admission,
+                )?;
+            }
+        }
+        admission.admit_visits(type_additions.len())?;
+        types.extend(type_additions.iter().copied());
+        admission.admit_visits(dependencies.len())?;
+        for edit in dependencies {
+            if let Some(digest) = edit.objects.after {
+                read_candidate_required(
+                    store,
+                    ObjectDomain::Dependency,
+                    digest.bytes(),
+                    work,
+                    &admission,
+                )?;
+            }
+        }
+        admission.admit_visits(retirements.len())?;
+        for edit in retirements {
+            if let Some(digest) = edit.objects.after {
+                read_candidate_required(
+                    store,
+                    ObjectDomain::Retirement,
+                    digest.bytes(),
+                    work,
+                    &admission,
+                )?;
+            }
+        }
+    }
+
+    let root = &prepared.authority.semantic.root;
+    let witness = prepared.authority.witness.manifest.roots;
+    for (domain, candidate, previous) in [
+        (
+            Some(ObjectDomain::Owner),
+            root.owners,
+            base.map(|value| value.semantic_root.owners),
+        ),
+        (
+            Some(ObjectDomain::Dependency),
+            root.dependencies,
+            base.map(|value| value.semantic_root.dependencies),
+        ),
+        (
+            Some(ObjectDomain::Retirement),
+            root.retirements,
+            base.map(|value| value.semantic_root.retirements),
+        ),
+        (
+            Some(ObjectDomain::OwnerSummary),
+            witness.owner_summaries,
+            base.map(|value| value.witness.roots.owner_summaries),
+        ),
+        (
+            None,
+            witness.namespaces,
+            base.map(|value| value.witness.roots.namespaces),
+        ),
+        (
+            None,
+            witness.ownership,
+            base.map(|value| value.witness.roots.ownership),
+        ),
+        (
+            None,
+            witness.forward_relations,
+            base.map(|value| value.witness.roots.forward_relations),
+        ),
+        (
+            None,
+            witness.reverse_relations,
+            base.map(|value| value.witness.roots.reverse_relations),
+        ),
+        (
+            None,
+            witness.test_dependencies,
+            base.map(|value| value.witness.roots.test_dependencies),
+        ),
+    ] {
+        // Diff opens changed paths and verifies their page links; accepted shared subtrees
+        // retain their existing closure. Bootstrap traverses every candidate entry.
+        let mut visit = |key: &[u8], bytes: &[u8]| -> Result<(), Diagnostic> {
+            match domain {
+                Some(ObjectDomain::Owner) => {
+                    let owner = EncodedOwnerKey::decode(key)?;
+                    let binding = decode_owner_binding(bytes, owner)?;
+                    let bytes = read_candidate_required(
+                        store,
+                        ObjectDomain::Owner,
+                        binding.object.bytes(),
+                        work,
+                        &admission,
+                    )?;
+                    let record = decode_owner(&bytes, owner, binding.kind, binding.object)?;
+                    admission.admit_visits(candidate_owner_type_root_count(&record))?;
+                    types.extend(record.type_roots());
+                    // blob_roots has at most one element; reserve that projection before allocation.
+                    admission.admit_visits(1)?;
+                    for (digest, length) in record.blob_roots() {
+                        let bytes = read_candidate_required(
+                            store,
+                            ObjectDomain::Blob,
+                            digest.bytes(),
+                            work,
+                            &admission,
+                        )?;
+                        if bytes.len() as u64 != length {
+                            return Err(repository_error(
+                                DiagnosticClass::Corrupt,
+                                "publication_repository_object_bytes",
+                                "referenced blob length differs from its canonical owner binding",
+                            ));
+                        }
+                    }
+                }
+                Some(ObjectDomain::Dependency) => {
+                    let binding = decode_dependency_binding(bytes)?;
+                    read_candidate_required(
+                        store,
+                        ObjectDomain::Dependency,
+                        binding.object.bytes(),
+                        work,
+                        &admission,
+                    )?;
+                }
+                Some(ObjectDomain::Retirement) => {
+                    let binding = decode_retirement_binding(bytes)?;
+                    read_candidate_required(
+                        store,
+                        ObjectDomain::Retirement,
+                        binding.object.bytes(),
+                        work,
+                        &admission,
+                    )?;
+                }
+                Some(ObjectDomain::OwnerSummary) => {
+                    let owner = EncodedOwnerKey::decode(key)?;
+                    let binding = SummaryBinding::decode(bytes, owner)?;
+                    let bytes = read_candidate_required(
+                        store,
+                        ObjectDomain::OwnerSummary,
+                        binding.summary.bytes(),
+                        work,
+                        &admission,
+                    )?;
+                    let summary = decode_owner_summary(&bytes, binding.summary)?;
+                    read_candidate_required(
+                        store,
+                        ObjectDomain::Owner,
+                        summary.record.bytes(),
+                        work,
+                        &admission,
+                    )?;
+                }
+                _ => {}
+            }
+            Ok(())
+        };
+        let result = for_each_new_publication_map_entry(
+            &reader,
+            previous,
+            candidate,
+            &mut map_work,
+            &mut visit,
+        );
+        if let Err(error) = result {
+            work.add(reader.work());
+            return Err(error);
+        }
+    }
+    let mut checked = BTreeSet::new();
+    while let Some(digest) = types.pop_first() {
+        admission.admit_visits(1)?;
+        if !checked.insert(digest) {
+            continue;
+        }
+        let bytes =
+            read_candidate_required(store, ObjectDomain::Type, digest.bytes(), work, &admission)?;
+        let object = decode_type_object(&bytes, digest)?;
+        admission.admit_visits(object.child_type_count())?;
+        types.extend(object.child_types());
+    }
+    work.add(reader.work());
+    Ok(())
+}
+
+fn for_each_new_publication_map_entry<S: ImmutableObjectStore + ?Sized>(
+    reader: &ObjectPageReader<'_, S>,
+    base: Option<MapRoot>,
+    candidate: MapRoot,
+    map_work: &mut MapWork,
+    visitor: &mut impl FnMut(&[u8], &[u8]) -> Result<(), Diagnostic>,
+) -> Result<(), Diagnostic> {
+    if base.is_some_and(|base| base.page() == candidate.page() && base != candidate) {
+        return Err(repository_error(
+            DiagnosticClass::Corrupt,
+            "publication_repository_object_bytes",
+            "candidate map root metadata disagrees with its unchanged accepted page",
+        ));
+    }
+    let mut visitor_error = None;
+    let mut visit = |key: &[u8], value: &[u8]| {
+        visitor(key, value).map_err(|error| {
+            visitor_error = Some(error);
+            MapError {
+                class: MapErrorClass::Store,
+                // Internal carrier only; preserve the original diagnostic below.
+                code: "publication_repository_object_missing",
+                message: String::new(),
+            }
+        })
+    };
+    let map = PersistentMap::from_root(candidate);
+    let result = match base {
+        Some(base) => PersistentMap::from_root(base).diff(&map, reader, map_work, |difference| {
+            match difference {
+                MapDifference::Added { key, value }
+                | MapDifference::Updated {
+                    key, after: value, ..
+                } => {
+                    visit(&key, &value)?;
+                }
+                MapDifference::Removed { .. } => {}
+            }
+            Ok(())
+        }),
+        None => map.for_each(reader, map_work, &mut visit),
+    };
+    if let Some(error) = visitor_error {
+        return Err(error);
+    }
+    result.map_err(|error| {
+        use crate::platform::persistent_map::MapErrorClass;
+        let class = match error.class {
+            MapErrorClass::Input => DiagnosticClass::Source,
+            MapErrorClass::Resource => DiagnosticClass::Resource,
+            MapErrorClass::Corrupt => DiagnosticClass::Corrupt,
+            MapErrorClass::Store => DiagnosticClass::Infrastructure,
+        };
+        repository_error(class, error.code, error.message)
+    })?;
+    Ok(())
 }
 
 pub(super) fn resolve_package_transport_closure<S: ImmutableObjectStore + ?Sized>(
@@ -2527,11 +2949,28 @@ fn replace_head(
         ));
     }
     inject(fault, PublicationPoint::AfterHeadRenamed)?;
-    root_directory.sync_all().map_err(|error| {
+    sync_visible_head(root_directory, fault)
+}
+
+fn sync_visible_head(
+    root_directory: &File,
+    fault: Option<PublicationPoint>,
+) -> Result<(), Diagnostic> {
+    #[cfg(test)]
+    let result = if fault == Some(PublicationPoint::HeadDirectorySyncFailed) {
+        Err(std::io::Error::other(
+            "injected HEAD directory sync failure",
+        ))
+    } else {
+        root_directory.sync_all()
+    };
+    #[cfg(not(test))]
+    let result = root_directory.sync_all();
+    result.map_err(|error| {
         repository_error(
             DiagnosticClass::Infrastructure,
             "publication_repository_visibility_indeterminate",
-            format!("HEAD rename succeeded but directory durability is indeterminate: {error}"),
+            format!("HEAD is visible but directory durability is indeterminate: {error}"),
         )
     })?;
     inject(fault, PublicationPoint::AfterHeadDirectorySynced)
@@ -2624,4 +3063,168 @@ fn repository_error(
     message: impl Into<String>,
 ) -> Diagnostic {
     Diagnostic::new(class, code, message)
+}
+
+#[cfg(test)]
+mod candidate_reference_admission_tests {
+    use super::*;
+    use crate::platform::storage::memory::MemoryPackedStore;
+
+    #[test]
+    fn unchanged_publication_page_cannot_relabel_its_content_root() {
+        use crate::platform::persistent_map::{MapContentDigest, PageDigest};
+        let base = MapRoot::from_parts(
+            PageDigest::from_bytes([1; 32]),
+            1,
+            MapContentDigest::from_bytes([2; 32]),
+        );
+        let candidate = MapRoot::from_parts(
+            base.page(),
+            base.entries(),
+            MapContentDigest::from_bytes([3; 32]),
+        );
+        let store = MemoryPackedStore::default();
+        let reader = ObjectPageReader::new(&store);
+        let mut called = false;
+        let error = for_each_new_publication_map_entry(
+            &reader,
+            Some(base),
+            candidate,
+            &mut MapWork::default(),
+            &mut |_, _| {
+                called = true;
+                Ok(())
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "publication_repository_object_bytes");
+        assert!(!called);
+        assert_eq!(reader.work(), StoreWork::default());
+    }
+
+    #[test]
+    fn consecutive_map_roots_share_exact_admission_before_next_page_read() {
+        let mut pages = MemoryPageStore::default();
+        let map = PersistentMap::from_sorted(
+            &mut pages,
+            [(b"key".to_vec(), b"value".to_vec())],
+            &mut MapWork::default(),
+        )
+        .unwrap();
+        let mut store = MemoryPackedStore::default();
+        for (digest, bytes) in pages.objects() {
+            store
+                .stage(
+                    ObjectKey::from_digest(ObjectDomain::MapPage, digest.bytes()),
+                    bytes,
+                    &mut StoreWork::default(),
+                )
+                .unwrap();
+        }
+        let limits = CanonicalReadAdmission::default();
+        let admission = CandidateReferenceAdmission::new(limits);
+        let reader = ObjectPageReader::new_shared_admission(&store, &admission.reads);
+        let page_bytes = pages
+            .objects()
+            .map(|(_, bytes)| bytes.len() as u64)
+            .sum::<u64>();
+        let mut work = MapWork::with_admission(MapAdmission {
+            maximum_pages_read: 2,
+            maximum_bytes_read: 2 * page_bytes,
+            maximum_entries_visited: 2,
+            maximum_pages_encoded: 0,
+            maximum_bytes_encoded: 0,
+        });
+        let mut visits = 0;
+        let mut visit = |key: &[u8], value: &[u8]| {
+            assert_eq!(key, b"key");
+            assert_eq!(value, b"value");
+            visits += 1;
+            Ok(())
+        };
+        for _ in 0..2 {
+            for_each_new_publication_map_entry(&reader, None, map.root(), &mut work, &mut visit)
+                .unwrap();
+        }
+        let before = reader.work();
+        let error =
+            for_each_new_publication_map_entry(&reader, None, map.root(), &mut work, &mut visit)
+                .unwrap_err();
+        assert_eq!(error.code, "persistent_map_admission_pages_read");
+        assert_eq!(
+            reader.work(),
+            before,
+            "shared page refusal precedes the next store read"
+        );
+        assert_eq!(visits, 2);
+    }
+
+    #[test]
+    fn shared_reference_reads_admit_exact_bytes_and_refuse_before_next_copy() {
+        for sealed in [false, true] {
+            let bytes = b"reference payload";
+            let key = ObjectKey::for_bytes(ObjectDomain::Blob, bytes);
+            let mut store = MemoryPackedStore::default();
+            store.stage(key, bytes, &mut StoreWork::default()).unwrap();
+            if sealed {
+                store
+                    .seal_staged(TARGET_PACK_BYTES, &mut StoreWork::default())
+                    .unwrap();
+            }
+            for short_bytes in [false, true] {
+                let admission = CandidateReferenceAdmission::new(CanonicalReadAdmission {
+                    maximum_catalog_lookups: 2,
+                    maximum_objects: 2,
+                    maximum_bytes: 2 * bytes.len() as u64 - u64::from(short_bytes),
+                    maximum_decoded_records: 2,
+                    ..Default::default()
+                });
+                let mut work = StoreWork::default();
+                assert_eq!(
+                    read_candidate_required(
+                        &store,
+                        key.domain,
+                        key.digest.bytes(),
+                        &mut work,
+                        &admission
+                    )
+                    .unwrap(),
+                    bytes
+                );
+                let result = read_candidate_required(
+                    &store,
+                    key.domain,
+                    key.digest.bytes(),
+                    &mut work,
+                    &admission,
+                );
+                if short_bytes {
+                    assert_eq!(result.unwrap_err().code, "object_read_bytes_exhausted");
+                    assert_eq!(work.objects_read, 1);
+                    assert_eq!(work.bytes_read, bytes.len() as u64);
+                } else {
+                    assert_eq!(result.unwrap(), bytes);
+                    assert_eq!(work.objects_read, 2);
+                    assert_eq!(work.bytes_read, 2 * bytes.len() as u64);
+                }
+                let before = work;
+                assert_eq!(
+                    read_candidate_required(
+                        &store,
+                        key.domain,
+                        key.digest.bytes(),
+                        &mut work,
+                        &admission
+                    )
+                    .unwrap_err()
+                    .code,
+                    "publication_repository_reference_visits_exhausted"
+                );
+                assert_eq!(
+                    work, before,
+                    "visit refusal must precede even the next lookup"
+                );
+            }
+        }
+    }
 }

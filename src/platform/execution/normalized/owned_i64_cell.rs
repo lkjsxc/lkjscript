@@ -107,6 +107,15 @@ impl OwnedI64Cell {
     pub(super) fn owns_live_loans(&self) -> bool {
         self.mode == Mode::Owner && self.lock().loans != 0
     }
+    pub(super) fn adopt_transfer(
+        &mut self,
+        source: ValueOrigin,
+        destination: ValueOrigin,
+    ) -> Result<(), ExecutionError> {
+        self.validate(source, true)?;
+        self.domain = destination;
+        Ok(())
+    }
     pub(super) fn borrow(&self) -> Result<Self, ExecutionError> {
         self.validate(self.domain, false)?;
         let mut storage = self.lock();

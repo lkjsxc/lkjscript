@@ -65,6 +65,8 @@ mod effect_admission_tests {
 mod declarations;
 mod mutation;
 pub(super) mod owned;
+#[cfg(test)]
+mod record_order_tests;
 pub use owned::{
     AuthoredImplementationOperand, AuthoredImplementationParameter, AuthoredOwnedMethod,
 };
@@ -334,6 +336,10 @@ pub struct AuthoredExpression {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredExpressionOperation {
+    Parallel {
+        left: Box<AuthoredExpression>,
+        right: Box<AuthoredExpression>,
+    },
     ChooseOwned {
         choice_type: AuthoredType,
         case: Name,
@@ -585,6 +591,10 @@ pub(super) fn collect_expression_symbols(
         let next = depth + 1;
         // Reverse pushes preserve the original preorder and per-kind allocation ordinals.
         match &expression.operation {
+            AuthoredExpressionOperation::Parallel { left, right } => {
+                stack.push(Visit::Expression(right, next));
+                stack.push(Visit::Expression(left, next));
+            }
             AuthoredExpressionOperation::If {
                 condition,
                 when_true,
@@ -1086,6 +1096,12 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
     ) -> Result<crate::platform::semantic_id::ExpressionId, Diagnostic> {
         let id = self.expression_identity(authored.symbol.as_deref())?;
         let operation = match &authored.operation {
+            AuthoredExpressionOperation::Parallel { left, right } => {
+                ExpressionOperation::Parallel {
+                    left: self.lower_expression(left)?,
+                    right: self.lower_expression(right)?,
+                }
+            }
             AuthoredExpressionOperation::ImplementationCall {
                 function,
                 type_arguments,
@@ -1328,14 +1344,60 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                         value: self.lower_expression(&field.value)?,
                     });
                 }
-                lowered.sort_by(|left, right| left.selector.cmp(&right.selector));
-                ExpressionOperation::Record {
-                    type_arguments: self.lower_types(type_arguments)?,
-                    nominal_type: nominal_type
-                        .as_ref()
-                        .map(|value| self.lower_declaration_reference(value))
-                        .transpose()?,
-                    fields: lowered,
+                let type_arguments = self.lower_types(type_arguments)?;
+                let nominal_type = nominal_type
+                    .as_ref()
+                    .map(|value| self.lower_declaration_reference(value))
+                    .transpose()?;
+                if lowered
+                    .windows(2)
+                    .any(|pair| pair[0].selector > pair[1].selector)
+                {
+                    // Canonical selectors describe record layout, not initializer order.
+                    // Ordinary lexical bindings evaluate each initializer once in authored
+                    // order; the canonical record then reads only those retained values.
+                    let mut bindings = Vec::with_capacity(lowered.len());
+                    for field in &mut lowered {
+                        let binding = self.generated_record_binding_identity()?;
+                        self.insert_created(OwnerRecord::Binding(
+                            crate::platform::kernel::BindingRecord {
+                                header: OwnerHeader::new(
+                                    OwnerKey::Binding(binding),
+                                    OwnerKind::Binding,
+                                ),
+                                name: Name::new("record-field")?,
+                                kind: crate::platform::kernel::BindingKind::Let,
+                                value: Some(field.value),
+                                declared_type: None,
+                            },
+                        ))?;
+                        let local = self.expression_identity(None)?;
+                        self.insert_created(OwnerRecord::Expression(ExpressionRecord::new(
+                            local,
+                            ExpressionOperation::Local {
+                                value: LocalValueReference::LexicalBinding(binding),
+                            },
+                        )?))?;
+                        bindings.push(binding);
+                        field.value = local;
+                    }
+                    lowered.sort_by(|left, right| left.selector.cmp(&right.selector));
+                    let body = self.expression_identity(None)?;
+                    self.insert_created(OwnerRecord::Expression(ExpressionRecord::new(
+                        body,
+                        ExpressionOperation::Record {
+                            type_arguments,
+                            nominal_type,
+                            fields: lowered,
+                        },
+                    )?))?;
+                    ExpressionOperation::Let { bindings, body }
+                } else {
+                    ExpressionOperation::Record {
+                        type_arguments,
+                        nominal_type,
+                        fields: lowered,
+                    }
                 }
             }
             AuthoredExpressionOperation::Variant {
@@ -1442,6 +1504,46 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             id, operation,
         )?))?;
         Ok(id)
+    }
+
+    fn generated_record_binding_identity(&mut self) -> Result<BindingId, Diagnostic> {
+        let count = self
+            .work
+            .allocated_identities
+            .checked_add(1)
+            .ok_or_else(|| {
+                request_error(
+                    DiagnosticClass::Resource,
+                    "change_budget_allocated_identities",
+                    "allocated identity observation overflowed",
+                )
+            })?;
+        self.budget
+            .check_allocated_identities(usize::try_from(count).unwrap_or(usize::MAX))?;
+        // Initial allocations are sorted by domain/ordinal; subsequent generated bindings
+        // append in increasing order, sharing the existing binding allocation domain.
+        let ordinal = self
+            .allocations
+            .iter()
+            .rev()
+            .find(|allocation| allocation.domain == crate::platform::kernel::IdentityKind::Binding)
+            .map_or(0, |allocation| allocation.ordinal)
+            .checked_add(1)
+            .ok_or_else(|| {
+                request_error(
+                    DiagnosticClass::Resource,
+                    "change_authored_allocation_ordinal",
+                    "generated record binding allocation ordinal was exhausted",
+                )
+            })?;
+        let binding = BindingId::allocate(&self.allocation_seed, ordinal);
+        self.work.allocated_identities = count;
+        self.allocations.push(super::AuthoredAllocation {
+            domain: crate::platform::kernel::IdentityKind::Binding,
+            ordinal,
+            owner: OwnerKey::Binding(binding),
+        });
+        Ok(binding)
     }
 
     fn lower_types(

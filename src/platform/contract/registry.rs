@@ -107,7 +107,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-19";
 pub const REGISTRY_CONTRACT_VERSION: u16 = 19;
-pub const CLI_CONTRACT_VERSION: u16 = 34;
+pub const CLI_CONTRACT_VERSION: u16 = 35;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -185,11 +185,12 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
         "transaction-outcome",
         "(transaction-outcome REQUIREMENT (types TYPE) (outcome OUTCOME REASON COMMITTED ABORTED CONDITION-FAILED CONFLICT) (binding NAME) BODY)",
     ),
+    ("parallel", "(parallel LEFT-CALL RIGHT-CALL)"),
 ];
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-function-definition-projection-10";
-pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 10;
+    "lkjscript-function-definition-projection-11";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 11;
 pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
 pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
 pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -731,8 +732,8 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
             magic_values: &[
-                "LKJOWN20", "LKJOWN19", "LKJOWN18", "LKJOWN17", "LKJOWN16", "LKJOWN15", "LKJOWN14",
-                "LKJSMR01", "LKJDEP14", "LKJRET14",
+                "LKJOWN21", "LKJOWN20", "LKJOWN19", "LKJOWN18", "LKJOWN17", "LKJOWN16", "LKJOWN15",
+                "LKJOWN14", "LKJSMR01", "LKJDEP14", "LKJRET14",
             ],
             digest_domains: &[
                 super::super::kernel::contract::OWNER_ENVELOPE_DOMAIN,
@@ -2291,6 +2292,12 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Semantic,
             "An authenticated accepted request cannot be revalidated under the current validator; its original result and idempotency binding remain intact.",
             "Inspect the historical result and repair the current canonical program through a new reviewed request. Re-plan old prepared tokens; the existing key cannot publish a second result.",
+        ),
+        diagnostic(
+            "publication_repository_reference_visits_exhausted",
+            DiagnosticClass::Resource,
+            "Candidate publication reference checks exhausted their aggregate preparation allowance before HEAD replacement.",
+            "Reduce the publication's changed closure or use a compatible implementation with sufficient preparation capacity; retain the current accepted HEAD.",
         ),
         diagnostic(
             "publication_history_limit",
@@ -4156,6 +4163,36 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Check nominal contract identity, Owned Self, exact monomorphic method signatures and closed effect rows, task-only consumption, caller allowances and lexical witness scope.",
         ),
         diagnostic(
+            "kernel_parallel_call",
+            DiagnosticClass::Semantic,
+            "A structured child is not an exact monomorphic empty-effect graph task with transferable input and closed ordinary output.",
+            "Use direct named task calls with ordinary data first and consuming owned arguments last; keep resources, loans, secrets and callables outside the child boundary.",
+        ),
+        diagnostic(
+            "kernel_parallel_context",
+            DiagnosticClass::Semantic,
+            "A pure computation attempts to execute structured child tasks.",
+            "Declare the enclosing computation as a task; an empty effect row does not make a task pure.",
+        ),
+        diagnostic(
+            "kernel_parallel_result",
+            DiagnosticClass::Semantic,
+            "A structured child result differs from its exact declared result type.",
+            "Preserve each child's canonical result type through its call and the joined structural record.",
+        ),
+        diagnostic(
+            "compiler_parallel_call",
+            DiagnosticClass::Corrupt,
+            "Canonical structured children disagree with direct monomorphic call lowering.",
+            "Preserve the rejected input and rebuild from fully validated accepted meaning.",
+        ),
+        diagnostic(
+            "kernel_parallel_generation",
+            DiagnosticClass::Semantic,
+            "A parallel expression is labeled with a predecessor meaning generation.",
+            "Author parallel meaning under Graph 21 and rebuild derived artifacts from accepted source.",
+        ),
+        diagnostic(
             "kernel_owned_choice",
             DiagnosticClass::Semantic,
             "An owned choice violates its exact payload, case coverage, scope or ownership contract.",
@@ -4370,6 +4407,48 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Resource,
             "Fresh memory invocation identity could not be reserved.",
             "Preserve the failure; invocation memory identity cannot be reused.",
+        ),
+        diagnostic(
+            "normalized_parallel_transfer",
+            DiagnosticClass::Semantic,
+            "A structured transfer has mismatched program, target, type, invocation identity or live ownership.",
+            "Transfer only exact consumed child inputs without outstanding loans; preserve the failure instead of retrying a disposed owner.",
+        ),
+        diagnostic(
+            "normalized_parallel_transfer_items",
+            DiagnosticClass::Resource,
+            "Structured nested ownership admission exceeds its finite traversal capacity.",
+            "Reduce the payload/type closure; rejected transfer retains one cleanup custodian.",
+        ),
+        diagnostic(
+            "normalized_parallel_depth",
+            DiagnosticClass::Resource,
+            "Structured child nesting exceeds the evaluator's native-stack capacity.",
+            "Reduce simultaneous nested task groups; this capacity is independent of cumulative instruction quotas.",
+        ),
+        diagnostic(
+            "normalized_parallel_origin",
+            DiagnosticClass::Resource,
+            "A fresh structured child memory identity could not be reserved.",
+            "Preserve the failure; child identity cannot be reused or replaced by its parent's identity.",
+        ),
+        diagnostic(
+            "normalized_parallel_arguments",
+            DiagnosticClass::Resource,
+            "Structured argument storage exceeds finite representable admission.",
+            "Reduce the exact child argument list; no partially admitted child can begin.",
+        ),
+        diagnostic(
+            "normalized_parallel_spawn",
+            DiagnosticClass::Resource,
+            "The host could not create an admitted structured worker.",
+            "Preserve the allocation failure; sealed inputs are cleaned and no child work is retried automatically.",
+        ),
+        diagnostic(
+            "normalized_parallel_worker",
+            DiagnosticClass::Infrastructure,
+            "A structured worker terminated unexpectedly.",
+            "Preserve the failure and joined cleanup evidence; no automatic retry is performed.",
         ),
         diagnostic(
             "kernel_affine_resource_parameter_use",
@@ -8407,6 +8486,11 @@ fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String
             "each syntactic occurrence owns a distinct expression; only let reuses an evaluated value; preserve authored argument, sequence, field and map-entry order, callee-before-arguments and selected-branch evaluation",
         ),
         (
+            "structured-parallel-tasks",
+            "(parallel (call LEFT-TASK EXPR...) (call RIGHT-TASK EXPR...))",
+            "task-only lexical scope; direct monomorphic graph tasks with closed empty effect rows; closed data parameters before consuming owned parameters; evaluate left then right arguments once in the parent, transfer exact owned custody to fresh child invocations, join both children before returning closed data fields left and right; no borrowed inputs, capabilities, detached lifetime or child quota reset",
+        ),
+        (
             "normalization",
             "flat|block",
             "equivalent normalized authored trees preserve canonical intent, request commitments and same-base plans; preserve semantic Names, optional annotations and explicit applications; formatting, comments and request labels are not meaning",
@@ -8991,9 +9075,9 @@ mod tests {
             .expect("definition projection contract");
         assert_eq!(
             contract.identity,
-            "lkjscript-function-definition-projection-10"
+            "lkjscript-function-definition-projection-11"
         );
-        assert_eq!(contract.version, 10);
+        assert_eq!(contract.version, 11);
         assert_eq!(
             contract_descriptors()
                 .iter()

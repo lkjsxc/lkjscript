@@ -178,6 +178,176 @@ fn native_failure_state_model_and_restart() {
         assert!(select(&prefix, "v0.1.34").is_ok(), "{point}");
     }
 }
+
+#[test]
+fn native_retained_slot_recovery_syncs_versions_before_selection_or_success() {
+    struct SyncTrace {
+        prefix: PathBuf,
+        previous: PathBuf,
+        fail: bool,
+        events: std::cell::RefCell<Vec<&'static str>>,
+    }
+    impl Checkpoints for SyncTrace {
+        fn sync_versions(&self, versions: &File) -> Result<(), Diagnostic> {
+            let expected = fs::metadata(self.prefix.join("lib/lkjscript/versions")).unwrap();
+            let observed = versions.metadata().unwrap();
+            assert_eq!(
+                (observed.dev(), observed.ino()),
+                (expected.dev(), expected.ino())
+            );
+            assert_eq!(
+                fs::read_link(self.prefix.join("bin/lkjscript")).unwrap(),
+                self.previous
+            );
+            self.events.borrow_mut().push("versions-sync");
+            if self.fail {
+                return Err(io_error(
+                    "injected versions-directory synchronization failure",
+                ));
+            }
+            super::fs::sync(versions)?;
+            self.events.borrow_mut().push("versions-synced");
+            Ok(())
+        }
+        fn at(&self, point: &'static str) -> Result<(), Diagnostic> {
+            assert_ne!(
+                point, "after-version-publish",
+                "retained slot was republished"
+            );
+            if point == "before-pointer-replace" {
+                assert_eq!(self.events.borrow().last(), Some(&"after-version-sync"));
+                assert_eq!(
+                    fs::read_link(self.prefix.join("bin/lkjscript")).unwrap(),
+                    self.previous
+                );
+            }
+            if matches!(
+                point,
+                "after-version-sync"
+                    | "before-pointer-replace"
+                    | "after-pointer-replace"
+                    | "after-pointer-sync"
+            ) {
+                self.events.borrow_mut().push(point);
+            }
+            Ok(())
+        }
+    }
+    // Recovery also has to synchronize when no pointer replacement is requested.
+    for (activate, select) in [(false, false), (true, false), (true, true)] {
+        let temp = tempfile::tempdir().unwrap();
+        let prefix = temp.path().join("prefix");
+        let (old, old_digest) = archive(temp.path(), "v0.1.32");
+        install(&prefix, &old, &old_digest, true).unwrap();
+        let previous = fs::read_link(prefix.join("bin/lkjscript")).unwrap();
+        let (archive, digest) = archive(temp.path(), "v0.1.34");
+        let interrupted = install_with(
+            &prefix,
+            &archive,
+            &digest,
+            true,
+            &Fail("after-version-publish"),
+        )
+        .unwrap_err();
+        assert_eq!(interrupted.message, "injected after-version-publish");
+        let slot = prefix.join("lib/lkjscript/versions/v0.1.34/x86_64-unknown-linux-musl");
+        let retained = PAYLOADS
+            .into_iter()
+            .chain(std::iter::once(RECEIPT))
+            .map(|name| {
+                let path = slot.join(name);
+                let metadata = fs::metadata(&path).unwrap();
+                (
+                    name,
+                    metadata.dev(),
+                    metadata.ino(),
+                    fs::read(path).unwrap(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let assert_retained = || {
+            for (name, dev, ino, bytes) in &retained {
+                let path = slot.join(name);
+                let metadata = fs::metadata(&path).unwrap();
+                assert_eq!((metadata.dev(), metadata.ino()), (*dev, *ino));
+                assert_eq!(fs::read(path).unwrap(), *bytes);
+            }
+        };
+        let recover = |points: &dyn Checkpoints| {
+            if select {
+                select_with(&prefix, "v0.1.34", points)
+            } else {
+                install_with(&prefix, &archive, &digest, activate, points)
+            }
+        };
+        let trace = |fail, previous| SyncTrace {
+            prefix: prefix.clone(),
+            previous,
+            fail,
+            events: std::cell::RefCell::new(Vec::new()),
+        };
+        for _ in 0..2 {
+            let failed = trace(true, previous.clone());
+            let error = recover(&failed).unwrap_err();
+            assert_eq!(error.code, "runtime_io");
+            assert!(
+                error
+                    .message
+                    .contains("versions-directory synchronization failure")
+            );
+            assert!(
+                error
+                    .notes
+                    .iter()
+                    .any(|note| note.contains("durability uncertain"))
+            );
+            assert_eq!(*failed.events.borrow(), ["versions-sync"]);
+            assert_eq!(
+                fs::read_link(prefix.join("bin/lkjscript")).unwrap(),
+                previous
+            );
+            assert_retained();
+        }
+        let succeeded = trace(false, previous.clone());
+        let result = recover(&succeeded).unwrap();
+        assert_eq!(result.version.archive_sha256, digest);
+        assert_eq!(
+            result.outcome,
+            if select {
+                "selected"
+            } else {
+                "already-installed"
+            }
+        );
+        assert_eq!(result.previous.as_deref(), Some("v0.1.32"));
+        assert_eq!(
+            result.selected.as_deref(),
+            Some(if activate { "v0.1.34" } else { "v0.1.32" })
+        );
+        let mut expected = vec!["versions-sync", "versions-synced", "after-version-sync"];
+        if activate {
+            expected.extend([
+                "before-pointer-replace",
+                "after-pointer-replace",
+                "after-pointer-sync",
+            ]);
+        }
+        assert_eq!(*succeeded.events.borrow(), expected);
+        assert_retained();
+
+        // Already selected/idempotent recovery must still fail if the sync fails.
+        let observed = fs::read_link(prefix.join("bin/lkjscript")).unwrap();
+        let failed = trace(true, observed.clone());
+        assert_eq!(recover(&failed).unwrap_err().code, "runtime_io");
+        assert_eq!(*failed.events.borrow(), ["versions-sync"]);
+        assert_eq!(
+            fs::read_link(prefix.join("bin/lkjscript")).unwrap(),
+            observed
+        );
+        assert_retained();
+    }
+}
+
 #[test]
 fn native_prefix_conflicts_never_touch_unrelated_sentinels() {
     let temp = tempfile::tempdir().unwrap();

@@ -6,6 +6,8 @@ mod recursive_tests;
 #[path = "f64_codec_tests.rs"]
 mod f64_codec_tests;
 
+#[path = "data_codec_limits_tests.rs"]
+mod data_codec_limits_tests;
 #[path = "map_codec_tests.rs"]
 mod map_codec_tests;
 
@@ -63,6 +65,8 @@ mod owned_task_method_fixture;
 mod owned_task_method_tests;
 #[path = "owned_task_tests.rs"]
 mod owned_task_tests;
+#[path = "parallel_tests.rs"]
+mod parallel_tests;
 
 #[path = "local_moves_value_tests.rs"]
 mod local_moves_value_tests;

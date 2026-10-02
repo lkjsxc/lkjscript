@@ -37,6 +37,9 @@ use crate::platform::witness::{NamespaceKey, OwnershipParent};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+#[path = "repository_durability_closure_tests.rs"]
+mod durability_closure_tests;
+
 fn non_builtin_source_with_standard() -> (ExportedPackageTransport, ExportedPackageTransport) {
     let standard = GraphRepository::open(
         &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard"),

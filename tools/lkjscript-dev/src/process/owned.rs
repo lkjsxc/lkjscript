@@ -50,6 +50,9 @@ impl Owned {
         let mut failures = Vec::new();
         remember(self.descendants.sample(), &mut failures);
         let mut survivors = remember(self.descendants.has_live(), &mut failures).unwrap_or(false);
+        // Discovery, including the finite cleanup reserve, and descendant-first
+        // signals precede ancestor/group termination. Errors remain failures but
+        // never suppress best-effort termination of already owned identities.
         remember(self.descendants.terminate(), &mut failures);
         remember(self.signal(Signal::KILL), &mut failures);
         // A direct child may have changed its group. Its unreaped PID is still ours.

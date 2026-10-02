@@ -84,7 +84,7 @@ source-free package artifacts, illegal loans, raw boundaries, traps, cancellatio
 and allocation refusal. A test design is not an acceptance result; current run
 outcomes belong to the campaign and release owners.
 
-The next distinct boundary is a bounded structured in-process handoff with explicit
-acceptance, owner-returning refusal, receiver failure and joined cancellation.
-There is no asynchronous memory transfer, channel or new shared-runtime scheduler
-in this increment.
+Development 0.1.68 adds a separate [structured parallel boundary](structured-parallel.md):
+two exact empty-effect child tasks consume owned inputs under fresh invocation
+identities and join before continuation. The same-task rules above remain intact.
+Channels, owner-returning send refusal and receiver lifecycle remain separate work.

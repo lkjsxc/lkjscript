@@ -29,319 +29,33 @@ compiler caches into source or make generated artifacts editable semantic author
 Current public availability belongs to [status](status.md#public-binary-v0164).
 The completed v0.1.64 publication is recorded in the
 [owned-choice continuation](campaigns/20261002-owned-choices.md#completed-v0164-publication).
-Historical selections below retain their original sources and evidence; they are
-not instructions to restart completed releases.
+Historical selections remain in their original archives and the linked immutable
+procedure revision; they are not instructions to restart completed releases.
 
-Historical delivery observation (2026-10-01): **v0.1.60** was immutable public/latest,
-release `400357606`, published at 04:10:53 JST. Original producer `36617982924/1`
-was accepted at source `2962c43f`; promotion `36763094941/1` completed at 04:12:24 JST
-with `immutable_published_and_public_verified`. Anonymous exact/latest acquisition,
-release attestations and the actual installed lifecycle passed. The
-[publication observation](campaigns/20260930-descendant-inventory.md#completed-v0160-publication)
-records the unchanged annotated tag, exact original/public three-asset comparison
-and terminal evidence. No duplicate producer, new build, prior-asset rewrite or
-protection/credential change was used. Later v0.1.61 development is not in this binary.
+## Selected structured-parallel successor v0.1.68
 
-The earlier [v0.1.52 delivery](campaigns/202609281010.md#already-accepted-v0152-publication-continuation)
-and [v0.1.53 shared-host delivery](campaigns/202609281356.md#completed-v0153-publication)
-retain their original failures, corrections and successful publications. In
-particular, failed history-only producer `36368771474/1` was never promoted.
-The [v0.1.55 generic-resource continuation](campaigns/202609281735.md) reached main
-at corrected source `320dacc0` after all 26 full-profile gates passed freshly with
-stable inputs. Its candidate, final-archive cases and unchanged-asset publication
-are complete. The [v0.1.57 package continuation](campaigns/202609290026.md) combines
-the separately accepted v0.1.56 recursion increment with exact public-library
-resource contracts. Corrected source `3438e2ed` passed all 26 fresh full-profile
-gates with stable inputs and reached main normally. Producer `36461408308/1` has
-completed with `candidate_accepted`; its original successful evidence is retained.
-The separate v0.1.57 publication is now explicitly superseded by the
-[consolidated v0.1.60 selection](campaigns/20260930-byte-buffer-reuse.md#revised-publication-selection-consolidate-v0160).
-The old candidate lacks the later demonstrated affine proof-work correction and
-subsequent composition/storage changes. Its additional 16 final-archive native cases
-are not claimed as executed, and no v0.1.57 tag or promotion is created.
+The [0.1.68 notes](releases/v0.1.68.md) consolidate same-task owned calls and methods,
+runtime mailbox custody and lexical parallel owned tasks. The
+[current status](status.md) records tested source, mainline integration and the
+exact candidate run/attempt; original early development evidence remains in the
+[parallel archive](campaigns/20261002-structured-parallel.md). After fresh
+full-source acceptance and copied-host native package evidence, dispatch one normal
+non-publishing candidate from the integrated source. Preserve every existing source,
+finalized-archive, installed-recovery, pinned-userland and original-reader obligation.
 
-Source `0f0f4d92` integrates reusable byte storage on top of those corrections and
-passed all 26 full-profile gates freshly with stable inputs and zero reuse. Its
-retained final optimized executable also passed the native byte/map cases. The
-[v0.1.60 notes](releases/v0.1.60.md) define the selected successor. Its own exact
-source/final-archive acceptance and supplementary public-case filters preceded the
-completed unchanged-asset promotion recorded above. Source acceptance alone is not
-publication or acceptance of another tree.
-After the notes/reporting descendant `89241cd3` reached main, one candidate
-`36605595167/1` was dispatched from that exact source on 2026-09-30 at 02:31:54 JST.
-That original run ended in failure at 03:23:21 JST: 19 source gates passed, while
-`workspace_tests` exhausted the contributor's historical descendant inventory.
-The [inventory correction](campaigns/20260930-descendant-inventory.md) preserves its
-original diagnostics and addresses the verifier defect without raising the bounds.
-The failed producer cannot be promoted or relabeled under a corrected verifier.
-Corrected source `2962c43f` passed all 26 full-profile gates freshly with stable
-inputs, reached main normally, and is the exact source of successor candidate
-`36617982924/1`, dispatched on 2026-09-30 at 04:15:47 JST. It completed at 05:11:11 JST
-with `candidate_accepted`. The original terminal and essential acceptance artifacts
-were authenticated against GitHub repository/run/attempt and service archive digests;
-they bind source `2962c43f`, 20 source gates, six target owners, two pinned userlands
-and joined installation/recovery. Original asset, archive and extracted executable
-identities agree. All 40 selected supplementary final-archive cases then passed with
-complete termination and no publishing credentials. Annotated object `1ed78aae`
-selects accepted source `2962c43f`; its verbatim notes and remote object were compared,
-and the existing release-only selector was updated and read back. Those original
-acceptance and selection observations are retained unchanged. The
-[completed delivery](campaigns/20260930-descendant-inventory.md#completed-v0160-publication)
-subsequently promoted the same candidate without rebuilding it; v0.1.60 became
-immutable public/latest at that observation.
+Before promotion, run the source-matched public harness against the exact executable
+extracted from that accepted archive. Select all cases matching `native_owned_`,
+`native_byte_buffer_`, `native_byte_ranges_`, `resident_policy` and `native_parallel`,
+plus the exact `copied_binary_authors_builds_and_serves_interactive_topology_from_minimal`
+case. Record the enumerated inventory and require zero failed, ignored or skipped
+selected cases. Preserve executable bytes and run with the cleared-environment
+candidate harness outside the compiler checkout. Development-host proof does not
+substitute for this final-byte boundary. Then use the existing explicitly selected
+unchanged-asset promotion and anonymous acquisition owners; do not change credentials,
+protections, immutability, old tags or prior assets.
 
-Immutable [v0.1.38](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.38) already publishes source
-`7083f9a6d56ed702017942e100c3696fc6f35308`. Publisher
-[35117655769/1](https://github.com/lkjsxc/lkjscript/actions/runs/35117655769) passed all four hosted
-jobs, including anonymous exact/latest installed application acceptance and attestations. Its separate
-later manual original-reader closure was not performed by the current campaign. That historical gap
-does not make the release unavailable or create a recurring reconstruction obligation. Genuine
-v0.1.36/v0.1.37 failures remain in the [delivery history](campaigns/202609151412.md) and
-[numerical milestone ending](campaigns/202609162154.md). The
-[former procedure](https://github.com/lkjsxc/lkjscript/blob/108ca2777fc202b543f48816a99b7db519542f97/docs/release.md)
-describes those frozen producers; the procedure below governs new candidates only.
-
-The [cutover campaign](campaigns/202609180007.md) selected non-publishing candidate and read-only
-consumer proof. The explicit release requests in the [v0.1.39 lineage](campaigns/202609201910.md)
-have fired its public-delivery trigger. The [delivery continuation](campaigns/202609210911.md)
-published accepted producer `35508727722/1` at `b05e9e12133ef625b33462123468b9b896885dd4`
-unchanged as immutable v0.1.39 on 2026-09-21T23:49:32Z. Resumption `35668854407/1` completed
-selection, publication, anonymous acquisition/installed smoke and terminal jobs. Its candidate
-job was intentionally skipped; the original producer remains authoritative. A private candidate built with occupied version 0.1.38
-is never the public v0.1.38 release.
-
-The [native-authoring milestone](campaigns/202609220955.md) selects successor v0.1.40.
-Source `1cdaf72888a1f46359a6d38956050747335f8e32` passed the local source tier and reached main.
-Producer [35685667968/1](https://github.com/lkjsxc/lkjscript/actions/runs/35685667968) passed hosted
-source/finalized-candidate acceptance and its terminal. The [delivery continuation](campaigns/202609221813.md)
-created the matching annotated tag and scoped selection, then dispatched promotion
-[35711837606/1](https://github.com/lkjsxc/lkjscript/actions/runs/35711837606) from controller
-`dd160c0e93fa15f895cbb9c3f65538b238a1f742`. It completed authenticated selection, immutable
-publication, anonymous exact/latest acquisition and installed lifecycles, and its terminal.
-[v0.1.40](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.40), release `393611808`, was published
-at 2026-09-22T09:49:23Z with the original three assets unchanged. Both public routes selected this
-product. The consumer's candidate job was intentionally skipped; no product or controller repair
-or candidate rebuild was needed. The supplementary
-[native-authoring observation](evidence/202609220955-native/public-v0.1.40/README.md) passed through
-the anonymously acquired installed exact executable: complete declaration creation, canonical
-drafting without the original input, tamper rejection, reviewed identity-preserving edit and detached
-old/new bundle execution. This bounded observation supplements the maintained installed pair;
-development evidence retains its original identities and limits.
-
-The [composable-cell milestone](campaigns/202609221952.md) selects v0.1.41 after observing its tag
-and release unoccupied. Its native standard participant and standalone wrapper, strict DataStore
-guard, maintained wrapper adoption and compatibility fixtures are implemented. Focused proof is
-recorded at the [campaign evidence owner](evidence/202609221952-cells/README.md). Corrected source
-`b52f51bd334dc71462e46c298dea12454f59ed6f` passed all 20 fresh release-source gates and reached
-remote main unchanged. Candidate [35725872480/1](https://github.com/lkjsxc/lkjscript/actions/runs/35725872480)
-was dispatched from that exact source on 2026-09-22T12:13:06Z and failed at service admission:
-its verifier still pinned the predecessor application artifact. No accepted candidate handoffs
-were uploaded. The continuation repairs that pin and preserves service originals alongside
-the existing candidate diagnostics. Corrected source
-`c78840a74ce19ad5145e1e23ca5ff2b2a7198c0f` passed all 20 fresh source gates with
-stable inputs and zero reuse, then reached remote main unchanged. Replacement
-candidate [35798767360/1](https://github.com/lkjsxc/lkjscript/actions/runs/35798767360)
-was superseded during source acceptance for a subsequently reproduced public
-deployment-discovery defect: four required nullable fields were advertised as
-omittable. The [autonomous continuation](campaigns/202609222330.md) corrects the
-schema inventory while preserving strict descriptor/runtime behavior and requests
-cancellation of that unaccepted producer; it ended cancelled with an incomplete
-terminal. Corrected source `346c0366bde29151952a19332cb540681ad7bc7c` passes all 20
-fresh source gates with stable inputs and zero reuse, and reached remote main
-unchanged. Candidate [35801102943/1](https://github.com/lkjsxc/lkjscript/actions/runs/35801102943)
-completed source, finalized-candidate and original-reader acceptance and its terminal
-at that exact product/controller source on 2026-09-23T01:55:07Z. Its annotated
-v0.1.41 tag and explicitly authorized scoped selection bind that product.
-Promotion [35809096928/1](https://github.com/lkjsxc/lkjscript/actions/runs/35809096928),
-from controller `677aa75010a587b0344f4fc2a71962ea56b7abd0`, completed selection,
-immutable publication, anonymous exact/latest installed verification and its terminal
-at 2026-09-23T02:16:09Z. Release [v0.1.41](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.41),
-`394244926`, published the same three assets unchanged at 02:13:28Z. Its bounded
-installed participation observation also passes. Original identities, expiry and
-that supplementary scope remain at the [evidence owner](evidence/202609221952-cells/README.md#immutable-publication-and-installed-participation).
-v0.1.40 remains complete and unchanged.
-
-Successor v0.1.42 adds bounded JSON argument files and the measured storage/read
-improvements. Source `8e9628ad3c8e71f886cd64aa750e032b20104bfa` passes all 20 fresh
-source gates with stable inputs and reached remote main unchanged. After the v0.1.41
-publication identity cleared, one non-publishing candidate
-[35810382909/1](https://github.com/lkjsxc/lkjscript/actions/runs/35810382909) was dispatched
-at that exact product/controller source. It completes all source/final-candidate,
-installation and original-reader acceptance, with terminal `candidate_accepted`.
-All five authenticated artifact ZIPs are retained locally; earliest service expiry
-is 2026-10-07T03:18:46Z. The [continuation](campaigns/202609222330.md#typed-json-framing--newly-observed-output-boundary)
-then observes an existing typed-JSON framing defect: Map output exceeds the
-advertised JSON item bound, and source inspection finds undercounted entry-array
-depth. Publication of this candidate is withheld for
-correction, while its authentic successful evidence remains unchanged. No v0.1.42
-tag or scoped-selection update occurred. At that checkpoint the control still
-named completed v0.1.41. The corrected successor below renewed source/target
-proof and supersedes this withheld lineage.
-
-Public v0.1.43 adds result files, corrects JSON representation accounting and
-reserves aggregate text before copying an already oversized result. Combined source
-9394c0ea863823f0ce068e1e956253d92ae80471 passes all 20 fresh source gates and
-reached remote main unchanged. Candidate
-[35820435256/1](https://github.com/lkjsxc/lkjscript/actions/runs/35820435256) passed
-at that exact product/controller source. Promotion
-[35824461469/1](https://github.com/lkjsxc/lkjscript/actions/runs/35824461469) completed
-immutable publication and anonymous exact/latest installed verification. The
-[release record](campaigns/202609222330.md#typed-json-framing--newly-observed-output-boundary)
-preserves its accepted originals and genuinely rejected first promotion.
-
-v0.1.44 adds ordinary standard `list-window` and maintained transported adoption.
-Candidate [35833374673/1](https://github.com/lkjsxc/lkjscript/actions/runs/35833374673)
-is accepted at exact source `9ea93419f1c5e76126548ac5460752fe4cc4511b`.
-Promotion [35838470851/1](https://github.com/lkjsxc/lkjscript/actions/runs/35838470851)
-published its same three assets as immutable release
-[v0.1.44](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.44), `394461526`,
-then public verification rejected an incomplete tag-lookup inventory. The corrected
-controller at `6ea0ff6db6605f07fe8192a53dbf708f5d4ecc5f` resumed only that boundary in
-[35841466243/1](https://github.com/lkjsxc/lkjscript/actions/runs/35841466243), using
-the original accepted producer and verifier. Anonymous exact/latest acquisition,
-attestations, installed lifecycles and terminal `public_recheck_passed` complete
-this release. The [record](campaigns/202609222330.md#v0144-public-metadata-boundary-and-resumption)
-retains original identities, failures and the separate controller proof. The user's
-release authorization remains valid without waiving acceptance or immutability.
-
-The native-development successor v0.1.45 has completed finalized-candidate and
-terminal acceptance in [36064706830/1](https://github.com/lkjsxc/lkjscript/actions/runs/36064706830)
-at exact source 4d64abc70f88dcfd6d31b0e800f23ca8bfb1459d. The
-[continuation](campaigns/202609250903.md) established annotated object
-d20cc8b1b141fca0de5f6f37e82ee0719630af4f and the read-back scoped selection,
-then dispatched [36075872648/1](https://github.com/lkjsxc/lkjscript/actions/runs/36075872648)
-from controller ca3ef4d672addc612275eca52da7534fd408a1b6. That original promotion
-completed successfully: authenticated selection, publication-authority admission,
-transferred installed lifecycle, immutable publication, anonymous public acquisition
-and installed verification, and the release terminal. Release 396174945 was
-published at 2026-09-25T00:11:48Z and observed as latest. No replacement producer or
-product rebuild was requested. The [resumption record](campaigns/202609250926.md)
-confirms the completed jobs without relabeling earlier pending observations.
-
-The byte-conversion and strict-form increment after that source is absent from
-immutable v0.1.45. The [durable editor campaign](campaigns/202609251211.md) now consumes
-it in an ordinary authenticated, conflict-aware native UI with source-free restart
-and actual script-free browser operation. This fires the successor trigger and
-selects v0.1.46 after observing the tag/release unoccupied and prior publication
-complete. Source, candidate and public acceptance remain distinct; selection alone
-is not publication, and the completed v0.1.45 assets are not rewritten.
-
-Corrected editor source `b25bde2d92c1882470fc4444c94319a68fe9a10c` passes all 20
-fresh source-tier gates with stable inputs, zero reuse, and confirmed normal
-mainline integration. One candidate [36097087012/1](https://github.com/lkjsxc/lkjscript/actions/runs/36097087012)
-was created at that exact product/controller source on 2026-09-25T05:05:20Z.
-It completed successfully, including finalized-candidate, installation/userland,
-original-reader and terminal acceptance. Annotated tag object
-`1551a2da98c120c98d69c2ccd88d4de940073457` selects that source. Promotion
-[36193525561/1](https://github.com/lkjsxc/lkjscript/actions/runs/36193525561), from controller
-`11e54ce170050c7b6022cafc77cc84f9d34336aa`, completed authenticated selection,
-immutable publication, anonymous installed verification and the terminal.
-Release [v0.1.46](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.46), ID 396948669,
-published the original three assets at 2026-09-25T21:54:08Z and was independently
-observed as latest. The continuation's initial pending observation remains historical;
-no replacement candidate, old-asset rewrite or product-source substitution occurred.
-
-The [web starter continuation](campaigns/202609251450.md) selects development v0.1.47
-for the separately implemented native `web` creation recipe. Its
-[release notes](releases/v0.1.47.md) describe the additive template, local editable UI
-ownership and stateless scope. Exact source `511f48c41bc45374492051181e5334fa018b0d71`
-passes all 20 fresh source gates with stable inputs and zero reuse. Normal mainline
-integration is complete through documentation descendant
-`18e04bc0e6611ff0b79a49da1e5ce5da3632da35`. One non-publishing candidate
-[36198402289/1](https://github.com/lkjsxc/lkjscript/actions/runs/36198402289) was dispatched
-from that exact 18e04bc0 product/controller source at 2026-09-25T22:48:09Z.
-It completed source/finalized-candidate, installation/userland, original-reader and
-terminal acceptance at that exact product/controller source. The [continuation](campaigns/202609260831.md)
-created annotated tag object `79a87148d7d5ccb2b1b6960a0a26d0afd832c588`, checked and
-updated the existing scoped selection, and promoted original producer `36198402289/1`.
-Promotion [36203046819/1](https://github.com/lkjsxc/lkjscript/actions/runs/36203046819),
-from controller `3a34c305119ca7c1dc34ee7326ebe5b960d2a0b2`, completed authenticated
-selection, immutable publication, anonymous exact/latest installed smoke and its
-terminal. Release [v0.1.47](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.47),
-ID `396991797`, published the same three assets at 2026-09-26T00:04:57Z and was
-independently observed as latest. No product rebuild or previous-asset rewrite occurred.
-
-The same continuation selects development v0.1.48 for immutable deployment builds.
-Its [release notes](releases/v0.1.48.md) describe exact reuse, static admission,
-unchanged running processes/data roots and private descriptor publication. An
-initial local implementation is withheld after an independently reproduced
-permissions defect. Combined correction `e5847f1e568ad823325dd3a1e56c7a6fd64fa3fa`
-also rejects ambiguous configuration keys and passes its local focused regressions
-and independent oracles. Its original [Verify 36206083541/1](https://github.com/lkjsxc/lkjscript/actions/runs/36206083541)
-completed all 26 gates freshly, without reuse and with stable inputs, at
-2026-09-26T01:50:22Z. The distinct seven-workflow relocation supplement retains its
-own source. Normal mainline delivery was independently confirmed at
-`e2c0d1f58ed0b347c7956d2af248b944ccf422b9`. One candidate
-[36210073260/1](https://github.com/lkjsxc/lkjscript/actions/runs/36210073260) was dispatched
-at that exact product/controller source on 2026-09-26T01:56:21Z.
-Its finalized archive, target acceptance and promotion remain separate gates; no
-v0.1.48 publication is inferred from source acceptance. The
-[delivery record](campaigns/202609261045.md) owns current evidence and resumption.
-The later ordinary form-library extension is not part of this candidate source
-and is independently usable with public v0.1.47, which remains complete and unchanged.
-
-## Withheld v0.1.49 and the v0.1.50 successor
-
-Original candidate [36227761390/1](https://github.com/lkjsxc/lkjscript/actions/runs/36227761390)
-completed at source `6536fea15635933d8d91eef5ca5e2d930ae5c3f6`. Annotated v0.1.49
-object `87434ee244bff305104bf12f2822cb7861b50210` and the read-back scoped selection
-bind that source. Promotion [36237509998/1](https://github.com/lkjsxc/lkjscript/actions/runs/36237509998)
-was cancelled before publication when a new resident queue-cancellation regression
-reproduced a product defect. Its terminal correctly does not claim release completion.
-At that cancelled boundary, no v0.1.49 release or draft was observed and immutable
-v0.1.48 remained public/latest.
-Preserve the original accepted evidence, annotation and cancelled history. Do not
-resume that producer or rewrite the tag. The [correction campaign](campaigns/202609262000.md)
-selects additive v0.1.50, with [notes](releases/v0.1.50.md); corrected source and
-finalized candidate need their own acceptance before any later scoped selection.
-The runtime defect also exists in the inspected v0.1.48 source; its published
-assets are not rewritten, and this new finding is not relabelled as an earlier
-acceptance failure.
-
-Corrected source `cf705260118f5a62dff2b73801ee9357d90f700d` passes the full 26-gate
-fresh profile with stable inputs and reached remote main through normal delivery.
-The scoped release selector was subsequently restored to the existing v0.1.48
-object `da0ac737ddd546653eac676ed1220674eeeee908`, with compared prior state and
-readback, so the withheld v0.1.49 candidate is no longer selected. Its original
-history and all public assets remain unchanged.
-
-The earlier attempted v0.1.50 candidate dispatch was blocked by the tool safety
-check; an independent Actions query returned no run for cf705260. The
-[termination continuation](campaigns/202609262313.md) subsequently corrects process
-signals, transport/cancellation ordering, parent-session joining and idle wakeups.
-Exact corrected source `866e0ed0ad89f0cb6ced88e604dceb7fd1744cb3` passes all 26 full
-gates freshly with stable inputs and zero reuse, and is integrated into remote main.
-One new nonpublishing candidate
-[36262586297/1](https://github.com/lkjsxc/lkjscript/actions/runs/36262586297) was created
-at that exact product/controller source on 2026-09-26T18:27:08Z. It completed
-source/finalized-target/installation acceptance and `candidate_accepted` terminal.
-The [delivery continuation](campaigns/202609270517.md) read that evidence, published
-annotated object `dfd34dfb5961e2c15528c2355b51d2c255e29ae3` and compared/updated/read back
-the existing release-only selection. Promotion
-[36268996460/1](https://github.com/lkjsxc/lkjscript/actions/runs/36268996460), controller
-`bfae3c944f27b85e5c58f7a4fd45f503fc32887b`, reused the producer unchanged and completed
-`immutable_published_and_public_verified`, including anonymous installed smoke.
-Immutable release 397383599 became public at 2026-09-26T20:23:56Z, and exact/latest
-reads agree on v0.1.50/source 866e0ed0. Do not resume or retag withheld v0.1.49.
-The [next delivery](campaigns/202609280123.md) completes v0.1.51 without changing
-that finished v0.1.50 producer. Original producer `36321176400/1` accepted source
-`42dd20353158895183793ac67d429925d6695836`; annotated tag object
-`083a486e237291245bc8b6e64f03ef2e806adbd6` binds that exact product and reviewed notes.
-Promotion `36333238917/1`, controller `c7dbbfafd25f8ca3b1e58bc89f0a0ec1d7828c43`,
-completed selection, immutable publication, anonymous exact/latest smoke and its
-terminal. Immutable release `397724184` became public at 2026-09-27T16:33:14Z,
-with the original archive, checksum and bootstrap bytes unchanged. The earlier
-failed v0.1.51 producers and withheld v0.1.49 remain recorded and unchanged.
-The proposed v0.1.52 history prototype remains unintegrated and is not part of this
-finished producer. At that completion, main and the public product both named v0.1.51.
-
-The [coherent-recovery continuation](campaigns/202609280350.md) selects development
-v0.1.52 after observing its tag and release unoccupied and the v0.1.51 promotion
-complete. It combines ordinary typed form selection and maintained editor adoption
-with a correction to recovery-time catalog/HEAD observation. Its
-[notes](releases/v0.1.52.md) preserve the unchanged formats and explicit-upgrade
-boundary. Source, finalized-candidate and public acceptance remain separate; no
-history command or replacement of the immutable v0.1.51 assets is selected.
+Public/latest remains v0.1.64 until those boundaries complete. A pending external
+producer is release-only waiting, not a reason to hold accepted source off main.
 
 ## Content and compatibility
 
@@ -395,93 +109,6 @@ The target and installation readers admit their original evidence in the same ow
 A forged summary, omitted/skipped/failed stage, cancellation or incomplete cleanup cannot yield
 candidate acceptance. Diagnostic originals need not be relocatable; portability applies to the
 admitted terminal decision under authenticated service provenance, not arbitrary filesystem replay.
-
-## Superseded v0.1.61 candidate
-
-The [owned-data notes](releases/v0.1.61.md) combine byte ranges, concrete affine
-storage, symbolic Owned parameters, exact static witnesses and structural owned
-products. Source `0dadaed890d7425509a37d746088500650be1fb7` passed all 26 full-profile
-gates freshly with stable inputs and zero reuse; its workspace suite passed 1,461
-tests with 29 existing ignored cases. The [campaign](campaigns/20261001-owned-products.md#accepted-frozen-source)
-retains exact-source and copied-product results. No v0.1.61 tag or release existed
-at selection. This does not change public v0.1.60 or its immutable assets.
-
-Following normal mainline integration, one candidate must complete the existing
-source/final-archive/installed-recovery workflow at its exact event source. Before
-promotion, run all 18 cases selected by `native_owned_`, `native_byte_buffer_`,
-`native_byte_ranges_` and `resident_policy` against the exact executable extracted
-from that accepted archive, with cleared environment/PATH apart from the explicit
-candidate selector. Development-binary results do not satisfy that final-byte gate.
-No selection authorizes changing credentials, protections, immutability or existing
-tags. Candidate dispatch and actual terminal results are recorded by the campaign.
-
-## Superseded consolidated 0.1.63 candidate
-
-The [0.1.63 notes](releases/v0.1.63.md) consolidate owned storage, byte views,
-explicit Owned abstraction, structural products, opaque numbering, corrected native
-input inventory and ordinary metadata inspection. Source
-`c2c50d3adc4ecd17126f0decfac9e0022fe68ad0` passed all 26 full-profile gates freshly
-with stable inputs, zero reuse, 1,475 workspace tests passed and 29 existing ignored.
-The [continuation](campaigns/20261001-owned-product-metadata.md) retains the failed
-source attempts, exact source/tree, copied-host observations and actual delivery.
-
-The frozen 0.1.61 producer `36828457203/1` failed source stability and supplies no
-accepted final archive. Its separate publication is superseded by this corrected
-consolidated selection; immutable releases and failed evidence are unchanged.
-No 0.1.63 tag, release or healthy matching producer existed at selection.
-
-The original selection required one normal non-publishing candidate at the
-exact event source and the existing source/final-archive/installation workflow.
-Its supplemental final-byte gate required all **19** cases selected by `native_owned_`,
-`native_byte_buffer_`, `native_byte_ranges_` and `resident_policy` against the exact
-executable extracted from that accepted archive, with cleared environment/PATH
-except its explicit candidate selector. The nineteenth case is the cross-package
-metadata read. Preserve original harness and executable identities; a host-development
-binary or source-only result does not satisfy this final-byte gate. Do not alter
-credentials, protection, immutable tags or prior assets. Public/latest remains
-v0.1.60 until accepted assets are explicitly selected and promoted.
-
-The resulting frozen producer `36869518385/1` failed installed structural discovery
-because its verifier retained a stale private syntax inventory. It was not accepted
-or published. The [diagnosis](campaigns/20261002-owned-choices.md#frozen-0163-producer-diagnosis)
-retains the original evidence; source development repairs that verification owner
-without rewriting or retrying the frozen failed producer.
-
-## Selected consolidated 0.1.64 successor
-
-The [0.1.64 notes](releases/v0.1.64.md) consolidate the unpublished owned-memory,
-byte-range, numbering and metadata work with recoverable owned choices. The
-[continuation](campaigns/20261002-owned-choices.md) binds the actual source acceptance
-and delivery. A selected version alone is neither accepted source nor a published
-binary. No new runtime, application data or deployment is selected by these notes.
-
-After accepted source reaches main, dispatch one normal non-publishing candidate
-from that exact event source. Preserve the existing source, finalized-archive,
-installed lifecycle, pinned-userland and original-reader obligations. The installed
-syntax inventory now comes from the authenticated verifier source registry; the
-literal lifecycle and independent mutation controls remain required.
-
-Before promotion, use the original source-matched public test harness to run all
-cases selected by `native_owned_`, `native_byte_buffer_`, `native_byte_ranges_` and
-`resident_policy` against the exact executable extracted from the accepted archive.
-This source contains 21 such cases, including both the four-package owned-choice
-witness and exact task-resource consumption. Record the actual enumerated inventory
-and require no ignored or skipped selected case. Run outside the compiler checkout
-with cleared environment/PATH except the explicit `LKJSCRIPT_RELEASE_CANDIDATE`
-selector. A copied host-development executable is supplementary evidence, not
-substitute final-archive acceptance. A future selector change must revise this
-obligation explicitly rather than silently reducing coverage.
-
-Original producer `36966111016/1` for `0048ae1ee2e4678b409c782e02044b038bf60052`
-now completes candidate acceptance, and its exact final extracted executable passes
-all 21 selected supplementary cases with no failures or ignored selections. The
-[completed final-byte record](campaigns/20261002-owned-choices.md#final-candidate-and-exact-archive-supplement-completed)
-retains original asset/receipt identities and the authenticated resumption window.
-Do not rebuild those assets or substitute a later development source for promotion.
-
-The failed 0.1.61 and 0.1.63 producers and all immutable releases remain unchanged.
-Public/latest remains v0.1.60 until accepted original assets are explicitly selected
-and promoted; no 0.1.64 tag or publication is implied by source integration.
 
 ## Build and accept a candidate
 
@@ -651,6 +278,32 @@ prove controller behavior, not GitHub publication or live attestation issuance.
 
 Main integration and public closure remain separate. Honor actual protections, integrate independently
 main-ready work normally and verify remote ancestry. If hosted acceptance is still pending, report
-that campaign gate as incomplete. At meaningful work boundaries inspect the exact run; if external
+that release gate as incomplete. At meaningful work boundaries inspect the exact run; if external
 completion is the sole dependency, return its observed state, retained identities, missing gate and
 next concrete action. Do not start a duplicate run or promise unattended monitoring.
+
+## Historical selections
+
+Completed and superseded release selections are preserved in the
+[immutable prior procedure](https://github.com/lkjsxc/lkjscript/blob/d9a6ba5e7a8ab6de94a3ee5f5b54e526c42e2ab3/docs/release.md)
+and its original evidence links. Consult an exact predecessor only when recovering
+that release or investigating a relevant failure. Current work needs no historical
+publication reconstruction. The current public binary and active successor belong
+to [status](status.md).
+
+### Withheld v0.1.49 and the v0.1.50 successor
+
+[Original selection and resolution](https://github.com/lkjsxc/lkjscript/blob/d9a6ba5e7a8ab6de94a3ee5f5b54e526c42e2ab3/docs/release.md#withheld-v0149-and-the-v0150-successor).
+
+### Superseded v0.1.61 candidate
+
+[Original failed producer](https://github.com/lkjsxc/lkjscript/blob/d9a6ba5e7a8ab6de94a3ee5f5b54e526c42e2ab3/docs/release.md#superseded-v0161-candidate).
+
+### Superseded consolidated 0.1.63 candidate
+
+[Original selection and diagnosis](https://github.com/lkjsxc/lkjscript/blob/d9a6ba5e7a8ab6de94a3ee5f5b54e526c42e2ab3/docs/release.md#superseded-consolidated-0163-candidate).
+
+### Selected consolidated 0.1.64 successor
+
+[Original selection](https://github.com/lkjsxc/lkjscript/blob/d9a6ba5e7a8ab6de94a3ee5f5b54e526c42e2ab3/docs/release.md#selected-consolidated-0164-successor);
+[completed publication](campaigns/20261002-owned-choices.md#completed-v0164-publication).

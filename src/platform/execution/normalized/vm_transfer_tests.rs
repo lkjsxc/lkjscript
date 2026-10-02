@@ -1,0 +1,461 @@
+use super::*;
+use crate::platform::execution::normalized::{
+    byte_buffer::{ByteBuffer, StorageObservation as Buffers},
+    owned_choice::OwnedChoice,
+    owned_i64_cell::{OwnedI64Cell, StorageObservation as Cells},
+    owned_product::{OwnedProduct, StorageObservation as Products},
+    tests::byte_buffer_tests,
+};
+use crate::platform::kernel::{DeclarationReference, OwnerKey, OwnerRecord};
+use crate::platform::publication::GraphRepository;
+use std::collections::BTreeMap;
+use std::sync::{Arc, OnceLock};
+
+const SOURCE: &str = r#"declarations.begin
+(units (module create custody
+  (function create tree (visibility public) (effect (task))
+    (parameter create payload (type (owned-choice (case empty Unit)
+      (case packet (owned-product (field bytes ByteBuffer) (field cell OwnedI64Cell) (field label Text))))) (use consume))
+    (returns Unit) (body (unit)))
+  (function create buffer (visibility public) (effect (task))
+    (parameter create payload (type ByteBuffer) (use consume)) (returns Unit) (body (unit)))
+  (function create ordered (visibility public) (effect (task))
+    (parameter create label (type Text))
+    (parameter create payload (type ByteBuffer) (use consume)) (returns Unit) (body (unit)))
+  (function create hidden-callback (visibility public) (effect (task))
+    (parameter create payload (type (option (function () Unit))))
+    (returns Unit) (body (unit)))))
+declarations.end"#;
+
+fn fixture() -> (Arc<NormalizedProgram>, BTreeMap<String, FunctionIndex>) {
+    static PREPARED: OnceLock<(Arc<NormalizedProgram>, BTreeMap<String, FunctionIndex>)> =
+        OnceLock::new();
+    let (program, functions) = PREPARED.get_or_init(|| {
+        let source = byte_buffer_tests::author_only(SOURCE).unwrap();
+        let temporary = tempfile::tempdir().unwrap();
+        let repository = GraphRepository::create(&temporary.path().join("custody"), &source, None)
+            .unwrap()
+            .repository;
+        let application =
+            crate::platform::normalized_lifecycle::prepare_repository(repository).unwrap();
+        let program = Arc::new(application.program);
+        let functions = source
+            .owners
+            .iter()
+            .filter_map(|(key, owner)| {
+                let (OwnerKey::Declaration(declaration), OwnerRecord::Declaration(owner)) =
+                    (key, owner)
+                else {
+                    return None;
+                };
+                let function = program.function(DeclarationReference {
+                    package: source.root.package_id,
+                    declaration: *declaration,
+                })?;
+                Some((owner.name.to_string(), function))
+            })
+            .collect();
+        (program, functions)
+    });
+    (Arc::clone(program), functions.clone())
+}
+
+fn payload(
+    program: &NormalizedProgram,
+    function: FunctionIndex,
+    source: ValueOrigin,
+    leaf_source: ValueOrigin,
+    borrowed: bool,
+    invalid_metadata: bool,
+) -> (NormalizedValue, [usize; 3], Option<ByteBuffer>) {
+    let ty = program.functions[function.0 as usize].parameters[0].ty;
+    let TypeForm::OwnedChoice { cases } = &program.types[&ty].form else {
+        panic!("choice");
+    };
+    let product_type = cases[1].ty;
+    assert_eq!(cases[1].name.as_str(), "packet");
+    let TypeForm::OwnedProduct { fields } = &program.types[&product_type].form else {
+        panic!("product");
+    };
+    assert_eq!(
+        fields.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(),
+        ["bytes", "cell", "label"]
+    );
+    let control = ExecutionControl::uncancelled();
+    let buffer = ByteBuffer::empty(leaf_source)
+        .push(197, &control, &mut |_| Ok(()))
+        .unwrap();
+    let loan = borrowed.then(|| buffer.borrow().unwrap());
+    let cell = OwnedI64Cell::new(source, -137);
+    let label: Arc<str> = Arc::from("metadata");
+    let identities = [
+        buffer.allocation_identity(),
+        cell.allocation_identity(),
+        label.as_ptr() as usize,
+    ];
+    let fields = vec![
+        NormalizedValue::ByteBuffer(buffer),
+        NormalizedValue::OwnedI64Cell(cell),
+        if invalid_metadata {
+            NormalizedValue::Bool(false)
+        } else {
+            NormalizedValue::Text(label)
+        },
+    ];
+    let product =
+        OwnedProduct::create(source, product_type, fields, &control, &mut |_| Ok(())).unwrap();
+    let choice = OwnedChoice::create(
+        source,
+        ty,
+        1,
+        NormalizedValue::OwnedProduct(product),
+        &control,
+        &mut |_| Ok(()),
+    )
+    .unwrap();
+    (NormalizedValue::OwnedChoice(choice), identities, loan)
+}
+
+fn ordinary(
+    program: &NormalizedProgram,
+    value: &NormalizedValue,
+    ty: TypeObjectDigest,
+) -> Result<(), ExecutionError> {
+    // Independent small expected shape for this fixture; production and reference
+    // integration tests exercise their respective complete borrowed admissions.
+    match (value, &program.types[&ty].form) {
+        (NormalizedValue::Text(text), TypeForm::Text) if &**text == "metadata" => Ok(()),
+        _ => Err(ExecutionError::new(
+            ExecutionFailureClass::Trap,
+            "test_metadata",
+            "unexpected metadata",
+        )),
+    }
+}
+
+#[test]
+fn sealed_transfer_adopts_every_nested_owner_without_copying_storage_or_metadata() {
+    let buffers = Buffers::start();
+    let cells = Cells::start();
+    let products = Products::start();
+    let (program, functions) = fixture();
+    let source = ValueOrigin::fresh().unwrap();
+    let destination = ValueOrigin::fresh().unwrap();
+    let function = functions["tree"];
+    let (value, identities, _) = payload(&program, function, source, source, false, false);
+    let inert = value.clone();
+    let control = ExecutionControl::uncancelled();
+    let envelope = TransferArguments::seal(
+        &program,
+        source,
+        destination,
+        function,
+        vec![value],
+        &control,
+        &mut |value, ty| ordinary(&program, value, ty),
+    )
+    .unwrap();
+    let queued = &envelope.values.as_ref().unwrap()[0];
+    queued.memory_validate(source, true).unwrap();
+    assert!(queued.memory_validate(destination, true).is_err());
+    let argument_storage = envelope.values.as_ref().unwrap().as_ptr() as usize;
+    let (selected, mut values) = std::thread::scope(|scope| {
+        scope
+            .spawn(|| {
+                let buffers = Buffers::start();
+                let cells = Cells::start();
+                let products = Products::start();
+                let adopted = envelope.adopt(&program, destination, &control);
+                assert_eq!(
+                    (buffers.created(), cells.created(), products.created()),
+                    (0, 0, 0)
+                );
+                adopted
+            })
+            .join()
+            .expect("adopting child must be joined")
+    })
+    .unwrap();
+    assert_eq!(selected, function);
+    assert_eq!(values.as_ptr() as usize, argument_storage);
+    let value = values.pop().unwrap();
+    value.memory_validate(destination, true).unwrap();
+    assert!(value.memory_validate(source, true).is_err());
+    assert!(inert.memory_validate(source, false).is_err());
+    assert!(inert.memory_validate(destination, false).is_err());
+    let NormalizedValue::OwnedChoice(choice) = value else {
+        panic!("choice");
+    };
+    let choice_type = choice.ty();
+    let (case, product) = choice.select(destination, choice_type, &control).unwrap();
+    assert_eq!(case, 1);
+    let NormalizedValue::OwnedProduct(product) = product else {
+        panic!("product");
+    };
+    let product_type = product.ty();
+    let fields = product.unpack(destination, product_type, &control).unwrap();
+    let mut fields = fields.into_iter();
+    let NormalizedValue::ByteBuffer(buffer) = fields.next().unwrap() else {
+        panic!("buffer");
+    };
+    let NormalizedValue::OwnedI64Cell(cell) = fields.next().unwrap() else {
+        panic!("cell");
+    };
+    let NormalizedValue::Text(label) = fields.next().unwrap() else {
+        panic!("label");
+    };
+    assert_eq!(
+        [
+            buffer.allocation_identity(),
+            cell.allocation_identity(),
+            label.as_ptr() as usize
+        ],
+        identities
+    );
+    assert!(buffer.validate(source, true).is_err());
+    assert!(cell.validate(source, true).is_err());
+    buffer.validate(destination, true).unwrap();
+    cell.validate(destination, true).unwrap();
+    assert_eq!(&*buffer.freeze().unwrap(), &[197]);
+    assert_eq!(cell.extract().unwrap(), -137);
+    assert_eq!(
+        (buffers.created(), cells.created(), products.created()),
+        (1, 1, 2)
+    );
+    assert_eq!(
+        (buffers.live(), cells.live(), products.live()),
+        ((0, 0), (0, 0), (0, 0))
+    );
+}
+
+#[test]
+fn sealed_transfer_rejects_nested_foreign_loan_and_wrong_metadata_before_adoption() {
+    let (program, functions) = fixture();
+    for failure in ["foreign", "loan", "metadata"] {
+        let buffers = Buffers::start();
+        let cells = Cells::start();
+        let products = Products::start();
+        let source = ValueOrigin::fresh().unwrap();
+        let leaf_source = if failure == "foreign" {
+            ValueOrigin::fresh().unwrap()
+        } else {
+            source
+        };
+        let (value, _, loan) = payload(
+            &program,
+            functions["tree"],
+            source,
+            leaf_source,
+            failure == "loan",
+            failure == "metadata",
+        );
+        let result = TransferArguments::seal(
+            &program,
+            source,
+            ValueOrigin::fresh().unwrap(),
+            functions["tree"],
+            vec![value],
+            &ExecutionControl::uncancelled(),
+            &mut |value, ty| ordinary(&program, value, ty),
+        );
+        assert!(result.is_err(), "{failure}");
+        if let Some(loan) = &loan {
+            assert!(loan.get(0).is_err());
+        }
+        drop(loan);
+        assert_eq!(
+            (buffers.live(), cells.live(), products.live()),
+            ((0, 0), (0, 0), (0, 0)),
+            "{failure}"
+        );
+    }
+}
+
+#[test]
+fn sealed_transfer_never_promotes_raw_clones_or_hidden_callable_types() {
+    let (program, functions) = fixture();
+    let buffers = Buffers::start();
+    let source = ValueOrigin::fresh().unwrap();
+    let buffer = ByteBuffer::empty(source);
+    let result = TransferArguments::seal(
+        &program,
+        source,
+        ValueOrigin::fresh().unwrap(),
+        functions["buffer"],
+        vec![NormalizedValue::ByteBuffer(buffer.clone())],
+        &ExecutionControl::uncancelled(),
+        &mut |_, _| panic!("owned token"),
+    );
+    assert!(result.is_err());
+    buffer.validate(source, true).unwrap();
+    drop(buffer);
+    assert_eq!(buffers.live(), (0, 0));
+    let result = TransferArguments::seal(
+        &program,
+        source,
+        ValueOrigin::fresh().unwrap(),
+        functions["hidden-callback"],
+        vec![NormalizedValue::Option(None)],
+        &ExecutionControl::uncancelled(),
+        &mut |_, _| panic!("forbidden type precedes values"),
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn sealed_transfer_requires_the_exact_ordinary_prefix_and_owned_suffix() {
+    let (program, functions) = fixture();
+    let buffers = Buffers::start();
+    let source = ValueOrigin::fresh().unwrap();
+    let destination = ValueOrigin::fresh().unwrap();
+    let function = functions["ordered"];
+    let accepted = TransferArguments::seal(
+        &program,
+        source,
+        destination,
+        function,
+        vec![
+            NormalizedValue::Text(Arc::from("metadata")),
+            NormalizedValue::ByteBuffer(ByteBuffer::empty(source)),
+        ],
+        &ExecutionControl::uncancelled(),
+        &mut |value, ty| ordinary(&program, value, ty),
+    )
+    .unwrap();
+    drop(accepted);
+    assert_eq!(buffers.live(), (0, 0));
+
+    let mut reordered = (*program).clone();
+    let selected = &mut Arc::make_mut(&mut reordered.functions)[function.0 as usize];
+    Arc::make_mut(&mut selected.parameters).swap(0, 1);
+    let rejected = TransferArguments::seal(
+        &reordered,
+        source,
+        destination,
+        function,
+        vec![
+            NormalizedValue::ByteBuffer(ByteBuffer::empty(source)),
+            NormalizedValue::Text(Arc::from("metadata")),
+        ],
+        &ExecutionControl::uncancelled(),
+        &mut |_, _| panic!("invalid parameter order must precede ordinary admission"),
+    );
+    assert!(rejected.is_err());
+    assert_eq!(buffers.live(), (0, 0));
+}
+
+#[test]
+fn sealed_transfer_checks_owned_choice_cases_that_the_value_does_not_select() {
+    let (program, functions) = fixture();
+    let buffers = Buffers::start();
+    let cells = Cells::start();
+    let products = Products::start();
+    let source = ValueOrigin::fresh().unwrap();
+    let function = functions["tree"];
+    let (value, _, _) = payload(&program, function, source, source, false, false);
+    let mut malformed = (*program).clone();
+    let ty = malformed.functions[function.0 as usize].parameters[0].ty;
+    let forbidden = malformed.functions[functions["hidden-callback"].0 as usize].parameters[0].ty;
+    let TypeForm::OwnedChoice { cases } = &mut malformed.types.get_mut(&ty).unwrap().form else {
+        panic!("choice");
+    };
+    // The actual packet case is unchanged. The unselected case is enough to
+    // invalidate the target's complete transfer contract before payload admission.
+    cases[0].ty = forbidden;
+    assert!(
+        TransferArguments::seal(
+            &malformed,
+            source,
+            ValueOrigin::fresh().unwrap(),
+            function,
+            vec![value],
+            &ExecutionControl::uncancelled(),
+            &mut |_, _| panic!("forbidden case must precede ordinary admission"),
+        )
+        .is_err()
+    );
+    assert_eq!(
+        (buffers.live(), cells.live(), products.live()),
+        ((0, 0), (0, 0), (0, 0))
+    );
+}
+
+#[test]
+fn sealed_transfer_cancellation_at_each_walk_phase_cleans_all_owners_and_preserves_another_task() {
+    let (program, functions) = fixture();
+    let control = ExecutionControl::uncancelled();
+    for preparing in [true, false] {
+        let mut failed = 0;
+        let mut completed = 0;
+        for checks in 0..24 {
+            let buffers = Buffers::start();
+            let cells = Cells::start();
+            let products = Products::start();
+            let source = ValueOrigin::fresh().unwrap();
+            let destination = ValueOrigin::fresh().unwrap();
+            let unrelated = OwnedI64Cell::new(ValueOrigin::fresh().unwrap(), 911);
+            let (value, _, _) = payload(&program, functions["tree"], source, source, false, false);
+            let cancelled = ExecutionControl::cancel_after_checks(checks);
+            let envelope = TransferArguments::seal(
+                &program,
+                source,
+                destination,
+                functions["tree"],
+                vec![value],
+                if preparing { &cancelled } else { &control },
+                &mut |value, ty| ordinary(&program, value, ty),
+            );
+            match envelope.and_then(|envelope| {
+                envelope.adopt(
+                    &program,
+                    destination,
+                    if preparing { &control } else { &cancelled },
+                )
+            }) {
+                Ok((_, values)) => {
+                    completed += 1;
+                    release_raw_values(values);
+                }
+                Err(error) => {
+                    failed += 1;
+                    assert_eq!(error.class, ExecutionFailureClass::Cancelled);
+                }
+            }
+            assert_eq!(
+                (buffers.live(), cells.live(), products.live()),
+                ((0, 0), (1, 0), (0, 0))
+            );
+            assert_eq!(unrelated.extract().unwrap(), 911);
+        }
+        assert!(failed > 0 && completed > 0, "preparing={preparing}");
+    }
+}
+
+#[test]
+fn sealed_transfer_destination_mismatch_disposes_instead_of_returning_a_foreign_owner() {
+    let (program, functions) = fixture();
+    let buffers = Buffers::start();
+    let source = ValueOrigin::fresh().unwrap();
+    let destination = ValueOrigin::fresh().unwrap();
+    let buffer = ByteBuffer::empty(source);
+    let envelope = TransferArguments::seal(
+        &program,
+        source,
+        destination,
+        functions["buffer"],
+        vec![NormalizedValue::ByteBuffer(buffer)],
+        &ExecutionControl::uncancelled(),
+        &mut |_, _| panic!("owned token"),
+    )
+    .unwrap();
+    assert!(
+        envelope
+            .adopt(
+                &program,
+                ValueOrigin::fresh().unwrap(),
+                &ExecutionControl::uncancelled()
+            )
+            .is_err()
+    );
+    assert_eq!(buffers.live(), (0, 0));
+}

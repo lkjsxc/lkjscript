@@ -29,6 +29,7 @@ mod namespace;
 mod owned_contract;
 pub(crate) mod owned_product;
 mod owner;
+pub(crate) mod parallel;
 pub use owned_contract::*;
 pub(crate) mod interface11;
 mod reference;
@@ -63,8 +64,8 @@ pub use id::{
 pub use implementation::ImplementationName;
 pub(crate) use infer::{
     ExpressionRead, ExpressionValidationExhaustion, ExpressionValidationLimits,
-    infer_function_expression_type, validate_expression_roots,
-    validate_expression_roots_with_limits,
+    infer_function_expression_type, infer_function_expression_type_object,
+    validate_expression_roots, validate_expression_roots_with_limits,
 };
 pub use interface::*;
 pub use name::Name;
@@ -87,4 +88,8 @@ pub(crate) use validate::{validate_full_checked, validate_full_with_limit};
 pub(crate) mod tests;
 
 #[cfg(test)]
+mod finite_admission_tests;
+#[cfg(test)]
 mod owned_contract_tests;
+#[cfg(test)]
+mod parallel_tests;

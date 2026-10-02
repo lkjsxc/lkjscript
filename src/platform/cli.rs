@@ -5224,6 +5224,7 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
         fields.push(("depth", position.depth.to_string()));
         let mut literal_fragments = None;
         match &record.operation {
+            ExpressionOperation::Parallel { .. } => fields.push(("form", "parallel".into())),
             ExpressionOperation::ChooseOwned {
                 choice_type, case, ..
             } => {
@@ -5859,6 +5860,24 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                         child_depth,
                     )?;
                 }
+            }
+            ExpressionOperation::Parallel { left, right } => {
+                self.visit_expression_child(
+                    owner,
+                    left,
+                    (ExpressionChildRole::ParallelLeft, "parallel_left"),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+                self.visit_expression_child(
+                    owner,
+                    right,
+                    (ExpressionChildRole::ParallelRight, "parallel_right"),
+                    0,
+                    None,
+                    child_depth,
+                )?;
             }
             ExpressionOperation::Bind { callee, arguments } => {
                 self.visit_expression_child(

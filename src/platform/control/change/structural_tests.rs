@@ -67,6 +67,54 @@ fn assert_candidate_pair(
     (flat, block)
 }
 
+#[test]
+fn structural_parallel_matches_literal_flat_calls_and_preserves_distinct_children() {
+    let temporary = tempfile::tempdir().unwrap();
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created =
+        GraphRepository::create(&temporary.path().join("meaning"), &logical, None).unwrap();
+    let header = format!("request base={}\n", created.current.head.revision);
+    let declarations = "create.module as=$module name=parallel-pair\n\
+type.structural-record as=@pair\n\
+type.field parent=@pair index=0 name=left type=i64\n\
+type.field parent=@pair index=1 name=right type=i64\n\
+create.function as=$parent module=$module name=parent visibility=public result=@pair effect=task body=$body\n\
+create.function as=$child module=$module name=child visibility=public result=i64 effect=task body=$child-body\n\
+add.parameter as=$input function=$child name=input type=i64\n\
+expression.local as=$child-body value=$input\n";
+    let flat = "expression.parallel as=$body left=$left right=$right\n\
+expression.call as=$left function=$child\n\
+expression.argument parent=$left index=0 expression=$left-input\n\
+expression.i64 as=$left-input value=17\n\
+expression.call as=$right function=$child\n\
+expression.argument parent=$right index=0 expression=$right-input\n\
+expression.i64 as=$right-input value=-29\n";
+    let block = "expression.block as=$body\n(parallel (call $child (i64 17)) (call $child (i64 -29)))\nexpression.end\n";
+    let (flat, block) = assert_intent_pair(
+        &format!("{header}{flat}{declarations}"),
+        &format!("{header}{block}{declarations}"),
+    );
+    let bytes = canonical_authored_intent_bytes(&block.semantic).unwrap();
+    assert_eq!(&bytes[..8], b"LKJACR25");
+    assert_candidate_pair(&created.repository, &flat, &block);
+    for malformed in [
+        "(parallel)",
+        "(parallel (unit))",
+        "(parallel (unit) (unit) (unit))",
+    ] {
+        assert!(
+            decode_compact_change(
+                "parallel-arity",
+                format!(
+                    "{header}expression.block as=$body\n{malformed}\nexpression.end\n{declarations}"
+                )
+                .as_bytes()
+            )
+            .is_err()
+        );
+    }
+}
+
 const SHADOW_FLAT: &str = "\
 expression.local as=$initial value=$parameter
 expression.local as=$previous value=$first

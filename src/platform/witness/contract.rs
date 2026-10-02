@@ -7,8 +7,8 @@ pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-9";
 pub const WITNESS_CONTRACT_VERSION: u16 = 9;
 pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-9";
 pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 9;
-pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-23";
-pub const VALIDATOR_CONTRACT_VERSION: u16 = 23;
+pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-24";
+pub const VALIDATOR_CONTRACT_VERSION: u16 = 24;
 
 pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT09";
 pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM14";
@@ -45,7 +45,11 @@ pub struct ValidatorFeatureDescriptor {
 
 /// This list is the executable owner for rules that affect acceptance or safe witness reuse.
 /// Changing one rule requires changing its feature version, which changes the validator digest.
-pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 34] = [
+pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 35] = [
+    ValidatorFeatureDescriptor {
+        name: "structured_parallel_owned_tasks",
+        version: 1,
+    },
     ValidatorFeatureDescriptor {
         name: "structural_owned_choices",
         version: 1,

@@ -1,0 +1,55 @@
+create.module as=$module name=mailbox-callback
+create.component as=$component module=$module name=MailboxCallback visibility=private
+add.requirement as=$streams component=$component name=streams interface=pkg_10000000000000000000000000000001/decl_e29e0ac407696662f355e9056172ac2b
+requirement.operation parent=$streams index=0 operation=pkg_10000000000000000000000000000001/op_30cd44d5491201efdafea2b9e22adff0
+requirement.limit parent=$streams index=0 name=maximum_calls maximum=8 unit=calls
+add.requirement as=$clock component=$component name=clock interface=pkg_10000000000000000000000000000001/decl_8d99ab2f1d59391e1e21c17cc8757731
+requirement.operation parent=$clock index=0 operation=pkg_10000000000000000000000000000001/op_2f02101a13d5b32d4be5e5ada08f8df4
+requirement.limit parent=$clock index=0 name=maximum_calls maximum=8 unit=calls
+type.named as=@event declaration=pkg_10000000000000000000000000000001/decl_66b80a34dfaac5f8ccf47ce707ec8731
+type.named as=@kind declaration=pkg_10000000000000000000000000000001/decl_b939d019fb10a24344c2c947a20f2c02
+type.named as=@outbound declaration=pkg_10000000000000000000000000000001/decl_effe692dc8cecc3b5dafaec348b5622e
+type.named as=@reject declaration=pkg_10000000000000000000000000000001/decl_d50d3cf51bf092ed8b1437e1664010fc
+type.named as=@close declaration=pkg_10000000000000000000000000000001/decl_a2baeefacf23b620d7f814eda4cfe0ba
+type.option as=@StateOption item=i64
+type.list as=@messages item=@outbound
+type.option as=@rejection item=@reject
+type.option as=@closing item=@close
+type.structural-record as=@Decision
+type.field parent=@Decision index=0 name=closing type=@closing
+type.field parent=@Decision index=1 name=kind type=@kind
+type.field parent=@Decision index=2 name=messages type=@messages
+type.field parent=@Decision index=3 name=rejection type=@rejection
+type.field parent=@Decision index=4 name=state type=@StateOption
+expression.call as=$closing function=pkg_10000000000000000000000000000001/decl_6e7cd674bd6163894e173e52a285ee43
+type.argument parent=$closing index=0 type=@close
+expression.call as=$rejection function=pkg_10000000000000000000000000000001/decl_6e7cd674bd6163894e173e52a285ee43
+type.argument parent=$rejection index=0 type=@reject
+expression.capability-call as=$effect requirement=$clock operation=pkg_10000000000000000000000000000001/op_2f02101a13d5b32d4be5e5ada08f8df4
+expression.call as=$next function=pkg_10000000000000000000000000000001/decl_693b43d38b8a4fa7d66ea171980e78a7
+type.argument parent=$next index=0 type=i64
+expression.argument parent=$next index=0 expression=$effect
+expression.variant as=$kind case=pkg_10000000000000000000000000000001/case_48345859be4146ce3b853632ddc9cef5
+expression.text as=$text value=never-accepted
+expression.variant as=$message case=pkg_10000000000000000000000000000001/case_0dfb37b8e11bc0b7e3dcf5bc7059de7d payload=$text
+expression.list as=$messages item=@outbound
+expression.argument parent=$messages index=0 expression=$message
+expression.record as=$body
+expression.record-field parent=$body index=0 name=closing value=$closing
+expression.record-field parent=$body index=1 name=kind value=$kind
+expression.record-field parent=$body index=2 name=messages value=$messages
+expression.record-field parent=$body index=3 name=rejection value=$rejection
+expression.record-field parent=$body index=4 name=state value=$next
+create.function as=$handler module=$module name=mailbox-handler visibility=private result=@Decision effect=task body=$body
+add.parameter as=$state function=$handler name=state type=@StateOption
+add.parameter as=$event function=$handler name=event type=@event
+effect.requirement parent=$handler index=0 requirement=$clock
+effect.requirement parent=$handler index=1 requirement=$streams
+effect.row as=@handler-effects
+effect.requirement parent=@handler-effects index=0 requirement=$clock
+effect.requirement parent=@handler-effects index=1 requirement=$streams
+type.task-function as=@Handler result=@Decision effect=@handler-effects
+type.argument parent=@Handler index=0 type=@StateOption
+type.argument parent=@Handler index=1 type=@event
+add.port as=$port component=$component name=live type=@Handler function=$handler
+create.target as=$target name=mailbox-live component=$component port=$port runner=interactive

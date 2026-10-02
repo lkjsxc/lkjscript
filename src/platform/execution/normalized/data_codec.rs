@@ -133,7 +133,7 @@ struct CodecState<'a> {
 }
 
 impl CodecState<'_> {
-    fn enter(&mut self, depth: usize) -> Result<(), Diagnostic> {
+    fn enter(&mut self, depth: usize, precharged: bool) -> Result<(), Diagnostic> {
         checkpoint(self.control)?;
         if depth > MAXIMUM_VALUE_DEPTH {
             return Err(codec_error(
@@ -142,9 +142,8 @@ impl CodecState<'_> {
                 "typed data value exceeds the nesting-depth limit",
             ));
         }
-        self.items = self.items.checked_add(1).ok_or_else(item_limit)?;
-        if self.items > MAXIMUM_VALUE_ITEMS {
-            return Err(item_limit());
+        if !precharged {
+            charge_count(self, 1)?;
         }
         Ok(())
     }
@@ -158,7 +157,7 @@ fn encode_value(
     state: &mut CodecState,
     depth: usize,
 ) -> Result<(), Diagnostic> {
-    state.enter(depth)?;
+    state.enter(depth, false)?;
     let form = type_form(program, ty)?;
     match (value, form) {
         (NormalizedValue::Unit, TypeForm::Unit) => {}
@@ -309,7 +308,18 @@ fn decode_value(
     state: &mut CodecState,
     depth: usize,
 ) -> Result<NormalizedValue, Diagnostic> {
-    state.enter(depth)?;
+    decode_value_charged(program, ty, cursor, state, depth, false)
+}
+
+fn decode_value_charged(
+    program: &NormalizedProgram,
+    ty: TypeObjectDigest,
+    cursor: &mut Cursor<'_>,
+    state: &mut CodecState,
+    depth: usize,
+    precharged: bool,
+) -> Result<NormalizedValue, Diagnostic> {
+    state.enter(depth, precharged)?;
     match type_form(program, ty)? {
         TypeForm::Unit => Ok(NormalizedValue::Unit),
         TypeForm::Bool => match cursor.u8("normalized_data_bool")? {
@@ -375,7 +385,14 @@ fn decode_value(
             charge_count(state, count)?;
             let mut output = Vec::with_capacity(count);
             for _ in 0..count {
-                output.push(decode_value(program, *item, cursor, state, depth + 1)?);
+                output.push(decode_value_charged(
+                    program,
+                    *item,
+                    cursor,
+                    state,
+                    depth + 1,
+                    true,
+                )?);
             }
             Ok(NormalizedValue::list(output).map_err(|error| {
                 Diagnostic::new(
@@ -390,7 +407,8 @@ fn decode_value(
             charge_count(state, count.saturating_mul(2))?;
             let mut output = BTreeMap::<NormalizedMapKey, NormalizedValue>::new();
             for _ in 0..count {
-                let decoded_key = decode_value(program, *key, cursor, state, depth + 1)?;
+                let decoded_key =
+                    decode_value_charged(program, *key, cursor, state, depth + 1, true)?;
                 let map_key = NormalizedMapKey::from_value(decoded_key).ok_or_else(|| {
                     codec_error(
                         DiagnosticClass::Corrupt,
@@ -408,7 +426,8 @@ fn decode_value(
                         "typed data map keys are duplicate or not in canonical order",
                     ));
                 }
-                let decoded_value = decode_value(program, *value, cursor, state, depth + 1)?;
+                let decoded_value =
+                    decode_value_charged(program, *value, cursor, state, depth + 1, true)?;
                 output.insert(map_key, decoded_value);
             }
             NormalizedValue::map_controlled(output, state.control)
@@ -673,7 +692,7 @@ fn encode_map_key(
     state: &mut CodecState,
     depth: usize,
 ) -> Result<(), Diagnostic> {
-    state.enter(depth)?;
+    state.enter(depth, false)?;
     // Check the exact declared primitive without allocating a temporary runtime value.
     match (key, type_form(program, ty)?) {
         (NormalizedMapKey::Bool(value), TypeForm::Bool) => {
@@ -798,7 +817,13 @@ impl<'a> Cursor<'a> {
     }
 
     fn blob(&mut self, code: &'static str) -> Result<Vec<u8>, Diagnostic> {
-        let length = self.count(code)?;
+        let length = usize::try_from(self.u32(code)?).map_err(|_| {
+            codec_error(
+                DiagnosticClass::Resource,
+                "normalized_data_value_bytes",
+                "typed data byte length exceeds the host address domain",
+            )
+        })?;
         if length > MAXIMUM_VALUE_BYTES {
             return Err(codec_error(
                 DiagnosticClass::Resource,
@@ -821,6 +846,8 @@ impl<'a> Cursor<'a> {
     }
 }
 
+// Reserve direct collection children before allocation; their later visits
+// still check depth/cancellation but do not charge the same nodes again.
 fn charge_count(state: &mut CodecState, count: usize) -> Result<(), Diagnostic> {
     state.items = state.items.checked_add(count).ok_or_else(item_limit)?;
     if state.items > MAXIMUM_VALUE_ITEMS {

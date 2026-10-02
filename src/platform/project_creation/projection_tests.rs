@@ -465,6 +465,20 @@ fn visit_expression(
         ExpressionOperation::Sequence { items } => {
             visit_many(snapshot, items, &label, "item", identities)
         }
+        ExpressionOperation::Parallel { left, right } => {
+            visit_expression(
+                snapshot,
+                *left,
+                format!("{label}/parallel-left"),
+                identities,
+            );
+            visit_expression(
+                snapshot,
+                *right,
+                format!("{label}/parallel-right"),
+                identities,
+            );
+        }
         ExpressionOperation::ImplementationCall { arguments, .. }
         | ExpressionOperation::MethodCall { arguments, .. }
         | ExpressionOperation::Call { arguments, .. } => {

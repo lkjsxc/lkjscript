@@ -127,3 +127,8 @@ The owned-product metadata continuation rebuilds this same accepted program for
 compiler 17, bytecode 13 and artifact 24. Public `capabilities --generate-docs`
 regenerates the reference, including product syntax and current admission diagnostics.
 The accepted native program and its exact standard supplier are unchanged.
+
+The [structured parallel compiler refresh](../../docs/campaigns/20261002-structured-parallel.md)
+rebuilds this accepted program for compiler 19, bytecode 15 and artifact 26 through
+public check/build. All 79 tests pass with equal production/reference results. Its
+accepted HEAD, exact standard supplier and native page-rendering meaning are unchanged.

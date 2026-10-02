@@ -112,6 +112,15 @@ impl PackMetadata {
         reader: &mut R,
         byte_length: u64,
     ) -> Result<PackMetadataRead, StoreError> {
+        Self::read_footer_with_entry_allowance(reader, byte_length, contract::MAXIMUM_PACK_ENTRIES)
+    }
+
+    /// Admit retained physical entries before allocating or reading the footer index.
+    pub(super) fn read_footer_with_entry_allowance<R: Read + Seek>(
+        reader: &mut R,
+        byte_length: u64,
+        remaining_entries: usize,
+    ) -> Result<PackMetadataRead, StoreError> {
         let length = usize_from_u64(byte_length, "pack_file_length")?;
         if !(MINIMUM_PACK_BYTES..=contract::MAXIMUM_PACK_BYTES).contains(&length) {
             return Err(pack_error(
@@ -179,6 +188,13 @@ impl PackMetadata {
                 StoreErrorClass::Resource,
                 "pack_index_size",
                 "pack footer declares an invalid or excessive index",
+            ));
+        }
+        if entry_count > remaining_entries {
+            return Err(pack_error(
+                StoreErrorClass::Resource,
+                "catalog_entry_count",
+                "footer reconstruction exceeds the catalog entry bound",
             ));
         }
         let index_start = footer_offset - index_bytes;

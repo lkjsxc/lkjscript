@@ -66,13 +66,13 @@ mod nominal_encoding_tests {
         .unwrap();
         let owner = OwnerRecord::Expression(expression.clone());
         let (digest, bytes) = encode_owner(&owner).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOWN20");
+        assert_eq!(&bytes[..8], b"LKJOWN21");
         assert_eq!(
             decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
             owner
         );
         // Scalar meaning remains readable in each supported scalar-era envelope.
-        for generation in [17, 18, 19, 20] {
+        for generation in [17, 18, 19, 20, 21] {
             expression.contract_version = generation;
             let historical = OwnerRecord::Expression(expression.clone());
             let (digest, bytes) = encode_owner(&historical).unwrap();
@@ -469,6 +469,11 @@ pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>)
             super::contract::PRODUCT_OWNER_MAGIC,
             super::contract::PRODUCT_OWNER_ENVELOPE_DOMAIN,
         )
+    } else if record.header().contract_version == 20 {
+        (
+            super::contract::CHOICE_OWNER_MAGIC,
+            super::contract::CHOICE_OWNER_ENVELOPE_DOMAIN,
+        )
     } else {
         (OWNER_MAGIC, OWNER_ENVELOPE_DOMAIN)
     };
@@ -557,7 +562,7 @@ pub fn decode_owner(
         }
         record
     } else {
-        // Graphs 19 and 20 append operation/binding tags. Earlier field layouts
+        // Graphs 19–21 append operation/binding tags. Earlier field layouts
         // and ordinals are frozen; local admission rejects new tags in old owners.
         let (magic, domain, generation) = if bytes.starts_with(&super::contract::OWNED_OWNER_MAGIC)
         {
@@ -572,8 +577,18 @@ pub fn decode_owner(
                 super::contract::PRODUCT_OWNER_ENVELOPE_DOMAIN,
                 19,
             )
+        } else if bytes.starts_with(&super::contract::CHOICE_OWNER_MAGIC) {
+            (
+                super::contract::CHOICE_OWNER_MAGIC,
+                super::contract::CHOICE_OWNER_ENVELOPE_DOMAIN,
+                20,
+            )
         } else {
-            (OWNER_MAGIC, OWNER_ENVELOPE_DOMAIN, 20)
+            (
+                OWNER_MAGIC,
+                OWNER_ENVELOPE_DOMAIN,
+                super::contract::GRAPH_CONTRACT_VERSION,
+            )
         };
         let record: OwnerRecord = packed::decode(bytes, magic, domain, MAXIMUM_OWNER_OBJECT_BYTES)?;
         if record.header().contract_version != generation {

@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-18";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 18;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-14";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 14;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN18";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v18";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v18";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-19";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 19;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-15";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 15;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN19";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v19";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v19";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -86,6 +86,8 @@ impl CompilationUnitKey {
             "lkjscript.compiler-unit-key.v16"
         } else if compiler_contract_version == 17 {
             "lkjscript.compiler-unit-key.v17"
+        } else if compiler_contract_version == 18 {
+            "lkjscript.compiler-unit-key.v18"
         } else {
             COMPILER_UNIT_KEY_DOMAIN
         });
@@ -420,6 +422,12 @@ pub enum CompiledInstruction {
         choice_type: u32,
         cases: Vec<CompiledOwnedChoiceJump>,
     },
+    Parallel {
+        left: u32,
+        left_arguments: u32,
+        right: u32,
+        right_arguments: u32,
+    },
 }
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
@@ -513,7 +521,7 @@ impl CompilationUnit {
                 "compiler-unit bytes disagree with their exact object-domain digest",
             ));
         }
-        // Derived generations 10–17 require a rebuild from supported canonical owners.
+        // Derived generations 10–18 require a rebuild from supported canonical owners.
         // Refuse before decoding; old bytes never acquire current instruction meaning.
         if [
             b"LKJCUN10",
@@ -524,6 +532,7 @@ impl CompilationUnit {
             b"LKJCUN15",
             b"LKJCUN16",
             b"LKJCUN17",
+            b"LKJCUN18",
         ]
         .iter()
         .any(|magic| bytes.starts_with(*magic))
@@ -559,7 +568,7 @@ impl CompilationUnit {
                 self.bytecode_contract_version,
                 self.graph_contract_version
             ),
-            (18, 14, 20)
+            (19, 15, 21)
         ) {
             return Err(unit_error(
                 DiagnosticClass::Source,
@@ -1393,6 +1402,17 @@ impl CompiledInstruction {
             Self::MethodCall { arguments, .. } => {
                 require_runtime_count("method arguments", *arguments)
             }
+            Self::Parallel {
+                left,
+                left_arguments,
+                right,
+                right_arguments,
+            } => {
+                require_index("left parallel task", *left, tables.declarations.len())?;
+                require_index("right parallel task", *right, tables.declarations.len())?;
+                require_runtime_count("left parallel arguments", *left_arguments)?;
+                require_runtime_count("right parallel arguments", *right_arguments)
+            }
             Self::Call {
                 requirement_arguments,
                 effect_arguments: _,
@@ -1872,6 +1892,22 @@ fn stack_effect(instruction: &CompiledInstruction) -> Result<(usize, usize), Dia
         CompiledInstruction::ImplementationCall { arguments, .. }
         | CompiledInstruction::MethodCall { arguments, .. }
         | CompiledInstruction::Call { arguments, .. } => (count(*arguments)?, 1),
+        CompiledInstruction::Parallel {
+            left_arguments,
+            right_arguments,
+            ..
+        } => {
+            let arguments = count(*left_arguments)?
+                .checked_add(count(*right_arguments)?)
+                .ok_or_else(|| {
+                    unit_error(
+                        DiagnosticClass::Resource,
+                        "compiler_unit_stack_count",
+                        "parallel operand count overflows",
+                    )
+                })?;
+            (arguments, 1)
+        }
         CompiledInstruction::BeginBind { .. } | CompiledInstruction::Capture { .. } => (1, 1),
         CompiledInstruction::Invoke { arguments } | CompiledInstruction::Bind { arguments } => {
             let consumed = count(*arguments)?.checked_add(1).ok_or_else(|| {

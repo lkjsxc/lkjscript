@@ -120,6 +120,7 @@ struct Writer {
     buffer_extension: bool,
     owned_extension: bool,
     task_method_extension: bool,
+    parallel_extension: bool,
     product_extension: bool,
     choice_extension: bool,
     declaration_body_extension: bool,
@@ -137,6 +138,7 @@ impl Writer {
             buffer_extension: false,
             owned_extension: false,
             task_method_extension: false,
+            parallel_extension: false,
             product_extension: false,
             choice_extension: false,
             declaration_body_extension: false,
@@ -145,7 +147,9 @@ impl Writer {
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.task_method_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+        if self.parallel_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR25");
+        } else if self.task_method_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR24");
         } else if self.choice_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR23");
@@ -1742,6 +1746,12 @@ impl Writer {
     ) -> Result<(), Diagnostic> {
         let next = depth.saturating_add(1);
         match value {
+            AuthoredExpressionOperation::Parallel { left, right } => {
+                self.parallel_extension = true;
+                self.tag(36)?;
+                self.expression(left, definitions, next)?;
+                self.expression(right, definitions, next)
+            }
             AuthoredExpressionOperation::Unit {} => self.tag(1),
             AuthoredExpressionOperation::Bool { value } => {
                 self.tag(2)?;

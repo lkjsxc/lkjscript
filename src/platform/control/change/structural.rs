@@ -242,6 +242,10 @@ pub(super) fn layout(
                 node.children.extend_from_slice(args);
             }
             "sequence" => node.children.extend_from_slice(args),
+            "parallel" => {
+                arity(&block, id, args, 2)?;
+                node.children.extend_from_slice(args);
+            }
             "method-call" => {
                 minimum(&block, id, args, 3)?;
                 node.record.fields.push(block.field(args[0], "witness")?);
@@ -897,6 +901,10 @@ fn lower_node(
             items: (0..node.children.len())
                 .map(|_| child())
                 .collect::<Result<_, _>>()?,
+        },
+        "expression.parallel" => AuthoredExpressionOperation::Parallel {
+            left: Box::new(child()?),
+            right: Box::new(child()?),
         },
         "expression.call" => AuthoredExpressionOperation::Call {
             function: decoder.parse_declaration_reference(record, "function")?,

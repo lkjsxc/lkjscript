@@ -634,6 +634,7 @@ impl TryFrom<super::ExpressionOperation> for ExpressionOperation14 {
     fn try_from(value: super::ExpressionOperation) -> Result<Self, Self::Error> {
         Ok(match value {
             super::ExpressionOperation::ImplementationCall { .. }
+            | super::ExpressionOperation::Parallel { .. }
             | super::ExpressionOperation::MethodCall { .. } => return Err(extension()),
             super::ExpressionOperation::Unit {} => Self::Unit {},
             super::ExpressionOperation::Bool { value } => Self::Bool { value },
