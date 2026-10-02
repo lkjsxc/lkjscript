@@ -1162,6 +1162,12 @@ impl FullValidator<'_> {
                     &[OwnerKind::TypeParameter],
                     "owned Self parameter",
                 );
+                for method in &c.methods {
+                    if !self.consume_work() {
+                        return;
+                    }
+                    self.validate_effect_row(owner, &method.effect.row());
+                }
             }
             DeclarationPayload::OwnedImplementation(_) => {}
             DeclarationPayload::Record {

@@ -5,6 +5,10 @@ use serde_json::json;
 
 #[path = "native_owned_choices.rs"]
 mod owned_choices;
+#[path = "native_owned_task_method_inspection.rs"]
+mod owned_task_method_inspection;
+#[path = "native_owned_task_methods.rs"]
+mod owned_task_methods;
 #[path = "native_owned_tasks.rs"]
 mod owned_tasks;
 

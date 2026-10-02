@@ -3725,6 +3725,22 @@ fn append_owned_inspection(
                 ],
             )?;
             for (index, method) in contract.methods.iter().enumerate() {
+                for (requirement_index, requirement) in
+                    method.effect.row().requirements.iter().enumerate()
+                {
+                    append_compact_record(
+                        output,
+                        "owned.method-requirement",
+                        &[
+                            ("method", method.id.to_string()),
+                            ("index", requirement_index.to_string()),
+                            (
+                                "requirement",
+                                format!("{}/{}", requirement.package(), requirement.owner()),
+                            ),
+                        ],
+                    )?;
+                }
                 append_compact_record(
                     output,
                     "owned.method",
@@ -3732,7 +3748,18 @@ fn append_owned_inspection(
                         ("id", method.id.to_string()),
                         ("index", index.to_string()),
                         ("name", method.name.as_str().to_owned()),
-                        ("kind", "pure".to_owned()),
+                        (
+                            "kind",
+                            match method.effect {
+                                crate::platform::kernel::FunctionEffect::Pure => "pure",
+                                crate::platform::kernel::FunctionEffect::Task { .. } => "task",
+                            }
+                            .to_owned(),
+                        ),
+                        (
+                            "requirements",
+                            method.effect.row().requirements.len().to_string(),
+                        ),
                         ("parameters", method.parameters.len().to_string()),
                         ("result", method.result.to_string()),
                     ],

@@ -77,9 +77,43 @@ contracts; planning an untouched draft is unchanged.
 The [recursive fixture](../../tests/fixtures/owned-witness-recursion.lkjc) forwards
 both consume and read witnesses and restores an outer selection after a nested
 call using another implementation. Ownership failures, missing or wrong witnesses,
-task-as-pure methods, escaping loans and ordinary owned-element containers reject before publication.
+callable-kind/effect mismatches, escaping loans and ordinary owned-element
+containers reject before publication.
 Explicit [structural owned products](native-owned-products.md) compose multiple
 Owned payloads with closed metadata and complete consuming decomposition.
 ByteBuffer, cell and product tokens cannot be JSON command inputs, persisted values,
 callback captures or ordinary returned raw values. Expose ordinary results at
 application boundaries.
+
+## Task methods in development 0.1.66
+
+A contract method may declare its task kind and the exact requirements it needs:
+
+```lisp
+(method method_80000000000000000000000000000002 finish
+  (parameters (Self consume)) (returns I64)
+  (effect (task (requirement authority::clock))))
+```
+
+Omitting `effect`, or writing `(effect pure)`, preserves the existing pure method.
+`(effect (task))` is an empty-row task, not a pure method. The selected graph
+function must match the method's kind and row exactly. A task Self argument must
+consume; use a separate pure method for synchronous scoped reading. The caller
+must independently declare the method's required effects, and deployment must
+independently grant the actual operation. Selection alone authorizes nothing.
+
+The literal [library](../../tests/fixtures/owned-task-method-library.lkjc),
+[carriers](../../tests/fixtures/owned-task-method-carriers.lkjc) and
+[consumer](../../tests/fixtures/owned-task-method-consumer.lkjc) cover both generic
+witness forwarding and direct method calls. A scalar preserves the signed input;
+a buffer reports length one. Each finishing operation performs one explicit clock
+call. The [public test](../../tests/public_cli/native_owned_task_methods.rs) uses
+three projects, exact exported dependencies, unchanged drafts, missing-grant
+refusal and source-free artifact execution. It also exports a contract whose
+requirement belongs to a private component and no public function mentions it.
+
+Owner inspection reports each method's `kind`, `requirements` count and exact
+`owned.method-requirement` records. An untouched task-method draft remains unchanged.
+Cancellation releases remaining storage but does not undo or replay clock calls.
+This is same-invocation composition, not a channel, scheduled child task or promise
+of cross-task ownership transfer. Public availability remains owned by [status](../status.md).

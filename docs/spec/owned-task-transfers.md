@@ -20,9 +20,10 @@ exact in-scope Owned type parameter. Ordinary containers, callable descriptors,
 partial application and capture do not gain permission to contain these values.
 A first-order task can declare Owned type parameters and explicit implementation
 witnesses without effect or requirement parameters. Concrete task effect rows are
-supported, including the empty row. Owned contract methods and their selected
-concrete implementations remain monomorphic pure functions; allowing a task to
-forward a static witness does not make an effectful method implementation valid.
+supported, including the empty row. The subsequent [task-method extension](owned-generics.md#nominal-contracts-and-exact-static-operands)
+also permits monomorphic task methods with exact closed rows and consuming Self
+arguments. A witness selects that exact signature, never the caller's effect
+allowance or an execution grant.
 
 For example, this helper transfers one owner without inspecting or copying it:
 
@@ -68,8 +69,10 @@ stream elements and persistence retain their existing boundary restrictions.
 Kernel validation, independent source classification, canonical preparation and
 both evaluators enforce the signature and custody rules. Unused parameters,
 unreachable applications and imported signatures are checked. Semantic validator
-22 invalidates prior proof reuse; the graph, owner/type encoding, authored request,
-compiler instruction and artifact formats are unchanged by this extension.
+22 invalidated prior proof reuse for the initial same-task extension, without a
+graph, owner/type, request, instruction or artifact format change. The subsequent
+task-method extension uses semantic validator 23 and authored request codec 24;
+the existing graph, instruction and artifact layouts remain unchanged.
 Historical accepted content remains historical; new task-owned meaning is not
 claimed executable by an older validator or host.
 

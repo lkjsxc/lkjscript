@@ -116,6 +116,15 @@ retains separate authority, scoped pure loans and the existing invocation origin
 This is not yet asynchronous transfer or a new supervisor; current source evidence
 and public binary availability remain separated in [status](status.md).
 
+The [task-method continuation](campaigns/20261002-owned-task-methods.md) closes a
+concrete composition gap before that handoff:
+owned libraries can now select monomorphic task implementations with identical
+closed effect rows. Pure reading and task consumption remain distinct; neither a
+witness nor a contract row replaces a caller allowance or deployment grant.
+The scalar/buffer producer-consumer family exercises these boundaries through public
+packages and source-free artifacts. Do not grow a full trait or effect calculus as
+a prerequisite for the next runtime experiment.
+
 The next preferred boundary is a small structured in-process handoff. Exercise
 explicit acceptance, declined transfer returning the original owner, cancellation
 before/after acceptance and receiver failure with exactly one cleanup custodian.

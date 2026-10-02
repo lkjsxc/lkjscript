@@ -4153,7 +4153,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_owned_contract",
             DiagnosticClass::Semantic,
             "An owned method contract, implementation map or explicit witness is not exact.",
-            "Check nominal contract identity, Owned Self, all monomorphic pure method signatures and lexical witness scope.",
+            "Check nominal contract identity, Owned Self, exact monomorphic method signatures and closed effect rows, task-only consumption, caller allowances and lexical witness scope.",
         ),
         diagnostic(
             "kernel_owned_choice",
@@ -8189,13 +8189,13 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         ),
         (
             "owned-contract",
-            "(owned-contract MODE BINDING (visibility public|private) (self SELF) (type-parameter MODE SELF (constraint owned)) (method method_HEX NAME (parameters (TYPE unrestricted|borrow|consume)...) (returns TYPE))...)",
-            "Nominal first-order pure methods with exactly one owned Self parameter; all ordinary method types must be closed and contain no callable or affine types.",
+            "(owned-contract MODE BINDING (visibility public|private) (self SELF) (type-parameter MODE SELF (constraint owned)) (method method_HEX NAME (parameters (TYPE unrestricted|borrow|consume)...) (returns TYPE) [(effect pure|(task (requirement REQUIREMENT)...))])...)",
+            "Nominal first-order pure or closed-effect task methods with one owned Self type parameter; task Self arguments consume. Ordinary method types are closed and contain no callable or affine types.",
         ),
         (
             "owned-implementation",
             "(owned-implementation MODE BINDING (visibility public|private) (contract DECLARATION) (self TYPE) (method method_HEX FUNCTION)...)",
-            "Every method maps to an exact visible monomorphic pure graph function; selection is explicit and never grants effects.",
+            "Every method maps to an exact visible monomorphic graph function with identical callable kind and effect row; selection is explicit and never grants effects.",
         ),
         (
             "implementation-parameter",

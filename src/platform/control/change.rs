@@ -54,10 +54,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-27";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 27;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-23";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 23;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-28";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 28;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-24";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 24;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -2633,6 +2633,12 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
                 required: true,
                 syntax: "type-reference",
             },
+            CompactFormField {
+                form: "owned.method",
+                name: "effect",
+                required: false,
+                syntax: "pure|task",
+            },
         ],
     },
     CompactEdgeDescriptor {
@@ -2954,7 +2960,7 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
     },
     CompactEdgeDescriptor {
         name: "effect.requirement",
-        parent: "effect-row-or-task-function-or-contract-fragment",
+        parent: "effect-row-or-task-function-or-owned-method-or-contract-fragment",
         child: "requirement-reference",
         fields: &[
             CompactFormField {
@@ -3483,7 +3489,7 @@ impl Decoder {
                 }
                 "owned.method" => self.insert_indexed_record_edge(
                     record,
-                    &["parent", "index", "as", "id", "name", "result"],
+                    &["parent", "index", "as", "id", "name", "result", "effect"],
                 )?,
                 "owned.parameter" => {
                     self.insert_indexed_record_edge(record, &["parent", "index", "type", "use"])?
@@ -3942,6 +3948,11 @@ impl Decoder {
                         name: parse_name(method, "name")?,
                         parameters,
                         result: self.decode_type(required(method, "result")?)?,
+                        effect: self.decode_function_effect(
+                            method,
+                            label,
+                            optional(method, "effect").unwrap_or("pure"),
+                        )?,
                     });
                 }
                 Ok(AuthoredChange::CreateOwnedContract {

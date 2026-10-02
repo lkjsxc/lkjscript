@@ -398,6 +398,18 @@ impl PackageInterfaceSelection {
         match &record.payload {
             DeclarationPayload::OwnedContract(c) => {
                 self.type_parameters.insert(c.self_parameter);
+                for method in &c.methods {
+                    self.requirements.extend(
+                        method
+                            .effect
+                            .row()
+                            .requirements
+                            .iter()
+                            .filter_map(|requirement| requirement.concrete())
+                            .filter(|requirement| requirement.package == self.package)
+                            .map(|requirement| requirement.requirement),
+                    );
+                }
             }
             DeclarationPayload::OwnedImplementation(_) => {}
             DeclarationPayload::Record { fields, .. } => self.fields.extend(fields),
@@ -743,7 +755,10 @@ pub(crate) fn interface_owner_validation_visits(owner: &PackageInterfaceOwner) -
             PackageInterfaceDeclarationPayload::OwnedContract(c) => {
                 c.methods
                     .iter()
-                    .map(|m| m.parameters.len() + 1)
+                    .map(|m| {
+                        let row = m.effect.row();
+                        m.parameters.len() + row.requirements.len() + row.parameters.len() + 1
+                    })
                     .sum::<usize>()
                     + 1
             }
@@ -819,6 +834,24 @@ fn validate_owner_closure(
                     OwnerKind::TypeParameter,
                     Some(*declaration_id),
                 )?;
+                for method in &c.methods {
+                    let row = method.effect.row();
+                    row.validate()?;
+                    if !row.is_closed() {
+                        return Err(interface_corrupt("owned method effect row is not closed"));
+                    }
+                    for requirement in row.requirements {
+                        if requirement.package() == package {
+                            require_child(
+                                owners,
+                                &mut expected,
+                                requirement.owner(),
+                                OwnerKind::Requirement,
+                                None,
+                            )?;
+                        }
+                    }
+                }
             }
             PackageInterfaceDeclarationPayload::OwnedImplementation(_) => {}
             PackageInterfaceDeclarationPayload::Record {

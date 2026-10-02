@@ -439,7 +439,20 @@ where
                         )?;
                     }
                 }
-                DeclarationPayload::OwnedContract(_) => {}
+                DeclarationPayload::OwnedContract(contract) => {
+                    for method in &contract.methods {
+                        extract_effect_relations(source, &method.effect.row(), edges)?;
+                        for requirement in method.effect.row().requirements {
+                            exact_edge(
+                                edges,
+                                source,
+                                RelationKind::FunctionRequirement,
+                                requirement.package(),
+                                requirement.owner(),
+                            )?;
+                        }
+                    }
+                }
                 DeclarationPayload::OwnedImplementation(i) => {
                     exact_edge(
                         edges,

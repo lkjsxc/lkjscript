@@ -1,0 +1,28 @@
+declarations.begin
+(units
+  (module create task-method-consumer
+    (function create method-main (visibility public)
+      (parameter create n (type I64)) (returns (record (value I64) (bytes I64)))
+      (effect (task (requirement task-method::authority::clock)))
+      (body (let
+        (binding cell (type OwnedI64Cell)
+          (implementation-call task-method::produce (types OwnedI64Cell)
+            (implementations concrete@task-carriers::Scalar) (local n)))
+        (binding value (type I64)
+          (implementation-call task-method::finish (types OwnedI64Cell)
+            (implementations concrete@task-carriers::Scalar) (local cell)))
+        (binding buffer (type ByteBuffer)
+          (method-call concrete@task-carriers::Octets task-method::Storage
+            method_80000000000000000000000000000001 (local n)))
+        (binding bytes (type I64)
+          (method-call concrete@task-carriers::Octets task-method::Storage
+            method_80000000000000000000000000000002 (local buffer)))
+        (in (record structural (field value (local value)) (field bytes (local bytes)))))))
+    (component create command (visibility private)
+      (port create main
+        (type (task-function (I64) (record (value I64) (bytes I64))
+          (row (requirement task-method::authority::clock))))
+        (function method-main))))
+  (target create task-methods (component task-method-consumer::command)
+    (runner command) (port task-method-consumer::command::main)))
+declarations.end

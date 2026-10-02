@@ -53,9 +53,27 @@ meaning. Authored request 23, compact discovery 27 and semantic validator 21 exp
 the relevant public contracts. Operational data and running services are not migrated.
 Installing this release does not replace accepted applications or exact dependencies.
 
-## Development v0.1.65: same-task owned calls
+## Development v0.1.66: task methods and same-task owned calls
 
-Named task helpers can consume and return owned buffers, cells, products and choices
+The [task-method continuation](campaigns/20261002-owned-task-methods.md) removes the
+pure-only restriction from explicit Owned
+contracts. A method may declare an exact closed task effect row; its selected
+monomorphic graph function must match kind, effects, types and use modes exactly.
+Task Self arguments consume, while pure methods retain synchronous scoped borrowing.
+The caller's effect allowance and the deployment's exact grant remain independent
+of implementation selection. Method effects survive native draft editing, public
+interface closure and package/artifact transport, including unused contracts.
+
+See the [generic guide](guides/native-owned-generics.md#task-methods-in-development-0166)
+and [contract](spec/owned-generics.md). This is still same-invocation composition,
+not an asynchronous channel, child task or CPU-parallel ownership transfer.
+Authored request 24 and compact discovery 28 expose the extension; validator 23
+invalidates predecessor proof reuse. Existing graph, method-field, compiler and
+artifact wire layouts remain unchanged. Pure-only authored intent retains its
+previous bytes. This source increment has not replaced public v0.1.64.
+
+The preceding 0.1.65 extension allows named task helpers to consume and return
+owned buffers, cells, products and choices
 within one invocation. First-order Owned parameters and exact static implementation
 witnesses compose with tasks. Ordinary arguments precede owned memory, and exact
 capability resources form a final suffix. Task memory parameters are consume-only;
@@ -176,7 +194,7 @@ passed the separate source/target, pinned-userland and installed-recovery owners
 Its exact extracted executable then passed all 21 required supplementary public cases
 outside the checkout with a cleared environment, followed by the completed unchanged
 publication and anonymous installed verification. These proofs do not certify later
-0.1.65 source merely because it descends from that commit.
+0.1.65 or later source merely because it descends from that commit.
 
 Earlier [owned-storage](campaigns/20261001-owned-storage-admission.md),
 [owned-product](campaigns/20261001-owned-products.md),
@@ -190,5 +208,7 @@ preserves the old chronology without presenting its publication checkpoints as c
 [Verification obligations](spec/verification.md) distinguish source checks,
 final-archive behavior, pinned userlands, installed recovery, authenticated transfer
 and anonymous acquisition. Current development proof belongs to the
-[task-owned continuation](campaigns/20261002-task-owned-transfer.md). Reporting-only
+[task-method continuation](campaigns/20261002-owned-task-methods.md), with the
+[preceding task-owned evidence](campaigns/20261002-task-owned-transfer.md) retained.
+Reporting-only
 descendants never relabel the source or bytes that were actually tested.

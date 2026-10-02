@@ -806,9 +806,24 @@ fn validate_interface_dependencies(
                                 revision,
                                 method.function.package,
                                 OwnerKey::Declaration(method.function.declaration),
-                                &[OwnerKind::PureFunction],
+                                &[OwnerKind::PureFunction, OwnerKind::TaskFunction],
                                 "owned implementation method",
                             )?;
+                        }
+                    }
+                    if let PackageInterfaceDeclarationPayload::OwnedContract(contract) =
+                        &declaration.payload
+                    {
+                        for method in &contract.methods {
+                            for requirement in method.effect.row().requirements {
+                                closure.require_owner(
+                                    revision,
+                                    requirement.package(),
+                                    requirement.owner(),
+                                    &[OwnerKind::Requirement],
+                                    "owned method requirement",
+                                )?;
+                            }
                         }
                     }
                     let PackageInterfaceDeclarationPayload::Function(signature) =

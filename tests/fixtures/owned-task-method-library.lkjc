@@ -1,0 +1,30 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create task-method
+    (function create available (visibility private) (returns I64) (effect pure) (body (i64 0)))
+    (component create authority (visibility public)
+      (requirement create clock (interface std::WallClock)
+        (operations std::WallClock::utc-milliseconds) (limits (maximum_calls 4 calls)))
+      (port create ready (type (function () I64)) (function available)))
+    (owned-contract create Storage (visibility public)
+      (self Self) (type-parameter create Self (constraint owned))
+      (method method_80000000000000000000000000000001 create
+        (parameters (I64 unrestricted)) (returns Self) (effect (task)))
+      (method method_80000000000000000000000000000002 finish
+        (parameters (Self consume)) (returns I64)
+        (effect (task (requirement authority::clock)))))
+    (function create produce (visibility public)
+      (type-parameter create T (constraint owned))
+      (implementation-parameter implparam_80000000000000000000000000000001 ops Storage T)
+      (parameter create n (type I64)) (returns T) (effect (task))
+      (body (method-call parameter@produce@implparam_80000000000000000000000000000001
+        Storage method_80000000000000000000000000000001 (local n))))
+    (function create finish (visibility public)
+      (type-parameter create T (constraint owned))
+      (implementation-parameter implparam_80000000000000000000000000000002 ops Storage T)
+      (parameter create value (type T) (use consume)) (returns I64)
+      (effect (task (requirement authority::clock)))
+      (body (method-call parameter@finish@implparam_80000000000000000000000000000002
+        Storage method_80000000000000000000000000000002 (local value))))))
+declarations.end

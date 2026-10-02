@@ -97,12 +97,16 @@ impl OwnedContract {
         for method in &self.methods {
             if !ids.insert(method.id)
                 || !names.insert(&method.name)
-                || !matches!(method.effect, FunctionEffect::Pure)
                 || method.parameters.len() > contract::MAXIMUM_CHILDREN
             {
                 return Err(reject(
-                    "owned methods require distinct identities/names and pure bounded signatures",
+                    "owned methods require distinct identities/names and bounded signatures",
                 ));
+            }
+            let row = method.effect.row();
+            row.validate()?;
+            if !row.is_closed() {
+                return Err(reject("owned methods require closed exact effect rows"));
             }
         }
         Ok(())
@@ -302,12 +306,11 @@ pub(crate) fn validate_implementation(
             || !f.effect_parameters.is_empty()
             || !f.requirement_parameters.is_empty()
             || !f.implementation_parameters.is_empty()
-            || !matches!(f.effect, FunctionEffect::Pure)
-            || !matches!(method.effect, FunctionEffect::Pure)
+            || f.effect != method.effect
             || f.parameters.len() != method.parameters.len()
         {
             return Err(reject(
-                "implementation methods require exact monomorphic pure graph functions",
+                "implementation methods require monomorphic graph functions with exact callable kind and effect row",
             ));
         }
         for (id, expected) in f.parameters.iter().zip(&method.parameters) {
@@ -461,8 +464,20 @@ fn validate_contract_at(
     reference: DeclarationReference,
     c: &OwnedContract,
 ) -> Result<(), Diagnostic> {
-    for _ in &c.methods {
+    for method in &c.methods {
         read.validation_work()?;
+        if let FunctionEffect::Task {
+            requirements,
+            effect_parameters,
+        } = &method.effect
+        {
+            for _ in requirements {
+                read.validation_work()?;
+            }
+            for _ in effect_parameters {
+                read.validation_work()?;
+            }
+        }
     }
     c.validate_local()?;
     let p = if reference.package == read.package_id() {
@@ -497,6 +512,11 @@ fn validate_contract_at(
                 suffix = true;
                 if parameter.use_mode == ParameterUse::Unrestricted {
                     return Err(reject("Self requires borrow or consume"));
+                }
+                if !matches!(method.effect, FunctionEffect::Pure)
+                    && parameter.use_mode != ParameterUse::Consume
+                {
+                    return Err(reject("task method Self parameters must consume ownership"));
                 }
             } else if suffix
                 || parameter.use_mode != ParameterUse::Unrestricted

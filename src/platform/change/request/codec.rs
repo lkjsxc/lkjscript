@@ -119,6 +119,7 @@ struct Writer {
     f64_extension: bool,
     buffer_extension: bool,
     owned_extension: bool,
+    task_method_extension: bool,
     product_extension: bool,
     choice_extension: bool,
     declaration_body_extension: bool,
@@ -135,6 +136,7 @@ impl Writer {
             f64_extension: false,
             buffer_extension: false,
             owned_extension: false,
+            task_method_extension: false,
             product_extension: false,
             choice_extension: false,
             declaration_body_extension: false,
@@ -143,7 +145,9 @@ impl Writer {
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.choice_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+        if self.task_method_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR24");
+        } else if self.choice_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR23");
         } else if self.product_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR22");
@@ -479,7 +483,11 @@ impl Writer {
                 methods,
             } => {
                 self.owned_extension = true;
-                self.tag(80)?;
+                let task_methods = methods
+                    .iter()
+                    .any(|m| !matches!(m.effect, AuthoredFunctionEffect::Pure {}));
+                self.task_method_extension |= task_methods;
+                self.tag(if task_methods { 86 } else { 80 })?;
                 self.symbol(symbol, definitions)?;
                 self.module_selector(module, definitions)?;
                 self.name(name)?;
@@ -492,7 +500,12 @@ impl Writer {
                         w.authored_type(t, definitions, 1)?;
                         w.parameter_use(*mode)
                     })?;
-                    w.authored_type(&m.result, definitions, 1)
+                    w.authored_type(&m.result, definitions, 1)?;
+                    if task_methods {
+                        w.function_effect(&m.effect, definitions)
+                    } else {
+                        Ok(())
+                    }
                 })
             }
             AuthoredChange::CreateOwnedImplementation {
@@ -523,7 +536,11 @@ impl Writer {
                 methods,
             } => {
                 self.owned_extension = true;
-                self.tag(84)?;
+                let task_methods = methods
+                    .iter()
+                    .any(|m| !matches!(m.effect, AuthoredFunctionEffect::Pure {}));
+                self.task_method_extension |= task_methods;
+                self.tag(if task_methods { 87 } else { 84 })?;
                 self.declaration_selector(declaration, definitions)?;
                 self.authored_type(self_type, definitions, 1)?;
                 self.list(methods, |w, m| {
@@ -533,7 +550,12 @@ impl Writer {
                         w.authored_type(t, definitions, 1)?;
                         w.parameter_use(*mode)
                     })?;
-                    w.authored_type(&m.result, definitions, 1)
+                    w.authored_type(&m.result, definitions, 1)?;
+                    if task_methods {
+                        w.function_effect(&m.effect, definitions)
+                    } else {
+                        Ok(())
+                    }
                 })
             }
             AuthoredChange::SetOwnedImplementation {

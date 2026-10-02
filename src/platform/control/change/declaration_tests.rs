@@ -4,6 +4,32 @@ use crate::platform::change::canonical_authored_intent_bytes;
 use crate::platform::publication::GraphRepository;
 
 #[test]
+fn native_owned_task_method_intent_is_distinct_and_pure_predecessor_stays_stable() {
+    let literal = "declarations.begin\n(units (module create methods
+      (owned-contract create Storage (visibility public)
+        (self Self) (type-parameter create Self (constraint owned))
+        (method method_82000000000000000000000000000001 create
+          (parameters (I64 unrestricted)) (returns Self)))))\ndeclarations.end\n";
+    let encode = |input: &str| {
+        let request = format!("request base=rev_{}\n{input}", "82".repeat(32));
+        let decoded = decode_compact_change("method-codec.lkjc", request.as_bytes()).unwrap();
+        canonical_authored_intent_bytes(&decoded.semantic).unwrap()
+    };
+    let implicit = encode(literal);
+    let pure = encode(&literal.replace("(returns Self)", "(returns Self) (effect pure)"));
+    let task = encode(&literal.replace("(returns Self)", "(returns Self) (effect (task))"));
+    assert_eq!(implicit, pure);
+    assert_eq!(&pure[..8], b"LKJACR21");
+    assert_eq!(&task[..8], b"LKJACR24");
+    assert_ne!(pure, task);
+    for effect in ["(effect pure ignored)", "(effect)", "(other (task))"] {
+        let invalid = literal.replace("(returns Self)", &format!("(returns Self) {effect}"));
+        let request = format!("request base=rev_{}\n{invalid}", "82".repeat(32));
+        assert!(decode_compact_change("invalid-method.lkjc", request.as_bytes()).is_err());
+    }
+}
+
+#[test]
 fn native_complete_declarations_match_independent_flat_intent() {
     let temporary = tempfile::tempdir().unwrap();
     let initial = crate::platform::kernel::tests::witness_snapshot();

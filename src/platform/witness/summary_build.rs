@@ -1077,6 +1077,12 @@ fn local_summary(
                 DeclarationPayload::OwnedContract(c) => {
                     interface.raw_piece(2, &[9]);
                     interface.piece(10, c)?;
+                    for method in &c.methods {
+                        if let FunctionEffect::Task { requirements, .. } = &method.effect {
+                            effect.piece(3, &(method.id, &method.effect))?;
+                            capability.piece(3, &(method.id, requirements))?;
+                        }
+                    }
                 }
                 DeclarationPayload::OwnedImplementation(i) => {
                     interface.raw_piece(2, &[10]);

@@ -35,7 +35,7 @@ affine rules as its concrete carrier:
   user-defined method and confers no capability authority.
 
 General owned containers, mutable borrows, escaping captures, memory-bearing indirect
-function descriptors, task memory signatures and generic implementation schemes
+function descriptors, cross-task memory transfer and generic implementation schemes
 are outside this increment. Ordinary generic and CaptureSafe contracts retain
 their previous meaning. Graph 19 adds fixed structural owned products with complete
 consuming decomposition. Ordinary raw-entry structural substitutions remain supported.
@@ -68,24 +68,29 @@ cannot manufacture or retain these tokens.
 
 An `OwnedContract` declaration embeds distinct method identities and names, one
 Self type-parameter identity with the Owned constraint, and each method's ordered
-parameter types/use modes, result and pure callable kind. Methods have no own
-generic scheme. Ordinary signature types must be closed and first order; this
+parameter types/use modes, result, callable kind and exact effect row. A method is
+pure or a named task with a closed row of concrete requirement identities. An empty
+task row remains a task. Methods have no own generic, effect or requirement scheme.
+Ordinary signature types must be closed and first order; this
 restriction follows nominal fields and cases as well as structural type children.
 A nominal wrapper cannot hide a function, resource, secret, stream or owned value.
 Closed recursive, mutual and nested nominal data remain first order. The structural
 property is proved under each nominal declaration's ordinary parameter assumptions,
 with every actual argument independently checked in its enclosing scope. Even a
 phantom argument must be closed and ordinary; recursive binding reuse cannot erase it.
-Direct Self parameters form the final affine suffix. A result is direct Self or
-an ordinary closed type. A method need not mention Self, but the exact Self owner
-and constraint remain mandatory.
+Direct Self parameters form the final affine suffix. Pure methods may borrow or
+consume Self; every task Self parameter must consume, including unused parameters.
+A result is direct Self or an ordinary closed type. A method need not mention Self,
+but the exact Self owner and constraint remain mandatory.
 
 An `OwnedImplementation` declaration names one exact contract and concrete owned
 Self, and supplies a complete, unique, canonically ordered method map. Every map
-entry selects an exact visible monomorphic pure graph function with matching
-ordered parameter types, modes, result and kind after Self substitution. All
-methods are checked even when unused. Empty-effect tasks and closed externals are
-not method implementations; ordinary graph wrappers may call closed externals.
+entry selects an exact visible monomorphic graph function with matching ordered
+parameter types, modes, result, callable kind and effect row after Self substitution.
+The row is equal, not an inferred upper bound: a pure implementation cannot silently
+replace an empty-row task, and an implementation cannot add, omit or substitute an
+exact requirement. All methods are checked even when unused. Closed externals are
+not implementations; ordinary graph wrappers may call them.
 Imported contracts, types and methods must belong to the declared exact visible
 package closure.
 
@@ -96,6 +101,11 @@ exact implementation declaration or forwards an exact witness parameter from its
 own lexical function. A method call selects a method identity in the witness's
 exact nominal contract. There is no implicit implementation search, overload
 resolution, capability grant, ordinary runtime dictionary or function value.
+A method invocation checks the caller's task kind and declared effect allowance in
+addition to its witness and argument types. Deployment supplies a separate exact
+grant before an external operation can run. Contract rows participate in relation
+extraction, effect/capability summaries, package interfaces and dependency closure;
+an otherwise unused public contract retains its required interface metadata.
 Multiple implementations for the same Self and signature are valid and remain
 distinguishable through package transport, preparation and detached artifacts.
 
@@ -111,18 +121,24 @@ independently of these prepared instances.
 
 ## Encodings, admission and compatibility
 
-The initial owned-generic increment used graph/owner generation 18. Current
-graph/owner generation 19 adds structural products. Frozen canonical owner codecs
-preserve generations 14–18, and ordinary base type identities remain unchanged.
+The initial owned-generic increment used graph/owner generation 18. Generation 19
+adds structural products and generation 20 adds owned choices. Frozen canonical
+owner codecs preserve supported predecessors, and ordinary base type identities
+remain unchanged. Task-method effects use the existing canonical method effect
+field; they do not introduce another program representation or owner wire layout.
 Package interface generation 12 changes method/function layout; interface 10 and
 11 have separate frozen representations. In particular, interface-11 function,
 constant and component bytes are not interpreted using generation-12 enum tags.
 
-Current compilation uses compiler unit 17, bytecode 13 and artifact 24. Derived
+Current compilation uses compiler unit 18, bytecode 14 and artifact 25. Derived
 predecessor artifacts require rebuilding from supported accepted meaning; an old
 proof or compiler artifact does not silently become current permission. Authored
-owned-only requests retain codec 21; product-bearing requests select codec 22.
-Compact changes use contract 26. The semantic validator identity is 19.
+pure owned-only requests retain codec 21; product-bearing requests select codec 22
+and choice-bearing requests select codec 23. A create/set contract with a task
+method selects authored codec 24, distinct change tags and an encoded effect for
+each method in that contract. Omitted and explicit pure effects retain identical
+predecessor intent bytes. Compact changes use contract 28. Semantic validator 23
+invalidates prior acceptance and summary reuse for task-method effects.
 Public discovery advertises the actual generations.
 Regeneration of maintained artifacts preserves accepted meaning HEADs.
 

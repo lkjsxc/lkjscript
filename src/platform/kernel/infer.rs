@@ -990,9 +990,18 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         context.declaration,
                     )
                 })?;
-                if !matches!(signature.effect, FunctionEffect::Pure) {
-                    return Err(type_error("kernel_owned_contract", "method is not pure"));
-                }
+                let row = signature.effect.row();
+                self.validate_call_effect(
+                    &FunctionSignature {
+                        target: Some(contract),
+                        parameters: Vec::new(),
+                        result: signature.result,
+                        task: !matches!(signature.effect, FunctionEffect::Pure),
+                        requirements: row.requirements.into_iter().collect(),
+                        effect_parameters: row.parameters.into_iter().collect(),
+                    },
+                    context,
+                )?;
                 let parameters = signature
                     .parameters
                     .iter()

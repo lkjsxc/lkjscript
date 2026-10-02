@@ -1153,10 +1153,10 @@ impl Lowering<'_> {
                             ],
                         )?;
                     } else {
-                        if args.len() != 4 {
+                        if !(4..=5).contains(&args.len()) {
                             return Err(self.error(
                                 *clause,
-                                "method requires ID, name, parameters and returns",
+                                "method requires ID, name, parameters, returns and optional effect",
                             ));
                         }
                         let label = self.allocate('$')?;
@@ -1170,6 +1170,20 @@ impl Lowering<'_> {
                             return Err(self.error(args[3], "method requires one result"));
                         }
                         let result = self.ty(results[0], &scope, 1)?;
+                        let effect = if let Some(clause) = args.get(4) {
+                            if self.block.head(*clause) != Some("effect") {
+                                return Err(self.error(*clause, "method requires an effect clause"));
+                            }
+                            let value = self.one(*clause)?;
+                            if self.block.atom(value).ok() == Some("pure") {
+                                "pure"
+                            } else {
+                                self.effect_edges(value, &scope, &label)?;
+                                "task"
+                            }
+                        } else {
+                            "pure"
+                        };
                         self.record(
                             *clause,
                             "owned.method",
@@ -1180,6 +1194,7 @@ impl Lowering<'_> {
                                 ("id", self.block.atom(args[0])?.into()),
                                 ("name", self.block.atom(args[1])?.into()),
                                 ("result", result),
+                                ("effect", effect.into()),
                             ],
                         )?;
                         for (index, parameter) in parameters.into_iter().enumerate() {

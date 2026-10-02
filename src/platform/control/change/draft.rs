@@ -539,12 +539,20 @@ impl Renderer<'_> {
                                     self.maximum,
                                 )?;
                             }
+                            let effect = match method.effect {
+                                k::FunctionEffect::Pure => String::new(),
+                                effect => format!(
+                                    " (effect {})",
+                                    self.row(&canonical::row(effect.row()), "task")?
+                                ),
+                            };
                             clauses.push(format!(
-                                "(method {} {} (parameters{}) (returns {}))",
+                                "(method {} {} (parameters{}) (returns {}){})",
                                 method.id,
                                 method.name,
                                 parameters,
-                                self.type_digest(method.result)?
+                                self.type_digest(method.result)?,
+                                effect
                             ));
                         }
                     }

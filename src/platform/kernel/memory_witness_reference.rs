@@ -281,6 +281,7 @@ impl Oracle<'_> {
                 p.declaration == d.declaration && p.constraints == TypeParameterConstraints::Owned
             })
             || c.methods.is_empty()
+            || c.methods.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN
         {
             return false;
         }
@@ -289,7 +290,9 @@ impl Oracle<'_> {
         for m in &c.methods {
             if !ids.insert(m.id)
                 || !names.insert(&m.name)
-                || !matches!(m.effect, FunctionEffect::Pure)
+                || m.parameters.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN
+                || m.effect.row().validate().is_err()
+                || !m.effect.row().is_closed()
             {
                 return false;
             }
@@ -301,7 +304,10 @@ impl Oracle<'_> {
                     })
                 {
                     suffix = true;
-                    if p.use_mode == ParameterUse::Unrestricted {
+                    if p.use_mode == ParameterUse::Unrestricted
+                        || (!matches!(m.effect, FunctionEffect::Pure)
+                            && p.use_mode != ParameterUse::Consume)
+                    {
                         return false;
                     }
                 } else if suffix || p.use_mode != ParameterUse::Unrestricted || !self.ordinary(p.ty)
@@ -364,7 +370,7 @@ impl Oracle<'_> {
             let Some(f) = self.function(mapping.function) else {
                 return false;
             };
-            if !matches!(f.effect, FunctionEffect::Pure)
+            if f.effect != m.effect
                 || !f.type_parameters.is_empty()
                 || !f.effect_parameters.is_empty()
                 || !f.requirement_parameters.is_empty()

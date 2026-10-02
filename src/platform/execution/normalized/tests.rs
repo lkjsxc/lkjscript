@@ -55,6 +55,12 @@ mod owned_generic_tests;
 mod owned_product_tests;
 #[path = "owned_task_boundary_tests.rs"]
 mod owned_task_boundary_tests;
+#[path = "owned_task_method_boundary_tests.rs"]
+mod owned_task_method_boundary_tests;
+#[path = "owned_task_method_fixture.rs"]
+mod owned_task_method_fixture;
+#[path = "owned_task_method_tests.rs"]
+mod owned_task_method_tests;
 #[path = "owned_task_tests.rs"]
 mod owned_task_tests;
 

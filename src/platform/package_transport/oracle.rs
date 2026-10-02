@@ -371,23 +371,24 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
     // Reconstruct static-witness visibility directly from the independently
     // selected public inventories, never from canonical private owners.
     for (package, inventory) in &interfaces {
-        let require = |reference: DeclarationReference,
-                       kind: OwnerKind|
+        let require = |package_id: PackageId,
+                       key: OwnerKey,
+                       kinds: &[OwnerKind]|
          -> Result<(), Diagnostic> {
             reader.charge(1)?;
-            let mut declared = reference.package == *package;
+            let mut declared = package_id == *package;
             for dependency in &revisions[package].dependencies {
                 reader.charge(1)?;
-                declared |= dependency.package == reference.package;
+                declared |= dependency.package == package_id;
             }
             if !declared {
                 return Err(failure("static witness names an undeclared dependency"));
             }
             let owner = interfaces
-                .get(&reference.package)
-                .and_then(|i| i.get(&OwnerKey::Declaration(reference.declaration)))
+                .get(&package_id)
+                .and_then(|i| i.get(&key))
                 .ok_or_else(|| failure("static witness signature is not public"))?;
-            let matches = match (kind, owner) {
+            let matches = kinds.iter().any(|kind| match (kind, owner) {
                 (OwnerKind::OwnedContract, PackageInterfaceRecord::Declaration(d)) => matches!(
                     d.payload,
                     PackageInterfaceDeclarationPayload::OwnedContract(_)
@@ -395,8 +396,12 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
                 (OwnerKind::PureFunction, PackageInterfaceRecord::Declaration(d)) => {
                     matches!(&d.payload, PackageInterfaceDeclarationPayload::Function(f) if matches!(f.effect, FunctionEffect::Pure))
                 }
+                (OwnerKind::TaskFunction, PackageInterfaceRecord::Declaration(d)) => {
+                    matches!(&d.payload, PackageInterfaceDeclarationPayload::Function(f) if matches!(f.effect, FunctionEffect::Task { .. }))
+                }
+                (OwnerKind::Requirement, PackageInterfaceRecord::Requirement(_)) => true,
                 _ => false,
-            };
+            });
             if !matches {
                 return Err(failure(
                     "static witness public signature has the wrong kind",
@@ -410,15 +415,39 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
                 continue;
             };
             match &d.payload {
+                PackageInterfaceDeclarationPayload::OwnedContract(c) => {
+                    for method in &c.methods {
+                        reader.charge(1)?;
+                        for requirement in method.effect.row().requirements {
+                            require(
+                                requirement.package(),
+                                requirement.owner(),
+                                &[OwnerKind::Requirement],
+                            )?;
+                        }
+                    }
+                }
                 PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
-                    require(i.contract, OwnerKind::OwnedContract)?;
+                    require(
+                        i.contract.package,
+                        OwnerKey::Declaration(i.contract.declaration),
+                        &[OwnerKind::OwnedContract],
+                    )?;
                     for m in &i.methods {
-                        require(m.function, OwnerKind::PureFunction)?;
+                        require(
+                            m.function.package,
+                            OwnerKey::Declaration(m.function.declaration),
+                            &[OwnerKind::PureFunction, OwnerKind::TaskFunction],
+                        )?;
                     }
                 }
                 PackageInterfaceDeclarationPayload::Function(f) => {
                     for p in &f.implementation_parameters {
-                        require(p.contract, OwnerKind::OwnedContract)?;
+                        require(
+                            p.contract.package,
+                            OwnerKey::Declaration(p.contract.declaration),
+                            &[OwnerKind::OwnedContract],
+                        )?;
                     }
                 }
                 _ => {}
@@ -546,6 +575,22 @@ fn public_inventory(
             DeclarationPayload::OwnedContract(c) => {
                 reader.charge(1)?;
                 selected.insert(OwnerKey::TypeParameter(c.self_parameter));
+                for method in &c.methods {
+                    reader.charge(1)?;
+                    if let FunctionEffect::Task {
+                        requirements,
+                        effect_parameters,
+                    } = &method.effect
+                    {
+                        reader.charge(requirements.len() + effect_parameters.len())?;
+                        selected.extend(
+                            requirements
+                                .iter()
+                                .filter(|r| r.package() == snapshot.root.package_id)
+                                .map(|r| r.owner()),
+                        );
+                    }
+                }
                 PackageInterfaceDeclarationPayload::OwnedContract(c.clone())
             }
             DeclarationPayload::OwnedImplementation(i) => {

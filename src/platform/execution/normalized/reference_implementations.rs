@@ -101,12 +101,27 @@ impl ReferenceState<'_> {
         let mut names = BTreeSet::new();
         for method in &contract.methods {
             self.witness_metadata_step()?;
-            if !ids.insert(method.id)
-                || !names.insert(&method.name)
-                || !matches!(method.effect, FunctionEffect::Pure)
-            {
+            if !ids.insert(method.id) || !names.insert(&method.name) {
                 return Err(reference_type_error(
                     "invalid method identity or callable kind",
+                ));
+            }
+            if let FunctionEffect::Task {
+                requirements,
+                effect_parameters,
+            } = &method.effect
+            {
+                for _ in requirements {
+                    self.witness_metadata_step()?;
+                }
+                for _ in effect_parameters {
+                    self.witness_metadata_step()?;
+                }
+            }
+            let row = method.effect.row();
+            if row.validate().is_err() || !row.is_closed() {
+                return Err(reference_type_error(
+                    "method effect row is not closed and canonical",
                 ));
             }
             let mut suffix = false;
@@ -118,9 +133,12 @@ impl ReferenceState<'_> {
                     })
                 {
                     suffix = true;
-                    if p.use_mode == ParameterUse::Unrestricted {
+                    if p.use_mode == ParameterUse::Unrestricted
+                        || (!matches!(method.effect, FunctionEffect::Pure)
+                            && p.use_mode != ParameterUse::Consume)
+                    {
                         return Err(reference_type_error(
-                            "Self method parameter is unrestricted",
+                            "Self requires scoped pure borrowing or owned consumption",
                         ));
                     }
                 } else if suffix
@@ -158,7 +176,7 @@ impl ReferenceState<'_> {
                     "method implementation must be a graph function",
                 ));
             };
-            if !matches!(function.effect, FunctionEffect::Pure)
+            if function.effect != method.effect
                 || !function.type_parameters.is_empty()
                 || !function.effect_parameters.is_empty()
                 || !function.requirement_parameters.is_empty()
@@ -166,7 +184,7 @@ impl ReferenceState<'_> {
                 || function.parameters.len() != method.parameters.len()
             {
                 return Err(reference_type_error(
-                    "method implementation must be exact monomorphic pure code",
+                    "method implementation must have exact monomorphic type, callable kind and effects",
                 ));
             }
             let parameters = self.parameters(target.package, &function.parameters)?;
