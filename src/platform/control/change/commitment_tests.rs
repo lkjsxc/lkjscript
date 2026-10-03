@@ -315,7 +315,7 @@ fn unsupported_and_future_magics_keep_the_existing_current_identity_fallback() {
     for intent in [
         b"".as_slice(),
         b"LKJACR13",
-        b"LKJACR26",
+        b"LKJACR27",
         b"LKJACR99",
         b"unknown",
     ] {

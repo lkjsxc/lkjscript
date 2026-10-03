@@ -10,8 +10,9 @@ At least one case must carry direct owned data: ByteBuffer, OwnedI64Cell, a fini
 owned product or choice, or an exactly scoped Owned parameter. Other payloads must
 satisfy the existing closed ordinary first-order proof, following all nominal
 members and actual arguments, including phantom arguments and untaken cases.
-Open ordinary parameters, functions, tasks, streams, secrets and capability resources
-are not ordinary choice payloads. No new Data constraint is introduced. Ordinary
+Development 0.1.71 also admits exact in-scope [transferable ordinary parameters](transferable-types.md)
+inside ordinary payloads. Unconstrained open parameters, functions, tasks, streams,
+secrets and capability resources are not ordinary choice payloads. Ordinary
 records, variants and unrestricted containers still cannot contain owned choices.
 
 ## Meaning and lexical scope

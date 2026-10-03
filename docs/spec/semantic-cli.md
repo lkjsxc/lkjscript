@@ -1204,18 +1204,22 @@ multi-tenant isolation.
 The rank-one constraint authoring forms are:
 
 ```text
-add.type-parameter as=$T declaration=DECLARATION name=NAME [constraint=none|capture-safe]
-set.type-parameter-constraint parameter=OWNER_SELECTOR constraint=none|capture-safe
+add.type-parameter as=$T declaration=DECLARATION name=NAME [constraint=CONSTRAINT]
+set.type-parameter-constraint parameter=OWNER_SELECTOR constraint=CONSTRAINT
 ```
 
 Both lower to typed changes with the same closed constraint set as canonical/JSON authoring.
+`CONSTRAINT` accepts `none`, `capture-safe`, `owned`, `transferable`,
+`"capture-safe transferable"` or `"owned transferable"`. Combined values are quoted.
+Transfer bounds belong only to graph functions; see [transferable types](transferable-types.md)
+for the exact scope and structural obligations.
 The setter requires an exact type-parameter owner, preserves its identity and declaration order,
 and constitutes an interface edit. Plan and apply validate the entire final candidate: strengthening
 can invalidate callers, and clearing can invalidate a capturing body. One coherent request can change
 constraint, body and callers together. Review reports affected dependents. Stale reviewed apply,
 malformed constraints, cancellation and exhausted validation cannot partially advance accepted HEAD.
-Owner queries, full function definitions and built-in/staged interfaces expose `constraint=none` or
-`constraint=capture-safe`; definition continuations remain revision-pinned and reject after edits.
+Owner queries, full function definitions and built-in/staged interfaces expose the
+exact canonical constraint set; definition continuations remain revision-pinned and reject after edits.
 
 The declaration selector accepts pure and task functions, records and variants. Nominal applications use
 `type.application as=@Applied declaration=DECLARATION` followed by ordered

@@ -66,7 +66,11 @@ impl Read<'_> {
         ] {
             self.reserve(count)?;
         }
-        let expected = canonical_code(self, self.package, tables, root, parameters)?;
+        let scope = match unit.source.owner {
+            OwnerKey::Declaration(declaration) => Some(declaration),
+            _ => None,
+        };
+        let expected = canonical_code(self, self.package, scope, tables, root, parameters)?;
         if expected != *actual {
             return Err(artifact_error(
                 DiagnosticClass::Corrupt,

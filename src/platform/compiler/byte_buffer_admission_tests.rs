@@ -596,8 +596,15 @@ fn reject_source(snapshot: KernelSnapshot, name: &str, carrier: TypeForm, callee
     };
     assert_eq!(
         *code,
-        super::super::lower::canonical_code(&forged, unit.source.package, &unit.tables, root, &[],)
-            .unwrap(),
+        super::super::lower::canonical_code(
+            &forged,
+            unit.source.package,
+            None,
+            &unit.tables,
+            root,
+            &[],
+        )
+        .unwrap(),
         "forged instructions must exactly correspond to forged canonical meaning"
     );
 

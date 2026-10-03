@@ -23,6 +23,20 @@ struct CanonicalParallelCall {
 }
 
 impl ReferenceState<'_> {
+    fn resolve_parallel_types(
+        &self,
+        types: &[TypeObjectDigest],
+    ) -> Result<Vec<TypeObjectDigest>, ExecutionError> {
+        let empty = BTreeMap::new();
+        let bindings = self.type_scopes.last().unwrap_or(&empty);
+        types
+            .iter()
+            .map(|ty| {
+                self.schema
+                    .transfer_type_identity(*ty, bindings, self.control)
+            })
+            .collect()
+    }
     fn parallel_transfer_type(
         &self,
         ty: TypeObjectDigest,
@@ -58,7 +72,7 @@ impl ReferenceState<'_> {
                 }
                 Ok(true)
             }
-            _ if self.schema.comparable_types.contains(&ty) => Ok(false),
+            _ if self.schema.transferable_types.contains(&ty) => Ok(false),
             _ => Err(reference_type_error(
                 "structured result requires closed data or owned memory",
             )),
@@ -126,6 +140,8 @@ impl ReferenceState<'_> {
                 "parallel branch must be a canonical graph function",
             ));
         };
+        self.charge_allocation((types.len() * std::mem::size_of::<TypeObjectDigest>()) as u64)?;
+        let types = self.resolve_parallel_types(&types)?;
         let mut signature = self.function_signature(function)?;
         if !matches!(&signature.effect, FunctionEffect::Task { requirements, effect_parameters } if requirements.is_empty() && effect_parameters.is_empty())
             || !signature.effect_parameters.is_empty()
@@ -152,8 +168,8 @@ impl ReferenceState<'_> {
             .zip(&signature.type_parameter_constraints)
         {
             let memory = self.parallel_transfer_type(*ty, 0, &mut 0)?;
-            if memory != (*constraint == crate::platform::kernel::TypeParameterConstraints::Owned)
-                || (*constraint == crate::platform::kernel::TypeParameterConstraints::CaptureSafe
+            if memory != constraint.has_owned()
+                || (constraint.requires_capture_safe()
                     && !self.schema.capture_safe_types.contains(ty))
                 || bindings.insert(*parameter, *ty).is_some()
             {
@@ -167,31 +183,22 @@ impl ReferenceState<'_> {
         )?;
         let mut selected = Vec::with_capacity(implementations.len());
         for operand in implementations {
-            let crate::platform::kernel::ImplementationOperand::Concrete { implementation } =
-                operand
-            else {
-                return Err(reference_type_error(
-                    "parallel requires concrete child implementation operands",
-                ));
-            };
-            selected.push(implementation);
+            selected.push(self.resolve_implementation(operand)?);
         }
         self.implementation_bindings(&declaration, &bindings, &selected)?;
         if !bindings.is_empty() {
-            signature.result = self
-                .schema
-                .substitute_type(signature.result, &bindings, 0)
-                .ok_or_else(|| reference_type_error("missing concrete child result"))?;
+            signature.result =
+                self.schema
+                    .transfer_type_identity(signature.result, &bindings, self.control)?;
         }
         self.parallel_transfer_type(signature.result, 0, &mut 0)?;
         let mut seen_owned = false;
         for parameter in &mut signature.parameters {
             self.control.check()?;
             if !bindings.is_empty() {
-                parameter.ty = self
-                    .schema
-                    .substitute_type(parameter.ty, &bindings, 0)
-                    .ok_or_else(|| reference_type_error("missing concrete child parameter"))?;
+                parameter.ty =
+                    self.schema
+                        .transfer_type_identity(parameter.ty, &bindings, self.control)?;
             }
             let memory = self.parallel_transfer_type(parameter.ty, 0, &mut 0)?;
             if seen_owned && !memory {
@@ -285,24 +292,21 @@ impl ReferenceState<'_> {
             .collect();
         let substitute = |ty| {
             if bindings.is_empty() {
-                Some(ty)
+                Ok(ty)
             } else {
-                self.schema.substitute_type(ty, &bindings, 0)
+                self.schema
+                    .transfer_type_identity(ty, &bindings, self.control)
             }
         };
         let selected = &self.program.functions[offset];
-        if substitute(selected.result) != Some(signature.result)
-            || selected.parameters.len() != signature.parameters.len()
-            || selected
-                .parameters
-                .iter()
-                .zip(&signature.parameters)
-                .any(|(prepared, canonical)| {
-                    substitute(prepared.ty) != Some(canonical.ty)
-                        || prepared.use_mode != canonical.use_mode
-                        || prepared.resource_requirement.is_some()
-                })
-        {
+        let mut matches = substitute(selected.result)? == signature.result
+            && selected.parameters.len() == signature.parameters.len();
+        for (prepared, canonical) in selected.parameters.iter().zip(&signature.parameters) {
+            matches &= substitute(prepared.ty)? == canonical.ty
+                && prepared.use_mode == canonical.use_mode
+                && prepared.resource_requirement.is_none();
+        }
+        if !matches {
             return Err(reference_type_error(
                 "physical child admission disagrees with its canonical instantiated signature",
             ));
@@ -603,7 +607,12 @@ impl ReferenceState<'_> {
                     if value.memory_form().is_some() {
                         CheckedValue::memory(&state.schema, value)
                     } else {
-                        state.admit_raw(value, parameter.ty, &bindings, None, true)
+                        let ty = state.schema.transfer_type_identity(
+                            parameter.ty,
+                            &bindings,
+                            state.control,
+                        )?;
+                        state.admit_raw(value, ty, &BTreeMap::new(), None, true)
                     }
                 })
                 .collect::<Result<Vec<_>, _>>()?;

@@ -55,7 +55,7 @@ fn parallel_result_affinity_is_exact_for_both_mixed_orientations_and_owned_pairs
         let (left, right) = branches(&source);
         for (expression, owned) in [left, right].into_iter().zip(expected) {
             assert_eq!(
-                parallel::admit_call(&source, expression)
+                parallel::admit_call(&source, expression, None)
                     .unwrap()
                     .result_owned,
                 owned
@@ -88,7 +88,7 @@ fn parallel_returned_ownership_cannot_be_erased_or_duplicate_an_input() {
 fn parallel_result_admission_checks_unselected_owned_choice_cases() {
     let mut source = author(OWNED).unwrap();
     let (left, _) = branches(&source);
-    let call = parallel::admit_call(&source, left).unwrap();
+    let call = parallel::admit_call(&source, left, None).unwrap();
     let secret = TypeObject::new(TypeForm::Secret).unwrap();
     let secret_type = encode_type_object(&secret).unwrap().0;
     source.types.insert(secret_type, secret);
@@ -118,6 +118,6 @@ fn parallel_result_admission_checks_unselected_owned_choice_cases() {
         panic!("child function");
     };
     function.result = result;
-    assert!(parallel::admit_call(&source, left).is_err());
+    assert!(parallel::admit_call(&source, left, None).is_err());
     assert!(!memory_reference::accepts(&source));
 }

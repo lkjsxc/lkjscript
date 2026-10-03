@@ -31,11 +31,11 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-12";
-pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 12;
-pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF12";
+pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-13";
+pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 13;
+pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF13";
 pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str =
-    "lkjscript.package-interface-owner-envelope.v12";
+    "lkjscript.package-interface-owner-envelope.v13";
 const PACKAGE_INTERFACE_IDENTITY_MAGIC: [u8; 8] = *b"LKJPIFI1";
 const PACKAGE_INTERFACE_IDENTITY_DOMAIN: &str = "lkjscript.package-interface-identity.v1";
 pub const MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES: usize = 1024 * 1024;
@@ -87,6 +87,116 @@ struct PackageInterfaceOwner11 {
     record: crate::platform::kernel::interface11::PackageInterfaceRecord11,
 }
 
+/// Frozen generation 12 admits only the original three constraint tags.
+#[derive(Clone, Debug, Decode, Encode)]
+struct PackageInterfaceOwner12 {
+    contract_version: u16,
+    record: PackageInterfaceRecord12,
+}
+
+#[derive(Clone, Debug, Decode, Encode)]
+enum PackageInterfaceRecord12 {
+    Declaration(crate::platform::kernel::PackageInterfaceDeclaration),
+    TypeParameter(TypeParameterRecord12),
+    EffectParameter(crate::platform::kernel::EffectParameterRecord),
+    Field(crate::platform::kernel::FieldRecord),
+    Case(crate::platform::kernel::CaseRecord),
+    Operation(crate::platform::kernel::OperationRecord),
+    Parameter(crate::platform::kernel::ParameterRecord),
+    Requirement(crate::platform::kernel::RequirementRecord),
+    Port(crate::platform::kernel::PackageInterfacePort),
+    RequirementParameter(crate::platform::kernel::RequirementParameterRecord),
+}
+
+#[derive(Clone, Debug, Decode, Encode)]
+struct TypeParameterRecord12 {
+    header: crate::platform::kernel::OwnerHeader,
+    declaration: DeclarationId,
+    name: crate::platform::kernel::Name,
+    constraints: TypeParameterConstraints12,
+}
+
+#[derive(Clone, Debug, Decode, Encode)]
+enum TypeParameterConstraints12 {
+    None,
+    CaptureSafe,
+    Owned,
+}
+
+impl From<PackageInterfaceRecord12> for PackageInterfaceRecord {
+    fn from(record: PackageInterfaceRecord12) -> Self {
+        use PackageInterfaceRecord12 as W;
+        match record {
+            W::Declaration(v) => Self::Declaration(v),
+            W::TypeParameter(v) => {
+                Self::TypeParameter(crate::platform::kernel::TypeParameterRecord {
+                    header: v.header,
+                    declaration: v.declaration,
+                    name: v.name,
+                    constraints: match v.constraints {
+                        TypeParameterConstraints12::None => {
+                            crate::platform::kernel::TypeParameterConstraints::None
+                        }
+                        TypeParameterConstraints12::CaptureSafe => {
+                            crate::platform::kernel::TypeParameterConstraints::CaptureSafe
+                        }
+                        TypeParameterConstraints12::Owned => {
+                            crate::platform::kernel::TypeParameterConstraints::Owned
+                        }
+                    },
+                })
+            }
+            W::EffectParameter(v) => Self::EffectParameter(v),
+            W::Field(v) => Self::Field(v),
+            W::Case(v) => Self::Case(v),
+            W::Operation(v) => Self::Operation(v),
+            W::Parameter(v) => Self::Parameter(v),
+            W::Requirement(v) => Self::Requirement(v),
+            W::Port(v) => Self::Port(v),
+            W::RequirementParameter(v) => Self::RequirementParameter(v),
+        }
+    }
+}
+
+impl TryFrom<PackageInterfaceRecord> for PackageInterfaceRecord12 {
+    type Error = Diagnostic;
+    fn try_from(record: PackageInterfaceRecord) -> Result<Self, Self::Error> {
+        use PackageInterfaceRecord as C;
+        Ok(match record {
+            C::Declaration(v) => Self::Declaration(v),
+            C::TypeParameter(v) => Self::TypeParameter(TypeParameterRecord12 {
+                header: v.header,
+                declaration: v.declaration,
+                name: v.name,
+                constraints: match v.constraints {
+                    crate::platform::kernel::TypeParameterConstraints::None => {
+                        TypeParameterConstraints12::None
+                    }
+                    crate::platform::kernel::TypeParameterConstraints::CaptureSafe => {
+                        TypeParameterConstraints12::CaptureSafe
+                    }
+                    crate::platform::kernel::TypeParameterConstraints::Owned => {
+                        TypeParameterConstraints12::Owned
+                    }
+                    _ => {
+                        return Err(interface_corrupt(
+                            "transferable constraints require interface generation 13",
+                        ));
+                    }
+                },
+            }),
+            C::EffectParameter(v) => Self::EffectParameter(v),
+            C::Field(v) => Self::Field(v),
+            C::Case(v) => Self::Case(v),
+            C::Operation(v) => Self::Operation(v),
+            C::Parameter(v) => Self::Parameter(v),
+            C::Requirement(v) => Self::Requirement(v),
+            C::Port(v) => Self::Port(v),
+            C::RequirementParameter(v) => Self::RequirementParameter(v),
+        })
+    }
+}
+
 impl PackageInterfaceOwner {
     pub fn project(
         canonical: &OwnerRecord,
@@ -119,6 +229,8 @@ impl PackageInterfaceOwner {
                 10
             } else if canonical.header().contract_version < 18 {
                 11
+            } else if canonical.header().contract_version < 22 {
+                12
             } else {
                 PACKAGE_INTERFACE_CONTRACT_VERSION
             },
@@ -168,6 +280,19 @@ impl PackageInterfaceOwner {
             )?;
             return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
         }
+        if self.contract_version == 12 {
+            let wire = PackageInterfaceOwner12 {
+                contract_version: 12,
+                record: self.record.clone().try_into()?,
+            };
+            let bytes = crate::platform::packed::encode(
+                *b"LKJPIF12",
+                "lkjscript.package-interface-owner-envelope.v12",
+                &wire,
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
+        }
         let bytes = crate::platform::packed::encode(
             PACKAGE_INTERFACE_MAGIC,
             PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
@@ -189,7 +314,23 @@ impl PackageInterfaceOwner {
                 "package-interface owner bytes disagree with their exact digest",
             ));
         }
-        let value: Self = if bytes.starts_with(b"LKJPIF11") {
+        let value: Self = if bytes.starts_with(b"LKJPIF12") {
+            let wire: PackageInterfaceOwner12 = crate::platform::packed::decode(
+                bytes,
+                *b"LKJPIF12",
+                "lkjscript.package-interface-owner-envelope.v12",
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            if wire.contract_version != 12 {
+                return Err(interface_corrupt(
+                    "predecessor interface envelope has a foreign generation",
+                ));
+            }
+            Self {
+                contract_version: 12,
+                record: wire.record.into(),
+            }
+        } else if bytes.starts_with(b"LKJPIF11") {
             let wire: PackageInterfaceOwner11 = crate::platform::packed::decode(
                 bytes,
                 *b"LKJPIF11",
@@ -252,11 +393,20 @@ impl PackageInterfaceOwner {
         if self.contract_version != PACKAGE_INTERFACE_CONTRACT_VERSION
             && self.contract_version != 10
             && self.contract_version != 11
+            && self.contract_version != 12
         {
             return Err(interface_error(
                 DiagnosticClass::Source,
                 "package_interface_contract",
                 "package-interface owner uses a predecessor or foreign contract",
+            ));
+        }
+        if self.contract_version < 13
+            && matches!(&self.record,
+            PackageInterfaceRecord::TypeParameter(p) if p.constraints.requires_transfer())
+        {
+            return Err(interface_corrupt(
+                "transferable constraints require interface generation 13",
             ));
         }
         self.record.validate_local()
@@ -1627,6 +1777,82 @@ mod tests {
     use crate::platform::kernel::encode_type_object;
     use crate::platform::storage::memory::MemoryPackedStore;
     use crate::platform::witness::rebuild_full_witness;
+
+    #[test]
+    fn transferable_interface13_preserves_frozen_interface12_and_rejects_new_tags() {
+        use crate::platform::kernel::{
+            Name, OwnerHeader, TypeParameterConstraints as C, TypeParameterRecord,
+        };
+        let owner =
+            OwnerKey::TypeParameter(TypeParameterId::migrate(b"interface-transfer-bounds", 0));
+        let mut parameter = TypeParameterRecord {
+            header: OwnerHeader::new(owner, OwnerKind::TypeParameter),
+            declaration: DeclarationId::migrate(b"interface-transfer-bounds", 0),
+            name: Name::new("T").unwrap(),
+            constraints: C::None,
+        };
+        for constraints in [C::None, C::CaptureSafe, C::Owned] {
+            parameter.header.contract_version = 21;
+            parameter.constraints = constraints;
+            let value = PackageInterfaceOwner {
+                contract_version: 12,
+                record: PackageInterfaceRecord::TypeParameter(parameter.clone()),
+            };
+            let original = crate::platform::packed::encode(
+                *b"LKJPIF12",
+                "lkjscript.package-interface-owner-envelope.v12",
+                &value,
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )
+            .unwrap();
+            let (digest, bytes) = value.encode().unwrap();
+            assert_eq!(
+                bytes,
+                original,
+                "frozen constraint tag {}",
+                constraints.tag()
+            );
+            assert_eq!(
+                PackageInterfaceOwner::decode(&bytes, owner, digest).unwrap(),
+                value
+            );
+        }
+        for constraints in [
+            C::Transferable,
+            C::CaptureSafeTransferable,
+            C::OwnedTransferable,
+        ] {
+            parameter.header.contract_version = 22;
+            parameter.constraints = constraints;
+            let mut value = PackageInterfaceOwner {
+                contract_version: 13,
+                record: PackageInterfaceRecord::TypeParameter(parameter.clone()),
+            };
+            let (digest, bytes) = value.encode().unwrap();
+            assert_eq!(&bytes[..8], b"LKJPIF13");
+            assert_eq!(
+                PackageInterfaceOwner::decode(&bytes, owner, digest).unwrap(),
+                value
+            );
+            value.contract_version = 12;
+            assert!(value.encode().is_err());
+            let forged = crate::platform::packed::encode(
+                *b"LKJPIF12",
+                "lkjscript.package-interface-owner-envelope.v12",
+                &value,
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )
+            .unwrap();
+            assert!(
+                PackageInterfaceOwner::decode(
+                    &forged,
+                    owner,
+                    PackageInterfaceOwnerDigest::of(&forged)
+                )
+                .is_err()
+            );
+        }
+    }
 
     fn built_fixture() -> (
         PackageId,

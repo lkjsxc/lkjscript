@@ -21,7 +21,17 @@ type Calls = VecDeque<Application>;
 const MAXIMUM_METADATA_BYTES: usize = 256 * 1024 * 1024;
 
 struct Closure<'a> {
-    parallel_targets: BTreeSet<(DeclarationReference, Vec<TypeObjectDigest>)>,
+    parallel_targets: BTreeSet<(
+        DeclarationReference,
+        Vec<TypeObjectDigest>,
+        Option<DeclarationReference>,
+    )>,
+    constrained_applications: BTreeSet<(
+        DeclarationReference,
+        Vec<TypeObjectDigest>,
+        Option<DeclarationReference>,
+    )>,
+    symbolic: bool,
     snapshots: BTreeMap<PackageId, &'a KernelSnapshot>,
     types: &'a mut BTreeMap<TypeObjectDigest, TypeObject>,
     visits: usize,
@@ -51,6 +61,97 @@ fn index_node<T>(allocated: &mut usize) -> Result<(), ExecutionError> {
 }
 
 impl Closure<'_> {
+    fn scoped_owned(
+        &mut self,
+        ty: TypeObjectDigest,
+        scope: Option<DeclarationReference>,
+    ) -> Result<bool, ExecutionError> {
+        self.tick()?;
+        match self.types.get(&ty).ok_or_else(failure)?.form {
+            TypeForm::ByteBuffer
+            | TypeForm::OwnedI64Cell
+            | TypeForm::OwnedProduct { .. }
+            | TypeForm::OwnedChoice { .. } => Ok(true),
+            TypeForm::TypeParameter { parameter } => {
+                let declaration = scope.ok_or_else(failure)?;
+                let OwnerRecord::TypeParameter(record) =
+                    self.owner(declaration.package, OwnerKey::TypeParameter(parameter))?
+                else {
+                    return Err(failure());
+                };
+                if record.declaration != declaration.declaration {
+                    return Err(failure());
+                }
+                Ok(record.constraints.has_owned())
+            }
+            _ => Ok(false),
+        }
+    }
+
+    fn parallel_witnesses(
+        &mut self,
+        function: &crate::platform::kernel::FunctionDeclaration,
+        child_bindings: &Bindings,
+        operands: &[crate::platform::kernel::ImplementationOperand],
+        scope: Option<DeclarationReference>,
+        caller_bindings: &Bindings,
+    ) -> Result<(), ExecutionError> {
+        for (formal, operand) in function.implementation_parameters.iter().zip(operands) {
+            self.tick()?;
+            let expected = self.identity(formal.self_type, child_bindings, 0)?;
+            let (contract, actual) = match *operand {
+                crate::platform::kernel::ImplementationOperand::Concrete { implementation } => {
+                    let OwnerRecord::Declaration(owner) = self
+                        .owner(
+                            implementation.package,
+                            OwnerKey::Declaration(implementation.declaration),
+                        )?
+                        .clone()
+                    else {
+                        return Err(failure());
+                    };
+                    let DeclarationPayload::OwnedImplementation(selected) = owner.payload else {
+                        return Err(failure());
+                    };
+                    (selected.contract, selected.self_type)
+                }
+                crate::platform::kernel::ImplementationOperand::Parameter {
+                    function,
+                    parameter,
+                } => {
+                    if scope != Some(function) {
+                        return Err(failure());
+                    }
+                    let OwnerRecord::Declaration(owner) = self
+                        .owner(
+                            function.package,
+                            OwnerKey::Declaration(function.declaration),
+                        )?
+                        .clone()
+                    else {
+                        return Err(failure());
+                    };
+                    let DeclarationPayload::Function(parent) = owner.payload else {
+                        return Err(failure());
+                    };
+                    let formal = parent
+                        .implementation_parameters
+                        .iter()
+                        .find(|formal| formal.id == parameter)
+                        .ok_or_else(failure)?;
+                    (
+                        formal.contract,
+                        self.identity(formal.self_type, caller_bindings, 0)?,
+                    )
+                }
+            };
+            if contract != formal.contract || actual != expected {
+                return Err(failure());
+            }
+        }
+        Ok(())
+    }
+
     // Independently propagate the greatest reached depth from every product root.
     // A substitution may add depth to an otherwise valid symbolic product type.
     fn product_depths(&mut self) -> Result<(), ExecutionError> {
@@ -181,18 +282,22 @@ impl Closure<'_> {
                 result,
                 effect,
             } => {
-                let effect = super::reference_effects::close(
-                    &effect,
-                    &self.effects,
-                    &self.requirements,
-                    |n| {
-                        allocate::<(crate::platform::kernel::RequirementReference, usize)>(
-                            &mut self.allocated,
-                            n,
-                        )?;
-                        self.control.check()
-                    },
-                )?;
+                let effect = if self.symbolic {
+                    effect
+                } else {
+                    super::reference_effects::close(
+                        &effect,
+                        &self.effects,
+                        &self.requirements,
+                        |n| {
+                            allocate::<(crate::platform::kernel::RequirementReference, usize)>(
+                                &mut self.allocated,
+                                n,
+                            )?;
+                            self.control.check()
+                        },
+                    )?
+                };
                 TypeForm::TaskFunction {
                     parameters: parameters
                         .into_iter()
@@ -239,6 +344,7 @@ impl Closure<'_> {
         bindings: &Bindings,
         calls: &mut Calls,
         task_context: bool,
+        scope: Option<DeclarationReference>,
     ) -> Result<(), ExecutionError> {
         allocate::<ExpressionId>(&mut self.allocated, 1)?;
         let mut pending = vec![root];
@@ -319,36 +425,27 @@ impl Closure<'_> {
                         else {
                             return Err(failure());
                         };
-                        let (function, type_arguments, implementations, arguments) = match child
-                            .operation
-                        {
-                            ExpressionOperation::Call {
-                                function,
-                                type_arguments,
-                                effect_arguments,
-                                requirement_arguments,
-                                arguments,
-                            } if effect_arguments.is_empty()
-                                && requirement_arguments.is_empty() =>
-                            {
-                                (function, type_arguments, Vec::new(), arguments)
-                            }
-                            ExpressionOperation::ImplementationCall {
-                                function,
-                                type_arguments,
-                                implementations,
-                                arguments,
-                            } if implementations.iter().all(|i| {
-                                matches!(
-                                    i,
-                                    crate::platform::kernel::ImplementationOperand::Concrete { .. }
-                                )
-                            }) =>
-                            {
-                                (function, type_arguments, implementations, arguments)
-                            }
-                            _ => return Err(failure()),
-                        };
+                        let (function, type_arguments, implementations, arguments) =
+                            match child.operation {
+                                ExpressionOperation::Call {
+                                    function,
+                                    type_arguments,
+                                    effect_arguments,
+                                    requirement_arguments,
+                                    arguments,
+                                } if effect_arguments.is_empty()
+                                    && requirement_arguments.is_empty() =>
+                                {
+                                    (function, type_arguments, Vec::new(), arguments)
+                                }
+                                ExpressionOperation::ImplementationCall {
+                                    function,
+                                    type_arguments,
+                                    implementations,
+                                    arguments,
+                                } => (function, type_arguments, implementations, arguments),
+                                _ => return Err(failure()),
+                            };
                         let OwnerRecord::Declaration(declaration) = self
                             .owner(
                                 function.package,
@@ -373,19 +470,26 @@ impl Closure<'_> {
                         allocate::<TypeObjectDigest>(&mut self.allocated, type_arguments.len())?;
                         let mut arguments = Vec::new();
                         for ty in type_arguments {
-                            arguments.push(self.identity(ty, &BTreeMap::new(), 0)?);
+                            arguments.push(self.identity(ty, bindings, 0)?);
                         }
                         allocate::<(TypeParameterId, TypeObjectDigest)>(
                             &mut self.allocated,
                             arguments.len(),
                         )?;
-                        let bindings = signature
+                        let child_bindings = signature
                             .type_parameters
                             .iter()
                             .copied()
                             .zip(arguments.iter().copied())
                             .collect();
-                        let ty = self.identity(signature.result, &bindings, 0)?;
+                        self.parallel_witnesses(
+                            &signature,
+                            &child_bindings,
+                            &implementations,
+                            scope,
+                            bindings,
+                        )?;
+                        let ty = self.identity(signature.result, &child_bindings, 0)?;
                         for parameter in &signature.parameters {
                             let OwnerRecord::Parameter(parameter) = self
                                 .owner(function.package, OwnerKey::Parameter(*parameter))?
@@ -393,29 +497,27 @@ impl Closure<'_> {
                             else {
                                 return Err(failure());
                             };
-                            self.identity(parameter.ty, &bindings, 0)?;
+                            self.identity(parameter.ty, &child_bindings, 0)?;
                         }
                         index_node::<(DeclarationReference, Vec<TypeObjectDigest>)>(
                             &mut self.allocated,
                         )?;
-                        self.parallel_targets.insert((function, arguments));
+                        self.parallel_targets.insert((
+                            function,
+                            arguments,
+                            if self.symbolic { scope } else { None },
+                        ));
                         fields.push(crate::platform::kernel::StructuralTypeField {
                             name: crate::platform::kernel::Name::new(name)
                                 .map_err(|_| failure())?,
                             ty,
                         });
                     }
-                    let owned = fields.iter().any(|field| {
-                        matches!(
-                            self.types.get(&field.ty).map(|ty| &ty.form),
-                            Some(
-                                TypeForm::ByteBuffer
-                                    | TypeForm::OwnedI64Cell
-                                    | TypeForm::OwnedProduct { .. }
-                                    | TypeForm::OwnedChoice { .. }
-                            )
-                        )
-                    });
+                    let mut owned = false;
+                    for field in &fields {
+                        owned |=
+                            self.scoped_owned(field.ty, if self.symbolic { scope } else { None })?;
+                    }
                     let object = TypeObject::new(if owned {
                         TypeForm::OwnedProduct { fields }
                     } else {
@@ -455,7 +557,20 @@ impl Closure<'_> {
                         &mut self.allocated,
                         1,
                     )?;
-                    calls.push_back((function, concrete, Vec::new(), Vec::new()));
+                    index_node::<(
+                        DeclarationReference,
+                        Vec<TypeObjectDigest>,
+                        Option<DeclarationReference>,
+                    )>(&mut self.allocated)?;
+                    allocate::<TypeObjectDigest>(&mut self.allocated, concrete.len())?;
+                    self.constrained_applications.insert((
+                        function,
+                        concrete.clone(),
+                        if self.symbolic { scope } else { None },
+                    ));
+                    if !self.symbolic {
+                        calls.push_back((function, concrete, Vec::new(), Vec::new()));
+                    }
                 }
                 ExpressionOperation::Let {
                     bindings: locals, ..
@@ -499,8 +614,22 @@ impl Closure<'_> {
                         &mut self.allocated,
                         effect_arguments.len(),
                     )?;
+                    index_node::<(
+                        DeclarationReference,
+                        Vec<TypeObjectDigest>,
+                        Option<DeclarationReference>,
+                    )>(&mut self.allocated)?;
+                    allocate::<TypeObjectDigest>(&mut self.allocated, concrete.len())?;
+                    self.constrained_applications.insert((
+                        function,
+                        concrete.clone(),
+                        if self.symbolic { scope } else { None },
+                    ));
                     let mut effects = Vec::with_capacity(effect_arguments.len());
                     for row in effect_arguments {
+                        if self.symbolic {
+                            continue;
+                        }
                         self.tick()?;
                         effects.push(super::reference_effects::close(
                             &row,
@@ -520,12 +649,15 @@ impl Closure<'_> {
                     )?;
                     let requirements = requirement_arguments
                         .iter()
+                        .filter(|_| !self.symbolic)
                         .map(|operand| {
                             self.control.check()?;
                             super::reference_effects::resolve(*operand, &self.requirements)
                         })
                         .collect::<Result<Vec<_>, _>>()?;
-                    calls.push_back((function, concrete, effects, requirements));
+                    if !self.symbolic {
+                        calls.push_back((function, concrete, effects, requirements));
+                    }
                 }
                 _ => {}
             }
@@ -594,6 +726,8 @@ pub(super) fn check_product_substitution(
     let control = crate::platform::execution::ExecutionControl::uncancelled();
     let mut closure = Closure {
         parallel_targets: BTreeSet::new(),
+        constrained_applications: BTreeSet::new(),
+        symbolic: false,
         snapshots: BTreeMap::new(),
         types: &mut types,
         visits: 0,
@@ -613,6 +747,8 @@ pub(super) fn complete(
 ) -> Result<(), ExecutionError> {
     let mut closure = Closure {
         parallel_targets: BTreeSet::new(),
+        constrained_applications: BTreeSet::new(),
+        symbolic: false,
         snapshots: snapshots
             .iter()
             .map(|snapshot| (snapshot.root.package_id, *snapshot))
@@ -645,7 +781,54 @@ pub(super) fn complete(
                     _ => None,
                 };
                 if let Some(generic) = generic {
-                    if !generic {
+                    if generic {
+                        if let DeclarationPayload::Function(function) = &declaration.payload {
+                            let scope = DeclarationReference {
+                                package,
+                                declaration: *id,
+                            };
+                            let mut bindings = Bindings::new();
+                            for parameter in &function.type_parameters {
+                                closure.tick()?;
+                                let object = TypeObject::new(TypeForm::TypeParameter {
+                                    parameter: *parameter,
+                                })
+                                .map_err(|_| failure())?;
+                                let (ty, _) = encode_type_object(&object).map_err(|_| failure())?;
+                                index_node::<(TypeObjectDigest, TypeObject)>(
+                                    &mut closure.allocated,
+                                )?;
+                                closure.types.entry(ty).or_insert(object);
+                                index_node::<(TypeParameterId, TypeObjectDigest)>(
+                                    &mut closure.allocated,
+                                )?;
+                                bindings.insert(*parameter, ty);
+                            }
+                            closure.symbolic = true;
+                            closure.identity(function.result, &bindings, 0)?;
+                            for parameter in &function.parameters {
+                                let OwnerRecord::Parameter(parameter) = closure
+                                    .owner(package, OwnerKey::Parameter(*parameter))?
+                                    .clone()
+                                else {
+                                    return Err(failure());
+                                };
+                                closure.identity(parameter.ty, &bindings, 0)?;
+                            }
+                            closure.body(
+                                package,
+                                function.body,
+                                &bindings,
+                                &mut calls,
+                                matches!(
+                                    function.effect,
+                                    crate::platform::kernel::FunctionEffect::Task { .. }
+                                ),
+                                Some(scope),
+                            )?;
+                            closure.symbolic = false;
+                        }
+                    } else {
                         allocate::<(DeclarationReference, Vec<TypeObjectDigest>)>(
                             &mut closure.allocated,
                             1,
@@ -667,7 +850,7 @@ pub(super) fn complete(
             if matches!(record, OwnerRecord::Declaration(_) | OwnerRecord::Port(_)) {
                 for root in record.expression_roots() {
                     let task_context = matches!(record, OwnerRecord::Port(port) if matches!(snapshot.types.get(&port.function_type).map(|t| &t.form), Some(TypeForm::TaskFunction { .. })));
-                    closure.body(package, root, &empty, &mut calls, task_context)?;
+                    closure.body(package, root, &empty, &mut calls, task_context, None)?;
                 }
             }
         }
@@ -782,7 +965,14 @@ pub(super) fn complete(
             closure.identity(parameter.ty, &bindings, 0)?;
         }
         if let Some(body) = body {
-            closure.body(function.package, body, &bindings, &mut calls, task_context)?;
+            closure.body(
+                function.package,
+                body,
+                &bindings,
+                &mut calls,
+                task_context,
+                Some(function),
+            )?;
         }
     }
     closure.effects.clear();
@@ -795,6 +985,7 @@ pub(super) fn complete(
     )?;
     closure.product_depths()?;
     let parallel_targets = std::mem::take(&mut closure.parallel_targets);
+    let constrained_applications = std::mem::take(&mut closure.constrained_applications);
     allocate::<bool>(&mut closure.allocated, schema.variants.len())?;
     schema.affine_variants.resize(schema.variants.len(), false);
     let mut visits = closure.visits;
@@ -808,6 +999,13 @@ pub(super) fn complete(
     )?;
     schema.capture_safe_types =
         property_types(schema, &mut visits, &mut bytes, control, Retention::Capture)?;
+    schema.transferable_types = property_types(
+        schema,
+        &mut visits,
+        &mut bytes,
+        control,
+        Retention::Transfer,
+    )?;
     schema.ordinary_types = property_types(
         schema,
         &mut visits,
@@ -829,14 +1027,58 @@ pub(super) fn complete(
         control,
         Retention::NoApplication,
     )?;
+    // Explicit transfer requirements are independently rechecked for every source
+    // application, including unused arguments and unreachable syntax in generic bodies.
+    for (target, arguments, scope) in constrained_applications {
+        let OwnerRecord::Declaration(owner) =
+            canonical_owner(snapshots, target, OwnerKey::Declaration(target.declaration))?
+        else {
+            return Err(failure());
+        };
+        let parameters = owner.payload.type_parameters();
+        if parameters.len() != arguments.len() {
+            return Err(failure());
+        }
+        for (parameter, actual) in parameters.iter().zip(arguments) {
+            control.check()?;
+            let OwnerRecord::TypeParameter(record) =
+                canonical_owner(snapshots, target, OwnerKey::TypeParameter(*parameter))?
+            else {
+                return Err(failure());
+            };
+            if record.declaration != target.declaration {
+                return Err(failure());
+            }
+            if record.constraints.requires_transfer() {
+                parallel_transfer_type(
+                    schema,
+                    snapshots,
+                    actual,
+                    scope,
+                    &mut visits,
+                    &mut bytes,
+                    control,
+                )?;
+                if scoped_owned(schema, snapshots, actual, scope)? != record.constraints.has_owned()
+                {
+                    return Err(failure());
+                }
+            }
+        }
+    }
     // Recheck canonical signatures against this independent complete data proof.
     // This includes unused targets and untaken expressions visited by body closure.
-    for (target, arguments) in parallel_targets {
+    for (target, arguments, scope) in parallel_targets {
         control.check()?;
         visits = visits
             .checked_add(1)
             .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-            .ok_or_else(failure)?;
+            .ok_or_else(|| {
+                ExecutionError::resource(
+                    "reference_transfer_work",
+                    "canonical transfer proof exhausted its work allowance",
+                )
+            })?;
         let snapshot = snapshots
             .iter()
             .find(|snapshot| snapshot.root.package_id == target.package)
@@ -856,28 +1098,23 @@ pub(super) fn complete(
         allocate::<(TypeParameterId, TypeObjectDigest)>(&mut bytes, arguments.len())?;
         let mut bindings = BTreeMap::new();
         for (parameter, actual) in function.type_parameters.iter().zip(arguments) {
-            parallel_transfer_type(schema, actual, 0, &mut visits, control)?;
+            parallel_transfer_type(
+                schema,
+                snapshots,
+                actual,
+                scope,
+                &mut visits,
+                &mut bytes,
+                control,
+            )?;
             let Some(OwnerRecord::TypeParameter(parameter_record)) =
                 snapshot.owners.get(&OwnerKey::TypeParameter(*parameter))
             else {
                 return Err(failure());
             };
-            let owned = matches!(
-                schema.types.get(&actual).map(|ty| &ty.form),
-                Some(
-                    TypeForm::ByteBuffer
-                        | TypeForm::OwnedI64Cell
-                        | TypeForm::OwnedProduct { .. }
-                        | TypeForm::OwnedChoice { .. }
-                )
-            );
+            let owned = scoped_owned(schema, snapshots, actual, scope)?;
             if parameter_record.declaration != target.declaration
-                || owned
-                    != (parameter_record.constraints
-                        == crate::platform::kernel::TypeParameterConstraints::Owned)
-                || (parameter_record.constraints
-                    == crate::platform::kernel::TypeParameterConstraints::CaptureSafe
-                    && !schema.capture_safe_types.contains(&actual))
+                || owned != parameter_record.constraints.has_owned()
                 || bindings.insert(*parameter, actual).is_some()
             {
                 return Err(failure());
@@ -890,14 +1127,27 @@ pub(super) fn complete(
                 .substitute_type(function.result, &bindings, 0)
                 .ok_or_else(failure)?
         };
-        parallel_transfer_type(schema, result, 0, &mut visits, control)?;
+        parallel_transfer_type(
+            schema,
+            snapshots,
+            result,
+            scope,
+            &mut visits,
+            &mut bytes,
+            control,
+        )?;
         let mut seen_owned = false;
         for parameter in &function.parameters {
             control.check()?;
             visits = visits
                 .checked_add(1)
                 .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-                .ok_or_else(failure)?;
+                .ok_or_else(|| {
+                    ExecutionError::resource(
+                        "reference_transfer_work",
+                        "canonical transfer proof exhausted its work allowance",
+                    )
+                })?;
             let Some(OwnerRecord::Parameter(parameter)) =
                 snapshot.owners.get(&OwnerKey::Parameter(*parameter))
             else {
@@ -910,16 +1160,16 @@ pub(super) fn complete(
                     .substitute_type(parameter.ty, &bindings, 0)
                     .ok_or_else(failure)?
             };
-            parallel_transfer_type(schema, ty, 0, &mut visits, control)?;
-            let owned = matches!(
-                schema.types.get(&ty).map(|t| &t.form),
-                Some(
-                    TypeForm::ByteBuffer
-                        | TypeForm::OwnedI64Cell
-                        | TypeForm::OwnedProduct { .. }
-                        | TypeForm::OwnedChoice { .. }
-                )
-            );
+            parallel_transfer_type(
+                schema,
+                snapshots,
+                ty,
+                scope,
+                &mut visits,
+                &mut bytes,
+                control,
+            )?;
+            let owned = scoped_owned(schema, snapshots, ty, scope)?;
             if seen_owned && !owned {
                 return Err(failure());
             }
@@ -931,7 +1181,6 @@ pub(super) fn complete(
                     parameter.use_mode != crate::platform::kernel::ParameterUse::Consume
                 } else {
                     parameter.use_mode != crate::platform::kernel::ParameterUse::Unrestricted
-                        || !schema.comparable_types.contains(&ty)
                 }
             {
                 return Err(failure());
@@ -943,34 +1192,253 @@ pub(super) fn complete(
     Ok(())
 }
 
-/// Complete canonical result admission, including unused owned choice cases.
-/// This does not use the prepared program's type or ownership classifications.
+#[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+struct TransferContext {
+    declaration: Option<DeclarationReference>,
+    nominal_formals: bool,
+}
+
+fn canonical_owner<'a>(
+    snapshots: &[&'a KernelSnapshot],
+    declaration: DeclarationReference,
+    key: OwnerKey,
+) -> Result<&'a OwnerRecord, ExecutionError> {
+    snapshots
+        .iter()
+        .find(|snapshot| snapshot.root.package_id == declaration.package)
+        .and_then(|snapshot| snapshot.owners.get(&key))
+        .ok_or_else(failure)
+}
+
+fn scoped_owned(
+    schema: &NormalizedReferenceSchema,
+    snapshots: &[&KernelSnapshot],
+    ty: TypeObjectDigest,
+    scope: Option<DeclarationReference>,
+) -> Result<bool, ExecutionError> {
+    match &schema.types.get(&ty).ok_or_else(failure)?.form {
+        TypeForm::ByteBuffer
+        | TypeForm::OwnedI64Cell
+        | TypeForm::OwnedProduct { .. }
+        | TypeForm::OwnedChoice { .. } => Ok(true),
+        TypeForm::TypeParameter { parameter } => {
+            let declaration = scope.ok_or_else(failure)?;
+            let OwnerRecord::TypeParameter(record) =
+                canonical_owner(snapshots, declaration, OwnerKey::TypeParameter(*parameter))?
+            else {
+                return Err(failure());
+            };
+            if record.declaration != declaration.declaration {
+                return Err(failure());
+            }
+            Ok(record.constraints.has_owned())
+        }
+        _ => Ok(false),
+    }
+}
+
+/// Traverse the complete canonical obligation graph. Revisited vertices only suppress
+/// duplicate work; success is returned after every reachable argument, field and case
+/// has been inspected. Nominal bodies use their own finite formal context, while every
+/// actual (including phantoms) remains an obligation in the enclosing context.
 fn parallel_transfer_type(
     schema: &NormalizedReferenceSchema,
+    snapshots: &[&KernelSnapshot],
     ty: TypeObjectDigest,
-    depth: usize,
+    scope: Option<DeclarationReference>,
     visits: &mut usize,
+    allocated: &mut usize,
     control: &crate::platform::execution::ExecutionControl,
 ) -> Result<(), ExecutionError> {
+    type Vertex = (TypeObjectDigest, TransferContext, bool);
     control.check()?;
-    *visits = visits
-        .checked_add(1)
-        .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-        .ok_or_else(failure)?;
-    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-        return Err(failure());
-    }
-    match &schema.types.get(&ty).ok_or_else(failure)?.form {
-        TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Ok(()),
-        TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
-            for field in fields {
-                parallel_transfer_type(schema, field.ty, depth + 1, visits, control)?;
-            }
-            Ok(())
+    let mut pending = VecDeque::new();
+    allocate::<Vertex>(allocated, 1)?;
+    pending.push_back((
+        ty,
+        TransferContext {
+            declaration: scope,
+            nominal_formals: false,
+        },
+        true,
+    ));
+    let mut seen = BTreeSet::new();
+    while let Some(vertex) = pending.pop_front() {
+        control.check()?;
+        *visits = visits
+            .checked_add(1)
+            .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
+            .ok_or_else(|| {
+                ExecutionError::resource(
+                    "reference_transfer_work",
+                    "canonical transfer proof exhausted its work allowance",
+                )
+            })?;
+        if seen.contains(&vertex) {
+            continue;
         }
-        _ if schema.comparable_types.contains(&ty) => Ok(()),
-        _ => Err(failure()),
+        index_node::<Vertex>(allocated)?;
+        seen.insert(vertex);
+        let (ty, context, owners_allowed) = vertex;
+        let form = &schema.types.get(&ty).ok_or_else(failure)?.form;
+        let mut edges = Vec::new();
+        match form {
+            TypeForm::Unit
+            | TypeForm::Bool
+            | TypeForm::I64
+            | TypeForm::F64
+            | TypeForm::Bytes
+            | TypeForm::Text
+            | TypeForm::StaticText => {}
+            TypeForm::ByteBuffer | TypeForm::OwnedI64Cell if owners_allowed => {}
+            TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields }
+                if owners_allowed =>
+            {
+                let mut statically_owned = false;
+                for field in fields {
+                    statically_owned |=
+                        scoped_owned(schema, snapshots, field.ty, context.declaration)?;
+                }
+                if !statically_owned {
+                    return Err(failure());
+                }
+                allocate::<Vertex>(allocated, fields.len())?;
+                for field in fields {
+                    edges.push((field.ty, context, true));
+                }
+            }
+            TypeForm::TypeParameter { parameter } => {
+                let declaration = context.declaration.ok_or_else(failure)?;
+                let OwnerRecord::TypeParameter(record) =
+                    canonical_owner(snapshots, declaration, OwnerKey::TypeParameter(*parameter))?
+                else {
+                    return Err(failure());
+                };
+                let OwnerRecord::Declaration(owner) = canonical_owner(
+                    snapshots,
+                    declaration,
+                    OwnerKey::Declaration(declaration.declaration),
+                )?
+                else {
+                    return Err(failure());
+                };
+                if record.declaration != declaration.declaration
+                    || !owner.payload.type_parameters().contains(parameter)
+                    || (!owners_allowed && record.constraints.has_owned())
+                    || if context.nominal_formals {
+                        record.constraints.has_owned()
+                            || !matches!(
+                                owner.payload,
+                                DeclarationPayload::Record { .. }
+                                    | DeclarationPayload::Variant { .. }
+                            )
+                    } else {
+                        !record.constraints.requires_transfer()
+                            || !matches!(owner.payload, DeclarationPayload::Function(_))
+                    }
+                {
+                    return Err(failure());
+                }
+            }
+            TypeForm::List { item } | TypeForm::Option { item } => {
+                allocate::<Vertex>(allocated, 1)?;
+                edges.push((*item, context, false));
+            }
+            TypeForm::Map { key, value }
+            | TypeForm::Result {
+                ok: key,
+                error: value,
+            } => {
+                allocate::<Vertex>(allocated, 2)?;
+                edges.push((*key, context, false));
+                edges.push((*value, context, false));
+            }
+            TypeForm::StructuralRecord { fields } => {
+                allocate::<Vertex>(allocated, fields.len())?;
+                for field in fields {
+                    edges.push((field.ty, context, false));
+                }
+            }
+            TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
+                let arguments: &[TypeObjectDigest] = match form {
+                    TypeForm::Applied { arguments, .. } => arguments,
+                    _ => &[],
+                };
+                let OwnerRecord::Declaration(owner) = canonical_owner(
+                    snapshots,
+                    *declaration,
+                    OwnerKey::Declaration(declaration.declaration),
+                )?
+                else {
+                    return Err(failure());
+                };
+                let (parameters, fields, cases) = match &owner.payload {
+                    DeclarationPayload::Record {
+                        type_parameters,
+                        fields,
+                    } => (type_parameters, fields.as_slice(), &[][..]),
+                    DeclarationPayload::Variant {
+                        type_parameters,
+                        cases,
+                    } => (type_parameters, &[][..], cases.as_slice()),
+                    _ => return Err(failure()),
+                };
+                if arguments.len() != parameters.len() {
+                    return Err(failure());
+                }
+                allocate::<Vertex>(allocated, arguments.len() + fields.len() + cases.len())?;
+                for (parameter, actual) in parameters.iter().zip(arguments) {
+                    let OwnerRecord::TypeParameter(record) = canonical_owner(
+                        snapshots,
+                        *declaration,
+                        OwnerKey::TypeParameter(*parameter),
+                    )?
+                    else {
+                        return Err(failure());
+                    };
+                    if record.declaration != declaration.declaration
+                        || record.constraints.has_owned()
+                        || record.constraints.requires_transfer()
+                    {
+                        return Err(failure());
+                    }
+                    edges.push((*actual, context, false));
+                }
+                let nested = TransferContext {
+                    declaration: Some(*declaration),
+                    nominal_formals: true,
+                };
+                for field in fields {
+                    let OwnerRecord::Field(record) =
+                        canonical_owner(snapshots, *declaration, OwnerKey::Field(*field))?
+                    else {
+                        return Err(failure());
+                    };
+                    if record.declaration != declaration.declaration {
+                        return Err(failure());
+                    }
+                    edges.push((record.ty, nested, false));
+                }
+                for case in cases {
+                    let OwnerRecord::Case(record) =
+                        canonical_owner(snapshots, *declaration, OwnerKey::Case(*case))?
+                    else {
+                        return Err(failure());
+                    };
+                    if record.declaration != declaration.declaration {
+                        return Err(failure());
+                    }
+                    if let Some(payload) = record.payload {
+                        edges.push((payload, nested, false));
+                    }
+                }
+            }
+            _ => return Err(failure()),
+        }
+        allocate::<Vertex>(allocated, edges.len())?;
+        pending.extend(edges);
     }
+    Ok(())
 }
 
 impl Closure<'_> {
@@ -1230,6 +1698,7 @@ impl Closure<'_> {
 enum Retention {
     BufferFree,
     Capture,
+    Transfer,
     Ordinary,
     Comparable,
     NoApplication,
@@ -1242,7 +1711,7 @@ fn property_types(
     control: &crate::platform::execution::ExecutionControl,
     retention: Retention,
 ) -> Result<BTreeSet<TypeObjectDigest>, ExecutionError> {
-    let callables = retention != Retention::Comparable;
+    let callables = !matches!(retention, Retention::Comparable | Retention::Transfer);
     let secrets = retention == Retention::Ordinary;
     fn tick(visits: &mut usize) -> Result<(), ExecutionError> {
         *visits = visits
@@ -1272,11 +1741,13 @@ fn property_types(
             || retention != Retention::BufferFree
                 && !matches!(
                     object.form,
-                    TypeForm::ByteBuffer
-                        | TypeForm::OwnedI64Cell
-                        | TypeForm::OwnedProduct { .. }
-                        | TypeForm::OwnedChoice { .. }
-                        | TypeForm::Stream { .. }
+                    TypeForm::ByteBuffer | TypeForm::OwnedI64Cell
+                        | TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. }
+                        if retention != Retention::Transfer
+                )
+                && !matches!(
+                    object.form,
+                    TypeForm::Stream { .. }
                         | TypeForm::CapabilityResource { .. }
                         | TypeForm::TypeParameter { .. }
                 )
@@ -1305,7 +1776,15 @@ fn property_types(
                 if !schema.types.contains_key(&child) {
                     return Err(failure());
                 }
-                Ok(safe.contains(&child))
+                Ok(safe.contains(&child)
+                    && (retention != Retention::Transfer
+                        || !matches!(
+                            schema.types[&child].form,
+                            TypeForm::ByteBuffer
+                                | TypeForm::OwnedI64Cell
+                                | TypeForm::OwnedProduct { .. }
+                                | TypeForm::OwnedChoice { .. }
+                        )))
             };
             let accepted = match &object.form {
                 TypeForm::ByteBuffer
@@ -1335,6 +1814,34 @@ fn property_types(
                     if retention == Retention::NoApplication =>
                 {
                     true
+                }
+                TypeForm::ByteBuffer | TypeForm::OwnedI64Cell
+                    if retention == Retention::Transfer =>
+                {
+                    true
+                }
+                TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields }
+                    if retention == Retention::Transfer =>
+                {
+                    let mut accepted = fields.iter().any(|field| {
+                        matches!(
+                            schema.types.get(&field.ty).map(|ty| &ty.form),
+                            Some(
+                                TypeForm::ByteBuffer
+                                    | TypeForm::OwnedI64Cell
+                                    | TypeForm::OwnedProduct { .. }
+                                    | TypeForm::OwnedChoice { .. }
+                            )
+                        )
+                    });
+                    for field in fields {
+                        tick(visits)?;
+                        if !schema.types.contains_key(&field.ty) {
+                            return Err(failure());
+                        }
+                        accepted &= safe.contains(&field.ty);
+                    }
+                    accepted
                 }
                 TypeForm::List { item } | TypeForm::Option { item } => retained(*item)?,
                 TypeForm::Map { key, value }
@@ -1369,7 +1876,15 @@ fn property_types(
                                 if !schema.types.contains_key(&payload) {
                                     return Err(failure());
                                 }
-                                accepted &= safe.contains(&payload);
+                                accepted &= safe.contains(&payload)
+                                    && (retention != Retention::Transfer
+                                        || !matches!(
+                                            schema.types[&payload].form,
+                                            TypeForm::ByteBuffer
+                                                | TypeForm::OwnedI64Cell
+                                                | TypeForm::OwnedProduct { .. }
+                                                | TypeForm::OwnedChoice { .. }
+                                        ));
                             }
                         }
                     } else if matches!(object.form, TypeForm::Applied { .. }) {
@@ -1396,6 +1911,350 @@ fn property_types(
         }
         if safe.len() == before {
             return Ok(safe);
+        }
+    }
+}
+
+#[cfg(test)]
+mod transfer_proof_tests {
+    use super::*;
+    use crate::platform::execution::{ExecutionControl, ExecutionFailureClass};
+    use crate::platform::kernel::TypeParameterConstraints;
+
+    fn source(input: &str) -> KernelSnapshot {
+        super::super::tests::byte_buffer_tests::author_only(input).unwrap()
+    }
+
+    fn declaration(snapshot: &KernelSnapshot, name: &str) -> DeclarationReference {
+        snapshot
+            .owners
+            .iter()
+            .find_map(|(key, record)| {
+                let (OwnerKey::Declaration(id), OwnerRecord::Declaration(owner)) = (key, record)
+                else {
+                    return None;
+                };
+                (owner.name.as_str() == name).then_some(DeclarationReference {
+                    package: snapshot.root.package_id,
+                    declaration: *id,
+                })
+            })
+            .unwrap()
+    }
+
+    fn schema(snapshot: &KernelSnapshot) -> NormalizedReferenceSchema {
+        NormalizedReferenceSchema {
+            types: snapshot
+                .types
+                .iter()
+                .chain(&snapshot.dependency_types)
+                .map(|(digest, object)| (*digest, object.clone()))
+                .collect(),
+            ..NormalizedReferenceSchema::default()
+        }
+    }
+
+    fn intern(schema: &mut NormalizedReferenceSchema, form: TypeForm) -> TypeObjectDigest {
+        let object = TypeObject::new(form).unwrap();
+        let (digest, _) = encode_type_object(&object).unwrap();
+        schema.types.insert(digest, object);
+        digest
+    }
+
+    fn prove(
+        schema: &NormalizedReferenceSchema,
+        snapshot: &KernelSnapshot,
+        ty: TypeObjectDigest,
+        scope: Option<DeclarationReference>,
+    ) -> Result<(), ExecutionError> {
+        parallel_transfer_type(
+            schema,
+            &[snapshot],
+            ty,
+            scope,
+            &mut 0,
+            &mut 0,
+            &ExecutionControl::uncancelled(),
+        )
+    }
+
+    const PARAMETERS: &str = r#"
+declarations.begin
+(units (module create proof
+  (function create keep (visibility public)
+    (type-parameter create T (constraint transferable))
+    (parameter create value (type T)) (returns T) (effect pure) (body (local value)))
+  (function create foreign (visibility public)
+    (type-parameter create U (constraint transferable))
+    (parameter create value (type U)) (returns U) (effect pure) (body (local value)))))
+declarations.end
+"#;
+
+    #[test]
+    fn canonical_transfer_parameters_require_exact_scope_and_explicit_bounds() {
+        let mut snapshot = source(PARAMETERS);
+        let scope = declaration(&snapshot, "keep");
+        let foreign = declaration(&snapshot, "foreign");
+        let OwnerRecord::Declaration(owner) =
+            &snapshot.owners[&OwnerKey::Declaration(scope.declaration)]
+        else {
+            panic!("function owner");
+        };
+        let DeclarationPayload::Function(function) = &owner.payload else {
+            panic!("function");
+        };
+        let ty = function.result;
+        let parameter = function.type_parameters[0];
+        let schema = schema(&snapshot);
+        assert!(prove(&schema, &snapshot, ty, Some(scope)).is_ok());
+        assert!(prove(&schema, &snapshot, ty, None).is_err());
+        assert!(prove(&schema, &snapshot, ty, Some(foreign)).is_err());
+        for constraints in [
+            TypeParameterConstraints::None,
+            TypeParameterConstraints::CaptureSafe,
+            TypeParameterConstraints::Owned,
+        ] {
+            let OwnerRecord::TypeParameter(record) = snapshot
+                .owners
+                .get_mut(&OwnerKey::TypeParameter(parameter))
+                .unwrap()
+            else {
+                panic!("type parameter");
+            };
+            record.constraints = constraints;
+            assert!(
+                prove(&schema, &snapshot, ty, Some(scope)).is_err(),
+                "{constraints:?}"
+            );
+        }
+        for constraints in [
+            TypeParameterConstraints::Transferable,
+            TypeParameterConstraints::CaptureSafeTransferable,
+            TypeParameterConstraints::OwnedTransferable,
+        ] {
+            let OwnerRecord::TypeParameter(record) = snapshot
+                .owners
+                .get_mut(&OwnerKey::TypeParameter(parameter))
+                .unwrap()
+            else {
+                panic!("type parameter");
+            };
+            record.constraints = constraints;
+            assert!(
+                prove(&schema, &snapshot, ty, Some(scope)).is_ok(),
+                "{constraints:?}"
+            );
+        }
+    }
+
+    const RECURSIVE: &str = r#"
+declarations.begin
+(units (module create recursive-proof
+  (record create Left (visibility public) (type-parameter create L)
+    (field create value (type L)) (field create right (type (option (Right L)))))
+  (record create Right (visibility public) (type-parameter create R)
+    (field create left (type (option (Left R)))))
+  (variant create Node (visibility public)
+    (case create loop (payload Node)) (case create inactive (payload I64)))
+  (record create Phantom (visibility public) (type-parameter create P)
+    (field create value (type I64)))))
+declarations.end
+"#;
+
+    #[test]
+    fn canonical_transfer_recursion_finishes_and_rejects_phantoms_and_inactive_cases() {
+        let mut snapshot = source(RECURSIVE);
+        let mut schema = schema(&snapshot);
+        let scalar = intern(&mut schema, TypeForm::I64);
+        let left = intern(
+            &mut schema,
+            TypeForm::Applied {
+                declaration: declaration(&snapshot, "Left"),
+                arguments: vec![scalar],
+            },
+        );
+        let node = intern(
+            &mut schema,
+            TypeForm::Named {
+                declaration: declaration(&snapshot, "Node"),
+            },
+        );
+        assert!(prove(&schema, &snapshot, left, None).is_ok());
+        assert!(prove(&schema, &snapshot, node, None).is_ok());
+        let callable = intern(
+            &mut schema,
+            TypeForm::Function {
+                parameters: vec![],
+                result: scalar,
+            },
+        );
+        let phantom = intern(
+            &mut schema,
+            TypeForm::Applied {
+                declaration: declaration(&snapshot, "Phantom"),
+                arguments: vec![callable],
+            },
+        );
+        assert!(prove(&schema, &snapshot, phantom, None).is_err());
+        let secret = intern(&mut schema, TypeForm::Secret);
+        for owner in snapshot.owners.values_mut() {
+            if let OwnerRecord::Case(case) = owner
+                && case.name.as_str() == "inactive"
+            {
+                case.payload = Some(secret);
+            }
+        }
+        assert!(prove(&schema, &snapshot, node, None).is_err());
+        let right = declaration(&snapshot, "Right");
+        for owner in snapshot.owners.values_mut() {
+            if let OwnerRecord::Field(field) = owner
+                && field.declaration == right.declaration
+            {
+                field.ty = callable;
+            }
+        }
+        assert!(prove(&schema, &snapshot, left, None).is_err());
+    }
+
+    #[test]
+    fn canonical_transfer_capacity_and_cancellation_are_distinct_from_rejection() {
+        let snapshot = source(PARAMETERS);
+        let scope = declaration(&snapshot, "keep");
+        let OwnerRecord::Declaration(owner) =
+            &snapshot.owners[&OwnerKey::Declaration(scope.declaration)]
+        else {
+            panic!("function owner");
+        };
+        let DeclarationPayload::Function(function) = &owner.payload else {
+            panic!("function");
+        };
+        let schema = schema(&snapshot);
+        let mut work = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
+        let error = parallel_transfer_type(
+            &schema,
+            &[&snapshot],
+            function.result,
+            Some(scope),
+            &mut work,
+            &mut 0,
+            &ExecutionControl::uncancelled(),
+        )
+        .unwrap_err();
+        assert_eq!(error.class, ExecutionFailureClass::Resource);
+        let control = ExecutionControl::uncancelled();
+        control.cancel();
+        let error = parallel_transfer_type(
+            &schema,
+            &[&snapshot],
+            function.result,
+            Some(scope),
+            &mut 0,
+            &mut 0,
+            &control,
+        )
+        .unwrap_err();
+        assert_eq!(error.class, ExecutionFailureClass::Cancelled);
+        let mut metadata = MAXIMUM_METADATA_BYTES;
+        let error = parallel_transfer_type(
+            &schema,
+            &[&snapshot],
+            function.result,
+            Some(scope),
+            &mut 0,
+            &mut metadata,
+            &ExecutionControl::uncancelled(),
+        )
+        .unwrap_err();
+        assert_eq!(error.class, ExecutionFailureClass::Resource);
+    }
+
+    #[test]
+    fn canonical_schema_retains_generic_pairs_without_a_concrete_caller() {
+        let snapshot = source(
+            r#"
+declarations.begin
+(units (module create pair-proof
+  (function create keep (visibility public) (effect (task))
+    (type-parameter create T (constraint transferable))
+    (parameter create value (type T)) (returns T) (body (local value)))
+  (function create group (visibility public) (effect (task))
+    (type-parameter create T (constraint transferable))
+    (parameter create value (type T)) (returns (record (left T) (right T)))
+    (body (parallel (call keep (types T) (local value))
+      (call keep (types T) (local value)))))))
+declarations.end
+"#,
+        );
+        let schema = NormalizedReferenceSchema::reconstruct([&snapshot]).unwrap();
+        let group = declaration(&snapshot, "group");
+        let OwnerRecord::Declaration(owner) =
+            &snapshot.owners[&OwnerKey::Declaration(group.declaration)]
+        else {
+            panic!("function owner");
+        };
+        let DeclarationPayload::Function(function) = &owner.payload else {
+            panic!("function");
+        };
+        assert!(schema.types.contains_key(&function.result));
+    }
+    #[test]
+    fn canonical_concrete_transfer_property_preserves_owners_and_complete_alternatives() {
+        use crate::platform::kernel::{Name, StructuralTypeField};
+        let mut schema = NormalizedReferenceSchema::default();
+        let integer = intern(&mut schema, TypeForm::I64);
+        let buffer = intern(&mut schema, TypeForm::ByteBuffer);
+        let cell = intern(&mut schema, TypeForm::OwnedI64Cell);
+        let callback = intern(
+            &mut schema,
+            TypeForm::Function {
+                parameters: vec![],
+                result: integer,
+            },
+        );
+        let fields = |left, right| {
+            vec![
+                StructuralTypeField {
+                    name: Name::new("left").unwrap(),
+                    ty: left,
+                },
+                StructuralTypeField {
+                    name: Name::new("right").unwrap(),
+                    ty: right,
+                },
+            ]
+        };
+        let mixed = intern(
+            &mut schema,
+            TypeForm::OwnedProduct {
+                fields: fields(buffer, integer),
+            },
+        );
+        let ordinary_wrapper = intern(
+            &mut schema,
+            TypeForm::OwnedProduct {
+                fields: fields(integer, integer),
+            },
+        );
+        let list_owner = intern(&mut schema, TypeForm::List { item: cell });
+        let choice = intern(
+            &mut schema,
+            TypeForm::OwnedChoice {
+                cases: fields(mixed, callback),
+            },
+        );
+        let safe = property_types(
+            &schema,
+            &mut 0,
+            &mut 0,
+            &ExecutionControl::uncancelled(),
+            Retention::Transfer,
+        )
+        .unwrap();
+        for ty in [integer, buffer, cell, mixed] {
+            assert!(safe.contains(&ty));
+        }
+        for ty in [callback, ordinary_wrapper, list_owner, choice] {
+            assert!(!safe.contains(&ty));
         }
     }
 }

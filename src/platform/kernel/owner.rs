@@ -162,12 +162,16 @@ impl OwnerRecord {
             }
             Self::TypeParameter(record) => {
                 validate_header_domain(record.header, OwnerKind::TypeParameter)?;
-                if record.constraints == TypeParameterConstraints::Owned
-                    && record.header.contract_version < 18
-                {
+                if record.constraints.has_owned() && record.header.contract_version < 18 {
                     return Err(owner_error(
                         "kernel_owned_generation",
                         "owned constraint requires Graph 18",
+                    ));
+                }
+                if record.constraints.requires_transfer() && record.header.contract_version < 22 {
+                    return Err(owner_error(
+                        "kernel_transfer_constraint_generation",
+                        "transferable constraints require Graph 22",
                     ));
                 }
                 validate_names([&record.name])
@@ -563,6 +567,9 @@ pub enum TypeParameterConstraints {
     None,
     CaptureSafe,
     Owned,
+    Transferable,
+    CaptureSafeTransferable,
+    OwnedTransferable,
 }
 
 impl TypeParameterConstraints {
@@ -571,6 +578,9 @@ impl TypeParameterConstraints {
             Self::None => 0,
             Self::CaptureSafe => 1,
             Self::Owned => 2,
+            Self::Transferable => 3,
+            Self::CaptureSafeTransferable => 4,
+            Self::OwnedTransferable => 5,
         }
     }
 
@@ -579,6 +589,56 @@ impl TypeParameterConstraints {
             Self::None => "none",
             Self::CaptureSafe => "capture-safe",
             Self::Owned => "owned",
+            Self::Transferable => "transferable",
+            Self::CaptureSafeTransferable => "capture-safe transferable",
+            Self::OwnedTransferable => "owned transferable",
+        }
+    }
+
+    pub const fn has_owned(self) -> bool {
+        matches!(self, Self::Owned | Self::OwnedTransferable)
+    }
+
+    pub const fn requires_capture_safe(self) -> bool {
+        matches!(self, Self::CaptureSafe | Self::CaptureSafeTransferable)
+    }
+
+    pub const fn proves_capture_safe(self) -> bool {
+        matches!(
+            self,
+            Self::CaptureSafe | Self::Transferable | Self::CaptureSafeTransferable
+        )
+    }
+
+    pub const fn requires_transfer(self) -> bool {
+        matches!(
+            self,
+            Self::Transferable | Self::CaptureSafeTransferable | Self::OwnedTransferable
+        )
+    }
+
+    pub const fn names(self) -> &'static [&'static str] {
+        match self {
+            Self::None => &[],
+            Self::CaptureSafe => &["capture-safe"],
+            Self::Owned => &["owned"],
+            Self::Transferable => &["transferable"],
+            Self::CaptureSafeTransferable => &["capture-safe", "transferable"],
+            Self::OwnedTransferable => &["owned", "transferable"],
+        }
+    }
+
+    pub fn from_names(names: &[&str]) -> Option<Self> {
+        match names {
+            [] => Some(Self::None),
+            ["capture-safe"] => Some(Self::CaptureSafe),
+            ["owned"] => Some(Self::Owned),
+            ["transferable"] => Some(Self::Transferable),
+            ["capture-safe", "transferable"] | ["transferable", "capture-safe"] => {
+                Some(Self::CaptureSafeTransferable)
+            }
+            ["owned", "transferable"] | ["transferable", "owned"] => Some(Self::OwnedTransferable),
+            _ => None,
         }
     }
 }
@@ -595,6 +655,9 @@ impl<Context> Decode<Context> for TypeParameterConstraints {
             0 => Ok(Self::None),
             1 => Ok(Self::CaptureSafe),
             2 => Ok(Self::Owned),
+            3 => Ok(Self::Transferable),
+            4 => Ok(Self::CaptureSafeTransferable),
+            5 => Ok(Self::OwnedTransferable),
             _ => Err(DecodeError::Other("unknown type-parameter constraint set")),
         }
     }
@@ -611,9 +674,9 @@ impl<'de, Context> BorrowDecode<'de, Context> for TypeParameterConstraints {
 impl Serialize for TypeParameterConstraints {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeSeq;
-        let mut sequence = serializer.serialize_seq(Some(usize::from(*self != Self::None)))?;
-        if *self != Self::None {
-            sequence.serialize_element(self.name())?;
+        let mut sequence = serializer.serialize_seq(Some(self.names().len()))?;
+        for name in self.names() {
+            sequence.serialize_element(name)?;
         }
         sequence.end()
     }
@@ -625,7 +688,8 @@ impl<'de> Deserialize<'de> for TypeParameterConstraints {
         impl<'de> serde::de::Visitor<'de> for ConstraintSet {
             type Value = TypeParameterConstraints;
             fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                formatter.write_str("an empty constraint set, [\"capture-safe\"], or [\"owned\"]")
+                formatter
+                    .write_str("a closed set of capture-safe, owned, and transferable constraints")
             }
             fn visit_seq<A: serde::de::SeqAccess<'de>>(
                 self,
@@ -634,20 +698,20 @@ impl<'de> Deserialize<'de> for TypeParameterConstraints {
                 let Some(value) = sequence.next_element::<String>()? else {
                     return Ok(TypeParameterConstraints::None);
                 };
-                if value != "capture-safe" && value != "owned" {
-                    return Err(serde::de::Error::custom(
-                        "unknown type-parameter constraint",
-                    ));
-                }
+                let second = sequence.next_element::<String>()?;
                 if sequence.next_element::<serde::de::IgnoredAny>()?.is_some() {
                     return Err(serde::de::Error::custom(
-                        "duplicate or unknown type-parameter constraint",
+                        "duplicate, incompatible, or unknown type-parameter constraint",
                     ));
                 }
-                Ok(if value == "owned" {
-                    TypeParameterConstraints::Owned
-                } else {
-                    TypeParameterConstraints::CaptureSafe
+                let constraints = match second.as_deref() {
+                    Some(second) => TypeParameterConstraints::from_names(&[value.as_str(), second]),
+                    None => TypeParameterConstraints::from_names(&[value.as_str()]),
+                };
+                constraints.ok_or_else(|| {
+                    serde::de::Error::custom(
+                        "duplicate, incompatible, or unknown type-parameter constraint",
+                    )
                 })
             }
         }

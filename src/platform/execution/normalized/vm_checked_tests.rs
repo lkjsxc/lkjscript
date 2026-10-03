@@ -34,6 +34,111 @@ fn fixture() -> (NormalizedProgram, KernelSnapshot) {
     (program, snapshot)
 }
 
+#[test]
+fn raw_generic_structural_identity_reserves_scratch_before_cloning_or_encoding() {
+    use crate::platform::kernel::StructuralTypeField;
+    use crate::platform::semantic_id::TypeParameterId;
+
+    let (mut program, _) = fixture();
+    let parameter = TypeParameterId::from_bytes([101; 16]).unwrap();
+    let object = TypeObject::new(TypeForm::TypeParameter { parameter }).unwrap();
+    let symbolic = encode_type_object(&object).unwrap().0;
+    program.types.insert(symbolic, object);
+    let integer = program
+        .types
+        .iter()
+        .find_map(|(digest, object)| matches!(object.form, TypeForm::I64).then_some(*digest))
+        .unwrap();
+    let fields = |ty| {
+        (0..256)
+            .map(|index| StructuralTypeField {
+                name: Name::new(format!(
+                    "field_{index:03}_with_metadata_that_must_not_be_cloned_before_reservation"
+                ))
+                .unwrap(),
+                ty,
+            })
+            .collect()
+    };
+    let template = TypeObject::new(TypeForm::StructuralRecord {
+        fields: fields(symbolic),
+    })
+    .unwrap();
+    let template_id = encode_type_object(&template).unwrap().0;
+    program.types.insert(template_id, template);
+    let concrete = TypeObject::new(TypeForm::StructuralRecord {
+        fields: fields(integer),
+    })
+    .unwrap();
+    let (expected, encoded) = encode_type_object(&concrete).unwrap();
+    // Raw generic boundaries have always accepted structural signatures even
+    // when no graph call has populated their concrete identity in call closure.
+    assert!(!program.types.contains_key(&expected));
+    let bindings = BTreeMap::from([(parameter, integer)]);
+    let resources = NormalizedResourceScope::new().unwrap();
+    let resolve = |program: &NormalizedProgram, maximum, control: &ExecutionControl| {
+        let mut work = ValueWork::default();
+        let mut allocated = 0;
+        let mut charges = 0;
+        let mut items = 0;
+        let mut policy = super::super::NormalizedRunPolicy::foreground();
+        policy.maximum_allocated_bytes = maximum;
+        let result = Admission {
+            shared_budget: None,
+            program,
+            substitutions: &bindings,
+            resources: &resources,
+            control,
+            policy,
+            work: &mut work,
+            allocated: &mut allocated,
+            allocation_charges: &mut charges,
+            items: &mut items,
+            admission_bytes: 0,
+            admission_items: 0,
+        }
+        .type_identity(template_id, &bindings);
+        (result, allocated, charges)
+    };
+    let control = ExecutionControl::uncancelled();
+    let (result, required, charges) = resolve(&program, None, &control);
+    assert_eq!(result.unwrap(), Some(expected));
+    let TypeForm::StructuralRecord { fields } = &concrete.form else {
+        unreachable!()
+    };
+    let name_bytes: u64 = fields
+        .iter()
+        .map(|field| field.name.as_str().len() as u64)
+        .sum();
+    let vector_bytes = (fields.len() * std::mem::size_of::<StructuralTypeField>()) as u64;
+    assert!(required >= name_bytes + vector_bytes + 2 * encoded.len() as u64 - 50);
+    assert_eq!(charges, 1);
+    assert_eq!(
+        resolve(&program, Some(required), &control).0.unwrap(),
+        Some(expected)
+    );
+    let (result, allocated, charges) = resolve(&program, Some(required - 1), &control);
+    let error = result.unwrap_err();
+    assert_eq!(
+        error.class,
+        crate::platform::execution::ExecutionFailureClass::Resource
+    );
+    assert_eq!(error.code, "normalized_allocation");
+    assert_eq!((allocated, charges), (0, 0));
+    assert_eq!(
+        resolve(&program, None, &ExecutionControl::cancel_after_checks(1))
+            .0
+            .unwrap_err()
+            .class,
+        crate::platform::execution::ExecutionFailureClass::Cancelled
+    );
+    assert!(!program.types.contains_key(&expected));
+    program.types.insert(expected, concrete);
+    let (result, allocated, charges) = resolve(&program, Some(0), &control);
+    assert_eq!(result.unwrap(), Some(expected));
+    assert_eq!((allocated, charges), (0, 0));
+}
+
 fn boundary_reader<'a>(
     snapshot: &'a KernelSnapshot,
     admitted: &NormalizedReferenceSchema,
@@ -499,15 +604,18 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                 );
             }
         }
-        let cancelled = invoke(
-            reference,
-            unary,
-            nested(128),
-            Default::default(),
-            &ExecutionControl::cancel_after_checks(37),
-        );
+        let cancelled = value_oracle::cancel_during_capture(3, || {
+            invoke(
+                reference,
+                unary,
+                nested(128),
+                Default::default(),
+                &ExecutionControl::uncancelled(),
+            )
+        });
         assert_eq!(cancelled.0.unwrap_err().code, "execution_cancelled");
         assert!(cancelled.1.capture_admission_nodes > 0);
+        assert_eq!(cancelled.1.capture_admission_nodes, 3);
         assert_eq!(
             invoke(reference, unary, leaf(), Default::default(), &control)
                 .0
@@ -1613,15 +1721,18 @@ fn constrained_raw_factory_checks_types_and_real_environments_before_body() {
                 );
             }
         }
-        let cancelled = invoke(
-            reference,
-            depth[240],
-            NormalizedValue::Option(None),
-            Default::default(),
-            &ExecutionControl::cancel_after_checks(100),
-        );
+        let cancelled = value_oracle::cancel_during_capture(3, || {
+            invoke(
+                reference,
+                depth[240],
+                NormalizedValue::Option(None),
+                Default::default(),
+                &ExecutionControl::uncancelled(),
+            )
+        });
         assert_eq!(cancelled.0.unwrap_err().code, "execution_cancelled");
         assert!(cancelled.2.capture_admission_nodes > 0);
+        assert_eq!(cancelled.2.capture_admission_nodes, 3);
         assert_eq!(cancelled.1, 0);
         let over = invoke(
             reference,

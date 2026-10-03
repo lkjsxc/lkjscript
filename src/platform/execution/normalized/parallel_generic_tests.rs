@@ -205,3 +205,6 @@ fn parallel_generic_closed_boundary_rejects_hidden_authority_and_duplicate_custo
 
 #[path = "parallel_generic_limits_tests.rs"]
 mod limits;
+
+#[path = "parallel_transfer_tests.rs"]
+mod transfer;

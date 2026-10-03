@@ -125,6 +125,7 @@ struct Writer {
     choice_extension: bool,
     declaration_body_extension: bool,
     literal_extension: bool,
+    transfer_constraint_extension: bool,
 }
 
 impl Writer {
@@ -143,11 +144,14 @@ impl Writer {
             choice_extension: false,
             declaration_body_extension: false,
             literal_extension: false,
+            transfer_constraint_extension: false,
         }
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.parallel_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+        if self.transfer_constraint_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR26");
+        } else if self.parallel_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR25");
         } else if self.task_method_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR24");
@@ -864,8 +868,8 @@ impl Writer {
             } => {
                 self.tag(39)?;
                 self.owner_selector(parameter, definitions)?;
-                self.owned_extension |=
-                    *constraints == crate::platform::kernel::TypeParameterConstraints::Owned;
+                self.owned_extension |= constraints.has_owned();
+                self.transfer_constraint_extension |= constraints.requires_transfer();
                 self.tag(constraints.tag())
             }
             AuthoredChange::AddParameter { parent, parameter } => {
@@ -1295,8 +1299,8 @@ impl Writer {
     ) -> Result<(), Diagnostic> {
         self.symbol(&value.symbol, definitions)?;
         self.name(&value.name)?;
-        self.owned_extension |=
-            value.constraints == crate::platform::kernel::TypeParameterConstraints::Owned;
+        self.owned_extension |= value.constraints.has_owned();
+        self.transfer_constraint_extension |= value.constraints.requires_transfer();
         self.tag(value.constraints.tag())
     }
 

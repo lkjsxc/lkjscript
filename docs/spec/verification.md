@@ -4,6 +4,29 @@ Status: normative.
 
 ## Structured parallel ownership
 
+Explicit transferable parameters extend this proof to generic task bodies that
+form groups before any concrete caller exists. A separately exported worker,
+generic combinator and consumer must retain symbolic ordinary and owned bounds,
+both mixed pair orientations, nested products/choices and exact implementation
+forwarding. Two implementations with the same Self type must remain observably
+distinct. Register and exercise concrete intermediate pairs absent from function
+signatures, with at least two different concrete applications.
+
+Reject missing bounds on None, CaptureSafe and Owned parameters, foreign function
+or package assumptions, phantom authority, inactive invalid cases and unsafe
+mutually recursive nominal members in either traversal order. A safe recursive
+symbolic proof must terminate without expanding concrete recursion indefinitely.
+Generic declarations and unused/untaken bodies receive independent kernel, memory
+oracle and canonical reference admission. Rehashed artifacts cannot erase bounds,
+substitute witnesses or pair types, or reinterpret new constraints under an old
+owner/interface/compiler generation. Quota exact/N-1 and cancellation probes cover
+new substitution and proof work, retaining joined cleanup and allocation identity.
+
+The copied public executable must author and validate the generic library before
+creating its concrete consumer, preserve canonical draft re-entry and a reviewed
+child edit, reject an unsafe template with accepted HEAD unchanged, then run full
+independently expected results after source projects and transports are removed.
+
 The [parallel contract](structured-parallel.md) requires independent canonical,
 ownership and reference admission, including unused children and hidden authority
 in unselected cases or nominal arguments. Flat and structural requests must produce

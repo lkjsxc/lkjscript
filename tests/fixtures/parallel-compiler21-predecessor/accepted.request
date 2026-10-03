@@ -1,0 +1,46 @@
+request base=rev_56531bb6c6a97b96ffaeefa8b005381f96d25b1c70e77e82fc3182e1b2ff4d68
+declarations.begin
+(units
+  (module create generic-parallel
+    (external create create-cell (visibility private) (implementation core.cell.create)
+      (parameter create n (type I64)) (returns OwnedI64Cell))
+    (external create extract-cell (visibility private) (implementation core.cell.extract)
+      (parameter create value (type OwnedI64Cell) (use consume)) (returns I64))
+    (function create transfer (visibility public) (effect (task))
+      (type-parameter create T (constraint owned))
+      (parameter create value (type T) (use consume)) (returns T)
+      (body (local value)))
+    (function create keep-list (visibility public) (effect (task))
+      (type-parameter create Item)
+      (parameter create values (type (list Item))) (returns (list Item))
+      (body (local values)))
+    (function create joined (visibility public) (effect (task))
+      (parameter create n (type I64))
+      (parameter create values (type (list I64)))
+      (returns (record (scalar I64) (values (list I64))))
+      (body (let
+        (binding value (type OwnedI64Cell) (call create-cell (local n)))
+        (binding pair
+          (type (owned-product (field left OwnedI64Cell) (field right (list I64))))
+          (parallel
+            (call transfer (types OwnedI64Cell) (local value))
+            (call keep-list (types I64) (local values))))
+        (in (unpack-owned
+          (type (owned-product (field left OwnedI64Cell) (field right (list I64))))
+          (local pair)
+          (field left (binding scalar (type OwnedI64Cell)))
+          (field right (binding kept (type (list I64))))
+          (in (record structural
+            (field scalar (call extract-cell (local scalar)))
+            (field values (local kept)))))))))))
+declarations.end
+declarations.begin
+(units (module create generic-entry
+  (component create command (visibility private)
+    (port create main
+      (type (task-function (I64 (list I64))
+        (record (scalar I64) (values (list I64))) (row)))
+      (function generic-parallel::joined))))
+  (target create joined (component generic-entry::command)
+    (runner command) (port generic-entry::command::main)))
+declarations.end

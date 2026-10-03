@@ -56,10 +56,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-29";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 29;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-25";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 25;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-30";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 30;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-26";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 26;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -373,7 +373,9 @@ impl CompactChangeFieldForm {
             Self::Idempotency => "idempotent|idempotent-with-key|non-idempotent",
             Self::ExternalVisibility => "none|possible",
             Self::ParameterUse => "unrestricted|borrow|consume",
-            Self::TypeParameterConstraint => "none|capture-safe|owned",
+            Self::TypeParameterConstraint => {
+                "none|capture-safe|owned|transferable|capture-safe transferable|owned transferable"
+            }
             Self::RequirementReference => "$NAME|pkg_HEX/req_HEX",
             Self::ImplementationName => "dot.separated.name",
             Self::ExactExpression => "expr_HEX",
@@ -5342,6 +5344,8 @@ fn commitment_codec_identity(intent: &[u8]) -> &'static str {
         "lkjscript-authored-change-codec-23"
     } else if intent.starts_with(b"LKJACR24") {
         "lkjscript-authored-change-codec-24"
+    } else if intent.starts_with(b"LKJACR25") {
+        "lkjscript-authored-change-codec-25"
     } else {
         // Retain the existing fallback; do not infer identities from unknown/future magics.
         AUTHORED_CHANGE_CODEC_IDENTITY
@@ -6070,17 +6074,29 @@ fn parse_type_parameter_constraint(
     record: &CompactRecord,
 ) -> Result<crate::platform::kernel::TypeParameterConstraints, Diagnostic> {
     use crate::platform::kernel::TypeParameterConstraints;
-    match optional(record, "constraint").unwrap_or("none") {
-        "none" => Ok(TypeParameterConstraints::None),
-        "capture-safe" => Ok(TypeParameterConstraints::CaptureSafe),
-        "owned" => Ok(TypeParameterConstraints::Owned),
-        _ => Err(field_error(
+    let value = optional(record, "constraint").unwrap_or("none");
+    if value == "none" {
+        return Ok(TypeParameterConstraints::None);
+    }
+    let mut names = value.split(' ');
+    let first = names.next().unwrap_or("");
+    let second = names.next();
+    let constraints = if names.next().is_some() {
+        None
+    } else {
+        match second {
+            Some(second) => TypeParameterConstraints::from_names(&[first, second]),
+            None => TypeParameterConstraints::from_names(&[first]),
+        }
+    };
+    constraints.ok_or_else(|| {
+        field_error(
             record,
             "constraint",
             "change_type_parameter_constraint",
-            "constraint must be none or capture-safe",
-        )),
-    }
+            "constraint must be none or a compatible set of capture-safe, owned, and transferable",
+        )
+    })
 }
 
 fn parse_type_parameter_reference(

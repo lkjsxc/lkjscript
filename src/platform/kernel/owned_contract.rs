@@ -548,15 +548,50 @@ pub(crate) fn ordinary_closed(
     read: &(impl ExpressionRead + ?Sized),
     ty: TypeObjectDigest,
 ) -> Result<bool, Diagnostic> {
+    ordinary_transfer(read, ty, None)
+}
+
+/// First-order ordinary data under exact function-local transfer assumptions.
+/// Nominal bodies use their own ordinary formal assumptions, while every actual
+/// argument, including phantom arguments, retains its enclosing assumptions.
+pub(crate) fn ordinary_transfer(
+    read: &(impl ExpressionRead + ?Sized),
+    ty: TypeObjectDigest,
+    scope: Option<DeclarationId>,
+) -> Result<bool, Diagnostic> {
+    let assumptions = super::transfer::ordinary_assumptions(read, scope)?;
+    ordinary_with_assumptions(read, ty, scope, &assumptions)
+}
+
+#[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+enum OrdinaryAssumptionContext {
+    Closed,
+    Function(DeclarationReference),
+    Nominal(DeclarationReference),
+}
+
+pub(super) fn ordinary_with_assumptions(
+    read: &(impl ExpressionRead + ?Sized),
+    ty: TypeObjectDigest,
+    scope: Option<DeclarationId>,
+    assumptions: &BTreeSet<TypeParameterId>,
+) -> Result<bool, Diagnostic> {
     // This property depends on ordinary parameter assumptions, not representation
     // identities. Check every actual argument in its caller scope, and prove each
     // nominal body under its own ordinary formal parameters. Recursive applications
     // then form a finite structural proof without overwriting actual substitutions.
-    let mut todo = vec![(ty, BTreeSet::<TypeParameterId>::new())];
+    let context = scope.map_or(OrdinaryAssumptionContext::Closed, |declaration| {
+        OrdinaryAssumptionContext::Function(DeclarationReference {
+            package: read.package_id(),
+            declaration,
+        })
+    });
+    read.validation_work()?;
+    let mut todo = vec![(ty, context, copy_assumptions(read, assumptions)?)];
     let mut seen = BTreeSet::new();
-    while let Some((ty, bindings)) = todo.pop() {
+    while let Some((ty, context, bindings)) = todo.pop() {
         read.validation_work()?;
-        if !seen.insert((ty, copy_assumptions(read, &bindings)?)) {
+        if !seen.insert((ty, context, copy_assumptions(read, &bindings)?)) {
             continue;
         }
         let t = read
@@ -565,6 +600,34 @@ pub(crate) fn ordinary_closed(
         match &t.form {
             TypeForm::TypeParameter { parameter } => {
                 if !bindings.contains(parameter) {
+                    return Ok(false);
+                }
+                let declaration = match context {
+                    OrdinaryAssumptionContext::Closed => return Ok(false),
+                    OrdinaryAssumptionContext::Function(d)
+                    | OrdinaryAssumptionContext::Nominal(d) => d,
+                };
+                read.validation_work()?;
+                let record = if declaration.package == read.package_id() {
+                    match read.owner(OwnerKey::TypeParameter(*parameter))? {
+                        Some(OwnerRecord::TypeParameter(p)) => p,
+                        _ => return Err(reject("missing exact ordinary assumption owner")),
+                    }
+                } else {
+                    match read.package_interface_owner(
+                        declaration.package,
+                        OwnerKey::TypeParameter(*parameter),
+                    )? {
+                        Some(PackageInterfaceRecord::TypeParameter(p)) => p,
+                        _ => return Err(reject("missing imported ordinary assumption owner")),
+                    }
+                };
+                if record.declaration != declaration.declaration
+                    || record.header.owner != OwnerKey::TypeParameter(*parameter)
+                    || record.constraints.has_owned()
+                    || matches!(context, OrdinaryAssumptionContext::Function(_))
+                        && !record.constraints.requires_transfer()
+                {
                     return Ok(false);
                 }
                 continue;
@@ -605,10 +668,13 @@ pub(crate) fn ordinary_closed(
                         }
                     };
                     if p.declaration != declaration.declaration
-                        || p.constraints == TypeParameterConstraints::Owned
+                        || p.constraints.has_owned()
+                        || p.constraints.requires_transfer()
+                        || p.header.owner != OwnerKey::TypeParameter(parameter)
                     {
                         return Ok(false);
                     }
+                    read.validation_work()?;
                     nested.insert(parameter);
                 }
                 for field in fields {
@@ -634,7 +700,11 @@ pub(crate) fn ordinary_closed(
                             _ => return Err(reject("missing imported method nominal field")),
                         }
                     };
-                    todo.push((ty, copy_assumptions(read, &nested)?));
+                    todo.push((
+                        ty,
+                        OrdinaryAssumptionContext::Nominal(*declaration),
+                        copy_assumptions(read, &nested)?,
+                    ));
                 }
                 for case in cases {
                     read.validation_work()?;
@@ -660,7 +730,11 @@ pub(crate) fn ordinary_closed(
                         }
                     };
                     if let Some(ty) = payload {
-                        todo.push((ty, copy_assumptions(read, &nested)?));
+                        todo.push((
+                            ty,
+                            OrdinaryAssumptionContext::Nominal(*declaration),
+                            copy_assumptions(read, &nested)?,
+                        ));
                     }
                 }
             }
@@ -679,7 +753,7 @@ pub(crate) fn ordinary_closed(
         }
         for child in t.child_types() {
             read.validation_work()?;
-            todo.push((child, copy_assumptions(read, &bindings)?));
+            todo.push((child, context, copy_assumptions(read, &bindings)?));
         }
     }
     Ok(true)
@@ -703,6 +777,7 @@ fn nominal_members(
     read: &(impl ExpressionRead + ?Sized),
     d: DeclarationReference,
 ) -> Result<NominalMembers, Diagnostic> {
+    admit_dependency(read, d.package)?;
     if d.package == read.package_id() {
         match read.owner(OwnerKey::Declaration(d.declaration))? {
             Some(OwnerRecord::Declaration(r)) => match r.payload {
@@ -772,14 +847,14 @@ pub(crate) fn validate_parameters(
                 "witness Self requires an in-scope owned type parameter",
             ));
         };
-        if !f.type_parameters.contains(&parameter) {
+        if !super::transfer::function_parameter_listed(read, &f.type_parameters, parameter)? {
             return Err(reject("witness Self escapes generic scope"));
         }
         let Some(OwnerRecord::TypeParameter(t)) = read.owner(OwnerKey::TypeParameter(parameter))?
         else {
             return Err(reject("missing witness Self type parameter"));
         };
-        if t.declaration != declaration || t.constraints != TypeParameterConstraints::Owned {
+        if t.declaration != declaration || !t.constraints.has_owned() {
             return Err(reject(
                 "witness Self requires exact owned generic constraint",
             ));

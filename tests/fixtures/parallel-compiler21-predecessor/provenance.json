@@ -1,0 +1,19 @@
+{
+  "kind": "retained-public-product-output",
+  "original_owner": "/home/coder/workspace/lkjscript-structured-handoff-20261002/.artifacts/20261003-closed-generic-parallel/public-direct-03/",
+  "producer_executable_sha256": "ba7f5b786ed98b15095eff6861f51fd035b00d056ef16f4cc94687a9bd71ad73",
+  "producer_environment": { "LANG": "C", "PATH": "" },
+  "contracts": { "graph": 21, "compiler": 21, "bytecode": 17, "artifact": 28 },
+  "artifact_bytes": 20601,
+  "accepted_revision": "rev_799764a77109b29002e97d5323ff877887d10f27c6ef7e3f340c457f8b164f32",
+  "artifact_manifest": "artifact_manifest_b8ce395a0f36ab413568f76fc6560ee4c7f63fb40ea570ecdaee285a6d9896b3",
+  "artifact_bundle": "artifact_bundle_10c8b52709bdec505df19a7108df9c8b3e300e7b1d5f9535ccc4be57fc7eeaec",
+  "files_sha256": {
+    "accepted.request": "e4f5244dcdc82d2c6f53b46c5a4ec19ccfc1a2d50dd3d17e1f1413b4aeb8f795",
+    "commands.json": "d9ef48a51caec737ecbe5de946fe5d4c22798e91c542daccc43deffc97d64bbc",
+    "original-observation.json": "dfd28d1f1f100d468ba372968498b3ac6b7814856b63e37bcb521fafa22fddbe",
+    "predecessor.lkja": "4dfa2042e61007c687716bc210977aed3d746496b2ade85cd8cde3a3fd73e3ee",
+    "producer-build.stdout": "4a800c9903e2f1b769d39ae209b6760f2795e38a5d58eb15cbd2466f1af2f28d"
+  },
+  "retention": "Copied byte-for-byte from the original evidence; no producer rerun, graph patch, unit rewrite, or current-envelope wrapper."
+}

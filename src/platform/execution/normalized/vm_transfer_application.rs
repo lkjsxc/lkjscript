@@ -1,6 +1,5 @@
 //! One exact closed task application. This certificate is not a language value.
 use super::*;
-use crate::platform::kernel::TypeParameterConstraints;
 use crate::platform::semantic_id::TypeParameterId;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -50,9 +49,8 @@ impl TaskApplication {
         let mut work = Work { control, nodes: 0 };
         for (ty, constraint) in types.iter().zip(f.type_parameter_constraints.iter()) {
             let owned = validate_type(program, *ty, 0, &mut work)?;
-            if owned != (*constraint == TypeParameterConstraints::Owned)
-                || (*constraint == TypeParameterConstraints::CaptureSafe
-                    && !program.capture_safe_types.contains(ty))
+            if owned != constraint.has_owned()
+                || (constraint.requires_capture_safe() && !program.capture_safe_types.contains(ty))
             {
                 return Err(reject());
             }
@@ -93,7 +91,7 @@ impl TaskApplication {
             .zip(f.implementation_arguments.iter())
         {
             work.visit(0)?;
-            if program.substitute_type(parameter.self_type, &bindings, 0) != Some(*self_type) {
+            if resolve_type(program, parameter.self_type, &bindings, control)? != *self_type {
                 return Err(reject());
             }
         }
@@ -105,15 +103,11 @@ impl TaskApplication {
         let mut parameters = Vec::with_capacity(f.parameters.len());
         for p in f.parameters.iter() {
             work.visit(0)?;
-            let ty = program
-                .substitute_type(p.ty, &bindings, 0)
-                .ok_or_else(reject)?;
+            let ty = resolve_type(program, p.ty, &bindings, control)?;
             validate_type(program, ty, 0, &mut work)?;
             parameters.push(ty);
         }
-        let result = program
-            .substitute_type(f.result, &bindings, 0)
-            .ok_or_else(reject)?;
+        let result = resolve_type(program, f.result, &bindings, control)?;
         validate_type(program, result, 0, &mut work)?;
         Ok(Self {
             function,

@@ -523,3 +523,305 @@ fn owned_result_packages(generic: bool) {
         }
     }
 }
+
+#[test]
+fn native_parallel_open_generic_combinator_exact_witnesses_and_source_free_results() {
+    let workers = Native::new();
+    author(
+        &workers,
+        &format!(
+            "{}{}{}{}",
+            include_str!("../fixtures/owned-witness-library.lkjc"),
+            include_str!("../fixtures/parallel-result-library.lkjc"),
+            RESULT_WORKERS,
+            include_str!("../fixtures/parallel-transfer-workers.lkjc"),
+        ),
+    );
+    unchanged(&workers, "transfer-workers");
+    let w = export(&workers);
+    let combinator = Native::new();
+    stage(&combinator, &w);
+    let generic_input = format!(
+        "{}declarations.begin\n(units (use abstraction {} {}) (use transfer-workers {} {}))\ndeclarations.end\n{}",
+        dependency(&w),
+        w.package,
+        w.revision,
+        w.package,
+        w.revision,
+        include_str!("../fixtures/parallel-transfer-combinator.lkjc"),
+    );
+    let before = combinator.revision();
+    for (name, bad) in [
+        (
+            "ordinary-bound",
+            generic_input.replacen(
+                "(constraint capture-safe transferable)",
+                "(constraint capture-safe)",
+                1,
+            ),
+        ),
+        (
+            "owned-bound",
+            generic_input.replacen("(constraint owned transferable)", "(constraint owned)", 1),
+        ),
+        (
+            "pure-builder",
+            generic_input.replacen("(effect (task))", "(effect pure)", 1),
+        ),
+    ] {
+        assert_ne!(
+            bad, generic_input,
+            "{name} must change the literal proposal"
+        );
+        let request = combinator.input(
+            &format!("rejected-open-{name}.lkjc"),
+            &format!("request base={before}\n{bad}"),
+        );
+        let rejected = combinator.plan(&request, false);
+        assert!(
+            rejected
+                .iter()
+                .any(|r| r.operation == "diagnostic"
+                    && compact_field(r, "code").starts_with("kernel_")),
+            "{name}: {rejected:?}",
+        );
+        assert_eq!(combinator.revision(), before, "{name} must not publish");
+    }
+    author(&combinator, &generic_input);
+    let original = std::fs::read_to_string(unchanged(&combinator, "transfer-combinator")).unwrap();
+    assert_eq!(original.matches("(parallel").count(), 8);
+    assert!(original.contains("(constraint owned transferable)"));
+    assert!(original.contains("(constraint transferable)"));
+    assert_eq!(original.matches("(i64 7)").count(), 1);
+    let before = combinator.revision();
+    let edited = combinator.input(
+        "edited-open-generic.lkjc",
+        &original.replace("(i64 7)", "(i64 8)"),
+    );
+    let plan = combinator.plan(&edited, true);
+    combinator.apply(&edited, &plan, true);
+    assert_ne!(combinator.revision(), before);
+    assert_eq!(
+        std::fs::read_to_string(unchanged(&combinator, "transfer-combinator")).unwrap(),
+        original
+            .replacen(&before, &combinator.revision(), 1)
+            .replace("(i64 7)", "(i64 8)"),
+        "a symbolic child edit retains every accepted type, expression and owner identity",
+    );
+    combinator.cli(&["check"], true);
+    // This exact generic package is accepted and exported before a concrete
+    // caller even exists. No monomorphic wrapper can establish its obligations.
+    let c = export(&combinator);
+    let consumer = Native::new();
+    stage(&consumer, &w);
+    stage(&consumer, &c);
+    let input = format!(
+        "{}{}declarations.begin\n(units (use abstraction {} {}) (use buffer {} {}) (use cell {} {}) (use result-workers {} {}) (use transfer-workers {} {}) (use transfer-combinator {} {}))\ndeclarations.end\n{}",
+        dependency(&w),
+        dependency(&c),
+        w.package,
+        w.revision,
+        w.package,
+        w.revision,
+        w.package,
+        w.revision,
+        w.package,
+        w.revision,
+        w.package,
+        w.revision,
+        c.package,
+        c.revision,
+        include_str!("../fixtures/parallel-transfer-consumer.lkjc"),
+    );
+    let before = consumer.revision();
+    for (name, bad) in [
+        (
+            "wrong-self",
+            input.replacen(
+                "concrete@buffer::Octets concrete@cell::Scalar",
+                "concrete@cell::Scalar concrete@cell::Scalar",
+                1,
+            ),
+        ),
+        (
+            "duplicate-owner",
+            input.replacen(
+                "(local n) (local left) (local right)",
+                "(local n) (local left) (local left)",
+                1,
+            ),
+        ),
+    ] {
+        assert_ne!(bad, input, "{name} must change the literal proposal");
+        let request = consumer.input(
+            &format!("rejected-open-{name}.lkjc"),
+            &format!("request base={before}\n{bad}"),
+        );
+        let rejected = consumer.plan(&request, false);
+        assert!(
+            rejected
+                .iter()
+                .any(|r| r.operation == "diagnostic"
+                    && compact_field(r, "code").starts_with("kernel_")),
+            "{name}: {rejected:?}",
+        );
+        assert_eq!(consumer.revision(), before, "{name} must not publish");
+    }
+    author(&consumer, &input);
+    unchanged(&consumer, "transfer-consumer");
+    let artifact = consumer.root.path().join("transferable-parallel.lkja");
+    consumer.cli(&["build", "--output", path(&artifact)], true);
+    let deployment = consumer.input(
+        "transferable-parallel.deployment.json",
+        &json!({
+            "artifact": "transferable-parallel.lkja", "target": "transferable-parallel", "listen": null,
+            "http": null, "session": null, "worker": null,
+            "runtime": {"maximum_concurrent_tasks": 1, "maximum_queued_tasks": 0,
+                "request_deadline_milliseconds": 30000, "shutdown_grace_milliseconds": 3000,
+                "cancellation_grace_milliseconds": 1000},
+            "streams": {"maximum_chunk_bytes": 65536, "maximum_buffered_chunks": 8,
+                "maximum_total_bytes": 1048576, "maximum_live_streams": 1024},
+            "grants": [], "secrets": [], "configuration": {}
+        })
+        .to_string(),
+    );
+    for detached in [false, true] {
+        if detached {
+            for project in [&workers.project, &combinator.project, &consumer.project] {
+                std::fs::remove_dir_all(project).unwrap();
+            }
+            for package in [&w.path, &c.path] {
+                std::fs::remove_file(package).unwrap();
+            }
+        }
+        for n in [i64::MIN, -257, 0, i64::MAX] {
+            for accepted in [false, true] {
+                let arguments = consumer.input(
+                    &format!("transferable-arguments-{detached}-{n}-{accepted}.json"),
+                    &json!([n, accepted]).to_string(),
+                );
+                let output = consumer.root.path().join(format!(
+                    "transferable-result-{detached}-{n}-{accepted}.json"
+                ));
+                let records = consumer.cli(
+                    &[
+                        "run",
+                        "--deployment",
+                        path(&deployment),
+                        "--arguments-file",
+                        path(&arguments),
+                        "--result-file",
+                        path(&output),
+                    ],
+                    true,
+                );
+                let execution = compact_record(&records, "execution");
+                let cleanup: Value =
+                    serde_json::from_str(compact_field(execution, "cleanup")).unwrap();
+                assert_eq!(cleanup["remaining_tasks"], json!(0));
+                assert_eq!(cleanup["cleanup_failures"], json!([]));
+                let observation: Value =
+                    serde_json::from_str(compact_field(execution, "production-observation"))
+                        .unwrap();
+                assert_eq!(observation["parallel_scopes"], json!(8));
+                assert_eq!(observation["capability_calls"], json!(0));
+                // Complete payload literals and direct input values establish
+                // expectations independently of the changed transfer machinery.
+                assert_eq!(
+                    serde_json::from_slice::<Value>(&std::fs::read(output).unwrap()).unwrap(),
+                    json!({
+                        "ordinary": {"left": [n, 42, -3], "right": [0, 255, 128]},
+                        "all": {"bytes": {"$bytes": "AP+ACAk="}, "length": 4,
+                            "before": n, "after": -81},
+                        "mixed-left": {"bytes": {"$bytes": "AP+ACw=="}, "scalar": n},
+                        "mixed-right": {"ordinary": n, "scalar": n},
+                        "nested": {"bytes": {"$bytes": "AP+AQA=="}, "scalar": n,
+                            "outcome": {"accepted": accepted, "value": n}},
+                        "intermediate": {"$bytes": "AP+A"},
+                        "witnesses": {"left": n, "right": -33},
+                    }),
+                );
+            }
+        }
+    }
+    if std::env::var_os("LKJSCRIPT_RETAIN_PRODUCT_EVIDENCE").is_some() {
+        for public in [workers, combinator, consumer] {
+            println!(
+                "retained transferable parallel public evidence: {}",
+                public.root.keep().display(),
+            );
+        }
+    }
+}
+
+#[test]
+fn native_parallel_transferable_guide_three_package_literals() {
+    // The guide itself is the literal input. Substitution supplies only public
+    // observed identities, never generated declarations or expected behavior.
+    let guide = include_str!("../../docs/guides/native-transferable-parallel.md");
+    let requests = guide
+        .split("```text\n")
+        .skip(1)
+        .map(|block| {
+            block
+                .split_once("\n```")
+                .unwrap()
+                .0
+                .split_once('\n')
+                .unwrap()
+                .1
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(requests.len(), 3);
+    let json_blocks = guide
+        .split("```json\n")
+        .skip(1)
+        .map(|block| block.split_once("\n```").unwrap().0)
+        .collect::<Vec<_>>();
+    assert_eq!(json_blocks.len(), 3);
+    let workers = Native::new();
+    author(&workers, requests[0]);
+    let w = export(&workers);
+    let substitute_workers = |request: &str| {
+        request
+            .replace("WORKERS_PACKAGE_REVISION", &w.revision)
+            .replace("WORKERS_PACKAGE", &w.package)
+            .replace("WORKERS_REVISION", &w.semantic)
+    };
+    let groups = Native::new();
+    stage(&groups, &w);
+    author(&groups, &substitute_workers(requests[1]));
+    unchanged(&groups, "groups");
+    let g = export(&groups);
+    let consumer = Native::new();
+    stage(&consumer, &w);
+    stage(&consumer, &g);
+    author(
+        &consumer,
+        &substitute_workers(requests[2])
+            .replace("GROUPS_PACKAGE_REVISION", &g.revision)
+            .replace("GROUPS_PACKAGE", &g.package)
+            .replace("GROUPS_REVISION", &g.semantic),
+    );
+    let artifact = consumer.root.path().join("transfer.lkja");
+    consumer.cli(&["build", "--output", path(&artifact)], true);
+    let deployment = consumer.input("transfer.deployment.json", json_blocks[0]);
+    let arguments = consumer.input("arguments.json", json_blocks[1]);
+    let output = consumer.root.path().join("result.json");
+    consumer.cli(
+        &[
+            "run",
+            "--deployment",
+            path(&deployment),
+            "--arguments-file",
+            path(&arguments),
+            "--result-file",
+            path(&output),
+        ],
+        true,
+    );
+    assert_eq!(
+        serde_json::from_slice::<Value>(&std::fs::read(output).unwrap()).unwrap(),
+        serde_json::from_str::<Value>(json_blocks[2]).unwrap(),
+    );
+}

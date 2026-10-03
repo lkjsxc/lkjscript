@@ -1166,7 +1166,7 @@ impl ReferenceState<'_> {
         raw: NormalizedValue,
         ty: TypeObjectDigest,
     ) -> Result<CheckedValue, ExecutionError> {
-        let expected = direct_memory_type(&self.schema, ty, &BTreeMap::new())?;
+        let expected = direct_memory_type(&self.schema, ty, &BTreeMap::new(), self.control)?;
         if let Some(expected) = expected {
             if raw.memory_form() != Some(expected) {
                 return Err(reference_type_error("owned product child type mismatch"));
@@ -1179,9 +1179,47 @@ impl ReferenceState<'_> {
     }
 
     fn resolve_type_arguments(
-        &self,
+        &mut self,
         type_arguments: &[TypeObjectDigest],
     ) -> Result<Vec<TypeObjectDigest>, ExecutionError> {
+        let scratch = {
+            let empty = BTreeMap::new();
+            let substitutions = self.type_scopes.last().unwrap_or(&empty);
+            let empty_effects = BTreeMap::new();
+            let effects = self.effect_scopes.last().unwrap_or(&empty_effects);
+            let effects_empty = effects.is_empty()
+                && self
+                    .requirement_scopes
+                    .last()
+                    .is_none_or(BTreeMap::is_empty);
+            let mut bytes = 0_u64;
+            for ty in type_arguments {
+                if effects_empty
+                    && self
+                        .schema
+                        .admitted_type_identity(*ty, substitutions, self.control)?
+                        .is_some()
+                {
+                    continue;
+                }
+                bytes = bytes
+                    .checked_add(self.schema.type_instantiation_scratch(
+                        *ty,
+                        effects,
+                        self.control,
+                    )?)
+                    .ok_or_else(|| {
+                        reference_resource(
+                            "reference_raw_instantiation_scratch",
+                            "call type argument scratch size overflowed",
+                        )
+                    })?;
+            }
+            bytes
+        };
+        if scratch != 0 {
+            self.charge_allocation(scratch)?;
+        }
         let empty = BTreeMap::new();
         let substitutions = self.type_scopes.last().unwrap_or(&empty);
         let empty_effects = BTreeMap::new();
@@ -1194,6 +1232,14 @@ impl ReferenceState<'_> {
         type_arguments
             .iter()
             .map(|ty| {
+                if effects.is_empty()
+                    && requirements.is_empty()
+                    && let Some(exact) =
+                        self.schema
+                            .admitted_type_identity(*ty, substitutions, self.control)?
+                {
+                    return Ok(exact);
+                }
                 self.schema
                     .instantiated_with_effects(*ty, substitutions, effects, requirements, 0)
                     .filter(|ty| self.schema.types.contains_key(ty))
@@ -1442,31 +1488,27 @@ impl ReferenceState<'_> {
         }
         let constraints =
             self.type_parameter_constraints(declaration, &function.type_parameters)?;
-        if constraints
-            .iter()
-            .zip(types)
-            .any(|(constraint, ty)| match constraint {
-                crate::platform::kernel::TypeParameterConstraints::Owned => !matches!(
-                    self.schema.types.get(ty).map(|t| &t.form),
-                    Some(
-                        TypeForm::ByteBuffer
-                            | TypeForm::OwnedI64Cell
-                            | TypeForm::OwnedProduct { .. }
-                            | TypeForm::OwnedChoice { .. }
-                    )
-                ),
-                crate::platform::kernel::TypeParameterConstraints::None => {
-                    !self.schema.buffer_free_types.contains(ty)
-                }
-                crate::platform::kernel::TypeParameterConstraints::CaptureSafe => {
-                    !self.schema.buffer_free_types.contains(ty)
-                        || !self.schema.capture_safe_types.contains(ty)
-                }
-            })
-        {
-            return Err(reference_type_error(
-                "canonical callable type arguments fail capture-safe constraints",
-            ));
+        for (constraint, ty) in constraints.iter().zip(types) {
+            self.control.check()?;
+            let owned = matches!(
+                self.schema.types.get(ty).map(|t| &t.form),
+                Some(
+                    TypeForm::ByteBuffer
+                        | TypeForm::OwnedI64Cell
+                        | TypeForm::OwnedProduct { .. }
+                        | TypeForm::OwnedChoice { .. }
+                )
+            );
+            if owned != constraint.has_owned()
+                || (!owned && !self.schema.buffer_free_types.contains(ty))
+                || (constraint.requires_capture_safe()
+                    && !self.schema.capture_safe_types.contains(ty))
+                || (constraint.requires_transfer() && !self.schema.transferable_types.contains(ty))
+            {
+                return Err(reference_type_error(
+                    "canonical callable type arguments fail their exact structural constraints",
+                ));
+            }
         }
         let requirement_scope =
             self.requirement_bindings(declaration, &function.requirement_parameters, requirements)?;
@@ -1555,6 +1597,7 @@ impl ReferenceState<'_> {
                     self.type_scopes
                         .last()
                         .ok_or_else(|| reference_type_error("missing type scope"))?,
+                    self.control,
                 )?;
                 let expected = memory_form.is_some();
                 if (value.ownership(&self.schema, &mut self.observation.value_work)?
@@ -1594,7 +1637,8 @@ impl ReferenceState<'_> {
     ) -> Result<(), ExecutionError> {
         let mut resource_seen = false;
         for (index, (parameter, argument)) in parameters.iter().zip(arguments).enumerate() {
-            let memory_form = direct_memory_type(&self.schema, parameter.ty, substitutions)?;
+            let memory_form =
+                direct_memory_type(&self.schema, parameter.ty, substitutions, self.control)?;
             if memory_form.is_some() {
                 if resource_seen
                     || (!pure && parameter.use_mode != ParameterUse::Consume)
@@ -2454,9 +2498,10 @@ impl ReferenceState<'_> {
                 for field in &fields {
                     values.push(self.evaluate(field.value, locals)?);
                 }
+                let type_arguments = self.resolve_type_arguments(&type_arguments)?;
                 self.record(
                     nominal_type,
-                    &self.resolve_type_arguments(&type_arguments)?,
+                    &type_arguments,
                     fields.into_iter().map(|field| field.selector),
                     values,
                 )
@@ -3406,7 +3451,7 @@ impl ReferenceState<'_> {
     }
 
     fn outcome_layouts(
-        &self,
+        &mut self,
         contract: TransactionOutcomeContract,
         type_argument: TypeObjectDigest,
     ) -> Result<(VariantLayoutIndex, VariantLayoutIndex, [u32; 4]), ExecutionError> {
@@ -5083,8 +5128,10 @@ fn direct_memory_type(
     schema: &BoundReferenceSchema,
     mut ty: TypeObjectDigest,
     substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+    control: &ExecutionControl,
 ) -> Result<Option<super::value::MemoryForm>, ExecutionError> {
     for _ in 0..=substitutions.len() {
+        control.check()?;
         match &schema
             .types
             .get(&ty)
@@ -5095,16 +5142,12 @@ fn direct_memory_type(
             TypeForm::OwnedI64Cell => return Ok(Some(super::value::MemoryForm::OwnedI64Cell)),
             TypeForm::OwnedChoice { .. } => {
                 return Ok(Some(super::value::MemoryForm::Choice(
-                    schema
-                        .substitute_type(ty, substitutions, 0)
-                        .ok_or_else(|| reference_type_error("unclosed choice type"))?,
+                    schema.transfer_type_identity(ty, substitutions, control)?,
                 )));
             }
             TypeForm::OwnedProduct { .. } => {
                 return Ok(Some(super::value::MemoryForm::Product(
-                    schema
-                        .substitute_type(ty, substitutions, 0)
-                        .ok_or_else(|| reference_type_error("unclosed product type"))?,
+                    schema.transfer_type_identity(ty, substitutions, control)?,
                 )));
             }
             TypeForm::TypeParameter { parameter } => {

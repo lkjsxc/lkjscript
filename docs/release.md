@@ -80,8 +80,8 @@ a corrected successor requires a fresh producer. In particular, producer 3704647
 accepted the earlier 0.1.68 source without the joined-deadline repair and is superseded,
 not a candidate to promote after the repair.
 
-Public/latest is v0.1.68 after those boundaries completed. A pending successor
-producer is release-only waiting, not a reason to hold accepted source off main.
+[Current status](status.md) owns the exact public/latest selection. A pending
+successor producer is release-only waiting; accepted source can proceed to main.
 
 ## Content and compatibility
 
@@ -99,6 +99,14 @@ nominal implementation operands, including generic forwarding and whole owned
 aggregate returns across separate packages. Compiler 21, bytecode 17 and artifact
 28 require fresh source and finalized-byte acceptance for these changes; neither
 v0.1.68 nor v0.1.69 evidence is relabelled as v0.1.70 proof.
+
+Development v0.1.71 extends that required family with generic group builders checked
+before concrete callers exist, both mixed result-pair orientations, intermediate
+pairs, twice-forwarded implementation parameters and reviewed identity-preserving
+edits. The exact published guide also runs as a public-harness test. Graph 22,
+validator 27, compiler 22 and artifact 29 require their own fresh acceptance;
+predecessor proofs and immutable assets remain separate. The final-byte harness
+selects every matching native parallel case automatically.
 
 The canonical manifest discriminator is `format: "lkjscript-release-content-1"`. It binds the product
 version/intended tag, exact product commit, repository, target/build policy and command, pinned Rust

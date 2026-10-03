@@ -92,6 +92,10 @@ pub fn compile_unit<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     let mut builder = UnitBuilder {
         canonical,
         package: canonical.package_id(),
+        scope: match owner {
+            OwnerKey::Declaration(declaration) => Some(declaration),
+            _ => None,
+        },
         tables: TablesBuilder::default(),
         derived_type_objects: BTreeMap::new(),
         work: CompilationWork {
@@ -234,6 +238,7 @@ fn target_route_ids<W: WitnessBaseRead + ?Sized>(
 struct UnitBuilder<'a, B: ?Sized> {
     canonical: &'a B,
     package: PackageId,
+    scope: Option<DeclarationId>,
     tables: TablesBuilder,
     derived_type_objects: BTreeMap<ObjectKey, Vec<u8>>,
     work: CompilationWork,
@@ -303,6 +308,7 @@ impl<B: CanonicalBaseRead + ?Sized> CodeRead for B {
 pub(super) fn canonical_code<B: CodeRead + ?Sized>(
     read: &B,
     package: PackageId,
+    scope: Option<DeclarationId>,
     tables: &CompilationTables,
     root: ExpressionId,
     parameters: &[ParameterId],
@@ -310,6 +316,7 @@ pub(super) fn canonical_code<B: CodeRead + ?Sized>(
     let mut builder = UnitBuilder {
         canonical: read,
         package,
+        scope,
         tables: TablesBuilder::from_tables(tables),
         derived_type_objects: BTreeMap::new(),
         work: CompilationWork::default(),
@@ -328,6 +335,10 @@ pub(super) fn reconstruct_parallel_result_types<B: CanonicalBaseRead + ?Sized>(
     let mut builder = UnitBuilder {
         canonical: read,
         package: unit.source.package,
+        scope: match unit.source.owner {
+            OwnerKey::Declaration(declaration) => Some(declaration),
+            _ => None,
+        },
         tables: TablesBuilder::default(),
         derived_type_objects: BTreeMap::new(),
         work: CompilationWork::default(),
@@ -1043,7 +1054,7 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
             ) => true,
             Some(TypeForm::TypeParameter { parameter }) => matches!(
                 self.required_owner(OwnerKey::TypeParameter(parameter), "owned local parameter")?,
-                OwnerRecord::TypeParameter(p) if p.constraints == crate::platform::kernel::TypeParameterConstraints::Owned
+                OwnerRecord::TypeParameter(p) if p.constraints.has_owned()
             ),
             _ => false,
         })
@@ -1430,13 +1441,32 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
         for ty in [left, right] {
             self.canonical.code_step()?;
             let object = self.parallel_type(ty)?;
-            owned |= matches!(
-                object.form,
+            owned |= match object.form {
                 TypeForm::ByteBuffer
-                    | TypeForm::OwnedI64Cell
-                    | TypeForm::OwnedProduct { .. }
-                    | TypeForm::OwnedChoice { .. }
-            );
+                | TypeForm::OwnedI64Cell
+                | TypeForm::OwnedProduct { .. }
+                | TypeForm::OwnedChoice { .. } => true,
+                TypeForm::TypeParameter { parameter } => {
+                    let OwnerRecord::TypeParameter(record) = self.required_owner(
+                        OwnerKey::TypeParameter(parameter),
+                        "parallel result type parameter",
+                    )?
+                    else {
+                        return Err(compiler_corrupt(
+                            "compiler_parallel_result_type",
+                            "parallel result parameter has another canonical owner kind",
+                        ));
+                    };
+                    if Some(record.declaration) != self.scope {
+                        return Err(compiler_corrupt(
+                            "compiler_parallel_result_type",
+                            "parallel result parameter is outside its exact caller scope",
+                        ));
+                    }
+                    record.constraints.has_owned()
+                }
+                _ => false,
+            };
         }
         self.canonical.code_step()?;
         if self.derived_type_objects.len() >= MAXIMUM_COMPILER_UNIT_ITEMS {

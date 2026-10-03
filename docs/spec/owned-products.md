@@ -6,11 +6,12 @@ annotation. Its ownership does not depend on its instantiated fields. Empty and
 data-only products are invalid: at least one direct field must be ByteBuffer,
 OwnedI64Cell, another finite owned product, or an exactly scoped Owned parameter.
 
-Other fields must prove closed ordinary first-order data under the existing owned
-contract rules. The proof follows nominal members and every actual argument,
-including phantom arguments and unused members. It excludes functions, task
-functions, streams, secrets, capabilities and open ordinary parameters. Neither
-None nor CaptureSafe proves this closed property. No Data constraint is introduced.
+Other fields must prove ordinary first-order data. Development 0.1.71 also permits
+exact in-scope [transferable ordinary parameters](transferable-types.md) in metadata.
+The proof follows nominal members and every actual argument, including phantom
+arguments and unused members. It excludes functions, task functions, streams,
+secrets, capabilities and unconstrained open parameters. Neither None nor CaptureSafe
+alone proves this property.
 Ordinary nominal and structural records and ordinary containers remain unrestricted
 and cannot contain products. Generic functions can abstract over one or more Owned
 payloads. Product parameters must occur in their exact function scope. Pure helpers may borrow; named tasks may only consume under [same-task transfer](owned-task-transfers.md).

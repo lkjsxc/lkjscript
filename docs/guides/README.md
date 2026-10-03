@@ -18,6 +18,7 @@ intrinsics or automatically maintained application packages.
 | [Owned byte buffers](native-byte-buffer.md) | Development: concrete affine storage, scoped synchronous reads, generic package composition and exact frozen binary output. |
 | [Owned generics and explicit witnesses](native-owned-generics.md) | Development: a symbolic library, ByteBuffer and scalar-cell implementations, exact static selection and grant-free detached execution. |
 | [Joined parallel computation](native-parallel.md) | Development v0.1.68: exact empty-effect child tasks, owned inputs, generic reductions, fresh child identities and shared invocation quotas. |
+| [Reusable generic parallel groups](native-transferable-parallel.md) | Development v0.1.71: explicit transferable bounds, three-package generic builders, mixed results, exact witnesses and standalone execution. |
 | [Structural owned products](native-owned-products.md) | Integration pending: fixed named affine fields, closed ordinary metadata, generic Owned payloads and complete consuming decomposition. |
 | [Immutable byte ranges](native-byte-ranges.md) | Development v0.1.61: strict binary ranges, explicit backing detachment, generic package composition and source-free execution. |
 | [HTML over HTTP](native-html-http.md) | Compose the separate typed HTML and HTTP libraries in a detached public-v0.1.44 service. |

@@ -1,6 +1,6 @@
 # Structured parallel tasks
 
-Status: normative for development 0.1.70. Current acceptance and publication state
+Status: normative for development 0.1.71. Current acceptance and publication state
 belong to [status](../status.md).
 
 ## Meaning and admission
@@ -8,26 +8,28 @@ belong to [status](../status.md).
 `Parallel(left, right)` is an expression in the accepted meaning graph. Both children
 are direct named applications of graph-defined tasks with closed empty effect
 rows. Native authoring spells this `(parallel LEFT-CALL RIGHT-CALL)`. Each child
-uses `call` with exact concrete type arguments, or `implementation-call` with exact
-concrete type and implementation arguments; a monomorphic call is the empty application.
+uses `call` or `implementation-call` with exact type and implementation arguments;
+a monomorphic call is the empty application. A generic enclosing task may supply
+its own [explicitly transferable types](transferable-types.md) and exact lexical
+implementation parameters. Every application becomes concrete before execution.
 The enclosing computation must be a task, even though neither child has an external
 effect. A pure computation cannot acquire task authority through an empty row.
 
-Each child accepts a prefix of closed ordinary data followed by a suffix of consumed
+Each child accepts a prefix of transferable ordinary data followed by a suffix of consumed
 owned values. Each region may be empty. Owned inputs can be ByteBuffer, OwnedI64Cell,
 or concrete nested owned products and choices. Every nested case and ordinary type
 argument is checked, including unused choice cases and phantom nominal arguments.
-Memory loans, capability resources, secrets, callables and unresolved generic
-parameters cannot cross this boundary. A child may declare type and implementation
-parameters, but the boundary supplies their exact complete concrete application.
-Even a phantom actual type must independently satisfy closed data or Owned admission.
-Symbolic caller types and implementation-parameter operands remain rejected here.
+Memory loans, capability resources, secrets and callables cannot cross this boundary.
+A child may declare type and implementation parameters; symbolic boundary arguments
+must prove their obligations under the exact caller scope. Even a phantom actual
+type must independently satisfy ordinary or owned transfer admission. Unconstrained,
+capture-safe-only and owned-only caller parameters cannot establish transferability.
 A child has no effect or requirement parameters. Its body may forward its admitted
 types and exact witnesses through generic libraries under the existing rules.
 An external declaration or dynamic callable is not a child-task identity.
 
-Each result must be closed ordinary data or a closed ByteBuffer, OwnedI64Cell,
-owned product or owned choice. If both results are ordinary, the expression returns
+Each result must prove ordinary or owned transferability and become a closed admitted
+type at execution. If both results are ordinary, the expression returns
 the existing structural record type `{left: L, right: R}`. If either result is owned,
 it returns `(owned-product (field left L) (field right R))`, including the ordinary
 field in a mixed pair. Return it directly or bind it to an explicitly typed owned
@@ -115,15 +117,14 @@ unused task declarations and untaken expressions. Strict artifact loading also
 reconstructs canonical control, so retargeting or erasing a compiled parallel
 instruction cannot be authorized by recomputing hashes.
 
-Graph 21 adds the expression and preserves supported historical meaning readers.
-Compiler 21, bytecode 17 and artifact 28 carry explicit child type and implementation
-operands alongside the parallel-result type. Strict loaders reconstruct these from
-canonical child applications, including unused declarations and untaken branches.
-Semantic validator 26 admits these closed generic applications and invalidates older
-derived proofs. Compiler-unit 20 and earlier are rejected before instruction decoding;
-old operand bytes cannot be reinterpreted as a current application. Earlier derived artifacts must be rebuilt from retained accepted
-meaning. Authored request 25, compact discovery 29, function projection 11 and CLI
-observations 35 retain their existing forms.
+Graph 21 introduced the expression; Graph 22 adds explicit transferable constraints.
+Compiler 22, bytecode 17 and artifact 29 carry child type and implementation operands
+alongside the parallel-result type. Strict loaders reconstruct these from canonical
+applications, including unused declarations and untaken branches. Validator 27
+renews admission. Compiler-unit 21 and earlier reject before current payload decoding;
+earlier derived artifacts require rebuilding from accepted meaning. Transfer-bearing
+requests select authored codec 26; compact discovery 30 and function projection 12
+advertise the constraints. CLI observations 35 retain their forms.
 Existing nonparallel authored intent retains its bytes. This does not upgrade exact
 package selections, replace running services or publish a new public executable.
 

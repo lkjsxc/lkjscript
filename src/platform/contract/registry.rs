@@ -189,8 +189,8 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
 ];
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-function-definition-projection-11";
-pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 11;
+    "lkjscript-function-definition-projection-12";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 12;
 pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
 pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
 pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -732,8 +732,8 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
             magic_values: &[
-                "LKJOWN21", "LKJOWN20", "LKJOWN19", "LKJOWN18", "LKJOWN17", "LKJOWN16", "LKJOWN15",
-                "LKJOWN14", "LKJSMR01", "LKJDEP14", "LKJRET14",
+                "LKJOWN22", "LKJOWN21", "LKJOWN20", "LKJOWN19", "LKJOWN18", "LKJOWN17", "LKJOWN16",
+                "LKJOWN15", "LKJOWN14", "LKJSMR01", "LKJDEP14", "LKJRET14",
             ],
             digest_domains: &[
                 super::super::kernel::contract::OWNER_ENVELOPE_DOMAIN,
@@ -952,7 +952,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             predecessor_policy: REJECT,
             magic_values: &[
                 "LKJACR14", "LKJACR15", "LKJACR16", "LKJACR17", "LKJACR18", "LKJACR19", "LKJACR20",
-                "LKJACR21", "LKJACR22", "LKJACR23", "LKJABG01",
+                "LKJACR21", "LKJACR22", "LKJACR23", "LKJACR24", "LKJACR25", "LKJACR26", "LKJABG01",
             ],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
@@ -1032,7 +1032,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
-            magic_values: &["LKJPIF09"],
+            magic_values: &["LKJPIF13", "LKJPIF12", "LKJPIF11", "LKJPIF10"],
             digest_domains: &[
                 PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::PACKAGE_INTERFACE_DIGEST_DOMAIN,
@@ -4165,8 +4165,26 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "kernel_parallel_call",
             DiagnosticClass::Semantic,
-            "A structured child is not an exact closed empty-effect graph task application with transferable input and closed ordinary or owned output.",
-            "Use direct named task calls with concrete type and implementation arguments, ordinary data first and consuming owned arguments last; keep resources, loans, secrets and callables outside the child boundary.",
+            "A structured child is not an exact empty-effect graph task application with transferable input and output.",
+            "Use direct named task calls with exact type and implementation arguments and declare transferable bounds on open caller types; keep ordinary data first and consuming owned arguments last, and keep resources, loans, secrets and callables outside the child boundary.",
+        ),
+        diagnostic(
+            "kernel_transfer_constraint_generation",
+            DiagnosticClass::Semantic,
+            "A transferable type-parameter constraint appears under a predecessor graph generation.",
+            "Author transferable bounds under Graph 22; preserve predecessor bytes and rebuild derived artifacts.",
+        ),
+        diagnostic(
+            "kernel_transfer_constraint",
+            DiagnosticClass::Semantic,
+            "An exact supplied type does not prove the required structural or symbolic transfer obligation.",
+            "Declare a transferable bound on the exact caller type parameter or supply a complete transferable type closure.",
+        ),
+        diagnostic(
+            "kernel_transfer_parameter_owner",
+            DiagnosticClass::Semantic,
+            "A transferable bound belongs to a declaration other than a graph function.",
+            "Declare transfer constraints only on graph-function type parameters; retain existing nominal and owned-contract Self constraints.",
         ),
         diagnostic(
             "kernel_parallel_types",
@@ -4279,8 +4297,8 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "kernel_owned_product",
             DiagnosticClass::Semantic,
-            "An explicit owned product has an invalid field type, annotation, scope or closed metadata proof.",
-            "Use unique fixed fields, at least one direct owned field and closed ordinary metadata; consume exact live locals and bind every field once.",
+            "An explicit owned product has an invalid field type, annotation, scope or ordinary metadata proof.",
+            "Use unique fixed fields, at least one statically owned field, and closed ordinary or exactly bounded transferable metadata; consume exact live locals and bind every field once.",
         ),
         diagnostic(
             "kernel_product_generation",
@@ -4479,6 +4497,36 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Resource,
             "The host could not create an admitted structured worker.",
             "Preserve the allocation failure; sealed inputs are cleaned and no child work is retried automatically.",
+        ),
+        diagnostic(
+            "normalized_type_substitution",
+            DiagnosticClass::Resource,
+            "Raw generic type substitution exceeds finite scratch storage or traversal work before construction.",
+            "Reduce the structural type closure; preserve the refusal and avoid retrying consumed owners.",
+        ),
+        diagnostic(
+            "reference_transfer_substitution",
+            DiagnosticClass::Infrastructure,
+            "The independent evaluator cannot resolve an exact transfer type in its admitted canonical inventory.",
+            "Preserve the graph and both evaluator observations when reporting the invariant failure.",
+        ),
+        diagnostic(
+            "reference_transfer_substitution_work",
+            DiagnosticClass::Resource,
+            "Independent transfer identity lookup exhausts its finite structural comparison work.",
+            "Reduce the exact type closure; exhaustion does not prove invalid meaning.",
+        ),
+        diagnostic(
+            "reference_raw_instantiation_scratch",
+            DiagnosticClass::Resource,
+            "Independent raw generic admission exceeds finite scratch storage or traversal work before construction.",
+            "Reduce the structural type closure and retain the refused invocation's cleanup evidence.",
+        ),
+        diagnostic(
+            "reference_raw_instantiation",
+            DiagnosticClass::Infrastructure,
+            "Independent raw generic admission is missing an exact canonical type template.",
+            "Preserve the graph and input when reporting the canonical admission invariant failure.",
         ),
         diagnostic(
             "normalized_parallel_worker",
@@ -4723,8 +4771,8 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "change_type_parameter_constraint",
             DiagnosticClass::Source,
-            "The authored constraint is outside the closed none/capture-safe set.",
-            "Select none or capture-safe; omission is permitted only when adding a parameter.",
+            "The authored constraint set contains a duplicate, unknown, or incompatible name.",
+            "Select none or a compatible set of capture-safe, owned, and transferable; omission is permitted only when adding a parameter.",
         ),
         diagnostic(
             "kernel_expression_generation",
@@ -7858,7 +7906,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ("layout-origin", "one-validated-preparation".to_owned()),
                     (
                         "constraints",
-                        "none,capture-safe,owned-in-exact-declaration-scope".to_owned(),
+                        "none,capture-safe,owned,transferable,capture-safe transferable,owned transferable; exact declaration scope; transfer bounds on graph functions only".to_owned(),
                     ),
                     (
                         "eligibility",
@@ -7944,7 +7992,8 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ),
                     (
                         "stored-type-parameters",
-                        "require-explicit-in-scope-capture-safe".to_owned(),
+                        "require-explicit-in-scope-capture-safe-or-ordinary-transferable"
+                            .to_owned(),
                     ),
                     (
                         "function-signature-parameters",
@@ -8319,7 +8368,7 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         ),
         (
             "type-parameter",
-            "(type-parameter MODE BINDING [(constraint none|capture-safe|owned)])",
+            "(type-parameter MODE BINDING [(constraint none|capture-safe|owned|transferable|capture-safe transferable|owned transferable)])",
             "Lexically scoped generic type; no escape to unrelated contracts.",
         ),
         (
@@ -8523,8 +8572,8 @@ fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String
         ),
         (
             "structured-parallel-tasks",
-            "(parallel LEFT-CALL RIGHT-CALL) ; each child is call or implementation-call with closed applications",
-            "task-only lexical scope; direct graph tasks with closed empty effect rows and explicit concrete type and implementation arguments; closed data parameters before consuming owned parameters; evaluate left then right arguments once in the parent, transfer exact owned custody to fresh child invocations, join both children before returning fields left and right; two ordinary results form a record, otherwise closed owned results transfer back into an owned product consumed with unpack-owned; no borrowed inputs or results, capabilities, detached lifetime or child quota reset",
+            "(parallel LEFT-CALL RIGHT-CALL) ; each child is call or implementation-call with exact applications",
+            "task-only lexical scope; direct graph tasks with closed empty effect rows; caller type parameters require transferable or owned transferable bounds and exact lexical implementation arguments may be forwarded; ordinary data parameters before consuming owned parameters; evaluate left then right arguments once in the parent, transfer exact owned custody to fresh child invocations, join both children before returning fields left and right; two ordinary results form a record, otherwise results transfer back into an owned product consumed with unpack-owned; no borrowed inputs or results, capabilities, detached lifetime or child quota reset",
         ),
         (
             "normalization",
@@ -9111,9 +9160,9 @@ mod tests {
             .expect("definition projection contract");
         assert_eq!(
             contract.identity,
-            "lkjscript-function-definition-projection-11"
+            "lkjscript-function-definition-projection-12"
         );
-        assert_eq!(contract.version, 11);
+        assert_eq!(contract.version, 12);
         assert_eq!(
             contract_descriptors()
                 .iter()

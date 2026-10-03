@@ -16,6 +16,11 @@ without effect or requirement parameters, and to the one Self parameter of an
 owned contract. Named tasks may use them under [same-task transfer](owned-task-transfers.md).
 Nominal records, variants and externals cannot advertise Owned parameters.
 
+Development 0.1.71 adds an orthogonal [transferable obligation](transferable-types.md)
+to function type parameters. `owned transferable` retains Owned's affine rules;
+ordinary `transferable` parameters admit first-order transferable data. Owned and
+CaptureSafe alone do not establish generic cross-task transfer permission.
+
 A generic body is checked symbolically before any concrete application exists.
 Instantiation checks the exact substituted type, constraint and parameter modes
 again. A direct Owned parameter, result or annotated lexical local has the same

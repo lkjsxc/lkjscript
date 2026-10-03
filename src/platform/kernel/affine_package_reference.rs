@@ -134,17 +134,23 @@ fn owned_task_imported_constraints_ignore_same_identity_caller_records() {
             (ty.form == TypeForm::TypeParameter { parameter }).then_some(*digest)
         })
         .unwrap();
-    for local_owned in [false, true] {
-        for foreign_owned in [false, true] {
+    for local_constraint in [
+        TypeParameterConstraints::None,
+        TypeParameterConstraints::Owned,
+        TypeParameterConstraints::OwnedTransferable,
+    ] {
+        for foreign_constraint in [
+            TypeParameterConstraints::None,
+            TypeParameterConstraints::Owned,
+            TypeParameterConstraints::OwnedTransferable,
+        ] {
+            let local_owned = local_constraint.has_owned();
+            let foreign_owned = foreign_constraint.has_owned();
             let mut snapshot = source.clone();
             let OwnerRecord::TypeParameter(p) = snapshot.owners.get_mut(&key).unwrap() else {
                 unreachable!()
             };
-            p.constraints = if local_owned {
-                TypeParameterConstraints::Owned
-            } else {
-                TypeParameterConstraints::None
-            };
+            p.constraints = local_constraint;
             let PackageInterfaceRecord::TypeParameter(p) = snapshot
                 .dependency_interfaces
                 .get_mut(&revision)
@@ -154,11 +160,7 @@ fn owned_task_imported_constraints_ignore_same_identity_caller_records() {
             else {
                 unreachable!()
             };
-            p.constraints = if foreign_owned {
-                TypeParameterConstraints::Owned
-            } else {
-                TypeParameterConstraints::None
-            };
+            p.constraints = foreign_constraint;
             assert_eq!(
                 memory::direct_in(&snapshot, package, ty).unwrap(),
                 foreign_owned

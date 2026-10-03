@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-21";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 21;
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-22";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 22;
 pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-17";
 pub const BYTECODE_CONTRACT_VERSION: u16 = 17;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN21";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v21";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v21";
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN22";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v22";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v22";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -92,6 +92,8 @@ impl CompilationUnitKey {
             "lkjscript.compiler-unit-key.v19"
         } else if compiler_contract_version == 20 {
             "lkjscript.compiler-unit-key.v20"
+        } else if compiler_contract_version == 21 {
+            "lkjscript.compiler-unit-key.v21"
         } else {
             COMPILER_UNIT_KEY_DOMAIN
         });
@@ -530,7 +532,7 @@ impl CompilationUnit {
                 "compiler-unit bytes disagree with their exact object-domain digest",
             ));
         }
-        // Derived generations 10–20 require a rebuild from supported canonical owners.
+        // Derived generations 10–21 require a rebuild from supported canonical owners.
         // Refuse before decoding; old bytes never acquire current instruction meaning.
         if [
             b"LKJCUN10",
@@ -544,6 +546,7 @@ impl CompilationUnit {
             b"LKJCUN18",
             b"LKJCUN19",
             b"LKJCUN20",
+            b"LKJCUN21",
         ]
         .iter()
         .any(|magic| bytes.starts_with(*magic))
@@ -579,7 +582,7 @@ impl CompilationUnit {
                 self.bytecode_contract_version,
                 self.graph_contract_version
             ),
-            (21, 17, 21)
+            (22, 17, 22)
         ) {
             return Err(unit_error(
                 DiagnosticClass::Source,
@@ -1102,11 +1105,17 @@ impl CompiledSignature {
             ));
         }
         require_item_count("compiled type parameters", self.type_parameters.len(), true)?;
-        if self.type_parameter_constraints.len() != self.type_parameters.len() {
+        if self.type_parameter_constraints.len() != self.type_parameters.len()
+            || (kind == OwnerKind::External
+                && self
+                    .type_parameter_constraints
+                    .iter()
+                    .any(|constraints| constraints.requires_transfer()))
+        {
             return Err(unit_error(
                 DiagnosticClass::Corrupt,
                 "compiler_type_parameter_constraints",
-                "compiled signature must retain exactly one constraint set per ordered type parameter",
+                "compiled signature must retain exact ordered constraints supported by its callable kind",
             ));
         }
         require_item_count("compiled parameters", self.parameters.len(), true)?;
@@ -1695,6 +1704,9 @@ fn validate_nominal_parameters(
     require_item_count("nominal type parameters", parameters.len(), true)?;
     if parameters.len() != constraints.len()
         || parameters.iter().collect::<BTreeSet<_>>().len() != parameters.len()
+        || constraints
+            .iter()
+            .any(|constraint| constraint.requires_transfer())
     {
         return Err(unit_corrupt(
             "compiler_nominal_parameters",

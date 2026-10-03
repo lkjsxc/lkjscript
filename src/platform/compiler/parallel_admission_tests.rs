@@ -415,14 +415,18 @@ fn parallel_artifact_rejects_rehashed_predecessor_logical_source() {
     // Only Parallel needs Graph 21. Unchanged surrounding owners retain supported
     // Graph 20 encodings, so the attack cannot fail on an unrelated newer owner.
     for owner in source.owners.values_mut() {
-        if !matches!(owner, OwnerRecord::Expression(expression)
+        let generation = if matches!(owner, OwnerRecord::Expression(expression)
             if matches!(expression.operation, ExpressionOperation::Parallel { .. }))
         {
-            owner.set_encoding_for_edit(20);
-        }
+            21
+        } else {
+            20
+        };
+        owner.set_encoding_for_edit(generation);
     }
     crate::platform::kernel::validate_full(&source).unwrap();
     let loaded = artifact_for_source(&source);
+    load_artifact(&rehash_logical_generation(&loaded, 22, 22)).unwrap();
     load_artifact(&rehash_logical_generation(&loaded, 21, 21)).unwrap();
     source.root.graph_contract_version = 20;
     assert!(
@@ -455,7 +459,7 @@ fn parallel_successor_rebuilds_supported_graph_20_meaning() {
     }
     crate::platform::kernel::validate_full(&source).unwrap();
     let loaded = artifact_for_source(&source);
-    assert_eq!(loaded.manifest.graph_contract_version, 21);
+    assert_eq!(loaded.manifest.graph_contract_version, 22);
     // The transport producer can also remain at Graph 20 around old source.
     load_artifact(&rehash_logical_generation(&loaded, 20, 20)).unwrap();
 }
@@ -489,8 +493,8 @@ fn parallel_artifact_logical_source_generation_also_bounds_signature_types() {
             crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(&input)
                 .unwrap();
         let loaded = artifact_for_source(&source);
-        load_artifact(&rehash_logical_generation(&loaded, 21, 21)).unwrap();
-        let error = load_artifact(&rehash_logical_generation(&loaded, 21, generation))
+        load_artifact(&rehash_logical_generation(&loaded, 22, 22)).unwrap();
+        let error = load_artifact(&rehash_logical_generation(&loaded, 22, generation))
             .map(|_| ())
             .expect_err("current package/derived envelopes cannot upgrade source type permission");
         assert_eq!(error.code, expected, "{error:?}");
@@ -770,3 +774,6 @@ fn parallel_generic_artifact_rejects_rehashed_type_and_implementation_substituti
 
 #[path = "parallel_predecessor20_tests.rs"]
 mod predecessor20;
+
+#[path = "transfer_admission_tests.rs"]
+mod transfer;

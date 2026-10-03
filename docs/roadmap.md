@@ -29,13 +29,18 @@ and memory oracles, complete type closure, cross-package source-free composition
 allocation identity, shared quotas and joined failure cleanup. Source and final-byte
 acceptance remain separate facts in [status](status.md).
 
-The next semantic boundary is reusable generic code that itself forms child groups.
-Do not merely accept arbitrary open types or inherit a caller's capabilities. Decide
-an explicit transferable-type contract, how nominal and phantom arguments establish
-it, and how symbolic type and implementation obligations become exact at execution.
-Preserve independently checkable bounded proof, exact implementation identity and
-loan exclusion. Channels, task handles and effectful children remain separate
-extensions, not implied consequences of generic task calls.
+Development 0.1.71 adds [explicit transferable contracts](spec/transferable-types.md)
+for reusable generic code that itself forms child groups. Transferability is
+independent of ownership and capture safety; symbolic proofs become exact at
+execution. Acceptance includes nominal/phantom closure, mixed generic result pairs,
+exact implementation forwarding and independent bounded proofs. [Status](status.md)
+owns the remaining acceptance boundary. Channels, task handles and effectful
+children remain separate extensions.
+
+After that boundary is accepted, prioritize the shared worker/runtime work below,
+then concurrent semantic transactions with revalidated dependency footprints.
+Keep region-local ownership possible: current owned carriers being transferable
+does not make every future owner transferable.
 
 ## 2. Scale structured execution and the shared host
 
@@ -89,7 +94,7 @@ workloads, including cache/NUMA and large working-set behavior.
 ## 5. Support concurrent semantic development
 
 Prepare private candidates from immutable revisions concurrently, then revalidate
-semantic dependency footprints at publication. Test disjoint edits and hidden
+semantic dependency footprints, including negative lookups, at publication. Test disjoint edits and hidden
 conflicts through types, witnesses, effects and references; different edited owners
 alone do not prove independence. A short serialized publication point is acceptable.
 Start with two candidates before a larger agent experiment on authorized resources.

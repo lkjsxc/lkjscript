@@ -1372,8 +1372,16 @@ impl Lowering<'_> {
             "type-parameter" | "effect-parameter" | "requirement-parameter" => {
                 fields.push(("declaration", unit.parent.clone()));
                 if kind == "type-parameter" {
-                    if self.clause(&unit.clauses, "constraint")?.is_some() {
-                        fields.push(("constraint", self.scalar(unit, "constraint")?));
+                    if let Some(clause) = self.clause(&unit.clauses, "constraint")? {
+                        let (_, operands) = self.parts(clause)?;
+                        if operands.is_empty() || operands.len() > 2 {
+                            return Err(self.error(clause, "constraint requires one or two names"));
+                        }
+                        let names = operands
+                            .iter()
+                            .map(|operand| self.block.atom(*operand))
+                            .collect::<Result<Vec<_>, _>>()?;
+                        fields.push(("constraint", names.join(" ")));
                     }
                     allowed.push("constraint");
                 }

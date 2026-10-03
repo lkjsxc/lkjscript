@@ -41,10 +41,10 @@ pub(crate) fn direct_in(
             TypeForm::TypeParameter { parameter } => {
                 if package == read.package_id() {
                     matches!(read.owner(OwnerKey::TypeParameter(parameter))?,
-                        Some(OwnerRecord::TypeParameter(p)) if p.constraints == TypeParameterConstraints::Owned)
+                        Some(OwnerRecord::TypeParameter(p)) if p.constraints.has_owned())
                 } else {
                     matches!(read.package_interface_owner(package, OwnerKey::TypeParameter(parameter))?,
-                        Some(PackageInterfaceRecord::TypeParameter(p)) if p.constraints == TypeParameterConstraints::Owned)
+                        Some(PackageInterfaceRecord::TypeParameter(p)) if p.constraints.has_owned())
                 }
             }
             _ => false,
@@ -213,6 +213,7 @@ fn instantiate(
     d: DeclarationReference,
     arguments: &[TypeObjectDigest],
     s: &mut Signature,
+    scope: Option<crate::platform::semantic_id::DeclarationId>,
 ) -> Result<(), Diagnostic> {
     if s.type_parameters.len() != arguments.len() {
         return Err(reject("memory type argument arity"));
@@ -226,12 +227,15 @@ fn instantiate(
         if p.declaration != d.declaration {
             return Err(reject("foreign generic memory parameter"));
         }
-        if p.constraints == TypeParameterConstraints::Owned {
+        if p.constraints.has_owned() {
             if !direct(read, *ty)? {
                 return Err(reject("owned substitution must be direct memory"));
             }
         } else if contains(read, *ty)? {
             return Err(reject("ordinary generic argument contains owned memory"));
+        }
+        if p.constraints.requires_transfer() {
+            super::transfer::admit(read, *ty, scope)?;
         }
         substitutions.insert(*id, *ty);
     }
@@ -707,7 +711,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                     }
                     return Ok(false);
                 };
-                instantiate(self.read, function, &type_arguments, &mut s)?;
+                instantiate(self.read, function, &type_arguments, &mut s, self.scope)?;
                 admit_signature(self.read, &s)?;
                 if s.parameters.len() != arguments.len() {
                     return Err(reject("memory call arity mismatch"));
@@ -742,8 +746,8 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 direct(self.read, s.result)?
             }
             ExpressionOperation::Parallel { left, right } => {
-                super::parallel::admit_call(self.read, left)?;
-                super::parallel::admit_call(self.read, right)?;
+                super::parallel::admit_call(self.read, left, self.scope)?;
+                super::parallel::admit_call(self.read, right, self.scope)?;
                 // Admission consumes both argument sets in the same parent state.
                 // No branch-local fork can make one owner available to both children.
                 let left_owned = self.eval(left, state, ParameterUse::Consume, next)?;
@@ -876,7 +880,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                     }
                     let selected =
                         selected.ok_or_else(|| reject("unknown product metadata field"))?;
-                    if !super::owned_contract::ordinary_closed(self.read, selected)? {
+                    if !super::transfer::ordinary(self.read, selected, self.scope)? {
                         return Err(reject("product field reads cannot expose owned children"));
                     }
                     self.eval(value, state, ParameterUse::Borrow, next)?;
@@ -953,7 +957,7 @@ pub(crate) fn validate_owner(
         record.header().contract_version,
     )?;
     match record {
-        OwnerRecord::TypeParameter(p) if p.constraints == TypeParameterConstraints::Owned => {
+        OwnerRecord::TypeParameter(p) if p.constraints.has_owned() => {
             let allowed = match read.owner(OwnerKey::Declaration(p.declaration))? {
                 Some(OwnerRecord::Declaration(d)) => match d.payload {
                     DeclarationPayload::OwnedContract(c) => {

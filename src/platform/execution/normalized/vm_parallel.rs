@@ -18,6 +18,29 @@ struct ChildContext<'a> {
 }
 
 impl Machine<'_> {
+    /// Child actuals are authored in the caller's scope. Resolve them before the
+    /// sealed application certificate is formed, reserving the new vectors first.
+    /// A closed caller retains the original shared operand arrays.
+    pub(super) fn resolve_parallel_types(
+        &mut self,
+        types: Arc<[TypeObjectDigest]>,
+    ) -> Result<Arc<[TypeObjectDigest]>, ExecutionError> {
+        if types.is_empty() || self.current_frame()?.type_arguments.is_empty() {
+            return Ok(types);
+        }
+        self.charge_allocation(super::super::value::collection_storage_bytes(
+            types.len() as u64,
+            (2 * std::mem::size_of::<TypeObjectDigest>() + 2 * std::mem::size_of::<usize>()) as u64,
+            "normalized_parallel_application",
+        )?)?;
+        let bindings = &self.current_frame()?.type_arguments;
+        types
+            .iter()
+            .map(|ty| transfer::resolve_type(self.program, *ty, bindings, self.control))
+            .collect::<Result<Vec<_>, _>>()
+            .map(Into::into)
+    }
+
     fn inspect_transfer_data(
         &mut self,
         raw: &NormalizedValue,

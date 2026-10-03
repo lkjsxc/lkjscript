@@ -65,7 +65,7 @@ fn parallel_native_meaning_has_two_owned_call_sites_and_closed_results() {
     let (left, right) = branches(&source);
     assert_ne!(left, right);
     for expression in [left, right] {
-        let call = parallel::admit_call(&source, expression).unwrap();
+        let call = parallel::admit_call(&source, expression, None).unwrap();
         assert_eq!(call.function, child(&source));
         assert_eq!(call.parameters.len(), 1);
         assert_eq!(call.parameters[0].use_mode, ParameterUse::Consume);
@@ -220,7 +220,7 @@ fn parallel_independent_admission_rejects_hidden_authority_and_task_shape_change
         TypeForm::Secret,
         TypeForm::Function {
             parameters: Vec::new(),
-            result: parallel::admit_call(&source, left).unwrap().result,
+            result: parallel::admit_call(&source, left, None).unwrap().result,
         },
         TypeForm::List {
             item: encode_type_object(&TypeObject::new(TypeForm::Secret).unwrap())
@@ -247,7 +247,7 @@ fn parallel_independent_admission_rejects_hidden_authority_and_task_shape_change
             panic!("child")
         };
         f.result = ty;
-        assert!(parallel::admit_call(&forged, left).is_err());
+        assert!(parallel::admit_call(&forged, left, None).is_err());
         assert!(!memory_reference::accepts(&forged));
     }
     let mut forged = source.clone();
@@ -262,7 +262,7 @@ fn parallel_independent_admission_rejects_hidden_authority_and_task_shape_change
         panic!("child")
     };
     f.effect = FunctionEffect::Pure;
-    assert!(parallel::admit_call(&forged, left).is_err());
+    assert!(parallel::admit_call(&forged, left, None).is_err());
     assert!(!memory_reference::accepts(&forged));
 }
 

@@ -594,12 +594,20 @@ impl FullValidator<'_> {
                         OwnerKey::Declaration(parameter.declaration),
                         "type parameter",
                     );
-                    if parameter.constraints == super::TypeParameterConstraints::Owned
+                    if parameter.constraints.has_owned()
                         && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::OwnedContract(_)) || matches!(&declaration.payload, DeclarationPayload::Function(f) if f.effect_parameters.is_empty() && f.requirement_parameters.is_empty()))
                     {
                         self.error(
                             "kernel_owned_parameter_owner",
                             "Owned is supported only by graph functions and owned contract Self",
+                        );
+                    }
+                    if parameter.constraints.requires_transfer()
+                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::Function(_)))
+                    {
+                        self.error(
+                            "kernel_transfer_parameter_owner",
+                            "Transferable is supported only by graph-function type parameters",
                         );
                     }
                     if parameter.constraints != super::TypeParameterConstraints::None

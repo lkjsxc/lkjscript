@@ -13,12 +13,11 @@ struct Rights {
 }
 #[path = "imported_memory_oracle_tests.rs"]
 mod imported_tests;
+#[path = "transfer_memory_oracle_tests.rs"]
+mod transfer_tests;
 #[path = "memory_witness_reference.rs"]
 mod witnesses;
-struct Oracle<'a>(
-    &'a KernelSnapshot,
-    Option<crate::platform::semantic_id::DeclarationId>,
-);
+struct Oracle<'a>(&'a KernelSnapshot, Option<DeclarationReference>);
 impl Oracle<'_> {
     fn foreign(&self, package: PackageId, key: OwnerKey) -> Option<&PackageInterfaceRecord> {
         let revision = self.0.dependencies.get(&package)?.package_revision;
@@ -37,7 +36,7 @@ impl Oracle<'_> {
                     | TypeForm::OwnedProduct { .. }
                     | TypeForm::OwnedChoice { .. }
             )
-        ) || matches!(self.0.types.get(&t).or_else(|| self.0.dependency_types.get(&t)).map(|t| &t.form), Some(TypeForm::TypeParameter { parameter }) if matches!(self.0.owners.get(&OwnerKey::TypeParameter(*parameter)), Some(OwnerRecord::TypeParameter(p)) if p.constraints == TypeParameterConstraints::Owned))
+        ) || matches!(self.form(t), Some(TypeForm::TypeParameter { parameter }) if self.type_parameter(self.1.map_or(self.0.root.package_id, |f| f.package), *parameter).is_some_and(|p| p.constraints.has_owned()))
     }
     fn contains(&self, t: TypeObjectDigest) -> bool {
         let mut todo = vec![t];
@@ -123,6 +122,7 @@ impl Oracle<'_> {
         if parameters.len() != arguments.len() {
             return false;
         }
+        let mut remaining = contract::MAXIMUM_VALIDATION_WORK;
         parameters.iter().zip(arguments).all(|(id, ty)| {
             let p = if d.package == self.0.root.package_id {
                 match self.0.owners.get(&OwnerKey::TypeParameter(*id)) {
@@ -137,11 +137,16 @@ impl Oracle<'_> {
             };
             p.is_some_and(|p| {
                 p.declaration == d.declaration
-                    && if p.constraints == TypeParameterConstraints::Owned {
+                    && (if p.constraints.has_owned() {
                         self.buffer(*ty) && self.owned_type_in_scope(*ty)
                     } else {
                         !self.contains(*ty)
-                    }
+                    })
+                    && (!p.constraints.requires_capture_safe() || self.capture_safe(*ty))
+                    && (!p.constraints.requires_transfer()
+                        || (self.function(d).is_some()
+                            && self.parallel_shape(*ty, &BTreeMap::new(), 0, &mut remaining)
+                                == Some(p.constraints.has_owned())))
             })
         })
     }
@@ -151,11 +156,8 @@ impl Oracle<'_> {
                 self.product_shape(ty)
             }
             Some(TypeForm::TypeParameter { parameter }) => self
-                .type_parameter(self.0.root.package_id, *parameter)
-                .is_some_and(|p| {
-                    Some(p.declaration) == self.1
-                        && p.constraints == TypeParameterConstraints::Owned
-                }),
+                .scoped_parameter(*parameter)
+                .is_some_and(|p| p.constraints.has_owned()),
             Some(TypeForm::ByteBuffer | TypeForm::OwnedI64Cell) => true,
             _ => false,
         }
@@ -426,29 +428,36 @@ impl Oracle<'_> {
             return None;
         }
         *remaining = remaining.checked_sub(1)?;
-        let closed = Oracle(self.0, None);
         match self.form(ty)? {
             TypeForm::TypeParameter { parameter } => {
-                let actual = *bindings.get(parameter)?;
-                if closed.owned_type_in_scope(actual) {
-                    Some(true)
-                } else {
-                    closed.ordinary(actual).then_some(false)
+                if let Some(actual) = bindings.get(parameter) {
+                    return self.parallel_shape(*actual, &BTreeMap::new(), depth, remaining);
                 }
+                let p = self.scoped_parameter(*parameter)?;
+                p.constraints
+                    .requires_transfer()
+                    .then_some(p.constraints.has_owned())
             }
             TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Some(true),
             TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
-                for field in fields {
-                    self.parallel_shape(field.ty, bindings, depth + 1, remaining)?;
+                if fields.is_empty()
+                    || fields.len() > contract::MAXIMUM_CHILDREN
+                    || fields.windows(2).any(|f| f[0].name >= f[1].name)
+                {
+                    return None;
                 }
-                Some(true)
+                let mut owned = false;
+                for field in fields {
+                    owned |= self.parallel_shape(field.ty, bindings, depth + 1, remaining)?;
+                }
+                owned.then_some(true)
             }
             _ => {
                 let ordinary = bindings
                     .iter()
-                    .filter_map(|(p, ty)| closed.ordinary(*ty).then_some(*p))
+                    .filter_map(|(p, ty)| self.ordinary(*ty).then_some(*p))
                     .collect();
-                closed.ordinary_assuming(ty, ordinary).then_some(false)
+                self.ordinary_assuming(ty, ordinary).then_some(false)
             }
         }
     }
@@ -477,15 +486,13 @@ impl Oracle<'_> {
             _ => return None,
         };
         let signature = self.function(function)?;
-        let closed = Oracle(self.0, None);
+        let mut remaining = contract::MAXIMUM_VALIDATION_WORK;
         if !self.application(function, types)
             || !self.witnesses(function, types, implementations)
-            || types
-                .iter()
-                .any(|ty| !closed.ordinary(*ty) && !closed.owned_type_in_scope(*ty))
-            || implementations
-                .iter()
-                .any(|i| !matches!(i, ImplementationOperand::Concrete { .. }))
+            || types.iter().any(|ty| {
+                self.parallel_shape(*ty, &BTreeMap::new(), 0, &mut remaining)
+                    .is_none()
+            })
             || !signature.requirement_parameters.is_empty()
             || !signature.effect_parameters.is_empty()
             || !matches!(&signature.effect, FunctionEffect::Task { requirements, effect_parameters } if requirements.is_empty() && effect_parameters.is_empty())
@@ -498,7 +505,6 @@ impl Oracle<'_> {
             .into_iter()
             .zip(types.iter().copied())
             .collect();
-        let mut remaining = contract::MAXIMUM_VALIDATION_WORK;
         let result = self.parallel_shape(signature.result, &bindings, 0, &mut remaining)?;
         let mut owned = false;
         for id in signature.parameters {
@@ -841,12 +847,9 @@ impl Oracle<'_> {
                 self.buffer(s.1)
             }
             ExpressionOperation::Parallel { left, right } => {
-                if let Some(declaration) = self.1
+                if let Some(function) = self.1
                     && self
-                        .function(DeclarationReference {
-                            package: self.0.root.package_id,
-                            declaration,
-                        })
+                        .function(function)
                         .is_none_or(|f| matches!(f.effect, FunctionEffect::Pure))
                 {
                     return None;
@@ -1027,6 +1030,68 @@ impl Oracle<'_> {
 }
 pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
     let oracle = Oracle(snapshot, None);
+    // Imported parameter identities live in their declaration's package. Check
+    // every exported template, even when no root expression calls it.
+    for (package, dependency) in &snapshot.dependencies {
+        let Some(interface) = snapshot
+            .dependency_interfaces
+            .get(&dependency.package_revision)
+        else {
+            return false;
+        };
+        for (key, owner) in interface {
+            match owner {
+                PackageInterfaceRecord::TypeParameter(p)
+                    if p.constraints.has_owned() || p.constraints.requires_transfer() =>
+                {
+                    let Some(PackageInterfaceRecord::Declaration(d)) =
+                        interface.get(&OwnerKey::Declaration(p.declaration))
+                    else {
+                        return false;
+                    };
+                    match &d.payload {
+                        PackageInterfaceDeclarationPayload::OwnedContract(c)
+                            if !p.constraints.requires_transfer()
+                                && *key == OwnerKey::TypeParameter(c.self_parameter) => {}
+                        PackageInterfaceDeclarationPayload::Function(f)
+                            if matches!(key, OwnerKey::TypeParameter(id) if f.type_parameters.contains(id))
+                                && (!p.constraints.has_owned()
+                                    || (f.effect_parameters.is_empty()
+                                        && f.requirement_parameters.is_empty()))
+                                && (!p.constraints.requires_transfer()
+                                    || p.header.contract_version >= 22) => {}
+                        _ => return false,
+                    }
+                }
+                PackageInterfaceRecord::Declaration(d) => {
+                    let OwnerKey::Declaration(id) = key else {
+                        return false;
+                    };
+                    if let PackageInterfaceDeclarationPayload::Function(f) = &d.payload {
+                        let function = DeclarationReference {
+                            package: *package,
+                            declaration: *id,
+                        };
+                        let imported = Oracle(snapshot, Some(function));
+                        if !imported.valid_parameters(function, f)
+                            || imported.signature(function).is_none_or(|s| {
+                                !imported.legal_signature(&s)
+                                    || s.0.iter().map(|p| p.ty).chain([s.1]).any(|ty| {
+                                        imported.buffer(ty) && !imported.owned_type_in_scope(ty)
+                                    })
+                                    || s.0
+                                        .iter()
+                                        .any(|p| p.parent != ParameterParent::Function(*id))
+                            })
+                        {
+                            return false;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
     let mut product_bindings = BTreeSet::new();
     for owner in snapshot.owners.values() {
         if let OwnerRecord::Expression(e) = owner
@@ -1049,6 +1114,11 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
             .min(owner.header().contract_version);
         if generation < 21
             && matches!(owner, OwnerRecord::Expression(e) if matches!(e.operation, ExpressionOperation::Parallel { .. }))
+        {
+            return false;
+        }
+        if generation < 22
+            && matches!(owner, OwnerRecord::TypeParameter(p) if p.constraints.requires_transfer())
         {
             return false;
         }
@@ -1091,7 +1161,9 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
     }
     for (key, owner) in &snapshot.owners {
         match owner {
-            OwnerRecord::TypeParameter(p) if p.constraints == TypeParameterConstraints::Owned => {
+            OwnerRecord::TypeParameter(p)
+                if p.constraints.has_owned() || p.constraints.requires_transfer() =>
+            {
                 let Some(OwnerRecord::Declaration(d)) =
                     snapshot.owners.get(&OwnerKey::Declaration(p.declaration))
                 else {
@@ -1099,10 +1171,12 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                 };
                 match &d.payload {
                     DeclarationPayload::OwnedContract(c)
-                        if *key == OwnerKey::TypeParameter(c.self_parameter) => {}
+                        if !p.constraints.requires_transfer()
+                            && *key == OwnerKey::TypeParameter(c.self_parameter) => {}
                     DeclarationPayload::Function(f)
-                        if f.effect_parameters.is_empty()
-                            && f.requirement_parameters.is_empty()
+                        if (!p.constraints.has_owned()
+                            || (f.effect_parameters.is_empty()
+                                && f.requirement_parameters.is_empty()))
                             && matches!(key, OwnerKey::TypeParameter(id) if f.type_parameters.contains(id)) =>
                         {}
                     _ => return false,
@@ -1163,8 +1237,21 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                     let OwnerKey::Declaration(id) = key else {
                         return false;
                     };
-                    let oracle = Oracle(snapshot, Some(*id));
-                    if !oracle.valid_parameters(*id, f) {
+                    let oracle = Oracle(
+                        snapshot,
+                        Some(DeclarationReference {
+                            package: snapshot.root.package_id,
+                            declaration: *id,
+                        }),
+                    );
+                    let function = DeclarationReference {
+                        package: snapshot.root.package_id,
+                        declaration: *id,
+                    };
+                    if oracle
+                        .function(function)
+                        .is_none_or(|f| !oracle.valid_parameters(function, &f))
+                    {
                         return false;
                     }
                     let Some(s) = oracle.signature(DeclarationReference {

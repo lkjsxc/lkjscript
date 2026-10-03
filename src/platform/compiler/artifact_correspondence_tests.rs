@@ -267,6 +267,10 @@ fn rehashed_conflicting_runtime_body_cannot_hide_untaken_double_consumption() {
         super::lower::canonical_code(
             &invalid,
             changed.source.package,
+            match changed.source.owner {
+                OwnerKey::Declaration(declaration) => Some(declaration),
+                _ => None,
+            },
             &changed.tables,
             function.body,
             &function.parameters,

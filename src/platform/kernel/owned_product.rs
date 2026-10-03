@@ -53,6 +53,7 @@ pub(crate) fn validate(
     scope: Option<DeclarationId>,
 ) -> Result<(), Diagnostic> {
     read.validation_work()?;
+    let ordinary_assumptions = super::transfer::ordinary_assumptions(read, scope)?;
     let code = if matches!(
         read.type_object(ty)?.map(|t| t.form),
         Some(TypeForm::OwnedChoice { .. })
@@ -122,15 +123,13 @@ pub(crate) fn validate(
                     pending.push((field.ty, depth + 1));
                 }
                 TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => owned = true,
-                TypeForm::TypeParameter { parameter } => {
+                TypeForm::TypeParameter { parameter } if super::memory::direct(read, field.ty)? => {
                     let Some(OwnerRecord::TypeParameter(p)) =
                         read.owner(OwnerKey::TypeParameter(parameter))?
                     else {
                         return Err(reject("missing owned product parameter"));
                     };
-                    if p.constraints != TypeParameterConstraints::Owned
-                        || Some(p.declaration) != scope
-                    {
+                    if !p.constraints.has_owned() || Some(p.declaration) != scope {
                         return Err(reject(
                             "product parameters require exact in-scope Owned constraints",
                         ));
@@ -140,17 +139,29 @@ pub(crate) fn validate(
                     else {
                         return Err(reject("missing owned parameter declaration"));
                     };
-                    if !matches!(d.payload, DeclarationPayload::Function(f) if f.type_parameters.contains(&parameter))
-                    {
+                    let DeclarationPayload::Function(function) = d.payload else {
+                        return Err(reject("product parameter requires a graph-function owner"));
+                    };
+                    if !super::transfer::function_parameter_listed(
+                        read,
+                        &function.type_parameters,
+                        parameter,
+                    )? {
                         return Err(reject(
                             "product parameter is outside its function signature",
                         ));
                     }
                     owned = true;
                 }
-                _ if !super::owned_contract::ordinary_closed(read, field.ty)? => {
+                _ if !super::owned_contract::ordinary_with_assumptions(
+                    read,
+                    field.ty,
+                    scope,
+                    &ordinary_assumptions,
+                )? =>
+                {
                     return Err(reject(
-                        "ordinary composite children must be closed first-order data",
+                        "ordinary composite children require closed data or exact in-scope transferable data",
                     ));
                 }
                 _ => {}

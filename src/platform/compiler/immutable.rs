@@ -117,3 +117,47 @@ fn store_error(error: crate::platform::storage::object::StoreError) -> Diagnosti
         error.message,
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::platform::package_transport::source::PackageContainer;
+    use crate::platform::publication::GraphRepository;
+
+    #[test]
+    fn current_export_of_predecessor_meaning_matches_native_and_immutable_compilation() {
+        let mut snapshot = crate::platform::kernel::tests::transport_snapshot();
+        snapshot.root.graph_contract_version = 21;
+        for owner in snapshot.owners.values_mut() {
+            owner.set_encoding_for_edit(21);
+        }
+        let directory = tempfile::tempdir().unwrap();
+        let repository = GraphRepository::create(&directory.path().join("source"), &snapshot, None)
+            .unwrap()
+            .repository;
+        let before = repository.current().unwrap().head;
+        let exported = repository.export_package_transport().unwrap();
+        let container =
+            PackageContainer::decode(&exported.container, exported.transport_digest).unwrap();
+        let admitted = container.admit().unwrap();
+        let source = &admitted.packages[&container.root.package_revision];
+        assert_eq!(source.snapshot.root.graph_contract_version, 21);
+        assert_eq!(source.revision.revision.graph_contract_version, 21);
+        assert_eq!(
+            source.revision.graph_contract_version,
+            crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+        );
+        let immutable = compile_immutable(source, &container.objects, &[]).unwrap();
+        let compilation =
+            super::super::build_clean(&repository, OptimizationPolicy::DeterministicBaseline)
+                .unwrap();
+        let native =
+            super::super::link_artifact(&repository, compilation.manifest_digest, &[]).unwrap();
+        assert_eq!(immutable.artifact.bytes, native.artifact.bytes);
+        assert_eq!(
+            immutable.artifact.manifest.packages[0].package_revision,
+            container.root.package_revision
+        );
+        assert_eq!(repository.current().unwrap().head, before);
+    }
+}

@@ -1,7 +1,7 @@
 //! Independent test oracle for nominal witness inventories and first-order method types.
 //! Reads source records directly; does not call production resolution or validation.
 use super::*;
-use crate::platform::semantic_id::{DeclarationId, TypeParameterId};
+use crate::platform::semantic_id::TypeParameterId;
 use std::collections::BTreeMap;
 
 impl Oracle<'_> {
@@ -28,6 +28,15 @@ impl Oracle<'_> {
                 _ => None,
             }
         }
+    }
+    pub(super) fn scoped_parameter(&self, id: TypeParameterId) -> Option<&TypeParameterRecord> {
+        let declaration = self.1?;
+        let p = self.type_parameter(declaration.package, id)?;
+        let function = self.function(declaration)?;
+        (p.header.owner == OwnerKey::TypeParameter(id)
+            && p.declaration == declaration.declaration
+            && function.type_parameters.contains(&id))
+        .then_some(p)
     }
     pub(super) fn function(&self, d: DeclarationReference) -> Option<PackageFunctionSignature> {
         if d.package == self.0.root.package_id {
@@ -185,10 +194,21 @@ impl Oracle<'_> {
     pub(super) fn ordinary(&self, ty: TypeObjectDigest) -> bool {
         self.ordinary_assuming(ty, BTreeSet::new())
     }
+    pub(super) fn capture_safe(&self, ty: TypeObjectDigest) -> bool {
+        self.data_assuming(ty, BTreeSet::new(), true)
+    }
     pub(super) fn ordinary_assuming(
         &self,
         ty: TypeObjectDigest,
         assumptions: BTreeSet<TypeParameterId>,
+    ) -> bool {
+        self.data_assuming(ty, assumptions, false)
+    }
+    fn data_assuming(
+        &self,
+        ty: TypeObjectDigest,
+        assumptions: BTreeSet<TypeParameterId>,
+        capture: bool,
     ) -> bool {
         // A nominal's formals stand for arbitrary ordinary types; its actuals
         // must independently prove that assumption, even when unused in fields.
@@ -207,10 +227,19 @@ impl Oracle<'_> {
             };
             match form {
                 TypeForm::TypeParameter { parameter } => {
-                    if !bindings.contains(parameter) {
+                    if !bindings.contains(parameter)
+                        && !self.scoped_parameter(*parameter).is_some_and(|p| {
+                            if capture {
+                                p.constraints.proves_capture_safe()
+                            } else {
+                                !p.constraints.has_owned() && p.constraints.requires_transfer()
+                            }
+                        })
+                    {
                         return false;
                     }
                 }
+                TypeForm::Function { .. } | TypeForm::TaskFunction { .. } if capture => {}
                 TypeForm::Function { .. }
                 | TypeForm::TaskFunction { .. }
                 | TypeForm::CapabilityResource { .. }
@@ -237,7 +266,8 @@ impl Oracle<'_> {
                             .type_parameter(declaration.package, p)
                             .is_some_and(|record| {
                                 record.declaration == declaration.declaration
-                                    && record.constraints != TypeParameterConstraints::Owned
+                                    && !record.constraints.has_owned()
+                                    && !record.constraints.requires_transfer()
                             })
                         {
                             return false;
@@ -282,6 +312,7 @@ impl Oracle<'_> {
         let Some(c) = self.contract(d) else {
             return false;
         };
+        let closed = Oracle(self.0, None);
         if !self
             .type_parameter(d.package, c.self_parameter)
             .is_some_and(|p| {
@@ -317,7 +348,9 @@ impl Oracle<'_> {
                     {
                         return false;
                     }
-                } else if suffix || p.use_mode != ParameterUse::Unrestricted || !self.ordinary(p.ty)
+                } else if suffix
+                    || p.use_mode != ParameterUse::Unrestricted
+                    || !closed.ordinary(p.ty)
                 {
                     return false;
                 }
@@ -326,7 +359,7 @@ impl Oracle<'_> {
                 != Some(&TypeForm::TypeParameter {
                     parameter: c.self_parameter,
                 })
-                && !self.ordinary(m.result)
+                && !closed.ordinary(m.result)
             {
                 return false;
             }
@@ -404,7 +437,23 @@ impl Oracle<'_> {
         }
         true
     }
-    pub(super) fn valid_parameters(&self, d: DeclarationId, f: &FunctionDeclaration) -> bool {
+    pub(super) fn valid_parameters(
+        &self,
+        d: DeclarationReference,
+        f: &PackageFunctionSignature,
+    ) -> bool {
+        if f.type_parameters.iter().any(|id| {
+            self.type_parameter(d.package, *id).is_none_or(|p| {
+                p.declaration != d.declaration
+                    || p.header.owner != OwnerKey::TypeParameter(*id)
+                    || (p.constraints.has_owned()
+                        && (!f.effect_parameters.is_empty()
+                            || !f.requirement_parameters.is_empty()))
+                    || (p.constraints.requires_transfer() && p.header.contract_version < 22)
+            })
+        }) {
+            return false;
+        }
         if f.implementation_parameters.is_empty() {
             return true;
         }
@@ -421,10 +470,8 @@ impl Oracle<'_> {
                 && names.insert(&p.name)
                 && f.type_parameters.contains(parameter)
                 && self
-                    .type_parameter(self.0.root.package_id, *parameter)
-                    .is_some_and(|t| {
-                        t.declaration == d && t.constraints == TypeParameterConstraints::Owned
-                    })
+                    .type_parameter(d.package, *parameter)
+                    .is_some_and(|t| t.declaration == d.declaration && t.constraints.has_owned())
                 && self.valid_contract(p.contract)
         })
     }
@@ -442,9 +489,7 @@ impl Oracle<'_> {
                 function,
                 parameter,
             } => {
-                if function.package != self.0.root.package_id
-                    || Some(function.declaration) != self.1
-                {
+                if function.package != self.0.root.package_id || Some(function) != self.1 {
                     return None;
                 }
                 let f = self.function(function)?;

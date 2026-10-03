@@ -1,0 +1,71 @@
+{
+  "status": "passed",
+  "executable_sha256": "ba7f5b786ed98b15095eff6861f51fd035b00d056ef16f4cc94687a9bd71ad73",
+  "literal_sha256": "d824175a1496e7df595ddd96997f0d150258a6f59524e9dfb5ea4f87b7060a9d",
+  "artifact_sha256": "4dfa2042e61007c687716bc210977aed3d746496b2ade85cd8cde3a3fd73e3ee",
+  "commands": 14,
+  "outcomes": [
+    {
+      "detached": false,
+      "scalar": "-9223372036854775808",
+      "values": "[]",
+      "actual": "{\"scalar\":-9223372036854775808,\"values\":[]}",
+      "cleanup_complete": true
+    },
+    {
+      "detached": false,
+      "scalar": "9223372036854775807",
+      "values": "[0,-1,9223372036854775807]",
+      "actual": "{\"scalar\":9223372036854775807,\"values\":[0,-1,9223372036854775807]}",
+      "cleanup_complete": true
+    },
+    {
+      "detached": false,
+      "scalar": "-137",
+      "values": "[1,2,-3]",
+      "actual": "{\"scalar\":-137,\"values\":[1,2,-3]}",
+      "cleanup_complete": true
+    },
+    {
+      "detached": false,
+      "scalar": "0",
+      "values": "[-9223372036854775808,9223372036854775807]",
+      "actual": "{\"scalar\":0,\"values\":[-9223372036854775808,9223372036854775807]}",
+      "cleanup_complete": true
+    },
+    {
+      "detached": true,
+      "scalar": "-9223372036854775808",
+      "values": "[]",
+      "actual": "{\"scalar\":-9223372036854775808,\"values\":[]}",
+      "cleanup_complete": true
+    },
+    {
+      "detached": true,
+      "scalar": "9223372036854775807",
+      "values": "[0,-1,9223372036854775807]",
+      "actual": "{\"scalar\":9223372036854775807,\"values\":[0,-1,9223372036854775807]}",
+      "cleanup_complete": true
+    },
+    {
+      "detached": true,
+      "scalar": "-137",
+      "values": "[1,2,-3]",
+      "actual": "{\"scalar\":-137,\"values\":[1,2,-3]}",
+      "cleanup_complete": true
+    },
+    {
+      "detached": true,
+      "scalar": "0",
+      "values": "[-9223372036854775808,9223372036854775807]",
+      "actual": "{\"scalar\":0,\"values\":[-9223372036854775808,9223372036854775807]}",
+      "cleanup_complete": true
+    }
+  ],
+  "source_project_absent": true,
+  "source_request_absent": true,
+  "environment": {
+    "LANG": "C",
+    "PATH": ""
+  }
+}

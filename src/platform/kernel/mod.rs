@@ -31,6 +31,7 @@ pub(crate) mod owned_product;
 mod owner;
 pub(crate) mod parallel;
 pub(crate) mod parallel_types;
+pub(crate) mod transfer;
 pub use owned_contract::*;
 pub(crate) mod interface11;
 mod reference;
@@ -94,3 +95,7 @@ mod finite_admission_tests;
 mod owned_contract_tests;
 #[cfg(test)]
 mod parallel_tests;
+#[cfg(test)]
+mod transfer_adversary_tests;
+#[cfg(test)]
+mod transfer_contract_tests;

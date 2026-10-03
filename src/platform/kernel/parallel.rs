@@ -1,6 +1,7 @@
 //! Exact static admission for lexical structured child calls.
 use super::*;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
+use crate::platform::semantic_id::DeclarationId;
 use crate::platform::semantic_id::ExpressionId;
 
 pub(crate) struct ParallelCall {
@@ -20,6 +21,7 @@ pub(super) fn reject(message: impl Into<String>) -> Diagnostic {
 pub(crate) fn admit_call(
     read: &(impl ExpressionRead + ?Sized),
     expression: ExpressionId,
+    scope: Option<DeclarationId>,
 ) -> Result<ParallelCall, Diagnostic> {
     read.validation_work()?;
     let Some(OwnerRecord::Expression(record)) = read.owner(OwnerKey::Expression(expression))?
@@ -44,7 +46,7 @@ pub(crate) fn admit_call(
         } => (function, arguments, type_arguments, implementations),
         _ => {
             return Err(reject(
-                "parallel children require direct named calls with closed applications",
+                "parallel children require direct named calls with exact scoped applications",
             ));
         }
     };
@@ -66,12 +68,9 @@ pub(crate) fn admit_call(
     }
     if signature.type_parameters.len() != type_arguments.len()
         || signature.implementation_parameters.len() != implementations.len()
-        || implementations
-            .iter()
-            .any(|i| !matches!(i, ImplementationOperand::Concrete { .. }))
     {
         return Err(reject(
-            "parallel child applications require exact concrete types and implementations",
+            "parallel child applications require exact type and implementation arities",
         ));
     }
     let mut substitutions = std::collections::BTreeMap::new();
@@ -89,9 +88,9 @@ pub(crate) fn admit_call(
                 _ => return Err(reject("missing imported child type parameter")),
             }
         };
-        let owned = admit_result(read, *ty)?;
+        let owned = admit_result(read, *ty, scope)?;
         if parameter.declaration != function.declaration
-            || owned != (parameter.constraints == TypeParameterConstraints::Owned)
+            || owned != parameter.constraints.has_owned()
             || substitutions.insert(*id, *ty).is_some()
         {
             return Err(reject(
@@ -104,7 +103,7 @@ pub(crate) fn admit_call(
         function,
         &type_arguments,
         &implementations,
-        None,
+        scope,
     )?;
     let mut applied = super::parallel_types::AppliedTypes::new(read);
     let result = applied.substitute(signature.result, &substitutions, 0)?;
@@ -113,7 +112,7 @@ pub(crate) fn admit_call(
             "parallel child argument count differs from its exact signature",
         ));
     }
-    let result_owned = admit_result(&applied, result)?;
+    let result_owned = admit_result(&applied, result, scope)?;
     let mut parameters = Vec::new();
     let mut seen_owned = false;
     for id in signature.parameters {
@@ -140,32 +139,17 @@ pub(crate) fn admit_call(
             ));
         }
         parameter.ty = applied.substitute(parameter.ty, &substitutions, 0)?;
-        let ty = applied
-            .type_object(parameter.ty)?
-            .ok_or_else(|| reject("parallel child parameter type is absent"))?;
-        match ty.form {
-            TypeForm::ByteBuffer
-            | TypeForm::OwnedI64Cell
-            | TypeForm::OwnedProduct { .. }
-            | TypeForm::OwnedChoice { .. } => {
+        match admit_result(&applied, parameter.ty, scope)? {
+            true => {
                 if parameter.use_mode != ParameterUse::Consume {
                     return Err(reject("parallel child owned parameters must consume"));
                 }
-                if matches!(
-                    ty.form,
-                    TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. }
-                ) {
-                    super::owned_product::validate(&applied, parameter.ty, None)?;
-                }
                 seen_owned = true;
             }
-            _ => {
-                if seen_owned
-                    || parameter.use_mode != ParameterUse::Unrestricted
-                    || !super::owned_contract::ordinary_closed(&applied, parameter.ty)?
-                {
+            false => {
+                if seen_owned || parameter.use_mode != ParameterUse::Unrestricted {
                     return Err(reject(
-                        "parallel child parameters require closed ordinary data followed by consuming owned values",
+                        "parallel child parameters require transferable data followed by consuming transferable owners",
                     ));
                 }
             }
@@ -186,21 +170,13 @@ pub(crate) fn admit_call(
 pub(crate) fn admit_result(
     read: &(impl ExpressionRead + ?Sized),
     result: TypeObjectDigest,
+    scope: Option<DeclarationId>,
 ) -> Result<bool, Diagnostic> {
-    read.validation_work()?;
-    let form = read
-        .type_object(result)?
-        .ok_or_else(|| reject("parallel child result type is absent"))?
-        .form;
-    match form {
-        TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Ok(true),
-        TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. } => {
-            super::owned_product::validate(read, result, None)?;
-            Ok(true)
+    super::transfer::admit(read, result, scope).map_err(|error| {
+        if error.class == DiagnosticClass::Semantic {
+            reject(error.message)
+        } else {
+            error
         }
-        _ if super::owned_contract::ordinary_closed(read, result)? => Ok(false),
-        _ => Err(reject(
-            "parallel child results require closed ordinary data or closed owned values",
-        )),
-    }
+    })
 }

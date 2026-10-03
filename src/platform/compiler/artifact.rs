@@ -48,16 +48,16 @@ use std::fmt;
 #[path = "artifact_code.rs"]
 mod code_admission;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-28";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-28";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 28;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF28";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART28";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN28";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-29";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-29";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 29;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF29";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART29";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN29";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v28";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v28";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v28";
+    "lkjscript.artifact-manifest-envelope.v29";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v29";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v29";
 pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v18";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
@@ -133,6 +133,15 @@ fn artifact_wire(version: u16) -> Result<ArtifactWire, Diagnostic> {
             manifest_domain: "lkjscript.artifact-manifest-envelope.v27",
             digest_domain: "lkjscript.artifact-bundle.v27",
             checksum_domain: "lkjscript.artifact-bundle.complete.v27",
+        }),
+        28 => Ok(ArtifactWire {
+            version,
+            manifest_magic: *b"LKJAMF28",
+            bundle_magic: *b"LKJART28",
+            end_magic: *b"LKJAEN28",
+            manifest_domain: "lkjscript.artifact-manifest-envelope.v28",
+            digest_domain: "lkjscript.artifact-bundle.v28",
+            checksum_domain: "lkjscript.artifact-bundle.complete.v28",
         }),
         ARTIFACT_CONTRACT_VERSION => Ok(ArtifactWire {
             version,
@@ -389,6 +398,8 @@ impl ArtifactManifest {
             26
         } else if bytes.starts_with(b"LKJAMF27") {
             27
+        } else if bytes.starts_with(b"LKJAMF28") {
+            28
         } else {
             ARTIFACT_CONTRACT_VERSION
         })?;
@@ -424,7 +435,7 @@ impl ArtifactManifest {
     fn validate(&self) -> Result<(), Diagnostic> {
         if !matches!(
             self.contract_version,
-            18 | 19 | 20 | 25 | 26 | 27 | ARTIFACT_CONTRACT_VERSION
+            18 | 19 | 20 | 25 | 26 | 27 | 28 | ARTIFACT_CONTRACT_VERSION
         ) || (self.contract_version == 18
             && (
                 self.graph_contract_version,
@@ -452,6 +463,8 @@ impl ArtifactManifest {
             || (self.contract_version == 25 && self.graph_contract_version > 20)
             || (self.contract_version == 26 && self.compiler_contract_version > 19)
             || (self.contract_version == 27 && self.compiler_contract_version > 20)
+            || (self.contract_version == 28
+                && (self.compiler_contract_version > 21 || self.graph_contract_version > 21))
             || !matches!(
                 (
                     self.graph_contract_version,
@@ -470,6 +483,7 @@ impl ArtifactManifest {
                     | (21, 19, 15)
                     | (21, 20, 16)
                     | (21, 21, 17)
+                    | (22, 22, 17)
             )
             || self.compilation_manifest_contract_version != COMPILATION_MANIFEST_CONTRACT_VERSION
         {
@@ -1848,7 +1862,8 @@ pub(crate) fn runtime_owner_expectations(
                 }) || !signature.implementation_parameters.is_empty()
                     || signature
                         .type_parameter_constraints
-                        .contains(&crate::platform::kernel::TypeParameterConstraints::Owned)
+                        .iter()
+                        .any(|constraints| constraints.has_owned())
                     || signature.parameters.iter().any(|parameter| {
                         parameter.resource_requirement.is_some()
                             || parameter.use_mode

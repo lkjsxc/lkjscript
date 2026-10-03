@@ -157,16 +157,17 @@ impl Machine<'_> {
         }
         for (constraint, ty) in function.type_parameter_constraints.iter().zip(types) {
             self.control.check()?;
-            if self
-                .program
-                .substitute_type(*ty, &BTreeMap::new(), 0)
-                .is_none()
-            {
-                return Err(type_error(
-                    "raw invocation requires fully resolved exact types",
-                ));
+            resolve_runtime_type(
+                self.program,
+                *ty,
+                &BTreeMap::new(),
+                self.control,
+                "raw invocation requires fully resolved exact types",
+            )?;
+            if constraint.requires_transfer() {
+                transfer::admit_type(self.program, *ty, self.control)?;
             }
-            if *constraint == crate::platform::kernel::TypeParameterConstraints::CaptureSafe {
+            if constraint.requires_capture_safe() {
                 checked::Admission {
                     shared_budget: self.shared_budget.as_deref(),
                     substitutions: &BTreeMap::new(),

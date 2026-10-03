@@ -494,7 +494,7 @@ impl ReferenceState<'_> {
                             return Ok(false);
                         };
                         if record.declaration != declaration.declaration
-                            || record.constraints == TypeParameterConstraints::Owned
+                            || record.constraints.has_owned()
                         {
                             return Ok(false);
                         }

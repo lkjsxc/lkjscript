@@ -1787,6 +1787,16 @@ fn canonical_kernel_codec_manifest_is_frozen() {
     let (mut snapshot, _) = historical_prototype_snapshot();
     assert_eq!(
         manifest(&snapshot, contract::GRAPH_CONTRACT_IDENTITY),
+        "9cd3f7a45f08dd2433f250756db4a7179ff2200b0026b33d989d88c9b54e1b6a"
+    );
+    // The current identity and owner envelopes advance together. Keep the previous
+    // golden under its original generation instead of relabeling its bytes.
+    snapshot.root.graph_contract_version = 21;
+    for owner in snapshot.owners.values_mut() {
+        owner.set_encoding_for_edit(21);
+    }
+    assert_eq!(
+        manifest(&snapshot, "lkjscript-meaning-graph-21"),
         "f2fe441b13f5b6a20612ac4a37aaf164d232548669cb283e9dc997161674b111"
     );
     // Preserve genuine predecessor identities under their own exact generations.
@@ -2382,6 +2392,21 @@ fn capture_constraint_set_has_stable_tags_and_strict_json() {
             "[\"capture-safe\"]",
         ),
         (TypeParameterConstraints::Owned, 2, "[\"owned\"]"),
+        (
+            TypeParameterConstraints::Transferable,
+            3,
+            "[\"transferable\"]",
+        ),
+        (
+            TypeParameterConstraints::CaptureSafeTransferable,
+            4,
+            "[\"capture-safe\",\"transferable\"]",
+        ),
+        (
+            TypeParameterConstraints::OwnedTransferable,
+            5,
+            "[\"owned\",\"transferable\"]",
+        ),
     ] {
         let bytes = bincode::encode_to_vec(constraint, bincode::config::standard()).unwrap();
         assert_eq!(bytes, [tag]);
@@ -2398,6 +2423,10 @@ fn capture_constraint_set_has_stable_tags_and_strict_json() {
         "[\"owned\",\"capture-safe\"]",
         "[\"capture-safe\",\"owned\"]",
         "[\"none\"]",
+        "[\"none\",\"transferable\"]",
+        "[\"transferable\",\"transferable\"]",
+        "[\"capture-safe\",\"owned\",\"transferable\"]",
+        "[\"owned\",\"transferable\",\"unknown\"]",
         "null",
         "{}",
     ] {
@@ -2406,7 +2435,7 @@ fn capture_constraint_set_has_stable_tags_and_strict_json() {
             "{json}"
         );
     }
-    for tag in [3_u8, 127, 255] {
+    for tag in [6_u8, 127, 255] {
         assert!(
             bincode::decode_from_slice::<TypeParameterConstraints, _>(
                 &[tag],

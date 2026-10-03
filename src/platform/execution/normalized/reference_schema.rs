@@ -16,6 +16,11 @@ use crate::platform::kernel::{
 use crate::platform::semantic_id::{TargetId, TypeParameterId};
 use std::collections::{BTreeMap, BTreeSet};
 
+#[path = "reference_instantiation_scratch.rs"]
+mod instantiation_scratch;
+#[path = "reference_transfer_substitution.rs"]
+mod transfer_substitution;
+
 fn source_error(error: Diagnostic) -> ExecutionError {
     use crate::platform::execution::ExecutionFailureClass;
     let class = match error.class {
@@ -34,6 +39,7 @@ pub struct NormalizedReferenceSchema {
     pub(super) type_metadata_bytes: u64,
     pub(super) affine_variants: Vec<bool>,
     pub(super) capture_safe_types: BTreeSet<TypeObjectDigest>,
+    pub(super) transferable_types: BTreeSet<TypeObjectDigest>,
     pub(super) ordinary_types: BTreeSet<TypeObjectDigest>,
     pub(super) buffer_free_types: BTreeSet<TypeObjectDigest>,
     pub(super) comparable_types: BTreeSet<TypeObjectDigest>,

@@ -4,6 +4,114 @@ use crate::platform::change::canonical_authored_intent_bytes;
 use crate::platform::publication::GraphRepository;
 
 #[test]
+fn native_transfer_constraint_sets_are_canonical_and_select_only_codec26() {
+    use crate::platform::kernel::TypeParameterConstraints as C;
+    for (names, expected, magic) in [
+        ("none", C::None, b"LKJACR14"),
+        ("capture-safe", C::CaptureSafe, b"LKJACR14"),
+        ("owned", C::Owned, b"LKJACR21"),
+        ("transferable", C::Transferable, b"LKJACR26"),
+        (
+            "capture-safe transferable",
+            C::CaptureSafeTransferable,
+            b"LKJACR26",
+        ),
+        ("owned transferable", C::OwnedTransferable, b"LKJACR26"),
+        (
+            "transferable capture-safe",
+            C::CaptureSafeTransferable,
+            b"LKJACR26",
+        ),
+        ("transferable owned", C::OwnedTransferable, b"LKJACR26"),
+    ] {
+        let input = format!(
+            "request base=rev_{}\ndeclarations.begin\n(units (module create constraints (function create f (visibility public) (type-parameter create T (constraint {names})) (returns Unit) (effect pure) (body (unit)))))\ndeclarations.end\n",
+            "82".repeat(32)
+        );
+        let decoded = decode_compact_change("constraint-set.lkjc", input.as_bytes()).unwrap();
+        assert!(decoded.semantic.changes.iter().any(|change| matches!(change,
+            AuthoredChange::AddTypeParameter { parameter, .. } if parameter.constraints == expected)));
+        let bytes = canonical_authored_intent_bytes(&decoded.semantic).unwrap();
+        assert_eq!(&bytes[..8], magic, "{names}");
+        let owner = OwnerKey::TypeParameter(
+            crate::platform::semantic_id::TypeParameterId::migrate(b"constraint-set", 0),
+        );
+        let flat = format!(
+            "request base=rev_{}\nset.type-parameter-constraint parameter={owner} constraint=\"{names}\"\n",
+            "82".repeat(32)
+        );
+        let decoded = decode_compact_change("constraint-flat.lkjc", flat.as_bytes()).unwrap();
+        assert!(
+            matches!(&decoded.semantic.changes[0], AuthoredChange::SetTypeParameterConstraint { constraints, .. } if *constraints == expected)
+        );
+        assert_eq!(
+            &canonical_authored_intent_bytes(&decoded.semantic).unwrap()[..8],
+            magic
+        );
+    }
+    for names in [
+        "",
+        "unknown",
+        "transferable transferable",
+        "none transferable",
+        "owned capture-safe",
+        "capture-safe owned",
+        "owned transferable capture-safe",
+    ] {
+        let input = format!(
+            "request base=rev_{}\ndeclarations.begin\n(units (module create constraints (function create f (visibility public) (type-parameter create T (constraint {names})) (returns Unit) (effect pure) (body (unit)))))\ndeclarations.end\n",
+            "82".repeat(32)
+        );
+        assert!(
+            decode_compact_change("invalid-constraint-set.lkjc", input.as_bytes()).is_err(),
+            "{names}"
+        );
+    }
+}
+
+#[test]
+fn transfer_constraints_round_trip_native_drafts_without_concrete_callers() {
+    let temporary = tempfile::tempdir().unwrap();
+    let initial = crate::platform::kernel::tests::witness_snapshot();
+    let created =
+        GraphRepository::create(&temporary.path().join("meaning"), &initial, None).unwrap();
+    let input = format!("request base={}\ndeclarations.begin\n(units (module create transferable_bounds (as $module)
+      (function create ordinary (visibility public) (type-parameter create T (constraint transferable)) (returns Unit) (effect pure) (body (unit)))
+      (function create explicit_capture (visibility public) (type-parameter create T (constraint capture-safe transferable)) (returns Unit) (effect pure) (body (unit)))
+      (function create owner (visibility public) (type-parameter create T (constraint owned transferable)) (returns Unit) (effect pure) (body (unit)))))\ndeclarations.end\n", created.current.head.revision);
+    let decoded = decode_compact_change("bounds.lkjc", input.as_bytes()).unwrap();
+    let prepared = created
+        .repository
+        .prepare_authored_change(&decoded.semantic, decoded.options)
+        .unwrap();
+    created.repository.publish(&prepared.publication).unwrap();
+    let draft = render_native_draft(
+        &created.repository.view_current().unwrap(),
+        &[prepared.allocated["$module"].into()],
+        4 * 1_048_576,
+        crate::platform::execution::ExecutionControl::uncancelled(),
+    )
+    .unwrap();
+    let text = std::str::from_utf8(&draft).unwrap();
+    for clause in [
+        "(constraint transferable)",
+        "(constraint capture-safe transferable)",
+        "(constraint owned transferable)",
+    ] {
+        assert!(text.contains(clause), "{text}");
+    }
+    let decoded =
+        decode_compact_change_in_repository("bounds-draft.lkjc", &draft, &created.repository)
+            .unwrap();
+    let errors = created
+        .repository
+        .prepare_authored_change(&decoded.semantic, decoded.options)
+        .unwrap_err();
+    assert_eq!(errors.len(), 1, "{errors:#?}");
+    assert_eq!(errors[0].code, "publication_semantic_no_change");
+}
+
+#[test]
 fn native_owned_task_method_intent_is_distinct_and_pure_predecessor_stays_stable() {
     let literal = "declarations.begin\n(units (module create methods
       (owned-contract create Storage (visibility public)

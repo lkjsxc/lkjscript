@@ -1161,9 +1161,12 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         "parallel requires a task context even when both effect rows are empty",
                     ));
                 }
-                let left_call = self.owned_read(|read| super::parallel::admit_call(read, left))?;
-                let right_call =
-                    self.owned_read(|read| super::parallel::admit_call(read, right))?;
+                let left_call = self.owned_read(|read| {
+                    super::parallel::admit_call(read, left, context.declaration)
+                })?;
+                let right_call = self.owned_read(|read| {
+                    super::parallel::admit_call(read, right, context.declaration)
+                })?;
                 // Both complete argument trees remain part of ordinary exact type,
                 // scope and effect validation, including unreachable expressions.
                 let left_type = self.infer(left, context, next)?;
@@ -1192,7 +1195,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 ];
                 if left_call.result_owned || right_call.result_owned {
                     let result = self.canonical_type(TypeForm::OwnedProduct { fields })?;
-                    self.owned_read(|read| super::owned_product::validate(read, result, None))?;
+                    self.owned_read(|read| {
+                        super::owned_product::validate(read, result, context.declaration)
+                    })?;
                     Ok(result)
                 } else {
                     self.canonical_type(TypeForm::StructuralRecord { fields })
@@ -2060,8 +2065,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     let proof = match self.read.owner(OwnerKey::TypeParameter(parameter))? {
                         Some(OwnerRecord::TypeParameter(record))
                             if Some(record.declaration) == context.declaration
-                                && record.constraints
-                                    == super::TypeParameterConstraints::CaptureSafe =>
+                                && record.constraints.proves_capture_safe() =>
                         {
                             match self.read.owner(OwnerKey::Declaration(record.declaration))? {
                                 Some(OwnerRecord::Declaration(declaration)) => {
@@ -2553,7 +2557,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         "callee type parameter has no exact declaration owner",
                     )
                 })?;
-            if owner.constraints == super::TypeParameterConstraints::Owned {
+            if owner.constraints.has_owned() {
                 if !super::memory::direct(self.read, *supplied)? {
                     return Err(type_error(
                         "kernel_owned_constraint",
@@ -2566,10 +2570,15 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     "owned memory cannot substitute an ordinary generic parameter",
                 ));
             }
-            if owner.constraints == super::TypeParameterConstraints::CaptureSafe {
+            if owner.constraints.requires_capture_safe() {
                 self.require_capture_safe(*supplied, context).map_err(|error| {
                     if error.code != "kernel_type_bind_capture" { return error; }
                     type_error("kernel_type_constraint", format!("callee {}/{} parameter {} ({}) requires capture-safe; supplied {}: {}", reference.package, reference.declaration, parameter, owner.name, supplied, error.message))
+                })?;
+            }
+            if owner.constraints.requires_transfer() {
+                self.owned_read(|read| {
+                    super::transfer::admit(read, *supplied, context.declaration)
                 })?;
             }
         }
@@ -3246,7 +3255,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         "nominal parameter has a foreign declaration owner",
                     )
                 })?;
-                if owner.constraints == super::TypeParameterConstraints::CaptureSafe {
+                if owner.constraints.requires_capture_safe() {
                     self.require_capture_safe(*argument, context)
                         .map_err(|error| {
                             if error.code == "kernel_type_bind_capture" {
@@ -3280,7 +3289,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     | TypeForm::OwnedI64Cell
                     | TypeForm::OwnedProduct { .. }
                     | TypeForm::OwnedChoice { .. }
-            ) || matches!(object.form, TypeForm::TypeParameter { parameter } if matches!(self.read.owner(OwnerKey::TypeParameter(parameter))?, Some(OwnerRecord::TypeParameter(p)) if p.constraints == super::TypeParameterConstraints::Owned))
+            ) || matches!(object.form, TypeForm::TypeParameter { parameter } if matches!(self.read.owner(OwnerKey::TypeParameter(parameter))?, Some(OwnerRecord::TypeParameter(p)) if p.constraints.has_owned()))
             {
                 return Ok(true);
             }

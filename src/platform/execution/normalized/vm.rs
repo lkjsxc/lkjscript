@@ -745,6 +745,14 @@ impl Machine<'_> {
                     if !left_implementations.is_empty() || !right_implementations.is_empty() {
                         return Err(type_error("unclosed parallel implementation application"));
                     }
+                    let left_types = self.resolve_parallel_types(left_types)?;
+                    let right_types = self.resolve_parallel_types(right_types)?;
+                    let result_type = transfer::resolve_type(
+                        self.program,
+                        result_type,
+                        &self.current_frame()?.type_arguments,
+                        self.control,
+                    )?;
                     self.charge_allocation(super::value::collection_storage_bytes(
                         u64::from(left_arguments) + u64::from(right_arguments),
                         std::mem::size_of::<CheckedValue>() as u64,
@@ -1357,6 +1365,7 @@ impl Machine<'_> {
                             self.program,
                             f.result,
                             &self.current_frame()?.type_arguments,
+                            self.control,
                         )?;
                         let expected = memory_form.is_some();
                         if (result.class(self.program, &mut self.observation.value_work)?
@@ -1491,7 +1500,7 @@ impl Machine<'_> {
         raw: NormalizedValue,
         ty: TypeObjectDigest,
     ) -> Result<CheckedValue, ExecutionError> {
-        let expected = direct_memory_type(self.program, ty, &BTreeMap::new())?;
+        let expected = direct_memory_type(self.program, ty, &BTreeMap::new(), self.control)?;
         if let Some(expected) = expected {
             if raw.memory_form() != Some(expected) {
                 return Err(type_error("owned product child type mismatch"));
@@ -1520,11 +1529,13 @@ impl Machine<'_> {
         type_arguments
             .iter()
             .map(|ty| {
-                self.program
-                    .substitute_type(*ty, substitutions, 0)
-                    .ok_or_else(|| {
-                        type_error("normalized call type argument escaped its exact function scope")
-                    })
+                resolve_runtime_type(
+                    self.program,
+                    *ty,
+                    substitutions,
+                    self.control,
+                    "normalized call type argument escaped its exact function scope",
+                )
             })
             .collect::<Result<Vec<_>, _>>()
             .map(Into::into)
@@ -1865,32 +1876,33 @@ impl Machine<'_> {
         if type_arguments.len() != function.type_parameters.len() {
             return Err(type_error("function type-argument count is foreign"));
         }
-        if function
+        for (constraint, ty) in function
             .type_parameter_constraints
             .iter()
             .zip(type_arguments.iter())
-            .any(|(constraint, ty)| match constraint {
-                crate::platform::kernel::TypeParameterConstraints::Owned => !matches!(
-                    self.program.types.get(ty).map(|t| &t.form),
-                    Some(
-                        TypeForm::ByteBuffer
-                            | TypeForm::OwnedI64Cell
-                            | TypeForm::OwnedProduct { .. }
-                            | TypeForm::OwnedChoice { .. }
-                    )
-                ),
-                crate::platform::kernel::TypeParameterConstraints::None => {
-                    !self.program.buffer_free_types.contains(ty)
-                }
-                crate::platform::kernel::TypeParameterConstraints::CaptureSafe => {
-                    !self.program.buffer_free_types.contains(ty)
-                        || !self.program.capture_safe_types.contains(ty)
-                }
-            })
         {
-            return Err(type_error(
-                "function type arguments do not satisfy capture-safe constraints",
-            ));
+            self.control.check()?;
+            let owned = matches!(
+                self.program.types.get(ty).map(|t| &t.form),
+                Some(
+                    TypeForm::ByteBuffer
+                        | TypeForm::OwnedI64Cell
+                        | TypeForm::OwnedProduct { .. }
+                        | TypeForm::OwnedChoice { .. }
+                )
+            );
+            if (constraint.has_owned() && !owned)
+                || (!constraint.has_owned() && !self.program.buffer_free_types.contains(ty))
+                || (constraint.requires_capture_safe()
+                    && !self.program.capture_safe_types.contains(ty))
+            {
+                return Err(type_error(
+                    "function type arguments do not satisfy exact structural constraints",
+                ));
+            }
+            if constraint.requires_transfer() {
+                transfer::admit_type(self.program, *ty, self.control)?;
+            }
         }
         let type_arguments_by_parameter = function
             .type_parameters
@@ -1898,16 +1910,19 @@ impl Machine<'_> {
             .copied()
             .zip(type_arguments.iter().copied())
             .collect::<BTreeMap<_, _>>();
-        if type_arguments_by_parameter.len() != type_arguments.len()
-            || type_arguments.iter().any(|ty| {
-                self.program
-                    .substitute_type(*ty, &BTreeMap::new(), 0)
-                    .is_none()
-            })
-        {
+        if type_arguments_by_parameter.len() != type_arguments.len() {
             return Err(type_error(
                 "function type arguments are not exact runtime types",
             ));
+        }
+        for ty in type_arguments.iter() {
+            resolve_runtime_type(
+                self.program,
+                *ty,
+                &BTreeMap::new(),
+                self.control,
+                "function type arguments are not exact runtime types",
+            )?;
         }
         if function.task_requirements.iter().any(|requirement| {
             self.capabilities
@@ -2019,7 +2034,8 @@ impl Machine<'_> {
     ) -> Result<(), ExecutionError> {
         let mut uses = BTreeMap::new();
         for (parameter, argument) in function.parameters.iter().zip(arguments) {
-            let memory_form = direct_memory_type(self.program, parameter.ty, substitutions)?;
+            let memory_form =
+                direct_memory_type(self.program, parameter.ty, substitutions, self.control)?;
             if memory_form.is_some() {
                 if (!matches!(
                     function.effect,
@@ -3954,10 +3970,31 @@ fn runtime_error(code: &'static str, message: &'static str) -> ExecutionError {
     ExecutionError::new(ExecutionFailureClass::Infrastructure, code, message)
 }
 
+/// Shared borrowed lookup does not make an ordinary call a custody boundary.
+/// Preserve that caller's diagnostic while retaining bounded-work failures.
+fn resolve_runtime_type(
+    program: &NormalizedProgram,
+    ty: TypeObjectDigest,
+    substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+    control: &ExecutionControl,
+    message: &'static str,
+) -> Result<TypeObjectDigest, ExecutionError> {
+    transfer::resolve_type(program, ty, substitutions, control).map_err(|error| {
+        if error.class == ExecutionFailureClass::Trap
+            && error.code == "normalized_parallel_transfer"
+        {
+            type_error(message)
+        } else {
+            error
+        }
+    })
+}
+
 fn direct_memory_type(
     program: &NormalizedProgram,
     mut ty: TypeObjectDigest,
     substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+    control: &ExecutionControl,
 ) -> Result<Option<super::value::MemoryForm>, ExecutionError> {
     for _ in 0..=substitutions.len() {
         match &program
@@ -3970,16 +4007,24 @@ fn direct_memory_type(
             TypeForm::OwnedI64Cell => return Ok(Some(super::value::MemoryForm::OwnedI64Cell)),
             TypeForm::OwnedChoice { .. } => {
                 return Ok(Some(super::value::MemoryForm::Choice(
-                    program
-                        .substitute_type(ty, substitutions, 0)
-                        .ok_or_else(|| type_error("unclosed choice type"))?,
+                    resolve_runtime_type(
+                        program,
+                        ty,
+                        substitutions,
+                        control,
+                        "unclosed choice type",
+                    )?,
                 )));
             }
             TypeForm::OwnedProduct { .. } => {
                 return Ok(Some(super::value::MemoryForm::Product(
-                    program
-                        .substitute_type(ty, substitutions, 0)
-                        .ok_or_else(|| type_error("unclosed product type"))?,
+                    resolve_runtime_type(
+                        program,
+                        ty,
+                        substitutions,
+                        control,
+                        "unclosed product type",
+                    )?,
                 )));
             }
             TypeForm::TypeParameter { parameter } => {

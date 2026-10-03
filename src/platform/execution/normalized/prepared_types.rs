@@ -873,9 +873,13 @@ fn calls(
             left_types,
             right,
             right_types,
+            result_type,
             ..
         } = instruction
         {
+            // A joined pair may be only an intermediate local: no function
+            // signature needs to retain its concrete substituted type for us.
+            substitute(types, *result_type, bindings, 0, work)?;
             for (function, types_actual) in [(left, left_types), (right, right_types)] {
                 work.reserve::<TypeObjectDigest>(types_actual.len())?;
                 let arguments = types_actual

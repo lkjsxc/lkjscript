@@ -1,0 +1,201 @@
+[
+  {
+    "label": "01-new",
+    "arguments": [
+      "new",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/project",
+      "--template",
+      "minimal",
+      "--name",
+      "closed-generic-proof"
+    ],
+    "status": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "label": "02-status",
+    "arguments": [
+      "--project",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/project",
+      "status"
+    ],
+    "status": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "label": "03-plan",
+    "arguments": [
+      "--project",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/project",
+      "change",
+      "plan",
+      "--input-file",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/request.lkjc"
+    ],
+    "status": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "label": "04-apply",
+    "arguments": [
+      "--project",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/project",
+      "change",
+      "apply",
+      "--input-file",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/request.lkjc",
+      "--plan",
+      "plan_34418b3f84165a82aaf34deb1ea192ad87231f9b4254577c40cff0bc1b478f673c298c10415a3f502b26aaf3e738fa1e35362a4bc70f684a02ce7f7997931801"
+    ],
+    "status": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "label": "05-check",
+    "arguments": [
+      "--project",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/project",
+      "check"
+    ],
+    "status": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "label": "06-build",
+    "arguments": [
+      "--project",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/project",
+      "build",
+      "--output",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/program.lkja"
+    ],
+    "status": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "label": "07-source-0",
+    "arguments": [
+      "run",
+      "--deployment",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/deployment.json",
+      "--arguments-file",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/source-0.input.json",
+      "--result-file",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/source-0.result.json"
+    ],
+    "status": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "label": "08-source-1",
+    "arguments": [
+      "run",
+      "--deployment",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/deployment.json",
+      "--arguments-file",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/source-1.input.json",
+      "--result-file",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/source-1.result.json"
+    ],
+    "status": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "label": "09-source-2",
+    "arguments": [
+      "run",
+      "--deployment",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/deployment.json",
+      "--arguments-file",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/source-2.input.json",
+      "--result-file",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/source-2.result.json"
+    ],
+    "status": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "label": "10-source-3",
+    "arguments": [
+      "run",
+      "--deployment",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/deployment.json",
+      "--arguments-file",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/source-3.input.json",
+      "--result-file",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/source-3.result.json"
+    ],
+    "status": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "label": "11-detached-4",
+    "arguments": [
+      "run",
+      "--deployment",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/deployment.json",
+      "--arguments-file",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/detached-4.input.json",
+      "--result-file",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/detached-4.result.json"
+    ],
+    "status": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "label": "12-detached-5",
+    "arguments": [
+      "run",
+      "--deployment",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/deployment.json",
+      "--arguments-file",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/detached-5.input.json",
+      "--result-file",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/detached-5.result.json"
+    ],
+    "status": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "label": "13-detached-6",
+    "arguments": [
+      "run",
+      "--deployment",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/deployment.json",
+      "--arguments-file",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/detached-6.input.json",
+      "--result-file",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/detached-6.result.json"
+    ],
+    "status": 0,
+    "signal": null,
+    "error": null
+  },
+  {
+    "label": "14-detached-7",
+    "arguments": [
+      "run",
+      "--deployment",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/deployment.json",
+      "--arguments-file",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/detached-7.input.json",
+      "--result-file",
+      "/tmp/lkjscript-closed-generic-public-2Zk7Bz/detached-7.result.json"
+    ],
+    "status": 0,
+    "signal": null,
+    "error": null
+  }
+]

@@ -165,12 +165,12 @@ impl Value {
             .iter()
             .zip(type_arguments.iter())
             .any(|(constraint, ty)| {
-                *constraint == crate::platform::kernel::TypeParameterConstraints::CaptureSafe
-                    && !program.capture_safe_types.contains(ty)
+                (constraint.requires_capture_safe() && !program.capture_safe_types.contains(ty))
+                    || (constraint.requires_transfer() && !program.comparable_types.contains(ty))
             })
         {
             return Err(admission_error(
-                "function constructor requires capture-safe type arguments",
+                "function constructor requires its exact structural type obligations",
             ));
         }
         if !target.implementation_parameters.is_empty()
@@ -617,6 +617,9 @@ type Visit<'a> = (
     bool,
 );
 
+#[path = "vm_checked_type_scratch.rs"]
+mod type_scratch;
+
 impl Admission<'_> {
     pub(super) fn begin_bind(
         &mut self,
@@ -801,6 +804,11 @@ impl Admission<'_> {
         while let Some((ty, depth)) = pending.pop() {
             self.control.check()?;
             self.work.capture_admission_nodes = self.work.capture_admission_nodes.saturating_add(1);
+            #[cfg(test)]
+            super::super::value_oracle::capture_admission_node(
+                self.control,
+                self.work.capture_admission_nodes,
+            )?;
             if depth > 256 {
                 return Err(resource_error(
                     "normalized_value_depth",
@@ -809,7 +817,7 @@ impl Admission<'_> {
             }
             let ty = self.parameter(ty, bindings)?;
             let identity = self
-                .type_identity(ty, bindings, 0)
+                .type_identity(ty, bindings)?
                 .ok_or_else(|| admission_error("capture type is unresolved or foreign"))?;
             if checked.contains(&identity) {
                 continue;
@@ -956,6 +964,11 @@ impl Admission<'_> {
             if capture {
                 self.work.capture_admission_nodes =
                     self.work.capture_admission_nodes.saturating_add(1);
+                #[cfg(test)]
+                super::super::value_oracle::capture_admission_node(
+                    self.control,
+                    self.work.capture_admission_nodes,
+                )?;
             } else if input {
                 self.work.input_admission_nodes = self.work.input_admission_nodes.saturating_add(1);
             } else {
@@ -979,7 +992,7 @@ impl Admission<'_> {
             }
             let ty = self.parameter(ty, &bindings)?;
             let identity = self
-                .type_identity(ty, &bindings, 0)
+                .type_identity(ty, &bindings)?
                 .ok_or_else(|| admission_error("raw nominal type substitution is unresolved"))?;
             let application_free = self.program.application_free_types.contains(&ty)
                 && bindings
@@ -1020,9 +1033,7 @@ impl Admission<'_> {
                     NormalizedValue::Record(NormalizedRecord::Nominal { layout, fields }),
                     TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. },
                 ) => {
-                    let exact = self
-                        .type_identity(ty, &bindings, 0)
-                        .and_then(|ty| self.program.record_instances.get(&ty));
+                    let exact = self.program.record_instances.get(&identity);
                     let definition = self.program.records.get(layout.0 as usize).filter(|definition| exact == Some(layout) && layout.1 == self.program.value_origin && definition.declaration == *declaration && definition.fields.len() == fields.len())
                         .ok_or_else(|| admission_error("raw nominal record has a foreign identity or shape; use the exact record layout"))?;
                     self.collection(fields.len())?;
@@ -1058,9 +1069,7 @@ impl Admission<'_> {
                     },
                     TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. },
                 ) => {
-                    let exact = self
-                        .type_identity(ty, &bindings, 0)
-                        .and_then(|ty| self.program.variant_instances.get(&ty));
+                    let exact = self.program.variant_instances.get(&identity);
                     let selected = self.program.variants.get(layout.0 as usize).filter(|definition| exact == Some(layout) && layout.1 == self.program.value_origin && definition.declaration == *declaration)
                         .and_then(|definition| definition.cases.get(*case as usize)).ok_or_else(|| admission_error("raw variant has a foreign identity or case; use the exact nominal layout"))?;
                     match (payload, selected.payload) {
@@ -1235,23 +1244,27 @@ impl Admission<'_> {
                             "raw callback carries owned memory or a forbidden substitution",
                         ));
                     }
-                    if type_arguments.iter().any(|ty| {
-                        self.program
-                            .substitute_type(*ty, &BTreeMap::new(), 0)
-                            .is_none()
-                    }) {
-                        return Err(admission_error(
-                            "raw callback has a foreign or unresolved type argument; supply exact canonical types",
-                        ));
+                    for ty in type_arguments.iter() {
+                        super::transfer::resolve_type(
+                            self.program,
+                            *ty,
+                            &BTreeMap::new(),
+                            self.control,
+                        )?;
                     }
                     for (constraint, ty) in callable
                         .type_parameter_constraints
                         .iter()
                         .zip(type_arguments.iter())
                     {
-                        if *constraint
-                            == crate::platform::kernel::TypeParameterConstraints::CaptureSafe
+                        if constraint.requires_transfer()
+                            && !self.program.comparable_types.contains(ty)
                         {
+                            return Err(admission_error(
+                                "raw callback requires first-order transferable type arguments",
+                            ));
+                        }
+                        if constraint.requires_capture_safe() {
                             self.require_capture_type(
                                 *ty,
                                 &BTreeMap::new(),
@@ -1272,20 +1285,16 @@ impl Admission<'_> {
                     for (actual, expected) in
                         callable.parameters.iter().skip(prefix_len).zip(parameters)
                     {
-                        if self.type_identity(actual.ty, &substitutions, 0).is_none()
-                            || self.type_identity(actual.ty, &substitutions, 0)
-                                != self.type_identity(*expected, &bindings, 0)
-                        {
+                        let actual = self.type_identity(actual.ty, &substitutions)?;
+                        if actual.is_none() || actual != self.type_identity(*expected, &bindings)? {
                             return Err(admission_error(
                                 "raw callback parameters disagree with the exact type; instantiate the declared callable",
                             ));
                         }
                     }
-                    if self
-                        .type_identity(callable.result, &substitutions, 0)
-                        .is_none()
-                        || self.type_identity(callable.result, &substitutions, 0)
-                            != self.type_identity(*result, &bindings, 0)
+                    let actual_result = self.type_identity(callable.result, &substitutions)?;
+                    if actual_result.is_none()
+                        || actual_result != self.type_identity(*result, &bindings)?
                     {
                         return Err(admission_error(
                             "raw callback result disagrees with the exact type; instantiate the declared callable",
@@ -1359,6 +1368,27 @@ impl Admission<'_> {
     }
 
     fn type_identity(
+        &mut self,
+        ty: TypeObjectDigest,
+        bindings: &BTreeMap<crate::platform::semantic_id::TypeParameterId, TypeObjectDigest>,
+    ) -> Result<Option<TypeObjectDigest>, ExecutionError> {
+        if !bindings.is_empty() {
+            match super::transfer::resolve_type(self.program, ty, bindings, self.control) {
+                Ok(identity) => return Ok(Some(identity)),
+                Err(error)
+                    if error.class == crate::platform::execution::ExecutionFailureClass::Trap
+                        && error.code == "normalized_parallel_transfer" => {}
+                Err(error) => return Err(error),
+            }
+            // Raw generic signatures may have no concrete entry in graph call
+            // closure. Preserve that boundary after reserving its whole scratch.
+            let scratch = type_scratch::bound(self.program, ty, self.control)?;
+            self.allocate(scratch)?;
+        }
+        Ok(self.type_identity_reserved(ty, bindings, 0))
+    }
+
+    fn type_identity_reserved(
         &self,
         ty: TypeObjectDigest,
         bindings: &BTreeMap<crate::platform::semantic_id::TypeParameterId, TypeObjectDigest>,
@@ -1370,7 +1400,7 @@ impl Admission<'_> {
         if bindings.is_empty() {
             return self.program.types.contains_key(&ty).then_some(ty);
         }
-        let descend = |ty| self.type_identity(ty, bindings, depth + 1);
+        let descend = |ty| self.type_identity_reserved(ty, bindings, depth + 1);
         let form = match &self.program.types.get(&ty)?.form {
             TypeForm::Applied {
                 declaration,

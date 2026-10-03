@@ -166,8 +166,8 @@ impl Value {
             .iter()
             .zip(type_arguments.iter())
             .any(|(constraint, ty)| {
-                *constraint == crate::platform::kernel::TypeParameterConstraints::CaptureSafe
-                    && !schema.capture_safe_types.contains(ty)
+                (constraint.requires_capture_safe() && !schema.capture_safe_types.contains(ty))
+                    || (constraint.requires_transfer() && !schema.transferable_types.contains(ty))
             })
         {
             return Err(reject(
@@ -737,6 +737,13 @@ impl ReferenceState<'_> {
                 &mut self.observation.value_work.raw_result_admission_nodes
             };
             *counter = counter.saturating_add(1);
+            #[cfg(test)]
+            if captured {
+                super::super::value_oracle::capture_admission_node(
+                    self.control,
+                    self.observation.value_work.capture_admission_nodes,
+                )?;
+            }
             if depth > 256 {
                 return Err(reference_resource(
                     "normalized_reference_value_depth",
@@ -757,10 +764,11 @@ impl ReferenceState<'_> {
             {
                 expected = *bindings.get(parameter).ok_or_else(|| reject("raw boundary has an unbound type parameter; supply all exact type arguments"))?;
             }
-            let identity = self
-                .schema
-                .instantiated_identity(expected, &bindings, 0)
-                .ok_or_else(|| reject("canonical raw type cannot be instantiated"))?;
+            let schema = Arc::clone(&self.schema);
+            let identity =
+                schema.raw_type_identity(expected, &bindings, self.control, &mut |bytes| {
+                    self.charge_allocation(bytes)
+                })?;
             let application_free = self.schema.application_free_types.contains(&expected)
                 && bindings
                     .values()
@@ -778,7 +786,6 @@ impl ReferenceState<'_> {
                     ));
                 }
             }
-            let schema = Arc::clone(&self.schema);
             let ty = &schema
                 .types
                 .get(&expected)
@@ -808,9 +815,7 @@ impl ReferenceState<'_> {
                 TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
                     match node {
                         NormalizedValue::Record(NormalizedRecord::Nominal { layout, fields }) => {
-                            let exact = schema
-                                .instantiated_identity(expected, &bindings, 0)
-                                .and_then(|ty| schema.record_instances.get(&ty).copied());
+                            let exact = schema.record_instances.get(&identity).copied();
                             let definition = schema.records.get(layout.0 as usize).filter(|record| exact == Some(layout.0 as usize) && layout.1 == schema.value_origin && record.declaration == *declaration && record.fields.len() == fields.len())
                             .ok_or_else(|| reject("raw record has a foreign nominal identity or shape; decode against the selected program"))?;
                             self.charge_admission_children(
@@ -836,9 +841,7 @@ impl ReferenceState<'_> {
                             case,
                             payload,
                         } => {
-                            let exact = schema
-                                .instantiated_identity(expected, &bindings, 0)
-                                .and_then(|ty| schema.variant_instances.get(&ty).copied());
+                            let exact = schema.variant_instances.get(&identity).copied();
                             let definition = schema.variants.get(layout.0 as usize).filter(|variant| exact == Some(layout.0 as usize) && layout.1 == schema.value_origin && variant.declaration == *declaration)
                             .and_then(|variant| variant.cases.get(*case as usize)).ok_or_else(|| reject("raw sum has a foreign nominal identity or case; decode its exact canonical layout"))?;
                             match (definition.payload, payload.as_deref()) {
@@ -1167,10 +1170,14 @@ impl ReferenceState<'_> {
                         .iter()
                         .zip(type_arguments.iter())
                     {
-                        if *constraint
-                            == crate::platform::kernel::TypeParameterConstraints::CaptureSafe
-                        {
+                        if constraint.requires_capture_safe() {
                             self.check_capture_type(*ty, &BTreeMap::new(), &mut BTreeSet::new())?;
+                        }
+                        if constraint.requires_transfer() && !schema.transferable_types.contains(ty)
+                        {
+                            return Err(reject(
+                                "raw callback type argument fails transfer constraints",
+                            ));
                         }
                     }
                     self.charge_reference_bindings(type_arguments.len())?;
@@ -1356,30 +1363,27 @@ impl ReferenceState<'_> {
                     "raw invocation requires resolved canonical type arguments",
                 ));
             }
-            match constraint {
-                crate::platform::kernel::TypeParameterConstraints::Owned
-                    if !matches!(
-                        self.schema.types.get(ty).map(|t| &t.form),
-                        Some(
-                            TypeForm::ByteBuffer
-                                | TypeForm::OwnedI64Cell
-                                | TypeForm::OwnedProduct { .. }
-                                | TypeForm::OwnedChoice { .. }
-                        )
-                    ) =>
-                {
-                    return Err(reject("Owned requires an exact closed owned type"));
-                }
-                crate::platform::kernel::TypeParameterConstraints::None
-                | crate::platform::kernel::TypeParameterConstraints::CaptureSafe
-                    if !self.schema.buffer_free_types.contains(ty) =>
-                {
-                    return Err(reject("ordinary type argument contains owned memory"));
-                }
-                _ => {}
+            let owned = matches!(
+                self.schema.types.get(ty).map(|t| &t.form),
+                Some(
+                    TypeForm::ByteBuffer
+                        | TypeForm::OwnedI64Cell
+                        | TypeForm::OwnedProduct { .. }
+                        | TypeForm::OwnedChoice { .. }
+                )
+            );
+            if owned != constraint.has_owned()
+                || (!owned && !self.schema.buffer_free_types.contains(ty))
+            {
+                return Err(reject(
+                    "type argument has incompatible ordinary or owned storage",
+                ));
             }
-            if *constraint == crate::platform::kernel::TypeParameterConstraints::CaptureSafe {
+            if constraint.requires_capture_safe() {
                 self.check_capture_type(*ty, &BTreeMap::new(), &mut BTreeSet::new())?;
+            }
+            if constraint.requires_transfer() && !self.schema.transferable_types.contains(ty) {
+                return Err(reject("type argument is not canonical transferable data"));
             }
         }
         let bindings = signature
@@ -1642,6 +1646,11 @@ impl ReferenceState<'_> {
                 .value_work
                 .capture_admission_nodes
                 .saturating_add(1);
+            #[cfg(test)]
+            super::super::value_oracle::capture_admission_node(
+                self.control,
+                self.observation.value_work.capture_admission_nodes,
+            )?;
             if depth > 256 {
                 return Err(reference_resource(
                     "normalized_reference_value_depth",

@@ -30,6 +30,57 @@ mod nominal_encoding_tests {
     use crate::platform::kernel::{DeclarationReference, TypeForm};
 
     #[test]
+    fn transfer_constraint_owners_round_trip_only_in_graph22() {
+        use crate::platform::kernel::{
+            Name, OwnerHeader, TypeParameterConstraints as C, TypeParameterRecord,
+        };
+        use crate::platform::semantic_id::{DeclarationId, TypeParameterId};
+        let key =
+            OwnerKey::TypeParameter(TypeParameterId::migrate(b"transfer-constraint-codec", 0));
+        for constraint in [
+            C::Transferable,
+            C::CaptureSafeTransferable,
+            C::OwnedTransferable,
+        ] {
+            let mut record = OwnerRecord::TypeParameter(TypeParameterRecord {
+                header: OwnerHeader::new(key, OwnerKind::TypeParameter),
+                declaration: DeclarationId::migrate(b"transfer-constraint-codec", 0),
+                name: Name::new("T").unwrap(),
+                constraints: constraint,
+            });
+            let (digest, bytes) = encode_owner(&record).unwrap();
+            assert_eq!(&bytes[..8], b"LKJOWN22");
+            assert_eq!(
+                decode_owner(&bytes, key, OwnerKind::TypeParameter, digest).unwrap(),
+                record
+            );
+            record.set_encoding_for_edit(21);
+            assert_eq!(
+                encode_owner(&record).unwrap_err().code,
+                "kernel_transfer_constraint_generation"
+            );
+            let forged = packed::encode(
+                super::super::contract::PARALLEL_OWNER_MAGIC,
+                super::super::contract::PARALLEL_OWNER_ENVELOPE_DOMAIN,
+                &record,
+                MAXIMUM_OWNER_OBJECT_BYTES,
+            )
+            .unwrap();
+            assert_eq!(
+                decode_owner(
+                    &forged,
+                    key,
+                    OwnerKind::TypeParameter,
+                    OwnerObjectDigest::of(&forged)
+                )
+                .unwrap_err()
+                .code,
+                "kernel_transfer_constraint_generation"
+            );
+        }
+    }
+
+    #[test]
     fn f64_type_and_literal_have_disjoint_canonical_generations() {
         use crate::platform::binary64::Binary64;
         use crate::platform::kernel::{ExpressionOperation, ExpressionRecord};
@@ -66,7 +117,7 @@ mod nominal_encoding_tests {
         .unwrap();
         let owner = OwnerRecord::Expression(expression.clone());
         let (digest, bytes) = encode_owner(&owner).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOWN21");
+        assert_eq!(&bytes[..8], b"LKJOWN22");
         assert_eq!(
             decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
             owner
@@ -474,6 +525,11 @@ pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>)
             super::contract::CHOICE_OWNER_MAGIC,
             super::contract::CHOICE_OWNER_ENVELOPE_DOMAIN,
         )
+    } else if record.header().contract_version == 21 {
+        (
+            super::contract::PARALLEL_OWNER_MAGIC,
+            super::contract::PARALLEL_OWNER_ENVELOPE_DOMAIN,
+        )
     } else {
         (OWNER_MAGIC, OWNER_ENVELOPE_DOMAIN)
     };
@@ -562,7 +618,7 @@ pub fn decode_owner(
         }
         record
     } else {
-        // Graphs 19–21 append operation/binding tags. Earlier field layouts
+        // Graphs 19–22 append operation/binding and constraint tags. Earlier field layouts
         // and ordinals are frozen; local admission rejects new tags in old owners.
         let (magic, domain, generation) = if bytes.starts_with(&super::contract::OWNED_OWNER_MAGIC)
         {
@@ -582,6 +638,12 @@ pub fn decode_owner(
                 super::contract::CHOICE_OWNER_MAGIC,
                 super::contract::CHOICE_OWNER_ENVELOPE_DOMAIN,
                 20,
+            )
+        } else if bytes.starts_with(&super::contract::PARALLEL_OWNER_MAGIC) {
+            (
+                super::contract::PARALLEL_OWNER_MAGIC,
+                super::contract::PARALLEL_OWNER_ENVELOPE_DOMAIN,
+                21,
             )
         } else {
             (

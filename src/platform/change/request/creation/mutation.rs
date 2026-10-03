@@ -294,7 +294,7 @@ pub(in crate::platform::change::request) fn lower_mutation<
                 return Err(mutation_kind("type parameter", owner));
             };
             record.constraints = *constraints;
-            if *constraints == crate::platform::kernel::TypeParameterConstraints::Owned {
+            if constraints.has_owned() || constraints.requires_transfer() {
                 record.header.contract_version =
                     crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
             }

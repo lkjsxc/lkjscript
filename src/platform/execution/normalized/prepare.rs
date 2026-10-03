@@ -1560,7 +1560,7 @@ fn validate_normalized_resource_signature(
                 | TypeForm::OwnedChoice { .. },
             ) => true,
             Some(TypeForm::TypeParameter { parameter }) => {
-                matches!(exact_runtime_owner(owners, declaration.package, OwnerKey::TypeParameter(*parameter), "owned signature type parameter")?, OwnerRecord::TypeParameter(p) if p.constraints == crate::platform::kernel::TypeParameterConstraints::Owned)
+                matches!(exact_runtime_owner(owners, declaration.package, OwnerKey::TypeParameter(*parameter), "owned signature type parameter")?, OwnerRecord::TypeParameter(p) if p.constraints.has_owned())
             }
             _ => false,
         })

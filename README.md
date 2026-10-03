@@ -10,22 +10,23 @@ The graph is the sole editable authority. Stable identities preserve declaration
 through edits, while names remain useful, changeable locators. Pure functions,
 tasks, exact libraries and standalone application bundles share this model.
 
-**Public:** [v0.1.68](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.68),
-with [same-task owned calls](docs/spec/owned-task-transfers.md) and joined parallel
-tasks that consume owned inputs and return ordinary results. Its
-[release notes](docs/releases/v0.1.68.md) describe the exact published boundary.
+**Public:** [v0.1.69](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.69),
+with joined parallel tasks that consume and return owned values. Its
+[release notes](docs/releases/v0.1.69.md) describe the exact published boundary.
+Development 0.1.71 adds [explicit transferable contracts](docs/spec/transferable-types.md)
+so generic libraries can form their own parallel groups. The
+[three-package guide](docs/guides/native-transferable-parallel.md) demonstrates
+reusable builders, exact implementation forwarding and standalone execution.
+[Current status](docs/status.md) separates source acceptance from public distribution.
+
 [Owned generic libraries](docs/guides/native-owned-generics.md),
 [products](docs/guides/native-owned-products.md), immutable byte ranges and
-[recoverable owned outcomes](docs/guides/native-owned-choices.md) remain available.
-Recursive [resource contracts](docs/guides/native-resources.md), explicit execution
-grants and the in-process [shared host](docs/spec/shared-runtime.md) remain separate
-from memory ownership. Native authoring, offline libraries, [web starters](docs/guides/native-web.md),
-[forms](docs/guides/native-forms.md) and the [durable editor](docs/guides/native-editor.md)
-continue through the same public executable.
-Promotion [37106215025/1](https://github.com/lkjsxc/lkjscript/actions/runs/37106215025)
-completed immutable publication and anonymous installed verification with unchanged
-accepted assets. [Current status](docs/status.md) separates that public release from
-development 0.1.70 [closed generic parallel tasks](docs/spec/structured-parallel.md).
+[recoverable owned outcomes](docs/guides/native-owned-choices.md) compose through
+the same executable. Recursive [resource contracts](docs/guides/native-resources.md),
+explicit execution grants and the in-process [shared host](docs/spec/shared-runtime.md)
+remain separate from memory ownership. Native authoring, offline libraries,
+[web starters](docs/guides/native-web.md), [forms](docs/guides/native-forms.md) and
+[the durable editor](docs/guides/native-editor.md) remain available.
 
 Product versions are **opaque `A.B.C` identifiers**. All three components have the
 same role: none denotes compatibility, stability, change size or a feature milestone.
@@ -42,10 +43,10 @@ executing it. The exact URL below remains pinned even when a newer release appea
 ```sh
 curl -q --fail --location --proto '=https' --proto-redir '=https' \
   --connect-timeout 15 --max-time 180 --max-filesize 16384 \
-  --output install-v0.1.68.sh \
-  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.68/install.sh
-cat install-v0.1.68.sh
-sh install-v0.1.68.sh --prefix "$HOME/.local"
+  --output install-v0.1.69.sh \
+  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.69/install.sh
+cat install-v0.1.69.sh
+sh install-v0.1.69.sh --prefix "$HOME/.local"
 export PATH="$HOME/.local/bin:$PATH"
 lkjscript --version
 lkjscript runtime list

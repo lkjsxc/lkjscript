@@ -23,8 +23,8 @@ Current normalized identity:
 - semantic revision: `rev_a1d97c5d7deda1ece8e2e3383bd7a58ae1e267838368ec5b42678e40c9eb1640`;
 - semantic state: `semantic_state_3832cd12c3fee672d0bdfb975cb363cbc457f6ef45f15cb44a62d40ab47f2dee`;
 - package revision: `package_revision_259829d424af326d6a1e38940a95e7f5882fdcf4152bff0470706aa050c7d1fb`;
-- artifact manifest: `artifact_manifest_4f1ae2943b06f241b10a9638fc7d30068b9e1ec365f6ffdd3d62ecf5a26817ed`;
-- artifact bundle: `artifact_bundle_03d5017142e6be9d12058d74470d7977fe0d6edc91bb73f2b127b9dd265eceb6`;
+- artifact manifest: `artifact_manifest_220c71a0060be2d036e5f5e9fcf9e1f07b319fad91999ffd21ac42cfc58e2209`;
+- artifact bundle: `artifact_bundle_d41162ab19456753a5b4027810045d2ac3dab59ed6b18b7eab879fdfe964ca12`;
 - 2,044 live root semantic owners and one exact built-in standard dependency.
 
 The original Graph 13 materialization preserved all existing application owner identities and behavior.
@@ -95,7 +95,7 @@ empty 404 and invokes none of them.
 
 All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,375,404-byte
 artifact bundle above (SHA-256
-`509bb3faa061f2d84806150af32af8566acc13b772ebf6bb5e3aa021932c4962`). The service descriptor
+`2a607f6097e23706ab49cab9a3ced2b4874761f7477d9d24bc29a9e931e50091`). The service descriptor
 resolves `serve`, the worker descriptor resolves `work`, and `live.deployment.json` resolves
 `lkjournal-live-1`. Preparation strictly loads the standalone bundle,
 validates the runner, route-indexed handler and component requirement closure, grants, secrets, and adapters, and emits
@@ -216,3 +216,8 @@ The structured parallel compiler refresh rebuilds the current bundle for compile
 19, bytecode 15 and artifact 26 through public check/build. All 44 application and
 exact-supplier tests agree between production and reference execution. Accepted
 HEAD, dependency selection, application behavior and operational data are unchanged.
+
+The explicit-transferable compiler refresh rebuilds the current bundle for
+compiler 22, bytecode 17 and artifact 29 through public check/build. All 44 tests
+agree between production and reference execution. Accepted HEAD, exact historical
+standard supplier, application behavior and operational data remain unchanged.

@@ -11,6 +11,10 @@ use crate::platform::kernel::{FunctionEffect, ParameterUse, TypeForm, TypeObject
 mod application;
 pub(in super::super) use application::TaskApplication;
 
+#[path = "vm_transfer_type.rs"]
+mod types;
+pub(in super::super) use types::resolve as resolve_type;
+
 /// No Clone, payload projection or unchecked constructor. Pending custody owns
 /// both the exact application and every argument, including partial adoptions.
 pub(in super::super) struct TransferArguments {
@@ -305,6 +309,16 @@ impl Drop for TransferResult {
 struct Work<'a> {
     control: &'a ExecutionControl,
     nodes: u64,
+}
+
+/// Concrete structural obligation checking for ordinary generic calls. This
+/// grants no transfer custody and shares no symbolic proof with the kernel.
+pub(in super::super) fn admit_type(
+    program: &NormalizedProgram,
+    ty: TypeObjectDigest,
+    control: &ExecutionControl,
+) -> Result<bool, ExecutionError> {
+    validate_type(program, ty, 0, &mut Work { control, nodes: 0 })
 }
 impl Work<'_> {
     fn visit(&mut self, depth: usize) -> Result<(), ExecutionError> {

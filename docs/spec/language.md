@@ -732,9 +732,11 @@ resource accounting do not make an accepted program a hostile-code sandbox.
 
 ## Explicit capture-safe rank-one parameters
 
-A type-parameter owner carries the closed constraint set `[]` or `["capture-safe"]`.
-The canonical set tags are 0 (empty) and 1 (capture-safe); unknown tags, names and duplicates
-reject. Omission in authoring creates the empty set. Constraints attach to the stable parameter
+A type-parameter owner carries an explicit constraint set. Tags 0 (empty) and
+1 (capture-safe) retain their original meanings. [Owned generics](owned-generics.md)
+add tag 2; [transferable types](transferable-types.md) define tags 3–5 and their
+permitted combinations. Unknown tags, names and duplicates reject. Omission in
+authoring creates the empty set. Constraints attach to the stable parameter
 identity and its exact declaration and are interface meaning even when the parameter is unused.
 Pure and task graph functions, records and variants may declare the constraint. Generic tasks
 carry explicit type and effect arguments under the same scope/constraint admission. Closed external signatures must match the intrinsic inventory, whose existing
@@ -752,11 +754,14 @@ unconstrained parameters. Actual callable admission verifies exact pure/task tar
 and retained environment. Binding a task descriptor acquires no grants; invocation still requires
 the calling task effect allowance and exact deployment bindings.
 
-A constrained body may bind its parameter or aggregates of it. An unconstrained body cannot bind
+A body with a capture-safe or ordinary transferable parameter may bind that
+parameter or capture-safe aggregates of it. An unconstrained body cannot bind
 an actual value of that parameter. There is no implicit constraint inference, subtyping, dictionary,
 specialization, generic extraction, anonymous lexical capture inference, affine captures, user-defined
 trait or higher-rank quantification. Explicit named task descriptor binding is supported.
-Capture safety does not confer equality, serialization, session retention or capability authority.
+Capture safety does not confer transferability, equality, serialization, session
+retention or capability authority. Ordinary transferable parameters also prove
+capture safety; owned transferable parameters remain noncapturable.
 Existing lifetime, affine resource, pure evaluation order, tail transfer and data rules still apply.
 
 An out-of-scope parameter fails exact declaration-scope validation before callee constraint checking.

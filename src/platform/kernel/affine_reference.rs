@@ -72,9 +72,9 @@ impl Reference<'_> {
             Some(TypeForm::TypeParameter { parameter }) => {
                 let key = OwnerKey::TypeParameter(*parameter);
                 if package == self.snapshot.root.package_id {
-                    matches!(self.snapshot.owners.get(&key), Some(OwnerRecord::TypeParameter(p)) if p.constraints == super::TypeParameterConstraints::Owned)
+                    matches!(self.snapshot.owners.get(&key), Some(OwnerRecord::TypeParameter(p)) if p.constraints.has_owned())
                 } else {
-                    matches!(self.foreign_owner(package, key), Some(PackageInterfaceRecord::TypeParameter(p)) if p.constraints == super::TypeParameterConstraints::Owned)
+                    matches!(self.foreign_owner(package, key), Some(PackageInterfaceRecord::TypeParameter(p)) if p.constraints.has_owned())
                 }
             }
             _ => false,
