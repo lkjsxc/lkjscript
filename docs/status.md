@@ -40,6 +40,20 @@ instance, ordered actual types and both invocation identities; payload allocatio
 are moved, not cloned. The independent reference evaluator reconstructs instantiated
 signatures and witness selection from canonical meaning.
 
+Exact accepted source: `f00432dd429ef18483687ff8f8df14a543962bd6`, tree
+`538f2cfea386880ee1f67f76e0936a3ac7f64b75`. All 26 full-profile gates passed fresh,
+with stable inputs, zero reuse and no unrun gates. Original receipt:
+`.artifacts/lkjscript-dev/check/1791024173787833253-3357815-0/receipt.json`, digest
+`verification_8fd37b200943b850812a9b74d5a6e139e7c109ae112e7bdd0566e7655cd4007a`.
+Main was fast-forwarded from `86c27c5bd155d25f3b14bec84a42c783e406104e` to that
+exact source and independently verified through Git and the repository API.
+Later reporting descendants do not relabel this source acceptance.
+
+The accepted full run passed 1,203 library tests, 196 public CLI tests, nine service
+preflight tests and 253 verifier tests, alongside the other required gate owners.
+Existing ignored cases remain recorded in the original suite outputs: eight library,
+one public CLI, one structural CLI and 19 verifier tests. None is counted as passed.
+
 Focused source checks passed: 37 parallel tests, 14 sealed-custody/related tests and
 all three public native parallel scenarios. The generic public scenario creates
 three independent packages, round-trips and edits exact projected meaning, and
@@ -64,25 +78,31 @@ in `public-direct-03/comparison.json` and its original commands; `public-direct-
 preserves the earlier diagnostic-reader mismatch, not a product execution failure.
 
 Selected checkout: `/home/coder/workspace/lkjscript-structured-handoff-20261002`,
-branch `dev/closed-generic-parallel-20261003`. Evidence and retained failures are
-under `.artifacts/20261003-closed-generic-parallel/`. Implementation
-`682b68aa7144e0dd6171abc49511e6c660028b99` completed 24 fresh gates in its first
-full run, but six stale current-generation assertions failed in two workspace test
-targets. The remaining offline-package owner was explicitly interrupted after that
-failure; its signaled result is not acceptance. Original receipt
-`verification_7920a6a1cb13eb6daf049112e5643a4047248710c63eb6cd4e55394d754b9689`
-and all outputs remain in `full-01-original/`, with the interruption recorded separately.
-The second attempt reached the next stale assertion in the same validator test:
-its pinned validator-25 digest. The interrupted attempt and original output remain
-in `full-02-original/`; the successor explicitly rejects that predecessor digest
-and pins the validator-26 identity. The repaired focused validator test passed before
-starting a fresh full run.
-The successor corrects only those exact current-generation expectations and records
-completed v0.1.69 publication; genuine predecessor bytes and behavioral rejection
-checks are preserved. Next: run fresh dependency-complete `check full` after this
-repair, then integrate only an exact input-stable 26-gate result. Remote main remains
-`86c27c5bd155d25f3b14bec84a42c783e406104e` until that acceptance. No full-source
-acceptance, mainline delivery or public v0.1.70 binary is claimed by this record.
+branch `dev/closed-generic-parallel-20261003`. Originals are retained under
+`.artifacts/20261003-closed-generic-parallel/`; `source-accepted.json` indexes the
+accepted source and `full-03-original/` preserves the complete original full run.
+The failed/interrupted first two attempts remain unchanged in `full-01-original/`
+and `full-02-original/`, with explicit interruption records. Their stale current
+format/validator assertions were corrected before acceptance; genuine predecessor
+bytes and behavioral rejection checks were not weakened. The focused validator pin
+check and the complete fresh successor both passed.
+
+## Final-byte acceptance for v0.1.70
+
+[Candidate 37117977368](https://github.com/lkjsxc/lkjscript/actions/runs/37117977368),
+attempt 1, was dispatched once from main at 10:55 UTC with product and controller
+source both `f00432dd429ef18483687ff8f8df14a543962bd6`. Its authenticated original
+run and job observations show dependency acquisition and immutable host-tool
+construction in progress. `release-0170/candidate-handoff.json` indexes those
+observations. No duplicate producer, v0.1.70 tag selection or publication was created.
+The public/latest selection remains the completed immutable v0.1.69 above.
+
+Next: read this exact attempt's original terminal and artifacts; do not redispatch.
+Only `candidate_accepted` permits selecting an annotated tag at the exact source and
+promoting its unchanged authenticated assets through [the release procedure](release.md).
+Publication is complete only at `immutable_published_and_public_verified`, including
+anonymous installed execution and joined cleanup. Source acceptance and mainline
+delivery are already complete; final-byte acceptance and publication remain separate.
 
 ## Compatibility and remaining limits
 
