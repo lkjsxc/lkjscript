@@ -1,0 +1,62 @@
+name: Acceptance reproduction kit
+run-name: Offline reproduction ${{ github.sha }}
+
+# Temporary investigation branch only; not a release or source-acceptance workflow.
+on:
+  push:
+    branches: ['work/acceptance-reproduction-20261003']
+    paths: ['.github/workflows/acceptance-reproduction.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  kit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Read the exact source without retaining checkout credentials
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Prepare only source, public dependencies, and the pinned toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$GITHUB_WORKFLOW_SHA" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          kit="$RUNNER_TEMP/reproduction-kit"
+          mkdir -m 0700 "$kit" "$kit/source" "$kit/toolchain"
+          git archive HEAD | tar -x -C "$kit/source"
+          rustup show
+          sysroot=$(rustc --print sysroot)
+          cp -a "$sysroot/bin" "$sysroot/lib" "$kit/toolchain/"
+          # cargo vendor copies public crate sources, never Cargo credentials or caches.
+          cargo vendor --locked --versioned-dirs "$kit/vendor" > "$kit/vendor-config.toml"
+          {
+            printf 'repository=%s\nsource=%s\nworkflow=%s\ntree=%s\nrun=%s\nattempt=%s\n' \
+              "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$GITHUB_WORKFLOW_SHA" \
+              "$(git rev-parse 'HEAD^{tree}')" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+            rustc --version --verbose
+            cargo --version
+            sha256sum Cargo.lock rust-toolchain.toml
+          } > "$kit/provenance.txt"
+          # Deliberately exclude .git, .cargo, HOME, environment dumps and credentials.
+          tar -C "$kit" -I 'zstd -T2 -3' -cf "$RUNNER_TEMP/reproduction-kit.tar.zst" .
+          cd "$RUNNER_TEMP"
+          sha256sum reproduction-kit.tar.zst > reproduction-kit.sha256
+
+      - name: Retain the offline reproduction inputs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: reproduction-kit-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/reproduction-kit.tar.zst
+            ${{ runner.temp }}/reproduction-kit.sha256
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
