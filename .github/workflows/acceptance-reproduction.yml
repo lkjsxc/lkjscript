@@ -1,131 +1,85 @@
-name: Prepare foreground policy repair
-run-name: Prepare policy repair ${{ github.sha }}
-# Temporary investigation branch only. No ref updates, release or deployment.
+name: Foreground repair focused verification
+run-name: Foreground regression d60cf24d5a4f3a82d1725f607545b13d1593485b
+# Temporary diagnostic workflow. Full acceptance is separately bound to verify.yml.
 on:
   push:
     branches: ['work/acceptance-reproduction-20261003']
-    paths: ['.github/workflows/acceptance-reproduction.yml', '.github/patches/foreground-policy.patch']
+    paths: ['.github/workflows/acceptance-reproduction.yml']
 permissions:
   contents: read
 jobs:
-  prepare:
+  regression:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 90
+    env:
+      SOURCE_SHA: d60cf24d5a4f3a82d1725f607545b13d1593485b
+      CARGO_BUILD_JOBS: '2'
     steps:
-      - name: Read the exact source without retained credentials
+      - name: Check out the exact integration without retained credentials
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
-          ref: ${{ github.sha }}
+          ref: d60cf24d5a4f3a82d1725f607545b13d1593485b
           fetch-depth: 2
           persist-credentials: false
-      - name: Apply only the reviewed patch and pinned formatter
+      - name: Bind the source and run all new policy regressions
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$GITHUB_WORKFLOW_SHA" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git rev-parse 'HEAD^{tree}')" = d8e249e3bcabe061a6471e59257f3de14e9cd822
           test -z "$(git status --porcelain=v1 --untracked-files=all)"
-          git apply --recount --check .github/patches/foreground-policy.patch
-          git apply --recount .github/patches/foreground-policy.patch
-          rustup show
-          cargo fmt --all
-          cargo fmt --all -- --check
-          git diff --check
-          output="$RUNNER_TEMP/prepared-source"
-          mkdir -m 0700 "$output"
-          printf '%s\n' \
-            '.github/workflows/verify.yml' \
-            'tools/lkjscript-dev/src/offline_packages/foreground.rs' \
-            'tools/lkjscript-dev/src/offline_packages/foreground_policy.rs' \
-            'tools/lkjscript-dev/src/offline_packages/foreground_policy_tests.rs' \
-            | sort > "$RUNNER_TEMP/allowed-paths"
-          git diff --name-only | sort > "$RUNNER_TEMP/changed-paths"
-          test -z "$(comm -23 "$RUNNER_TEMP/changed-paths" "$RUNNER_TEMP/allowed-paths")"
-          while IFS= read -r path; do
-            test -f "$path" && test ! -L "$path"
-            mkdir -p "$output/$(dirname "$path")"
-            cp "$path" "$output/$path"
-            printf '%s %s\n' "$(git hash-object "$path")" "$path"
-          done < "$RUNNER_TEMP/allowed-paths"
-          git diff --stat
-          git diff -- tools/lkjscript-dev/src/offline_packages/foreground.rs .github/workflows/verify.yml
-          jq -n --arg source "$GITHUB_SHA" --arg workflow "$GITHUB_WORKFLOW_SHA" \
+          mkdir -m 0700 "$RUNNER_TEMP/focused-evidence"
+          jq -n --arg source "$SOURCE_SHA" --arg controller "$GITHUB_SHA" \
             --arg run "$GITHUB_RUN_ID" --arg attempt "$GITHUB_RUN_ATTEMPT" \
-            '{source:$source,workflow:$workflow,run:$run,attempt:$attempt}' > "$output/context.json"
-      - name: Retain prepared source as data
+            '{source:$source,controller:$controller,run:$run,attempt:$attempt}' \
+            > "$RUNNER_TEMP/focused-evidence/context.json"
+          rustup show
+          cargo test --release --locked -p lkjscript-dev --lib \
+            offline_packages::foreground::policy::tests -- --nocapture 2>&1 \
+            | tee "$RUNNER_TEMP/focused-evidence/unit-tests.log"
+      - name: Build and copy the source-matched runtime and verifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --release --locked -p lkjscript --bin lkjscript \
+            -p lkjscript-dev --bin lkjscript-dev 2>&1 \
+            | tee "$RUNNER_TEMP/focused-evidence/build.log"
+          mkdir -m 0700 "$RUNNER_TEMP/focused-bin"
+          cp target/release/lkjscript target/release/lkjscript-dev "$RUNNER_TEMP/focused-bin/"
+          chmod 0500 "$RUNNER_TEMP/focused-bin/"*
+          sha256sum "$RUNNER_TEMP/focused-bin/"* \
+            > "$RUNNER_TEMP/focused-evidence/binaries.sha256"
+      - name: Execute the complete standalone offline composition oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/focused-bin/lkjscript-dev" offline-packages \
+            --binary "$RUNNER_TEMP/focused-bin/lkjscript" \
+            --evidence-root "$RUNNER_TEMP/focused-evidence/offline-packages" --machine \
+            2>&1 | tee "$RUNNER_TEMP/focused-evidence/offline.jsonl"
+      - name: Retain exact loop observations and verify unchanged source
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          receipt="$RUNNER_TEMP/focused-evidence/offline-packages/receipt.json"
+          if test -f "$receipt"; then
+            jq '{schema,status,failure,cleanup_complete,candidate_sha256,verifier_sha256,
+              command_count:(.commands|length),foreground_cells:(.effects.foreground.cells|length),
+              failure_cells:(.effects.foreground.failures|length),
+              loops:[.effects.foreground.loops[] | {label,n,bounded,output,
+                observation:(.execution["production-observation"]|fromjson)}]}' "$receipt" \
+              | tee "$RUNNER_TEMP/focused-evidence/result.json"
+          fi
+      - name: Retain focused evidence including failure details
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: prepared-source-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/prepared-source
+          name: foreground-regression-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/focused-evidence
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 14
-
-  store-blobs:
-    needs: prepare
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      actions: read
-      contents: write
-    steps:
-      # No checkout, dependency installation, build, or repository code execution in this job.
-      # The token stores four immutable source blobs only; it never updates a Git ref.
-      - name: Retrieve only this run's prepared source
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh run download "$GITHUB_RUN_ID" --repo lkjsxc/lkjscript \
-            --name "prepared-source-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
-            --dir "$RUNNER_TEMP/prepared-source"
-      - name: Store the four bounded UTF-8 blobs without creating a commit or updating refs
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs/promises';
-          import path from 'node:path';
-          import { createHash } from 'node:crypto';
-          const root = path.join(process.env.RUNNER_TEMP, 'prepared-source');
-          const context = JSON.parse(await fs.readFile(path.join(root, 'context.json'), 'utf8'));
-          for (const [key, expected] of Object.entries({source:process.env.GITHUB_SHA,
-              workflow:process.env.GITHUB_WORKFLOW_SHA,run:process.env.GITHUB_RUN_ID,
-              attempt:process.env.GITHUB_RUN_ATTEMPT})) {
-            if (context[key] !== expected) throw new Error(`Context mismatch: ${key}`);
-          }
-          const paths = ['.github/workflows/verify.yml',
-            'tools/lkjscript-dev/src/offline_packages/foreground.rs',
-            'tools/lkjscript-dev/src/offline_packages/foreground_policy.rs',
-            'tools/lkjscript-dev/src/offline_packages/foreground_policy_tests.rs'];
-          const blobs = [];
-          for (const relative of paths) {
-            const location = path.join(root, relative);
-            const stat = await fs.lstat(location);
-            if (!stat.isFile() || stat.size > 131072) throw new Error('Not a bounded regular source file');
-            const bytes = await fs.readFile(location);
-            new TextDecoder('utf-8', {fatal:true}).decode(bytes);
-            const expected = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
-            const response = await fetch('https://api.github.com/repos/lkjsxc/lkjscript/git/blobs', {
-              method:'POST', headers:{Authorization:`Bearer ${process.env.GH_TOKEN}`,
-                Accept:'application/vnd.github+json','Content-Type':'application/json'},
-              body:JSON.stringify({encoding:'base64',content:bytes.toString('base64')})});
-            if (!response.ok) throw new Error(`Store failed: ${response.status}`);
-            const result = await response.json();
-            if (result.sha !== expected) throw new Error('Returned source digest mismatch');
-            blobs.push({path:relative,sha:result.sha,mode:'100644',type:'blob'});
-          }
-          console.log(JSON.stringify({context,blobs}));
-          await fs.writeFile(path.join(process.env.RUNNER_TEMP, 'prepared-blobs.json'),
-            JSON.stringify({context,blobs}, null, 2)+'\n');
-          NODE
-      - name: Retain exact source blob identities
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: prepared-blobs-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/prepared-blobs.json
-          if-no-files-found: error
-          retention-days: 14
+          compression-level: 6
