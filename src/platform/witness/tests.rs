@@ -121,9 +121,14 @@ fn witness_contract_domains_are_closed_and_unique() {
         digest,
         "validator_contract_75edd39f91c2c55b02f3259574560abd8d4d7c75853c2e9776dea87120df3a08"
     );
-    assert_eq!(
+    // Closed generic child applications cannot reuse the published 0.1.69 proof.
+    assert_ne!(
         digest,
         "validator_contract_25babcb5c19defefc06991c9e84ee626c93360a95a8a21c7a945fb5a5e67967b"
+    );
+    assert_eq!(
+        digest,
+        "validator_contract_97d3f19b3b0d7a4791b2927d1611208833da0a62174cbd38dd71c14eb0a2c7f8"
     );
 }
 

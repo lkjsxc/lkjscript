@@ -56,6 +56,13 @@ copy retains the complete reviewed input and pack inventory. Historical predeces
 bytes remain unchanged; regenerated current controls retain original meaning and
 instructions under the current derived envelopes.
 
+A separately copied executable also passed eight complete generic cell/list results,
+including signed I64 extremes and four executions after deleting its source project.
+The same native literal was rejected by the predecessor with unchanged accepted HEAD.
+Exact literal/executable identities, whole result bytes and joined cleanup are retained
+in `public-direct-03/comparison.json` and its original commands; `public-direct-02/`
+preserves the earlier diagnostic-reader mismatch, not a product execution failure.
+
 Selected checkout: `/home/coder/workspace/lkjscript-structured-handoff-20261002`,
 branch `dev/closed-generic-parallel-20261003`. Evidence and retained failures are
 under `.artifacts/20261003-closed-generic-parallel/`. Implementation
@@ -65,6 +72,11 @@ targets. The remaining offline-package owner was explicitly interrupted after th
 failure; its signaled result is not acceptance. Original receipt
 `verification_7920a6a1cb13eb6daf049112e5643a4047248710c63eb6cd4e55394d754b9689`
 and all outputs remain in `full-01-original/`, with the interruption recorded separately.
+The second attempt reached the next stale assertion in the same validator test:
+its pinned validator-25 digest. The interrupted attempt and original output remain
+in `full-02-original/`; the successor explicitly rejects that predecessor digest
+and pins the validator-26 identity. The repaired focused validator test passed before
+starting a fresh full run.
 The successor corrects only those exact current-generation expectations and records
 completed v0.1.69 publication; genuine predecessor bytes and behavioral rejection
 checks are preserved. Next: run fresh dependency-complete `check full` after this
