@@ -12,7 +12,7 @@ These priorities order the next useful experiments, not a waterfall or a feature
 promise. Mechanisms may change when a better complete design has evidence. Memory
 safety, bounded checking and avoidance of unnecessary copying are baseline requirements.
 
-## 1. Complete ownership round trips through structured parallel tasks
+## 1. Compose generic contracts with structured ownership
 
 Retain the completed 0.1.68 distribution acceptance and publication under the
 [existing procedure](release.md#published-structured-parallel-v0168).
@@ -22,13 +22,20 @@ renew proof when its bindings change. Preserve task kind independently of an emp
 effect row throughout authoring, extraction and execution.
 
 Use the [current pair contract](spec/structured-parallel.md) as a small coherent
-foundation. Development 0.1.69 extends closed child results through the existing
-OwnedProduct pair when either side is owned, with separately sealed result custody
-and complete parent decomposition. First close the independent memory oracle's
-imported Owned-generic signature boundary using actual separate packages. Complete
-source and final-byte acceptance for the returned-owner composition before claiming
-availability. General channels, task handles or effectful children are separate
-extensions, and passing one boundary does not certify the others.
+foundation. Owned results now return through a separately sealed pair; development
+0.1.70 adds exact closed generic child applications and nominal implementation
+selection without mandatory monomorphic wrappers. Preserve the independent canonical
+and memory oracles, complete type closure, cross-package source-free composition,
+allocation identity, shared quotas and joined failure cleanup. Source and final-byte
+acceptance remain separate facts in [status](status.md).
+
+The next semantic boundary is reusable generic code that itself forms child groups.
+Do not merely accept arbitrary open types or inherit a caller's capabilities. Decide
+an explicit transferable-type contract, how nominal and phantom arguments establish
+it, and how symbolic type and implementation obligations become exact at execution.
+Preserve independently checkable bounded proof, exact implementation identity and
+loan exclusion. Channels, task handles and effectful children remain separate
+extensions, not implied consequences of generic task calls.
 
 ## 2. Scale structured execution and the shared host
 

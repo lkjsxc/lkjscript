@@ -21,7 +21,7 @@ type Calls = VecDeque<Application>;
 const MAXIMUM_METADATA_BYTES: usize = 256 * 1024 * 1024;
 
 struct Closure<'a> {
-    parallel_targets: BTreeSet<DeclarationReference>,
+    parallel_targets: BTreeSet<(DeclarationReference, Vec<TypeObjectDigest>)>,
     snapshots: BTreeMap<PackageId, &'a KernelSnapshot>,
     types: &'a mut BTreeMap<TypeObjectDigest, TypeObject>,
     visits: usize,
@@ -319,22 +319,36 @@ impl Closure<'_> {
                         else {
                             return Err(failure());
                         };
-                        let ExpressionOperation::Call {
-                            function,
-                            type_arguments,
-                            effect_arguments,
-                            requirement_arguments,
-                            arguments,
-                        } = child.operation
-                        else {
-                            return Err(failure());
-                        };
-                        if !type_arguments.is_empty()
-                            || !effect_arguments.is_empty()
-                            || !requirement_arguments.is_empty()
+                        let (function, type_arguments, implementations, arguments) = match child
+                            .operation
                         {
-                            return Err(failure());
-                        }
+                            ExpressionOperation::Call {
+                                function,
+                                type_arguments,
+                                effect_arguments,
+                                requirement_arguments,
+                                arguments,
+                            } if effect_arguments.is_empty()
+                                && requirement_arguments.is_empty() =>
+                            {
+                                (function, type_arguments, Vec::new(), arguments)
+                            }
+                            ExpressionOperation::ImplementationCall {
+                                function,
+                                type_arguments,
+                                implementations,
+                                arguments,
+                            } if implementations.iter().all(|i| {
+                                matches!(
+                                    i,
+                                    crate::platform::kernel::ImplementationOperand::Concrete { .. }
+                                )
+                            }) =>
+                            {
+                                (function, type_arguments, implementations, arguments)
+                            }
+                            _ => return Err(failure()),
+                        };
                         let OwnerRecord::Declaration(declaration) = self
                             .owner(
                                 function.package,
@@ -347,18 +361,44 @@ impl Closure<'_> {
                         let DeclarationPayload::Function(signature) = declaration.payload else {
                             return Err(failure());
                         };
-                        if !signature.type_parameters.is_empty()
+                        if signature.type_parameters.len() != type_arguments.len()
                             || !signature.effect_parameters.is_empty()
                             || !signature.requirement_parameters.is_empty()
-                            || !signature.implementation_parameters.is_empty()
+                            || signature.implementation_parameters.len() != implementations.len()
                             || !matches!(&signature.effect, crate::platform::kernel::FunctionEffect::Task { requirements, effect_parameters } if requirements.is_empty() && effect_parameters.is_empty())
                             || signature.parameters.len() != arguments.len()
                         {
                             return Err(failure());
                         }
-                        index_node::<DeclarationReference>(&mut self.allocated)?;
-                        self.parallel_targets.insert(function);
-                        let ty = self.identity(signature.result, &BTreeMap::new(), 0)?;
+                        allocate::<TypeObjectDigest>(&mut self.allocated, type_arguments.len())?;
+                        let mut arguments = Vec::new();
+                        for ty in type_arguments {
+                            arguments.push(self.identity(ty, &BTreeMap::new(), 0)?);
+                        }
+                        allocate::<(TypeParameterId, TypeObjectDigest)>(
+                            &mut self.allocated,
+                            arguments.len(),
+                        )?;
+                        let bindings = signature
+                            .type_parameters
+                            .iter()
+                            .copied()
+                            .zip(arguments.iter().copied())
+                            .collect();
+                        let ty = self.identity(signature.result, &bindings, 0)?;
+                        for parameter in &signature.parameters {
+                            let OwnerRecord::Parameter(parameter) = self
+                                .owner(function.package, OwnerKey::Parameter(*parameter))?
+                                .clone()
+                            else {
+                                return Err(failure());
+                            };
+                            self.identity(parameter.ty, &bindings, 0)?;
+                        }
+                        index_node::<(DeclarationReference, Vec<TypeObjectDigest>)>(
+                            &mut self.allocated,
+                        )?;
+                        self.parallel_targets.insert((function, arguments));
                         fields.push(crate::platform::kernel::StructuralTypeField {
                             name: crate::platform::kernel::Name::new(name)
                                 .map_err(|_| failure())?,
@@ -791,7 +831,7 @@ pub(super) fn complete(
     )?;
     // Recheck canonical signatures against this independent complete data proof.
     // This includes unused targets and untaken expressions visited by body closure.
-    for target in parallel_targets {
+    for (target, arguments) in parallel_targets {
         control.check()?;
         visits = visits
             .checked_add(1)
@@ -810,7 +850,47 @@ pub(super) fn complete(
         let DeclarationPayload::Function(function) = &declaration.payload else {
             return Err(failure());
         };
-        parallel_transfer_type(schema, function.result, 0, &mut visits, control)?;
+        if function.type_parameters.len() != arguments.len() {
+            return Err(failure());
+        }
+        allocate::<(TypeParameterId, TypeObjectDigest)>(&mut bytes, arguments.len())?;
+        let mut bindings = BTreeMap::new();
+        for (parameter, actual) in function.type_parameters.iter().zip(arguments) {
+            parallel_transfer_type(schema, actual, 0, &mut visits, control)?;
+            let Some(OwnerRecord::TypeParameter(parameter_record)) =
+                snapshot.owners.get(&OwnerKey::TypeParameter(*parameter))
+            else {
+                return Err(failure());
+            };
+            let owned = matches!(
+                schema.types.get(&actual).map(|ty| &ty.form),
+                Some(
+                    TypeForm::ByteBuffer
+                        | TypeForm::OwnedI64Cell
+                        | TypeForm::OwnedProduct { .. }
+                        | TypeForm::OwnedChoice { .. }
+                )
+            );
+            if parameter_record.declaration != target.declaration
+                || owned
+                    != (parameter_record.constraints
+                        == crate::platform::kernel::TypeParameterConstraints::Owned)
+                || (parameter_record.constraints
+                    == crate::platform::kernel::TypeParameterConstraints::CaptureSafe
+                    && !schema.capture_safe_types.contains(&actual))
+                || bindings.insert(*parameter, actual).is_some()
+            {
+                return Err(failure());
+            }
+        }
+        let result = if bindings.is_empty() {
+            function.result
+        } else {
+            schema
+                .substitute_type(function.result, &bindings, 0)
+                .ok_or_else(failure)?
+        };
+        parallel_transfer_type(schema, result, 0, &mut visits, control)?;
         let mut seen_owned = false;
         for parameter in &function.parameters {
             control.check()?;
@@ -823,8 +903,16 @@ pub(super) fn complete(
             else {
                 return Err(failure());
             };
+            let ty = if bindings.is_empty() {
+                parameter.ty
+            } else {
+                schema
+                    .substitute_type(parameter.ty, &bindings, 0)
+                    .ok_or_else(failure)?
+            };
+            parallel_transfer_type(schema, ty, 0, &mut visits, control)?;
             let owned = matches!(
-                schema.types.get(&parameter.ty).map(|t| &t.form),
+                schema.types.get(&ty).map(|t| &t.form),
                 Some(
                     TypeForm::ByteBuffer
                         | TypeForm::OwnedI64Cell
@@ -836,12 +924,14 @@ pub(super) fn complete(
                 return Err(failure());
             }
             seen_owned |= owned;
-            if parameter.resource_requirement.is_some()
+            if parameter.parent
+                != crate::platform::kernel::ParameterParent::Function(target.declaration)
+                || parameter.resource_requirement.is_some()
                 || if owned {
                     parameter.use_mode != crate::platform::kernel::ParameterUse::Consume
                 } else {
                     parameter.use_mode != crate::platform::kernel::ParameterUse::Unrestricted
-                        || !schema.comparable_types.contains(&parameter.ty)
+                        || !schema.comparable_types.contains(&ty)
                 }
             {
                 return Err(failure());

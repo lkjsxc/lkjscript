@@ -1,8 +1,8 @@
 # Joined parallel computation
 
-Development 0.1.69 supports two child tasks with owned inputs and joined ordinary
-or owned results. Check the installed executable's `capabilities --section change`:
-it must advertise `parallel`. Public v0.1.64 does not supply this expression.
+Development 0.1.70 supports two child tasks with owned inputs, joined ordinary
+or owned results, and explicit closed generic applications. Check the installed executable's `capabilities --section change`:
+it must advertise `parallel`. Check [status](../status.md) for the separate public executable selection.
 
 For two already declared empty-effect graph tasks, the native form is:
 
@@ -13,7 +13,8 @@ For two already declared empty-effect graph tasks, the native form is:
 ```
 
 The enclosing function declares `(effect (task))`. Each child is a direct named,
-monomorphic task with an empty effect row. Ordinary arguments come first; owned
+task application with an empty effect row. Generic tasks need their exact concrete
+type and implementation arguments at this boundary. Ordinary arguments come first; owned
 arguments are exact live locals passed to `consume` parameters. Results can be
 closed ordinary data or owned carriers. Both results above are ordinary I64 values,
 producing `(record (left I64) (right I64))` in this example.
@@ -22,8 +23,8 @@ may overlap; the parent receives the pair only after both finish.
 
 The [literal worker library](../../tests/fixtures/parallel-library.lkjc) supplies
 buffer and scalar-cell reductions, a generic Owned reduction contract, exact static
-implementations, and concrete task wrappers. Generic composition occurs inside the
-wrapper; the child identity itself remains exact and monomorphic. The
+implementations, and concrete task wrappers. These wrappers remain supported, but
+closed generic tasks no longer need a wrapper solely to become parallel children. The
 [literal consumer](examples/parallel-consumer.lkjc) uses two groups: independent
 buffer/cell inputs, followed by an owned product and owned choice. Constructors first
 bind each owned input to a typed local, preserving the existing transfer rules.
@@ -108,3 +109,41 @@ task code for external effects before or after the group. Channels, detached tas
 borrowed child inputs and detached lifetimes are separate future boundaries. See
 the [normative contract](../spec/structured-parallel.md) and
 [current acceptance status](../status.md) for precise limits and evidence.
+
+## Closed generic child applications
+
+A generic worker can transfer ownership without knowing the concrete carrier. A
+worker with an Owned method contract can also forward a selected implementation:
+
+```text
+(parallel
+  (implementation-call generic-workers::transform (types ByteBuffer)
+    (implementations concrete@buffer::Octets) (i64 8) (local buffer))
+  (implementation-call generic-workers::forward (types OwnedI64Cell)
+    (implementations concrete@cell::Scalar) (local count) (local cell)))
+```
+
+The [generic workers](../../tests/fixtures/parallel-generic-workers.lkjc) declare
+both tasks; the existing carrier library supplies their exact contracts and
+implementations. This pair has the same owned-product type and unpacking rules as
+the earlier monomorphic example. A plain generic `call` needs no witness when the
+callee has no implementation parameters:
+
+```text
+(call generic-workers::transfer (types OwnedI64Cell) (local cell))
+```
+
+That call can be either child of `parallel`. It can also instantiate `transfer`
+with a complete owned product or choice, moving the entire aggregate rather than
+reconstructing its leaves. Ordinary generic results such as `list I64` remain
+ordinary data. Every concrete type argument is checked, including unused cases and
+phantom arguments. An open caller type parameter, borrowed carrier, callable or
+capability is not made transferable by wrapping it in a generic type.
+
+The [generic consumer](../../tests/fixtures/parallel-generic-consumer.lkjc) is a
+literal three-package example. Its public test retains package export/import,
+identity-preserving edits, complete returned byte payloads, both signed I64 extremes,
+both owned-choice cases, and execution after deleting the source projects and
+package transports. Another literal witness uses two implementations with the same
+Self type but different behavior: their exact selected references, not just Self,
+remain distinct through forwarding and return custody.

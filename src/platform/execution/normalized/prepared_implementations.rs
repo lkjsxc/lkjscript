@@ -110,6 +110,26 @@ impl Closing<'_, '_> {
         for instruction in Arc::make_mut(&mut code.instructions) {
             step(self.work)?;
             match instruction {
+                NormalizedInstruction::Parallel {
+                    left,
+                    left_implementations,
+                    right,
+                    right_implementations,
+                    ..
+                } => {
+                    for (function, implementations) in
+                        [(left, left_implementations), (right, right_implementations)]
+                    {
+                        self.work
+                            .reserve::<DeclarationReference>(implementations.len())?;
+                        let mut selected = Vec::new();
+                        for operand in implementations.iter() {
+                            selected.push(self.operand(*operand, scope, bindings)?);
+                        }
+                        *function = self.application(*function, selected)?;
+                        *implementations = Arc::from([]);
+                    }
+                }
                 NormalizedInstruction::ImplementationCall {
                     function,
                     implementations,
@@ -179,6 +199,15 @@ fn code_requires_specialization(
 ) -> Result<bool, Diagnostic> {
     for instruction in code.instructions.iter() {
         step(work)?;
+        if let NormalizedInstruction::Parallel {
+            left_implementations,
+            right_implementations,
+            ..
+        } = instruction
+            && (!left_implementations.is_empty() || !right_implementations.is_empty())
+        {
+            return Ok(true);
+        }
         if matches!(
             instruction,
             NormalizedInstruction::ImplementationCall { .. }

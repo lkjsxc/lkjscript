@@ -525,12 +525,17 @@ fn parallel_artifact_rejects_rehashed_retargeting_and_erasure() {
             left_arguments: 0,
             right_arguments: 0,
             result_type,
+            ..
         } = code.instructions[at]
         else {
             panic!("zero-argument pair");
         };
         code.instructions[at] = match attack {
             0 => CompiledInstruction::Parallel {
+                left_types: vec![],
+                left_implementations: vec![],
+                right_types: vec![],
+                right_implementations: vec![],
                 left: right,
                 right: left,
                 left_arguments: 0,
@@ -538,6 +543,10 @@ fn parallel_artifact_rejects_rehashed_retargeting_and_erasure() {
                 result_type,
             },
             1 => CompiledInstruction::Parallel {
+                left_types: vec![],
+                left_implementations: vec![],
+                right_types: vec![],
+                right_implementations: vec![],
                 left,
                 right: left,
                 left_arguments: 0,
@@ -689,3 +698,75 @@ fn parallel_genuine_predecessor_wire_requires_rebuild_even_in_rehashed_current_a
     .unwrap_err();
     assert_eq!(error.code, "compiler_unit_contract", "{error:?}");
 }
+
+#[test]
+fn parallel_generic_artifact_rejects_rehashed_type_and_implementation_substitution() {
+    let source = crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(
+        &[
+            include_str!("../../../tests/fixtures/owned-witness-library.lkjc"),
+            include_str!("../../../tests/fixtures/parallel-result-library.lkjc"),
+            include_str!("../../../tests/fixtures/parallel-generic-workers.lkjc"),
+            include_str!("../../../tests/fixtures/parallel-generic-witness.lkjc"),
+        ]
+        .join("\n"),
+    )
+    .unwrap();
+    let loaded = artifact_for_source(&source);
+    let owner = OwnerKey::Declaration(declaration_named(&source, "owned"));
+    let (key, unit) = loaded
+        .objects
+        .iter()
+        .filter(|(key, _)| key.domain == ObjectDomain::CompilerUnit)
+        .map(|(key, bytes)| (*key, CompilationUnit::decode(bytes, *key).unwrap()))
+        .find(|(_, unit)| unit.source.owner == owner)
+        .unwrap();
+    load_artifact(&effect_tests::replace_unit(&loaded, key, &unit, vec![])).unwrap();
+    for attack in 0..4 {
+        let mut changed = unit.clone();
+        let CompilationPayload::Function { code, .. } = &mut changed.payload else {
+            panic!("function");
+        };
+        let instruction = code
+            .instructions
+            .iter_mut()
+            .find(|i| matches!(i, CompiledInstruction::Parallel { .. }))
+            .unwrap();
+        let CompiledInstruction::Parallel {
+            left_types,
+            left_implementations,
+            right_implementations,
+            ..
+        } = instruction
+        else {
+            unreachable!()
+        };
+        match attack {
+            0 => left_types.clear(),
+            1 => {
+                left_types[0] = u32::try_from(
+                    changed
+                        .tables
+                        .types
+                        .iter()
+                        .position(|ty| *ty != changed.tables.types[left_types[0] as usize])
+                        .unwrap(),
+                )
+                .unwrap();
+            }
+            2 => *left_implementations = right_implementations.clone(),
+            _ => left_implementations.clear(),
+        }
+        let error = load_artifact(&effect_tests::replace_unit(&loaded, key, &changed, vec![]))
+            .expect_err("rehashed application is not canonical meaning");
+        assert!(
+            matches!(
+                error.class,
+                DiagnosticClass::Corrupt | DiagnosticClass::Source | DiagnosticClass::Semantic
+            ),
+            "{attack}: {error:?}"
+        );
+    }
+}
+
+#[path = "parallel_predecessor20_tests.rs"]
+mod predecessor20;

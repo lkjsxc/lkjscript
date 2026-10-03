@@ -7,8 +7,8 @@ pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-9";
 pub const WITNESS_CONTRACT_VERSION: u16 = 9;
 pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-9";
 pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 9;
-pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-25";
-pub const VALIDATOR_CONTRACT_VERSION: u16 = 25;
+pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-26";
+pub const VALIDATOR_CONTRACT_VERSION: u16 = 26;
 
 pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT09";
 pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM14";
@@ -48,7 +48,7 @@ pub struct ValidatorFeatureDescriptor {
 pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 35] = [
     ValidatorFeatureDescriptor {
         name: "structured_parallel_owned_tasks",
-        version: 2,
+        version: 3,
     },
     ValidatorFeatureDescriptor {
         name: "structural_owned_choices",

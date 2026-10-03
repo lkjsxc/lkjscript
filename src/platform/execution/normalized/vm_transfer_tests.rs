@@ -31,6 +31,10 @@ const SOURCE: &str = r#"declarations.begin
   (function create ordered (visibility public) (effect (task))
     (parameter create label (type Text))
     (parameter create payload (type ByteBuffer) (use consume)) (returns Unit) (body (unit)))
+  (function create fixed-result (visibility public) (effect (task))
+    (type-parameter create Tag)
+    (parameter create payload (type ByteBuffer) (use consume)) (returns ByteBuffer)
+    (body (local payload)))
   (function create hidden-callback (visibility public) (effect (task))
     (parameter create payload (type (option (function () Unit))))
     (returns Unit) (body (unit)))))
@@ -829,3 +833,6 @@ fn joined_failure_disposes_a_successful_owned_result_envelope() {
         assert_eq!(buffers.live(), (0, 0));
     }
 }
+
+#[path = "vm_transfer_generic_tests.rs"]
+mod generic;

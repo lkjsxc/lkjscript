@@ -92,9 +92,9 @@ fn native_parallel_three_packages_owned_reduction_edit_and_source_free_execution
             "kernel_buffer_ownership",
         ),
         (
-            "generic-child",
-            input.replacen(left, "(implementation-call parallel-workers::generic-reduce (types ByteBuffer) (implementations concrete@parallel-workers::Octets) (i64 31) (local buffer))", 1),
-            "kernel_parallel_call",
+            "generic-witness-self",
+            input.replacen(left, "(implementation-call parallel-workers::generic-reduce (types ByteBuffer) (implementations concrete@parallel-workers::Scalar) (i64 31) (local buffer))", 1),
+            "kernel_owned_contract",
         ),
     ] {
         assert_ne!(bad, input, "{name} must change the literal proposal");
@@ -284,6 +284,29 @@ fn native_parallel_three_packages_owned_reduction_edit_and_source_free_execution
 
 #[test]
 fn native_parallel_owned_results_three_packages_edit_borrow_and_detached_payloads() {
+    owned_result_packages(false);
+}
+
+#[test]
+fn native_parallel_generic_three_packages_forwarded_witnesses_and_owned_aggregate_results() {
+    owned_result_packages(true);
+}
+
+fn owned_result_packages(generic: bool) {
+    let result_workers = if generic {
+        format!(
+            "{}{}",
+            RESULT_WORKERS,
+            include_str!("../fixtures/parallel-generic-workers.lkjc")
+        )
+    } else {
+        RESULT_WORKERS.into()
+    };
+    let result_consumer = if generic {
+        include_str!("../fixtures/parallel-generic-consumer.lkjc")
+    } else {
+        RESULT_CONSUMER
+    };
     let library = Native::new();
     // Literal generic and uniquely named carrier contracts form one separately
     // exported library. The witness itself never constructs semantic records.
@@ -305,15 +328,23 @@ fn native_parallel_owned_results_three_packages_edit_borrow_and_detached_payload
     );
     author(
         &workers,
-        &format!("{}{imports}{RESULT_WORKERS}", dependency(&p)),
+        &format!("{}{imports}{result_workers}", dependency(&p)),
     );
     unchanged(&workers, "result-workers");
     let w = export(&workers);
     let consumer = Native::new();
     stage(&consumer, &p);
     stage(&consumer, &w);
+    let generic_import = if generic {
+        format!(
+            "declarations.begin\n(units (use generic-workers {} {}))\ndeclarations.end\n",
+            w.package, w.revision
+        )
+    } else {
+        String::new()
+    };
     let input = format!(
-        "{}{}{imports}declarations.begin\n(units (use result-workers {} {}))\ndeclarations.end\n{RESULT_CONSUMER}",
+        "{}{}{imports}{generic_import}declarations.begin\n(units (use result-workers {} {}))\ndeclarations.end\n{result_consumer}",
         dependency(&p),
         dependency(&w),
         w.package,
@@ -355,6 +386,45 @@ fn native_parallel_owned_results_three_packages_edit_borrow_and_detached_payload
     let original = std::fs::read_to_string(unchanged(&consumer, "result-consumer")).unwrap();
     assert_eq!(original.matches("(parallel").count(), 4);
     assert!(original.contains("(owned-product"));
+    if generic {
+        // Projection emits exact reference/type aliases, not the original package
+        // spelling or repeated inline type syntax. Check the applied references.
+        let reference = |name: &str| {
+            original
+                .lines()
+                .find(|line| {
+                    line.trim_start()
+                        .starts_with(&format!("(reference ref_{name}_"))
+                })
+                .and_then(|line| line.split_whitespace().nth(1))
+                .expect("projected generic reference")
+        };
+        let choice = original
+            .lines()
+            .find(|line| line.contains("(type-alias ") && line.contains("(owned-choice "))
+            .and_then(|line| line.split_whitespace().nth(1))
+            .expect("projected closed choice");
+        let projected = original.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert_eq!(
+            projected
+                .matches(&format!("(call {} (types ", reference("transfer")))
+                .count(),
+            2
+        );
+        assert!(
+            projected.contains(&format!("(call {} (types {choice})", reference("transfer"))),
+            "{original}"
+        );
+        assert_eq!(
+            projected
+                .matches(&format!(
+                    "(implementation-call {} (types OwnedI64Cell)",
+                    reference("forward")
+                ))
+                .count(),
+            2
+        );
+    }
     let before = consumer.revision();
     let edited = consumer.input(
         "edited-result-parallel.lkjc",

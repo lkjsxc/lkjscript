@@ -1,0 +1,53 @@
+declarations.begin
+(units
+  (module create generic-selection
+    (external create extract (visibility private) (implementation core.cell.extract)
+      (parameter create value (type OwnedI64Cell) (use consume)) (returns I64))
+    (function create alternate-update (visibility public) (effect pure)
+      (parameter create n (type I64))
+      (parameter create value (type OwnedI64Cell) (use consume)) (returns OwnedI64Cell)
+      (body (call cell::cell-update (i64 99) (local value))))
+    (function create alternate-read (visibility public) (effect pure)
+      (parameter create value (type OwnedI64Cell) (use borrow)) (returns I64)
+      (body (i64 99)))
+    (owned-implementation create Alternate (visibility public)
+      (contract abstraction::Storage) (self OwnedI64Cell)
+      (method method_10000000000000000000000000000001 cell::cell-create)
+      (method method_10000000000000000000000000000002 alternate-update)
+      (method method_10000000000000000000000000000003 alternate-read))
+    (function create reduce (visibility public) (effect (task))
+      (type-parameter create T (constraint owned))
+      (implementation-parameter implparam_93000000000000000000000000000001 ops abstraction::Storage T)
+      (parameter create value (type T) (use consume)) (returns I64)
+      (body (implementation-call abstraction::consume (types T)
+        (implementations parameter@reduce@implparam_93000000000000000000000000000001)
+        (local value))))
+    (function create main (visibility public) (effect (task))
+      (parameter create n (type I64)) (returns (record (left I64) (right I64)))
+      (body (let
+        (binding left (type OwnedI64Cell) (call cell::cell-create (local n)))
+        (binding right (type OwnedI64Cell) (call cell::cell-create (local n)))
+        (in (parallel
+          (implementation-call reduce (types OwnedI64Cell)
+            (implementations concrete@cell::Scalar) (local left))
+          (implementation-call reduce (types OwnedI64Cell)
+            (implementations concrete@Alternate) (local right)))))))
+    (function create owned (visibility public) (effect (task))
+      (parameter create n (type I64)) (returns (record (left I64) (right I64)))
+      (body (let
+        (binding left (type OwnedI64Cell) (call cell::cell-create (i64 0)))
+        (binding right (type OwnedI64Cell) (call cell::cell-create (i64 0)))
+        (binding pair (type (owned-product (field left OwnedI64Cell) (field right OwnedI64Cell)))
+          (parallel
+            (implementation-call generic-workers::forward (types OwnedI64Cell)
+              (implementations concrete@cell::Scalar) (local n) (local left))
+            (implementation-call generic-workers::forward (types OwnedI64Cell)
+              (implementations concrete@Alternate) (local n) (local right))))
+        (in (unpack-owned (type (owned-product (field left OwnedI64Cell) (field right OwnedI64Cell)))
+          (local pair)
+          (field left (binding left (type OwnedI64Cell)))
+          (field right (binding right (type OwnedI64Cell)))
+          (in (record structural
+            (field left (call extract (local left)))
+            (field right (call extract (local right))))))))))))
+declarations.end

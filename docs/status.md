@@ -1,138 +1,88 @@
 # Status
 
-Current snapshot: 2026-10-03. This page owns availability, selected source and
-unfinished acceptance. [Direction](direction.md) owns goals, [specifications](spec/)
-own semantics and [roadmap](roadmap.md) orders future work.
+Current snapshot: 2026-10-03. This page owns availability and unfinished acceptance.
+[Direction](direction.md) owns goals, [specifications](spec/) own semantics and
+[roadmap](roadmap.md) orders future language work.
 
-## Public binary
+## Public binary and accepted predecessor
 
-Immutable [v0.1.68](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.68) is
-public/latest. Exact accepted source: `a7c4222cc669088032689e6620a1082e91478597`.
-The [release notes](releases/v0.1.68.md) describe same-task owned calls and task
-methods, runtime mailbox custody, and lexical parallel tasks consuming owned inputs
-under fresh child identities. Both children join before ordinary results return.
-Bounded auxiliary workers use immediate acquisition and caller fallback; quotas
-remain invocation-wide. Pure helper loans, products, choices, exact offline packages,
-effects and explicit capability resources remain separate contracts.
+Immutable [v0.1.68](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.68) remains
+public/latest. Source `a7c4222cc669088032689e6620a1082e91478597`, producer
+37100969378/1 and promotion 37106215025/1 completed
+`immutable_published_and_public_verified`; release `402389568` and its three assets
+are unchanged. Original evidence remains in
+`.artifacts/20261003-owned-parallel-results/release-0168/`.
 
-Producer [37100969378](https://github.com/lkjsxc/lkjscript/actions/runs/37100969378),
-attempt 1, completed `candidate_accepted`: 20 fresh source gates, six target owners,
-two pinned userlands, 27 native public cases and installed recovery passed with
-joined cleanup. [Promotion 37106215025](https://github.com/lkjsxc/lkjscript/actions/runs/37106215025),
-attempt 1, controller `96e7bab0c230cc8c4f4ee116ce50a4a423197b47`, completed the mandatory
-`immutable_published_and_public_verified` terminal. GitHub release `402389568`
-is immutable/latest; all three public asset lengths and digests match the unchanged
-accepted assets. Annotated tag object `898b3de0e0ed20dd3f2b0461d63ffe863f8d248a`
-binds the exact source. No publication gate remains for this selection.
-
-Original authenticated receipts, assets and controls are retained under
-`.artifacts/20261003-owned-parallel-results/release-0168/`. The
-[prior mainline handoff](https://github.com/lkjsxc/lkjscript/blob/96e7bab0c230cc8c4f4ee116ce50a4a423197b47/docs/status.md)
-retains the fresh 26-gate source result, PR #6 integration, runtime-repair evidence
-and superseded producer 37046478616. The completed
-[v0.1.64 publication record](campaigns/20261002-owned-choices.md#completed-v0164-publication)
-and its immutable assets remain historical originals, not a current selection.
-
-## Development v0.1.69: owned parallel results
-
-The [parallel contract](spec/structured-parallel.md) now permits closed owned child
-results. Two ordinary results form the existing record; if either result is owned,
-`parallel` returns an OwnedProduct with exact `left` and `right` fields. The parent
-uses existing complete decomposition, borrowing and consumption. A sealed result
-custodian retains payloads through child-local cleanup and join; parent adoption
-retags nested owners without copying their payload allocations. Result-storage
-refusal, partial adoption, cancellation and sibling failure dispose of pending owners.
-
-The independent symbolic memory oracle now substitutes imported Owned signatures
-before flow checking. Separate exported/imported packages reproduce the predecessor's
-rejection of valid calls. New tests cover exact parallel result types, complete closure
-admission, allocation identity, joined cleanup and three-package public authorship.
-The [release notes](releases/v0.1.69.md) describe the compatibility boundary.
-
-Exact accepted source: `441995c5dc2e7e54a105afb50031239a1b2ed457`, tree
-`49205904b16a76abb3b89f7be0ffd2a709a5812d`. All 26 full-profile gates passed fresh,
-with stable inputs, zero reuse and no unrun gates. Original run:
+The owned-result predecessor v0.1.69 is already integrated and source-accepted at
+`441995c5dc2e7e54a105afb50031239a1b2ed457`, tree
+`49205904b16a76abb3b89f7be0ffd2a709a5812d`. Its fresh 26-gate receipt is
 `.artifacts/lkjscript-dev/check/1791015899556306767-2988954-0/receipt.json`, digest
 `verification_548993164a30211baec6804529e21357c98d491bf38ce1128ef1758522a9651a`.
-Remote main was fast-forwarded from `96e7bab0c230cc8c4f4ee116ce50a4a423197b47`
-to this exact source and independently verified through Git and the repository API.
-Later status-only reporting descendants do not relabel that source acceptance.
+The [previous status](https://github.com/lkjsxc/lkjscript/blob/86c27c5bd155d25f3b14bec84a42c783e406104e/docs/status.md)
+retains that exact source, tests, maintained inputs and original failed observations.
 
-Current originals: `.artifacts/20261003-owned-parallel-results/`, including the
-complete preserved `full-02-original/`. The retained development checkout is
-`/home/coder/workspace/lkjscript-structured-handoff-20261002`, branch
-`dev/owned-parallel-results-20261003`. Implementation, maintained artifacts,
-compatibility controls and mainline delivery are complete; final-byte release
-acceptance remains separate.
-The predecessor oracle failed all four imported regressions at the expected valid-call
-assertion. The successor passed six oracle tests, 40 parallel tests and 13 custody
-tests (overlapping selectors), including inferred wrapper depth and rehashed artifacts.
-All-feature workspace Clippy and generated-page verification passed.
+Original candidate [37110644675](https://github.com/lkjsxc/lkjscript/actions/runs/37110644675),
+attempt 1, has completed `candidate_accepted` for v0.1.69 with product and controller
+source both `441995c5dc2e7e54a105afb50031239a1b2ed457`. The exact final-archive
+acceptance includes 20 source gates, six target owners, two pinned userlands,
+installed recovery, the native public harness and joined cleanup. Current authenticated
+API observations and originals are retained in
+`.artifacts/20261003-closed-generic-parallel/release-0169/`. This is not publication:
+select the exact annotated tag and scoped authority, then promote these unchanged
+assets through [the release procedure](release.md). Do not dispatch another v0.1.69
+producer. Publication requires its own `immutable_published_and_public_verified` terminal.
 
-Public check/build regenerated the four maintained artifacts without changing their
-accepted HEADs or the exact standard transport. All 274 tests passed differentially.
-An isolated copy of 176 tracked inputs plus the four newly generated maintained packs
-also passed 274 tests with clean compilation: its 180 input files and 156 pack
-path/content records remained unchanged. Original evidence is in `cold-inputs/`.
-The separate-package public witness now passes all 16 complete payload, signed-cell
-and choice executions, including source-deleted artifacts and the exact edited
-canonical definition. Its exported buffer/cell APIs have distinct names. A repaired
-literal-editor traversal preserves every body owner through implementation and method
-calls; all 14 literal-edit tests pass, including metadata/arity substitution rejection.
-The same unchanged public harness failed before this repair and passed with the
-corrected host. Originals, 44 retained literal/artifact/input/result files and exact
-executable identities are indexed under `public-witness-03/`; earlier failures stay
-under `public-witness-01/` and `public-witness-02/`. The superseded verifier build
-was cancelled before completion and is not an acceptance claim.
-The failed first full run remains in `full-01-original/`; its stale current-envelope
-fixtures, successor contract expectations and maintained service pin were corrected
-before the accepted run. `fixture-regeneration-01/` retains the original readers'
-outputs and byte checks. Genuine predecessor bytes and semantic refusal assertions
-remain unchanged. The accepted run includes 1,195 library tests, 195 public CLI
-tests and 253 verifier tests, plus the other required gate owners; each suite's
-existing ignored cases remain explicitly recorded in its original output.
+## Development v0.1.70: closed generic parallel applications
 
-Candidate [37110644675](https://github.com/lkjsxc/lkjscript/actions/runs/37110644675),
-attempt 1, was dispatched once from main with product and controller source both
-`441995c5dc2e7e54a105afb50031239a1b2ed457`. At 08:44 UTC it was in progress at
-locked-dependency acquisition and immutable host-tool construction. The original
-repository/workflow/run/attempt/source observations and unchanged v0.1.68 publication
-selection are retained under `release-0169/`; `candidate-handoff.json` indexes them.
-No v0.1.69 final-candidate acceptance, tag selection or publication is claimed yet.
+The [parallel contract](spec/structured-parallel.md) permits exact concrete type and
+implementation arguments on either child. Ordinary generic data, owned primitive,
+product and choice transfers, generic implementation forwarding and owned results
+compose without a monomorphic wrapper. Two implementations with the same Self type
+retain distinct nominal identities. Argument and result custody bind the exact task
+instance, ordered actual types and both invocation identities; payload allocations
+are moved, not cloned. The independent reference evaluator reconstructs instantiated
+signatures and witness selection from canonical meaning.
 
-Remaining work is the external candidate's fresh source and finalized-byte acceptance.
-Read this exact attempt's original terminal and artifacts; do not dispatch a duplicate.
-After `candidate_accepted`, authenticate its finalized assets, select an annotated tag
-at the exact accepted source, and promote the unchanged assets through the maintained
-[release procedure](release.md). Completion requires
-`immutable_published_and_public_verified`, including anonymous installed execution
-and joined cleanup. Until then the public/latest selection remains v0.1.68.
+Focused source checks passed: 37 parallel tests, 14 sealed-custody/related tests and
+all three public native parallel scenarios. The generic public scenario creates
+three independent packages, round-trips and edits exact projected meaning, and
+executes complete byte payloads, signed-cell extremes and both owned-choice cases
+after deleting all source projects and transports. Tests include quota exact/N-1
+boundaries, cancellation, phantom-actual custody, same-Self witness substitution,
+rehashed artifact attacks and genuine compiler-20 rejection before decoding.
+These checks do not substitute for full-source or final-distribution acceptance.
 
-Preserve the older `.artifacts/20261002-structured-parallel/` and
-`.artifacts/20261003-structured-finalization/` evidence, other worktrees and stash.
-No running application or deployment is changed by this work.
+All four maintained native projects passed their 274 differential tests; generated
+artifacts and public discovery pages were refreshed through native owners. Accepted
+project HEADs and the standard source transport remain unchanged. A separate cold
+copy retains the complete reviewed input and pack inventory. Historical predecessor
+bytes remain unchanged; regenerated current controls retain original meaning and
+instructions under the current derived envelopes.
+
+Selected checkout: `/home/coder/workspace/lkjscript-structured-handoff-20261002`,
+branch `dev/closed-generic-parallel-20261003`. Evidence and retained failures are
+under `.artifacts/20261003-closed-generic-parallel/`. Next: freeze the reviewed
+implementation and run fresh dependency-complete `check full`; only an exact,
+input-stable 26-gate result authorizes mainline integration and a new v0.1.70
+candidate. No full acceptance, mainline delivery or public v0.1.70 binary is claimed
+by this pre-acceptance source record.
 
 ## Compatibility and remaining limits
 
-Graph 21 and authored request 25 retain their representation. Compiler 20,
-bytecode 16 and artifact 27 require rebuilding predecessor derived artifacts from
-accepted meaning. Semantic validator 25 renews acceptance; compact discovery 29,
-function projection 11 and CLI observations 35 retain their shape. Discover actual
-binary support with `lkjscript capabilities`; product-version components are opaque.
+Graph 21 and authored request 25 retain their representations. Compiler 21, bytecode
+17 and artifact 28 encode exact child applications; semantic validator 26 renews
+acceptance. Predecessor derived units require rebuilding from accepted meaning.
+Discover support through `lkjscript capabilities`; all product-number components
+remain opaque identifiers. Installation does not migrate operational data, update
+exact dependencies or replace running services.
 
-The accepted typed meaning graph remains the sole editable program authority.
-Installation does not update exact dependencies, migrate data or replace services.
-A missing response does not prove rollback or safe replay.
+Open caller type/witness parameters, capability-bearing children, task handles,
+channels and asynchronous borrowing remain separate language extensions. The next
+semantic boundary is a reusable generic function that itself forms child groups,
+with explicit transferable-type obligations rather than implicit capability capture.
+Worker counts and overlap are not speedup, fairness or hostile-code isolation claims.
+General traits/containers, field borrowing, region policies, graph/data reclamation,
+native-code/Wasm compilation and complete self-hosting remain future work.
 
-- Direct parallel children remain monomorphic empty-row graph tasks. General
-  channels, detached tasks, asynchronous borrowing and cross-instance transfer are open.
-- General traits, owned containers, partial moves, field borrows, mutable/escaping
-  references and region policies remain incomplete.
-- Shared hosting is not a hostile-code sandbox or dynamic supervisor. Worker counts
-  and overlap tests do not establish speedup, fairness or arbitrary scale.
-- Concurrent semantic publication, branch/merge history and graph/data reclamation
-  remain open. Dependencies are exact offline closures.
-- Native-code compilation, browser/Wasm and complete self-hosting are future work.
-  Rust remains the kernel/tooling implementation; Linux x86-64 musl is the binary target.
-- Durable transactions do not establish replication, consensus, encryption or
-  automatic migration. Modeled allocation is not RSS or allocator overhead.
+Preserve the prior owned-result and structured-parallel evidence, other worktrees,
+stash and immutable release history. No application deployment is changed here.

@@ -183,9 +183,16 @@ impl Oracle<'_> {
         Some((parameters, types))
     }
     pub(super) fn ordinary(&self, ty: TypeObjectDigest) -> bool {
+        self.ordinary_assuming(ty, BTreeSet::new())
+    }
+    pub(super) fn ordinary_assuming(
+        &self,
+        ty: TypeObjectDigest,
+        assumptions: BTreeSet<TypeParameterId>,
+    ) -> bool {
         // A nominal's formals stand for arbitrary ordinary types; its actuals
         // must independently prove that assumption, even when unused in fields.
-        let mut pending = vec![(ty, BTreeSet::new())];
+        let mut pending = vec![(ty, assumptions)];
         let mut seen = BTreeSet::new();
         while let Some((ty, bindings)) = pending.pop() {
             if !seen.insert((ty, bindings.clone())) {

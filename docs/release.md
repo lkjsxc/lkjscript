@@ -94,6 +94,12 @@ bytecode 16 and artifact 27 assets require their own source and candidate
 acceptance. The v0.1.68 producer remains a separate immutable selection and cannot
 serve as evidence for these successor bytes.
 
+Development v0.1.70 extends the same family with concrete generic child types and
+nominal implementation operands, including generic forwarding and whole owned
+aggregate returns across separate packages. Compiler 21, bytecode 17 and artifact
+28 require fresh source and finalized-byte acceptance for these changes; neither
+v0.1.68 nor v0.1.69 evidence is relabelled as v0.1.70 proof.
+
 The canonical manifest discriminator is `format: "lkjscript-release-content-1"`. It binds the product
 version/intended tag, exact product commit, repository, target/build policy and command, pinned Rust
 and Cargo, lockfile, static ELF executable, license/notices and deterministic packaging. It contains

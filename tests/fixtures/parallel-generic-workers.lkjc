@@ -1,0 +1,28 @@
+declarations.begin
+(units
+  (module create generic-workers
+    (function create transfer (visibility public) (effect (task))
+      (type-parameter create T (constraint owned))
+      (parameter create value (type T) (use consume)) (returns T)
+      (body (local value)))
+    (function create keep-list (visibility public) (effect (task))
+      (type-parameter create Item)
+      (parameter create values (type (list Item))) (returns (list Item))
+      (body (local values)))
+    (function create transform (visibility public) (effect (task))
+      (type-parameter create T (constraint owned))
+      (implementation-parameter implparam_92000000000000000000000000000001 ops abstraction::Storage T)
+      (parameter create n (type I64))
+      (parameter create value (type T) (use consume)) (returns T)
+      (body (implementation-call abstraction::transform (types T)
+        (implementations parameter@transform@implparam_92000000000000000000000000000001)
+        (local n) (local value))))
+    (function create forward (visibility public) (effect (task))
+      (type-parameter create T (constraint owned))
+      (implementation-parameter implparam_92000000000000000000000000000002 ops abstraction::Storage T)
+      (parameter create n (type I64))
+      (parameter create value (type T) (use consume)) (returns T)
+      (body (implementation-call transform (types T)
+        (implementations parameter@forward@implparam_92000000000000000000000000000002)
+        (local n) (local value))))))
+declarations.end

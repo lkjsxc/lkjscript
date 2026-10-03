@@ -74,8 +74,27 @@ fn expected(n: i64, accepted: bool) -> NormalizedValue {
 
 #[test]
 fn parallel_owned_results_compose_primitives_mixed_pairs_nested_groups_and_choices() {
+    exercise_results(composed_source());
+}
+
+#[test]
+fn parallel_generic_owned_aggregates_preserve_payloads_and_allocation_identity() {
+    let source = byte_buffer_tests::author_only(
+        &[
+            include_str!("../../../../tests/fixtures/owned-witness-library.lkjc"),
+            include_str!("../../../../tests/fixtures/parallel-result-library.lkjc"),
+            include_str!("../../../../tests/fixtures/parallel-result-workers.lkjc"),
+            include_str!("../../../../tests/fixtures/parallel-generic-workers.lkjc"),
+            include_str!("../../../../tests/fixtures/parallel-generic-consumer.lkjc"),
+        ]
+        .join("\n"),
+    )
+    .unwrap();
+    exercise_results(source);
+}
+
+fn exercise_results(source: crate::platform::kernel::KernelSnapshot) {
     let _lane = super::super::super::parallel::isolated_test_lane();
-    let source = composed_source();
     assert!(crate::platform::kernel::memory_reference::accepts(&source));
     let program = prepare_snapshot(&source);
     let entry = declaration_named(&source, "main");

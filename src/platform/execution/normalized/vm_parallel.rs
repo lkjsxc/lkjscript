@@ -46,29 +46,33 @@ impl Machine<'_> {
 
     pub(super) fn parallel(
         &mut self,
-        left: FunctionIndex,
+        left: (FunctionIndex, Arc<[TypeObjectDigest]>),
         left_values: Vec<CheckedValue>,
-        right: FunctionIndex,
+        right: (FunctionIndex, Arc<[TypeObjectDigest]>),
         right_values: Vec<CheckedValue>,
         result_type: TypeObjectDigest,
     ) -> Result<CheckedValue, ExecutionError> {
         self.admit_task_call(&[])?;
-        let left_index = left;
-        let right_index = right;
-        let left_type = self
-            .program
-            .functions
-            .get(left.0 as usize)
-            .filter(|_| left.1 == self.program.value_origin)
-            .ok_or_else(|| type_error("missing structured left child"))?
-            .result;
-        let right_type = self
-            .program
-            .functions
-            .get(right.0 as usize)
-            .filter(|_| right.1 == self.program.value_origin)
-            .ok_or_else(|| type_error("missing structured right child"))?
-            .result;
+        let left_index = left.0;
+        let right_index = right.0;
+        let left_types = Arc::clone(&left.1);
+        let right_types = Arc::clone(&right.1);
+        let left = transfer::TaskApplication::bind(
+            self.program,
+            left.0,
+            left.1,
+            self.control,
+            &mut |bytes| self.charge_allocation(bytes),
+        )?;
+        let right = transfer::TaskApplication::bind(
+            self.program,
+            right.0,
+            right.1,
+            self.control,
+            &mut |bytes| self.charge_allocation(bytes),
+        )?;
+        let left_type = left.result();
+        let right_type = right.result();
         let owned = !self.program.comparable_types.contains(&left_type)
             || !self.program.comparable_types.contains(&right_type);
         let fields = match self.program.types.get(&result_type).map(|ty| &ty.form) {
@@ -133,7 +137,7 @@ impl Machine<'_> {
         let program = self.program;
         let control = self.control;
         let source = self.memory_domain;
-        let left = transfer::TransferArguments::seal(
+        let left = transfer::TransferArguments::seal_applied(
             program,
             source,
             left_domain,
@@ -145,7 +149,7 @@ impl Machine<'_> {
             control,
             &mut |raw, ty| self.inspect_transfer_data(raw, ty),
         )?;
-        let right = transfer::TransferArguments::seal(
+        let right = transfer::TransferArguments::seal_applied(
             program,
             source,
             right_domain,
@@ -184,9 +188,17 @@ impl Machine<'_> {
         if owned {
             self.charge_collection(2, std::mem::size_of::<NormalizedValue>())?;
             self.charge_allocation(super::super::owned_product::OwnedProduct::ALLOCATION_BYTES)?;
-            let left = left.adopt(program, source, left_index, left_type, control)?;
+            let left =
+                left.adopt_applied(program, source, left_index, &left_types, left_type, control)?;
             let left = self.product_child(left, left_type)?;
-            let right = right.adopt(program, source, right_index, right_type, control)?;
+            let right = right.adopt_applied(
+                program,
+                source,
+                right_index,
+                &right_types,
+                right_type,
+                control,
+            )?;
             let right = self.product_child(right, right_type)?;
             // The complete wrapper storage was reserved before either adoption.
             let token = super::super::owned_product::OwnedProduct::create(
@@ -202,9 +214,17 @@ impl Machine<'_> {
         self.charge_allocation(9)?;
         let left_name = Name::new("left").map_err(|_| type_error("invalid structured field"))?;
         let right_name = Name::new("right").map_err(|_| type_error("invalid structured field"))?;
-        let left = left.adopt(program, source, left_index, left_type, control)?;
+        let left =
+            left.adopt_applied(program, source, left_index, &left_types, left_type, control)?;
         let left = self.admit(left, left_type, None, true)?;
-        let right = right.adopt(program, source, right_index, right_type, control)?;
+        let right = right.adopt_applied(
+            program,
+            source,
+            right_index,
+            &right_types,
+            right_type,
+            control,
+        )?;
         let right = self.admit(right, right_type, None, true)?;
         CheckedValue::record(
             program,
@@ -266,7 +286,8 @@ fn child(
         },
     };
     let result = (|| {
-        let (function, values) = envelope.adopt(program, memory_domain, control)?;
+        let (application, values) = envelope.adopt_applied(program, memory_domain, control)?;
+        let function = application.function();
         let parameters = &program
             .functions
             .get(function.0 as usize)
@@ -280,25 +301,24 @@ fn child(
         let arguments = values
             .into_iter()
             .zip(parameters.iter())
-            .map(|(value, parameter)| {
+            .enumerate()
+            .map(|(index, (value, _parameter))| {
                 if value.memory_form().is_some() {
                     CheckedValue::memory(program, value)
                 } else {
-                    machine.admit(value, parameter.ty, None, true)
+                    machine.admit(value, application.parameter(program, index)?, None, true)
                 }
             })
             .collect::<Result<Vec<_>, _>>()?;
         #[cfg(test)]
         ChildProbe::enter(program.value_origin, memory_domain)?;
-        machine.call(function, Arc::from([]), arguments)?;
+        machine.call(function, Arc::clone(application.types()), arguments)?;
         let value = finish_admitted(&mut machine)?;
-        let result_type = program.functions[function.0 as usize].result;
-        transfer::TransferResult::seal(
+        transfer::TransferResult::seal_applied(
             program,
             memory_domain,
             parent_domain,
-            function,
-            result_type,
+            application,
             value.into_raw(),
             control,
             &mut |raw, ty| machine.inspect_transfer_data(raw, ty),

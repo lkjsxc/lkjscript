@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-20";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 20;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-16";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 16;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN20";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v20";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v20";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-21";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 21;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-17";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 17;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN21";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v21";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v21";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -90,6 +90,8 @@ impl CompilationUnitKey {
             "lkjscript.compiler-unit-key.v18"
         } else if compiler_contract_version == 19 {
             "lkjscript.compiler-unit-key.v19"
+        } else if compiler_contract_version == 20 {
+            "lkjscript.compiler-unit-key.v20"
         } else {
             COMPILER_UNIT_KEY_DOMAIN
         });
@@ -425,6 +427,10 @@ pub enum CompiledInstruction {
         cases: Vec<CompiledOwnedChoiceJump>,
     },
     Parallel {
+        left_types: Vec<u32>,
+        left_implementations: Vec<crate::platform::kernel::ImplementationOperand>,
+        right_types: Vec<u32>,
+        right_implementations: Vec<crate::platform::kernel::ImplementationOperand>,
         left: u32,
         left_arguments: u32,
         right: u32,
@@ -524,7 +530,7 @@ impl CompilationUnit {
                 "compiler-unit bytes disagree with their exact object-domain digest",
             ));
         }
-        // Derived generations 10–19 require a rebuild from supported canonical owners.
+        // Derived generations 10–20 require a rebuild from supported canonical owners.
         // Refuse before decoding; old bytes never acquire current instruction meaning.
         if [
             b"LKJCUN10",
@@ -537,6 +543,7 @@ impl CompilationUnit {
             b"LKJCUN17",
             b"LKJCUN18",
             b"LKJCUN19",
+            b"LKJCUN20",
         ]
         .iter()
         .any(|magic| bytes.starts_with(*magic))
@@ -572,7 +579,7 @@ impl CompilationUnit {
                 self.bytecode_contract_version,
                 self.graph_contract_version
             ),
-            (20, 16, 21)
+            (21, 17, 21)
         ) {
             return Err(unit_error(
                 DiagnosticClass::Source,
@@ -1407,12 +1414,25 @@ impl CompiledInstruction {
                 require_runtime_count("method arguments", *arguments)
             }
             Self::Parallel {
+                left_types,
+                left_implementations,
+                right_types,
+                right_implementations,
                 left,
                 left_arguments,
                 right,
                 right_arguments,
                 result_type,
             } => {
+                for types in [left_types, right_types] {
+                    require_item_count("parallel types", types.len(), true)?;
+                    for ty in types {
+                        require_index("parallel type", *ty, tables.types.len())?;
+                    }
+                }
+                for operands in [left_implementations, right_implementations] {
+                    require_item_count("parallel witnesses", operands.len(), true)?;
+                }
                 require_index("left parallel task", *left, tables.declarations.len())?;
                 require_index("right parallel task", *right, tables.declarations.len())?;
                 require_index("parallel result type", *result_type, tables.types.len())?;

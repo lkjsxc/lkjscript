@@ -1,6 +1,5 @@
 //! Sealed custody between fresh invocations of one prepared program.
 //! This physical boundary is shared by evaluators; ordinary shape admission is not.
-
 use super::super::prepare::NormalizedProgram;
 use super::super::value::{
     FunctionIndex, MAXIMUM_ADMISSION_ITEMS, NormalizedValue, ValueOrigin, release_raw_values,
@@ -8,19 +7,21 @@ use super::super::value::{
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::kernel::{FunctionEffect, ParameterUse, TypeForm, TypeObjectDigest};
 
-/// No Clone, payload projection, or unchecked constructor. While this exists,
-/// neither invocation possesses its argument owners.
+#[path = "vm_transfer_application.rs"]
+mod application;
+pub(in super::super) use application::TaskApplication;
+
+/// No Clone, payload projection or unchecked constructor. Pending custody owns
+/// both the exact application and every argument, including partial adoptions.
 pub(in super::super) struct TransferArguments {
     program: ValueOrigin,
     source: ValueOrigin,
     destination: ValueOrigin,
-    function: FunctionIndex,
+    application: Option<TaskApplication>,
     values: Option<Vec<NormalizedValue>>,
 }
-
 impl TransferArguments {
-    /// The caller already owns and charged the argument vector. This read-only
-    /// traversal allocates no storage; ordinary admission reserves its own scratch.
+    #[cfg(test)]
     pub(in super::super) fn seal(
         program: &NormalizedProgram,
         source: ValueOrigin,
@@ -30,34 +31,55 @@ impl TransferArguments {
         control: &ExecutionControl,
         ordinary: &mut impl FnMut(&NormalizedValue, TypeObjectDigest) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
+        let application = match TaskApplication::bind(
+            program,
+            function,
+            std::sync::Arc::from([]),
+            control,
+            &mut |_| Ok(()),
+        ) {
+            Ok(application) => application,
+            Err(error) => {
+                release_raw_values(values);
+                return Err(error);
+            }
+        };
+        Self::seal_applied(
+            program,
+            source,
+            destination,
+            application,
+            values,
+            control,
+            ordinary,
+        )
+    }
+
+    pub(in super::super) fn seal_applied(
+        program: &NormalizedProgram,
+        source: ValueOrigin,
+        destination: ValueOrigin,
+        application: TaskApplication,
+        values: Vec<NormalizedValue>,
+        control: &ExecutionControl,
+        ordinary: &mut impl FnMut(&NormalizedValue, TypeObjectDigest) -> Result<(), ExecutionError>,
+    ) -> Result<Self, ExecutionError> {
         let transfer = Self {
             program: program.value_origin,
             source,
             destination,
-            function,
+            application: Some(application),
             values: Some(values),
         };
+        let application = transfer.application.as_ref().ok_or_else(reject)?;
         control.check()?;
-        if source == destination || function.1 != program.value_origin {
+        if source == destination || application.function().1 != program.value_origin {
             return Err(reject());
         }
         let selected = program
             .functions
-            .get(function.0 as usize)
+            .get(application.function().0 as usize)
             .ok_or_else(reject)?;
-        let empty_task = matches!(&selected.effect,
-            FunctionEffect::Task { requirements, effect_parameters }
-                if requirements.is_empty() && effect_parameters.is_empty());
-        if !selected.graph_function
-            || !empty_task
-            || !selected.task_requirements.is_empty()
-            || !selected.type_parameters.is_empty()
-            || !selected.effect_parameters.is_empty()
-            || !selected.requirement_parameters.is_empty()
-            || !selected.implementation_parameters.is_empty()
-        {
-            return Err(reject());
-        }
         let arguments = transfer.values.as_ref().ok_or_else(reject)?;
         if arguments.len() != selected.parameters.len()
             || arguments.len() != selected.parameter_count as usize
@@ -65,13 +87,16 @@ impl TransferArguments {
             return Err(reject());
         }
         let mut work = Work { control, nodes: 0 };
-        validate_type(program, selected.result, 0, &mut work)?;
+        validate_type(program, application.result(), 0, &mut work)?;
         let mut seen_owned = false;
-        for (argument, parameter) in arguments.iter().zip(selected.parameters.iter()) {
+        for (index, (argument, parameter)) in
+            arguments.iter().zip(selected.parameters.iter()).enumerate()
+        {
+            let ty = application.parameter(program, index)?;
             if parameter.resource_requirement.is_some() {
                 return Err(reject());
             }
-            let memory = validate_type(program, parameter.ty, 0, &mut work)?;
+            let memory = validate_type(program, ty, 0, &mut work)?;
             if seen_owned && !memory {
                 return Err(reject());
             }
@@ -85,31 +110,32 @@ impl TransferArguments {
             {
                 return Err(reject());
             }
-            inspect_value(
-                program,
-                argument,
-                parameter.ty,
-                source,
-                0,
-                &mut work,
-                ordinary,
-            )?;
+            inspect_value(program, argument, ty, source, 0, &mut work, ordinary)?;
         }
         control.check()?;
         Ok(transfer)
     }
 
-    /// Acceptance is already irrevocable. If cancellation interrupts adoption,
-    /// this custodian destroys every argument, including partially retagged ones.
+    #[cfg(test)]
     pub(in super::super) fn adopt(
-        mut self,
+        self,
         program: &NormalizedProgram,
         destination: ValueOrigin,
         control: &ExecutionControl,
     ) -> Result<(FunctionIndex, Vec<NormalizedValue>), ExecutionError> {
+        self.adopt_applied(program, destination, control)
+            .map(|(a, values)| (a.function(), values))
+    }
+
+    pub(in super::super) fn adopt_applied(
+        mut self,
+        program: &NormalizedProgram,
+        destination: ValueOrigin,
+        control: &ExecutionControl,
+    ) -> Result<(TaskApplication, Vec<NormalizedValue>), ExecutionError> {
         control.check()?;
         if self.program != program.value_origin
-            || self.function.1 != program.value_origin
+            || self.application.as_ref().ok_or_else(reject)?.function().1 != program.value_origin
             || self.destination != destination
         {
             return Err(reject());
@@ -119,10 +145,12 @@ impl TransferArguments {
             adopt_value(value, self.source, destination, 0, &mut work)?;
         }
         control.check()?;
-        Ok((self.function, self.values.take().ok_or_else(reject)?))
+        Ok((
+            self.application.take().ok_or_else(reject)?,
+            self.values.take().ok_or_else(reject)?,
+        ))
     }
 }
-
 impl Drop for TransferArguments {
     fn drop(&mut self) {
         if let Some(values) = self.values.take() {
@@ -131,21 +159,21 @@ impl Drop for TransferArguments {
     }
 }
 
-/// Sole custody of one child result between joined invocation domains. Result
-/// custody is established before child cleanup and consumed only by its parent.
+/// Return custody retains the exact instantiated task, not just its declaration.
+/// No child-local cleanup can dispose of the value while this custodian holds it.
 pub(in super::super) struct TransferResult {
     program: ValueOrigin,
     source: ValueOrigin,
     destination: ValueOrigin,
-    function: FunctionIndex,
+    application: TaskApplication,
     ty: TypeObjectDigest,
     value: Option<NormalizedValue>,
 }
-
 impl TransferResult {
+    #[cfg(test)]
     #[allow(
         clippy::too_many_arguments,
-        reason = "sealing binds program, child, result type and both invocation domains explicitly"
+        reason = "negative controls retain explicit monomorphic identity"
     )]
     pub(in super::super) fn seal(
         program: &NormalizedProgram,
@@ -157,40 +185,61 @@ impl TransferResult {
         control: &ExecutionControl,
         ordinary: &mut impl FnMut(&NormalizedValue, TypeObjectDigest) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
+        let application = match TaskApplication::bind(
+            program,
+            function,
+            std::sync::Arc::from([]),
+            control,
+            &mut |_| Ok(()),
+        ) {
+            Ok(application) if application.result() == ty => application,
+            Ok(_) => {
+                super::super::value::release_raw_value(value);
+                return Err(reject());
+            }
+            Err(error) => {
+                super::super::value::release_raw_value(value);
+                return Err(error);
+            }
+        };
+        Self::seal_applied(
+            program,
+            source,
+            destination,
+            application,
+            value,
+            control,
+            ordinary,
+        )
+    }
+
+    pub(in super::super) fn seal_applied(
+        program: &NormalizedProgram,
+        source: ValueOrigin,
+        destination: ValueOrigin,
+        application: TaskApplication,
+        value: NormalizedValue,
+        control: &ExecutionControl,
+        ordinary: &mut impl FnMut(&NormalizedValue, TypeObjectDigest) -> Result<(), ExecutionError>,
+    ) -> Result<Self, ExecutionError> {
         let transfer = Self {
             program: program.value_origin,
             source,
             destination,
-            function,
-            ty,
+            ty: application.result(),
+            application,
             value: Some(value),
         };
         control.check()?;
-        if source == destination || function.1 != program.value_origin {
-            return Err(reject());
-        }
-        let selected = program
-            .functions
-            .get(function.0 as usize)
-            .ok_or_else(reject)?;
-        if !selected.graph_function
-            || selected.result != ty
-            || !matches!(&selected.effect, FunctionEffect::Task { requirements, effect_parameters }
-                if requirements.is_empty() && effect_parameters.is_empty())
-            || !selected.task_requirements.is_empty()
-            || !selected.type_parameters.is_empty()
-            || !selected.effect_parameters.is_empty()
-            || !selected.requirement_parameters.is_empty()
-            || !selected.implementation_parameters.is_empty()
-        {
+        if source == destination || transfer.application.function().1 != program.value_origin {
             return Err(reject());
         }
         let mut work = Work { control, nodes: 0 };
-        validate_type(program, ty, 0, &mut work)?;
+        validate_type(program, transfer.ty, 0, &mut work)?;
         inspect_value(
             program,
             transfer.value.as_ref().ok_or_else(reject)?,
-            ty,
+            transfer.ty,
             source,
             0,
             &mut work,
@@ -200,21 +249,36 @@ impl TransferResult {
         Ok(transfer)
     }
 
+    #[cfg(test)]
     pub(in super::super) fn adopt(
-        mut self,
+        self,
         program: &NormalizedProgram,
         destination: ValueOrigin,
         function: FunctionIndex,
         ty: TypeObjectDigest,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
+        self.adopt_applied(program, destination, function, &[], ty, control)
+    }
+
+    pub(in super::super) fn adopt_applied(
+        mut self,
+        program: &NormalizedProgram,
+        destination: ValueOrigin,
+        function: FunctionIndex,
+        types: &[TypeObjectDigest],
+        ty: TypeObjectDigest,
+        control: &ExecutionControl,
+    ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
         if self.program != program.value_origin
-            || self.function != function
+            || self.application.function() != function
             || function.1 != program.value_origin
             || self.destination != destination
             || self.ty != ty
-            || program.functions.get(function.0 as usize).map(|f| f.result) != Some(ty)
+            || self.application.types().as_ref() != types
+            || self.application.result() != ty
+            || !self.application.matches(program)
         {
             return Err(reject());
         }
@@ -230,7 +294,6 @@ impl TransferResult {
         self.value.take().ok_or_else(reject)
     }
 }
-
 impl Drop for TransferResult {
     fn drop(&mut self) {
         if let Some(value) = self.value.take() {

@@ -25,7 +25,7 @@ continue through the same public executable.
 Promotion [37106215025/1](https://github.com/lkjsxc/lkjscript/actions/runs/37106215025)
 completed immutable publication and anonymous installed verification with unchanged
 accepted assets. [Current status](docs/status.md) separates that public release from
-development 0.1.69 [owned parallel results](docs/spec/structured-parallel.md).
+development 0.1.70 [closed generic parallel tasks](docs/spec/structured-parallel.md).
 
 Product versions are **opaque `A.B.C` identifiers**. All three components have the
 same role: none denotes compatibility, stability, change size or a feature milestone.

@@ -380,3 +380,6 @@ fn parallel_failure_keeps_original_trap_and_cancellation_joins_all_owners() {
         assert_eq!(buffers.live(), (0, 0));
     }
 }
+
+#[path = "parallel_generic_tests.rs"]
+mod generic;

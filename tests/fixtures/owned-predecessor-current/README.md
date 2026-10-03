@@ -4,7 +4,7 @@ These three fixtures are derived controls, not republished official artifacts.
 Their unchanged originals and provenance remain under `../requirement-predecessor/`,
 `../transaction-outcome-predecessor/` and `../cell-participation-predecessor/`.
 
-Current derivation uses compiler 20 / bytecode 16 / artifact 27 and requires
+Current derivation uses compiler 21 / bytecode 17 / artifact 28 and requires
 rebuilding predecessor compiler units. Original canonical source generations
 remain unchanged; Graph 21 is the compiler's current meaning contract. The offline
 workflow therefore distinguishes exact original format refusal from execution of
@@ -54,15 +54,15 @@ An initial generation can fail retained-byte comparison until the new files are
 installed; that failure is not acceptance. No original fixture may be overwritten.
 
 The current envelopes were regenerated on 2026-10-03 with the supported test owner
-from source `c2e61f5a52e06a9b43bcfa0af93c06cd8b56f646`. Every regenerated control passed
+for the closed-generic parallel successor. Every regenerated control passed
 strict artifact admission and its exact original source-transport probe before the
 retained-byte comparison.
 
 | Current control | SHA-256 |
 | --- | --- |
-| `requirements.lkja` | `15df668e2854953079aeb322e43a2e0ca273fbfd7312c62325480d3f0d0fb34b` |
-| `transactions.lkja` | `90b4708181cd0803bca3d18ea8e03abce7383f25495ff5e5c65ce1123779ea95` |
-| `participation.lkja` | `c0dbda2cf141603b8896c75b7160d0bce3ce5cb29c2238b63fd485c8a0dcec17` |
+| `requirements.lkja` | `098c4a63a52081795b6d53f4569e526946ba78a25717dfc3a4de4a1e630cd49a` |
+| `transactions.lkja` | `1221178c2496d6d661f09790b0a3df35358c3c849ff46c5eee6eb6b43ab2e170` |
+| `participation.lkja` | `e4be104386f505eb1b477b1acabb513d6d756706fe0517243caa5093a24d358e` |
 
 The execution and receipt owners require original and current material separately.
 Omitting either, substituting an otherwise valid control, changing the selected

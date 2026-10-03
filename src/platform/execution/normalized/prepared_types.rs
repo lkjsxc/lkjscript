@@ -868,6 +868,24 @@ fn calls(
             }
             types.entry(ty).or_insert(object);
         }
+        if let NormalizedInstruction::Parallel {
+            left,
+            left_types,
+            right,
+            right_types,
+            ..
+        } = instruction
+        {
+            for (function, types_actual) in [(left, left_types), (right, right_types)] {
+                work.reserve::<TypeObjectDigest>(types_actual.len())?;
+                let arguments = types_actual
+                    .iter()
+                    .map(|ty| substitute(types, *ty, bindings, 0, work))
+                    .collect::<Result<Vec<_>, _>>()?;
+                work.node::<Context>()?;
+                pending.insert((*function, arguments));
+            }
+        }
         if let NormalizedInstruction::Call {
             function,
             type_arguments,

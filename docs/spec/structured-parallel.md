@@ -1,13 +1,15 @@
 # Structured parallel tasks
 
-Status: normative for development 0.1.69. Current acceptance and publication state
+Status: normative for development 0.1.70. Current acceptance and publication state
 belong to [status](../status.md).
 
 ## Meaning and admission
 
 `Parallel(left, right)` is an expression in the accepted meaning graph. Both children
-are direct named calls to graph-defined, monomorphic tasks with closed empty effect
-rows. Native authoring spells this `(parallel (call LEFT ...) (call RIGHT ...))`.
+are direct named applications of graph-defined tasks with closed empty effect
+rows. Native authoring spells this `(parallel LEFT-CALL RIGHT-CALL)`. Each child
+uses `call` with exact concrete type arguments, or `implementation-call` with exact
+concrete type and implementation arguments; a monomorphic call is the empty application.
 The enclosing computation must be a task, even though neither child has an external
 effect. A pure computation cannot acquire task authority through an empty row.
 
@@ -16,9 +18,12 @@ owned values. Each region may be empty. Owned inputs can be ByteBuffer, OwnedI64
 or concrete nested owned products and choices. Every nested case and ordinary type
 argument is checked, including unused choice cases and phantom nominal arguments.
 Memory loans, capability resources, secrets, callables and unresolved generic
-parameters cannot cross this boundary. The direct child declaration has no type,
-effect, requirement or implementation parameters. Its body may call ordinary generic
-libraries and select exact static implementation witnesses under the existing rules.
+parameters cannot cross this boundary. A child may declare type and implementation
+parameters, but the boundary supplies their exact complete concrete application.
+Even a phantom actual type must independently satisfy closed data or Owned admission.
+Symbolic caller types and implementation-parameter operands remain rejected here.
+A child has no effect or requirement parameters. Its body may forward its admitted
+types and exact witnesses through generic libraries under the existing rules.
 An external declaration or dynamic callable is not a child-task identity.
 
 Each result must be closed ordinary data or a closed ByteBuffer, OwnedI64Cell,
@@ -44,7 +49,10 @@ failure behavior. Child effects are empty; no adapter or deployment grant is inh
 
 Each child has a fresh invocation memory identity and resource scope. A private
 nonduplicable transfer envelope validates the exact prepared program, target task,
-source identity, destination identity, type closure and absence of active loans.
+ordered concrete type arguments, source identity, destination identity, type closure
+and absence of active loans. The prepared function instance also binds the ordered
+nominal implementation references; equal Self types do not make two implementations
+interchangeable.
 The envelope is the sole custodian between parent and child. Destination adoption
 updates every nested owned identity without cloning its live token or copying its
 payload allocation. Existing immutable ordinary metadata may retain its sharing.
@@ -52,7 +60,7 @@ Raw host ingress still rejects owners and cannot construct a transfer certificat
 
 A separate nonduplicable result envelope owns each returned carrier between child
 local cleanup and parent adoption. It validates the exact prepared program, child
-task, canonical result type, child source identity, parent destination identity and
+task application, instantiated canonical result type, child source identity, parent destination identity and
 absence of active loans. A child may return an input owner or newly allocated owned
 storage; neither path copies its payload. Both child results must succeed, and the
 parent must reserve the result carrier's modeled storage, before result adoption
@@ -91,7 +99,9 @@ An optional cumulative instruction, allocation or collection quota belongs to th
 whole invocation. The first group seeds a shared ledger with prior parent usage;
 all children and subsequent parent execution continue charging that ledger. A nested
 group cannot reset fuel or gain another allocation allowance. Charges precede modeled
-growth and are not refunded after cleanup. Call-depth policy includes active ancestor
+growth and are not refunded after cleanup. Generic substitution scratch and retained
+concrete child signatures are charged before allocation. The non-generic path needs
+no substitution map or concrete-signature vector. Call-depth policy includes active ancestor
 frames, and structured nesting has an independent finite native-stack bound.
 Cancellation and deadlines use the invocation control throughout the group. Ordinary
 trusted execution retains its existing unmetered cumulative-work default.
@@ -106,17 +116,19 @@ reconstructs canonical control, so retargeting or erasing a compiled parallel
 instruction cannot be authorized by recomputing hashes.
 
 Graph 21 adds the expression and preserves supported historical meaning readers.
-Compiler 20, bytecode 16 and artifact 27 carry an explicit parallel-result type
-reference, which strict loaders independently reconstruct from canonical child
-signatures. Semantic validator 25 admits closed owned results and invalidates older
-derived proofs. Earlier derived artifacts must be rebuilt from retained accepted
+Compiler 21, bytecode 17 and artifact 28 carry explicit child type and implementation
+operands alongside the parallel-result type. Strict loaders reconstruct these from
+canonical child applications, including unused declarations and untaken branches.
+Semantic validator 26 admits these closed generic applications and invalidates older
+derived proofs. Compiler-unit 20 and earlier are rejected before instruction decoding;
+old operand bytes cannot be reinterpreted as a current application. Earlier derived artifacts must be rebuilt from retained accepted
 meaning. Authored request 25, compact discovery 29, function projection 11 and CLI
 observations 35 retain their existing forms.
 Existing nonparallel authored intent retains its bytes. This does not upgrade exact
 package selections, replace running services or publish a new public executable.
 
 Acceptance separates canonical and independent semantic checks, rehashed-artifact
-attacks including forged result types, nested allocation identity through both
+attacks including forged result types and substituted child types or witnesses, nested allocation identity through both
 directions and cleanup tests, controlled real-child overlap, aggregate quotas, and
 copied-executable native cross-package computation with complete returned payloads. Each proves
 a different boundary; none alone establishes all concurrency properties.

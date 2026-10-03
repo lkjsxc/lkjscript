@@ -415,63 +415,110 @@ impl Oracle<'_> {
         };
         Some(&e.operation)
     }
-    fn parallel_child(&self, id: ExpressionId) -> Option<bool> {
-        let ExpressionOperation::Call {
-            function,
-            arguments,
-            type_arguments,
-            requirement_arguments,
-            effect_arguments,
-        } = self.expression(id)?
-        else {
+    fn parallel_shape(
+        &self,
+        ty: TypeObjectDigest,
+        bindings: &BTreeMap<crate::platform::semantic_id::TypeParameterId, TypeObjectDigest>,
+        depth: usize,
+        remaining: &mut usize,
+    ) -> Option<bool> {
+        if depth > contract::MAXIMUM_TYPE_DEPTH {
             return None;
+        }
+        *remaining = remaining.checked_sub(1)?;
+        let closed = Oracle(self.0, None);
+        match self.form(ty)? {
+            TypeForm::TypeParameter { parameter } => {
+                let actual = *bindings.get(parameter)?;
+                if closed.owned_type_in_scope(actual) {
+                    Some(true)
+                } else {
+                    closed.ordinary(actual).then_some(false)
+                }
+            }
+            TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Some(true),
+            TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
+                for field in fields {
+                    self.parallel_shape(field.ty, bindings, depth + 1, remaining)?;
+                }
+                Some(true)
+            }
+            _ => {
+                let ordinary = bindings
+                    .iter()
+                    .filter_map(|(p, ty)| closed.ordinary(*ty).then_some(*p))
+                    .collect();
+                closed.ordinary_assuming(ty, ordinary).then_some(false)
+            }
+        }
+    }
+    fn parallel_child(&self, id: ExpressionId) -> Option<bool> {
+        let (function, arguments, types, implementations) = match self.expression(id)? {
+            ExpressionOperation::Call {
+                function,
+                arguments,
+                type_arguments,
+                requirement_arguments,
+                effect_arguments,
+            } if requirement_arguments.is_empty() && effect_arguments.is_empty() => {
+                (*function, arguments, type_arguments, &[][..])
+            }
+            ExpressionOperation::ImplementationCall {
+                function,
+                arguments,
+                type_arguments,
+                implementations,
+            } => (
+                *function,
+                arguments,
+                type_arguments,
+                implementations.as_slice(),
+            ),
+            _ => return None,
         };
-        let signature = self.function(*function)?;
-        if !type_arguments.is_empty()
-            || !requirement_arguments.is_empty()
-            || !effect_arguments.is_empty()
-            || !signature.type_parameters.is_empty()
+        let signature = self.function(function)?;
+        let closed = Oracle(self.0, None);
+        if !self.application(function, types)
+            || !self.witnesses(function, types, implementations)
+            || types
+                .iter()
+                .any(|ty| !closed.ordinary(*ty) && !closed.owned_type_in_scope(*ty))
+            || implementations
+                .iter()
+                .any(|i| !matches!(i, ImplementationOperand::Concrete { .. }))
             || !signature.requirement_parameters.is_empty()
             || !signature.effect_parameters.is_empty()
-            || !signature.implementation_parameters.is_empty()
-            || !matches!(&signature.effect, FunctionEffect::Task { requirements, effect_parameters }
-                if requirements.is_empty() && effect_parameters.is_empty())
+            || !matches!(&signature.effect, FunctionEffect::Task { requirements, effect_parameters } if requirements.is_empty() && effect_parameters.is_empty())
             || signature.parameters.len() != arguments.len()
         {
             return None;
         }
-        let result_owned = Oracle(self.0, None).owned_type_in_scope(signature.result);
-        if !result_owned && !self.ordinary(signature.result) {
-            return None;
-        }
+        let bindings = signature
+            .type_parameters
+            .into_iter()
+            .zip(types.iter().copied())
+            .collect();
+        let mut remaining = contract::MAXIMUM_VALIDATION_WORK;
+        let result = self.parallel_shape(signature.result, &bindings, 0, &mut remaining)?;
         let mut owned = false;
         for id in signature.parameters {
             let p = self.parameter(function.package, id)?;
+            let memory = self.parallel_shape(p.ty, &bindings, 0, &mut remaining)?;
             if p.parent != ParameterParent::Function(function.declaration)
                 || p.resource_requirement.is_some()
+                || (owned && !memory)
+                || p.use_mode
+                    != if memory {
+                        ParameterUse::Consume
+                    } else {
+                        ParameterUse::Unrestricted
+                    }
             {
                 return None;
             }
-            if matches!(
-                self.form(p.ty),
-                Some(
-                    TypeForm::ByteBuffer
-                        | TypeForm::OwnedI64Cell
-                        | TypeForm::OwnedProduct { .. }
-                        | TypeForm::OwnedChoice { .. }
-                )
-            ) {
-                if p.use_mode != ParameterUse::Consume
-                    || !Oracle(self.0, None).owned_type_in_scope(p.ty)
-                {
-                    return None;
-                }
-                owned = true;
-            } else if owned || p.use_mode != ParameterUse::Unrestricted || !self.ordinary(p.ty) {
-                return None;
-            }
+            owned |= memory;
         }
-        Some(result_owned)
+        Some(result)
     }
     fn arguments(
         &self,

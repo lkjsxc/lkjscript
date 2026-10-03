@@ -239,9 +239,13 @@ struct UnitBuilder<'a, B: ?Sized> {
     work: CompilationWork,
 }
 
+#[path = "parallel_lower.rs"]
+mod parallel_lower;
+
 /// Exact point reads needed for expression lowering. Artifact admission supplies these from its
 /// independently admitted canonical closure, without a repository or a producer's witness.
 pub(super) trait CodeRead {
+    fn code_dependency(&self, package: PackageId) -> Result<CanonicalRead<bool>, Diagnostic>;
     fn code_step(&self) -> Result<(), Diagnostic> {
         Ok(())
     }
@@ -259,6 +263,13 @@ pub(super) trait CodeRead {
 }
 
 impl<B: CanonicalBaseRead + ?Sized> CodeRead for B {
+    fn code_dependency(&self, package: PackageId) -> Result<CanonicalRead<bool>, Diagnostic> {
+        let r = self.read_dependency(package)?;
+        Ok(CanonicalRead {
+            value: r.value.is_some(),
+            work: r.work,
+        })
+    }
     fn code_owner(
         &self,
         owner: OwnerKey,
@@ -333,7 +344,9 @@ pub(super) fn reconstruct_parallel_result_types<B: CanonicalBaseRead + ?Sized>(
             })?;
             let CompiledInstruction::Parallel {
                 left,
+                left_types,
                 right,
+                right_types,
                 result_type,
                 ..
             } = instruction
@@ -352,8 +365,21 @@ pub(super) fn reconstruct_parallel_result_types<B: CanonicalBaseRead + ?Sized>(
                         )
                     })
             };
-            let left = builder.parallel_function_result(target(*left)?)?;
-            let right = builder.parallel_function_result(target(*right)?)?;
+            let types = |indexes: &[u32]| {
+                indexes
+                    .iter()
+                    .map(|i| {
+                        unit.tables.types.get(*i as usize).copied().ok_or_else(|| {
+                            compiler_corrupt(
+                                "compiler_parallel_type",
+                                "missing child type relocation",
+                            )
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            };
+            let left = builder.parallel_function_result(target(*left)?, &types(left_types)?)?;
+            let right = builder.parallel_function_result(target(*right)?, &types(right_types)?)?;
             let expected = builder.parallel_result_type(left, right)?;
             if unit.tables.types.get(*result_type as usize)
                 != builder.tables.types.values.get(expected as usize)
@@ -1393,34 +1419,6 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
             .is_some_and(|object| matches!(object.form, TypeForm::CapabilityResource { .. })))
     }
 
-    fn parallel_function_result(
-        &mut self,
-        function: DeclarationReference,
-    ) -> Result<TypeObjectDigest, Diagnostic> {
-        if function.package == self.package {
-            if let OwnerRecord::Declaration(record) = self.required_owner(
-                OwnerKey::Declaration(function.declaration),
-                "parallel child function is missing",
-            )? && let DeclarationPayload::Function(signature) = record.payload
-            {
-                return Ok(signature.result);
-            }
-        } else if let PackageInterfaceRecord::Declaration(record) = self
-            .exact_package_interface_owner(
-                function.package,
-                OwnerKey::Declaration(function.declaration),
-            )?
-            && let crate::platform::kernel::PackageInterfaceDeclarationPayload::Function(signature) =
-                record.payload
-        {
-            return Ok(signature.result);
-        }
-        Err(compiler_corrupt(
-            "compiler_parallel_function",
-            "parallel child must name an exact graph function",
-        ))
-    }
-
     /// Reconstruct the pair from canonical child signatures. Strict loading calls this
     /// independently too, so a rehashed table operand cannot select another result type.
     fn parallel_result_type(
@@ -1431,11 +1429,7 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
         let mut owned = false;
         for ty in [left, right] {
             self.canonical.code_step()?;
-            let read = self.canonical.code_type(ty)?;
-            self.work.canonical.add(read.work);
-            let object = read.value.ok_or_else(|| {
-                compiler_corrupt("compiler_parallel_result_type", "missing child result type")
-            })?;
+            let object = self.parallel_type(ty)?;
             owned |= matches!(
                 object.form,
                 TypeForm::ByteBuffer
@@ -1604,33 +1598,43 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         &mut self,
         expression: ExpressionId,
         depth: usize,
-    ) -> Result<(u32, u32, TypeObjectDigest), Diagnostic> {
+    ) -> Result<parallel_lower::Child, Diagnostic> {
         let operation = self.begin_expression(expression, depth)?;
         let result = (|| {
-            let ExpressionOperation::Call {
-                function,
-                arguments,
-                type_arguments,
-                effect_arguments,
-                requirement_arguments,
-            } = operation
-            else {
-                return Err(compiler_corrupt(
-                    "compiler_parallel_call",
-                    "parallel child must be a direct named call",
-                ));
+            let (function, arguments, type_arguments, implementations) = match operation {
+                ExpressionOperation::Call {
+                    function,
+                    arguments,
+                    type_arguments,
+                    effect_arguments,
+                    requirement_arguments,
+                } if effect_arguments.is_empty() && requirement_arguments.is_empty() => {
+                    (function, arguments, type_arguments, Vec::new())
+                }
+                ExpressionOperation::ImplementationCall {
+                    function,
+                    arguments,
+                    type_arguments,
+                    implementations,
+                } => (function, arguments, type_arguments, implementations),
+                _ => {
+                    return Err(compiler_corrupt(
+                        "compiler_parallel_call",
+                        "parallel child must be a closed named call",
+                    ));
+                }
             };
-            if !type_arguments.is_empty()
-                || !effect_arguments.is_empty()
-                || !requirement_arguments.is_empty()
-            {
-                return Err(compiler_corrupt(
-                    "compiler_parallel_call",
-                    "parallel child must be monomorphic",
-                ));
-            }
             let uses = self.unit.function_parameter_uses(function)?;
-            let result = self.unit.parallel_function_result(function)?;
+            let result = self
+                .unit
+                .parallel_function_result(function, &type_arguments)?;
+            let types = type_arguments
+                .into_iter()
+                .map(|ty| self.unit.tables.ty(ty))
+                .collect::<Result<Vec<_>, _>>()?;
+            for operand in &implementations {
+                self.unit.implementation_operand(*operand)?;
+            }
             if uses.len() != arguments.len() {
                 return Err(compiler_corrupt(
                     "compiler_parallel_call",
@@ -1642,7 +1646,13 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
             for (argument, use_mode) in arguments.into_iter().zip(uses) {
                 self.expression_with_use(argument, depth + 1, use_mode)?;
             }
-            Ok((function, count, result))
+            Ok(parallel_lower::Child {
+                function,
+                arguments: count,
+                result,
+                types,
+                implementations,
+            })
         })();
         self.active.remove(&expression);
         result
@@ -1656,14 +1666,18 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
     ) -> Result<(), Diagnostic> {
         match operation {
             ExpressionOperation::Parallel { left, right } => {
-                let (left, left_arguments, left_result) = self.parallel_call(left, depth)?;
-                let (right, right_arguments, right_result) = self.parallel_call(right, depth)?;
-                let result_type = self.unit.parallel_result_type(left_result, right_result)?;
+                let left = self.parallel_call(left, depth)?;
+                let right = self.parallel_call(right, depth)?;
+                let result_type = self.unit.parallel_result_type(left.result, right.result)?;
                 self.push(CompiledInstruction::Parallel {
-                    left,
-                    left_arguments,
-                    right,
-                    right_arguments,
+                    left: left.function,
+                    left_arguments: left.arguments,
+                    left_types: left.types,
+                    left_implementations: left.implementations,
+                    right: right.function,
+                    right_arguments: right.arguments,
+                    right_types: right.types,
+                    right_implementations: right.implementations,
                     result_type,
                 })?;
             }

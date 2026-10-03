@@ -4165,8 +4165,14 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "kernel_parallel_call",
             DiagnosticClass::Semantic,
-            "A structured child is not an exact monomorphic empty-effect graph task with transferable input and closed ordinary or owned output.",
-            "Use direct named task calls with ordinary data first and consuming owned arguments last; keep resources, loans, secrets and callables outside the child boundary.",
+            "A structured child is not an exact closed empty-effect graph task application with transferable input and closed ordinary or owned output.",
+            "Use direct named task calls with concrete type and implementation arguments, ordinary data first and consuming owned arguments last; keep resources, loans, secrets and callables outside the child boundary.",
+        ),
+        diagnostic(
+            "kernel_parallel_types",
+            DiagnosticClass::Resource,
+            "A closed child signature exceeds finite type-derivation capacity.",
+            "Reduce nested signature depth or distinct instantiated types; capacity exhaustion is not a semantic rejection.",
         ),
         diagnostic(
             "kernel_parallel_context",
@@ -4183,7 +4189,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "compiler_parallel_call",
             DiagnosticClass::Corrupt,
-            "Canonical structured children disagree with direct monomorphic call lowering.",
+            "Canonical structured children disagree with exact closed task-application lowering.",
             "Preserve the rejected input and rebuild from fully validated accepted meaning.",
         ),
         diagnostic(
@@ -4191,6 +4197,12 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Corrupt,
             "A canonical structured child result type is absent during lowering.",
             "Preserve the rejected input and rebuild from fully validated accepted meaning.",
+        ),
+        diagnostic(
+            "compiler_parallel_type",
+            DiagnosticClass::Corrupt,
+            "A structured child application contains a missing type relocation.",
+            "Preserve the rejected artifact and rebuild from fully validated accepted meaning.",
         ),
         diagnostic(
             "compiler_parallel_function",
@@ -4455,6 +4467,12 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Resource,
             "Structured argument storage exceeds finite representable admission.",
             "Reduce the exact child argument list; no partially admitted child can begin.",
+        ),
+        diagnostic(
+            "normalized_parallel_application",
+            DiagnosticClass::Resource,
+            "An exact child application's signature storage exceeds finite representable admission.",
+            "Reduce the type application or child signature; no child can start before complete charged admission.",
         ),
         diagnostic(
             "normalized_parallel_spawn",
@@ -8505,8 +8523,8 @@ fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String
         ),
         (
             "structured-parallel-tasks",
-            "(parallel (call LEFT-TASK EXPR...) (call RIGHT-TASK EXPR...))",
-            "task-only lexical scope; direct monomorphic graph tasks with closed empty effect rows; closed data parameters before consuming owned parameters; evaluate left then right arguments once in the parent, transfer exact owned custody to fresh child invocations, join both children before returning fields left and right; two ordinary results form a record, otherwise closed owned results transfer back into an owned product consumed with unpack-owned; no borrowed inputs or results, capabilities, detached lifetime or child quota reset",
+            "(parallel LEFT-CALL RIGHT-CALL) ; each child is call or implementation-call with closed applications",
+            "task-only lexical scope; direct graph tasks with closed empty effect rows and explicit concrete type and implementation arguments; closed data parameters before consuming owned parameters; evaluate left then right arguments once in the parent, transfer exact owned custody to fresh child invocations, join both children before returning fields left and right; two ordinary results form a record, otherwise closed owned results transfer back into an owned product consumed with unpack-owned; no borrowed inputs or results, capabilities, detached lifetime or child quota reset",
         ),
         (
             "normalization",

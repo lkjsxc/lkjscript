@@ -79,6 +79,10 @@ impl Read<'_> {
 }
 
 impl CodeRead for Read<'_> {
+    fn code_dependency(&self, package: PackageId) -> Result<CanonicalRead<bool>, Diagnostic> {
+        self.observed(|| self.interfaces.contains_key(&package))
+    }
+
     fn code_step(&self) -> Result<(), Diagnostic> {
         self.reserve(1)
     }

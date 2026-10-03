@@ -732,12 +732,19 @@ impl Machine<'_> {
             };
             match instruction {
                 NormalizedInstruction::Parallel {
+                    left_types,
+                    left_implementations,
+                    right_types,
+                    right_implementations,
                     left,
                     left_arguments,
                     right,
                     right_arguments,
                     result_type,
                 } => {
+                    if !left_implementations.is_empty() || !right_implementations.is_empty() {
+                        return Err(type_error("unclosed parallel implementation application"));
+                    }
                     self.charge_allocation(super::value::collection_storage_bytes(
                         u64::from(left_arguments) + u64::from(right_arguments),
                         std::mem::size_of::<CheckedValue>() as u64,
@@ -745,8 +752,13 @@ impl Machine<'_> {
                     )?)?;
                     let right_values = self.pop_many(right_arguments as usize)?;
                     let left_values = self.pop_many(left_arguments as usize)?;
-                    let value =
-                        self.parallel(left, left_values, right, right_values, result_type)?;
+                    let value = self.parallel(
+                        (left, left_types),
+                        left_values,
+                        (right, right_types),
+                        right_values,
+                        result_type,
+                    )?;
                     self.push(value)?;
                 }
                 NormalizedInstruction::ImplementationCall { .. }

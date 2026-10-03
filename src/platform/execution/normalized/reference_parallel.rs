@@ -2,13 +2,24 @@
 use super::super::{
     parallel,
     shared_budget::SharedBudget,
-    vm::transfer::{TransferArguments, TransferResult},
+    vm::transfer::{TaskApplication, TransferArguments, TransferResult},
 };
 use super::*;
 
 struct ChildOutcome {
     result: Result<TransferResult, ExecutionError>,
     observation: NormalizedReferenceObservation,
+}
+
+struct CanonicalTask {
+    declaration: DeclarationReference,
+    types: Arc<[TypeObjectDigest]>,
+    implementations: Vec<DeclarationReference>,
+}
+struct CanonicalParallelCall {
+    task: CanonicalTask,
+    arguments: Vec<ExpressionId>,
+    signature: ReferenceSignature,
 }
 
 impl ReferenceState<'_> {
@@ -86,72 +97,135 @@ impl ReferenceState<'_> {
     fn parallel_call(
         &mut self,
         expression: ExpressionId,
-    ) -> Result<(DeclarationReference, Vec<ExpressionId>, ReferenceSignature), ExecutionError> {
-        let ExpressionOperation::Call {
-            function,
-            type_arguments,
-            effect_arguments,
-            requirement_arguments,
-            arguments,
-        } = self.read_expression(expression)?
-        else {
-            return Err(reference_type_error(
-                "parallel branches require direct named calls",
-            ));
-        };
-        if !type_arguments.is_empty()
-            || !effect_arguments.is_empty()
-            || !requirement_arguments.is_empty()
-        {
-            return Err(reference_type_error(
-                "parallel branches require monomorphic calls",
-            ));
-        }
-        if !matches!(
-            self.declaration(function)?.payload,
-            DeclarationPayload::Function(_)
-        ) {
+    ) -> Result<CanonicalParallelCall, ExecutionError> {
+        let (function, types, implementations, arguments) =
+            match self.read_expression(expression)? {
+                ExpressionOperation::Call {
+                    function,
+                    type_arguments,
+                    effect_arguments,
+                    requirement_arguments,
+                    arguments,
+                } if effect_arguments.is_empty() && requirement_arguments.is_empty() => {
+                    (function, type_arguments, Vec::new(), arguments)
+                }
+                ExpressionOperation::ImplementationCall {
+                    function,
+                    type_arguments,
+                    implementations,
+                    arguments,
+                } => (function, type_arguments, implementations, arguments),
+                _ => {
+                    return Err(reference_type_error(
+                        "parallel branches require closed direct named calls",
+                    ));
+                }
+            };
+        let DeclarationPayload::Function(declaration) = self.declaration(function)?.payload else {
             return Err(reference_type_error(
                 "parallel branch must be a canonical graph function",
             ));
-        }
-        let signature = self.function_signature(function)?;
+        };
+        let mut signature = self.function_signature(function)?;
         if !matches!(&signature.effect, FunctionEffect::Task { requirements, effect_parameters } if requirements.is_empty() && effect_parameters.is_empty())
-            || !signature.type_parameters.is_empty()
             || !signature.effect_parameters.is_empty()
             || !signature.requirement_parameters.is_empty()
-            || signature.has_implementations
             || signature.parameters.len() != arguments.len()
+            || signature.type_parameters.len() != types.len()
+            || declaration.implementation_parameters.len() != implementations.len()
         {
             return Err(reference_type_error(
-                "parallel child requires an exact empty-row task",
+                "parallel child requires an exact closed empty-row task",
             ));
+        }
+        self.charge_allocation(super::super::value::collection_storage_bytes(
+            types.len() as u64,
+            (std::mem::size_of::<(TypeParameterId, TypeObjectDigest)>()
+                + 3 * std::mem::size_of::<usize>()) as u64,
+            "normalized_parallel_application",
+        )?)?;
+        let mut bindings = BTreeMap::new();
+        for ((parameter, ty), constraint) in signature
+            .type_parameters
+            .iter()
+            .zip(&types)
+            .zip(&signature.type_parameter_constraints)
+        {
+            let memory = self.parallel_transfer_type(*ty, 0, &mut 0)?;
+            if memory != (*constraint == crate::platform::kernel::TypeParameterConstraints::Owned)
+                || (*constraint == crate::platform::kernel::TypeParameterConstraints::CaptureSafe
+                    && !self.schema.capture_safe_types.contains(ty))
+                || bindings.insert(*parameter, *ty).is_some()
+            {
+                return Err(reference_type_error(
+                    "parallel child type arguments violate exact canonical constraints",
+                ));
+            }
+        }
+        self.charge_allocation(
+            (implementations.len() * std::mem::size_of::<DeclarationReference>()) as u64,
+        )?;
+        let mut selected = Vec::with_capacity(implementations.len());
+        for operand in implementations {
+            let crate::platform::kernel::ImplementationOperand::Concrete { implementation } =
+                operand
+            else {
+                return Err(reference_type_error(
+                    "parallel requires concrete child implementation operands",
+                ));
+            };
+            selected.push(implementation);
+        }
+        self.implementation_bindings(&declaration, &bindings, &selected)?;
+        if !bindings.is_empty() {
+            signature.result = self
+                .schema
+                .substitute_type(signature.result, &bindings, 0)
+                .ok_or_else(|| reference_type_error("missing concrete child result"))?;
         }
         self.parallel_transfer_type(signature.result, 0, &mut 0)?;
         let mut seen_owned = false;
-        for parameter in &signature.parameters {
-            let memory =
-                direct_memory_type(&self.schema, parameter.ty, &BTreeMap::new())?.is_some();
+        for parameter in &mut signature.parameters {
+            self.control.check()?;
+            if !bindings.is_empty() {
+                parameter.ty = self
+                    .schema
+                    .substitute_type(parameter.ty, &bindings, 0)
+                    .ok_or_else(|| reference_type_error("missing concrete child parameter"))?;
+            }
+            let memory = self.parallel_transfer_type(parameter.ty, 0, &mut 0)?;
             if seen_owned && !memory {
                 return Err(reference_type_error(
                     "parallel owned parameters must form the final suffix",
                 ));
             }
             seen_owned |= memory;
-            if parameter.resource_requirement.is_some()
-                || if memory {
-                    parameter.use_mode != crate::platform::kernel::ParameterUse::Consume
-                } else {
-                    parameter.use_mode != crate::platform::kernel::ParameterUse::Unrestricted
-                        || !self.schema.comparable_types.contains(&parameter.ty)
-                }
+            if parameter.parent
+                != crate::platform::kernel::ParameterParent::Function(function.declaration)
+                || parameter.resource_requirement.is_some()
+                || parameter.use_mode
+                    != if memory {
+                        crate::platform::kernel::ParameterUse::Consume
+                    } else {
+                        crate::platform::kernel::ParameterUse::Unrestricted
+                    }
             {
                 return Err(reference_type_error(
                     "parallel child parameters require closed data or consumed owners",
                 ));
             }
         }
-        Ok((function, arguments, signature))
+        // Vec-to-Arc conversion has its own metadata storage; payloads stay untouched.
+        self.charge_allocation((types.len() * std::mem::size_of::<TypeObjectDigest>()) as u64)?;
+        Ok(CanonicalParallelCall {
+            task: CanonicalTask {
+                declaration: function,
+                types: types.into(),
+                implementations: selected,
+            },
+            arguments,
+            signature,
+        })
     }
 
     fn inspect_transfer_data(
@@ -170,46 +244,67 @@ impl ReferenceState<'_> {
     }
 
     fn parallel_destination(
-        &self,
-        declaration: DeclarationReference,
+        &mut self,
+        task: &CanonicalTask,
         signature: &ReferenceSignature,
     ) -> Result<super::super::value::FunctionIndex, ExecutionError> {
+        // Selection is by the exact canonical implementation references, never by
+        // an incidental numeric instance order or by compatible Self alone.
         let offset = self
             .program
             .functions
             .iter()
             .position(|f| {
-                f.declaration == declaration
-                    && f.type_parameters.is_empty()
-                    && f.implementation_parameters.is_empty()
+                f.declaration == task.declaration
+                    && f.type_parameters.as_ref() == signature.type_parameters.as_slice()
+                    && f.implementation_arguments.len() == task.implementations.len()
+                    && f.implementation_arguments
+                        .iter()
+                        .map(|(reference, _)| reference)
+                        .eq(task.implementations.iter())
             })
             .ok_or_else(|| {
-                reference_type_error("canonical child has no exact prepared identity")
+                reference_type_error("canonical child has no exact prepared application")
             })?;
         let index = super::super::value::FunctionIndex(
             u32::try_from(offset)
                 .map_err(|_| reference_type_error("prepared child index overflow"))?,
             self.program.value_origin,
         );
-        let selected = self
-            .program
-            .functions
-            .get(index.0 as usize)
-            .ok_or_else(|| reference_type_error("missing prepared child"))?;
-        if selected.result != signature.result
+        self.charge_allocation(super::super::value::collection_storage_bytes(
+            task.types.len() as u64,
+            (std::mem::size_of::<(TypeParameterId, TypeObjectDigest)>()
+                + 3 * std::mem::size_of::<usize>()) as u64,
+            "normalized_parallel_application",
+        )?)?;
+        let bindings: BTreeMap<_, _> = signature
+            .type_parameters
+            .iter()
+            .copied()
+            .zip(task.types.iter().copied())
+            .collect();
+        let substitute = |ty| {
+            if bindings.is_empty() {
+                Some(ty)
+            } else {
+                self.schema.substitute_type(ty, &bindings, 0)
+            }
+        };
+        let selected = &self.program.functions[offset];
+        if substitute(selected.result) != Some(signature.result)
             || selected.parameters.len() != signature.parameters.len()
             || selected
                 .parameters
                 .iter()
                 .zip(&signature.parameters)
                 .any(|(prepared, canonical)| {
-                    prepared.ty != canonical.ty
+                    substitute(prepared.ty) != Some(canonical.ty)
                         || prepared.use_mode != canonical.use_mode
                         || prepared.resource_requirement.is_some()
                 })
         {
             return Err(reference_type_error(
-                "physical child admission disagrees with its canonical signature",
+                "physical child admission disagrees with its canonical instantiated signature",
             ));
         }
         Ok(index)
@@ -237,8 +332,18 @@ impl ReferenceState<'_> {
                 "structured evaluator nesting exceeds its live-stack capacity",
             ));
         }
-        let (left_function, left_args, left_signature) = self.parallel_call(left)?;
-        let (right_function, right_args, right_signature) = self.parallel_call(right)?;
+        let CanonicalParallelCall {
+            task: left_task,
+            arguments: left_args,
+            signature: left_signature,
+        } = self.parallel_call(left)?;
+        let CanonicalParallelCall {
+            task: right_task,
+            arguments: right_args,
+            signature: right_signature,
+        } = self.parallel_call(right)?;
+        let left_types = Arc::clone(&left_task.types);
+        let right_types = Arc::clone(&right_task.types);
         let left_type = left_signature.result;
         let right_type = right_signature.result;
         let owned = self.parallel_transfer_type(left_type, 0, &mut 0)?
@@ -313,22 +418,36 @@ impl ReferenceState<'_> {
         let program = self.program;
         let control = self.control;
         let source = self.memory_domain;
-        let left_index = self.parallel_destination(left_function, &left_signature)?;
-        let right_index = self.parallel_destination(right_function, &right_signature)?;
-        let left = TransferArguments::seal(
+        let left_index = self.parallel_destination(&left_task, &left_signature)?;
+        let right_index = self.parallel_destination(&right_task, &right_signature)?;
+        let left_application = TaskApplication::bind(
+            program,
+            left_index,
+            Arc::clone(&left_types),
+            control,
+            &mut |bytes| self.charge_allocation(bytes),
+        )?;
+        let right_application = TaskApplication::bind(
+            program,
+            right_index,
+            Arc::clone(&right_types),
+            control,
+            &mut |bytes| self.charge_allocation(bytes),
+        )?;
+        let left = TransferArguments::seal_applied(
             program,
             source,
             left_domain,
-            left_index,
+            left_application,
             left_values.into_iter().map(CheckedValue::release).collect(),
             control,
             &mut |raw, ty| self.inspect_transfer_data(raw, ty),
         )?;
-        let right = TransferArguments::seal(
+        let right = TransferArguments::seal_applied(
             program,
             source,
             right_domain,
-            right_index,
+            right_application,
             right_values
                 .into_iter()
                 .map(CheckedValue::release)
@@ -336,8 +455,8 @@ impl ReferenceState<'_> {
             control,
             &mut |raw, ty| self.inspect_transfer_data(raw, ty),
         )?;
-        let left = self.run_child(Arc::clone(&budget), left_domain, left_function, left);
-        let right = self.run_child(budget, right_domain, right_function, right);
+        let left = self.run_child(Arc::clone(&budget), left_domain, left_task, left);
+        let right = self.run_child(budget, right_domain, right_task, right);
         self.observation.include_child(&left.observation);
         self.observation.include_child(&right.observation);
         let (left, right) = parallel::results(left.result, right.result)?;
@@ -345,9 +464,17 @@ impl ReferenceState<'_> {
         if owned {
             self.charge_items(2, std::mem::size_of::<NormalizedValue>())?;
             self.charge_allocation(super::super::owned_product::OwnedProduct::ALLOCATION_BYTES)?;
-            let left = left.adopt(program, source, left_index, left_type, control)?;
+            let left =
+                left.adopt_applied(program, source, left_index, &left_types, left_type, control)?;
             let left = self.product_child(left, left_type)?;
-            let right = right.adopt(program, source, right_index, right_type, control)?;
+            let right = right.adopt_applied(
+                program,
+                source,
+                right_index,
+                &right_types,
+                right_type,
+                control,
+            )?;
             let right = self.product_child(right, right_type)?;
             // The complete wrapper storage was reserved before either adoption.
             let token = super::super::owned_product::OwnedProduct::create(
@@ -365,9 +492,17 @@ impl ReferenceState<'_> {
             Name::new("left").map_err(|_| reference_type_error("invalid structured field"))?;
         let right_name =
             Name::new("right").map_err(|_| reference_type_error("invalid structured field"))?;
-        let left = left.adopt(program, source, left_index, left_type, control)?;
+        let left =
+            left.adopt_applied(program, source, left_index, &left_types, left_type, control)?;
         let left = self.admit_raw(left, left_type, &BTreeMap::new(), None, true)?;
-        let right = right.adopt(program, source, right_index, right_type, control)?;
+        let right = right.adopt_applied(
+            program,
+            source,
+            right_index,
+            &right_types,
+            right_type,
+            control,
+        )?;
         let right = self.admit_raw(right, right_type, &BTreeMap::new(), None, true)?;
         self.record_value(None, vec![(left_name, left), (right_name, right)])
     }
@@ -376,9 +511,10 @@ impl ReferenceState<'_> {
         &self,
         budget: Arc<SharedBudget>,
         memory_domain: super::super::value::ValueOrigin,
-        declaration: DeclarationReference,
+        task: CanonicalTask,
         envelope: TransferArguments,
     ) -> ChildOutcome {
+        let declaration = task.declaration;
         let resources = match NormalizedResourceScope::new() {
             Ok(resources) => resources,
             Err(error) => {
@@ -423,7 +559,14 @@ impl ReferenceState<'_> {
             },
         };
         let result = (|| {
-            let (index, values) = envelope.adopt(self.program, memory_domain, self.control)?;
+            let (application, values) =
+                envelope.adopt_applied(self.program, memory_domain, self.control)?;
+            let index = application.function();
+            if application.types().as_ref() != task.types.as_ref() {
+                return Err(reference_type_error(
+                    "structured child type application changed in transit",
+                ));
+            }
             if self
                 .program
                 .functions
@@ -436,7 +579,18 @@ impl ReferenceState<'_> {
                 ));
             }
             let signature = state.function_signature(declaration)?;
-            let result_type = signature.result;
+            state.charge_allocation(super::super::value::collection_storage_bytes(
+                task.types.len() as u64,
+                (std::mem::size_of::<(TypeParameterId, TypeObjectDigest)>()
+                    + 3 * std::mem::size_of::<usize>()) as u64,
+                "normalized_parallel_application",
+            )?)?;
+            let bindings: BTreeMap<_, _> = signature
+                .type_parameters
+                .iter()
+                .copied()
+                .zip(task.types.iter().copied())
+                .collect();
             state.charge_allocation(super::super::value::collection_storage_bytes(
                 values.len() as u64,
                 std::mem::size_of::<CheckedValue>() as u64,
@@ -449,17 +603,30 @@ impl ReferenceState<'_> {
                     if value.memory_form().is_some() {
                         CheckedValue::memory(&state.schema, value)
                     } else {
-                        state.admit_raw(value, parameter.ty, &BTreeMap::new(), None, true)
+                        state.admit_raw(value, parameter.ty, &bindings, None, true)
                     }
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            let value = state.call_declaration(declaration, &[], &[], &[], arguments)?;
-            TransferResult::seal(
+            let DeclarationPayload::Function(function) = state.declaration(declaration)?.payload
+            else {
+                return Err(reference_type_error("missing canonical child task"));
+            };
+            let admitted = state.admit_graph_call_with_implementations(
+                declaration,
+                function,
+                arguments,
+                ReferenceApplication {
+                    types: &task.types,
+                    implementations: &task.implementations,
+                    ..Default::default()
+                },
+            )?;
+            let value = state.execute_witness_call(admitted)?;
+            TransferResult::seal_applied(
                 self.program,
                 memory_domain,
                 self.memory_domain,
-                index,
-                result_type,
+                application,
                 value.release(),
                 self.control,
                 &mut |raw, ty| state.inspect_transfer_data(raw, ty),

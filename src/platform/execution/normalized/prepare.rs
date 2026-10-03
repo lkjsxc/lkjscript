@@ -90,6 +90,10 @@ pub struct NormalizedCode {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NormalizedInstruction {
     Parallel {
+        left_types: Arc<[TypeObjectDigest]>,
+        left_implementations: Arc<[crate::platform::kernel::ImplementationOperand]>,
+        right_types: Arc<[TypeObjectDigest]>,
+        right_implementations: Arc<[crate::platform::kernel::ImplementationOperand]>,
         left: FunctionIndex,
         left_arguments: u32,
         right: FunctionIndex,
@@ -2721,6 +2725,10 @@ fn translate_code(
                 arguments: *arguments,
             },
             CompiledInstruction::Parallel {
+                left_types,
+                left_implementations,
+                right_types,
+                right_implementations,
                 left,
                 left_arguments,
                 right,
@@ -2730,6 +2738,18 @@ fn translate_code(
                 let left = index_copy(&unit.tables.declarations, *left, "left parallel task")?;
                 let right = index_copy(&unit.tables.declarations, *right, "right parallel task")?;
                 NormalizedInstruction::Parallel {
+                    left_types: left_types
+                        .iter()
+                        .map(|ty| index_copy(&unit.tables.types, *ty, "parallel left type"))
+                        .collect::<Result<Vec<_>, _>>()?
+                        .into(),
+                    right_types: right_types
+                        .iter()
+                        .map(|ty| index_copy(&unit.tables.types, *ty, "parallel right type"))
+                        .collect::<Result<Vec<_>, _>>()?
+                        .into(),
+                    left_implementations: left_implementations.clone().into(),
+                    right_implementations: right_implementations.clone().into(),
                     left: required_index(&indexes.functions, left, "left parallel task")?,
                     left_arguments: *left_arguments,
                     right: required_index(&indexes.functions, right, "right parallel task")?,

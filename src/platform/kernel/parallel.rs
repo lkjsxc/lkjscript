@@ -11,7 +11,7 @@ pub(crate) struct ParallelCall {
     pub result_owned: bool,
 }
 
-fn reject(message: impl Into<String>) -> Diagnostic {
+pub(super) fn reject(message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Semantic, "kernel_parallel_call", message)
 }
 
@@ -26,79 +26,100 @@ pub(crate) fn admit_call(
     else {
         return Err(reject("parallel child expression is absent"));
     };
-    let ExpressionOperation::Call {
-        function,
-        arguments,
-        type_arguments,
-        effect_arguments,
-        requirement_arguments,
-    } = record.operation
-    else {
-        return Err(reject("parallel children require direct named task calls"));
-    };
-    if !type_arguments.is_empty()
-        || !effect_arguments.is_empty()
-        || !requirement_arguments.is_empty()
-    {
-        return Err(reject("parallel children require monomorphic task calls"));
-    }
-    read.validation_work()?;
-    let key = OwnerKey::Declaration(function.declaration);
-    let signature = if function.package == read.package_id() {
-        let Some(OwnerRecord::Declaration(record)) = read.owner(key)? else {
-            return Err(reject("parallel child function is absent"));
-        };
-        let DeclarationPayload::Function(f) = record.payload else {
-            return Err(reject("parallel child must name a graph function"));
-        };
-        PackageFunctionSignature {
-            implementation_parameters: f.implementation_parameters,
-            requirement_parameters: f.requirement_parameters,
-            effect_parameters: f.effect_parameters,
-            type_parameters: f.type_parameters,
-            parameters: f.parameters,
-            result: f.result,
-            effect: f.effect,
+    let (function, arguments, type_arguments, implementations) = match record.operation {
+        ExpressionOperation::Call {
+            function,
+            arguments,
+            type_arguments,
+            effect_arguments,
+            requirement_arguments,
+        } if effect_arguments.is_empty() && requirement_arguments.is_empty() => {
+            (function, arguments, type_arguments, Vec::new())
         }
-    } else {
-        if !read.has_dependency(function.package)? {
-            return Err(reject("parallel child belongs to no exact dependency"));
-        }
-        let Some(PackageInterfaceRecord::Declaration(record)) =
-            read.package_interface_owner(function.package, key)?
-        else {
-            return Err(reject("parallel child function interface is absent"));
-        };
-        let PackageInterfaceDeclarationPayload::Function(f) = record.payload else {
+        ExpressionOperation::ImplementationCall {
+            function,
+            arguments,
+            type_arguments,
+            implementations,
+        } => (function, arguments, type_arguments, implementations),
+        _ => {
             return Err(reject(
-                "parallel child must name an imported graph function",
+                "parallel children require direct named calls with closed applications",
             ));
-        };
-        f
+        }
     };
-    if !signature.type_parameters.is_empty()
-        || !signature.implementation_parameters.is_empty()
-        || !signature.requirement_parameters.is_empty()
+    let signature = super::owned_contract::function_contract(read, function).map_err(|error| {
+        if error.class == DiagnosticClass::Semantic {
+            reject("parallel child must name an exact graph function")
+        } else {
+            error
+        }
+    })?;
+    if !signature.requirement_parameters.is_empty()
         || !signature.effect_parameters.is_empty()
         || !matches!(&signature.effect, FunctionEffect::Task { requirements, effect_parameters }
             if requirements.is_empty() && effect_parameters.is_empty())
     {
         return Err(reject(
-            "parallel children require monomorphic tasks with closed empty effect rows",
+            "parallel children require tasks with closed empty effect rows",
         ));
     }
+    if signature.type_parameters.len() != type_arguments.len()
+        || signature.implementation_parameters.len() != implementations.len()
+        || implementations
+            .iter()
+            .any(|i| !matches!(i, ImplementationOperand::Concrete { .. }))
+    {
+        return Err(reject(
+            "parallel child applications require exact concrete types and implementations",
+        ));
+    }
+    let mut substitutions = std::collections::BTreeMap::new();
+    for (id, ty) in signature.type_parameters.iter().zip(&type_arguments) {
+        read.validation_work()?;
+        let key = OwnerKey::TypeParameter(*id);
+        let parameter = if function.package == read.package_id() {
+            match read.owner(key)? {
+                Some(OwnerRecord::TypeParameter(p)) => p,
+                _ => return Err(reject("missing child type parameter")),
+            }
+        } else {
+            match read.package_interface_owner(function.package, key)? {
+                Some(PackageInterfaceRecord::TypeParameter(p)) => p,
+                _ => return Err(reject("missing imported child type parameter")),
+            }
+        };
+        let owned = admit_result(read, *ty)?;
+        if parameter.declaration != function.declaration
+            || owned != (parameter.constraints == TypeParameterConstraints::Owned)
+            || substitutions.insert(*id, *ty).is_some()
+        {
+            return Err(reject(
+                "child type arguments disagree with their exact constraints",
+            ));
+        }
+    }
+    super::owned_contract::validate_application(
+        read,
+        function,
+        &type_arguments,
+        &implementations,
+        None,
+    )?;
+    let mut applied = super::parallel_types::AppliedTypes::new(read);
+    let result = applied.substitute(signature.result, &substitutions, 0)?;
     if signature.parameters.len() != arguments.len() {
         return Err(reject(
             "parallel child argument count differs from its exact signature",
         ));
     }
-    let result_owned = admit_result(read, signature.result)?;
+    let result_owned = admit_result(&applied, result)?;
     let mut parameters = Vec::new();
     let mut seen_owned = false;
     for id in signature.parameters {
         read.validation_work()?;
         let key = OwnerKey::Parameter(id);
-        let parameter = if function.package == read.package_id() {
+        let mut parameter = if function.package == read.package_id() {
             let Some(OwnerRecord::Parameter(p)) = read.owner(key)? else {
                 return Err(reject("parallel child parameter is absent"));
             };
@@ -118,7 +139,8 @@ pub(crate) fn admit_call(
                 "parallel child parameter has a foreign owner or capability requirement",
             ));
         }
-        let ty = read
+        parameter.ty = applied.substitute(parameter.ty, &substitutions, 0)?;
+        let ty = applied
             .type_object(parameter.ty)?
             .ok_or_else(|| reject("parallel child parameter type is absent"))?;
         match ty.form {
@@ -133,14 +155,14 @@ pub(crate) fn admit_call(
                     ty.form,
                     TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. }
                 ) {
-                    super::owned_product::validate(read, parameter.ty, None)?;
+                    super::owned_product::validate(&applied, parameter.ty, None)?;
                 }
                 seen_owned = true;
             }
             _ => {
                 if seen_owned
                     || parameter.use_mode != ParameterUse::Unrestricted
-                    || !super::owned_contract::ordinary_closed(read, parameter.ty)?
+                    || !super::owned_contract::ordinary_closed(&applied, parameter.ty)?
                 {
                     return Err(reject(
                         "parallel child parameters require closed ordinary data followed by consuming owned values",
@@ -154,7 +176,7 @@ pub(crate) fn admit_call(
         function,
         parameters,
         arguments,
-        result: signature.result,
+        result,
         result_owned,
     })
 }
