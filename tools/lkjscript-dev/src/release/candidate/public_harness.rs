@@ -245,11 +245,27 @@ pub(super) fn accept(
     result.map(|()| root.join("receipt.json"))
 }
 
+// This non-publishing source witness accepts ordinary and linked worktrees.
+// Publishing owners retain their own stricter checkout and provenance admission.
+fn harness_repository(current: &Path) -> Result<PathBuf, DevError> {
+    archive::ensure_regular(
+        &current.join("Cargo.toml"),
+        "native harness root Cargo.toml",
+    )?;
+    let root =
+        super::super::command_text("git", &["rev-parse", "--show-toplevel"], current, 16 * 1024)?;
+    require(
+        Path::new(&root) == current,
+        "native harness requires the actual checkout root",
+    )?;
+    Ok(current.to_path_buf())
+}
+
 pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, DevError> {
     let mut values = super::verifier::parse_values(arguments, &["--candidate", "--evidence-root"])?;
     let candidate = PathBuf::from(super::verifier::required(&mut values, "--candidate")?);
     let root = PathBuf::from(super::verifier::required(&mut values, "--evidence-root")?);
-    let repository = super::super::repository_root()?;
+    let repository = harness_repository(&std::env::current_dir()?)?;
     let commit = super::super::command_text("git", &["rev-parse", "HEAD"], &repository, 1024)?;
     let cancellation = super::super::transferred::Cancellation::new()?;
     let result = accept(

@@ -119,3 +119,61 @@ fn native_runner_cancellation_and_timeout_never_become_passing_evidence() {
         assert!(root.path().join("receipt.json").is_file());
     }
 }
+
+#[test]
+fn native_source_witness_accepts_linked_worktrees_without_relaxing_root_identity() {
+    fn git(root: &Path, args: &[&str]) {
+        let output = std::process::Command::new("git")
+            .args([
+                "-c",
+                "user.name=Native witness fixture",
+                "-c",
+                "user.email=native@example.invalid",
+                "-c",
+                "core.hooksPath=/dev/null",
+                "-c",
+                "commit.gpgsign=false",
+            ])
+            .args(args)
+            .current_dir(root)
+            .env_clear()
+            .envs(process::environment())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    let temporary = tempfile::tempdir().unwrap();
+    let root = temporary.path().join("source");
+    fs::create_dir(&root).unwrap();
+    git(&root, &["init", "--initial-branch=fixture"]);
+    fs::write(root.join("Cargo.toml"), b"fixture").unwrap();
+    git(&root, &["add", "Cargo.toml"]);
+    git(&root, &["commit", "--message", "owned fixture"]);
+    let worktree = temporary.path().join("linked");
+    git(
+        &root,
+        &[
+            "worktree",
+            "add",
+            "--detach",
+            worktree.to_str().unwrap(),
+            "HEAD",
+        ],
+    );
+    assert_eq!(harness_repository(&root).unwrap(), root);
+    assert_eq!(harness_repository(&worktree).unwrap(), worktree);
+    assert!(root.join(".git").is_dir());
+    assert!(worktree.join(".git").is_file());
+    let nested = root.join("nested");
+    fs::create_dir(&nested).unwrap();
+    fs::write(nested.join("Cargo.toml"), b"not the root").unwrap();
+    assert!(harness_repository(&nested).is_err());
+    assert!(harness_repository(temporary.path()).is_err());
+    fs::remove_file(worktree.join("Cargo.toml")).unwrap();
+    std::os::unix::fs::symlink(root.join("Cargo.toml"), worktree.join("Cargo.toml")).unwrap();
+    assert!(harness_repository(&worktree).is_err());
+}

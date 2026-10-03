@@ -85,7 +85,7 @@ This replaces the manual final-byte supplement, not any existing source, target,
 userland, installation or publication boundary. The new checker is being validated
 in `/home/coder/workspace/lkjscript-structured-handoff-20261002`, branch
 `dev/structured-finalization-20261003`; current logs and copied tools are under
-`.artifacts/20261003-structured-finalization/`. Finish scoped checker acceptance,
+`.artifacts/20261003-structured-finalization/`. Finish fresh full-source acceptance,
 run its copied-candidate witness, integrate the checker, then dispatch exactly one
 fresh normal candidate from main. No new producer has yet been dispatched.
 

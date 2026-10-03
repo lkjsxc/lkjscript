@@ -57,7 +57,7 @@ bytes must remain unchanged. No additional manual supplement is needed for a new
 candidate accepted under this contract.
 
 For focused diagnosis against explicitly supplied candidate bytes, the same owner is
-available from a clean source-matched checkout through the immutable verifier:
+available from a clean source-matched checkout (ordinary or linked worktree) through the immutable verifier:
 
 ```sh
 lkjscript-dev release public-harness --candidate /absolute/path/lkjscript \
