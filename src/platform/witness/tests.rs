@@ -132,9 +132,14 @@ fn witness_contract_domains_are_closed_and_unique() {
         digest,
         "validator_contract_97d3f19b3b0d7a4791b2927d1611208833da0a62174cbd38dd71c14eb0a2c7f8"
     );
-    assert_eq!(
+    // Owned effect applications cannot reuse the predecessor scheme inventory.
+    assert_ne!(
         digest,
         "validator_contract_1983ed920a5c849b7c404f5a56a4b002b880a86703bab17c872505fad6b4dfbc"
+    );
+    assert_eq!(
+        digest,
+        "validator_contract_f642ef28cabfd3aef567c665eee1ba8971d7492aa4a47c61cb3c02e11f0dcbe0"
     );
 }
 
