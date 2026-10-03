@@ -74,8 +74,16 @@ corrected host. Originals, 44 retained literal/artifact/input/result files and e
 executable identities are indexed under `public-witness-03/`; earlier failures stay
 under `public-witness-01/` and `public-witness-02/`. The superseded verifier build
 was cancelled before completion and is not an acceptance claim.
-Next gates: fresh full-source acceptance from the fixed input set, mainline integration,
-then exact finalized-candidate acceptance/publication.
+The first full run on `c2e61f5a52e06a9b43bcfa0af93c06cd8b56f646` completed
+with stable inputs: 23 fresh gates passed; workspace tests, offline-package acceptance
+and service acceptance failed on retained current-format fixture bytes and contract
+or artifact-pin expectations. All 195 public CLI tests passed. Original receipt and
+outputs remain in `full-01-original/`. The current-envelope controls are regenerated
+through their original frozen predecessor readers; predecessor bytes and semantic
+refusal assertions remain unchanged. The exact maintained service artifact pin and
+successor contract expectations are refreshed together.
+Next gates: fresh full-source acceptance from the corrected fixed input set,
+mainline integration, then exact finalized-candidate acceptance/publication.
 
 Preserve the older `.artifacts/20261002-structured-parallel/` and
 `.artifacts/20261003-structured-finalization/` evidence, other worktrees and stash.

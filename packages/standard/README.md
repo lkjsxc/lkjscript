@@ -65,8 +65,8 @@ Current identity:
 - semantic revision: `rev_85b2be44a8deca911fc6bdf4efdd4fb7b510f53e4a39723fbee263dff4b3a9b2`;
 - package revision: `package_revision_edde167d2c4c875795cd411c7e4bb56f3da63668fd8cb7b585510992f06ed20d`;
 - package transport: `package_transport_8a7b756af561b6d44e0ef279e1d1773f9f19184fb62d6eec12f58256c8d06b00`;
-- artifact manifest: `artifact_manifest_875ddabe9a2ff1bf72a720c340999f4bd29911a6f02d7702704afd90e2239e2f`;
-- artifact bundle: `artifact_bundle_85996ad7f15befccbd842ae29bb255549dfd93ae0e64121bab0cd410fbf7daf2`;
+- artifact manifest: `artifact_manifest_41a871bfd58b61613ef93df319b37a77ee9a26c8b1e3af4585835222eb3809e9`;
+- artifact bundle: `artifact_bundle_68c885529b95726e41821ca776289fd0cd85978451dafc9adb5a1927a87a2b65`;
 - 1,626 live semantic owners, 232 compiler units, and 89 graph tests.
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose

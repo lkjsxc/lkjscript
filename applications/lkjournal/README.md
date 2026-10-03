@@ -23,8 +23,8 @@ Current normalized identity:
 - semantic revision: `rev_a1d97c5d7deda1ece8e2e3383bd7a58ae1e267838368ec5b42678e40c9eb1640`;
 - semantic state: `semantic_state_3832cd12c3fee672d0bdfb975cb363cbc457f6ef45f15cb44a62d40ab47f2dee`;
 - package revision: `package_revision_259829d424af326d6a1e38940a95e7f5882fdcf4152bff0470706aa050c7d1fb`;
-- artifact manifest: `artifact_manifest_ed33818d2777889351a93cd31334c9f1327cadb1f4882c3b20752c08dbbbb712`;
-- artifact bundle: `artifact_bundle_2ec896c7faf67ea320fa54b719f826552f93e26eaeb800ddb2957f2f8d0ef374`;
+- artifact manifest: `artifact_manifest_4f1ae2943b06f241b10a9638fc7d30068b9e1ec365f6ffdd3d62ecf5a26817ed`;
+- artifact bundle: `artifact_bundle_03d5017142e6be9d12058d74470d7977fe0d6edc91bb73f2b127b9dd265eceb6`;
 - 2,044 live root semantic owners and one exact built-in standard dependency.
 
 The original Graph 13 materialization preserved all existing application owner identities and behavior.
@@ -95,7 +95,7 @@ empty 404 and invokes none of them.
 
 All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,375,404-byte
 artifact bundle above (SHA-256
-`6a544c4d8a811f820f48a204cc1ebdf28d377a55012f2b1060e3f94c5ec91d21`). The service descriptor
+`509bb3faa061f2d84806150af32af8566acc13b772ebf6bb5e3aa021932c4962`). The service descriptor
 resolves `serve`, the worker descriptor resolves `work`, and `live.deployment.json` resolves
 `lkjournal-live-1`. Preparation strictly loads the standalone bundle,
 validates the runner, route-indexed handler and component requirement closure, grants, secrets, and adapters, and emits

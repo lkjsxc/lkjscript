@@ -73,7 +73,7 @@ fn witness_contract_domains_are_closed_and_unique() {
         "validator_contract_a4865032b8c53d9472988c166a7bce1d72eba3158026cb4a803482a08c2fc576"
     );
     for (name, version) in [
-        ("structured_parallel_owned_tasks", 1),
+        ("structured_parallel_owned_tasks", 2),
         ("structural_owned_choices", 1),
         ("structural_owned_products", 2),
         ("symbolic_owned_parameters", 2),
@@ -117,9 +117,13 @@ fn witness_contract_domains_are_closed_and_unique() {
         digest,
         "validator_contract_d1516493a8999830f868d87baf8265f9cc30dd911c8275dfad67a84a9895d98f"
     );
-    assert_eq!(
+    assert_ne!(
         digest,
         "validator_contract_75edd39f91c2c55b02f3259574560abd8d4d7c75853c2e9776dea87120df3a08"
+    );
+    assert_eq!(
+        digest,
+        "validator_contract_25babcb5c19defefc06991c9e84ee626c93360a95a8a21c7a945fb5a5e67967b"
     );
 }
 
