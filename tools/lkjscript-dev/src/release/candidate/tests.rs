@@ -50,8 +50,8 @@ fn terminal() -> Terminal {
         source_commit: "1".repeat(40),
         controller_source_commit: "1".repeat(40),
         tag: "v0.1.39".to_owned(),
-        acceptance_contract: "lkjscript-final-candidate-acceptance-1".to_owned(),
-        workload: "release-source+six-target-owners+two-pinned-userlands+installed-recovery-1"
+        acceptance_contract: "lkjscript-final-candidate-acceptance-2".to_owned(),
+        workload: "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-2"
             .to_owned(),
         target_triple: "x86_64-unknown-linux-musl".to_owned(),
         target_policy_sha256: target::policy_sha256().expect("current target policy"),
@@ -82,7 +82,7 @@ fn terminal() -> Terminal {
         source_gates: 20,
         target_owners: 6,
         userlands: 2,
-        proofs: ["release-source", "final-target", "installation"]
+        proofs: ["release-source", "native-public-harness", "final-target", "installation"]
             .into_iter()
             .map(|name| Proof {
                 name: name.to_owned(),
@@ -311,4 +311,31 @@ fn candidate_real_stage_retains_failure_timeout_and_cancellation_without_accepta
         assert!(root.join("target-admission.stdout.log").is_file());
         assert!(root.join("target-admission.stderr.log").is_file());
     }
+}
+
+#[test]
+fn candidate_requires_native_public_proof_without_relabelling_the_old_contract() {
+    let original = terminal();
+    assert!(validate_terminal(&original).is_ok());
+    let mut missing = original.clone();
+    missing
+        .proofs
+        .retain(|proof| proof.name != "native-public-harness");
+    assert!(validate_terminal(&missing).is_err());
+    let mut duplicate = original.clone();
+    duplicate.proofs[1] = duplicate.proofs[0].clone();
+    assert!(validate_terminal(&duplicate).is_err());
+    let mut empty = original.clone();
+    empty.proofs[1].receipt.byte_length = 0;
+    assert!(validate_terminal(&empty).is_err());
+    let mut old = missing;
+    old.acceptance_contract = "lkjscript-final-candidate-acceptance-1".to_owned();
+    old.workload =
+        "release-source+six-target-owners+two-pinned-userlands+installed-recovery-1".to_owned();
+    // The old producer retains its historical meaning but is not proof of this successor.
+    assert!(validate_terminal(&old).is_err());
+    let mut relabelled = old;
+    relabelled.acceptance_contract = original.acceptance_contract;
+    relabelled.workload = original.workload;
+    assert!(validate_terminal(&relabelled).is_err());
 }

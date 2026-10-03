@@ -9,14 +9,17 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-pub(super) const CONTRACT: &str = "lkjscript-final-candidate-acceptance-1";
+pub(super) mod public_harness;
+mod public_inventory;
+
+pub(super) const CONTRACT: &str = "lkjscript-final-candidate-acceptance-2";
 #[cfg(test)]
 pub(super) fn canonical_terminal_fixture(value: serde_json::Value) -> Result<Vec<u8>, DevError> {
     evidence::encode_json(&serde_json::from_value::<Terminal>(value)?)
 }
 #[cfg(test)]
 mod tests;
-const WORKLOAD: &str = "release-source+six-target-owners+two-pinned-userlands+installed-recovery-1";
+const WORKLOAD: &str = "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-2";
 const MAXIMUM_RECEIPT_BYTES: u64 = 4 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -311,6 +314,18 @@ fn execute(
         terminal.verifier.byte_length,
     )?;
     let candidate = extracted.join("lkjscript");
+    terminal.phase = "native-public-harness".to_owned();
+    evidence::publish_json(&options.output, terminal)?;
+    let native_receipt = public_harness::accept(
+        repository,
+        &candidate,
+        &terminal.source_commit,
+        &options.evidence_root.join("native-public-harness"),
+        control,
+    )?;
+    terminal
+        .proofs
+        .push(proof("native-public-harness", &native_receipt)?);
     let target_root = options.evidence_root.join("target");
     let target_result = stage(
         options,
@@ -620,6 +635,7 @@ fn validate_terminal(t: &Terminal) -> Result<(), DevError> {
         ]) && t.assets.iter().all(|a| a.byte_length > 0)
             && t.proofs.iter().map(|p| p.name.as_str()).eq([
                 "release-source",
+                "native-public-harness",
                 "final-target",
                 "installation",
             ])

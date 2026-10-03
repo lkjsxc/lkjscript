@@ -82,6 +82,7 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         "verifier" => verifier::command(arguments),
         "prepare" => prepare(parse_prepare(arguments)?),
         "candidate" => candidate::command(arguments),
+        "public-harness" => candidate::public_harness::command(arguments),
         "controller" => controller::command(arguments),
         "verify" => verify(parse_verify(arguments)?),
         value => Err(DevError::usage(format!(
