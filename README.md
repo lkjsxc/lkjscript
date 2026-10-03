@@ -10,9 +10,9 @@ The graph is the sole editable authority. Stable identities preserve declaration
 through edits, while names remain useful, changeable locators. Pure functions,
 tasks, exact libraries and standalone application bundles share this model.
 
-**Public:** [v0.1.69](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.69),
-with joined parallel tasks that consume and return owned values. Its
-[release notes](docs/releases/v0.1.69.md) describe the exact published boundary.
+**Public:** [v0.1.70](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.70),
+with concrete generic child applications and exact implementation forwarding. Its
+[release notes](docs/releases/v0.1.70.md) describe the exact published boundary.
 Development 0.1.71 adds [explicit transferable contracts](docs/spec/transferable-types.md)
 so generic libraries can form their own parallel groups. The
 [three-package guide](docs/guides/native-transferable-parallel.md) demonstrates
@@ -43,10 +43,10 @@ executing it. The exact URL below remains pinned even when a newer release appea
 ```sh
 curl -q --fail --location --proto '=https' --proto-redir '=https' \
   --connect-timeout 15 --max-time 180 --max-filesize 16384 \
-  --output install-v0.1.69.sh \
-  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.69/install.sh
-cat install-v0.1.69.sh
-sh install-v0.1.69.sh --prefix "$HOME/.local"
+  --output install-v0.1.70.sh \
+  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.70/install.sh
+cat install-v0.1.70.sh
+sh install-v0.1.70.sh --prefix "$HOME/.local"
 export PATH="$HOME/.local/bin:$PATH"
 lkjscript --version
 lkjscript runtime list

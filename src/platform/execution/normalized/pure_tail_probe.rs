@@ -598,6 +598,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
                 cases.push(observed);
             }
         }
+        let capture_cancel_after_nodes = 3;
         let (result, mut observed) = invocation_control(
             &prepared,
             reference,
@@ -608,17 +609,19 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
             ],
             policy,
             u64::MAX,
-            &ExecutionControl::cancel_after_checks(700),
+            &ExecutionControl::cancel_after_capture_nodes(capture_cancel_after_nodes),
         )?;
         let error = result
             .err()
             .ok_or_else(|| failure("capture cancellation did not interrupt"))?;
         require(
             error.code == "execution_cancelled"
+                && error.class == crate::platform::execution::ExecutionFailureClass::Cancelled
                 && observed["host_calls"] == 0
+                && observed["cancelled"] == true
                 && observed["observation"]["value_work"]["capture_admission_nodes"]
                     .as_u64()
-                    .is_some_and(|visits| visits > 0),
+                    .is_some_and(|visits| visits > 0 && visits == capture_cancel_after_nodes),
             "capture cancellation executed its target or skipped retention admission",
         )?;
         observed["case"] = json!("capture-construction-cancellation");

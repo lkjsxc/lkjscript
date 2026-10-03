@@ -737,12 +737,9 @@ impl ReferenceState<'_> {
                 &mut self.observation.value_work.raw_result_admission_nodes
             };
             *counter = counter.saturating_add(1);
-            #[cfg(test)]
             if captured {
-                super::super::value_oracle::capture_admission_node(
-                    self.control,
-                    self.observation.value_work.capture_admission_nodes,
-                )?;
+                self.control
+                    .capture_admission_node(self.observation.value_work.capture_admission_nodes)?;
             }
             if depth > 256 {
                 return Err(reference_resource(
@@ -1646,11 +1643,8 @@ impl ReferenceState<'_> {
                 .value_work
                 .capture_admission_nodes
                 .saturating_add(1);
-            #[cfg(test)]
-            super::super::value_oracle::capture_admission_node(
-                self.control,
-                self.observation.value_work.capture_admission_nodes,
-            )?;
+            self.control
+                .capture_admission_node(self.observation.value_work.capture_admission_nodes)?;
             if depth > 256 {
                 return Err(reference_resource(
                     "normalized_reference_value_depth",

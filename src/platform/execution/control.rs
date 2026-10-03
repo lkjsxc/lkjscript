@@ -131,6 +131,7 @@ pub struct ExecutionControl {
     cancelled: Arc<AtomicBool>,
     deadline: Option<Instant>,
     remaining_checks: Option<Arc<std::sync::atomic::AtomicU64>>,
+    cancel_at_capture_nodes: Option<u64>,
 }
 
 impl ExecutionControl {
@@ -139,6 +140,7 @@ impl ExecutionControl {
             cancelled: Arc::new(AtomicBool::new(false)),
             deadline: None,
             remaining_checks: None,
+            cancel_at_capture_nodes: None,
         }
     }
 
@@ -147,6 +149,7 @@ impl ExecutionControl {
             cancelled: Arc::new(AtomicBool::new(false)),
             deadline: Some(deadline),
             remaining_checks: None,
+            cancel_at_capture_nodes: None,
         }
     }
 
@@ -168,6 +171,26 @@ impl ExecutionControl {
             remaining_checks: Some(Arc::new(std::sync::atomic::AtomicU64::new(count))),
             ..Self::uncancelled()
         }
+    }
+
+    /// Contributor-only phase probe. Public controls never install this threshold;
+    /// unrelated type or value admission checks cannot consume its capture target.
+    pub(crate) fn cancel_after_capture_nodes(count: u64) -> Self {
+        Self {
+            cancel_at_capture_nodes: Some(count),
+            ..Self::uncancelled()
+        }
+    }
+
+    pub(crate) fn capture_admission_node(&self, nodes: u64) -> Result<(), ExecutionError> {
+        if self
+            .cancel_at_capture_nodes
+            .is_some_and(|target| nodes >= target)
+        {
+            self.cancel();
+            self.check()?;
+        }
+        Ok(())
     }
 
     pub fn check(&self) -> Result<(), ExecutionError> {
@@ -210,6 +233,34 @@ impl Default for ExecutionControl {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn contributor_capture_cancellation_ignores_unrelated_checks_and_normal_controls() {
+        let control = ExecutionControl::cancel_after_capture_nodes(3);
+        for _ in 0..1024 {
+            assert!(control.check().is_ok());
+        }
+        assert!(control.capture_admission_node(1).is_ok());
+        assert!(control.capture_admission_node(2).is_ok());
+        assert!(!control.is_cancelled());
+        let clone = control.clone();
+        assert_eq!(
+            clone.capture_admission_node(3).unwrap_err().class,
+            ExecutionFailureClass::Cancelled
+        );
+        assert!(control.is_cancelled());
+
+        let normal = ExecutionControl::uncancelled();
+        assert!(normal.capture_admission_node(u64::MAX).is_ok());
+        assert!(!normal.is_cancelled());
+        let checked = ExecutionControl::cancel_after_checks(1);
+        assert!(checked.capture_admission_node(u64::MAX).is_ok());
+        assert!(checked.check().is_ok());
+        assert_eq!(
+            checked.check().unwrap_err().class,
+            ExecutionFailureClass::Cancelled
+        );
+    }
 
     #[test]
     fn cumulative_quota_overflow_and_unbounded_telemetry_are_distinct() {

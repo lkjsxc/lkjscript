@@ -2429,12 +2429,19 @@ pub(crate) fn read_transferred_receipt(
                 )?;
             }
         }
+        let mut capture_cases = cases.iter().filter(|case| {
+            case["tier"] == tier && case["case"] == "capture-construction-cancellation"
+        });
+        let capture = capture_cases
+            .next()
+            .ok_or_else(|| DevError::corrupt("capture cancellation proof is absent"))?;
         require(
-            cases.iter().any(|case| {
-                case["tier"] == tier
-                    && case["case"] == "capture-construction-cancellation"
-                    && case["failure"]["code"] == "execution_cancelled"
-            }),
+            capture_cases.next().is_none()
+                && capture["failure"]["code"] == "execution_cancelled"
+                && capture["failure"]["class"] == "cancelled"
+                && capture["observation"]["value_work"]["capture_admission_nodes"] == 3
+                && capture["host_calls"] == 0
+                && capture["cancelled"] == true,
             "capture cancellation proof is absent",
         )?;
         require(

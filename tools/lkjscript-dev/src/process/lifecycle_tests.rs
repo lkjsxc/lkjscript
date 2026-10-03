@@ -92,9 +92,11 @@ fn all_shared_routes_clean_sampled_separate_groups_and_reap_the_direct_child() {
     let root = tempfile::tempdir().unwrap();
     for mode in 0..4 {
         let script =
-            format!("setsid sleep 0.8 & printf '%s %s' $$ $! > ids-{mode}; sleep 0.06; exit 0");
+            format!("setsid sleep 5 & printf '%s %s' $$ $! > ids-{mode}; sleep 0.06; exit 0");
         let mut spec = fixture(root.path(), &format!("route-{mode}"), &script);
-        spec.timeout = Duration::from_millis(180);
+        // This witnesses joined cleanup through every shared route, not a startup
+        // scheduling SLO. Keep the inherited-output deadline tests at 80 ms.
+        spec.timeout = Duration::from_secs(2);
         let result = match mode {
             0 => run(&spec, root.path()),
             1 => run_selected(&spec, root.path(), Some(Path::new("/bin/sh"))),
@@ -106,7 +108,15 @@ fn all_shared_routes_clean_sampled_separate_groups_and_reap_the_direct_child() {
             }
         };
         assert_eq!(result.status, ProcessStatus::Timeout, "{result:?}");
-        let ids = std::fs::read_to_string(root.path().join(format!("ids-{mode}"))).unwrap();
+        let ids_path = root.path().join(format!("ids-{mode}"));
+        let ids = std::fs::read_to_string(&ids_path).unwrap_or_else(|error| {
+            panic!(
+                "route {mode} did not publish PID witness '{}': {error}; observation={result:?}; stdout={:?}; stderr={:?}",
+                ids_path.display(),
+                std::fs::read_to_string(&spec.stdout_path),
+                std::fs::read_to_string(&spec.stderr_path),
+            )
+        });
         let pids: Vec<u32> = ids
             .split_whitespace()
             .map(|id| id.parse().unwrap())
@@ -117,7 +127,8 @@ fn all_shared_routes_clean_sampled_separate_groups_and_reap_the_direct_child() {
         );
         assert_stopped(pids[1]);
     }
-    let spec = fixture(root.path(), "recovered", "printf healthy");
+    let mut spec = fixture(root.path(), "recovered", "printf healthy");
+    spec.timeout = Duration::from_secs(2);
     assert_eq!(run(&spec, root.path()).status, ProcessStatus::Passed);
 }
 

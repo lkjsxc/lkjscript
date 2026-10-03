@@ -22,7 +22,7 @@ Current normalized identity:
 - package: `pkg_20000000000000000000000000000001`;
 - semantic revision: `rev_a1d97c5d7deda1ece8e2e3383bd7a58ae1e267838368ec5b42678e40c9eb1640`;
 - semantic state: `semantic_state_3832cd12c3fee672d0bdfb975cb363cbc457f6ef45f15cb44a62d40ab47f2dee`;
-- package revision: `package_revision_259829d424af326d6a1e38940a95e7f5882fdcf4152bff0470706aa050c7d1fb`;
+- package revision: `package_revision_13035e42572a2c0d087a6cd4880d53eca4387e660a6d18a59f79d94fe7599fc1`;
 - artifact manifest: `artifact_manifest_220c71a0060be2d036e5f5e9fcf9e1f07b319fad91999ffd21ac42cfc58e2209`;
 - artifact bundle: `artifact_bundle_d41162ab19456753a5b4027810045d2ac3dab59ed6b18b7eab879fdfe964ca12`;
 - 2,044 live root semantic owners and one exact built-in standard dependency.

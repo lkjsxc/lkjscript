@@ -1411,7 +1411,10 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .collect::<Vec<_>>();
     assert_eq!(field_forms.len(), 36);
     for (name, syntax) in [
-        ("type_parameter_constraint", "none|capture-safe|owned"),
+        (
+            "type_parameter_constraint",
+            "none|capture-safe|owned|transferable|capture-safe transferable|owned transferable",
+        ),
         ("reference_alias", "$REFERENCE_ALIAS"),
         ("exact_declaration", "decl_HEX"),
         ("exact_expression", "expr_HEX"),

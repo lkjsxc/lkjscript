@@ -6,16 +6,17 @@ Current snapshot: 2026-10-03. This page owns availability and unfinished accepta
 
 ## Public binary
 
-Immutable [v0.1.69](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.69) is
-public/latest. Accepted source: `441995c5dc2e7e54a105afb50031239a1b2ed457`.
-[Producer 37110644675/1](https://github.com/lkjsxc/lkjscript/actions/runs/37110644675)
+Immutable [v0.1.70](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.70) is
+public/latest. Accepted source: `f00432dd429ef18483687ff8f8df14a543962bd6`.
+[Producer 37117977368/1](https://github.com/lkjsxc/lkjscript/actions/runs/37117977368)
 completed `candidate_accepted`;
-[promotion 37115582930/1](https://github.com/lkjsxc/lkjscript/actions/runs/37115582930)
-completed `immutable_published_and_public_verified`. Release `402454819` is immutable;
-annotated tag `dcd80145bfb766e16a595d1b4012965d2eafed3f` binds the accepted source.
+[promotion 37123673615/1](https://github.com/lkjsxc/lkjscript/actions/runs/37123673615)
+completed `immutable_published_and_public_verified`. Release `402510978` is immutable;
+annotated tag `736435d4ac8a88b932d9a3cb0e9db1d437cd4f96` binds the accepted source.
 Public asset identities, anonymous acquisition, installed execution and joined cleanup
-passed. Originals remain under
-`.artifacts/20261003-closed-generic-parallel/release-0169/` in the preceding checkout.
+passed. Original producer and promotion evidence remains under
+`.artifacts/20261003-transfer-contracts/release-0170/` in the selected checkout;
+`completed-publication.json` indexes the authenticated terminal and public proof.
 
 ## Development v0.1.71: reusable generic parallel groups
 
@@ -30,8 +31,10 @@ See the [public three-package guide](guides/native-transferable-parallel.md) and
 Selected checkout: `/home/coder/workspace/lkjscript-transfer-contracts-20261003`,
 branch `dev/generic-transfer-contracts-20261003`, based on main
 `38252b4134dd30dfada6f9b8a2f0ccfb5f23c436`.
-Implementation is complete and focused validation passes. The required fresh
-full-source run is next; no v0.1.71 full-source or final-byte acceptance is claimed. Evidence, immutable probe executables, literal
+Implementation is complete and focused validation passes. The first fresh full run
+passed 23 of 26 gates; corrections to acceptance probes and current artifact/discovery
+inventories require a new full run. No v0.1.71 full-source or final-byte acceptance is
+claimed. Evidence, immutable probe executables, literal
 inputs and failed observations are retained under
 `.artifacts/20261003-transfer-contracts/` in this checkout.
 
@@ -57,7 +60,7 @@ Required completion: fresh dependency-complete 26-gate acceptance, mainline
 integration and independent finalized-byte acceptance through
 [the release procedure](release.md).
 
-## Preceding accepted source and pending v0.1.70 publication
+## Preceding accepted source and completed v0.1.70 publication
 
 Closed generic parallel applications were accepted at source
 `f00432dd429ef18483687ff8f8df14a543962bd6`, tree
@@ -77,10 +80,10 @@ It completed authenticated `candidate_accepted`: final-byte admission passed at
 `736435d4ac8a88b932d9a3cb0e9db1d437cd4f96` selects that exact source.
 [Promotion 37123673615/1](https://github.com/lkjsxc/lkjscript/actions/runs/37123673615)
 uses controller `38252b4134dd30dfada6f9b8a2f0ccfb5f23c436` and the original unchanged
-assets. Publication and anonymous installed verification remain pending. Current
-originals and authentication evidence are under `release-0170/`; read that exact
-promotion's terminal before further action. No duplicate producer or rebuilt assets
-were introduced. Publication completes at `immutable_published_and_public_verified`.
+assets. It completed `immutable_published_and_public_verified` at 12:49:53 UTC.
+Anonymous exact/latest installed lifecycles each passed 30 commands and joined
+cleanup. Current originals and authentication evidence are under `release-0170/`.
+No duplicate producer or rebuilt assets were introduced.
 
 ## Compatibility and remaining limits
 

@@ -604,15 +604,13 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                 );
             }
         }
-        let cancelled = value_oracle::cancel_during_capture(3, || {
-            invoke(
-                reference,
-                unary,
-                nested(128),
-                Default::default(),
-                &ExecutionControl::uncancelled(),
-            )
-        });
+        let cancelled = invoke(
+            reference,
+            unary,
+            nested(128),
+            Default::default(),
+            &ExecutionControl::cancel_after_capture_nodes(3),
+        );
         assert_eq!(cancelled.0.unwrap_err().code, "execution_cancelled");
         assert!(cancelled.1.capture_admission_nodes > 0);
         assert_eq!(cancelled.1.capture_admission_nodes, 3);
@@ -1721,15 +1719,13 @@ fn constrained_raw_factory_checks_types_and_real_environments_before_body() {
                 );
             }
         }
-        let cancelled = value_oracle::cancel_during_capture(3, || {
-            invoke(
-                reference,
-                depth[240],
-                NormalizedValue::Option(None),
-                Default::default(),
-                &ExecutionControl::uncancelled(),
-            )
-        });
+        let cancelled = invoke(
+            reference,
+            depth[240],
+            NormalizedValue::Option(None),
+            Default::default(),
+            &ExecutionControl::cancel_after_capture_nodes(3),
+        );
         assert_eq!(cancelled.0.unwrap_err().code, "execution_cancelled");
         assert!(cancelled.2.capture_admission_nodes > 0);
         assert_eq!(cancelled.2.capture_admission_nodes, 3);

@@ -804,11 +804,8 @@ impl Admission<'_> {
         while let Some((ty, depth)) = pending.pop() {
             self.control.check()?;
             self.work.capture_admission_nodes = self.work.capture_admission_nodes.saturating_add(1);
-            #[cfg(test)]
-            super::super::value_oracle::capture_admission_node(
-                self.control,
-                self.work.capture_admission_nodes,
-            )?;
+            self.control
+                .capture_admission_node(self.work.capture_admission_nodes)?;
             if depth > 256 {
                 return Err(resource_error(
                     "normalized_value_depth",
@@ -964,11 +961,8 @@ impl Admission<'_> {
             if capture {
                 self.work.capture_admission_nodes =
                     self.work.capture_admission_nodes.saturating_add(1);
-                #[cfg(test)]
-                super::super::value_oracle::capture_admission_node(
-                    self.control,
-                    self.work.capture_admission_nodes,
-                )?;
+                self.control
+                    .capture_admission_node(self.work.capture_admission_nodes)?;
             } else if input {
                 self.work.input_admission_nodes = self.work.input_admission_nodes.saturating_add(1);
             } else {

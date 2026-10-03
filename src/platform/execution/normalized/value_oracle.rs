@@ -228,33 +228,6 @@ pub(super) fn inspect(
 #[cfg(test)]
 std::thread_local! {
     static FORCED_RESCAN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    static CANCEL_CAPTURE_AT: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
-}
-
-/// Target the capture phase independently of unrelated evaluator control checks.
-#[cfg(test)]
-pub(super) fn cancel_during_capture<T>(after: u64, run: impl FnOnce() -> T) -> T {
-    assert!(after > 0);
-    struct Reset(Option<u64>);
-    impl Drop for Reset {
-        fn drop(&mut self) {
-            CANCEL_CAPTURE_AT.set(self.0);
-        }
-    }
-    let _reset = Reset(CANCEL_CAPTURE_AT.replace(Some(after)));
-    run()
-}
-
-#[cfg(test)]
-pub(super) fn capture_admission_node(
-    control: &ExecutionControl,
-    nodes: u64,
-) -> Result<(), crate::platform::execution::ExecutionError> {
-    if CANCEL_CAPTURE_AT.get().is_some_and(|after| nodes >= after) {
-        control.cancel();
-        control.check()?;
-    }
-    Ok(())
 }
 
 #[cfg(test)]
