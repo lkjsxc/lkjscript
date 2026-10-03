@@ -70,27 +70,63 @@ also passed the 11 new policy tests and 1,041 standalone offline commands. Earli
 failed runs and the original accepted development source remain historical evidence;
 they are not relabelled as proof of the repair.
 
+**Mandatory native final-byte witnesses are also on main:**
+[PR #6](https://github.com/lkjsxc/lkjscript/pull/6) integrated accepted source
+`e059e806b60c652001ac93c6eab2f5119328218d` as
+`a7c4222cc669088032689e6620a1082e91478597`. An independent fetch confirmed the
+unchanged tested tree `d1b8d2eb658626acec01ebd93da2c1eb82787b6d`.
+Fresh full acceptance passed 26/26 gates with stable inputs, no reused or unrun
+gates and no failure. Workspace tests passed 1,665 cases with zero failures and
+29 existing ignored cases; two nested child-test summaries are excluded. The
+independent offline owner passed 1,041 commands and completed cleanup.
+Receipt: `verification_94dd56045f9e1204947a12c6cdd8f182d5fb112640430bb3bb5092c2aaf0c81c`.
+
+The new source-built public harness enumerated 195 tests and passed all 27 selected
+ownership, buffer, range, resident, parallel and interactive-topology cases, with
+zero failed or ignored selected cases, unchanged candidate/harness bytes and joined
+cleanup. The owner rejects omitted, duplicate or ignored outcomes even with a zero
+process exit. Ten independent regressions cover inventory, process, terminal and
+real linked-worktree behavior. This copied development-host witness does not stand
+in for final musl archive acceptance. No runtime source or product encoding was
+changed by PR #6; publication authority and existing acceptance boundaries remain.
+
+Full original: `.artifacts/lkjscript-dev/check/1791005253213055324-2567364-0/`.
+Its exact copy is retained outside automatic rotation in
+`.artifacts/20261003-structured-finalization/accepted-full-e059e806/`.
+Native original: `/home/coder/.local/state/lkjscript-native-evidence-20261003-e059e806/`;
+receipt SHA256 `2afc585eb6f54ec46161699a3fac9265ff3e28a06227ef7454722ffca99feb8b`.
+The copied candidate and harness identities remain in that receipt and PR #6.
+Earlier full-run originals are preserved under the current evidence root's
+`retained-original-checks/`; the first failed linked-worktree invocation also remains.
+Reporting-only descendants do not relabel the exact source accepted above.
+
 ## Current publication handoff
 
-[v0.1.68](releases/v0.1.68.md) remains the selected successor. Producer
-[37046478616](https://github.com/lkjsxc/lkjscript/actions/runs/37046478616), attempt 1,
-completed candidate acceptance for source `aa9883f0d073a0d7eaf1f44716ac7e2a5ef5b2fd`.
-That source precedes the deadline repair; the producer is superseded, not selected
-for promotion. Its original archive, receipt and success remain unchanged. No
-v0.1.68 tag or release has been published; public/latest remains immutable v0.1.64.
+[v0.1.68](releases/v0.1.68.md) remains the selected successor. The corrected normal
+candidate was dispatched exactly once from integrated main
+`a7c4222cc669088032689e6620a1082e91478597` at 2026-10-03 05:47:42 UTC:
+[producer 37100969378](https://github.com/lkjsxc/lkjscript/actions/runs/37100969378),
+attempt 1, last observed in progress. This is a non-publishing candidate operation;
+no v0.1.68 tag or release has been published. Public/latest remains immutable v0.1.64.
 
-The next candidate must include the integrated repair and mandatory native public
+The new producer includes the integrated runtime repair and mandatory native public
 harness under [acceptance contract 2](release.md#selected-structured-parallel-successor-v0168).
-This replaces the manual final-byte supplement, not any existing source, target,
-userland, installation or publication boundary. The new checker is being validated
-in `/home/coder/workspace/lkjscript-structured-handoff-20261002`, branch
-`dev/structured-finalization-20261003`; current logs and copied tools are under
-`.artifacts/20261003-structured-finalization/`. Finish fresh full-source acceptance,
-run its copied-candidate witness, integrate the checker, then dispatch exactly one
-fresh normal candidate from main. No new producer has yet been dispatched.
+That owner replaces the manual final-byte supplement, not any source, target,
+userland, installation or publication boundary. Resume this exact producer before
+dispatching another. After inspecting its original accepted terminal and diagnostics,
+use the existing exact-producer unchanged-asset promotion and anonymous acquisition
+owners. Source delivery is complete; the external producer is release-only pending.
 
-Preserve the older `.artifacts/20261002-structured-parallel/` originals and the
-existing other worktrees/stash. No running application or deployment is changed.
+Earlier producer [37046478616](https://github.com/lkjsxc/lkjscript/actions/runs/37046478616),
+attempt 1, accepted source `aa9883f0d073a0d7eaf1f44716ac7e2a5ef5b2fd` before the deadline
+repair. It is superseded, not selected for promotion. Its original success, archive
+and receipts remain unchanged; the new contract does not relabel that older evidence.
+
+Integration checkout: `/home/coder/workspace/lkjscript-structured-handoff-20261002`,
+branch `dev/structured-finalization-20261003`. Current logs, copied tools and dispatch
+identity are under `.artifacts/20261003-structured-finalization/`. Preserve the older
+`.artifacts/20261002-structured-parallel/` originals and other worktrees/stash. No
+running application or deployment was changed.
 
 ## Compatibility and authority
 
