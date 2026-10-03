@@ -467,7 +467,7 @@ fn assert_factory_invocation(snapshot: &KernelSnapshot) {
             )
             .map(|(value, _)| value)
         } else {
-            NormalizedVm::new(&program, NormalizedRunPolicy::default())
+            NormalizedVm::for_test(&program, NormalizedRunPolicy::default())
                 .invoke(
                     caller,
                     Vec::new(),
@@ -534,7 +534,7 @@ fn task_invocation_checks_activation_even_when_the_component_has_the_grant() {
         }
     }
     let (capabilities, calls) = bind_fixture_capability(&program, 10);
-    let result = NormalizedVm::new(&program, NormalizedRunPolicy::default()).invoke(
+    let result = NormalizedVm::for_test(&program, NormalizedRunPolicy::default()).invoke(
         declaration_named(&snapshot, "caller"),
         Vec::new(),
         Some(&capabilities),
@@ -910,7 +910,7 @@ fn recursive_effect_permutation_and_union_close_by_finite_set_identity() {
             )
             .map(|r| r.0)
         } else {
-            NormalizedVm::new(&program, Default::default())
+            NormalizedVm::for_test(&program, Default::default())
                 .invoke(
                     entry,
                     vec![],
@@ -1249,7 +1249,7 @@ fn task_descriptor_raw_boundaries_reject_kind_row_origin_arity_and_retained_reso
                 .invoke(accept, vec![value.clone()], Some(&capabilities), &control)
                 .map(|(value, _)| value)
             } else {
-                NormalizedVm::new(&program, NormalizedRunPolicy::default())
+                NormalizedVm::for_test(&program, NormalizedRunPolicy::default())
                     .invoke(accept, vec![value.clone()], Some(&capabilities), &control)
                     .map(|(value, _)| value)
             };
@@ -1407,7 +1407,7 @@ fn empty_and_inactive_task_containers_are_transient_but_not_serializable() {
             .invoke(discard, values, None, &ExecutionControl::uncancelled())
             .map(|r| r.0)
         } else {
-            NormalizedVm::new(&program, Default::default())
+            NormalizedVm::for_test(&program, Default::default())
                 .invoke(discard, values, None, &ExecutionControl::uncancelled())
                 .map(|r| r.0)
         };
@@ -1605,7 +1605,7 @@ fn shared_grant_allowance(direct: bool) {
     target.task_requirements =
         Arc::from([super::super::value::RequirementIndex(narrow_index as u32)]);
     let (capabilities, calls) = bind_fixture_capability(&program, 1);
-    let error = NormalizedVm::new(&program, NormalizedRunPolicy::default())
+    let error = NormalizedVm::for_test(&program, NormalizedRunPolicy::default())
         .invoke(
             accept,
             vec![descriptor],
@@ -1752,7 +1752,7 @@ fn an_empty_task_row_requires_task_context_in_both_evaluators() {
         bound_arguments: Some(Arc::new(vec![NormalizedValue::Unit])),
     };
     assert!(
-        NormalizedVm::new(&program, NormalizedRunPolicy::default())
+        NormalizedVm::for_test(&program, NormalizedRunPolicy::default())
             .invoke(
                 accept,
                 vec![value.clone()],
@@ -1810,7 +1810,7 @@ fn an_empty_task_row_requires_task_context_in_both_evaluators() {
     let target = &mut Arc::make_mut(&mut program.functions)[index.0 as usize];
     target.effect = FunctionEffect::Pure;
     target.graph_function = true;
-    let error = NormalizedVm::new(&program, NormalizedRunPolicy::default())
+    let error = NormalizedVm::for_test(&program, NormalizedRunPolicy::default())
         .invoke(accept, vec![value], None, &ExecutionControl::uncancelled())
         .unwrap_err();
     assert!(error.message.contains("task calling context"), "{error:?}");

@@ -202,7 +202,7 @@ fn resource_suffix_both_evaluators_preserve_effect_order_and_join_failures() {
                         )
                         .map(|(value, _)| value)
                 } else {
-                    NormalizedVm::new(&program, Default::default())
+                    NormalizedVm::for_test(&program, Default::default())
                         .invoke_root_target_scoped(
                             &Name::new("command").unwrap(),
                             vec![],

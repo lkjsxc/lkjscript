@@ -18,8 +18,10 @@ use crate::platform::json::{JsonLimits, decode_application};
 use crate::platform::kernel::{ComparisonPolicy, Name, OwnerKey, TypeForm, TypeObjectDigest};
 use crate::platform::package::RunnerKind;
 use crate::platform::publication::RepositoryView;
+use crate::platform::runtime::structured::StructuredExecutor;
 use crate::platform::semantic_id::RevisionId;
 use futures_util::FutureExt;
+use std::sync::Arc;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedCommandReceipt {
@@ -113,7 +115,7 @@ impl NormalizedReferenceRead for RepositoryView {
 /// production tier and separately retained deterministic adapter evidence.
 pub fn run_pure_command(
     authority: &dyn NormalizedReferenceRead,
-    program: &NormalizedProgram,
+    program: &Arc<NormalizedProgram>,
     target_name: &Name,
     arguments_json: &[u8],
     policy: NormalizedCommandPolicy,
@@ -125,7 +127,8 @@ pub fn run_pure_command(
         prepare_command_invocation(program, target_name, arguments_json, policy.json, control)?;
     require_pure_invocation(program, &invocation)?;
 
-    let production = NormalizedVm::new(program, policy.execution)
+    let mut executor = StructuredExecutor::new();
+    let production = NormalizedVm::new(program, policy.execution, &executor.handle())
         .invoke_root_target(target_name, invocation.arguments.clone(), None, control)
         .map_err(execution_diagnostic)?;
     let reference =
@@ -140,12 +143,13 @@ pub fn run_pure_command(
         ));
     }
     let result_json = encode_typed_with_control(
-        program,
+        program.as_ref(),
         &production.0,
         invocation.result_type,
         policy.json,
         control,
     )?;
+    executor.shutdown().map_err(execution_diagnostic)?;
     Ok(NormalizedCommandReceipt {
         target: target_name.clone(),
         revision: authority_binding.revision,
@@ -160,7 +164,7 @@ pub fn run_pure_command(
 /// This is one production invocation, not differential evidence. Task identity and
 /// component requirements reject before invoking code, even for an empty effect row.
 pub(crate) fn run_pure_artifact_command(
-    program: &NormalizedProgram,
+    program: &Arc<NormalizedProgram>,
     target_name: &Name,
     arguments_json: &[u8],
     policy: NormalizedCommandPolicy,
@@ -169,16 +173,19 @@ pub(crate) fn run_pure_artifact_command(
     let invocation =
         prepare_command_invocation(program, target_name, arguments_json, policy.json, control)?;
     require_pure_invocation(program, &invocation)?;
-    let (value, _) = NormalizedVm::new(program, policy.execution)
+    let mut executor = StructuredExecutor::new();
+    let (value, _) = NormalizedVm::new(program, policy.execution, &executor.handle())
         .invoke_root_target(target_name, invocation.arguments, None, control)
         .map_err(execution_diagnostic)?;
-    encode_typed_with_control(
-        program,
+    let result = encode_typed_with_control(
+        program.as_ref(),
         &value,
         invocation.result_type,
         policy.json,
         control,
-    )
+    )?;
+    executor.shutdown().map_err(execution_diagnostic)?;
+    Ok(result)
 }
 
 fn require_pure_invocation(
@@ -269,7 +276,7 @@ pub(crate) async fn run_foreground_command(
     let encoded = outcome.and_then(|receipt| {
         let started = std::time::Instant::now();
         let bytes = encode_typed_with_control(
-            resident.program(),
+            resident.program().as_ref(),
             &receipt.value,
             invocation.result_type,
             JsonLimits::default(),
@@ -328,14 +335,15 @@ pub(crate) async fn run_foreground_command(
 /// per tier. Production deployment adapters are not appropriate here.
 pub fn run_graph_tests(
     authority: &dyn NormalizedReferenceRead,
-    program: &NormalizedProgram,
+    program: &Arc<NormalizedProgram>,
     capabilities: Option<&NormalizedCapabilities>,
     policy: NormalizedRunPolicy,
     control: &ExecutionControl,
 ) -> Result<NormalizedTestReceipt, Diagnostic> {
     let authority_binding = authority.binding().map_err(execution_diagnostic)?;
     validate_authority_binding(program, authority_binding)?;
-    let vm = NormalizedVm::new(program, policy);
+    let mut executor = StructuredExecutor::new();
+    let vm = NormalizedVm::new(program, policy, &executor.handle());
     let reference = NormalizedReferenceInterpreter::from_reader(authority, program, policy);
     let schema = authority.schema().map_err(execution_diagnostic)?;
     let prepared_tests = program
@@ -411,6 +419,7 @@ pub fn run_graph_tests(
         }
         receipt.passed = receipt.passed.saturating_add(1);
     }
+    executor.shutdown().map_err(execution_diagnostic)?;
     Ok(receipt)
 }
 

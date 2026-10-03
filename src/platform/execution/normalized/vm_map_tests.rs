@@ -123,7 +123,7 @@ fn invoke(
         }
     } else {
         let sink = std::sync::Mutex::new(None);
-        let interpreter = NormalizedVm::new(program, policy);
+        let interpreter = NormalizedVm::for_test(program, policy);
         let interpreter = if let Some(host) = host {
             interpreter.observing(&sink, host)
         } else {
@@ -1207,7 +1207,7 @@ fn raw_map_hosts_release_unused_deep_fallbacks_and_cancelled_keys_iteratively() 
                             .map(|(value, _)| value)
                     } else {
                         let sink = std::sync::Mutex::new(None);
-                        NormalizedVm::new(&program, Default::default())
+                        NormalizedVm::for_test(&program, Default::default())
                             .observing(&sink, &host)
                             .invoke_entry(
                                 NormalizedEntryPoint::InstantiatedFunction(
@@ -1471,7 +1471,7 @@ fn map_literals_keep_authored_evaluation_order_and_get_or_evaluates_present_fall
                     result
                 } else {
                     let sink = std::sync::Mutex::new(None);
-                    let result = NormalizedVm::new(&program, Default::default())
+                    let result = NormalizedVm::for_test(&program, Default::default())
                         .observing(&sink, &host)
                         .invoke(declaration, vec![], None, &control)
                         .map(|(value, _)| value);

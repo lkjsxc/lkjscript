@@ -7,11 +7,12 @@ struct ChildOutcome {
     observation: NormalizedRunObservation,
 }
 
-#[derive(Clone, Copy)]
-struct ChildContext<'a> {
-    program: &'a NormalizedProgram,
+#[derive(Clone)]
+struct ChildContext {
+    program: Arc<NormalizedProgram>,
+    executor: StructuredExecutorHandle,
     policy: NormalizedRunPolicy,
-    control: &'a ExecutionControl,
+    control: ExecutionControl,
     parent_domain: super::super::value::ValueOrigin,
     structured_depth: usize,
     ancestor_depth: usize,
@@ -185,25 +186,37 @@ impl Machine<'_> {
             &mut |raw, ty| self.inspect_transfer_data(raw, ty),
         )?;
         let context = ChildContext {
-            program,
+            program: Arc::clone(self.program_owner),
+            executor: self.executor.clone(),
             policy: self.policy,
-            control,
+            control: control.clone(),
             parent_domain: source,
             structured_depth: self.structured_depth + 1,
             ancestor_depth: self.ancestor_depth.saturating_add(self.frames.len()),
         };
         let left_budget = Arc::clone(&budget);
+        let left_context = context.clone();
         let pair = parallel::run(
+            self.executor,
             control,
-            move || child(context, left_budget, left_domain, left),
-            move || child(context, budget, right_domain, right),
+            move || child(left_context, left_budget, left_domain, left),
+            move || {
+                let _lists = super::super::list::WorkScope::enter();
+                let _maps = super::super::map::WorkScope::enter();
+                child(context, budget, right_domain, right)
+            },
         )?;
-        if pair.spawned {
-            self.observation.parallel_workers_spawned =
-                self.observation.parallel_workers_spawned.saturating_add(1);
-            super::super::list::Work::include_joined(pair.right.observation.value_work.lists);
-            super::super::map::Work::include_joined(pair.right.observation.value_work.maps);
+        if pair.dispatched {
+            self.observation.parallel_worker_dispatches = self
+                .observation
+                .parallel_worker_dispatches
+                .saturating_add(1);
+        } else {
+            self.observation.parallel_inline_fallbacks =
+                self.observation.parallel_inline_fallbacks.saturating_add(1);
         }
+        super::super::list::Work::include_joined(pair.right.observation.value_work.lists);
+        super::super::map::Work::include_joined(pair.right.observation.value_work.maps);
         self.observation.include_child(&pair.left.observation);
         self.observation.include_child(&pair.right.observation);
         let (left, right) = super::super::parallel::results(pair.left.result, pair.right.result)?;
@@ -259,19 +272,23 @@ impl Machine<'_> {
 }
 
 fn child(
-    context: ChildContext<'_>,
+    context: ChildContext,
     budget: Arc<SharedBudget>,
     memory_domain: super::super::value::ValueOrigin,
     envelope: transfer::TransferArguments,
 ) -> ChildOutcome {
     let ChildContext {
         program,
+        executor,
         policy,
         control,
         parent_domain,
         structured_depth,
         ancestor_depth,
     } = context;
+    let program_owner = &program;
+    let program = program.as_ref();
+    let control = &control;
     let resources = match NormalizedResourceScope::new() {
         Ok(resources) => resources,
         Err(error) => {
@@ -290,6 +307,8 @@ fn child(
         ancestor_depth,
         memory_domain,
         program,
+        program_owner,
+        executor: &executor,
         root_allowance: Some(Arc::from([])),
         policy,
         host: None,
@@ -462,7 +481,8 @@ impl NormalizedRunObservation {
             collection_items,
             tail_transfers,
             parallel_scopes,
-            parallel_workers_spawned
+            parallel_worker_dispatches,
+            parallel_inline_fallbacks
         );
         maximum!(
             maximum_call_depth,

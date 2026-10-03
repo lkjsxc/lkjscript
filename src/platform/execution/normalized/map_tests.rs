@@ -21,6 +21,56 @@ fn value(value: i64) -> NormalizedValue {
     NormalizedValue::I64(value)
 }
 
+#[test]
+fn reused_worker_map_scope_restores_saturated_totals_after_nested_unwind() {
+    use crate::platform::runtime::structured::StructuredExecutor;
+    let _caller_scope = WorkScope::enter();
+    let job = || {
+        let saved = Work {
+            nodes_allocated: u64::MAX,
+            entry_handles_allocated: u64::MAX,
+            ..Work::default()
+        };
+        WORK.set(saved);
+        let observed = {
+            let _scope = WorkScope::enter();
+            let map = Map::default()
+                .insert(key(11), value(17), TEST_LIMIT, &mut free)
+                .unwrap();
+            let before_nested = Work::current();
+            let failure = std::panic::catch_unwind(|| {
+                let _nested = WorkScope::enter();
+                let _map = Map::default()
+                    .insert(key(13), value(19), TEST_LIMIT, &mut free)
+                    .unwrap();
+                panic!("disposable nested map observation failure");
+            });
+            assert!(failure.is_err());
+            assert_eq!(Work::current(), before_nested);
+            assert_eq!(map.len(), 1);
+            Work::current()
+        };
+        assert_eq!(Work::current(), saved);
+        (std::thread::current().id(), observed)
+    };
+    for workers in [0, 1] {
+        let mut executor = StructuredExecutor::for_test(workers);
+        let handle = executor.handle();
+        let first = handle
+            .run(&ExecutionControl::uncancelled(), || (), job)
+            .unwrap()
+            .right;
+        let second = handle
+            .run(&ExecutionControl::uncancelled(), || (), job)
+            .unwrap()
+            .right;
+        assert_eq!(first, second);
+        assert_eq!(first.1.nodes_allocated, 1);
+        assert_eq!(first.1.entry_handles_allocated, 1);
+        assert_eq!(executor.shutdown().unwrap().joined_workers, workers as u64);
+    }
+}
+
 fn shape<'a>(
     root: &'a Link,
     lower: Option<&'a NormalizedMapKey>,

@@ -377,7 +377,7 @@ fn recursive_resource_activations_join_success_failure_and_cancellation_in_both_
                             )
                             .map(|(value, observation)| (value, observation.maximum_call_depth))
                     } else {
-                        NormalizedVm::new(&program, policy)
+                        NormalizedVm::for_test(&program, policy)
                             .invoke_root_target_scoped(
                                 &Name::new("command").unwrap(),
                                 vec![],

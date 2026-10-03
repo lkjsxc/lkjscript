@@ -51,7 +51,7 @@ fn fixture() -> (Arc<NormalizedProgram>, BTreeMap<String, FunctionIndex>) {
             .repository;
         let application =
             crate::platform::normalized_lifecycle::prepare_repository(repository).unwrap();
-        let program = Arc::new(application.program);
+        let program = application.program;
         let functions = source
             .owners
             .iter()

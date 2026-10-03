@@ -4,6 +4,32 @@ Status: normative.
 
 ## Structured parallel ownership
 
+Reusable auxiliary execution requires stable worker identity across successive
+jobs, lazy physical starts bounded by peak admitted demand and the process ceiling,
+and joined capacity reclamation across repeated runtime lifetimes. Exercise zero,
+one and saturated capacity, nested groups, independent runtime owners and refusal
+before submission. An unsubmitted job retains its single custody envelope for
+inline execution. A caller unwind or worker panic must join cleanup and release
+every pending input/result owner before capacity becomes available again.
+
+Reuse the same workers across exact programs, cancellation controls and quota
+ledgers. Prime thread-local observation counters near saturation; each dispatched
+job must have independent list/map observations on success and unwind. Compare
+normal and cancellation behavior with the independent serial reference evaluator.
+The host must discard preparation code references while retaining the separate
+executor owner, close dispatch before draining, and derive stopped observations
+from joined workers rather than copying the ready snapshot.
+
+The maintained native parallel-work family supplies exact generic witnesses for
+ByteBuffer and OwnedI64Cell transform/reduction implementations. Serial and parallel
+routes execute the same methods and return complete independently expected payloads.
+Include empty, small, substantial and nested inputs, source-deleted standalone
+execution, CPU work beside independent HTTP service, cancellation after observed
+progress and restart. Buffer growth inside the algorithm is distinct from copies
+at transfer boundaries. Record cold/warm costs, latency tails and slower cases
+against the preceding executable and a matched separate-process baseline. These
+observations do not establish a total CPU bound, preemption or fairness.
+
 Explicit transferable parameters extend this proof to generic task bodies that
 form groups before any concrete caller exists. A separately exported worker,
 generic combinator and consumer must retain symbolic ordinary and owned bounds,
@@ -1141,6 +1167,8 @@ receipt remains incomplete; cache cleanup does not turn it into an accepted resu
 
 The maintained `docs/guides/examples/` directory contains executable native programs,
 embedded creation recipes and tested deployment inputs, not documentation-only text.
+The `examples/parallel-work/` proposals, README and deployment descriptors receive
+the same bounded product-surface audit and full-profile change selection.
 Any changed path within that directory selects the complete `full` profile, including
 untracked additions, staged/unstaged edits, deletion and either side of a rename.
 Unknown file types there still require the surface audit rather than being ignored.

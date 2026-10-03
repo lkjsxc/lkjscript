@@ -69,7 +69,9 @@ async fn exact_shared_code_has_private_kernels_and_unloads_after_last_owner() {
         assert_eq!(set.observe().programs[0].instances, 2);
         assert!(set.observe().programs[0].artifact_object_bytes > 0);
         assert_eq!(set.observe().private_configuration_fields, 2);
-        let deployments = set.into_deployments();
+        assert!(set.observe().executor.dispatch_open);
+        assert_eq!(set.observe().executor.workers_started, 0);
+        let (deployments, mut executor) = set.into_parts();
         assert!(Arc::ptr_eq(
             &deployments[0].program,
             &deployments[1].program
@@ -89,6 +91,10 @@ async fn exact_shared_code_has_private_kernels_and_unloads_after_last_owner() {
         assert!(stopped.cleanup_failures.is_empty());
         assert!(!first.observe_resident().accepting);
         drop(first);
+        assert!(
+            executor.observe().dispatch_open,
+            "a member does not close its siblings' dispatch"
+        );
         assert!(weak.upgrade().is_some());
         assert!(second.observe_resident().accepting);
         assert_eq!(second.dispatch(request()).await.unwrap().0.status, 200);
@@ -98,6 +104,12 @@ async fn exact_shared_code_has_private_kernels_and_unloads_after_last_owner() {
         assert!(stopped.cleanup_failures.is_empty());
         drop(second);
         assert!(weak.upgrade().is_none(), "no cache retains unloaded code");
+        executor.close_dispatch();
+        let workers = executor.shutdown().unwrap();
+        assert!(!workers.dispatch_open);
+        assert_eq!(workers.active_dispatches, 0);
+        assert_eq!(workers.remaining_workers, 0);
+        assert_eq!(workers.joined_workers, workers.workers_started);
     }
 }
 
@@ -109,8 +121,9 @@ async fn distinct_exact_programs_coexist_without_identity_aliasing() {
         write(first_root.path(), "first.json", &descriptor),
         write(second_root.path(), "second.json", &second_descriptor),
     ];
-    let set = PreparedServiceSet::load(&paths, Handle::current(), &ExecutionControl::uncancelled())
-        .unwrap();
+    let mut set =
+        PreparedServiceSet::load(&paths, Handle::current(), &ExecutionControl::uncancelled())
+            .unwrap();
     assert_eq!(set.observe().programs.len(), 2);
     assert!(!Arc::ptr_eq(
         &set.deployments[0].program,
@@ -119,6 +132,29 @@ async fn distinct_exact_programs_coexist_without_identity_aliasing() {
     let mut cleanup = deployment_error("test_cleanup", "not invoked");
     set.close_uninvoked(&mut cleanup);
     assert!(cleanup.notes.is_empty());
+    assert!(!set.observe().executor.dispatch_open);
+    assert_eq!(set.observe().executor.remaining_workers, 0);
+}
+
+#[tokio::test]
+async fn standalone_owner_can_outlive_preparation_without_pinning_programs() {
+    let (root, descriptor) = fixture();
+    let path = write(root.path(), "standalone.json", &descriptor);
+    let mut prepared = PreparedDeployment::load(&path, Handle::current()).unwrap();
+    let weak = Arc::downgrade(&prepared.program);
+    let mut executor = prepared.take_executor().unwrap();
+    assert!(prepared.take_executor().is_none());
+    let application = prepared.http_application().unwrap();
+    drop(prepared);
+    assert!(executor.observe().dispatch_open);
+    assert_eq!(application.dispatch(request()).await.unwrap().0.status, 200);
+    executor.close_dispatch();
+    assert_eq!(application.shutdown().await.remaining_tasks, 0);
+    drop(application);
+    assert!(weak.upgrade().is_none());
+    let workers = executor.shutdown().unwrap();
+    assert_eq!(workers.remaining_workers, 0);
+    assert_eq!(workers.active_dispatches, 0);
 }
 
 #[tokio::test]

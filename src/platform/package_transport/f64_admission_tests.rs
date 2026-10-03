@@ -190,7 +190,9 @@ fn f64_successor_checks_rebuilds_and_executes_genuine_pre_f64_source_without_rew
     let artifacts = [reencoded.as_slice(), rebuilt.artifact.bytes.as_slice()];
     let mut observations = Vec::new();
     for artifact in artifacts {
-        let program = NormalizedProgram::prepare(load_artifact(artifact).unwrap()).unwrap();
+        let program = std::sync::Arc::new(
+            NormalizedProgram::prepare(load_artifact(artifact).unwrap()).unwrap(),
+        );
         let receipt = run_graph_tests(
             &package.snapshot,
             &program,

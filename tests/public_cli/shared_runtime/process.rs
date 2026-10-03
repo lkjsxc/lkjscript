@@ -4,7 +4,7 @@ use rustix::process::{Pid, Signal, kill_process};
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
-pub(super) struct Group {
+pub(in super::super) struct Group {
     child: support::SpawnedChild,
     output: PathBuf,
     errors: PathBuf,
@@ -123,7 +123,27 @@ impl Group {
             .collect::<Vec<_>>();
         assert_eq!(stopped.len(), 1);
         let stopped = stopped[0];
-        assert_eq!(stopped["shared_runtime"], self.ready["shared_runtime"]);
+        let mut ready_runtime = self.ready["shared_runtime"].clone();
+        let mut stopped_runtime = stopped["shared_runtime"].clone();
+        let ready_executor = ready_runtime
+            .as_object_mut()
+            .unwrap()
+            .remove("executor")
+            .unwrap();
+        let stopped_executor = stopped_runtime
+            .as_object_mut()
+            .unwrap()
+            .remove("executor")
+            .unwrap();
+        assert_eq!(stopped_runtime, ready_runtime);
+        assert_eq!(ready_executor["dispatch_open"], true);
+        assert_eq!(stopped_executor["dispatch_open"], false);
+        assert_eq!(stopped_executor["active_dispatches"], 0);
+        assert_eq!(stopped_executor["remaining_workers"], 0);
+        assert_eq!(
+            stopped_executor["joined_workers"],
+            stopped_executor["workers_started"]
+        );
         for instance in stopped["instances"].as_array().unwrap() {
             let receipt = &instance["receipt"];
             assert_eq!(receipt["shutdown"]["admission_stopped"], true);

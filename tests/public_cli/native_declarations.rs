@@ -1673,3 +1673,6 @@ mod native_owned_witnesses;
 
 #[path = "native_owned_mutation.rs"]
 mod native_owned_mutation;
+
+#[path = "parallel_work.rs"]
+mod parallel_work;

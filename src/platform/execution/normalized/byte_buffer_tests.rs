@@ -63,7 +63,7 @@ fn byte_buffer_creation_reserves_complete_owned_storage_before_allocation() {
                 (result, observed.allocated_bytes, observed.external_calls)
             } else {
                 let observer = Mutex::new(None);
-                let result = NormalizedVm::new(&program, policy)
+                let result = NormalizedVm::for_test(&program, policy)
                     .observing_checked(&observer)
                     .invoke(declaration, vec![], None, &control)
                     .map(|pair| pair.0);
@@ -126,7 +126,7 @@ fn byte_buffer_source_and_vm_have_exact_binary_and_cleanup() {
         ("discarded", NormalizedValue::Unit),
     ] {
         let d = declaration_named(&source, name);
-        let (actual, work) = NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+        let (actual, work) = NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
             .invoke(d, vec![], None, &control)
             .unwrap();
         let (reference, reference_work) = NormalizedReferenceInterpreter::new(
@@ -170,7 +170,7 @@ fn byte_buffer_task_locals_preserve_task_kind_in_both_evaluators() {
                 .unwrap()
                 .0
         } else {
-            let engine = NormalizedVm::new(&program, NormalizedRunPolicy::foreground());
+            let engine = NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground());
             assert_eq!(
                 engine.invoke(d, vec![], None, &control).unwrap().0,
                 NormalizedValue::bytes(vec![])
@@ -192,7 +192,7 @@ fn byte_buffer_invalid_octets_and_raw_owners_reject_in_both_evaluators() {
     for n in [-1, 256, i64::MIN, i64::MAX] {
         let d = declaration_named(&source, "invalid-push");
         assert_eq!(
-            NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+            NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                 .invoke(d, vec![NormalizedValue::I64(n)], None, &control)
                 .unwrap_err()
                 .code,
@@ -214,7 +214,7 @@ fn byte_buffer_invalid_octets_and_raw_owners_reject_in_both_evaluators() {
     let raw = NormalizedValue::ByteBuffer(super::super::byte_buffer::ByteBuffer::empty(domain));
     let d = declaration_named(&source, "freeze");
     assert!(
-        NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+        NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
             .invoke(d, vec![raw.clone()], None, &control)
             .is_err()
     );
@@ -225,7 +225,7 @@ fn byte_buffer_invalid_octets_and_raw_owners_reject_in_both_evaluators() {
     );
     let d = declaration_named(&source, "empty");
     assert!(
-        NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+        NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
             .invoke(d, vec![], None, &control)
             .is_err()
     );
@@ -283,7 +283,7 @@ fn byte_buffer_failures_cancel_and_quotas_drop_all_storage_and_loans() {
                 .invoke(main, vec![], None, &control)
                 .map(|_| ())
             } else {
-                NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                     .invoke(main, vec![], None, &control)
                     .map(|_| ())
             };
@@ -314,7 +314,7 @@ fn byte_buffer_failures_cancel_and_quotas_drop_all_storage_and_loans() {
                     .invoke(main, vec![], None, &control)
                     .map(|_| ())
             } else {
-                NormalizedVm::new(&program, policy)
+                NormalizedVm::for_test(&program, policy)
                     .invoke(main, vec![], None, &control)
                     .map(|_| ())
             };
@@ -425,9 +425,10 @@ fn byte_buffer_long_owned_builder_borrowed_reader_and_both_owner_choices() {
                     assert!(work.tail_transfers >= 16383);
                 }
             } else {
-                let (value, work) = NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
-                    .invoke(d, args, None, &control)
-                    .unwrap();
+                let (value, work) =
+                    NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
+                        .invoke(d, args, None, &control)
+                        .unwrap();
                 assert_eq!(value, expected);
                 assert!(work.maximum_call_depth < 16);
                 if name.starts_with("long") {
@@ -446,7 +447,7 @@ fn byte_buffer_long_owned_builder_borrowed_reader_and_both_owner_choices() {
             .invoke_test(test, None, &control)
             .unwrap();
         } else {
-            NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+            NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                 .invoke_test(test, None, &control)
                 .unwrap();
         }
@@ -499,7 +500,7 @@ fn byte_buffer_raw_unused_generic_and_descriptor_instantiations_reject() {
     let function = program.function(declaration).unwrap();
     let control = ExecutionControl::uncancelled();
     assert!(
-        NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+        NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
             .invoke_entry(
                 NormalizedEntryPoint::InstantiatedFunction(
                     function,
@@ -525,7 +526,7 @@ fn byte_buffer_raw_unused_generic_and_descriptor_instantiations_reject() {
     };
     let callback = declaration_named(&source, "callback");
     assert!(
-        NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+        NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
             .invoke(callback, vec![raw.clone()], None, &control)
             .is_err()
     );
@@ -616,7 +617,7 @@ fn byte_buffer_lexical_drop_precedes_continuation_and_cancel_during_live_loan_cl
                 .map(|_| ())
             } else {
                 let sink = std::sync::Mutex::new(None);
-                NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                     .observing(&sink, &host)
                     .invoke(d, vec![], None, &control)
                     .map(|_| ())
@@ -660,7 +661,7 @@ fn byte_buffer_raw_adapter_results_and_borrowed_or_stale_ingress_reject() {
             .map(|_| ())
         } else {
             let sink = std::sync::Mutex::new(None);
-            NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+            NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                 .observing(&sink, &host)
                 .invoke(d, vec![], None, &control)
                 .map(|_| ())
@@ -692,7 +693,7 @@ fn byte_buffer_raw_adapter_results_and_borrowed_or_stale_ingress_reject() {
                 .invoke(d, vec![NormalizedValue::ByteBuffer(raw)], None, &control)
                 .map(|_| ())
             } else {
-                NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                     .invoke(d, vec![NormalizedValue::ByteBuffer(raw)], None, &control)
                     .map(|_| ())
             };
@@ -803,7 +804,7 @@ declarations.end"#,
             .0
         } else {
             let sink = std::sync::Mutex::new(None);
-            NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+            NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                 .observing(&sink, &host)
                 .invoke(d, vec![], None, &control)
                 .unwrap()
@@ -832,7 +833,7 @@ fn byte_buffer_invalid_indices_trap_and_drop_storage_in_both_evaluators() {
                 .invoke(d, vec![NormalizedValue::I64(index)], None, &control)
                 .map(|_| ())
             } else {
-                NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                     .invoke(d, vec![NormalizedValue::I64(index)], None, &control)
                     .map(|_| ())
             };

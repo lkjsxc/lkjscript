@@ -47,6 +47,21 @@ thread_local! {
     static WORK: Cell<Work> = const { Cell::new(Work::ZERO) };
 }
 
+/// A worker job starts with fresh observations and restores its caller on unwind.
+pub(super) struct WorkScope(Work);
+
+impl WorkScope {
+    pub(super) fn enter() -> Self {
+        Self(WORK.replace(Work::ZERO))
+    }
+}
+
+impl Drop for WorkScope {
+    fn drop(&mut self) {
+        WORK.set(self.0);
+    }
+}
+
 impl Work {
     /// Join observations from a completed off-thread child into this invocation.
     pub(super) fn include_joined(child: Self) {

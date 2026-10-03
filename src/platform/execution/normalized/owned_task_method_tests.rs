@@ -24,7 +24,7 @@ fn owned_task_method_both_engines_preserve_values_allocations_and_exact_effect_c
                 .unwrap()
                 .0
             } else {
-                NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                     .invoke(entry, args, Some(&caps), &control)
                     .unwrap()
                     .0
@@ -54,7 +54,7 @@ fn owned_task_method_cancellation_quota_and_missing_grants_never_leak_or_replay(
                     .invoke(entry, args, caps, control)
                     .map(|v| v.0)
             } else {
-                NormalizedVm::new(&program, policy)
+                NormalizedVm::for_test(&program, policy)
                     .invoke(entry, args, caps, control)
                     .map(|v| v.0)
             }

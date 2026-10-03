@@ -1,5 +1,7 @@
 //! Independent expected errors exercise the common production/reference join owner.
 use super::*;
+use crate::platform::runtime::structured::StructuredExecutor;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 fn cancelled() -> ExecutionError {
@@ -64,54 +66,51 @@ fn nested_joins_do_not_erase_the_original_deadline() {
 
 #[test]
 fn worker_deadline_survives_joined_caller_cancellation() {
-    let workers = Workers {
-        active: AtomicUsize::new(0),
-        maximum: 1,
-    };
+    let executor = StructuredExecutor::for_test(1);
     let control = ExecutionControl::uncancelled();
     let original = deadline();
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-    let pair = run_with_workers(
-        &workers,
+    let child_control = control.clone();
+    let child_original = original.clone();
+    let pair = run(
+        &executor.handle(),
         &control,
         || {
             receiver.recv_timeout(Duration::from_secs(5)).unwrap();
             control.check()
         },
-        || {
+        move || {
             // Inject the original operational failure, then signal its sibling.
             // Synchronization fixes this causal order without wall-clock timing.
-            control.cancel();
+            child_control.cancel();
             sender.send(()).unwrap();
-            Err::<(), _>(original.clone())
+            Err::<(), _>(child_original)
         },
     )
     .unwrap();
-    assert!(pair.spawned);
-    assert_eq!(workers.active.load(Ordering::Acquire), 0);
+    assert!(pair.dispatched);
+    assert_eq!(executor.observe().active_dispatches, 0);
     assert_eq!(results(pair.left, pair.right).unwrap_err(), original);
 }
 
 #[test]
 fn saturated_worker_fallback_retains_the_callers_deadline() {
-    let workers = Workers {
-        active: AtomicUsize::new(0),
-        maximum: 0,
-    };
+    let executor = StructuredExecutor::for_test(0);
     let control = ExecutionControl::uncancelled();
     let original = deadline();
-    let pair = run_with_workers(
-        &workers,
+    let child_control = control.clone();
+    let pair = run(
+        &executor.handle(),
         &control,
         || {
             control.cancel();
             Err::<(), _>(original.clone())
         },
-        || control.check(),
+        move || child_control.check(),
     )
     .unwrap();
-    assert!(!pair.spawned);
-    assert_eq!(workers.active.load(Ordering::Acquire), 0);
+    assert!(!pair.dispatched);
+    assert_eq!(executor.observe().active_dispatches, 0);
     assert_eq!(results(pair.left, pair.right).unwrap_err(), original);
 }
 

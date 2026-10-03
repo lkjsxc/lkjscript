@@ -348,7 +348,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
             )
         } else {
             let sink = std::sync::Mutex::new(None);
-            let result = super::super::NormalizedVm::new(&program, policy)
+            let result = super::super::NormalizedVm::for_test(&program, policy)
                 .observing(&sink, &super::super::CoreNormalizedHost)
                 .invoke_entry(
                     super::super::super::prepare::NormalizedEntryPoint::InstantiatedFunction(
@@ -994,11 +994,13 @@ fn raw_tail_element_and_host_results_reject_in_both_tiers_before_downstream_work
         let host = RejectingHost::default();
         let vm_sink = std::sync::Mutex::new(None);
         let reference_sink = std::sync::Mutex::new(None);
-        let production =
-            super::super::NormalizedVm::new(&program, super::super::NormalizedRunPolicy::default())
-                .observing(&vm_sink, &host)
-                .invoke_entry(entry.clone(), arguments.clone(), None, &control)
-                .expect_err("raw VM input rejects");
+        let production = super::super::NormalizedVm::for_test(
+            &program,
+            super::super::NormalizedRunPolicy::default(),
+        )
+        .observing(&vm_sink, &host)
+        .invoke_entry(entry.clone(), arguments.clone(), None, &control)
+        .expect_err("raw VM input rejects");
         let reference = NormalizedReferenceInterpreter::new(
             &snapshot,
             &program,
@@ -1059,7 +1061,7 @@ fn raw_tail_element_and_host_results_reject_in_both_tiers_before_downstream_work
             );
         } else {
             let sink = std::sync::Mutex::new(None);
-            let error = super::super::NormalizedVm::new(
+            let error = super::super::NormalizedVm::for_test(
                 &program,
                 super::super::NormalizedRunPolicy::default(),
             )
@@ -1079,17 +1081,18 @@ fn raw_tail_element_and_host_results_reject_in_both_tiers_before_downstream_work
         assert_eq!(host.calls.load(Ordering::Relaxed), 1);
     }
     assert_eq!(
-        super::super::NormalizedVm::new(&program, super::super::NormalizedRunPolicy::default())
-            .invoke_entry(
-                entry,
-                vec![
-                    NormalizedValue::list(vec![NormalizedValue::I64(1)]).expect("bounded raw list")
-                ],
-                None,
-                &control
-            )
-            .unwrap()
-            .0,
+        super::super::NormalizedVm::for_test(
+            &program,
+            super::super::NormalizedRunPolicy::default()
+        )
+        .invoke_entry(
+            entry,
+            vec![NormalizedValue::list(vec![NormalizedValue::I64(1)]).expect("bounded raw list")],
+            None,
+            &control
+        )
+        .unwrap()
+        .0,
         NormalizedValue::I64(1)
     );
 }
@@ -1148,7 +1151,7 @@ fn admission_limits_and_deterministic_cancellation_retain_progress_and_allow_reu
                 index,
                 Arc::from([ty]),
             );
-            let result = super::super::NormalizedVm::new(&program, policy)
+            let result = super::super::NormalizedVm::for_test(&program, policy)
                 .observing(&sink, &super::super::CoreNormalizedHost)
                 .invoke_entry(entry, vec![raw], None, control)
                 .map(|(value, _)| value);
@@ -1305,7 +1308,7 @@ fn corrupt_production_layout_class_is_caught_by_canonical_reference_and_oracle()
     );
     Arc::make_mut(&mut program.affine_variants)[layout] = false; // Safe fault in disposable production metadata only.
     let arguments = vec![NormalizedValue::list(vec![raw]).expect("bounded raw list")];
-    let production = super::super::NormalizedVm::new(&program, Default::default())
+    let production = super::super::NormalizedVm::for_test(&program, Default::default())
         .invoke_entry(
             super::super::super::prepare::NormalizedEntryPoint::InstantiatedFunction(
                 index,
@@ -1444,7 +1447,7 @@ fn independent_oracle_covers_scalar_and_nominal_constructors_and_foreign_callbac
             Affinity::Free
         );
         let raw = NormalizedValue::list(vec![value.into_raw()]).expect("bounded raw list");
-        let production = super::super::NormalizedVm::new(&program, Default::default())
+        let production = super::super::NormalizedVm::for_test(&program, Default::default())
             .invoke_entry(
                 super::super::super::prepare::NormalizedEntryPoint::InstantiatedFunction(
                     length,
@@ -1520,7 +1523,7 @@ fn independent_oracle_covers_scalar_and_nominal_constructors_and_foreign_callbac
             .unwrap_err()
         } else {
             let sink = std::sync::Mutex::new(None);
-            super::super::NormalizedVm::new(&program, Default::default())
+            super::super::NormalizedVm::for_test(&program, Default::default())
                 .observing(&sink, &host)
                 .invoke_entry(
                     super::super::super::prepare::NormalizedEntryPoint::InstantiatedFunction(
@@ -1645,7 +1648,7 @@ fn constrained_raw_factory_checks_types_and_real_environments_before_body() {
             )
         } else {
             let sink = std::sync::Mutex::new(None);
-            let result = super::super::NormalizedVm::new(&program, policy)
+            let result = super::super::NormalizedVm::for_test(&program, policy)
                 .observing(&sink, &super::super::CoreNormalizedHost)
                 .invoke_entry(
                     super::super::super::prepare::NormalizedEntryPoint::InstantiatedFunction(

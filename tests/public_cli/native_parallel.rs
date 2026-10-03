@@ -257,7 +257,10 @@ fn native_parallel_three_packages_owned_reduction_edit_and_source_free_execution
             let observation: Value =
                 serde_json::from_str(compact_field(execution, "production-observation")).unwrap();
             assert_eq!(observation["parallel_scopes"], json!(2));
-            assert_eq!(observation["parallel_workers_spawned"], json!(2));
+            let dispatched = observation["parallel_worker_dispatches"].as_u64().unwrap();
+            let inline = observation["parallel_inline_fallbacks"].as_u64().unwrap();
+            assert_eq!(dispatched + inline, 2);
+            assert!(observation.get("parallel_workers_spawned").is_none());
             assert_eq!(observation["capability_calls"], json!(0));
             // Independent closed-form arithmetic, not outputs from a sequential
             // copy of the authored implementation, determines every result.

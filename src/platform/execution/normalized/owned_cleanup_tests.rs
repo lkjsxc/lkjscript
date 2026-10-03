@@ -124,7 +124,7 @@ fn owned_generic_lexical_drop_live_loan_cancellation_and_adapter_ingress() {
                     .map(|v| v.0)
                 } else {
                     let sink = Mutex::new(None);
-                    NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                    NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                         .observing(&sink, &host)
                         .invoke(d, vec![], None, &control)
                         .map(|v| v.0)
@@ -167,7 +167,7 @@ fn owned_generic_traps_cancellation_and_quota_cleanup() {
                         .invoke(d, vec![], None, control)
                         .map(|v| v.0)
                 } else {
-                    NormalizedVm::new(&program, policy)
+                    NormalizedVm::for_test(&program, policy)
                         .invoke(d, vec![], None, control)
                         .map(|v| v.0)
                 }

@@ -125,7 +125,7 @@ fn evaluate(
     let declaration = declaration_named(snapshot, name);
     let control = ExecutionControl::uncancelled();
     [
-        NormalizedVm::new(program, NormalizedRunPolicy::foreground())
+        NormalizedVm::for_test(program, NormalizedRunPolicy::foreground())
             .invoke(declaration, arguments.clone(), None, &control)
             .unwrap()
             .0,
@@ -235,7 +235,7 @@ fn f64_arithmetic_matches_independent_fixed_bits_and_detects_a_fault() {
         NormalizedFunctionBody::External(
             ImplementationName::new("core.f64.abs".to_owned()).unwrap(),
         );
-    let actual = NormalizedVm::new(&faulted, NormalizedRunPolicy::foreground())
+    let actual = NormalizedVm::for_test(&faulted, NormalizedRunPolicy::foreground())
         .invoke(
             declaration,
             vec![scalar(0x4000_0000_0000_0000)],
@@ -462,7 +462,7 @@ fn f64_literals_generics_bound_captures_and_graph_observation_use_ordinary_paths
     let control = ExecutionControl::uncancelled();
     let ignored = declaration_named(&snapshot, "ignore");
     assert!(
-        NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+        NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
             .invoke(ignored, vec![NormalizedValue::I64(1)], None, &control)
             .is_err()
     );

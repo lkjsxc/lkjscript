@@ -165,7 +165,7 @@ fn task_iteration_cutover_preserves_unrelated_owners_public_contracts_and_old_su
     // Rebuild the exact retained canonical graph; all 33 old behavioral cases remain exercised.
     let program = crate::platform::execution::normalized::tests::prepare_snapshot(old);
     let control = crate::platform::execution::ExecutionControl::uncancelled();
-    let vm = NormalizedVm::new(&program, Default::default());
+    let vm = NormalizedVm::for_test(&program, Default::default());
     let reference = NormalizedReferenceInterpreter::new(old, &program, Default::default());
     let mut tests = 0;
     for target in program.tests.values() {

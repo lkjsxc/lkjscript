@@ -3,7 +3,7 @@
 use super::*;
 
 pub const MAXIMUM_SHARED_DEPLOYMENTS: usize = 64;
-pub const SHARED_RUNTIME_CONTRACT_VERSION: u16 = 1;
+pub const SHARED_RUNTIME_CONTRACT_VERSION: u16 = 2;
 
 /// These are retained encoded object bytes and table counts, not heap/RSS estimates.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -24,6 +24,7 @@ pub struct SharedRuntimeObservation {
     pub maximum_concurrent_tasks: usize,
     pub maximum_queued_tasks: usize,
     pub private_configuration_fields: usize,
+    pub executor: StructuredExecutorObservation,
 }
 
 /// A finite service group, not a global deployment selector or mutable code cache.
@@ -32,6 +33,7 @@ pub struct SharedRuntimeObservation {
 pub struct PreparedServiceSet {
     deployments: Vec<PreparedDeployment>,
     observation: SharedRuntimeObservation,
+    executor: StructuredExecutor,
 }
 
 impl PreparedServiceSet {
@@ -92,6 +94,7 @@ impl PreparedServiceSet {
             admitted.push(item);
         }
 
+        let mut executor = StructuredExecutor::new();
         let observation = SharedRuntimeObservation {
             contract_version: SHARED_RUNTIME_CONTRACT_VERSION,
             runtime_version: crate::PRODUCT_VERSION.to_owned(),
@@ -112,15 +115,17 @@ impl PreparedServiceSet {
             maximum_concurrent_tasks: concurrent,
             maximum_queued_tasks: queued,
             private_configuration_fields: configuration_fields,
+            executor: executor.observe(),
         };
         // No process-global cache keeps a stopped group's programs alive.
         drop(programs);
         let mut deployments: Vec<PreparedDeployment> = Vec::with_capacity(admitted.len());
         for item in admitted {
-            match item.prepare(runtime.clone(), control) {
+            match item.prepare(runtime.clone(), control, executor.handle()) {
                 Ok(deployment) => deployments.push(deployment),
                 Err(mut error) => {
                     close_uninvoked(&deployments, &mut error);
+                    shutdown_executor(&mut executor, &mut error);
                     return Err(error);
                 }
             }
@@ -128,30 +133,47 @@ impl PreparedServiceSet {
         if let Err(failure) = control.check() {
             let mut error = super::super::execution::normalized::execution_diagnostic(failure);
             close_uninvoked(&deployments, &mut error);
+            shutdown_executor(&mut executor, &mut error);
             return Err(error);
         }
         Ok(Self {
             deployments,
             observation,
+            executor,
         })
     }
 
-    pub fn observe(&self) -> &SharedRuntimeObservation {
-        &self.observation
+    pub fn observe(&self) -> SharedRuntimeObservation {
+        let mut observation = self.observation.clone();
+        observation.executor = self.executor.observe();
+        observation
     }
 
     pub fn deployments(&self) -> &[PreparedDeployment] {
         &self.deployments
     }
 
-    /// Transfer lifetime ownership to the host. There is no hidden pool reference.
-    pub fn into_deployments(self) -> Vec<PreparedDeployment> {
-        self.deployments
+    /// Transfer prepared members and their sole worker owner independently.
+    /// The owner retains no program or application authority.
+    pub fn into_parts(self) -> (Vec<PreparedDeployment>, StructuredExecutor) {
+        (self.deployments, self.executor)
     }
 
     /// Only before invoking any member. Started members require joined shutdown.
-    pub fn close_uninvoked(&self, error: &mut Diagnostic) {
+    pub fn close_uninvoked(&mut self, error: &mut Diagnostic) {
+        self.executor.close_dispatch();
         close_uninvoked(&self.deployments, error);
+        shutdown_executor(&mut self.executor, error);
+    }
+}
+
+fn shutdown_executor(executor: &mut StructuredExecutor, error: &mut Diagnostic) {
+    executor.close_dispatch();
+    if let Err(failure) = executor.shutdown() {
+        error.notes.push(format!(
+            "structured worker cleanup failed with safe code '{}'",
+            failure.code
+        ));
     }
 }
 

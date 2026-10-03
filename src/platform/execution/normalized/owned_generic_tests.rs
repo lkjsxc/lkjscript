@@ -12,7 +12,7 @@ fn owned_generics_cell_scalar_extremes() {
     let d = declaration_named(&source, "main");
     let control = ExecutionControl::uncancelled();
     for n in [0, 255, 128, -257, i64::MIN, i64::MAX] {
-        let (actual, work) = NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+        let (actual, work) = NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
             .invoke(d, vec![NormalizedValue::I64(n)], None, &control)
             .unwrap();
         assert_eq!(actual, NormalizedValue::I64(n));
@@ -72,7 +72,7 @@ declarations.end
         let d = declaration_named(&source, name);
         let argument = || vec![NormalizedValue::list(vec![NormalizedValue::I64(1)]).unwrap()];
         assert_eq!(
-            NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+            NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                 .invoke_entry(
                     super::super::prepare::NormalizedEntryPoint::InstantiatedFunction(
                         program.function(d).unwrap(),
@@ -116,7 +116,7 @@ fn owned_witness_cell_selects_exact_same_self_implementation() {
     let alternate = declaration_named(&source, "alternate");
     for n in [128, i64::MIN, i64::MAX] {
         assert_eq!(
-            NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+            NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                 .invoke(main, vec![NormalizedValue::I64(n)], None, &control)
                 .unwrap()
                 .0,
@@ -135,7 +135,7 @@ fn owned_witness_cell_selects_exact_same_self_implementation() {
         );
     }
     assert_eq!(
-        NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+        NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
             .invoke(alternate, vec![], None, &control)
             .unwrap()
             .0,
@@ -178,7 +178,7 @@ fn owned_witness_deep_tail_forwarding_restores_exact_selection() {
             .unwrap();
             (value, work.maximum_call_depth, work.tail_transfers)
         } else {
-            let (value, work) = NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+            let (value, work) = NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                 .invoke(entry, vec![NormalizedValue::I64(i64::MIN)], None, &control)
                 .unwrap();
             (value, work.maximum_call_depth, work.tail_transfers)
@@ -215,15 +215,16 @@ declarations.end"#)).unwrap();
             .unwrap()
             .0;
         let args = || vec![NormalizedValue::I64(1), NormalizedValue::I64(2)];
-        let actual = NormalizedVm::new(&program, NormalizedRunPolicy::foreground()).invoke_entry(
-            NormalizedEntryPoint::InstantiatedFunction(
-                program.function(d).unwrap(),
-                Arc::from([ty]),
-            ),
-            args(),
-            None,
-            &control,
-        );
+        let actual = NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
+            .invoke_entry(
+                NormalizedEntryPoint::InstantiatedFunction(
+                    program.function(d).unwrap(),
+                    Arc::from([ty]),
+                ),
+                args(),
+                None,
+                &control,
+            );
         let reference = NormalizedReferenceInterpreter::new(
             &source,
             &program,

@@ -157,7 +157,7 @@ declarations.end"#).unwrap();
                 .invoke(entry, arguments, None, &control)
                 .map(|r| r.0)
             } else {
-                NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                     .invoke(entry, arguments, None, &control)
                     .map(|r| r.0)
             }

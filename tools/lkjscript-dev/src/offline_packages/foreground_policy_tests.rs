@@ -22,7 +22,7 @@ fn cells(base: u64, stride: u64) -> Vec<LoopCell> {
             "maximum_value_stack":5,"maximum_live_transactions":0,
             "live_call_frames_after":0,"live_handles_after":0,"live_locals_after":0,
             "live_operands_after":0,"live_transactions_after":0,"live_type_bindings_after":0,
-            "parallel_scopes":0,"parallel_workers_spawned":0,"tail_transfers":n + 1
+            "parallel_scopes":0,"parallel_worker_dispatches":0,"parallel_inline_fallbacks":0,"tail_transfers":n + 1
         });
         let mut execution = BTreeMap::new();
         for (field, value) in [
@@ -143,7 +143,8 @@ fn completed_loops_must_release_every_tracked_state_kind() {
         "live_type_bindings_after",
         "maximum_live_transactions",
         "parallel_scopes",
-        "parallel_workers_spawned",
+        "parallel_worker_dispatches",
+        "parallel_inline_fallbacks",
     ] {
         let mut changed = cells(52, 36);
         replace(&mut changed, 2, field, json!(1));

@@ -21,6 +21,7 @@ use crate::platform::json::JsonLimits;
 use crate::platform::kernel::{
     DeclarationReference, ImplementationName, Name, ParameterUse, TypeForm, TypeObjectDigest,
 };
+use crate::platform::runtime::structured::StructuredExecutorHandle;
 use crate::platform::semantic_id::TypeParameterId;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -77,7 +78,8 @@ impl NormalizedRunPolicy {
 #[derive(Clone, Debug, Default, Eq, PartialEq, serde::Serialize)]
 pub struct NormalizedRunObservation {
     pub parallel_scopes: u64,
-    pub parallel_workers_spawned: u64,
+    pub parallel_worker_dispatches: u64,
+    pub parallel_inline_fallbacks: u64,
     pub instructions: u64,
     pub calls: u64,
     pub external_calls: u64,
@@ -158,7 +160,10 @@ impl NormalizedHost for CoreNormalizedHost {
 }
 
 pub struct NormalizedVm<'a> {
-    program: &'a NormalizedProgram,
+    program: Arc<NormalizedProgram>,
+    executor: StructuredExecutorHandle,
+    #[cfg(test)]
+    test_executor: Option<crate::platform::runtime::structured::StructuredExecutor>,
     policy: NormalizedRunPolicy,
     host: Option<&'a dyn NormalizedHost>,
     observer: Option<&'a std::sync::Mutex<Option<NormalizedRunObservation>>>,
@@ -173,13 +178,31 @@ impl<'a> NormalizedVm<'a> {
         self
     }
 
-    pub fn new(program: &'a NormalizedProgram, policy: NormalizedRunPolicy) -> Self {
+    pub fn new(
+        program: &Arc<NormalizedProgram>,
+        policy: NormalizedRunPolicy,
+        executor: &StructuredExecutorHandle,
+    ) -> Self {
         Self {
-            program,
+            program: Arc::clone(program),
+            executor: executor.clone(),
+            #[cfg(test)]
+            test_executor: None,
             policy,
             host: None,
             observer: None,
         }
+    }
+
+    /// Fault-injection fixtures intentionally mutate their prepared tables. Copy
+    /// those tables once at test setup and give this VM an explicitly owned lane.
+    /// Production and worker dispatch always share the admitted program Arc.
+    #[cfg(test)]
+    pub(super) fn for_test(program: &NormalizedProgram, policy: NormalizedRunPolicy) -> Self {
+        let executor = crate::platform::runtime::structured::StructuredExecutor::for_test(1);
+        let mut vm = Self::new(&Arc::new(program.clone()), policy, &executor.handle());
+        vm.test_executor = Some(executor);
+        vm
     }
 
     pub(super) fn observing(
@@ -381,7 +404,9 @@ impl<'a> NormalizedVm<'a> {
                     "memory invocation identity exhausted",
                 )
             })?,
-            program: self.program,
+            program: &self.program,
+            program_owner: &self.program,
+            executor: &self.executor,
             root_allowance: None,
             policy: self.policy,
             host: self.host,
@@ -397,7 +422,8 @@ impl<'a> NormalizedVm<'a> {
             calls_by_requirement: BTreeMap::new(),
             observation: NormalizedRunObservation {
                 parallel_scopes: 0,
-                parallel_workers_spawned: 0,
+                parallel_worker_dispatches: 0,
+                parallel_inline_fallbacks: 0,
                 instructions: 0,
                 calls: 0,
                 external_calls: 0,
@@ -553,6 +579,8 @@ struct Machine<'a> {
     memory_domain: super::value::ValueOrigin,
     root_allowance: Option<Arc<[RequirementIndex]>>,
     program: &'a NormalizedProgram,
+    program_owner: &'a Arc<NormalizedProgram>,
+    executor: &'a StructuredExecutorHandle,
     policy: NormalizedRunPolicy,
     host: Option<&'a dyn NormalizedHost>,
     capabilities: Option<&'a NormalizedCapabilities>,

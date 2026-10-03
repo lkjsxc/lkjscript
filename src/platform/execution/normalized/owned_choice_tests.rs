@@ -63,7 +63,7 @@ fn owned_choice_both_cases_preserve_result_and_release_storage() {
                     .unwrap()
                     .0
                 } else {
-                    NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                    NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                         .invoke(entry, args, None, &control)
                         .unwrap()
                         .0
@@ -85,7 +85,7 @@ fn owned_choice_both_cases_preserve_result_and_release_storage() {
             .unwrap()
             .0
         } else {
-            NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+            NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                 .invoke(entry, vec![], None, &control)
                 .unwrap()
                 .0
@@ -176,7 +176,7 @@ fn owned_choice_selected_arm_failure_cleans_up_and_does_not_poison_reused_execut
     let entry = declaration_named(&source, "main");
     let control = ExecutionControl::uncancelled();
     let policy = NormalizedRunPolicy::foreground();
-    let vm = NormalizedVm::new(&program, policy);
+    let vm = NormalizedVm::for_test(&program, policy);
     let interpreter = NormalizedReferenceInterpreter::new(&source, &program, policy);
     for reference in [false, true] {
         let composites = super::super::owned_product::StorageObservation::start();

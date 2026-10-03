@@ -1,6 +1,6 @@
 # Structured parallel tasks
 
-Status: normative for development 0.1.71. Current acceptance and publication state
+Status: normative for development 0.1.72. Current acceptance and publication state
 belong to [status](../status.md).
 
 ## Meaning and admission
@@ -82,13 +82,39 @@ originating failure takes precedence over the sibling's consequent cancellation.
 When both independently fail, no temporal ordering of those failures is promised.
 This is not transactional rollback or an implicit retry.
 
-The production evaluator may run child bodies concurrently. Available worker capacity
-is acquired without waiting; the calling thread runs one child, and exhausted worker
-capacity uses the caller for both. Nested groups therefore cannot wait for a worker
-held by their own ancestor. Worker capacity is process-wide, finite, and remains held
-until join. The current implementation uses scoped OS threads and a finite structured
-nesting capacity; these are replaceable scheduling choices. A parallel expression
-does not promise two available CPUs, a speedup, fairness or a permanent thread per task.
+The production evaluator may run child bodies concurrently. An explicitly owned
+executor reuses auxiliary workers through bounded per-worker mailboxes. Available
+capacity is reserved without waiting; the calling thread runs the left child.
+An unavailable worker, closed dispatch, or refusal before submission leaves the
+right job intact for execution on the caller. This is its first execution, not a
+retry. Nested groups therefore cannot wait for capacity held by their ancestor.
+An accepted dispatch retains its reservation until its completion receipt is joined.
+
+Workers are created lazily, up to a process-wide physical ceiling of available CPU
+parallelism minus one; unavailable CPU discovery selects zero auxiliary workers.
+Zero capacity is valid serial execution. Separate runtime owners share only this
+capacity accounting and may execute inline while another owner retains workers.
+Workers never run unrelated jobs while waiting for their own child. The finite
+structured nesting bound remains independent of cumulative quotas.
+
+Each job owns a shared handle to the admitted immutable program, its control and
+quota handles, exact application and sealed inputs. Program metadata and owned
+payloads are not cloned for dispatch. Application grants, secrets, adapters,
+cancellation lineage, locals and resources remain private to their invocation.
+List/map thread-local observations are scoped to each dispatched job and restored
+on every exit, including panic; worker reuse cannot inherit previous work counts.
+
+The executor owner is separate from dispatch handles and cannot travel inside a
+job. Stopping closes dispatch, drains and joins invocation scopes, then closes
+mailboxes and joins every worker before releasing process capacity. Caller unwind
+cancels and joins an accepted child before disposing its result and reservation.
+A caught child panic reports infrastructure failure after cleanup; the worker may
+then execute another job with fresh invocation state. No detached cleanup is success.
+
+These workers supplement the existing resident root executor. The auxiliary ceiling
+does not bound total root-plus-child CPU execution, provide CPU reservations or
+establish fairness. A parallel expression does not promise two available CPUs,
+speedup or a permanent thread per task. Scheduling remains a derived mechanism.
 
 The reference evaluator independently admits and evaluates canonical child calls in
 authored order. Its serial result and ownership checks are a semantic oracle, not
@@ -108,10 +134,15 @@ frames, and structured nesting has an independent finite native-stack bound.
 Cancellation and deadlines use the invocation control throughout the group. Ordinary
 trusted execution retains its existing unmetered cumulative-work default.
 
-Production observations aggregate child work and expose `parallel_scopes` and
-`parallel_workers_spawned`. These are invocation totals, not maximum simultaneous
-workers. Allocated bytes model admitted cumulative storage, not RSS or allocator
-overhead; thread stacks and system scheduling costs are not claimed as that metric.
+Production observations aggregate child work and expose `parallel_scopes`,
+`parallel_worker_dispatches` and `parallel_inline_fallbacks`. Dispatches count
+accepted off-thread jobs, including reuse; fallbacks count pairs executed on their
+caller. They are invocation totals, not physical thread starts or simultaneous
+workers. Pool observations separately report starts, active/peak dispatches,
+completions, inline fallbacks, and remaining/joined workers. CLI observation 36
+intentionally replaces the former `parallel_workers_spawned` field rather than
+changing its meaning. Allocated bytes model admitted cumulative storage, not RSS
+or allocator overhead; thread stacks and system scheduling costs are not that metric.
 Admission must check the complete canonical closure before live execution, including
 unused task declarations and untaken expressions. Strict artifact loading also
 reconstructs canonical control, so retargeting or erasing a compiled parallel
@@ -124,7 +155,8 @@ applications, including unused declarations and untaken branches. Validator 27
 renews admission. Compiler-unit 21 and earlier reject before current payload decoding;
 earlier derived artifacts require rebuilding from accepted meaning. Transfer-bearing
 requests select authored codec 26; compact discovery 30 and function projection 12
-advertise the constraints. CLI observations 35 retain their forms.
+advertise the constraints. Worker reuse changes no semantic, compiler or artifact
+encoding; CLI observations 36 and shared-runtime observations 2 describe its lifecycle.
 Existing nonparallel authored intent retains its bytes. This does not upgrade exact
 package selections, replace running services or publish a new public executable.
 

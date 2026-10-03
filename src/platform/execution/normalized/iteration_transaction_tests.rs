@@ -313,7 +313,7 @@ fn task_tail_chain_retains_one_ancestor_transaction_until_commit_or_reverse_clea
                     )
                     .map(|(v, w)| (v, w.maximum_call_depth))
             } else {
-                NormalizedVm::new(&program, policy)
+                NormalizedVm::for_test(&program, policy)
                     .invoke(
                         declaration_named(&snapshot, "caller"),
                         vec![],

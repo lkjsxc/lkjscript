@@ -129,7 +129,7 @@ fn task_tail_chain_has_constant_control_state() {
                 )
             } else {
                 let sink = Mutex::new(None);
-                let result = NormalizedVm::new(&program, policy)
+                let result = NormalizedVm::for_test(&program, policy)
                     .observing_checked(&sink)
                     .invoke(entry, args, None, &control);
                 (
@@ -199,7 +199,7 @@ fn task_tail_contexts_and_bound_mutual_transitions_preserve_pending_work() {
                     .invoke(entry, args, None, &control)
                     .map(|(v, o)| (v, o.maximum_call_depth))
             } else {
-                NormalizedVm::new(&program, policy)
+                NormalizedVm::for_test(&program, policy)
                     .invoke(entry, args, None, &control)
                     .map(|(v, o)| (v, o.maximum_call_depth))
             };
@@ -254,7 +254,7 @@ fn task_control_oracle_detects_disabled_production_transfers() {
     let control = ExecutionControl::uncancelled();
     let args = vec![NormalizedValue::I64(8192), NormalizedValue::I64(0)];
     assert_eq!(
-        NormalizedVm::new(&program, policy)
+        NormalizedVm::for_test(&program, policy)
             .invoke(entry, args.clone(), None, &control)
             .unwrap_err()
             .code,

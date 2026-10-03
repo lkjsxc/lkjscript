@@ -107,7 +107,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-19";
 pub const REGISTRY_CONTRACT_VERSION: u16 = 19;
-pub const CLI_CONTRACT_VERSION: u16 = 35;
+pub const CLI_CONTRACT_VERSION: u16 = 36;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -1150,7 +1150,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         simple_contract(
             ContractKey::SharedRuntime,
             "in-process exact-code service group with private deployment authority",
-            "lkjscript-shared-runtime-1",
+            "lkjscript-shared-runtime-2",
             SHARED_RUNTIME_CONTRACT_VERSION,
             ContractAuthority::Deployment,
         ),
@@ -2456,6 +2456,12 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Inspect retained primary failure and cleanup notes; earlier effects may be visible, so do not automatically retry.",
         ),
         diagnostic(
+            "foreground_executor_owner",
+            DiagnosticClass::Source,
+            "Foreground execution has no standalone structured-worker lifetime owner.",
+            "Retain the executor owned by foreground preparation until invocation and joined cleanup finish.",
+        ),
+        diagnostic(
             "foreground_signal",
             DiagnosticClass::Infrastructure,
             "The process could not register its foreground termination owner.",
@@ -2466,6 +2472,18 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Infrastructure,
             "The process could not register its resident termination owner.",
             "Correct the process environment before serving or running workers; no deployment adapters, secrets or listeners have been opened.",
+        ),
+        diagnostic(
+            "resident_executor_owner",
+            DiagnosticClass::Infrastructure,
+            "Standalone resident startup has no structured-worker lifetime owner.",
+            "Retain the exact executable and deployment inputs for lifecycle inspection; no resident invocation was started.",
+        ),
+        diagnostic(
+            "resident_workers",
+            DiagnosticClass::Infrastructure,
+            "A standalone resident host could not complete joined structured-worker cleanup.",
+            "Inspect retained cleanup notes and process state; earlier application effects may be visible, so do not automatically retry.",
         ),
         diagnostic(
             "foreground_preparation_join",
@@ -4493,12 +4511,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Reduce the type application or child signature; no child can start before complete charged admission.",
         ),
         diagnostic(
-            "normalized_parallel_spawn",
-            DiagnosticClass::Resource,
-            "The host could not create an admitted structured worker.",
-            "Preserve the allocation failure; sealed inputs are cleaned and no child work is retried automatically.",
-        ),
-        diagnostic(
             "normalized_type_substitution",
             DiagnosticClass::Resource,
             "Raw generic type substitution exceeds finite scratch storage or traversal work before construction.",
@@ -4531,7 +4543,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "normalized_parallel_worker",
             DiagnosticClass::Infrastructure,
-            "A structured worker terminated unexpectedly.",
+            "A structured child or its worker terminated unexpectedly.",
             "Preserve the failure and joined cleanup evidence; no automatic retry is performed.",
         ),
         diagnostic(
@@ -6137,6 +6149,12 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Preserve diagnostics; do not infer a published successful group receipt.",
         ),
         diagnostic(
+            "shared_serve_workers",
+            DiagnosticClass::Infrastructure,
+            "A shared service host could not complete joined structured-worker cleanup.",
+            "Inspect retained group cleanup notes and process state; earlier application effects may be visible, so do not automatically retry.",
+        ),
+        diagnostic(
             "http_client_contract",
             DiagnosticClass::Capability,
             "Outbound HTTP client limits use a predecessor or foreign adapter contract.",
@@ -7704,6 +7722,10 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ("invocation-nanoseconds", "nonnegative-integer"),
                 ("result-encoding-nanoseconds", "nonnegative-integer"),
                 ("production-observation", "json-object"),
+                (
+                    "executor-observation",
+                    "json-object-joined-auxiliary-workers",
+                ),
                 ("cleanup", "json-object"),
                 ("value", "typed-json"),
                 (
@@ -7720,6 +7742,16 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ],
                 )?);
             }
+            records.push(compact_record("execution.structured-workers", &[
+                ("ownership", "explicit-runtime-owner-cloneable-dispatch-handles".to_owned()),
+                ("dispatch", "sealed-owned-job-shared-prepared-program-nonblocking-idle-mailbox".to_owned()),
+                ("capacity", "lazy-process-wide-available-parallelism-minus-one-zero-if-unknown".to_owned()),
+                ("fallback", "unsubmitted-right-job-executes-on-caller-without-retry-or-clone".to_owned()),
+                ("join", "reservation-held-through-receipt-caller-unwind-cancels-and-joins".to_owned()),
+                ("invocation-counters", "parallel_scopes,parallel_worker_dispatches,parallel_inline_fallbacks".to_owned()),
+                ("pool-counters", "workers_started,active_dispatches,maximum_active_dispatches,completed_dispatches,inline_fallbacks,remaining_workers,joined_workers".to_owned()),
+                ("scope", "auxiliary-workers-excludes-blocking-capable-resident-roots".to_owned()),
+            ])?);
             for kind in RunnerKind::ALL {
                 records.push(compact_record(
                     "runner.kind",
@@ -8127,11 +8159,15 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ("maximum-queued-tasks-total", MAXIMUM_QUEUED_TASKS.to_string()),
                 ("selection", "repeated-serve-deployment-arguments-in-ordinal-order".to_owned()),
                 ("sharing-key", "strictly-loaded-exact-artifact-content-in-current-executable-abi".to_owned()),
-                ("shared", "immutable-program-types-code-constants-and-tokio-scheduler".to_owned()),
+                ("shared", "immutable-program-types-code-constants-tokio-scheduler-and-owned-reusable-auxiliary-workers".to_owned()),
                 ("private", "configuration-secrets-grants-adapters-state-cancellation-task-accounting".to_owned()),
                 ("admission", "all-static-before-any-live-adapter".to_owned()),
                 ("readiness", "all-listeners-bound-before-one-group-ready-event".to_owned()),
-                ("shutdown", "signal-or-service-failure-stops-group-and-joins-every-started-service".to_owned()),
+                ("shutdown", "close-auxiliary-dispatch-drain-and-join-services-then-join-owned-workers".to_owned()),
+                ("auxiliary-capacity", "process-wide-available-parallelism-minus-one-zero-if-unknown-lazy-creation".to_owned()),
+                ("auxiliary-admission", "nonblocking-idle-worker-reservation-caller-participates-inline-on-refusal".to_owned()),
+                ("auxiliary-observation", "physical-starts-dispatches-inline-fallbacks-active-high-water-remaining-and-joined-workers".to_owned()),
+                ("cpu-policy", "auxiliary-bound-not-total-root-cpu-bound-or-fairness".to_owned()),
                 ("memory-observation", "loader-object-bytes-and-table-counts-not-rss-or-live-heap".to_owned()),
                 ("retention", "no-global-cache-last-owning-service-reference-releases-code".to_owned()),
                 ("isolation", "trusted-runtime-not-process-sandbox-explicit-external-resources-may-be-shared".to_owned()),
@@ -9299,7 +9335,7 @@ mod tests {
             .find(|descriptor| descriptor.key == ContractKey::SharedRuntime)
             .expect("shared runtime contract");
         assert_eq!(descriptor.version, SHARED_RUNTIME_CONTRACT_VERSION);
-        assert_eq!(descriptor.identity, "lkjscript-shared-runtime-1");
+        assert_eq!(descriptor.identity, "lkjscript-shared-runtime-2");
         let records = section_records(RegistrySection::Deployment).unwrap();
         let record = records
             .iter()
@@ -9326,6 +9362,7 @@ mod tests {
             "shared_serve_cancelled",
             "shared_serve_prepare",
             "shared_serve_receipt",
+            "shared_serve_workers",
         ] {
             assert_eq!(
                 diagnostic_descriptors()

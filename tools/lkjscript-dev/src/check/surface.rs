@@ -22,6 +22,9 @@ const CURRENT_FILES: &[&str] = &[
     "docs/roadmap.md",
     "docs/security.md",
     "docs/status.md",
+    "examples/parallel-work/README.md",
+    "examples/parallel-work/command.deployment.json",
+    "examples/parallel-work/service.deployment.json",
     "packages/standard/README.md",
 ];
 
@@ -30,6 +33,7 @@ const CURRENT_DIRECTORIES: &[(&str, &str)] = &[
     ("docs/guides", ".md"),
     ("docs/guides/examples", ".lkjc"),
     ("docs/spec", ".md"),
+    ("examples/parallel-work", ".lkjc"),
 ];
 const HISTORICAL_FILES: &[&str] = &["docs/spec/semantic-diff-merge.md"];
 
@@ -566,16 +570,19 @@ mod tests {
 
     #[test]
     fn native_examples_receive_the_same_text_audit() {
-        let root = surface_fixture();
-        let path = root.path().join("docs/guides/examples/native.lkjc");
-        fs::write(&path, "request base=BASE\n").unwrap();
-        assert!(inspect_files(root.path()).unwrap().0.is_empty());
-        fs::write(&path, "Graph 5\n").unwrap();
-        let violations = inspect_files(root.path()).unwrap().0;
-        assert!(violations.iter().any(|violation| {
-            violation.path == "docs/guides/examples/native.lkjc"
-                && violation.kind == ViolationKind::TextLeak
-        }));
+        for directory in ["docs/guides/examples", "examples/parallel-work"] {
+            let root = surface_fixture();
+            let relative = format!("{directory}/native.lkjc");
+            let path = root.path().join(&relative);
+            fs::write(&path, "request base=BASE\n").unwrap();
+            assert!(inspect_files(root.path()).unwrap().0.is_empty());
+            assert!(input_paths(root.path()).unwrap().contains(&relative));
+            fs::write(&path, "Graph 5\n").unwrap();
+            let violations = inspect_files(root.path()).unwrap().0;
+            assert!(violations.iter().any(|violation| {
+                violation.path == relative && violation.kind == ViolationKind::TextLeak
+            }));
+        }
     }
 
     #[test]
@@ -584,102 +591,122 @@ mod tests {
         let (violations, scanned) = inspect_files(root.path()).unwrap();
         assert!(violations.is_empty());
         assert_eq!(scanned, CURRENT_FILES.len());
-        let relative = "docs/guides/examples/editor.deployment.json";
-        fs::write(root.path().join(relative), "Graph 5\n").unwrap();
-        let (violations, scanned) = inspect_files(root.path()).unwrap();
-        assert_eq!(scanned, CURRENT_FILES.len());
-        assert_eq!(violations.len(), 1);
-        assert_eq!(violations[0].path, relative);
-        assert_eq!(violations[0].kind, ViolationKind::TextLeak);
+        for relative in [
+            "docs/guides/examples/editor.deployment.json",
+            "examples/parallel-work/README.md",
+            "examples/parallel-work/command.deployment.json",
+            "examples/parallel-work/service.deployment.json",
+        ] {
+            fs::write(root.path().join(relative), "Graph 5\n").unwrap();
+            let (violations, scanned) = inspect_files(root.path()).unwrap();
+            assert_eq!(scanned, CURRENT_FILES.len());
+            assert_eq!(violations.len(), 1);
+            assert_eq!(violations[0].path, relative);
+            assert_eq!(violations[0].kind, ViolationKind::TextLeak);
+            fs::write(root.path().join(relative), "current product guidance\n").unwrap();
+        }
     }
 
     #[test]
     fn explicit_example_descriptor_still_requires_a_regular_file() {
-        let root = surface_fixture();
-        let descriptor = root
-            .path()
-            .join("docs/guides/examples/editor.deployment.json");
-        fs::remove_file(&descriptor).unwrap();
-        assert!(
-            inspect_files(root.path()).is_err(),
-            "required file is absent"
-        );
-        fs::create_dir(&descriptor).unwrap();
-        assert!(
-            inspect_files(root.path()).is_err(),
-            "directory is not a descriptor"
-        );
-        fs::remove_dir(&descriptor).unwrap();
-        #[cfg(unix)]
-        {
-            let target = root.path().join("original.json");
-            fs::write(&target, "current product guidance\n").unwrap();
-            std::os::unix::fs::symlink(&target, &descriptor).unwrap();
+        for relative in [
+            "docs/guides/examples/editor.deployment.json",
+            "examples/parallel-work/README.md",
+            "examples/parallel-work/command.deployment.json",
+            "examples/parallel-work/service.deployment.json",
+        ] {
+            let root = surface_fixture();
+            let descriptor = root.path().join(relative);
+            fs::remove_file(&descriptor).unwrap();
             assert!(
                 inspect_files(root.path()).is_err(),
-                "explicit file cannot be a symlink"
+                "required file is absent"
             );
+            fs::create_dir(&descriptor).unwrap();
+            assert!(
+                inspect_files(root.path()).is_err(),
+                "directory is not a descriptor"
+            );
+            fs::remove_dir(&descriptor).unwrap();
+            #[cfg(unix)]
+            {
+                let target = root.path().join("original.json");
+                fs::write(&target, "current product guidance\n").unwrap();
+                std::os::unix::fs::symlink(&target, &descriptor).unwrap();
+                assert!(
+                    inspect_files(root.path()).is_err(),
+                    "explicit file cannot be a symlink"
+                );
+            }
         }
     }
 
     #[test]
     fn native_examples_reject_unowned_entries_and_symlinks() {
-        let root = surface_fixture();
-        let examples = root.path().join("docs/guides/examples");
-        for name in [
-            "unexpected.txt",
-            "unexpected.json",
-            "unexpected.deployment.json",
-        ] {
-            let unexpected = examples.join(name);
-            fs::write(&unexpected, "not an owned native request or descriptor").unwrap();
+        for directory in ["docs/guides/examples", "examples/parallel-work"] {
+            let root = surface_fixture();
+            let examples = root.path().join(directory);
+            for name in [
+                "unexpected.txt",
+                "unexpected.json",
+                "unexpected.deployment.json",
+            ] {
+                let unexpected = examples.join(name);
+                fs::write(&unexpected, "not an owned native request or descriptor").unwrap();
+                assert!(inspect_files(root.path()).is_err());
+                fs::remove_file(unexpected).unwrap();
+            }
+            let nested = examples.join("unowned");
+            fs::create_dir(&nested).unwrap();
             assert!(inspect_files(root.path()).is_err());
-            fs::remove_file(unexpected).unwrap();
-        }
-        let nested = examples.join("unowned");
-        fs::create_dir(&nested).unwrap();
-        assert!(inspect_files(root.path()).is_err());
-        fs::remove_dir(nested).unwrap();
-        #[cfg(unix)]
-        {
-            let target = root.path().join("original.lkjc");
-            fs::write(&target, "request base=BASE\n").unwrap();
-            let alias = examples.join("alias.lkjc");
-            std::os::unix::fs::symlink(&target, &alias).unwrap();
-            assert!(inspect_files(root.path()).is_err());
-            fs::remove_file(alias).unwrap();
-            fs::remove_file(examples.join("editor.deployment.json")).unwrap();
-            fs::remove_dir(&examples).unwrap();
-            let foreign = root.path().join("foreign-examples");
-            fs::create_dir(&foreign).unwrap();
-            std::os::unix::fs::symlink(&foreign, &examples).unwrap();
-            assert!(inspect_files(root.path()).is_err());
+            fs::remove_dir(nested).unwrap();
+            #[cfg(unix)]
+            {
+                let target = root.path().join("original.lkjc");
+                fs::write(&target, "request base=BASE\n").unwrap();
+                let alias = examples.join("alias.lkjc");
+                std::os::unix::fs::symlink(&target, &alias).unwrap();
+                assert!(inspect_files(root.path()).is_err());
+                fs::remove_file(alias).unwrap();
+                for entry in fs::read_dir(&examples).unwrap() {
+                    fs::remove_file(entry.unwrap().path()).unwrap();
+                }
+                fs::remove_dir(&examples).unwrap();
+                let foreign = root.path().join("foreign-examples");
+                fs::create_dir(&foreign).unwrap();
+                std::os::unix::fs::symlink(&foreign, &examples).unwrap();
+                assert!(input_paths(root.path()).is_err());
+                assert!(inspect_files(root.path()).is_err());
+            }
         }
     }
 
     #[test]
     fn snapshot_inventory_and_surface_audit_share_finite_directory_and_file_bounds() {
-        let root = surface_fixture();
-        let examples = root.path().join("docs/guides/examples");
-        // The explicitly owned deployment descriptor occupies the first entry.
-        for index in 1..MAXIMUM_DIRECTORY_FILES {
-            fs::write(
-                examples.join(format!("fixture-{index}.lkjc")),
-                b"request base=BASE\n",
-            )
-            .unwrap();
+        for directory in ["docs/guides/examples", "examples/parallel-work"] {
+            let root = surface_fixture();
+            let examples = root.path().join(directory);
+            let existing = fs::read_dir(&examples).unwrap().count();
+            for index in existing..MAXIMUM_DIRECTORY_FILES {
+                fs::write(
+                    examples.join(format!("fixture-{index}.lkjc")),
+                    b"request base=BASE\n",
+                )
+                .unwrap();
+            }
+            assert!(input_paths(root.path()).is_ok());
+            assert!(inspect_files(root.path()).is_ok());
+            let extra = examples.join("one-more.lkjc");
+            fs::write(&extra, b"request base=BASE\n").unwrap();
+            assert!(input_paths(root.path()).is_err());
+            assert!(inspect_files(root.path()).is_err());
+            fs::remove_file(extra).unwrap();
+            let oversized =
+                fs::File::create(examples.join(format!("fixture-{existing}.lkjc"))).unwrap();
+            oversized.set_len(MAXIMUM_FILE_BYTES + 1).unwrap();
+            assert!(input_paths(root.path()).is_err());
+            assert!(inspect_files(root.path()).is_err());
         }
-        assert!(input_paths(root.path()).is_ok());
-        assert!(inspect_files(root.path()).is_ok());
-        let extra = examples.join("one-more.lkjc");
-        fs::write(&extra, b"request base=BASE\n").unwrap();
-        assert!(input_paths(root.path()).is_err());
-        assert!(inspect_files(root.path()).is_err());
-        fs::remove_file(extra).unwrap();
-        let oversized = fs::File::create(examples.join("fixture-1.lkjc")).unwrap();
-        oversized.set_len(MAXIMUM_FILE_BYTES + 1).unwrap();
-        assert!(input_paths(root.path()).is_err());
-        assert!(inspect_files(root.path()).is_err());
     }
 
     #[test]

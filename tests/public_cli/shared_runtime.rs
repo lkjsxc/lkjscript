@@ -7,7 +7,7 @@ use serde_json::json;
 #[path = "shared_runtime/faults.rs"]
 mod faults;
 #[path = "shared_runtime/process.rs"]
-mod process;
+pub(super) mod process;
 use process::Group;
 
 fn build(public: &Native, output: &str) {

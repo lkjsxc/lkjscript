@@ -7,6 +7,7 @@ use super::value::{NormalizedValue, PortIndex};
 use super::vm::{NormalizedRunObservation, NormalizedRunPolicy, NormalizedVm};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::ExecutionError;
+use crate::platform::runtime::structured::StructuredExecutorHandle;
 use crate::platform::runtime::{
     InvocationTiming, ResidentKernel, ResidentLimits, ResidentObservation,
     ResidentPermitObservation, ShutdownReceipt,
@@ -30,6 +31,7 @@ pub(crate) struct NormalizedResidentDeployment {
     policy: NormalizedRunPolicy,
     kernel: ResidentKernel,
     timing: InvocationTiming,
+    executor: StructuredExecutorHandle,
 }
 
 impl NormalizedResidentDeployment {
@@ -38,6 +40,7 @@ impl NormalizedResidentDeployment {
         deployment: NormalizedPreparedDeployment,
         limits: ResidentLimits,
         policy: NormalizedRunPolicy,
+        executor: &StructuredExecutorHandle,
     ) -> Result<Self, Diagnostic> {
         let observation = deployment.observation();
         if observation.artifact_manifest != program.artifact().manifest_digest
@@ -73,6 +76,7 @@ impl NormalizedResidentDeployment {
             policy,
             kernel: ResidentKernel::new(limits)?,
             timing: InvocationTiming::Resident,
+            executor: executor.clone(),
         })
     }
 
@@ -93,8 +97,12 @@ impl NormalizedResidentDeployment {
         &self.deployment
     }
 
-    pub(crate) fn program(&self) -> &NormalizedProgram {
+    pub(crate) fn program(&self) -> &Arc<NormalizedProgram> {
         &self.program
+    }
+
+    pub(crate) fn executor(&self) -> &StructuredExecutorHandle {
+        &self.executor
     }
 
     pub(crate) fn limits(&self) -> &ResidentLimits {
@@ -126,10 +134,11 @@ impl NormalizedResidentDeployment {
         let target = self.target.clone();
         let capabilities = self.deployment.capabilities().clone();
         let policy = self.policy;
+        let executor = self.executor.clone();
         let receipt = self
             .kernel
             .invoke_timed(self.timing, move |control| {
-                NormalizedVm::new(&program, policy).invoke_target_scoped(
+                NormalizedVm::new(&program, policy, &executor).invoke_target_scoped(
                     &target,
                     arguments,
                     Some(&capabilities),
@@ -158,10 +167,11 @@ impl NormalizedResidentDeployment {
         let component = self.target.component;
         let capabilities = self.deployment.capabilities().clone();
         let policy = self.policy;
+        let executor = self.executor.clone();
         let receipt = self
             .kernel
             .invoke_timed(self.timing, move |control| {
-                NormalizedVm::new(&program, policy).invoke_port_scoped(
+                NormalizedVm::new(&program, policy, &executor).invoke_port_scoped(
                     component,
                     port,
                     arguments,

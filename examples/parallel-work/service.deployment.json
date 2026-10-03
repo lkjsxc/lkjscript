@@ -1,0 +1,44 @@
+{
+  "artifact": "work.lkja",
+  "target": "work-http",
+  "listen": "127.0.0.1:0",
+  "http": {
+    "maximum_request_body_bytes": 4096,
+    "maximum_response_body_bytes": 32768,
+    "maximum_header_bytes": 8192,
+    "maximum_headers": 32
+  },
+  "session": null,
+  "worker": null,
+  "execution": {
+    "instruction_fuel": null,
+    "maximum_call_depth": 4096,
+    "maximum_value_stack": 1000000,
+    "maximum_allocated_bytes": null,
+    "maximum_collection_items": null,
+    "maximum_capability_calls": null
+  },
+  "runtime": {
+    "maximum_concurrent_tasks": 4,
+    "maximum_queued_tasks": 8,
+    "request_deadline_milliseconds": 120000,
+    "shutdown_grace_milliseconds": 3000,
+    "cancellation_grace_milliseconds": 1000
+  },
+  "streams": {
+    "maximum_chunk_bytes": 4096,
+    "maximum_buffered_chunks": 2,
+    "maximum_total_bytes": 4096,
+    "maximum_live_streams": 32
+  },
+  "grants": [
+    {
+      "requirement": "streams",
+      "sharing_domain": "work-http-request-streams",
+      "authority_revision": "37b6db179d5b869e0d6bd91570f0bfd343cd8a093a99e70ab9b1e5450726cd87",
+      "adapter": {"kind": "byte_stream"}
+    }
+  ],
+  "secrets": [],
+  "configuration": {}
+}

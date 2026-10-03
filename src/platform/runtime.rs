@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore, watch};
 
 pub(crate) mod idle;
+pub mod structured;
 
 #[cfg(test)]
 #[allow(

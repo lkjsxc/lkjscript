@@ -71,7 +71,7 @@ fn bytes_construct_preserves_every_octet_and_persistent_list_alias() {
         )
         .unwrap();
         let argument = original.clone();
-        let actual = NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+        let actual = NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
             .invoke(declaration, vec![argument.clone()], None, &control)
             .unwrap()
             .0;
@@ -100,7 +100,7 @@ fn bytes_construct_rejects_out_of_range_without_clamping_or_wrapping() {
             let mut input = vec![NormalizedValue::I64(65); 65];
             input[position] = NormalizedValue::I64(invalid);
             let arguments = vec![NormalizedValue::list(input).unwrap()];
-            let actual = NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+            let actual = NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                 .invoke(declaration, arguments.clone(), None, &control)
                 .unwrap_err();
             let reference = NormalizedReferenceInterpreter::new(
@@ -133,7 +133,7 @@ fn bytes_decode_preserves_valid_scalars_bom_and_controls_and_rejects_whole_inval
         "\u{7f}\u{80}\u{7ff}\u{800}\u{d7ff}\u{e000}\u{ffff}\u{10000}\u{10ffff}",
     ] {
         let arguments = vec![NormalizedValue::bytes(text.as_bytes())];
-        let actual = NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+        let actual = NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
             .invoke(declaration, arguments.clone(), None, &control)
             .unwrap()
             .0;
@@ -168,7 +168,7 @@ fn bytes_decode_preserves_valid_scalars_bom_and_controls_and_rejects_whole_inval
     ];
     for bytes in invalid {
         let arguments = vec![NormalizedValue::bytes(*bytes)];
-        let actual = NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+        let actual = NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
             .invoke(declaration, arguments.clone(), None, &control)
             .unwrap()
             .0;
@@ -183,7 +183,7 @@ fn bytes_decode_preserves_valid_scalars_bom_and_controls_and_rejects_whole_inval
         assert_eq!(actual, decoded(false, ""));
         assert_eq!(reference, decoded(false, ""));
         assert_eq!(
-            NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+            NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                 .invoke(strict, arguments.clone(), None, &control)
                 .unwrap_err()
                 .code,
@@ -218,7 +218,7 @@ fn byte_conversions_keep_cancellation_and_allocation_failures_as_errors() {
         let control = ExecutionControl::uncancelled();
         control.cancel();
         assert!(
-            NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+            NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                 .invoke(declaration, vec![input.clone()], None, &control)
                 .is_err()
         );
@@ -234,7 +234,7 @@ fn byte_conversions_keep_cancellation_and_allocation_failures_as_errors() {
         let mut policy = NormalizedRunPolicy::foreground();
         policy.maximum_allocated_bytes = Some(4096);
         let control = ExecutionControl::uncancelled();
-        let actual = NormalizedVm::new(&program, policy)
+        let actual = NormalizedVm::for_test(&program, policy)
             .invoke(declaration, vec![input.clone()], None, &control)
             .unwrap_err();
         let reference = NormalizedReferenceInterpreter::new(&snapshot, &program, policy)
@@ -273,7 +273,7 @@ fn bytes_conversion_explicit_core_hosts_agree_with_checked_paths() {
         let declaration = declaration_named(&snapshot, name);
         let vm_observer = std::sync::Mutex::new(None);
         let reference_observer = std::sync::Mutex::new(None);
-        let actual = NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+        let actual = NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
             .observing(&vm_observer, &CoreNormalizedHost)
             .invoke(declaration, vec![input.clone()], None, &control)
             .unwrap()
@@ -327,7 +327,7 @@ fn observed_conversion(
         )
     } else {
         let observer = std::sync::Mutex::new(None);
-        let result = NormalizedVm::new(&program, policy)
+        let result = NormalizedVm::for_test(&program, policy)
             .observing_checked(&observer)
             .invoke(declaration, vec![input], None, control)
             .map(|pair| pair.0);

@@ -95,9 +95,12 @@ the exact input cell value, and the parent's replacement value -81. Both signed
 I64 extremes and both choice cases execute with and without authoring sources.
 The nested case returns the complete `[0,255,128,64]` buffer and the exact cell.
 
-`run` reports `parallel_scopes` and `parallel_workers_spawned` inside its production
-observation. They count groups and created workers, not simultaneous activity or
-speedup. Worker exhaustion falls back to the calling thread. Optional cumulative
+`run` reports `parallel_scopes`, `parallel_worker_dispatches` and
+`parallel_inline_fallbacks` inside its production
+observation. They count groups, accepted off-thread jobs and caller fallbacks,
+not physical thread creation, simultaneous activity or speedup. Development
+0.1.72 reuses auxiliary workers and replaces the former `parallel_workers_spawned`
+observation. Worker exhaustion falls back to the calling thread. Optional cumulative
 quotas apply to the entire invocation, including both children and later parent work.
 On a trap or cancellation, started children are cancelled cooperatively and joined,
 and every transferred owner is reclaimed before the invocation returns. A successful

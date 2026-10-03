@@ -12,6 +12,53 @@ fn append(list: &List, value: i64) -> List {
     .unwrap()
 }
 
+#[test]
+fn reused_worker_list_scope_restores_saturated_totals_after_nested_unwind() {
+    use crate::platform::execution::ExecutionControl;
+    use crate::platform::runtime::structured::StructuredExecutor;
+    let _caller_scope = WorkScope::enter();
+    let job = || {
+        let saved = Work {
+            nodes_allocated: u64::MAX,
+            element_handle_allocations: u64::MAX,
+            ..Work::ZERO
+        };
+        WORK.set(saved);
+        let observed = {
+            let _scope = WorkScope::enter();
+            let list = append(&List::default(), 23);
+            let before_nested = Work::current();
+            let failure = std::panic::catch_unwind(|| {
+                let _nested = WorkScope::enter();
+                let _list = append(&List::default(), 19);
+                panic!("disposable nested list observation failure");
+            });
+            assert!(failure.is_err());
+            assert_eq!(Work::current(), before_nested);
+            assert_eq!(list.len(), 1);
+            Work::current()
+        };
+        assert_eq!(Work::current(), saved);
+        (std::thread::current().id(), observed)
+    };
+    for workers in [0, 1] {
+        let mut executor = StructuredExecutor::for_test(workers);
+        let handle = executor.handle();
+        let first = handle
+            .run(&ExecutionControl::uncancelled(), || (), job)
+            .unwrap()
+            .right;
+        let second = handle
+            .run(&ExecutionControl::uncancelled(), || (), job)
+            .unwrap()
+            .right;
+        assert_eq!(first, second);
+        assert_eq!(first.1.nodes_allocated, 1);
+        assert_eq!(first.1.element_handle_allocations, 1);
+        assert_eq!(executor.shutdown().unwrap().joined_workers, workers as u64);
+    }
+}
+
 fn verify(list: &List, expected: &[i64]) -> Result<(), String> {
     if list.len() != expected.len() {
         return Err("length".into());

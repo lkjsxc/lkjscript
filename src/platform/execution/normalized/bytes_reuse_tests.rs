@@ -46,7 +46,7 @@ fn concat(
     left: NormalizedValue,
     right: NormalizedValue,
 ) -> NormalizedValue {
-    NormalizedVm::new(program, NormalizedRunPolicy::foreground())
+    NormalizedVm::for_test(program, NormalizedRunPolicy::foreground())
         .invoke(
             declaration,
             vec![left, right],
@@ -129,14 +129,14 @@ fn bytes_concat_vm_late_budget_exhaustion_cleans_owned_slots() {
         NormalizedValue::bytes([255]),
     ];
     let control = ExecutionControl::uncancelled();
-    let (_, complete) = NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+    let (_, complete) = NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
         .invoke(declaration, arguments.clone(), None, &control)
         .unwrap();
     assert_eq!(complete.value_work.bytes.payload_bytes_copied, 3);
     let mut policy = NormalizedRunPolicy::foreground();
     policy.maximum_allocated_bytes = Some(complete.allocated_bytes - 1);
     let sink = std::sync::Mutex::new(None);
-    let failure = NormalizedVm::new(&program, policy)
+    let failure = NormalizedVm::for_test(&program, policy)
         .observing_checked(&sink)
         .invoke(declaration, arguments.clone(), None, &control)
         .unwrap_err();
@@ -155,7 +155,7 @@ fn bytes_concat_vm_late_budget_exhaustion_cleans_owned_slots() {
     );
     let mut policy = NormalizedRunPolicy::foreground();
     policy.maximum_allocated_bytes = Some(complete.allocated_bytes);
-    let (result, recovered) = NormalizedVm::new(&program, policy)
+    let (result, recovered) = NormalizedVm::for_test(&program, policy)
         .invoke(declaration, arguments.clone(), None, &control)
         .unwrap();
     assert_eq!(result, NormalizedValue::bytes([0, 128, 255]));
@@ -179,7 +179,7 @@ fn bytes_concat_vm_reservation_sweep_distinguishes_payload_and_operand_failure()
         NormalizedValue::bytes([255]),
     ];
     let control = ExecutionControl::uncancelled();
-    let (_, complete) = NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+    let (_, complete) = NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
         .invoke(declaration, arguments.clone(), None, &control)
         .unwrap();
     let mut before_copy = 0;
@@ -192,7 +192,7 @@ fn bytes_concat_vm_reservation_sweep_distinguishes_payload_and_operand_failure()
         let mut policy = NormalizedRunPolicy::foreground();
         policy.maximum_allocated_bytes = Some(maximum);
         let sink = std::sync::Mutex::new(None);
-        let failure = NormalizedVm::new(&program, policy)
+        let failure = NormalizedVm::for_test(&program, policy)
             .observing_checked(&sink)
             .invoke(declaration, arguments.clone(), None, &control)
             .unwrap_err();

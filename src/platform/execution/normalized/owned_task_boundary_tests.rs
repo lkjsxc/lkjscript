@@ -121,7 +121,7 @@ fn owned_task_raw_ingress_egress_and_traps_release_before_reuse() {
                 .invoke(entry, args, None, &control)
                 .map(|v| v.0)
             } else {
-                NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                     .invoke(entry, args, None, &control)
                     .map(|v| v.0)
             }

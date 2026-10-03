@@ -389,7 +389,7 @@ fn requirement_vectors_remain_distinct_bounded_and_simultaneously_recursive() {
             program.work.type_metadata_bytes
         );
         let control = ExecutionControl::uncancelled();
-        let production = NormalizedVm::new(&program, Default::default())
+        let production = NormalizedVm::for_test(&program, Default::default())
             .invoke_root_target(&Name::new("command").unwrap(), vec![], None, &control)
             .unwrap();
         let reference =
@@ -470,7 +470,7 @@ fn requirement_vectors_remain_distinct_bounded_and_simultaneously_recursive() {
                 (true, accepted, reference_accepted),
                 (false, forged, reference_forged),
             ] {
-                let production = NormalizedVm::new(&program, Default::default()).invoke(
+                let production = NormalizedVm::for_test(&program, Default::default()).invoke(
                     accept,
                     vec![value],
                     None,
@@ -651,7 +651,7 @@ fn raw_pure_descriptor_cannot_omit_unused_requirement_arguments() {
         bound_arguments: None,
     };
     let accept = declaration_named(&snapshot, "accept-exact-descriptor");
-    let result = NormalizedVm::new(&program, Default::default()).invoke(
+    let result = NormalizedVm::for_test(&program, Default::default()).invoke(
         accept,
         vec![value],
         None,

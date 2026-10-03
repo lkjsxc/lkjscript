@@ -327,7 +327,7 @@ fn recursive_instances_properties_ingress_and_codec_limits_are_independent() {
     ] {
         let observed = Mutex::new(None);
         assert!(
-            NormalizedVm::new(&program, Default::default())
+            NormalizedVm::for_test(&program, Default::default())
                 .observing(&observed, &super::super::vm::CoreNormalizedHost)
                 .invoke(entries[0], vec![bad.clone()], None, &control)
                 .is_err()
@@ -345,7 +345,7 @@ fn recursive_instances_properties_ingress_and_codec_limits_are_independent() {
     }
     let foreign = prepare_snapshot(&snapshot);
     assert!(
-        NormalizedVm::new(&foreign, Default::default())
+        NormalizedVm::for_test(&foreign, Default::default())
             .invoke(entries[0], vec![value], None, &control)
             .is_err()
     );
@@ -572,7 +572,7 @@ fn recursive_decoder_operational_failures_cannot_select_fallback_in_either_tier(
                     ExecutionFailureClass::Cancelled
                 };
                 let observed = Mutex::new(None);
-                let evaluator = NormalizedVm::new(&program, Default::default());
+                let evaluator = NormalizedVm::for_test(&program, Default::default());
                 let evaluator = if raw_host {
                     evaluator.observing(&observed, &super::super::vm::CoreNormalizedHost)
                 } else {

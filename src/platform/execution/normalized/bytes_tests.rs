@@ -66,7 +66,7 @@ fn bytes_slice_exhaustive_small_ranges_agree_with_independent_values() {
                     NormalizedValue::I64(start as i64),
                     NormalizedValue::I64(end as i64),
                 ];
-                let actual = NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                let actual = NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                     .invoke(declaration, arguments.clone(), None, &control)
                     .unwrap()
                     .0;
@@ -97,7 +97,7 @@ fn bytes_slice_exhaustive_small_ranges_agree_with_independent_values() {
         (1, 3, vec![0x8c, 0xab]),
         (2, 4, vec![0xab, 0]),
     ] {
-        let actual = NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+        let actual = NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
             .invoke(
                 declaration,
                 vec![
@@ -131,7 +131,7 @@ fn bytes_slice_rejects_invalid_ranges_in_both_evaluators() {
                     NormalizedValue::I64(start),
                     NormalizedValue::I64(end),
                 ];
-                let actual = NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                let actual = NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                     .invoke(declaration, arguments.clone(), None, &control)
                     .unwrap_err();
                 let reference = NormalizedReferenceInterpreter::new(
@@ -163,7 +163,7 @@ fn bytes_get_returns_every_unsigned_octet_without_text_interpretation() {
     let bytes = NormalizedValue::bytes((0..=255).collect::<Vec<u8>>());
     for expected in 0..=255_i64 {
         let arguments = vec![bytes.clone(), NormalizedValue::I64(expected)];
-        let actual = NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+        let actual = NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
             .invoke(declaration, arguments.clone(), None, &control)
             .unwrap()
             .0;
@@ -197,7 +197,7 @@ fn bytes_get_rejects_empty_negative_and_excessive_indices_in_both_evaluators() {
                 NormalizedValue::bytes(bytes.clone()),
                 NormalizedValue::I64(index),
             ];
-            let actual = NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+            let actual = NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                 .invoke(declaration, arguments.clone(), None, &control)
                 .unwrap_err();
             let reference = NormalizedReferenceInterpreter::new(

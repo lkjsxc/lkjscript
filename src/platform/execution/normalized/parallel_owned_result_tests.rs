@@ -94,7 +94,6 @@ fn parallel_generic_owned_aggregates_preserve_payloads_and_allocation_identity()
 }
 
 fn exercise_results(source: crate::platform::kernel::KernelSnapshot) {
-    let _lane = super::super::super::parallel::isolated_test_lane();
     assert!(crate::platform::kernel::memory_reference::accepts(&source));
     let program = prepare_snapshot(&source);
     let entry = declaration_named(&source, "main");
@@ -119,11 +118,11 @@ fn exercise_results(source: crate::platform::kernel::KernelSnapshot) {
                     value
                 } else {
                     let (value, observation) =
-                        NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                        NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                             .invoke(entry, arguments, None, &control)
                             .unwrap();
                     assert_eq!(observation.parallel_scopes, 5);
-                    assert!(observation.parallel_workers_spawned > 0);
+                    assert!(observation.parallel_worker_dispatches > 0);
                     assert_eq!(observation.live_call_frames_after, 0);
                     assert_eq!(observation.live_handles_after, 0);
                     value
@@ -163,7 +162,7 @@ fn parallel_owned_result_wrapper_and_nested_children_charge_one_invocation_quota
                         )
                     })
             } else {
-                NormalizedVm::new(&program, policy)
+                NormalizedVm::for_test(&program, policy)
                     .invoke(entry, arguments, None, &control)
                     .map(|(value, work)| {
                         (
@@ -237,7 +236,7 @@ fn parallel_owned_result_cancellation_joins_and_releases_every_parent_created_ow
                 .invoke(entry, arguments, None, &control)
                 .map(|r| r.0)
             } else {
-                NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                     .invoke(entry, arguments, None, &control)
                     .map(|r| r.0)
             };
@@ -311,7 +310,7 @@ fn parallel_owned_result_trap_in_either_lane_preserves_original_failure_and_clea
                 .invoke(entry, vec![], None, &control)
                 .unwrap_err()
             } else {
-                NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                     .invoke(entry, vec![], None, &control)
                     .unwrap_err()
             };
@@ -397,7 +396,7 @@ declarations.end"#,
             .unwrap()
             .0
         } else {
-            NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+            NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                 .invoke(entry, vec![], None, &control)
                 .unwrap()
                 .0

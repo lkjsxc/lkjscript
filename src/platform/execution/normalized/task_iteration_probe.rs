@@ -75,6 +75,7 @@ impl NormalizedReferenceRead for Narrow<'_> {
 }
 
 fn outgoing_authority(prepared: &PreparedApplication) -> Result<Value, Diagnostic> {
+    let executor = crate::platform::runtime::structured::StructuredExecutor::new();
     use crate::platform::kernel::{DeclarationPayload, FunctionEffect, OwnerKey, OwnerRecord};
     let entry = select(prepared, "iterate")?;
     let declaration = prepared.program.functions[entry.0 as usize].declaration;
@@ -150,7 +151,7 @@ fn outgoing_authority(prepared: &PreparedApplication) -> Result<Value, Diagnosti
             .map(|(value, _)| value)
         } else {
             let mut program = prepared.program.clone();
-            for function in Arc::make_mut(&mut program.functions) {
+            for function in Arc::make_mut(&mut Arc::make_mut(&mut program).functions) {
                 if function.declaration == target && function.effect_parameters.is_empty() {
                     function.effect = FunctionEffect::Task {
                         requirements: vec![],
@@ -159,7 +160,7 @@ fn outgoing_authority(prepared: &PreparedApplication) -> Result<Value, Diagnosti
                     function.task_requirements = Arc::from([]);
                 }
             }
-            NormalizedVm::new(&program, Default::default())
+            NormalizedVm::new(&program, Default::default(), &executor.handle())
                 .invoke_entry(
                     NormalizedEntryPoint::Function(entry),
                     vec![],
@@ -192,6 +193,7 @@ fn invoke(
     fault: &'static str,
     observed: bool,
 ) -> Result<Value, Diagnostic> {
+    let executor = crate::platform::runtime::structured::StructuredExecutor::new();
     let function = select(prepared, "iterate")?;
     let signature = &prepared.program.functions[function.0 as usize];
     require(
@@ -243,7 +245,7 @@ fn invoke(
         )
     } else {
         let sink = Mutex::new(None);
-        let vm = NormalizedVm::new(&prepared.program, policy);
+        let vm = NormalizedVm::new(&prepared.program, policy, &executor.handle());
         let vm = if observed {
             vm.observing_checked(&sink)
         } else {
@@ -364,7 +366,7 @@ fn invoke(
             if reference {
                 &schema
             } else {
-                &prepared.program
+                prepared.program.as_ref()
             },
             &value,
             signature.result,

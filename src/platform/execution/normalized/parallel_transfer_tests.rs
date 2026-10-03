@@ -160,7 +160,7 @@ fn parallel_transfer_generic_intermediate_pair_is_prepared_for_each_concrete_app
                     value
                 } else {
                     let (value, work) =
-                        NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                        NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                             .invoke(entry, arguments(name, n), None, &control)
                             .unwrap();
                     assert_eq!(work.parallel_scopes, 1);
@@ -203,7 +203,7 @@ fn parallel_transfer_generic_pair_reservations_have_exact_quota_and_joined_clean
                         )
                     })
             } else {
-                NormalizedVm::new(&program, policy)
+                NormalizedVm::for_test(&program, policy)
                     .invoke(entry, arguments("integer-case", -137), None, control)
                     .map(|(value, work)| {
                         (
@@ -332,7 +332,7 @@ declarations.end"#;
                 .unwrap()
                 .0
             } else {
-                NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                     .invoke(entry, vec![NormalizedValue::I64(n)], None, &control)
                     .unwrap()
                     .0
@@ -393,7 +393,7 @@ declarations.end"#;
                 .invoke_instantiated(declaration, &[ty], vec![], &control)
                 .map(|(value, _)| value)
             } else {
-                NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                     .invoke_entry(
                         NormalizedEntryPoint::InstantiatedFunction(
                             program.function(declaration).unwrap(),

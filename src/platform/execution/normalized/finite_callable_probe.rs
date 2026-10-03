@@ -332,6 +332,7 @@ fn invoke(
     reference: bool,
     fault: &'static str,
 ) -> Result<Value, Diagnostic> {
+    let executor = crate::platform::runtime::structured::StructuredExecutor::new();
     let function = select(prepared, "task")?;
     let signature = &prepared.program.functions[function.0 as usize];
     require(
@@ -369,7 +370,7 @@ fn invoke(
         (result.map(|r| r.0), json!(observed))
     } else {
         let sink = Mutex::new(None);
-        let result = NormalizedVm::new(&prepared.program, policy)
+        let result = NormalizedVm::new(&prepared.program, policy, &executor.handle())
             .observing_checked(&sink)
             .invoke_entry(
                 NormalizedEntryPoint::Function(function),

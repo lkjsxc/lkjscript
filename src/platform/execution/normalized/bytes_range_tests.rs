@@ -48,7 +48,7 @@ fn byte_ranges_and_copies_agree_through_checked_and_explicit_core_hosts() {
         for explicit in [false, true] {
             let vm_observer = std::sync::Mutex::new(None);
             let reference_observer = std::sync::Mutex::new(None);
-            let vm = NormalizedVm::new(&program, NormalizedRunPolicy::foreground());
+            let vm = NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground());
             let vm = if explicit {
                 vm.observing(&vm_observer, &CoreNormalizedHost)
             } else {
@@ -117,7 +117,7 @@ fn observed(
         )
     } else {
         let observer = std::sync::Mutex::new(None);
-        let result = NormalizedVm::new(&program, policy)
+        let result = NormalizedVm::for_test(&program, policy)
             .observing_checked(&observer)
             .invoke(declaration, arguments, None, &control)
             .map(|pair| pair.0);
@@ -217,7 +217,7 @@ fn byte_range_pre_cancelled_calls_return_no_value_in_either_evaluator() {
     ] {
         let declaration = declaration_named(&snapshot, name);
         assert!(
-            NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+            NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                 .invoke(declaration, arguments.clone(), None, &control)
                 .is_err()
         );

@@ -9,6 +9,7 @@ use lkjscript::platform::contract::{
     MAXIMUM_CLI_RESPONSE_BYTES, MAXIMUM_CLI_RESPONSE_RECORDS, exit_status_for,
 };
 use lkjscript::platform::control::{CompactResponseLimits, CompactResponseWriter};
+use lkjscript::platform::runtime::structured::{StructuredExecutor, StructuredExecutorObservation};
 use lkjscript::platform::{
     Diagnostic, PreparedDeployment, PublicOperation, ShutdownReceipt, execute_build,
     execute_capabilities, execute_change, execute_check, execute_data, execute_foreground_run,
@@ -585,22 +586,37 @@ async fn worker(arguments: &[String]) -> Result<(), Diagnostic> {
         ));
     }
     let mut signals = ProcessTermination::register("resident_signal")?;
-    let prepared =
+    let mut prepared =
         PreparedDeployment::load(Path::new(&arguments[1]), tokio::runtime::Handle::current())?;
-    let application = prepared.worker_application()?;
+    let mut executor = take_executor(&mut prepared)?;
+    let application = match prepared.worker_application() {
+        Ok(application) => application,
+        Err(mut error) => {
+            prepared.close_uninvoked(&mut error);
+            return join_executor(&mut executor, Err::<(), _>(error)).map(|_| ());
+        }
+    };
     if let Err(mut error) = write_json(&json!({
         "ok": true,
         "event": "ready",
         "deployment": prepared.observe_redacted(),
+        "executor": executor.observe(),
     })) {
+        executor.close_dispatch();
         append_shutdown_evidence(&mut error, &application.shutdown().await);
-        return Err(error);
+        return join_executor(&mut executor, Err::<(), _>(error)).map(|_| ());
     }
-    let receipt = application.run(signals.wait()).await?;
+    drop(prepared);
+    let (stop, stopping) = tokio::sync::oneshot::channel();
+    let running = application.run(async move {
+        let _ = stopping.await;
+    });
+    let (receipt, workers) = run_resident(&mut executor, &mut signals, running, stop).await?;
     write_json(&json!({
         "ok": true,
         "event": "stopped",
         "receipt": receipt,
+        "executor": workers,
     }))
 }
 
@@ -616,25 +632,38 @@ async fn serve(arguments: &[String]) -> Result<(), Diagnostic> {
     let signals = ProcessTermination::register("resident_signal")?;
     let prepared =
         PreparedDeployment::load(Path::new(&arguments[1]), tokio::runtime::Handle::current())?;
-    let address = prepared
-        .listen()
-        .ok_or_else(|| cli_error("service deployment requires a concrete listen address"))?
-        .to_owned();
+    let address = match prepared.listen() {
+        Some(address) => address.to_owned(),
+        None => {
+            return Err(failed_preparation(
+                prepared,
+                cli_error("service deployment requires a concrete listen address"),
+            ));
+        }
+    };
     match prepared.observe_redacted().runner.as_str() {
         "http" => serve_http(prepared, &address, signals).await,
         "interactive" => serve_interactive(prepared, &address, signals).await,
-        _ => Err(cli_error(
-            "serve requires an http or interactive resident target",
+        _ => Err(failed_preparation(
+            prepared,
+            cli_error("serve requires an http or interactive resident target"),
         )),
     }
 }
 
 async fn serve_http(
-    prepared: PreparedDeployment,
+    mut prepared: PreparedDeployment,
     address: &str,
     mut signals: ProcessTermination,
 ) -> Result<(), Diagnostic> {
-    let application = prepared.http_application()?;
+    let mut executor = take_executor(&mut prepared)?;
+    let application = match prepared.http_application() {
+        Ok(application) => application,
+        Err(mut error) => {
+            prepared.close_uninvoked(&mut error);
+            return join_executor(&mut executor, Err::<(), _>(error)).map(|_| ());
+        }
+    };
     let listener = match TcpListener::bind(address).await {
         Ok(listener) => listener,
         Err(source) => {
@@ -643,8 +672,9 @@ async fn serve_http(
                 "serve_bind",
                 format!("listener could not bind: {source}"),
             );
+            executor.close_dispatch();
             append_shutdown_evidence(&mut error, &application.shutdown().await);
-            return Err(error);
+            return join_executor(&mut executor, Err::<(), _>(error)).map(|_| ());
         }
     };
     let local_address = match listener.local_addr() {
@@ -655,8 +685,9 @@ async fn serve_http(
                 "serve_address",
                 format!("listener address is unavailable: {source}"),
             );
+            executor.close_dispatch();
             append_shutdown_evidence(&mut error, &application.shutdown().await);
-            return Err(error);
+            return join_executor(&mut executor, Err::<(), _>(error)).map(|_| ());
         }
     };
     if let Err(mut error) = write_json(&json!({
@@ -664,26 +695,39 @@ async fn serve_http(
         "event": "ready",
         "local_address": local_address.to_string(),
         "deployment": prepared.observe_redacted(),
+        "executor": executor.observe(),
     })) {
+        executor.close_dispatch();
         append_shutdown_evidence(&mut error, &application.shutdown().await);
-        return Err(error);
+        return join_executor(&mut executor, Err::<(), _>(error)).map(|_| ());
     }
-    let receipt = application
-        .serve(listener, async move { signals.wait().await })
-        .await?;
+    drop(prepared);
+    let (stop, stopping) = tokio::sync::oneshot::channel();
+    let running = application.serve(listener, async move {
+        let _ = stopping.await;
+    });
+    let (receipt, workers) = run_resident(&mut executor, &mut signals, running, stop).await?;
     write_json(&json!({
         "ok": true,
         "event": "stopped",
         "receipt": receipt,
+        "executor": workers,
     }))
 }
 
 async fn serve_interactive(
-    prepared: PreparedDeployment,
+    mut prepared: PreparedDeployment,
     address: &str,
     mut signals: ProcessTermination,
 ) -> Result<(), Diagnostic> {
-    let application = prepared.session_application()?;
+    let mut executor = take_executor(&mut prepared)?;
+    let application = match prepared.session_application() {
+        Ok(application) => application,
+        Err(mut error) => {
+            prepared.close_uninvoked(&mut error);
+            return join_executor(&mut executor, Err::<(), _>(error)).map(|_| ());
+        }
+    };
     let listener = match TcpListener::bind(address).await {
         Ok(listener) => listener,
         Err(source) => {
@@ -692,8 +736,9 @@ async fn serve_interactive(
                 "serve_bind",
                 format!("listener could not bind: {source}"),
             );
+            executor.close_dispatch();
             append_shutdown_evidence(&mut error, &application.shutdown().await);
-            return Err(error);
+            return join_executor(&mut executor, Err::<(), _>(error)).map(|_| ());
         }
     };
     let local_address = match listener.local_addr() {
@@ -704,8 +749,9 @@ async fn serve_interactive(
                 "serve_address",
                 format!("listener address is unavailable: {source}"),
             );
+            executor.close_dispatch();
             append_shutdown_evidence(&mut error, &application.shutdown().await);
-            return Err(error);
+            return join_executor(&mut executor, Err::<(), _>(error)).map(|_| ());
         }
     };
     if let Err(mut error) = write_json(&json!({
@@ -713,18 +759,106 @@ async fn serve_interactive(
         "event": "ready",
         "local_address": local_address.to_string(),
         "deployment": prepared.observe_redacted(),
+        "executor": executor.observe(),
     })) {
+        executor.close_dispatch();
         append_shutdown_evidence(&mut error, &application.shutdown().await);
-        return Err(error);
+        return join_executor(&mut executor, Err::<(), _>(error)).map(|_| ());
     }
-    let receipt = application
-        .serve(listener, async move { signals.wait().await })
-        .await?;
+    drop(prepared);
+    let (stop, stopping) = tokio::sync::oneshot::channel();
+    let running = application.serve(listener, async move {
+        let _ = stopping.await;
+    });
+    let (receipt, workers) = run_resident(&mut executor, &mut signals, running, stop).await?;
     write_json(&json!({
         "ok": true,
         "event": "stopped",
         "receipt": receipt,
+        "executor": workers,
     }))
+}
+
+fn take_executor(prepared: &mut PreparedDeployment) -> Result<StructuredExecutor, Diagnostic> {
+    prepared.take_executor().ok_or_else(|| {
+        Diagnostic::new(
+            lkjscript::platform::DiagnosticClass::Infrastructure,
+            "resident_executor_owner",
+            "standalone deployment has no worker lifetime owner",
+        )
+    })
+}
+
+fn failed_preparation(mut prepared: PreparedDeployment, mut error: Diagnostic) -> Diagnostic {
+    prepared.close_uninvoked(&mut error);
+    if let Some(mut executor) = prepared.take_executor() {
+        executor.close_dispatch();
+        if let Err(failure) = executor.shutdown() {
+            error.notes.push(format!(
+                "structured worker cleanup failed with safe code '{}'",
+                failure.code
+            ));
+        }
+    }
+    error
+}
+
+async fn run_resident<T>(
+    executor: &mut StructuredExecutor,
+    signals: &mut ProcessTermination,
+    operation: impl std::future::Future<Output = Result<T, Diagnostic>>,
+    stop: tokio::sync::oneshot::Sender<()>,
+) -> Result<(T, StructuredExecutorObservation), Diagnostic> {
+    tokio::pin!(operation);
+    let outcome = tokio::select! {
+        biased;
+        _ = signals.wait() => {
+            executor.close_dispatch();
+            let _ = stop.send(());
+            operation.await
+        }
+        outcome = &mut operation => outcome,
+    };
+    executor.close_dispatch();
+    join_executor(executor, outcome)
+}
+
+fn join_executor<T>(
+    executor: &mut StructuredExecutor,
+    outcome: Result<T, Diagnostic>,
+) -> Result<(T, StructuredExecutorObservation), Diagnostic> {
+    executor.close_dispatch();
+    match executor.shutdown() {
+        Ok(joined) => outcome
+            .map_err(|mut error| {
+                error.notes.push(format!(
+                    "structured worker cleanup: dispatch-stopped={} active={} remaining-workers={} joined-workers={}",
+                    !joined.dispatch_open,
+                    joined.active_dispatches,
+                    joined.remaining_workers,
+                    joined.joined_workers
+                ));
+                error
+            })
+            .map(|value| (value, joined)),
+        Err(failure) => {
+            let note = format!(
+                "structured worker cleanup failed with safe code '{}'",
+                failure.code
+            );
+            match outcome {
+                Err(mut error) => {
+                    error.notes.push(note);
+                    Err(error)
+                }
+                Ok(_) => Err(Diagnostic::new(
+                    lkjscript::platform::DiagnosticClass::Infrastructure,
+                    "resident_workers",
+                    note,
+                )),
+            }
+        }
+    }
 }
 
 fn append_shutdown_evidence(error: &mut Diagnostic, shutdown: &ShutdownReceipt) {

@@ -88,7 +88,7 @@ fn recursive_resource_tail_cycles_exhaust_work_without_replaying_effects() {
                     )
                     .expect_err("bounded expression work must stop recursive borrowing/transfer")
             } else {
-                NormalizedVm::new(&program, policy)
+                NormalizedVm::for_test(&program, policy)
                     .invoke_root_target_scoped(
                         &Name::new("command").unwrap(),
                         vec![],

@@ -67,7 +67,7 @@ fn owned_cell_raw_ingress_results_and_persistence_fail_closed() {
                 .invoke(entry, vec![raw], None, &control)
                 .map(|v| v.0)
             } else {
-                NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                     .invoke(entry, vec![raw], None, &control)
                     .map(|v| v.0)
             };
@@ -85,7 +85,7 @@ fn owned_cell_raw_ingress_results_and_persistence_fail_closed() {
             .invoke(create, vec![NormalizedValue::I64(128)], None, &control)
             .map(|v| v.0)
         } else {
-            NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+            NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                 .invoke(create, vec![NormalizedValue::I64(128)], None, &control)
                 .map(|v| v.0)
         };
@@ -137,7 +137,7 @@ fn owned_static_witness_templates_cannot_be_erased_at_raw_entry() {
     .0;
     let control = ExecutionControl::uncancelled();
     assert!(
-        NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+        NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
             .invoke_entry(
                 super::super::prepare::NormalizedEntryPoint::InstantiatedFunction(
                     program.function(d).unwrap(),
@@ -194,7 +194,7 @@ fn owned_vm_rechecks_closed_witness_self_and_binding_arity() {
         }
         assert!(changed > 0);
         let storage = super::super::owned_i64_cell::StorageObservation::start();
-        let failure = NormalizedVm::new(&forged, NormalizedRunPolicy::foreground())
+        let failure = NormalizedVm::for_test(&forged, NormalizedRunPolicy::foreground())
             .invoke(
                 entry,
                 vec![NormalizedValue::I64(128)],

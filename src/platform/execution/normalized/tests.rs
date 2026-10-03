@@ -400,10 +400,7 @@ use super::reference::{
 };
 use super::resident::NormalizedResidentDeployment;
 use super::resource::NormalizedResourceScope;
-use super::runner::{
-    NormalizedCommandPolicy, prepare_command_invocation, run_foreground_command, run_graph_tests,
-    run_pure_command,
-};
+use super::runner::{NormalizedCommandPolicy, prepare_command_invocation, run_foreground_command};
 use super::value::{NormalizedMapKey, NormalizedValue};
 use super::vm::{NormalizedRunPolicy, NormalizedVm};
 use super::worker::NormalizedWorkerApplication;
@@ -489,6 +486,58 @@ fn declaration_named(
 
 fn prepare_snapshot(snapshot: &crate::platform::kernel::KernelSnapshot) -> NormalizedProgram {
     prepare_repository(snapshot).2
+}
+
+// Mutable fault fixtures remain local; production preparation wraps once and
+// dispatch shares that admitted Arc. These adapters copy only at test setup.
+fn run_pure_command(
+    authority: &dyn NormalizedReferenceRead,
+    program: &NormalizedProgram,
+    target: &Name,
+    arguments: &[u8],
+    policy: NormalizedCommandPolicy,
+    control: &ExecutionControl,
+) -> Result<super::runner::NormalizedCommandReceipt, crate::platform::diagnostic::Diagnostic> {
+    super::runner::run_pure_command(
+        authority,
+        &Arc::new(program.clone()),
+        target,
+        arguments,
+        policy,
+        control,
+    )
+}
+
+fn run_graph_tests(
+    authority: &dyn NormalizedReferenceRead,
+    program: &NormalizedProgram,
+    capabilities: Option<&NormalizedCapabilities>,
+    policy: NormalizedRunPolicy,
+    control: &ExecutionControl,
+) -> Result<super::runner::NormalizedTestReceipt, crate::platform::diagnostic::Diagnostic> {
+    super::runner::run_graph_tests(
+        authority,
+        &Arc::new(program.clone()),
+        capabilities,
+        policy,
+        control,
+    )
+}
+
+fn run_pure_artifact_command(
+    program: &NormalizedProgram,
+    target: &Name,
+    arguments: &[u8],
+    policy: NormalizedCommandPolicy,
+    control: &ExecutionControl,
+) -> Result<Vec<u8>, crate::platform::diagnostic::Diagnostic> {
+    super::runner::run_pure_artifact_command(
+        &Arc::new(program.clone()),
+        target,
+        arguments,
+        policy,
+        control,
+    )
 }
 
 #[test]
@@ -741,7 +790,7 @@ fn nominal_phantom_identity_origin_properties_codecs_and_alias_fault_are_indepen
     let index = declarations[1];
     let sink = std::sync::Mutex::new(None);
     assert!(
-        NormalizedVm::new(&program, Default::default())
+        NormalizedVm::for_test(&program, Default::default())
             .observing(&sink, &super::vm::CoreNormalizedHost)
             .invoke(index, vec![first.clone()], None, &control)
             .is_err()
@@ -754,7 +803,7 @@ fn nominal_phantom_identity_origin_properties_codecs_and_alias_fault_are_indepen
     );
     let foreign = prepare_snapshot(&snapshot);
     assert!(
-        NormalizedVm::new(&foreign, Default::default())
+        NormalizedVm::for_test(&foreign, Default::default())
             .invoke(declarations[1], vec![second], None, &control)
             .is_err()
     );
@@ -764,7 +813,7 @@ fn nominal_phantom_identity_origin_properties_codecs_and_alias_fault_are_indepen
         .record_instances
         .insert(applications[1], program.record_instances[&applications[0]]);
     assert!(
-        NormalizedVm::new(&program, Default::default())
+        NormalizedVm::for_test(&program, Default::default())
             .invoke(index, vec![first.clone()], None, &control)
             .is_ok()
     );
@@ -873,7 +922,7 @@ fn maintained_pair_map_calls_each_callback_once_in_order_and_stops_on_traps() {
                     .map(|_| ())
             } else {
                 let sink = Mutex::new(None);
-                NormalizedVm::new(&program, Default::default())
+                NormalizedVm::for_test(&program, Default::default())
                     .observing(&sink, &host)
                     .invoke_test(test, None, &control)
                     .map(|_| ())
@@ -3505,11 +3554,13 @@ async fn normalized_resident_reuses_the_bounded_execution_kernel() {
         &SecretCatalog::from_environment(&[]).expect("empty exact secret catalog"),
     )
     .expect("pure normalized deployment");
+    let executor = crate::platform::runtime::structured::StructuredExecutor::for_test(1);
     let resident = NormalizedResidentDeployment::prepare(
         Arc::clone(&program),
         deployment,
         ResidentLimits::default(),
         NormalizedRunPolicy::default(),
+        &executor.handle(),
     )
     .expect("normalized resident deployment");
 
@@ -3552,11 +3603,13 @@ async fn normalized_deployment_cleans_owned_adapters_exactly_once() {
         NormalizedDeploymentResourcePolicy::default(),
     )
     .expect("tracked normalized deployment");
+    let executor = crate::platform::runtime::structured::StructuredExecutor::for_test(1);
     let resident = NormalizedResidentDeployment::prepare(
         Arc::clone(&program),
         deployment,
         ResidentLimits::default(),
         NormalizedRunPolicy::default(),
+        &executor.handle(),
     )
     .expect("tracked normalized resident");
 
@@ -3604,11 +3657,13 @@ async fn normalized_worker_uses_shared_structured_topology() {
             &SecretCatalog::from_environment(&[]).expect("empty exact secret catalog"),
         )
         .expect("exact normalized worker deployment");
+        let executor = crate::platform::runtime::structured::StructuredExecutor::for_test(1);
         let resident = NormalizedResidentDeployment::prepare(
             Arc::clone(&program),
             deployment,
             ResidentLimits::default(),
             NormalizedRunPolicy::default(),
+            &executor.handle(),
         )
         .expect("normalized worker resident");
         let application = NormalizedWorkerApplication::new(
@@ -3676,11 +3731,13 @@ async fn normalized_http_dispatch_uses_exact_body_resources_and_resident_admissi
         &SecretCatalog::from_environment(&[]).expect("empty exact secret catalog"),
     )
     .expect("normalized HTTP deployment");
+    let executor = crate::platform::runtime::structured::StructuredExecutor::for_test(1);
     let resident = NormalizedResidentDeployment::prepare(
         Arc::clone(&program),
         deployment,
         ResidentLimits::default(),
         NormalizedRunPolicy::default(),
+        &executor.handle(),
     )
     .expect("normalized HTTP resident");
     let application = NormalizedHttpApplication::new(
@@ -4014,11 +4071,13 @@ async fn normalized_http_patterns_bind_raw_captures_to_vm_parameters() {
         &SecretCatalog::from_environment(&[]).expect("empty exact secret catalog"),
     )
     .expect("normalized pattern HTTP deployment");
+    let executor = crate::platform::runtime::structured::StructuredExecutor::for_test(1);
     let resident = NormalizedResidentDeployment::prepare(
         Arc::clone(&program),
         deployment,
         ResidentLimits::default(),
         NormalizedRunPolicy::default(),
+        &executor.handle(),
     )
     .expect("normalized pattern HTTP resident");
     let application = NormalizedHttpApplication::new(
@@ -4199,11 +4258,13 @@ async fn normalized_deployment_resolves_and_runs_one_exact_effect_adapter() {
         &ExecutionControl::uncancelled(),
     )
     .unwrap();
+    let executor = crate::platform::runtime::structured::StructuredExecutor::for_test(1);
     let resident = NormalizedResidentDeployment::prepare(
         Arc::new(program),
         deployment,
         ResidentLimits::default(),
         NormalizedRunPolicy::foreground(),
+        &executor.handle(),
     )
     .unwrap()
     .foreground(None);
@@ -4295,7 +4356,7 @@ fn exact_byte_stream_grant_executes_in_task_scopes_in_both_tiers() {
             b"streamed bytes".to_vec(),
         )
         .expect("production memory stream");
-    let production = NormalizedVm::new(&program, NormalizedRunPolicy::default())
+    let production = NormalizedVm::for_test(&program, NormalizedRunPolicy::default())
         .invoke_root_target_scoped(
             &target_name,
             vec![production_stream],
@@ -4342,7 +4403,7 @@ fn exact_byte_stream_grant_executes_in_task_scopes_in_both_tiers() {
     let foreign_stream = deployment
         .register_memory_stream(requirement.reference, &owning_scope, b"foreign".to_vec())
         .expect("foreign-scope stream");
-    let error = NormalizedVm::new(&program, NormalizedRunPolicy::default())
+    let error = NormalizedVm::for_test(&program, NormalizedRunPolicy::default())
         .invoke_root_target_scoped(
             &target_name,
             vec![foreign_stream],
@@ -4414,11 +4475,13 @@ async fn normalized_reference_runner_uses_revision_pinned_owner_reads() {
             NormalizedDeploymentResourcePolicy::default(),
         )
         .unwrap();
+        let executor = crate::platform::runtime::structured::StructuredExecutor::for_test(1);
         let resident = NormalizedResidentDeployment::prepare(
             Arc::new(program.clone()),
             deployment,
             ResidentLimits::default(),
             NormalizedRunPolicy::foreground(),
+            &executor.handle(),
         )
         .unwrap()
         .foreground(None);
@@ -4460,7 +4523,7 @@ async fn normalized_reference_runner_uses_revision_pinned_owner_reads() {
 fn dense_vm_executes_pure_external_test_and_capability_paths() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let program = prepare_snapshot(&snapshot);
-    let vm = NormalizedVm::new(&program, NormalizedRunPolicy::default());
+    let vm = NormalizedVm::for_test(&program, NormalizedRunPolicy::default());
     let control = ExecutionControl::uncancelled();
 
     let (pure, pure_observation) = vm
@@ -4520,7 +4583,7 @@ fn dense_vm_enforces_exact_grants_cancellation_and_separate_budgets() {
     let program = prepare_snapshot(&snapshot);
     let target_name = Name::new("command").unwrap();
     let control = ExecutionControl::uncancelled();
-    let vm = NormalizedVm::new(&program, NormalizedRunPolicy::default());
+    let vm = NormalizedVm::for_test(&program, NormalizedRunPolicy::default());
 
     let missing = vm
         .invoke_root_target(&target_name, Vec::new(), None, &control)
@@ -4656,7 +4719,7 @@ fn dense_vm_enforces_exact_grants_cancellation_and_separate_budgets() {
         .expect_err("cancellation reaches normalized external execution");
     assert_eq!(cancelled_error.class, ExecutionFailureClass::Cancelled);
 
-    let step_limited = NormalizedVm::new(
+    let step_limited = NormalizedVm::for_test(
         &program,
         NormalizedRunPolicy {
             instruction_steps: Some(1),
@@ -4672,7 +4735,7 @@ fn dense_vm_enforces_exact_grants_cancellation_and_separate_budgets() {
     .expect_err("instruction budget is independent");
     assert_eq!(step_limited.code, "normalized_instruction_steps");
 
-    let allocation_limited = NormalizedVm::new(
+    let allocation_limited = NormalizedVm::for_test(
         &program,
         NormalizedRunPolicy {
             maximum_allocated_bytes: Some(1),
@@ -4689,7 +4752,7 @@ fn dense_vm_enforces_exact_grants_cancellation_and_separate_budgets() {
     assert_eq!(allocation_limited.code, "normalized_allocation");
 
     let (capabilities, _) = bind_fixture_capability(&program, 1);
-    let call_depth_limited = NormalizedVm::new(
+    let call_depth_limited = NormalizedVm::for_test(
         &program,
         NormalizedRunPolicy {
             maximum_call_depth: 1,
@@ -4802,7 +4865,7 @@ fn canonical_reference_and_dense_vm_agree_on_fixture_execution() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let program = prepare_snapshot(&snapshot);
     let policy = NormalizedRunPolicy::default();
-    let vm = NormalizedVm::new(&program, policy);
+    let vm = NormalizedVm::for_test(&program, policy);
     let reference = NormalizedReferenceInterpreter::new(&snapshot, &program, policy);
     let control = ExecutionControl::uncancelled();
 
@@ -4852,7 +4915,7 @@ fn canonical_reference_executes_exact_linked_dependency_bodies_with_shared_budge
     let policy = NormalizedRunPolicy::default();
     let control = ExecutionControl::uncancelled();
 
-    let production = NormalizedVm::new(&program, policy)
+    let production = NormalizedVm::for_test(&program, policy)
         .invoke(caller, Vec::new(), None, &control)
         .expect("dense linked dependency call");
     let reference = NormalizedReferenceInterpreter::from_reader(&view, &program, policy)
@@ -4891,7 +4954,7 @@ fn canonical_reference_executes_exact_linked_dependency_bodies_with_shared_budge
         maximum_call_depth: 1,
         ..policy
     };
-    let production_bounded = NormalizedVm::new(&program, bounded)
+    let production_bounded = NormalizedVm::for_test(&program, bounded)
         .invoke(caller, Vec::new(), None, &control)
         .expect("dense linked tail call replaces its caller");
     let reference_bounded = NormalizedReferenceInterpreter::from_reader(&view, &program, bounded)
@@ -4913,7 +4976,7 @@ fn canonical_reference_executes_exact_linked_dependency_bodies_with_shared_budge
         .expect("canonical dependency evaluation cannot consult compiled resolution");
     assert_eq!(independent.0, NormalizedValue::Unit);
     assert!(
-        NormalizedVm::new(&absent_compiler, policy)
+        NormalizedVm::for_test(&absent_compiler, policy)
             .invoke(caller, Vec::new(), None, &control)
             .is_err()
     );
@@ -4991,7 +5054,7 @@ fn pure_tail_transfer_rechecks_operand_base_exact_callee_and_caller_authority() 
             panic!("graph code")
         };
         code.instructions = instructions.into();
-        let error = NormalizedVm::new(&faulty, NormalizedRunPolicy::default())
+        let error = NormalizedVm::for_test(&faulty, NormalizedRunPolicy::default())
             .invoke(caller, Vec::new(), None, &ExecutionControl::uncancelled())
             .expect_err("unsafe transfer rejected");
         assert_eq!(error.code, expected);
@@ -4999,7 +5062,7 @@ fn pure_tail_transfer_rechecks_operand_base_exact_callee_and_caller_authority() 
     let mut impure = program.clone();
     Arc::make_mut(&mut impure.functions)[callee_index.0 as usize].graph_function = false;
     assert_eq!(
-        NormalizedVm::new(&impure, NormalizedRunPolicy::default())
+        NormalizedVm::for_test(&impure, NormalizedRunPolicy::default())
             .invoke(caller, Vec::new(), None, &ExecutionControl::uncancelled())
             .expect_err("exact impure callee rejects forced transfer")
             .code,
@@ -5016,7 +5079,7 @@ fn pure_tail_transfer_rechecks_operand_base_exact_callee_and_caller_authority() 
         NormalizedInstruction::Return,
     ]);
     let sink = Mutex::new(None);
-    let error = NormalizedVm::new(
+    let error = NormalizedVm::for_test(
         &cyclic,
         NormalizedRunPolicy {
             instruction_steps: Some(1000),
@@ -5080,7 +5143,7 @@ fn pure_tail_preparation_executes_the_current_maintained_standard_artifact() {
                 },
             ]
         };
-        let production = NormalizedVm::new(&program, policy)
+        let production = NormalizedVm::for_test(&program, policy)
             .invoke_entry(
                 super::prepare::NormalizedEntryPoint::InstantiatedFunction(
                     program.function(fold).expect("fold index"),
@@ -5112,7 +5175,7 @@ fn pure_tail_preparation_executes_the_current_maintained_standard_artifact() {
         assert_eq!(reference.1.value_work.internal_guard_descendant_visits, 0);
         if n == 256 {
             let forced = super::value_oracle::force_rescan(|| {
-                NormalizedVm::new(&program, policy).invoke_entry(
+                NormalizedVm::for_test(&program, policy).invoke_entry(
                     super::prepare::NormalizedEntryPoint::InstantiatedFunction(
                         program.function(fold).expect("fold"),
                         Arc::from([i64_type, i64_type]),
@@ -5192,7 +5255,7 @@ fn pure_tail_fault_cannot_discard_an_owned_transaction() {
     instructions.push(NormalizedInstruction::Return);
     code.instructions = instructions.into();
     let (capabilities, stats) = bind_tracking_capability(&program, 10, false);
-    let error = NormalizedVm::new(&program, NormalizedRunPolicy::default())
+    let error = NormalizedVm::for_test(&program, NormalizedRunPolicy::default())
         .invoke(
             caller,
             Vec::new(),
@@ -5255,7 +5318,7 @@ fn every_graph9_expression_form_executes_equally_in_both_tiers() {
     let snapshot = transaction_result_snapshot();
     let program = prepare_snapshot(&snapshot);
     let policy = NormalizedRunPolicy::default();
-    let vm = NormalizedVm::new(&program, policy);
+    let vm = NormalizedVm::for_test(&program, policy);
     let reference = NormalizedReferenceInterpreter::new(&snapshot, &program, policy);
     let control = ExecutionControl::uncancelled();
     let caller = declaration_named(&snapshot, "caller");
@@ -5286,7 +5349,7 @@ fn both_graph9_execution_tiers_commit_and_rollback_exact_transactions() {
     let caller = declaration_named(&snapshot, "caller");
     let (capabilities, stats) = bind_tracking_capability(&program, 2, false);
 
-    NormalizedVm::new(&program, policy)
+    NormalizedVm::for_test(&program, policy)
         .invoke(caller, Vec::new(), Some(&capabilities), &control)
         .expect("dense transaction commit");
     NormalizedReferenceInterpreter::new(&snapshot, &program, policy)
@@ -5358,7 +5421,7 @@ fn both_graph9_execution_tiers_commit_and_rollback_exact_transactions() {
         assert_eq!(invalid.code, expected);
     }
     let (failing_capabilities, failing_stats) = bind_tracking_capability(&failing_program, 3, true);
-    let dense_error = NormalizedVm::new(&failing_program, policy)
+    let dense_error = NormalizedVm::for_test(&failing_program, policy)
         .invoke(
             failing_caller,
             Vec::new(),
@@ -5448,7 +5511,7 @@ fn both_graph9_execution_tiers_commit_and_rollback_exact_transactions() {
     let forbidden_caller = declaration_named(&forbidden_snapshot, "caller");
     let (forbidden_capabilities, forbidden_stats) =
         bind_tracking_capability(&forbidden_program, 3, true);
-    let forbidden_error = NormalizedVm::new(&forbidden_program, policy)
+    let forbidden_error = NormalizedVm::for_test(&forbidden_program, policy)
         .invoke(
             forbidden_caller,
             Vec::new(),
@@ -5497,7 +5560,7 @@ fn foreground_optional_quotas_preserve_independent_grants_and_cancellation_in_bo
                     .invoke(caller, vec![], Some(&capabilities), control)
                     .map(|(value, _)| value)
             } else {
-                NormalizedVm::new(&program, policy)
+                NormalizedVm::for_test(&program, policy)
                     .invoke(caller, vec![], Some(&capabilities), control)
                     .map(|(value, _)| value)
             };
@@ -5575,11 +5638,13 @@ async fn foreground_lifecycle_keeps_primary_failure_and_joins_shutdown_once() {
                 NormalizedDeploymentResourcePolicy::default(),
             )
             .unwrap();
+            let executor = crate::platform::runtime::structured::StructuredExecutor::for_test(1);
             let resident = NormalizedResidentDeployment::prepare(
                 program,
                 deployment,
                 ResidentLimits::default(),
                 NormalizedRunPolicy::foreground(),
+                &executor.handle(),
             )
             .unwrap()
             .foreground(None);
@@ -5634,7 +5699,7 @@ fn dense_vm_reports_stack_collection_and_capability_budget_dimensions() {
     let control = ExecutionControl::uncancelled();
     let (capabilities, _) = bind_fixture_capability(&program, 2);
 
-    let stack = NormalizedVm::new(
+    let stack = NormalizedVm::for_test(
         &program,
         NormalizedRunPolicy {
             maximum_value_stack: 1,
@@ -5645,7 +5710,7 @@ fn dense_vm_reports_stack_collection_and_capability_budget_dimensions() {
     .expect_err("value-stack budget is independent");
     assert_eq!(stack.code, "normalized_value_stack");
 
-    let collection = NormalizedVm::new(
+    let collection = NormalizedVm::for_test(
         &program,
         NormalizedRunPolicy {
             maximum_collection_items: Some(1),
@@ -5656,7 +5721,7 @@ fn dense_vm_reports_stack_collection_and_capability_budget_dimensions() {
     .expect_err("collection-item budget is independent");
     assert_eq!(collection.code, "normalized_collection_items");
 
-    let capability = NormalizedVm::new(
+    let capability = NormalizedVm::for_test(
         &program,
         NormalizedRunPolicy {
             maximum_capability_calls: Some(1),
@@ -5721,10 +5786,10 @@ fn declaration_rename_and_move_do_not_change_dense_runtime_dispatch() {
     let target = Name::new("command").unwrap();
     let (before_capabilities, _) = bind_fixture_capability(&before, 1);
     let (after_capabilities, _) = bind_fixture_capability(&after, 1);
-    let before_result = NormalizedVm::new(&before, NormalizedRunPolicy::default())
+    let before_result = NormalizedVm::for_test(&before, NormalizedRunPolicy::default())
         .invoke_root_target(&target, Vec::new(), Some(&before_capabilities), &control)
         .expect("base dense target");
-    let after_result = NormalizedVm::new(&after, NormalizedRunPolicy::default())
+    let after_result = NormalizedVm::for_test(&after, NormalizedRunPolicy::default())
         .invoke_root_target(&target, Vec::new(), Some(&after_capabilities), &control)
         .expect("renamed and moved dense target");
     assert_eq!(before_result, after_result);
@@ -5809,7 +5874,7 @@ fn raw_adapter_result_rejection_reports_prior_visibility_and_stops_next_effect()
             (error, observation.value_work)
         } else {
             let observer = Mutex::new(None);
-            let error = NormalizedVm::new(&program, Default::default())
+            let error = NormalizedVm::for_test(&program, Default::default())
                 .observing(&observer, &super::vm::CoreNormalizedHost)
                 .invoke(caller, Vec::new(), Some(&capabilities), &control)
                 .unwrap_err();
@@ -5835,7 +5900,7 @@ fn raw_adapter_result_rejection_reports_prior_visibility_and_stops_next_effect()
                 .invoke(caller, Vec::new(), Some(&capabilities), &control)
                 .unwrap();
         } else {
-            NormalizedVm::new(&program, Default::default())
+            NormalizedVm::for_test(&program, Default::default())
                 .invoke(caller, Vec::new(), Some(&capabilities), &control)
                 .unwrap();
         }
@@ -6033,7 +6098,7 @@ type.argument parent=@items index=0 type=i64"#)
                                 observation.allocated_bytes,
                             )
                         } else {
-                            let (value, observation) = NormalizedVm::new(&program, policy)
+                            let (value, observation) = NormalizedVm::for_test(&program, policy)
                                 .invoke(entry, arguments, None, &ExecutionControl::uncancelled())
                                 .unwrap();
                             assert_eq!(
@@ -6119,7 +6184,6 @@ type.argument parent=@items index=0 type=i64"#)
 
 #[test]
 fn pure_artifact_commands_admit_inputs_and_reject_both_effect_authorities() {
-    use super::runner::run_pure_artifact_command;
     let control = ExecutionControl::uncancelled();
     let policy = NormalizedCommandPolicy::default();
     let program = prepare_snapshot(&pure_command_snapshot());

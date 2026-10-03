@@ -30,7 +30,7 @@ fn owned_closure_reference_derives_composites_inside_witness_generic_bodies() {
     let entry = declaration_named(&source, "composite-main");
     let control = ExecutionControl::uncancelled();
     assert_eq!(
-        NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+        NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
             .invoke(entry, vec![], None, &control)
             .unwrap()
             .0,
@@ -56,7 +56,7 @@ fn owned_closure_recursive_nominal_method_types_are_closed_first_order_data() {
     let entry = declaration_named(&source, "recursive-data-main");
     let control = ExecutionControl::uncancelled();
     assert_eq!(
-        NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+        NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
             .invoke(entry, vec![], None, &control)
             .unwrap()
             .0,

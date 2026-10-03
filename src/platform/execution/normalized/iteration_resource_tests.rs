@@ -590,7 +590,7 @@ fn task_tail_transfer_preserves_unused_consumed_and_final_handoff_resource_lifet
                         )
                         .map(|(v, w)| (v, w.maximum_call_depth))
                 } else {
-                    NormalizedVm::new(&program, Default::default())
+                    NormalizedVm::for_test(&program, Default::default())
                         .invoke_root_target_scoped(
                             &Name::new("command").unwrap(),
                             vec![],
@@ -745,7 +745,7 @@ fn check_scoped_borrow_with_effects(generic: bool, effects: Option<bool>) {
                         )
                         .map(|(value, _)| value)
                 } else {
-                    NormalizedVm::new(&program, Default::default())
+                    NormalizedVm::for_test(&program, Default::default())
                         .invoke_root_target_scoped(
                             &Name::new("command").unwrap(),
                             vec![],
@@ -1083,7 +1083,7 @@ fn requirement_resource_helpers_close_exact_operands_and_join_both_execution_own
                     )
                     .map(|(value, _)| value)
             } else {
-                NormalizedVm::new(&program, Default::default())
+                NormalizedVm::for_test(&program, Default::default())
                     .invoke_root_target_scoped(
                         &Name::new("command").unwrap(),
                         vec![],

@@ -52,7 +52,7 @@ pub struct PreparedApplication {
     pub artifact_bundle: ArtifactBundleDigest,
     pub artifact_bytes: Vec<u8>,
     pub link_work: ArtifactLinkWork,
-    pub program: NormalizedProgram,
+    pub program: std::sync::Arc<NormalizedProgram>,
     pub(crate) reference: PackageReference,
 }
 
@@ -474,7 +474,7 @@ pub(crate) fn prepare_repository_with_control(
         artifact_bundle,
         artifact_bytes,
         link_work: linked.work,
-        program,
+        program: std::sync::Arc::new(program),
         reference,
     };
     let view = prepared.repository.view_current()?;

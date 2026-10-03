@@ -242,6 +242,7 @@ fn invoke(
     count: i64,
     fault: &'static str,
 ) -> Result<Value, Diagnostic> {
+    let executor = crate::platform::runtime::structured::StructuredExecutor::new();
     let function = select(prepared, target)?;
     let signature = &prepared.program.functions[function.0 as usize];
     require(
@@ -259,7 +260,7 @@ fn invoke(
         if reference {
             &schema
         } else {
-            &prepared.program
+            prepared.program.as_ref()
         },
         &input,
         signature.parameters[0].ty,
@@ -323,7 +324,7 @@ fn invoke(
         (result.map(|(value, _)| value), json!(observed))
     } else {
         let sink = Mutex::new(None);
-        let result = NormalizedVm::new(&prepared.program, policy)
+        let result = NormalizedVm::new(&prepared.program, policy, &executor.handle())
             .observing_checked(&sink)
             .invoke_entry(
                 NormalizedEntryPoint::Function(function),
@@ -358,7 +359,7 @@ fn invoke(
             if reference {
                 &schema
             } else {
-                &prepared.program
+                prepared.program.as_ref()
             },
             &value,
             signature.result,
@@ -417,7 +418,7 @@ fn invoke(
                 )
                 .map(|r| r.0)
             } else {
-                NormalizedVm::new(&prepared.program, policy)
+                NormalizedVm::new(&prepared.program, policy, &executor.handle())
                     .invoke_entry(
                         NormalizedEntryPoint::Function(function),
                         vec![alias],
@@ -432,7 +433,7 @@ fn invoke(
                 if reference {
                     &schema
                 } else {
-                    &prepared.program
+                    prepared.program.as_ref()
                 },
                 &value,
                 signature.result,
@@ -498,7 +499,7 @@ fn invoke(
             .invoke(signature.declaration, vec![alias], Some(&healthy), &control)
             .map(|r| r.0)
         } else {
-            NormalizedVm::new(&prepared.program, healthy_policy)
+            NormalizedVm::new(&prepared.program, healthy_policy, &executor.handle())
                 .invoke_entry(
                     NormalizedEntryPoint::Function(function),
                     vec![alias],
@@ -512,7 +513,7 @@ fn invoke(
             if reference {
                 &schema
             } else {
-                &prepared.program
+                prepared.program.as_ref()
             },
             &recovered,
             signature.result,

@@ -128,14 +128,15 @@ fn terminal_move_preserves_owned_box_and_matches_canonical_and_copying_execution
         let argument = nested(&program, 64);
         let addresses = payload_addresses(&argument);
         assert_eq!(addresses.len(), 65);
-        let (actual, observation) = NormalizedVm::new(&program, NormalizedRunPolicy::default())
-            .invoke(
-                declaration,
-                vec![argument],
-                None,
-                &ExecutionControl::uncancelled(),
-            )
-            .unwrap();
+        let (actual, observation) =
+            NormalizedVm::for_test(&program, NormalizedRunPolicy::default())
+                .invoke(
+                    declaration,
+                    vec![argument],
+                    None,
+                    &ExecutionControl::uncancelled(),
+                )
+                .unwrap();
         assert_eq!(actual, nested(&program, 64));
         let result_addresses = payload_addresses(&actual);
         assert_eq!(result_addresses.len(), addresses.len());
@@ -179,14 +180,15 @@ fn branch_terminal_moves_preserve_both_paths_payload_identity() {
     for flag in [false, true] {
         let argument = nested(&program, 64);
         let addresses = payload_addresses(&argument);
-        let (actual, observation) = NormalizedVm::new(&program, NormalizedRunPolicy::default())
-            .invoke(
-                declaration,
-                vec![argument, NormalizedValue::Bool(flag)],
-                None,
-                &ExecutionControl::uncancelled(),
-            )
-            .unwrap();
+        let (actual, observation) =
+            NormalizedVm::for_test(&program, NormalizedRunPolicy::default())
+                .invoke(
+                    declaration,
+                    vec![argument, NormalizedValue::Bool(flag)],
+                    None,
+                    &ExecutionControl::uncancelled(),
+                )
+                .unwrap();
         assert_eq!(actual, nested(&program, 64));
         assert_eq!(payload_addresses(&actual), addresses, "branch {flag}");
         assert_eq!(observation.value_work.local_value_moves, 2);
@@ -215,7 +217,7 @@ fn cancellation_joins_moved_frames_and_the_same_program_remains_reusable() {
     let program = prepare_snapshot(&snapshot);
     let declaration = declaration_named(&snapshot, "forever");
     let sink = std::sync::Mutex::new(None);
-    let error = NormalizedVm::new(&program, NormalizedRunPolicy::default())
+    let error = NormalizedVm::for_test(&program, NormalizedRunPolicy::default())
         .observing_checked(&sink)
         .invoke(
             declaration,
@@ -238,7 +240,7 @@ fn cancellation_joins_moved_frames_and_the_same_program_remains_reusable() {
         (0, 0, 0)
     );
     let declaration = declaration_named(&snapshot, "keep");
-    let actual = NormalizedVm::new(&program, NormalizedRunPolicy::default())
+    let actual = NormalizedVm::for_test(&program, NormalizedRunPolicy::default())
         .invoke(
             declaration,
             vec![nested(&program, 32)],
@@ -257,7 +259,7 @@ fn terminal_move_never_admits_a_foreign_prepared_value() {
     let foreign = prepare_snapshot(&snapshot);
     let declaration = declaration_named(&snapshot, "keep");
     let sink = std::sync::Mutex::new(None);
-    let error = NormalizedVm::new(&program, NormalizedRunPolicy::default())
+    let error = NormalizedVm::for_test(&program, NormalizedRunPolicy::default())
         .observing_checked(&sink)
         .invoke(
             declaration,

@@ -16,9 +16,10 @@ use super::execution::normalized::{
 };
 use super::json::JsonLimits;
 use super::kernel::Name;
+use std::sync::Arc;
 
 pub struct PureTool {
-    program: NormalizedProgram,
+    program: Arc<NormalizedProgram>,
 }
 
 impl PureTool {
@@ -26,7 +27,7 @@ impl PureTool {
     pub fn load(artifact: &[u8], control: &ExecutionControl) -> Result<Self, Diagnostic> {
         control.check().map_err(execution_diagnostic)?;
         let artifact = load_artifact(artifact)?;
-        let program = NormalizedProgram::prepare_with_control(artifact, control)?;
+        let program = Arc::new(NormalizedProgram::prepare_with_control(artifact, control)?);
         Ok(Self { program })
     }
 

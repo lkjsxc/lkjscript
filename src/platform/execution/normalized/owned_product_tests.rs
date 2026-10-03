@@ -272,7 +272,7 @@ fn owned_products_composition_nested_cleanup_and_tail_transfer() {
                     .unwrap()
                     .0
                 } else {
-                    NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                    NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                         .invoke(entry, args, None, &control)
                         .unwrap()
                         .0
@@ -522,7 +522,7 @@ fn owned_products_metadata_read_preserves_owner_across_reborrow() {
                 .unwrap()
                 .0
             } else {
-                NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                     .invoke(main, vec![NormalizedValue::I64(n)], None, &control)
                     .unwrap()
                     .0
@@ -719,7 +719,7 @@ declarations.end"#).unwrap();
             .unwrap()
             .0
         } else {
-            NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+            NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                 .invoke(main, vec![NormalizedValue::I64(-257)], None, &control)
                 .unwrap()
                 .0
@@ -741,7 +741,7 @@ fn owned_products_native_generic_cell_roundtrip() {
     let main = declaration_named(&source, "main");
     let control = ExecutionControl::uncancelled();
     for n in [i64::MIN, -257, 0, 128, 255, i64::MAX] {
-        let value = NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+        let value = NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
             .invoke(main, vec![NormalizedValue::I64(n)], None, &control)
             .unwrap()
             .0;
@@ -797,7 +797,7 @@ declarations.end"#).unwrap();
                 .unwrap()
                 .0
             } else {
-                NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                     .invoke(entry, vec![NormalizedValue::I64(n)], None, &control)
                     .unwrap()
                     .0
@@ -970,7 +970,7 @@ fn owned_products_authored_trap_order_and_failure_cleanup() {
                 .invoke(entry, vec![], None, &control)
                 .unwrap_err()
             } else {
-                NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                     .invoke(entry, vec![], None, &control)
                     .unwrap_err()
             };
@@ -1043,7 +1043,7 @@ fn owned_products_exact_monomorphic_witness_selection() {
                 .unwrap()
                 .0
             } else {
-                NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                     .invoke(entry, vec![NormalizedValue::I64(n)], None, &control)
                     .unwrap()
                     .0
@@ -1161,7 +1161,7 @@ fn owned_products_active_loan_cancellation_adapter_and_quota_cleanup() {
                 .map(|v| v.0)
             } else {
                 let sink = Mutex::new(None);
-                NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                     .observing(&sink, &host)
                     .invoke(entry, vec![], None, &control)
                     .map(|v| v.0)
@@ -1193,7 +1193,7 @@ fn owned_products_active_loan_cancellation_adapter_and_quota_cleanup() {
                 (result, sink.into_inner().unwrap().unwrap().allocated_bytes)
             } else {
                 let sink = Mutex::new(None);
-                let result = NormalizedVm::new(&program, policy)
+                let result = NormalizedVm::for_test(&program, policy)
                     .observing_checked(&sink)
                     .invoke(entry, vec![], None, &control)
                     .map(|v| v.0);
@@ -1262,7 +1262,7 @@ fn owned_products_raw_capture_and_persistence_boundaries() {
             .invoke(factory, vec![NormalizedValue::I64(128)], None, &control)
             .map(|v| v.0)
         } else {
-            NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+            NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                 .invoke(factory, vec![NormalizedValue::I64(128)], None, &control)
                 .map(|v| v.0)
         };
@@ -1320,7 +1320,7 @@ fn owned_products_raw_capture_and_persistence_boundaries() {
                 .invoke(factory, vec![raw], None, &control)
                 .map(|v| v.0)
             } else {
-                NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                     .invoke(factory, vec![raw], None, &control)
                     .map(|v| v.0)
             };

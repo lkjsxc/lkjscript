@@ -6,7 +6,6 @@ const DIRECT: &str = include_str!("../../../../tests/fixtures/parallel-generic-d
 
 #[test]
 fn parallel_generic_direct_owned_and_composite_ordinary_results() {
-    let _lane = super::super::super::parallel::isolated_test_lane();
     let source = byte_buffer_tests::author_only(DIRECT).unwrap();
     assert!(crate::platform::kernel::memory_reference::accepts(&source));
     let program = prepare_snapshot(&source);
@@ -36,11 +35,12 @@ fn parallel_generic_direct_owned_and_composite_ordinary_results() {
                 assert_eq!(work.live_handles_after, 0);
                 value
             } else {
-                let (value, work) = NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
-                    .invoke(entry, arguments, None, &control)
-                    .unwrap();
+                let (value, work) =
+                    NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
+                        .invoke(entry, arguments, None, &control)
+                        .unwrap();
                 assert_eq!(work.parallel_scopes, 1);
-                assert_eq!(work.parallel_workers_spawned, 1);
+                assert_eq!(work.parallel_worker_dispatches, 1);
                 assert_eq!(work.live_call_frames_after, 0);
                 assert_eq!(work.live_handles_after, 0);
                 value
@@ -71,7 +71,6 @@ pub(crate) fn witnessed_source() -> String {
 
 #[test]
 fn parallel_generic_witness_identity_survives_forwarding_and_owned_returns() {
-    let _lane = super::super::super::parallel::isolated_test_lane();
     let source = byte_buffer_tests::author_only(&witnessed_source()).unwrap();
     assert!(crate::platform::kernel::memory_reference::accepts(&source));
     let program = prepare_snapshot(&source);
@@ -93,11 +92,11 @@ fn parallel_generic_witness_identity_survives_forwarding_and_owned_returns() {
                     .0
                 } else {
                     let (value, work) =
-                        NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                        NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                             .invoke(entry, args, None, &control)
                             .unwrap();
                     assert_eq!(work.parallel_scopes, 1);
-                    assert_eq!(work.parallel_workers_spawned, 1);
+                    assert_eq!(work.parallel_worker_dispatches, 1);
                     assert_eq!(work.live_call_frames_after, 0);
                     value
                 };

@@ -108,6 +108,14 @@ validator 27, compiler 22 and artifact 29 require their own fresh acceptance;
 predecessor proofs and immutable assets remain separate. The final-byte harness
 selects every matching native parallel case automatically.
 
+Development v0.1.72 adds reusable structured workers and the maintained three-package
+transformation/reduction workload to that same required family. Final-byte cases
+exercise complete serial/parallel/nested results after source deletion, an independent
+HTTP sibling, repeated dispatch and joined shutdown. CLI observation 36 and
+shared-runtime observation 2 distinguish invocation dispatch/fallback from physical
+worker lifetime; semantic graph and artifact generations remain unchanged. Fresh
+source and finalized-byte acceptance remain required for this implementation.
+
 The canonical manifest discriminator is `format: "lkjscript-release-content-1"`. It binds the product
 version/intended tag, exact product commit, repository, target/build policy and command, pinned Rust
 and Cargo, lockfile, static ELF executable, license/notices and deterministic packaging. It contains

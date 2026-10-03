@@ -75,14 +75,14 @@ pub(crate) fn observe_transaction(path: &Path, function: &str) -> Result<Value, 
         let control = ExecutionControl::uncancelled();
         let host = ProgressHost { calls: AtomicU64::new(0), cancel_after: 37, mapper_items: Mutex::new(Vec::new()) };
         let arguments = vec![raw_list((1..=8192).map(NormalizedValue::I64).collect())?, NormalizedValue::Text(Arc::from("cancelled")), NormalizedValue::I64(1), NormalizedValue::I64(0)];
-        let result = NormalizedVm::new(resident.program(), NormalizedRunPolicy { maximum_call_depth: 8, ..Default::default() })
+        let result = NormalizedVm::new(resident.program(), NormalizedRunPolicy { maximum_call_depth: 8, ..Default::default() }, resident.executor())
             .observing(&sink, &host).invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(index, resident.program().value_origin)), arguments, Some(resident.deployment().capabilities()), &control);
         let error = result.err().ok_or_else(|| failure("transaction cancellation did not fail"))?;
         let observation = sink.into_inner().map_err(|_| failure("transaction observation poisoned"))?.ok_or_else(|| failure("transaction observation missing"))?;
         let mapper_items = host.mapper_items.into_inner().map_err(|_|failure("transaction mapper observation poisoned"))?;
         require(error.code == "execution_cancelled" && error.class == crate::platform::execution::ExecutionFailureClass::Cancelled && host.calls.load(Ordering::Relaxed) == 37 && observation.external_calls == 37 && !mapper_items.is_empty() && mapper_items.iter().enumerate().all(|(index, item)| *item == index as i64 + 1) && observation.value_work.lists.element_handle_allocations > 1 && observation.value_work.lists.element_handle_allocations < 8192 && observation.tail_transfers > 0 && observation.capability_calls == 2 && observation.maximum_live_transactions == 1 && observation.live_transactions_after == 0 && observation.live_call_frames_after == 0 && observation.live_operands_after == 0 && observation.live_locals_after == 0 && observation.live_type_bindings_after == 0, "cancelled helper retained state or skipped staged work")?;
         let recovery_sink = Mutex::new(None);
-        let recovery = NormalizedVm::new(resident.program(), NormalizedRunPolicy { maximum_call_depth: 8, ..Default::default() }).observing_checked(&recovery_sink)
+        let recovery = NormalizedVm::new(resident.program(), NormalizedRunPolicy { maximum_call_depth: 8, ..Default::default() }, resident.executor()).observing_checked(&recovery_sink)
             .invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(index, resident.program().value_origin)), vec![raw_list((1..=8192).map(NormalizedValue::I64).collect())?, NormalizedValue::Text(Arc::from("after-cancel")), NormalizedValue::I64(1), NormalizedValue::I64(0)], Some(resident.deployment().capabilities()), &ExecutionControl::uncancelled())
             .map_err(|error| failure(&format!("healthy task after cancellation: {}", error.code)))?;
         require(matches!(&recovery.0, NormalizedValue::List(items) if items.len() == 8192 && items.iter().enumerate().all(|(index, value)| *value == NormalizedValue::I64(index as i64 + 1))) && recovery.1.live_transactions_after == 0, "healthy task failed after cancellation")?;
@@ -135,11 +135,12 @@ pub(crate) fn observe_recursive_transaction(
         .ok_or_else(|| failure("recursive write parameter absent"))?
         .ty;
     let input = json!({"case":"branch","value":[{"case":"leaf","value":8},{"case":"branch","value":[{"case":"leaf","value":11},{"case":"leaf","value":17}]},{"case":"branch","value":[]}]});
-    let value = super::codec::decode_value(resident.program(), &input, ty, Default::default())?;
+    let value =
+        super::codec::decode_value(resident.program().as_ref(), &input, ty, Default::default())?;
     std::thread::Builder::new().name("recursive-transaction".into()).stack_size(STACK_BYTES).spawn(move || {
         let sink=Mutex::new(None);
         let control=ExecutionControl::cancel_after_transaction_tail_transfers(3,3);
-        let result=NormalizedVm::new(resident.program(),NormalizedRunPolicy::default()).observing_checked(&sink).invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(u32::try_from(index).map_err(|_|failure("function index overflow"))?,resident.program().value_origin)),vec![value,NormalizedValue::text("cancel")],Some(resident.deployment().capabilities()),&control);
+        let result=NormalizedVm::new(resident.program(),NormalizedRunPolicy::default(), resident.executor()).observing_checked(&sink).invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(u32::try_from(index).map_err(|_|failure("function index overflow"))?,resident.program().value_origin)),vec![value,NormalizedValue::text("cancel")],Some(resident.deployment().capabilities()),&control);
         let error=result.err().ok_or_else(||failure("recursive cancelled transaction committed"))?;
         let observation=sink.into_inner().map_err(|_|failure("recursive transaction observation poisoned"))?.ok_or_else(||failure("recursive transaction observation absent"))?;
         require(error.code=="execution_cancelled" && error.class == crate::platform::execution::ExecutionFailureClass::Cancelled && observation.capability_calls==3 && observation.tail_transfers>=3 && observation.maximum_live_transactions==1 && observation.live_transactions_after==0 && observation.live_call_frames_after==0 && observation.live_operands_after==0 && observation.live_locals_after==0 && observation.live_type_bindings_after==0,"recursive cancellation skipped staged work or retained live execution state")?;
@@ -152,6 +153,7 @@ pub(crate) fn observe_recursive(project: &Path) -> Result<Value, Diagnostic> {
     let prepared = prepare_repository(GraphRepository::open(project)?)?;
     let preparation_nanoseconds = started.elapsed().as_nanos();
     std::thread::Builder::new().name("recursive-observations".into()).stack_size(STACK_BYTES).spawn(move || {
+        let executor = crate::platform::runtime::structured::StructuredExecutor::new();
         let counts=(prepared.program.record_instances.len(),prepared.program.variant_instances.len(),prepared.program.types.len());
         let canonical=prepared.reference.schema().map_err(|error|failure(&format!("recursive canonical preparation: {}", error.code)))?;
         require(prepared.program.record_instances.keys().eq(canonical.record_instances.keys()) && prepared.program.variant_instances.keys().eq(canonical.variant_instances.keys()),"independent recursive instance inventories differ")?;
@@ -177,7 +179,7 @@ pub(crate) fn observe_recursive(project: &Path) -> Result<Value, Diagnostic> {
                     let unobserved=if reference {
                         NormalizedReferenceInterpreter::from_reader(&prepared.reference,&prepared.program,NormalizedRunPolicy::default()).invoke_root_target(&name,arguments,None,&ExecutionControl::uncancelled()).map(|result|result.0)
                     } else {
-                        NormalizedVm::new(&prepared.program,NormalizedRunPolicy::default()).invoke_root_target(&name,arguments,None,&ExecutionControl::uncancelled()).map(|result|result.0)
+                        NormalizedVm::new(&prepared.program,NormalizedRunPolicy::default(), &executor.handle()).invoke_root_target(&name,arguments,None,&ExecutionControl::uncancelled()).map(|result|result.0)
                     }.map_err(|error|failure(&format!("recursive observation-disabled execution: {}", error.code)))?;
                     require(unobserved==NormalizedValue::I64(expected),"recursive observation-disabled result differs")?;
                     observation["observation_sink_disabled_nanoseconds"]=json!(started.elapsed().as_nanos());
@@ -294,6 +296,7 @@ fn invocation_control(
     cancel_after: u64,
     control: &ExecutionControl,
 ) -> Result<(Result<NormalizedValue, ExecutionError>, Value), Diagnostic> {
+    let executor = crate::platform::runtime::structured::StructuredExecutor::new();
     let host = ProgressHost {
         calls: AtomicU64::new(0),
         cancel_after,
@@ -330,7 +333,7 @@ fn invocation_control(
         (result.map(|(value, _)| value), json!(observed))
     } else {
         let sink = Mutex::new(None);
-        let evaluator = NormalizedVm::new(&prepared.program, policy);
+        let evaluator = NormalizedVm::new(&prepared.program, policy, &executor.handle());
         let evaluator =
             if (target == "map" || target.starts_with("scale-")) && cancel_after == u64::MAX {
                 evaluator.observing_checked(&sink)
@@ -390,8 +393,12 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
         let input_nanoseconds = started.elapsed().as_nanos();
         let started = std::time::Instant::now();
         let before = super::list::Work::current();
-        let encoded =
-            super::codec::encode_typed(&prepared.program, &input, list_type, Default::default())?;
+        let encoded = super::codec::encode_typed(
+            prepared.program.as_ref(),
+            &input,
+            list_type,
+            Default::default(),
+        )?;
         let output_work = before.since();
         let output_nanoseconds = started.elapsed().as_nanos();
         require(
@@ -1065,7 +1072,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
     }
     // Safe wrong-prefix fault: alter the captured scalar only in disposable production code.
     let mut wrong_prefix = prepared.clone();
-    for function in Arc::make_mut(&mut wrong_prefix.program.functions) {
+    for function in Arc::make_mut(&mut Arc::make_mut(&mut wrong_prefix.program).functions) {
         if let NormalizedFunctionBody::Code(code) = &mut function.body {
             for instruction in Arc::make_mut(&mut code.instructions) {
                 if matches!(instruction, NormalizedInstruction::I64(4)) {
@@ -1097,7 +1104,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
     // Safe fault: remove derived tail dispatch only in this private prepared copy. Canonical
     // reference execution must still succeed; production must now hit the independent bound.
     let mut faulty = prepared.clone();
-    for function in Arc::make_mut(&mut faulty.program.functions) {
+    for function in Arc::make_mut(&mut Arc::make_mut(&mut faulty.program).functions) {
         if let NormalizedFunctionBody::Code(code) = &mut function.body {
             for instruction in Arc::make_mut(&mut code.instructions) {
                 *instruction = match instruction {

@@ -25,7 +25,7 @@ fn parallel_generic_application_shares_exact_quota_and_cleans_cancelled_owners()
                         )
                     })
             } else {
-                NormalizedVm::new(&program, policy)
+                NormalizedVm::for_test(&program, policy)
                     .invoke(entry, arguments, None, control)
                     .map(|(value, work)| {
                         (

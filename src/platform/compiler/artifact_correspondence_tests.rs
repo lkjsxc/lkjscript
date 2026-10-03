@@ -88,7 +88,8 @@ fn unit_for(loaded: &LoadedArtifact, owner: OwnerKey) -> (ObjectKey, Compilation
 }
 
 fn assert_unchanged_behavior(source: &KernelSnapshot, bytes: &[u8]) {
-    let program = NormalizedProgram::prepare(load_artifact(bytes).unwrap()).unwrap();
+    let program =
+        std::sync::Arc::new(NormalizedProgram::prepare(load_artifact(bytes).unwrap()).unwrap());
     let receipt = run_graph_tests(
         source,
         &program,

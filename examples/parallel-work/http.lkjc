@@ -1,0 +1,25 @@
+declarations.begin
+(units
+  (use std builtin)
+  (type-alias WorkHeader (record (name Text) (value Bytes)))
+  (type-alias WorkRequest (record (body (stream Bytes)) (headers (list WorkHeader))
+    (method Text) (path Text) (query Text) (query_parameters (map Text (list Text)))))
+  (type-alias WorkResponse (record (body Bytes) (headers (list WorkHeader)) (status I64)))
+  (module create work-http
+    (function create calculate (visibility private) (effect (task (requirement server::streams)))
+      (parameter create request (type WorkRequest)) (returns WorkResponse)
+      (body (record structural
+        (field status (i64 200)) (field headers (list WorkHeader))
+        (field body (call std::json-encode
+          (types (record (payload Bytes) (buffer_sum I64) (scalar_sum I64)))
+          (call work::parallel (i64 4096) (i64 32) (i64 0)))))))
+    (component create server (visibility private)
+      (requirement create streams (interface std::ByteStream)
+        (operations std::ByteStream::close std::ByteStream::read-all std::ByteStream::read)
+        (limits (maximum_calls 4 calls)))
+      (port create calculate
+        (type (task-function (WorkRequest) WorkResponse (row (requirement streams))))
+        (function calculate))))
+  (target create work-http (component work-http::server) (runner http)
+    (route create calculate (method GET) (path "/work") (port work-http::server::calculate))))
+declarations.end

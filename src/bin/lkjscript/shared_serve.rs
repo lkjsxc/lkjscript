@@ -99,7 +99,7 @@ pub(super) async fn serve(arguments: &[String]) -> Result<(), Diagnostic> {
         }
         outcome = &mut preparation => (outcome, false),
     };
-    let set = outcome
+    let mut set = outcome
         .map_err(|_| infrastructure("shared_serve_prepare", "shared preparation owner failed"))??;
     if interrupted {
         let mut error = cancelled();
@@ -113,7 +113,7 @@ pub(super) async fn serve(arguments: &[String]) -> Result<(), Diagnostic> {
             return Err(error);
         }
     };
-    let observation = set.observe().clone();
+    let mut observation = set.observe();
     let readiness = bound
         .iter()
         .map(|(_, _, ready)| ready.clone())
@@ -127,7 +127,8 @@ pub(super) async fn serve(arguments: &[String]) -> Result<(), Diagnostic> {
     }
     // Services now own their code and private adapters. This set must not pin code
     // after the last service using it has stopped.
-    drop(set);
+    let (deployments, mut executor) = set.into_parts();
+    drop(deployments);
     let (stop, receiver) = watch::channel(false);
     let mut running = FuturesUnordered::new();
     for (index, (service, listener, _)) in bound.into_iter().enumerate() {
@@ -143,6 +144,7 @@ pub(super) async fn serve(arguments: &[String]) -> Result<(), Diagnostic> {
             biased;
             _ = signals.wait(), if !stopping => {
                 stopping = true;
+                executor.close_dispatch();
                 stop.send_replace(true);
             }
             completed = running.next() => {
@@ -160,6 +162,7 @@ pub(super) async fn serve(arguments: &[String]) -> Result<(), Diagnostic> {
                             // A service infrastructure failure closes the group; ordinary
                             // handled request failures remain local to their own service.
                             stopping = true;
+                            executor.close_dispatch();
                             stop.send_replace(true);
                         }
                     }
@@ -167,8 +170,36 @@ pub(super) async fn serve(arguments: &[String]) -> Result<(), Diagnostic> {
             }
         }
     }
+    executor.close_dispatch();
+    match executor.shutdown() {
+        Ok(joined) => observation.executor = joined,
+        Err(worker_failure) => {
+            if let Some(primary) = &mut failure {
+                primary.notes.push(format!(
+                    "structured worker cleanup failed with safe code '{}'",
+                    worker_failure.code
+                ));
+            } else {
+                failure = Some(infrastructure(
+                    "shared_serve_workers",
+                    format!(
+                        "structured worker cleanup failed with safe code '{}'",
+                        worker_failure.code
+                    ),
+                ));
+            }
+        }
+    }
     // Never early-return or drop unjoined service futures on a member's failure.
-    if let Some(error) = failure {
+    if let Some(mut error) = failure {
+        let workers = executor.observe();
+        error.notes.push(format!(
+            "structured worker cleanup: dispatch-stopped={} active={} remaining-workers={} joined-workers={}",
+            !workers.dispatch_open,
+            workers.active_dispatches,
+            workers.remaining_workers,
+            workers.joined_workers
+        ));
         return Err(error);
     }
     write_json(&json!({

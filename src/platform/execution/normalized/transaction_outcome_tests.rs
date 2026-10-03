@@ -328,7 +328,7 @@ fn invoke(
             .invoke(entry, vec![], Some(capabilities), &control)
             .map(|(value, _)| value)
     } else {
-        NormalizedVm::new(program, policy)
+        NormalizedVm::for_test(program, policy)
             .invoke(entry, vec![], Some(capabilities), &control)
             .map(|(value, _)| value)
     }
@@ -719,7 +719,7 @@ fn transaction_outcome_wrapper_capacity_is_reserved_before_physical_commit() {
                 .1
                 .allocated_bytes
         } else {
-            NormalizedVm::new(&program, NormalizedRunPolicy::default())
+            NormalizedVm::for_test(&program, NormalizedRunPolicy::default())
                 .invoke(entry, vec![], Some(&caps), &control)
                 .unwrap()
                 .1

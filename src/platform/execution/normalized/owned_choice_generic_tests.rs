@@ -25,7 +25,7 @@ fn owned_choice_closed_self_witnesses_recursive_transfer_and_reborrow() {
                     .unwrap()
                     .0
                 } else {
-                    NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                    NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                         .invoke(entry, args, None, &control)
                         .unwrap()
                         .0
@@ -112,7 +112,7 @@ fn owned_choice_generics_preserve_nested_allocations_and_independent_arm_scope()
                 .unwrap()
                 .0
             } else {
-                NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                     .invoke(entry, arguments.clone(), None, &control)
                     .unwrap()
                     .0
@@ -163,7 +163,7 @@ fn owned_choice_quota_failure_releases_nested_payloads_in_both_engines() {
                 (result.map(|pair| pair.0), observed.allocated_bytes)
             } else {
                 let observer = Mutex::new(None);
-                let result = NormalizedVm::new(&program, policy)
+                let result = NormalizedVm::for_test(&program, policy)
                     .observing_checked(&observer)
                     .invoke(entry, vec![], None, &control);
                 let observed = observer.into_inner().unwrap().unwrap();

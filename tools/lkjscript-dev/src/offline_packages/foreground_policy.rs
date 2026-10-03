@@ -103,7 +103,8 @@ pub(super) fn validate_series(cells: &[LoopCell]) -> Result<(), DevError> {
             "live_type_bindings_after",
             "maximum_live_transactions",
             "parallel_scopes",
-            "parallel_workers_spawned",
+            "parallel_worker_dispatches",
+            "parallel_inline_fallbacks",
         ] {
             require(
                 counter(observation, field)? == 0,

@@ -70,7 +70,7 @@ fn owned_task_named_helpers_keep_exact_witness_values_and_allocations() {
                     (value, work.live_call_frames_after)
                 } else {
                     let (value, work) =
-                        NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+                        NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                             .invoke(entry, args, None, &control)
                             .unwrap();
                     assert_eq!(work.live_operands_after, 0);
@@ -110,7 +110,7 @@ fn owned_task_cancel_and_quota_failures_release_all_custodians() {
                         .invoke(entry, args, None, control)
                         .map(|v| v.0)
                 } else {
-                    NormalizedVm::new(&program, policy)
+                    NormalizedVm::for_test(&program, policy)
                         .invoke(entry, args, None, control)
                         .map(|v| v.0)
                 }

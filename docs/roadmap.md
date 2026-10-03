@@ -22,33 +22,42 @@ renew proof when its bindings change. Preserve task kind independently of an emp
 effect row throughout authoring, extraction and execution.
 
 Use the [current pair contract](spec/structured-parallel.md) as a small coherent
-foundation. Owned results now return through a separately sealed pair; development
-0.1.70 adds exact closed generic child applications and nominal implementation
+foundation. Owned results now return through a separately sealed pair; public
+0.1.70 added exact closed generic child applications and nominal implementation
 selection without mandatory monomorphic wrappers. Preserve the independent canonical
 and memory oracles, complete type closure, cross-package source-free composition,
 allocation identity, shared quotas and joined failure cleanup. Source and final-byte
 acceptance remain separate facts in [status](status.md).
 
-Development 0.1.71 adds [explicit transferable contracts](spec/transferable-types.md)
+Public 0.1.71 adds [explicit transferable contracts](spec/transferable-types.md)
 for reusable generic code that itself forms child groups. Transferability is
 independent of ownership and capture safety; symbolic proofs become exact at
 execution. Acceptance includes nominal/phantom closure, mixed generic result pairs,
 exact implementation forwarding and independent bounded proofs. [Status](status.md)
-owns the remaining acceptance boundary. Channels, task handles and effectful
+owns the exact completed acceptance and publication. Channels, task handles and effectful
 children remain separate extensions.
 
 After that boundary is accepted, prioritize the shared worker/runtime work below,
-then concurrent semantic transactions with revalidated dependency footprints.
+then unify generic Owned implementation applications with caller-supplied effects
+and requirements before concurrent semantic transactions. Ordinary calls already
+carry these operands; exact implementation calls must compose through the same
+independently checked authority boundaries before effectful parallel children.
 Keep region-local ownership possible: current owned carriers being transferable
 does not make every future owner transferable.
 
 ## 2. Scale structured execution and the shared host
 
-Evaluate reusable bounded workers, local queues, batching and locality-aware scheduling
-with substantial transform/reduction work beside an independent I/O instance. Keep
-nested execution from waiting for a worker or resident slot held by its ancestor.
-Measure fairness under saturation, cancellation latency, preparation cost and repeated
-start/stop behavior before making scaling claims.
+Development 0.1.72 replaces per-child OS thread creation with lazily reused auxiliary
+workers under an explicit lifetime owner. Nonblocking idle-worker reservation and
+caller fallback preserve nested progress. The maintained native parallel-work
+family compares identical serial/parallel transforms and reductions beside an
+independent I/O instance. [Status](status.md) owns actual acceptance and measurement.
+This auxiliary bound does not establish a total root-plus-child CPU bound or fairness.
+
+Use the retained cold/warm, cancellation and start/stop evidence to select subsequent
+root scheduling, local queues, batching and locality work. Blocking-capable roots
+remain separately scheduled until their suspension and completion contracts can
+support a bounded CPU scheduler. Do not infer fairness or preemption from worker reuse.
 
 Extend the [in-process shared runtime](spec/shared-runtime.md) with explicit pooling,
 admission, readiness, stop/drain/unload and version coexistence. Share compatible
@@ -66,7 +75,15 @@ in-process transfer establishes no distributed exactly-once guarantee.
 
 Extend the [Owned library contracts](spec/owned-generics.md), [products](spec/owned-products.md)
 and [choices](spec/owned-choices.md) through one ordinary cross-package composition
-at a time. Prioritize useful owned containers, borrowing/lifetime relationships and
+at a time. The next semantic slice is a same-invocation generic task consuming an
+Owned carrier, forwarding an exact implementation witness and using a caller-supplied
+requirement. Extend implementation applications with explicit effect/requirement
+operands and preserve their substitutions and grant checks through transport and
+both evaluators; keep method contracts closed initially. Prove distinct cell/buffer
+implementations and foreign or insufficient authority rejection before expanding
+parallel child effects.
+
+Then prioritize useful owned containers, borrowing/lifetime relationships and
 typed trait methods over disconnected syntax. Explore associated type families,
 higher-ranked borrowing, effect polymorphism and bounded value/region parameters
 where they support a sound abstraction.

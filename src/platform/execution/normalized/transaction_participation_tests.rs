@@ -410,7 +410,7 @@ fn invoke(
             .invoke(entry, arguments, Some(&bound.capabilities), &control)
             .map(|(value, observation)| (value, observation.capability_calls))
     } else {
-        NormalizedVm::new(program, policy)
+        NormalizedVm::for_test(program, policy)
             .invoke(entry, arguments, Some(&bound.capabilities), &control)
             .map(|(value, observation)| (value, observation.capability_calls))
     }
@@ -963,7 +963,7 @@ fn data_transaction_participation_cannot_expand_operations_grants_or_task_allowa
             )
             .map(|(value, _)| value)
         } else {
-            NormalizedVm::new(&program, NormalizedRunPolicy::foreground())
+            NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                 .invoke(
                     helper,
                     vec![NormalizedValue::StaticText("read".into())],

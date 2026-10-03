@@ -43,6 +43,9 @@ use super::queue::{
     MAXIMUM_QUEUE_ATTEMPTS, MAXIMUM_QUEUE_LEASE_MILLISECONDS, MAXIMUM_QUEUE_PAYLOAD_BYTES,
     QueueLimits,
 };
+use super::runtime::structured::{
+    StructuredExecutor, StructuredExecutorHandle, StructuredExecutorObservation,
+};
 use super::runtime::{
     MAXIMUM_CONCURRENT_TASKS, MAXIMUM_OPERATIONAL_MILLISECONDS, MAXIMUM_QUEUED_TASKS,
     ResidentLimits, ResidentObservation, ShutdownReceipt,
@@ -1516,12 +1519,13 @@ pub struct DeploymentObservation {
     pub grants: BTreeMap<String, String>,
 }
 
-#[derive(Clone)]
 pub struct PreparedDeployment {
     descriptor: DeploymentDescriptor,
     program: Arc<NormalizedProgram>,
     deployment: NormalizedPreparedDeployment,
     observation: DeploymentObservation,
+    executor: StructuredExecutorHandle,
+    executor_owner: Option<StructuredExecutor>,
 }
 
 impl std::fmt::Debug for PreparedDeployment {
@@ -1599,6 +1603,7 @@ impl AdmittedDeployment {
         self,
         runtime: Handle,
         control: &ExecutionControl,
+        executor: StructuredExecutorHandle,
     ) -> Result<PreparedDeployment, Diagnostic> {
         control
             .check()
@@ -1615,6 +1620,7 @@ impl AdmittedDeployment {
             runtime,
             secrets,
             control,
+            executor,
         )
     }
 }
@@ -1632,6 +1638,7 @@ pub(crate) struct ForegroundCommandReceipt {
     pub invocation_nanoseconds: u64,
     pub result_encoding_nanoseconds: u64,
     pub shutdown: ShutdownReceipt,
+    pub executor: StructuredExecutorObservation,
 }
 
 impl PreparedDeployment {
@@ -1641,7 +1648,10 @@ impl PreparedDeployment {
         if admitted.descriptor.runtime.is_none() || admitted.descriptor.execution.is_none() {
             return Err(missing_resident_policy());
         }
-        admitted.prepare(runtime, &control)
+        let executor = StructuredExecutor::new();
+        let mut prepared = admitted.prepare(runtime, &control, executor.handle())?;
+        prepared.executor_owner = Some(executor);
+        Ok(prepared)
     }
 
     pub(crate) fn load_foreground(
@@ -1677,7 +1687,9 @@ impl PreparedDeployment {
             super::json::JsonLimits::default(),
             control,
         )?;
-        let prepared = admitted.prepare(runtime, control)?;
+        let executor = StructuredExecutor::new();
+        let mut prepared = admitted.prepare(runtime, control, executor.handle())?;
+        prepared.executor_owner = Some(executor);
         Ok((prepared, invocation))
     }
 
@@ -1690,6 +1702,7 @@ impl PreparedDeployment {
         runtime: Handle,
         secrets: SecretCatalog,
         control: &ExecutionControl,
+        executor: StructuredExecutorHandle,
     ) -> Result<Self, Diagnostic> {
         let target_name = Name::new(descriptor.target.clone())?;
         let target = program.root_target(&target_name).cloned().ok_or_else(|| {
@@ -1798,6 +1811,8 @@ impl PreparedDeployment {
             program,
             deployment,
             observation,
+            executor,
+            executor_owner: None,
         })
     }
 
@@ -1807,6 +1822,13 @@ impl PreparedDeployment {
 
     pub fn listen(&self) -> Option<&str> {
         self.descriptor.listen.as_deref()
+    }
+
+    /// Transfer the standalone runtime owner to a host before discarding preparation.
+    /// Applications retain dispatch handles; only this owner joins native workers.
+    /// Shared-group members have no individual owner.
+    pub fn take_executor(&mut self) -> Option<StructuredExecutor> {
+        self.executor_owner.take()
     }
 
     pub(crate) fn resident(&self) -> Result<NormalizedResidentDeployment, Diagnostic> {
@@ -1822,10 +1844,16 @@ impl PreparedDeployment {
                     .execution
                     .ok_or_else(missing_resident_policy)?,
             ),
+            &self.executor,
         )
     }
 
-    pub(crate) fn close_uninvoked(&self, error: &mut Diagnostic) {
+    /// Close adapters before any invocation has started. Started applications need
+    /// their asynchronous joined shutdown before the executor owner is joined.
+    pub fn close_uninvoked(&self, error: &mut Diagnostic) {
+        if let Some(executor) = &self.executor_owner {
+            executor.close_dispatch();
+        }
         for failure in self.deployment.capabilities().shutdown() {
             error.notes.push(format!(
                 "adapter cleanup failed with safe code '{}'",
@@ -1835,10 +1863,16 @@ impl PreparedDeployment {
     }
 
     pub(crate) async fn run_foreground(
-        self,
+        mut self,
         invocation: super::execution::normalized::PreparedCommandInvocation,
         cancellation: impl std::future::Future<Output = ()>,
     ) -> Result<ForegroundCommandReceipt, Diagnostic> {
+        let mut executor = self.take_executor().ok_or_else(|| {
+            deployment_error(
+                "foreground_executor_owner",
+                "foreground execution requires its standalone worker lifetime owner",
+            )
+        })?;
         let policy = self
             .descriptor
             .execution
@@ -1863,21 +1897,66 @@ impl PreparedDeployment {
             self.deployment.clone(),
             limits,
             policy,
+            &self.executor,
         ) {
             Ok(resident) => {
                 resident.foreground(deadline_milliseconds.map(std::time::Duration::from_millis))
             }
             Err(mut error) => {
+                executor.close_dispatch();
                 self.close_uninvoked(&mut error);
+                if let Err(failure) = executor.shutdown() {
+                    error.notes.push(format!(
+                        "structured worker cleanup failed with safe code '{}'",
+                        failure.code
+                    ));
+                }
                 return Err(error);
             }
         };
-        let receipt = super::execution::normalized::run_foreground_command(
+        let cancellation = async {
+            cancellation.await;
+            executor.close_dispatch();
+        };
+        let task = invocation.task;
+        let outcome = super::execution::normalized::run_foreground_command(
             resident,
             invocation,
             cancellation,
         )
-        .await?;
+        .await;
+        executor.close_dispatch();
+        let outcome = match executor.shutdown() {
+            Ok(joined) => outcome
+                .map_err(|mut error| {
+                    error.notes.push(format!(
+                        "structured worker cleanup: dispatch-stopped={} active={} remaining-workers={} joined-workers={}",
+                        !joined.dispatch_open,
+                        joined.active_dispatches,
+                        joined.remaining_workers,
+                        joined.joined_workers
+                    ));
+                    error
+                })
+                .map(|receipt| (receipt, joined)),
+            Err(failure) => match outcome {
+                Ok(_) => {
+                    let mut error = super::execution::normalized::execution_diagnostic(failure);
+                    if task {
+                        foreground_visibility(&mut error);
+                    }
+                    Err(error)
+                }
+                Err(mut error) => {
+                    error.notes.push(format!(
+                        "structured worker cleanup failed with safe code '{}'",
+                        failure.code
+                    ));
+                    Err(error)
+                }
+            },
+        };
+        let (receipt, executor) = outcome?;
         Ok(ForegroundCommandReceipt {
             deployment: self.observation,
             repository: self.program.root_repository.to_string(),
@@ -1891,6 +1970,7 @@ impl PreparedDeployment {
             invocation_nanoseconds: receipt.invocation_nanoseconds,
             result_encoding_nanoseconds: receipt.result_encoding_nanoseconds,
             shutdown: receipt.shutdown,
+            executor,
         })
     }
 

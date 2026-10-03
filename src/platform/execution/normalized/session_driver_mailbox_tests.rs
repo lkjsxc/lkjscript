@@ -72,7 +72,11 @@ impl NormalizedCapabilityAdapter for ControlledClock {
 
 fn application(
     sender: mailbox::Sender<WriterCommand>,
-) -> (Arc<NormalizedSessionApplication>, Arc<ControlledClock>) {
+) -> (
+    Arc<NormalizedSessionApplication>,
+    Arc<ControlledClock>,
+    crate::platform::runtime::structured::StructuredExecutor,
+) {
     application_with_limits(
         sender,
         SessionLimits {
@@ -85,7 +89,11 @@ fn application(
 fn application_with_limits(
     sender: mailbox::Sender<WriterCommand>,
     limits: SessionLimits,
-) -> (Arc<NormalizedSessionApplication>, Arc<ControlledClock>) {
+) -> (
+    Arc<NormalizedSessionApplication>,
+    Arc<ControlledClock>,
+    crate::platform::runtime::structured::StructuredExecutor,
+) {
     let temporary = tempfile::tempdir().unwrap();
     let project = temporary.path().join("source");
     let created = create_project(&project, "mailbox-callback", ProjectTemplate::Command).unwrap();
@@ -106,7 +114,7 @@ fn application_with_limits(
         PublicationOutcome::Accepted { .. }
     ));
     let prepared = crate::platform::normalized_lifecycle::prepare_repository(repository).unwrap();
-    let program = Arc::new(prepared.program);
+    let program = prepared.program;
     let target = Name::new("mailbox-live").unwrap();
     let component = program.root_target(&target).unwrap().component;
     let requirement = |name: &str| {
@@ -169,23 +177,26 @@ fn application_with_limits(
         NormalizedDeploymentResourcePolicy::default(),
     )
     .unwrap();
+    let executor = crate::platform::runtime::structured::StructuredExecutor::for_test(1);
     let resident = NormalizedResidentDeployment::prepare(
         program,
         deployment,
         ResidentLimits::default(),
         NormalizedRunPolicy::default(),
+        &executor.handle(),
     )
     .unwrap();
     (
         Arc::new(NormalizedSessionApplication::new(resident, limits).unwrap()),
         adapter,
+        executor,
     )
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn session_mailbox_writer_close_inside_callback_fails_without_replay_or_next_event() {
     let (sender, mut receiver) = mailbox::channel(1).unwrap();
-    let (application, adapter) = application(sender.clone());
+    let (application, adapter, _executor) = application(sender.clone());
     let (inbound, mut events) = mpsc::channel(2);
     let mut driver = Box::pin(session_driver(
         Arc::clone(&application),
@@ -263,7 +274,7 @@ async fn session_lifetime_after_successful_write_stops_queued_callbacks_without_
             ..SessionLimits::default()
         };
         let lifetime = Duration::from_millis(limits.maximum_lifetime_milliseconds);
-        let (application, adapter) = application_with_limits(sender.clone(), limits);
+        let (application, adapter, _executor) = application_with_limits(sender.clone(), limits);
         let (inbound, mut events) = mpsc::channel(2);
         let message = |body: &'static [u8]| InboundEvent::Message {
             kind: InboundKind::Text,

@@ -921,7 +921,18 @@ pub async fn execute_foreground_run(
             let mut error = Diagnostic::new(DiagnosticClass::Cancelled, "execution_cancelled",
                 "foreground preparation was cancelled before invocation");
             match joined {
-                Ok((prepared, _)) => prepared.close_uninvoked(&mut error),
+                Ok((mut prepared, _)) => {
+                    prepared.close_uninvoked(&mut error);
+                    if let Some(mut executor) = prepared.take_executor() {
+                        executor.close_dispatch();
+                        if let Err(failure) = executor.shutdown() {
+                            error.notes.push(format!(
+                                "structured worker cleanup failed with safe code '{}'",
+                                failure.code
+                            ));
+                        }
+                    }
+                }
                 Err(failure) => error.notes.extend(failure.notes),
             }
             return Err(error);
@@ -968,6 +979,13 @@ pub async fn execute_foreground_run(
                 DiagnosticClass::Infrastructure,
                 "foreground_observation",
                 "cleanup observation could not be encoded",
+            )
+        })?;
+        let executor = serde_json::to_string(&receipt.executor).map_err(|_| {
+            Diagnostic::new(
+                DiagnosticClass::Infrastructure,
+                "foreground_observation",
+                "structured worker observation could not be encoded",
             )
         })?;
         let limit = |value: Option<u64>| {
@@ -1054,6 +1072,7 @@ pub async fn execute_foreground_run(
                     receipt.result_encoding_nanoseconds.to_string(),
                 ),
                 ("cleanup", cleanup),
+                ("executor-observation", executor),
                 result.field,
             ],
         )?;

@@ -1,9 +1,9 @@
 # Shared service runtime
 
-Availability: development v0.1.53. This is not part of the immutable public
-v0.1.52 binary. Discover the actual executable with
+The fixed shared service group is available in public v0.1.64 and later.
+Development v0.1.72 adds explicitly owned reusable auxiliary workers. Discover the actual executable with
 `lkjscript capabilities --section deployment` and `lkjscript capabilities serve`.
-The shared-runtime observation contract is version 1; the existing deployment
+The shared-runtime observation contract is version 2; the existing deployment
 descriptor, graph and artifact encodings are unchanged.
 
 ## Explicit process ownership
@@ -27,7 +27,8 @@ targets may coexist, including different exact versions of the same application.
 Workers and foreground commands are not members of this first service group.
 Each member owns its listener; this is not host-name routing behind one listener.
 
-The running host has one executable ABI and one Tokio runtime. This is genuine
+The running host has one executable ABI, one Tokio runtime and one explicitly
+owned structured executor shared by its members. This is genuine
 same-process execution, not merely a shared runtime installation or a supervisor
 that launches one process per application.
 
@@ -100,6 +101,22 @@ set does not pin code: after the last owning application/reference is released,
 the program is reclaimed. Outstanding explicit clones remain legitimate owners.
 This is ownership reclamation, not forced unload of live references.
 
+The structured executor has a separate lifetime owner, which the host retains
+after discarding the preparation set and its code references. Prepared applications
+retain dispatch handles, never worker join handles. Library consumers transferring
+prepared members also transfer the executor owner through `into_parts`; standalone
+preparation can transfer its owner with `take_executor`.
+
+Auxiliary workers are created lazily under the process-wide physical ceiling and
+reused across invocations and exact programs. Child execution retains the
+[structured custody contract](structured-parallel.md), private cancellation and
+shared per-invocation quotas. Closing group dispatch makes existing groups execute
+new child work inline while service admission stops and current invocations drain.
+After every started service has joined, the host joins all owned auxiliary threads.
+Other independently owned groups retain their own lifetime and dispatch state.
+Resident root execution and blocking adapters remain on their existing executor;
+this auxiliary bound does not establish a bound on all process CPU work or fairness.
+
 ## Bounds and observations
 
 A group admits at most 64 instances. The sum of declared
@@ -115,14 +132,20 @@ The multi-service `ready` event contains `process_id`, `shared_runtime`, and
 `instances`. Each instance has a zero-based argument ordinal, concrete bound
 `local_address` and the existing redacted deployment observation. Neither
 configuration values nor secret values are included. The `stopped` event includes
-the same selection/accounting observation and one joined receipt for each
-instance. A failed group returns a diagnostic after cleanup, not a successful
+the same static selection observation, a freshly observed joined executor receipt,
+and one joined receipt for each instance. A failed group returns a diagnostic after cleanup, not a successful
 `stopped` receipt.
 
 `shared_runtime` reports the executable version, observation contract version,
 instance count, exact program digests, instances per program, loader-reported
 artifact object bytes, function/type counts, summed resident capacities, and
-the count of private configuration fields. Program entries are digest ordered;
+the count of private configuration fields. Its `executor` observation reports
+dispatch openness, the process auxiliary ceiling, physical thread starts,
+active and peak dispatches, completed dispatches, inline fallbacks, remaining
+workers and joined workers. The ready snapshot may contain no workers because
+creation is lazy. A successful stopped receipt has closed dispatch, zero active
+dispatches and remaining workers, and all started workers joined.
+Program entries are digest ordered;
 instance entries are argument ordered. These are structural observations, not
 RSS/PSS, allocator bytes, peak/live heap, a complete count of adapter storage,
 current retained memory after stopping, or measured speedup. Strict loading still
