@@ -43,16 +43,41 @@ full-source acceptance and copied-host native package evidence, dispatch one nor
 non-publishing candidate from the integrated source. Preserve every existing source,
 finalized-archive, installed-recovery, pinned-userland and original-reader obligation.
 
-Before promotion, run the source-matched public harness against the exact executable
-extracted from that accepted archive. Select all cases matching `native_owned_`,
-`native_byte_buffer_`, `native_byte_ranges_`, `resident_policy` and `native_parallel`,
-plus the exact `copied_binary_authors_builds_and_serves_interactive_topology_from_minimal`
-case. Record the enumerated inventory and require zero failed, ignored or skipped
-selected cases. Preserve executable bytes and run with the cleared-environment
-candidate harness outside the compiler checkout. Development-host proof does not
-substitute for this final-byte boundary. Then use the existing explicitly selected
-unchanged-asset promotion and anonymous acquisition owners; do not change credentials,
-protections, immutability, old tags or prior assets.
+Final candidate acceptance now runs the source-matched public harness against the
+exact executable extracted from the finalized archive. It selects every enumerated
+case matching `native_owned_`, `native_byte_buffer_`, `native_byte_ranges_`,
+`resident_policy` and `native_parallel`, plus the exact
+`copied_binary_authors_builds_and_serves_interactive_topology_from_minimal` case.
+Every family must be present. The native owner rejects missing, duplicate, ignored,
+failed or unexpectedly substituted cases even when the harness exits successfully.
+It records the source-selected Cargo executable, copied harness and candidate
+identities, exact inventory, bounded process logs and joined cleanup. The harness
+runs outside the compiler checkout with a closed environment; candidate and harness
+bytes must remain unchanged. No additional manual supplement is needed for a new
+candidate accepted under this contract.
+
+For focused diagnosis against explicitly supplied candidate bytes, the same owner is
+available from a clean source-matched checkout (ordinary or linked worktree) through the immutable verifier:
+
+```sh
+lkjscript-dev release public-harness --candidate /absolute/path/lkjscript \
+  --evidence-root /absolute/absent/native-public-evidence
+```
+
+This standalone command binds the current harness source and supplied executable
+bytes, not their provenance. The enclosing candidate owner separately authenticates
+the finalized archive, source and build receipt. Development-host proof does not
+substitute for final-byte acceptance. Normal promotion and anonymous acquisition
+still use the unchanged assets and existing authority; no credentials, protections,
+immutable tags or prior assets are changed.
+
+`lkjscript-final-candidate-acceptance-2` requires the native-public proof in addition
+to all previous source, six target-owner, two userland and installation boundaries.
+The current controller intentionally rejects predecessor acceptance terminals rather
+than relabelling them. Their original contracts and evidence remain historical facts;
+a corrected successor requires a fresh producer. In particular, producer 37046478616
+accepted the earlier 0.1.68 source without the joined-deadline repair and is superseded,
+not a candidate to promote after the repair.
 
 Public/latest remains v0.1.64 until those boundaries complete. A pending external
 producer is release-only waiting, not a reason to hold accepted source off main.

@@ -1,6 +1,6 @@
 # Status
 
-Current snapshot: 2026-10-02. This page owns current availability, development scope
+Current snapshot: 2026-10-03. This page owns current availability, development scope
 and unresolved acceptance. [Direction](direction.md) owns project goals,
 [specifications](spec/) own semantic contracts, and [roadmap](roadmap.md) orders future
 work. Prior prompts and historical delivery sequences are not required reading.
@@ -46,40 +46,51 @@ The current audit also addresses canonical artifact correspondence, finite valid
 data codec/store limits, publication and installation durability, authored evaluation
 order, and task cleanup. Findings and independent checks are retained under
 `.artifacts/audit64-20261002/`; static findings are not execution proof. Development
-checks now isolate site/documentation and checker-only work while retaining full-source
+checks isolate site/documentation and checker-only work while retaining full-source
 acceptance for product changes. Campaigns remain historical originals, not required
 task prompts.
 
-**Accepted source is on main:**
-[`aa9883f0d073a0d7eaf1f44716ac7e2a5ef5b2fd`](https://github.com/lkjsxc/lkjscript/commit/aa9883f0d073a0d7eaf1f44716ac7e2a5ef5b2fd).
-Fresh full acceptance passed all 26 gates with zero reused or unrun gates and stable
-inputs. Workspace tests passed 1,637 cases, with zero failures and 29 existing ignored
-cases; two nested child-harness executions are separate. The source-matched copied
-release host also passed the three-package parallel author/edit/detached-execution
-witness with a cleared environment. This is development-host evidence, not finalized
-distribution-byte acceptance.
+**Accepted runtime repair is on main:** source
+[`d60cf24d5a4f3a82d1725f607545b13d1593485b`](https://github.com/lkjsxc/lkjscript/commit/d60cf24d5a4f3a82d1725f607545b13d1593485b)
+was integrated by [PR #5](https://github.com/lkjsxc/lkjscript/pull/5), merge
+`3fef605c0a218262ef908d3baa8f713f8ed6dad3`, with the same source tree.
+[Full run 37095802455](https://github.com/lkjsxc/lkjscript/actions/runs/37095802455),
+attempt 1, passed all 26 gates freshly with stable inputs, no reused or unrun gates.
+Receipt: `verification_c6c102511abd27dd2fbf37c3070f8cf2158eda639de2202e2eaaa9a57358a23d`.
+The original is retained in that run's source-verification artifact; its controller,
+source and tree identities were independently inspected before integration.
 
-Original full run: `.artifacts/lkjscript-dev/check/1790963982625792190-2932798-0/`.
-Receipt: `verification_d2da25acbe5a3c72913d850274927b1bece97d0a17fe43e5b12bf383b07bcbd1`.
-The copied host and harness identities, public witness, failed predecessor run and
-subsequent fixes remain under `.artifacts/20261002-structured-parallel/`; start with
-`full-02.jsonl`, `generator-host-05/identity.json` and `stabilization-index.json`.
-Reporting-only descendants do not relabel this exact tested source.
+The repair retains the originating operational deadline instead of replacing it
+with a sibling's generic cancellation. The foreground loop witness calibrates the
+same immutable artifact before checking independently expected long-run output,
+work beyond the former ten-million-instruction ceiling, bounded-mode equivalence,
+fixed live-state maxima and complete cleanup. It no longer assumes nominal field
+allocation order. [Focused run 37095977638](https://github.com/lkjsxc/lkjscript/actions/runs/37095977638)
+also passed the 11 new policy tests and 1,041 standalone offline commands. Earlier
+failed runs and the original accepted development source remain historical evidence;
+they are not relabelled as proof of the repair.
 
-Integration checkout: `/home/coder/workspace/lkjscript-structured-handoff-20261002`,
-branch `dev/custody-mailbox-20261002`. Current integration logs live in
-`.artifacts/20261002-structured-parallel/`; preserve this checkout and its ignored
-evidence until delivery and release acceptance finish.
+## Current publication handoff
 
-[v0.1.68](releases/v0.1.68.md) is the selected publication successor. Candidate
-[run 37046478616](https://github.com/lkjsxc/lkjscript/actions/runs/37046478616), attempt 1,
-was dispatched from the exact accepted source above at 2026-10-02 18:17:55 UTC;
-last observed queued at 18:18 UTC. Mainline delivery is complete; release acceptance
-is pending. Resume this producer before dispatching another. Once it reaches
-`candidate_accepted`, run the exact extracted-executable supplement specified in the
-[release procedure](release.md#selected-structured-parallel-successor-v0168), then
-unchanged-asset promotion and anonymous verification. Public/latest stays v0.1.64
-until those boundaries finish. No v0.1.68 tag or release has been published.
+[v0.1.68](releases/v0.1.68.md) remains the selected successor. Producer
+[37046478616](https://github.com/lkjsxc/lkjscript/actions/runs/37046478616), attempt 1,
+completed candidate acceptance for source `aa9883f0d073a0d7eaf1f44716ac7e2a5ef5b2fd`.
+That source precedes the deadline repair; the producer is superseded, not selected
+for promotion. Its original archive, receipt and success remain unchanged. No
+v0.1.68 tag or release has been published; public/latest remains immutable v0.1.64.
+
+The next candidate must include the integrated repair and mandatory native public
+harness under [acceptance contract 2](release.md#selected-structured-parallel-successor-v0168).
+This replaces the manual final-byte supplement, not any existing source, target,
+userland, installation or publication boundary. The new checker is being validated
+in `/home/coder/workspace/lkjscript-structured-handoff-20261002`, branch
+`dev/structured-finalization-20261003`; current logs and copied tools are under
+`.artifacts/20261003-structured-finalization/`. Finish fresh full-source acceptance,
+run its copied-candidate witness, integrate the checker, then dispatch exactly one
+fresh normal candidate from main. No new producer has yet been dispatched.
+
+Preserve the older `.artifacts/20261002-structured-parallel/` originals and the
+existing other worktrees/stash. No running application or deployment is changed.
 
 ## Compatibility and authority
 
