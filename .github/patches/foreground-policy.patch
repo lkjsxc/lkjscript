@@ -68,7 +68,7 @@ diff --git a/tools/lkjscript-dev/src/offline_packages/foreground.rs b/tools/lkjs
      for (cell, (label, n, bounded)) in receipt.loops.iter().zip([
          ("calibration-zero", 0, false),
          ("calibration-thousand", 1000, false),
- diff --git a/.github/workflows/verify.yml b/.github/workflows/verify.yml
+diff --git a/.github/workflows/verify.yml b/.github/workflows/verify.yml
 --- a/.github/workflows/verify.yml
 +++ b/.github/workflows/verify.yml
 @@ -113,7 +113,8 @@
