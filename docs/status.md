@@ -29,15 +29,20 @@ See the [public three-package guide](guides/native-transferable-parallel.md) and
 [release notes](releases/v0.1.71.md).
 
 Selected checkout: `/home/coder/workspace/lkjscript-transfer-contracts-20261003`,
-branch `dev/generic-transfer-contracts-20261003`, based on main
-`38252b4134dd30dfada6f9b8a2f0ccfb5f23c436`.
-Implementation is complete and focused validation passes. The second fresh full run
-passed 25 of 26 gates, including all workspace tests and the external service checks.
-Its pure-tail mapping cancellation probe still depended on an unrelated poll count;
-phase-specific probe corrections require a new full run. No v0.1.71 full-source or
-final-byte acceptance is claimed. Evidence, immutable probe executables, literal
-inputs and failed observations are retained under
-`.artifacts/20261003-transfer-contracts/` in this checkout.
+branch `dev/generic-transfer-contracts-20261003`. Accepted source
+`200f1512b15e3b5b15147c70332c9566ef06d1f7`, tree
+`e01e1ae4fc059d9692d852411d997277ba00dde5`, passed all 26 gates fresh, with zero
+reuse, no unrun gates and stable inputs. It was fast-forwarded into main from
+`38252b4134dd30dfada6f9b8a2f0ccfb5f23c436`; remote Git and GitHub ancestry checks
+confirmed the exact accepted commit. This reporting descendant does not relabel
+that source acceptance.
+
+The original full receipt is
+`.artifacts/lkjscript-dev/check/1791036974135001923-3943037-0/receipt.json`, digest
+`verification_513b173a892e32c366a4b40809e670511a118cbb0f7bd44cacdabc28cb934038`.
+The complete retained copy is `full-03-original/`, indexed by `source-accepted.json`,
+under `.artifacts/20261003-transfer-contracts/` in this checkout. Earlier failed
+runs, immutable probe executables and literal inputs remain in the same evidence root.
 
 The implementation includes separate kernel, memory-oracle, compiler and canonical
 reference checks; transfer-bearing native/flat requests and package interfaces;
@@ -48,18 +53,28 @@ supported owners. Historical fixture bytes and accepted native HEADs remain unch
 The current standard transport renews its Graph 22 wrapper with unchanged meaning;
 supported Graph 21 owner envelopes remain readable.
 
-The corrected library harness passes 113 focused tests, including every failure from
-the earlier broad run. All five copied-executable public parallel tests pass with
-57 complete result executions. The four maintained native projects pass 274 differential
-tests; the cold input consists of 188 selected files and four required native packs.
-The eight generated discovery pages verify against the executable. Original evidence
-is in `focused-09.log`, `public-probe-09/` and `native-cold-03/` under the evidence
-root. Earlier failed/intermediate observations remain preserved, including
-`library-all-08.log`; they are not full-source acceptance.
+The full workspace gate includes 1,250 passing library tests, 198 public CLI tests
+and 253 developer-tool tests, alongside the remaining suites. All five native parallel
+public tests pass. The full profile also passes maintained artifact comparisons,
+generated discovery, offline packages, pure-tail execution and all service owners.
+Cancellation proofs now target observed construction, admission and staged transaction
+progress while retaining quota, alias, rollback, recovery and joined-cleanup assertions.
 
-Required completion: fresh dependency-complete 26-gate acceptance, mainline
-integration and independent finalized-byte acceptance through
-[the release procedure](release.md).
+Earlier focused evidence remains in `focused-09.log`, `public-probe-09/` and
+`native-cold-03/`: 113 focused tests, 57 complete public result executions and 274
+differential tests over the four maintained native projects. The cold input contains
+188 selected files and four required native packs. Failed observations, including
+`library-all-08.log`, `full-01-original/` and `full-02-original/`, remain explicitly
+failed historical evidence.
+
+[Candidate 37130051190](https://github.com/lkjsxc/lkjscript/actions/runs/37130051190)
+was dispatched once from the exact accepted main commit at 14:33:59 UTC. Its event
+source is `200f1512b15e3b5b15147c70332c9566ef06d1f7`; final-byte acceptance remains
+pending. Dispatch and continuation evidence is under `release-0171/`.
+Remaining completion is independent finalized-byte acceptance, unchanged-asset
+promotion and anonymous public verification through [the release procedure](release.md).
+Read this exact producer's terminal before further action; do not replace a healthy
+producer. Public/latest remains the completed v0.1.70 selection above.
 
 ## Preceding accepted source and completed v0.1.70 publication
 
