@@ -1,64 +1,94 @@
-name: Acceptance evidence diagnosis
-run-name: Evidence diagnosis ${{ github.sha }}
-
-# Temporary investigation branch only. Never publishes or updates a ref.
+name: Bounded reproduction inputs
+run-name: Reproduction inputs ${{ github.sha }}
+# Temporary investigation branch; no publication, deployment or ref mutation.
 on:
   push:
     branches: ['work/acceptance-reproduction-20261003']
     paths: ['.github/workflows/acceptance-reproduction.yml']
-
 permissions:
   contents: read
   actions: read
-
 jobs:
-  evidence:
+  transfer:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - name: Inspect exact producer metadata and retrieve its original diagnostics
+      - name: Retrieve the exact credential-free kit
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh api repos/lkjsxc/lkjscript/actions/runs/37046478616 \
-            --jq '{id,run_attempt,head_sha,path,status,conclusion}'
-          gh api repos/lkjsxc/lkjscript/actions/artifacts/11248796920 \
-            --jq '{id,name,digest,expired,workflow_run}'
-          gh run download 37046478616 --repo lkjsxc/lkjscript \
-            --name candidate-diagnostics-37046478616-1 \
-            --dir "$RUNNER_TEMP/original-diagnostics"
-
-      - name: Read original receipts and calibration observations only
+          gh api repos/lkjsxc/lkjscript/actions/artifacts/11263643036 \
+            --jq '{id,name,digest,workflow_run}'
+          gh run download 37093670285 --repo lkjsxc/lkjscript \
+            --name reproduction-kit-b9170803c63ca7a8fd9321422b461999afba92a8-37093670285-1 \
+            --dir "$RUNNER_TEMP/kit"
+      - name: Preserve exact bytes in bounded pieces
         shell: bash
         run: |
           set -euo pipefail
-          output="$RUNNER_TEMP/calibration-evidence.txt"
-          : > "$output"
-          while IFS= read -r -d '' receipt; do
-            if jq -e '.effects.foreground.loops != null' "$receipt" > /dev/null 2>&1; then
-              printf '\nRECEIPT %s\n' "${receipt#"$RUNNER_TEMP/"}" | tee -a "$output"
-              jq -c '{schema,status,failure,candidate_sha256,verifier_sha256,
-                loops:[.effects.foreground.loops[] | {label,n,bounded,output,
-                  observation:(.execution["production-observation"]|fromjson)}]}' \
-                "$receipt" | tee -a "$output"
-            fi
-            if jq -e '.profile != null and .selected_gates != null' "$receipt" > /dev/null 2>&1; then
-              printf '\nSOURCE CHECK %s\n' "${receipt#"$RUNNER_TEMP/"}" | tee -a "$output"
-              jq -c '{profile,status,git_head,input_stable,selected_gates,passed_gates,
-                fresh_passed_gates,reused_passed_gates,failure}' "$receipt" | tee -a "$output"
-            fi
-          done < <(find "$RUNNER_TEMP/original-diagnostics" -type f -name receipt.json -print0)
-          printf '\nFOREGROUND FILES\n' | tee -a "$output"
-          find "$RUNNER_TEMP/original-diagnostics" -type f -iname '*foreground*' \
-            | sed "s|$RUNNER_TEMP/||" | head -60 | tee -a "$output"
-          test -s "$output"
-
-      - name: Retain the extracted text beside the immutable originals
+          cd "$RUNNER_TEMP/kit"
+          sha256sum -c reproduction-kit.sha256
+          split -b 48M reproduction-kit.tar.zst part-
+          test "$(find . -maxdepth 1 -name 'part-*' | wc -l)" = 7
+          sha256sum part-* > parts.sha256
+          mkdir context
+          tar --zstd -xf reproduction-kit.tar.zst -C context ./source ./provenance.txt
+          cp reproduction-kit.sha256 parts.sha256 context/
+      - name: Source and provenance
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: calibration-evidence-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/calibration-evidence.txt
-          if-no-files-found: error
-          retention-days: 14
+          name: reproduction-source-${{ github.run_id }}
+          path: ${{ runner.temp }}/kit/context
+          include-hidden-files: true
+          retention-days: 7
+      - name: Part aa
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: reproduction-aa-${{ github.run_id }}
+          path: ${{ runner.temp }}/kit/part-aa
+          compression-level: 0
+          retention-days: 7
+      - name: Part ab
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: reproduction-ab-${{ github.run_id }}
+          path: ${{ runner.temp }}/kit/part-ab
+          compression-level: 0
+          retention-days: 7
+      - name: Part ac
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: reproduction-ac-${{ github.run_id }}
+          path: ${{ runner.temp }}/kit/part-ac
+          compression-level: 0
+          retention-days: 7
+      - name: Part ad
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: reproduction-ad-${{ github.run_id }}
+          path: ${{ runner.temp }}/kit/part-ad
+          compression-level: 0
+          retention-days: 7
+      - name: Part ae
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: reproduction-ae-${{ github.run_id }}
+          path: ${{ runner.temp }}/kit/part-ae
+          compression-level: 0
+          retention-days: 7
+      - name: Part af
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: reproduction-af-${{ github.run_id }}
+          path: ${{ runner.temp }}/kit/part-af
+          compression-level: 0
+          retention-days: 7
+      - name: Part ag
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: reproduction-ag-${{ github.run_id }}
+          path: ${{ runner.temp }}/kit/part-ag
+          compression-level: 0
+          retention-days: 7
