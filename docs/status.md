@@ -31,10 +31,11 @@ See the [public three-package guide](guides/native-transferable-parallel.md) and
 Selected checkout: `/home/coder/workspace/lkjscript-transfer-contracts-20261003`,
 branch `dev/generic-transfer-contracts-20261003`, based on main
 `38252b4134dd30dfada6f9b8a2f0ccfb5f23c436`.
-Implementation is complete and focused validation passes. The first fresh full run
-passed 23 of 26 gates; corrections to acceptance probes and current artifact/discovery
-inventories require a new full run. No v0.1.71 full-source or final-byte acceptance is
-claimed. Evidence, immutable probe executables, literal
+Implementation is complete and focused validation passes. The second fresh full run
+passed 25 of 26 gates, including all workspace tests and the external service checks.
+Its pure-tail mapping cancellation probe still depended on an unrelated poll count;
+phase-specific probe corrections require a new full run. No v0.1.71 full-source or
+final-byte acceptance is claimed. Evidence, immutable probe executables, literal
 inputs and failed observations are retained under
 `.artifacts/20261003-transfer-contracts/` in this checkout.
 

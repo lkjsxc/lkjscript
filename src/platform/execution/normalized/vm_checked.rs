@@ -965,6 +965,8 @@ impl Admission<'_> {
                     .capture_admission_node(self.work.capture_admission_nodes)?;
             } else if input {
                 self.work.input_admission_nodes = self.work.input_admission_nodes.saturating_add(1);
+                self.control
+                    .input_admission_node(self.work.input_admission_nodes)?;
             } else {
                 self.work.raw_result_admission_nodes =
                     self.work.raw_result_admission_nodes.saturating_add(1);

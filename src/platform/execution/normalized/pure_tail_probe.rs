@@ -72,19 +72,21 @@ pub(crate) fn observe_transaction(path: &Path, function: &str) -> Result<Value, 
         .ok_or_else(|| failure("exact public helper is absent"))?;
     let worker = std::thread::Builder::new().name("pure-tail-transaction".to_owned()).stack_size(STACK_BYTES).spawn(move || {
         let sink = Mutex::new(None);
-        let control = ExecutionControl::cancel_after_checks(20_000);
+        let control = ExecutionControl::uncancelled();
+        let host = ProgressHost { calls: AtomicU64::new(0), cancel_after: 37, mapper_items: Mutex::new(Vec::new()) };
         let arguments = vec![raw_list((1..=8192).map(NormalizedValue::I64).collect())?, NormalizedValue::Text(Arc::from("cancelled")), NormalizedValue::I64(1), NormalizedValue::I64(0)];
         let result = NormalizedVm::new(resident.program(), NormalizedRunPolicy { maximum_call_depth: 8, ..Default::default() })
-            .observing_checked(&sink).invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(index, resident.program().value_origin)), arguments, Some(resident.deployment().capabilities()), &control);
+            .observing(&sink, &host).invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(index, resident.program().value_origin)), arguments, Some(resident.deployment().capabilities()), &control);
         let error = result.err().ok_or_else(|| failure("transaction cancellation did not fail"))?;
         let observation = sink.into_inner().map_err(|_| failure("transaction observation poisoned"))?.ok_or_else(|| failure("transaction observation missing"))?;
-        require(error.code == "execution_cancelled" && observation.tail_transfers > 0 && observation.capability_calls == 2 && observation.maximum_live_transactions == 1 && observation.live_transactions_after == 0 && observation.live_call_frames_after == 0 && observation.live_operands_after == 0 && observation.live_locals_after == 0 && observation.live_type_bindings_after == 0, "cancelled helper retained state or skipped staged work")?;
+        let mapper_items = host.mapper_items.into_inner().map_err(|_|failure("transaction mapper observation poisoned"))?;
+        require(error.code == "execution_cancelled" && error.class == crate::platform::execution::ExecutionFailureClass::Cancelled && host.calls.load(Ordering::Relaxed) == 37 && observation.external_calls == 37 && !mapper_items.is_empty() && mapper_items.iter().enumerate().all(|(index, item)| *item == index as i64 + 1) && observation.value_work.lists.element_handle_allocations > 1 && observation.value_work.lists.element_handle_allocations < 8192 && observation.tail_transfers > 0 && observation.capability_calls == 2 && observation.maximum_live_transactions == 1 && observation.live_transactions_after == 0 && observation.live_call_frames_after == 0 && observation.live_operands_after == 0 && observation.live_locals_after == 0 && observation.live_type_bindings_after == 0, "cancelled helper retained state or skipped staged work")?;
         let recovery_sink = Mutex::new(None);
         let recovery = NormalizedVm::new(resident.program(), NormalizedRunPolicy { maximum_call_depth: 8, ..Default::default() }).observing_checked(&recovery_sink)
             .invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(index, resident.program().value_origin)), vec![raw_list((1..=8192).map(NormalizedValue::I64).collect())?, NormalizedValue::Text(Arc::from("after-cancel")), NormalizedValue::I64(1), NormalizedValue::I64(0)], Some(resident.deployment().capabilities()), &ExecutionControl::uncancelled())
             .map_err(|error| failure(&format!("healthy task after cancellation: {}", error.code)))?;
         require(matches!(&recovery.0, NormalizedValue::List(items) if items.len() == 8192 && items.iter().enumerate().all(|(index, value)| *value == NormalizedValue::I64(index as i64 + 1))) && recovery.1.live_transactions_after == 0, "healthy task failed after cancellation")?;
-        Ok(json!({"classification":"fresh passed","failure":error,"observation":observation,"recovery_observation":recovery.1,"recovery_length":8192,"recovery_sum":33_558_528,"cancellation_checks":20_000,"stack_bytes":STACK_BYTES,"cleanup_complete":true,"effects_replayed":false}))
+        Ok(json!({"classification":"fresh passed","failure":error,"observation":observation,"recovery_observation":recovery.1,"recovery_length":8192,"recovery_sum":33_558_528,"host_calls":host.calls.load(Ordering::Relaxed),"mapper_items":mapper_items,"stack_bytes":STACK_BYTES,"cleanup_complete":true,"effects_replayed":false}))
     }).map_err(|error| failure(&format!("transaction probe thread: {error}")))?;
     worker
         .join()
@@ -136,12 +138,12 @@ pub(crate) fn observe_recursive_transaction(
     let value = super::codec::decode_value(resident.program(), &input, ty, Default::default())?;
     std::thread::Builder::new().name("recursive-transaction".into()).stack_size(STACK_BYTES).spawn(move || {
         let sink=Mutex::new(None);
-        let control=ExecutionControl::cancel_after_checks(20_000);
+        let control=ExecutionControl::cancel_after_transaction_tail_transfers(3,3);
         let result=NormalizedVm::new(resident.program(),NormalizedRunPolicy::default()).observing_checked(&sink).invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(u32::try_from(index).map_err(|_|failure("function index overflow"))?,resident.program().value_origin)),vec![value,NormalizedValue::text("cancel")],Some(resident.deployment().capabilities()),&control);
         let error=result.err().ok_or_else(||failure("recursive cancelled transaction committed"))?;
         let observation=sink.into_inner().map_err(|_|failure("recursive transaction observation poisoned"))?.ok_or_else(||failure("recursive transaction observation absent"))?;
-        require(error.code=="execution_cancelled" && observation.capability_calls==3 && observation.tail_transfers>0 && observation.maximum_live_transactions==1 && observation.live_transactions_after==0 && observation.live_call_frames_after==0 && observation.live_operands_after==0 && observation.live_locals_after==0 && observation.live_type_bindings_after==0,"recursive cancellation skipped staged work or retained live execution state")?;
-        Ok(json!({"source_bound":true,"effects_replayed":false,"cancellation_checks":20000,"failure":error,"observation":observation,"cleanup_complete":true}))
+        require(error.code=="execution_cancelled" && error.class == crate::platform::execution::ExecutionFailureClass::Cancelled && observation.capability_calls==3 && observation.tail_transfers>=3 && observation.maximum_live_transactions==1 && observation.live_transactions_after==0 && observation.live_call_frames_after==0 && observation.live_operands_after==0 && observation.live_locals_after==0 && observation.live_type_bindings_after==0,"recursive cancellation skipped staged work or retained live execution state")?;
+        Ok(json!({"source_bound":true,"effects_replayed":false,"failure":error,"observation":observation,"cleanup_complete":true}))
     }).map_err(|e|failure(&e.to_string()))?.join().map_err(|_|failure("recursive transaction observation stack failed"))?
 }
 
@@ -512,23 +514,26 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
             }
             cases.push(observed);
         }
-        let (result, mut observed) = invocation_control(
-            &prepared,
-            reference,
-            "map",
-            arguments.clone(),
-            policy,
-            u64::MAX,
-            &ExecutionControl::cancel_after_checks(5000),
-        )?;
+        let (result, mut observed) =
+            invocation(&prepared, reference, "map", arguments.clone(), policy, 37)?;
         let error = result
             .err()
             .ok_or_else(|| failure("mapping cancellation did not interrupt"))?;
         require(
             error.code == "execution_cancelled"
+                && error.class == crate::platform::execution::ExecutionFailureClass::Cancelled
+                && observed["host_calls"] == 37
+                && observed["cancelled"] == true
+                && observed["mapper_items"].as_array().is_some_and(|items| {
+                    !items.is_empty()
+                        && items
+                            .iter()
+                            .enumerate()
+                            .all(|(index, item)| item.as_i64() == Some(index as i64))
+                })
                 && observed["observation"]["value_work"]["lists"]["element_handle_allocations"]
                     .as_u64()
-                    .is_some_and(|n| n > 0),
+                    .is_some_and(|n| n > 0 && n < 1057),
             "mapping cancellation missed real construction progress",
         )?;
         observed["case"] = json!("list-construction-cancellation");
@@ -683,7 +688,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
             observed["item_limit"] = json!(item_limit);
             cases.push(observed);
         }
-        let control = ExecutionControl::cancel_after_checks(37);
+        let control = ExecutionControl::cancel_after_input_nodes(3);
         let (result, mut observed) = invocation_control(
             &prepared,
             reference,
@@ -701,8 +706,11 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
             .unwrap_or(0);
         require(
             error.code == "execution_cancelled"
+                && error.class == crate::platform::execution::ExecutionFailureClass::Cancelled
                 && nodes > 0
                 && nodes < 4097
+                && nodes == 3
+                && observed["cancelled"] == true
                 && observed["host_calls"] == 0,
             "admission cancellation did not stop before callbacks",
         )?;

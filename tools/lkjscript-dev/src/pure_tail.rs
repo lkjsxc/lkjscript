@@ -1807,9 +1807,15 @@ fn standalone_http(
             && cancellation["cleanup_complete"] == true
             && cancellation["recovery_length"] == 8192
             && cancellation["recovery_sum"] == 33_558_528
+            && cancellation["failure"]["class"] == "cancelled"
+            && cancellation["observation"]["external_calls"] == 37
+            && cancellation["observation"]["capability_calls"] == 2
+            && cancellation["observation"]["tail_transfers"]
+                .as_u64()
+                .is_some_and(|n| n > 0)
             && cancellation["observation"]["value_work"]["lists"]["element_handle_allocations"]
                 .as_u64()
-                .is_some_and(|n| n > 1),
+                .is_some_and(|n| n > 1 && n < 8192),
         "transaction cancellation or healthy recovery evidence missing",
     )?;
     let store = DataStore::open(&data_root, "tail", DataLimits::default())
@@ -2402,6 +2408,19 @@ pub(crate) fn read_transferred_receipt(
                     case["tier"] == tier
                         && case["case"] == "list-construction-cancellation"
                         && case["failure"]["code"] == "execution_cancelled"
+                        && case["failure"]["class"] == "cancelled"
+                        && case["host_calls"] == 37
+                        && case["cancelled"] == true
+                        && case["mapper_items"].as_array().is_some_and(|items| {
+                            !items.is_empty()
+                                && items
+                                    .iter()
+                                    .enumerate()
+                                    .all(|(index, item)| item.as_i64() == Some(index as i64))
+                        })
+                        && case["observation"]["value_work"]["lists"]["element_handle_allocations"]
+                            .as_u64()
+                            .is_some_and(|n| n > 0 && n < 1057)
                 })
                 && cases
                     .iter()
@@ -2489,10 +2508,12 @@ pub(crate) fn read_transferred_receipt(
                 case["tier"] == tier
                     && case["case"] == "input-admission-cancellation"
                     && case["failure"]["code"] == "execution_cancelled"
+                    && case["failure"]["class"] == "cancelled"
                     && case["host_calls"] == 0
+                    && case["cancelled"] == true
                     && case["observation"]["value_work"]["input_admission_nodes"]
                         .as_u64()
-                        .is_some_and(|nodes| nodes > 0 && nodes < 4097)
+                        .is_some_and(|nodes| nodes > 0 && nodes < 4097 && nodes == 3)
             }),
             "admission cancellation progress is missing",
         )?;
@@ -2594,7 +2615,12 @@ pub(crate) fn read_transferred_receipt(
     )?;
     require(
         cancellation["execution"]["failure"]["code"] == "execution_cancelled"
+            && cancellation["execution"]["failure"]["class"] == "cancelled"
             && cancellation["execution"]["cleanup_complete"] == true
+            && cancellation["execution"]["observation"]["external_calls"] == 37
+            && cancellation["execution"]["observation"]["capability_calls"] == 2
+            && cancellation["execution"]["observation"]["tail_transfers"].as_u64().is_some_and(|n| n > 0)
+            && cancellation["execution"]["observation"]["value_work"]["lists"]["element_handle_allocations"].as_u64().is_some_and(|n| n > 1 && n < 8192)
             && cancellation["execution"]["observation"]["maximum_live_transactions"] == 1
             && cancellation["cancelled_key_absent"] == true
             && cancellation["committed_changes"] == 4

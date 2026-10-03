@@ -132,6 +132,14 @@ pub struct ExecutionControl {
     deadline: Option<Instant>,
     remaining_checks: Option<Arc<std::sync::atomic::AtomicU64>>,
     cancel_at_capture_nodes: Option<u64>,
+    cancel_at_input_nodes: Option<u64>,
+    staged_tail_probe: Option<Arc<StagedTailProbe>>,
+}
+
+#[derive(Debug)]
+struct StagedTailProbe {
+    required_capability_calls: u64,
+    remaining_transfers: std::sync::atomic::AtomicU64,
 }
 
 impl ExecutionControl {
@@ -141,6 +149,8 @@ impl ExecutionControl {
             deadline: None,
             remaining_checks: None,
             cancel_at_capture_nodes: None,
+            cancel_at_input_nodes: None,
+            staged_tail_probe: None,
         }
     }
 
@@ -150,6 +160,8 @@ impl ExecutionControl {
             deadline: Some(deadline),
             remaining_checks: None,
             cancel_at_capture_nodes: None,
+            cancel_at_input_nodes: None,
+            staged_tail_probe: None,
         }
     }
 
@@ -189,6 +201,62 @@ impl ExecutionControl {
         {
             self.cancel();
             self.check()?;
+        }
+        Ok(())
+    }
+
+    /// Contributor-only partial input admission, independent of type lookup work.
+    pub(crate) fn cancel_after_input_nodes(count: u64) -> Self {
+        Self {
+            cancel_at_input_nodes: Some(count),
+            ..Self::uncancelled()
+        }
+    }
+
+    pub(crate) fn input_admission_node(&self, nodes: u64) -> Result<(), ExecutionError> {
+        if self
+            .cancel_at_input_nodes
+            .is_some_and(|target| nodes >= target)
+        {
+            self.cancel();
+            self.check()?;
+        }
+        Ok(())
+    }
+
+    /// Count actual tail transfers only after the contributor's staged-effect
+    /// boundary and while its transaction is live. Public controls never install it.
+    pub(crate) fn cancel_after_transaction_tail_transfers(
+        count: u64,
+        required_capability_calls: u64,
+    ) -> Self {
+        Self {
+            staged_tail_probe: Some(Arc::new(StagedTailProbe {
+                required_capability_calls,
+                remaining_transfers: std::sync::atomic::AtomicU64::new(count),
+            })),
+            ..Self::uncancelled()
+        }
+    }
+
+    pub(crate) fn transaction_tail_transfer(
+        &self,
+        capability_calls: u64,
+        active_transactions: usize,
+    ) -> Result<(), ExecutionError> {
+        if let Some(probe) = &self.staged_tail_probe
+            && capability_calls >= probe.required_capability_calls
+            && active_transactions == 1
+        {
+            let prior = probe.remaining_transfers.fetch_update(
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+                |remaining| remaining.checked_sub(1),
+            );
+            if prior.is_err() || prior == Ok(1) {
+                self.cancel();
+                self.check()?;
+            }
         }
         Ok(())
     }
@@ -255,6 +323,57 @@ mod tests {
         assert!(!normal.is_cancelled());
         let checked = ExecutionControl::cancel_after_checks(1);
         assert!(checked.capture_admission_node(u64::MAX).is_ok());
+        assert!(checked.check().is_ok());
+        assert_eq!(
+            checked.check().unwrap_err().class,
+            ExecutionFailureClass::Cancelled
+        );
+    }
+
+    #[test]
+    fn contributor_input_cancellation_targets_partial_admission() {
+        let control = ExecutionControl::cancel_after_input_nodes(3);
+        for _ in 0..1024 {
+            assert!(control.check().is_ok());
+            assert!(control.capture_admission_node(u64::MAX).is_ok());
+        }
+        assert!(control.input_admission_node(1).is_ok());
+        assert!(control.input_admission_node(2).is_ok());
+        assert!(!control.is_cancelled());
+        assert_eq!(
+            control.clone().input_admission_node(3).unwrap_err().class,
+            ExecutionFailureClass::Cancelled
+        );
+        assert!(control.is_cancelled());
+    }
+
+    #[test]
+    fn contributor_staged_tail_cancellation_requires_completed_stage_and_live_transaction() {
+        let control = ExecutionControl::cancel_after_transaction_tail_transfers(3, 2);
+        for _ in 0..1024 {
+            assert!(control.check().is_ok());
+            assert!(control.transaction_tail_transfer(1, 1).is_ok());
+            assert!(control.transaction_tail_transfer(2, 0).is_ok());
+            assert!(control.transaction_tail_transfer(2, 2).is_ok());
+            assert!(control.input_admission_node(u64::MAX).is_ok());
+        }
+        assert!(control.transaction_tail_transfer(2, 1).is_ok());
+        let clone = control.clone();
+        assert!(clone.transaction_tail_transfer(2, 1).is_ok());
+        assert!(!control.is_cancelled());
+        assert_eq!(
+            clone.transaction_tail_transfer(2, 1).unwrap_err().class,
+            ExecutionFailureClass::Cancelled
+        );
+        assert!(control.is_cancelled());
+
+        let normal = ExecutionControl::uncancelled();
+        assert!(normal.transaction_tail_transfer(u64::MAX, 1).is_ok());
+        assert!(normal.input_admission_node(u64::MAX).is_ok());
+        assert!(!normal.is_cancelled());
+        let checked = ExecutionControl::cancel_after_checks(1);
+        assert!(checked.transaction_tail_transfer(u64::MAX, 1).is_ok());
+        assert!(checked.input_admission_node(u64::MAX).is_ok());
         assert!(checked.check().is_ok());
         assert_eq!(
             checked.check().unwrap_err().class,

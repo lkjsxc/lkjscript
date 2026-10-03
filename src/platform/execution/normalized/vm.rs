@@ -2217,6 +2217,10 @@ impl Machine<'_> {
             .max(self.frames.iter().map(|frame| frame.locals.len()).sum());
         if tail {
             self.observation.tail_transfers = self.observation.tail_transfers.saturating_add(1);
+            self.control.transaction_tail_transfer(
+                self.observation.capability_calls,
+                self.transactions.len(),
+            )?;
         }
         Ok(())
     }

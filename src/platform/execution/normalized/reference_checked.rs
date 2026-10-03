@@ -740,6 +740,9 @@ impl ReferenceState<'_> {
             if captured {
                 self.control
                     .capture_admission_node(self.observation.value_work.capture_admission_nodes)?;
+            } else if input {
+                self.control
+                    .input_admission_node(self.observation.value_work.input_admission_nodes)?;
             }
             if depth > 256 {
                 return Err(reference_resource(

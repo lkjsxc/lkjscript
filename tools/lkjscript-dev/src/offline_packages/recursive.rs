@@ -109,7 +109,11 @@ pub(super) fn validate(receipt: &RecursiveReceipt) -> Result<(), DevError> {
             && cancel["effects_replayed"] == false
             && cancel["cleanup_complete"] == true
             && cancel["failure"]["code"] == "execution_cancelled"
+            && cancel["failure"]["class"] == "cancelled"
             && cancel["observation"]["capability_calls"] == 3
+            && cancel["observation"]["tail_transfers"]
+                .as_u64()
+                .is_some_and(|n| n >= 3)
             && cancel["observation"]["maximum_live_transactions"] == 1
             && cancel["observation"]["live_transactions_after"] == 0,
         "recursive staged cancellation and cleanup evidence omitted",
