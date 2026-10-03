@@ -4,7 +4,7 @@ run-name: Prepare policy repair ${{ github.sha }}
 on:
   push:
     branches: ['work/acceptance-reproduction-20261003']
-    paths: ['.github/workflows/acceptance-reproduction.yml']
+    paths: ['.github/workflows/acceptance-reproduction.yml', '.github/patches/foreground-policy.patch']
 permissions:
   contents: read
 jobs:
