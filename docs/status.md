@@ -35,9 +35,13 @@ form their own parallel groups, exact implementation forwarding, mixed owned/dat
 results and source-free offline composition. See its [notes](releases/v0.1.71.md)
 and the [three-package guide](guides/native-transferable-parallel.md).
 
-## Development v0.1.72: reusable structured execution
+## v0.1.72 source acceptance and release candidate
 
 Selected checkout: `/home/coder/workspace/lkjscript`, branch `main`.
+Accepted source `6a14335e4d57015da0d4663a6ef3b1e49bb321fc` was fast-forward
+integrated into remote main and independently verified through Git and GitHub.
+Later reporting descendants do not relabel this exact-source acceptance.
+
 The implementation replaces per-child OS thread creation with explicitly owned,
 lazily reused auxiliary workers. Nonblocking reservation and caller fallback
 preserve nested progress. Jobs retain shared prepared code and sealed custody;
@@ -51,25 +55,28 @@ the same methods. The fixed-workload HTTP route runs beside an independent servi
 See the [parallel contract](spec/structured-parallel.md),
 [shared-runtime contract](spec/shared-runtime.md) and [notes](releases/v0.1.72.md).
 
-Implementation is complete; final source acceptance is pending. Release workspace
-builds, all-target/all-feature Clippy, 70 focused runtime/VM/lifecycle tests, all four
-maintained native project checks and generated discovery verification have passed.
-Both new public-workload tests passed against the measured release copy: complete
-command results before and after source deletion, plus two HTTP host lifetimes
-each completing six dispatches with four joined workers.
-These are development results, not fresh full-source or final-byte acceptance.
-Current development logs, literal native authoring inputs, copied executables and
-performance evidence belong under `.artifacts/20261003-reusable-workers/` in the
-selected checkout. The first fresh full run at source `db542d5a` passed 25 of 26
-gates: all 201 public CLI tests passed, but a checker fixture's independent raw
-PATH launch received Linux `ETXTBSY`. Its original failed receipt is
-`.artifacts/lkjscript-dev/check/1791052581790680700-200853-0/receipt.json`.
-The fixture now uses the existing joined-child writer pattern;
-production executable selection and its security assertions remain unchanged.
-The repaired development-tool library passed 253 tests with 19 existing ignored
-entries under 32 test threads. Clippy and formatting passed again. A direct helper
-test run without Rust on PATH remains a separate failed environment observation.
-Failed intermediate compiler observations and this full run remain failed.
+Fresh `check full --fresh --jobs 1 --machine` passed **26 of 26 gates**, all fresh,
+none reused, with stable source inputs. Original receipt:
+`.artifacts/lkjscript-dev/check/1791055313021873408-308116-0/receipt.json`, digest
+`verification_9190b0b6ead630a89a885250bfc09a5008eed35a3b2a13f700130fc406345516`.
+This includes workspace Clippy/tests, maintained packages and exact artifacts,
+generated discovery, copied-executable applications and joined service acceptance.
+Workspace results include 1,266 library passes with eight existing ignored entries,
+200 public CLI passes with one existing ignored scale fixture, and 253 checker
+library passes with 19 existing ignored entries. Both new workload cases passed.
+Their command results remain exact after source deletion; each repeated HTTP host
+completed six dispatches using four workers and joined every worker.
+
+`.artifacts/20261003-reusable-workers/source-accepted.json` indexes the original
+receipt, its complete retained copy, executable identities and performance evidence.
+The accepted host executable is byte-identical to the corrected measured copy.
+This is source/development-host acceptance, not finalized musl distribution proof.
+The earlier full run at `db542d5a` remains failed: 25 of 26 gates passed before a
+checker fixture's raw PATH control encountered Linux `ETXTBSY`. The repair uses
+the existing joined-child writer pattern without changing production executable
+selection or weakening the security assertions. Original failures, including the
+separate helper run without Rust on PATH, remain retained under the same evidence root.
+
 [Matched measurements](performance.md#reusable-structured-workers-2026-10-03)
 retain all samples and tradeoffs. The shared host completed 14 child dispatches
 using four auxiliary workers and joined every worker. Its warm CPU HTTP median was
@@ -78,8 +85,16 @@ increased. The corrected comparison pairs the same post-lifecycle GNU host build
 stage. Initial observations from differing dependency features remain retained and
 superseded for comparison. These finite observations establish neither general
 speedup nor fairness.
-Freeze inputs for fresh dependency-complete 26-gate acceptance before mainline delivery.
-No v0.1.72 candidate has been selected or published.
+[Candidate 37148975781](https://github.com/lkjsxc/lkjscript/actions/runs/37148975781)
+was dispatched once at 19:44:19 UTC with event source
+`6a14335e4d57015da0d4663a6ef3b1e49bb321fc` and is in progress. Its original
+service metadata and handoff belong under `release-0172/candidate-01/` in the
+evidence root. The remaining release gate is fresh hosted source/finalized-byte
+acceptance, including the required native public workload cases. After authenticated
+`candidate_accepted`, refresh publication occupancy, select the exact accepted tag
+object and promote the unchanged assets through the existing publication/public
+verification terminal. No v0.1.72 assets have been accepted or published; its tag and
+publication selection remain untouched. Public/latest remains v0.1.71.
 
 ## Compatibility and remaining limits
 
