@@ -1,7 +1,7 @@
-name: Acceptance reproduction kit
-run-name: Offline reproduction ${{ github.sha }}
+name: Acceptance evidence diagnosis
+run-name: Evidence diagnosis ${{ github.sha }}
 
-# Temporary investigation branch only; not a release or source-acceptance workflow.
+# Temporary investigation branch only. Never publishes or updates a ref.
 on:
   push:
     branches: ['work/acceptance-reproduction-20261003']
@@ -9,54 +9,56 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
-  kit:
+  evidence:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
-      - name: Read the exact source without retaining checkout credentials
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 2
-          persist-credentials: false
+      - name: Inspect exact producer metadata and retrieve its original diagnostics
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api repos/lkjsxc/lkjscript/actions/runs/37046478616 \
+            --jq '{id,run_attempt,head_sha,path,status,conclusion}'
+          gh api repos/lkjsxc/lkjscript/actions/artifacts/11248796920 \
+            --jq '{id,name,digest,expired,workflow_run}'
+          gh run download 37046478616 --repo lkjsxc/lkjscript \
+            --name candidate-diagnostics-37046478616-1 \
+            --dir "$RUNNER_TEMP/original-diagnostics"
 
-      - name: Prepare only source, public dependencies, and the pinned toolchain
+      - name: Read original receipts and calibration observations only
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$GITHUB_WORKFLOW_SHA" = "$GITHUB_SHA"
-          test -z "$(git status --porcelain=v1 --untracked-files=all)"
-          kit="$RUNNER_TEMP/reproduction-kit"
-          mkdir -m 0700 "$kit" "$kit/source" "$kit/toolchain"
-          git archive HEAD | tar -x -C "$kit/source"
-          rustup show
-          sysroot=$(rustc --print sysroot)
-          cp -a "$sysroot/bin" "$sysroot/lib" "$kit/toolchain/"
-          # cargo vendor copies public crate sources, never Cargo credentials or caches.
-          cargo vendor --locked --versioned-dirs "$kit/vendor" > "$kit/vendor-config.toml"
-          {
-            printf 'repository=%s\nsource=%s\nworkflow=%s\ntree=%s\nrun=%s\nattempt=%s\n' \
-              "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$GITHUB_WORKFLOW_SHA" \
-              "$(git rev-parse 'HEAD^{tree}')" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
-            rustc --version --verbose
-            cargo --version
-            sha256sum Cargo.lock rust-toolchain.toml
-          } > "$kit/provenance.txt"
-          # Deliberately exclude .git, .cargo, HOME, environment dumps and credentials.
-          tar -C "$kit" -I 'zstd -T2 -3' -cf "$RUNNER_TEMP/reproduction-kit.tar.zst" .
-          cd "$RUNNER_TEMP"
-          sha256sum reproduction-kit.tar.zst > reproduction-kit.sha256
+          output="$RUNNER_TEMP/calibration-evidence.txt"
+          : > "$output"
+          while IFS= read -r -d '' receipt; do
+            if jq -e '.effects.foreground.loops != null' "$receipt" > /dev/null 2>&1; then
+              printf '\nRECEIPT %s\n' "${receipt#"$RUNNER_TEMP/"}" | tee -a "$output"
+              jq -c '{schema,status,failure,candidate_sha256,verifier_sha256,
+                loops:[.effects.foreground.loops[] | {label,n,bounded,output,
+                  observation:(.execution["production-observation"]|fromjson)}]}' \
+                "$receipt" | tee -a "$output"
+            fi
+            if jq -e '.profile != null and .selected_gates != null' "$receipt" > /dev/null 2>&1; then
+              printf '\nSOURCE CHECK %s\n' "${receipt#"$RUNNER_TEMP/"}" | tee -a "$output"
+              jq -c '{profile,status,git_head,input_stable,selected_gates,passed_gates,
+                fresh_passed_gates,reused_passed_gates,failure}' "$receipt" | tee -a "$output"
+            fi
+          done < <(find "$RUNNER_TEMP/original-diagnostics" -type f -name receipt.json -print0)
+          printf '\nFOREGROUND FILES\n' | tee -a "$output"
+          find "$RUNNER_TEMP/original-diagnostics" -type f -iname '*foreground*' \
+            | sed "s|$RUNNER_TEMP/||" | head -60 | tee -a "$output"
+          test -s "$output"
 
-      - name: Retain the offline reproduction inputs
+      - name: Retain the extracted text beside the immutable originals
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: reproduction-kit-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/reproduction-kit.tar.zst
-            ${{ runner.temp }}/reproduction-kit.sha256
+          name: calibration-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/calibration-evidence.txt
           if-no-files-found: error
-          retention-days: 7
-          compression-level: 0
+          retention-days: 14
