@@ -1,7 +1,7 @@
 # Joined parallel computation
 
 Development 0.1.68 adds two child tasks with owned inputs and a joined ordinary
-result. Check the installed executable's `capabilities --section change-grammar`:
+result. Check the installed executable's `capabilities --section change`:
 it must advertise `parallel`. Public v0.1.64 does not supply this expression.
 
 For two already declared empty-effect graph tasks, the native form is:
