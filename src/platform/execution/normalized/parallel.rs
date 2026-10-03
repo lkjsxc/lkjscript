@@ -46,6 +46,8 @@ pub(super) struct Pair<L, R> {
 }
 
 /// Prefer the originating failure over its sibling's cooperative cancellation.
+/// Deadlines also have the Cancelled class; only execution_cancelled is the
+/// generic scope signal, so joining must retain a more specific cancellation cause.
 pub(super) fn results<L, R>(
     left: Result<L, ExecutionError>,
     right: Result<R, ExecutionError>,
@@ -54,7 +56,9 @@ pub(super) fn results<L, R>(
         (Ok(left), Ok(right)) => Ok((left, right)),
         (Err(left), Err(right))
             if left.class == ExecutionFailureClass::Cancelled
-                && right.class != ExecutionFailureClass::Cancelled =>
+                && (right.class != ExecutionFailureClass::Cancelled
+                    || (left.code == "execution_cancelled"
+                        && right.code != "execution_cancelled")) =>
         {
             Err(right)
         }
@@ -298,3 +302,7 @@ mod tests {
         assert_eq!(workers.active.load(Ordering::Acquire), 0);
     }
 }
+
+#[cfg(test)]
+#[path = "parallel_failure_tests.rs"]
+mod failure_tests;
