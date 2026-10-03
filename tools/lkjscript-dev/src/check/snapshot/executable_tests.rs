@@ -9,13 +9,33 @@ use crate::check::{registry::GateRegistry, snapshot};
 use crate::evidence::VerificationDigest;
 use crate::process::{self, ProcessSpec, ProcessStatus};
 use std::collections::BTreeMap;
+use std::io::Write;
 use std::os::unix::fs::{PermissionsExt, symlink};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
 fn script(path: &Path, exit: u8) {
-    fs::write(path, format!("#!/bin/sh\nexit {exit}\n")).expect("owned executable fixture");
-    fs::set_permissions(path, fs::Permissions::from_mode(0o755)).expect("executable mode");
+    write_script(path, format!("#!/bin/sh\nexit {exit}\n").as_bytes());
+}
+
+fn write_script(path: &Path, bytes: &[u8]) {
+    let mut source = tempfile::NamedTempFile::new_in(path.parent().expect("owned script parent"))
+        .expect("owned script staging source");
+    source.write_all(bytes).expect("complete script bytes");
+    // Sibling test forks can inherit a parent's writable fd until exec, causing
+    // ETXTBSY after the parent closes it. Only this joined child opens the executed
+    // inode for writing; the deliberately held staging writer owns another inode.
+    let written = Command::new("/usr/bin/install")
+        .args(["-m", "755", "--"])
+        .arg(source.path())
+        .arg(path)
+        .output()
+        .expect("join independent script writer");
+    assert!(
+        written.status.success(),
+        "script writer failed: {written:?}"
+    );
+    assert_eq!(fs::read(path).expect("installed script"), bytes);
 }
 
 #[test]
@@ -308,25 +328,22 @@ fn a_missing_interpreter_cannot_switch_execution_to_an_unobserved_path_candidate
     let first = root.path().join("first/probe");
     let second = root.path().join("second/probe");
     let marker = root.path().join("unchecked");
-    fs::write(
+    write_script(
         &first,
         format!(
             "#!{}\nexit 0\n",
             root.path().join("absent-interpreter").display()
-        ),
-    )
-    .unwrap();
-    fs::set_permissions(&first, fs::Permissions::from_mode(0o755)).unwrap();
+        )
+        .as_bytes(),
+    );
     let path = OsStr::new("first:second");
     let original = observe_with_path(root.path(), "probe", Some(path)).unwrap();
     assert_eq!(original.path.as_deref(), Some(first.as_path()));
     for exit in [37, 7] {
-        fs::write(
+        write_script(
             &second,
-            format!("#!/bin/sh\nprintf visited > unchecked\nexit {exit}\n"),
-        )
-        .unwrap();
-        fs::set_permissions(&second, fs::Permissions::from_mode(0o755)).unwrap();
+            format!("#!/bin/sh\nprintf visited > unchecked\nexit {exit}\n").as_bytes(),
+        );
         let observed = observe_with_path(root.path(), "probe", Some(path)).unwrap();
         assert_eq!(observed.proof, original.proof);
         // Independent raw execution demonstrates why a second PATH search is unsound.

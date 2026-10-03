@@ -11,13 +11,16 @@ rounds and seed zero. Every complete 8,192-byte original-plus-transformed payloa
 matches an independent oracle; both reductions equal **1,069,109,248**. The nested
 route adds two marker children around the two computation leaves.
 
-Both executables use the pinned release profile: accepted v0.1.71 is SHA-256
-`2dd951490152543503e1a0c534015caa1405705a1c4c4153518ff7770638929e`; the measured
-development v0.1.72 copy is
-`2bece810dee16a7b2af91a804782b917cbc0cb9cffe776c16f01899921ee913e`.
-They execute identical final native bundles and literal inputs from copied binaries
-outside the checkout, without authoring projects or transports. The development
-copy is measurement evidence, not a published-distribution claim.
+These measurements compare `x86_64-unknown-linux-gnu` host release-profile builds.
+The baseline is the retained host build of accepted v0.1.71 source `200f1512`, SHA-256
+`2dd951490152543503e1a0c534015caa1405705a1c4c4153518ff7770638929e`; current is the
+immutable GNU development v0.1.72 copy, SHA-256
+`c51fc84d07b2510cc35443e140256ad9f86bf665e0533425db9eddf7a0b2fe55`.
+Both are exact post-`release_command_lifecycle` outputs using pinned Rust 1.98.0
+and the same release profile; Cargo fingerprints confirm the selected producing
+configuration. They execute identical final native bundles and literal inputs from
+copied binaries outside the checkout, without authoring projects or transports.
+Public musl distribution bytes were not measured.
 
 One excluded warmup pair precedes eight fresh-process pairs per route, alternating
 before/after order. Preparation is cold within each process; filesystem caches stay
@@ -26,14 +29,16 @@ encoding and result publication. Product stage medians are reported separately.
 
 | Route | Before wall median (min–max), ms | After wall median (min–max), ms | Preparation before → after, ms | Invocation before → after, ms |
 | --- | ---: | ---: | ---: | ---: |
-| Serial | 999.590 (956.274–1,106.207) | 1,002.164 (963.607–1,031.768) | 73.441 → 74.557 | 911.918 → 912.856 |
-| Parallel | 603.128 (548.096–727.679) | 585.389 (541.072–630.718) | 74.165 → 72.650 | 512.288 → 493.808 |
-| Nested | 631.207 (552.721–694.284) | 620.965 (590.864–729.412) | 74.877 → 74.466 | 510.637 → 512.451 |
+| Serial | 1,001.624 (983.902–1,136.573) | 997.928 (959.213–1,015.403) | 74.048 → 73.573 | 915.695 → 909.665 |
+| Parallel | 654.296 (559.888–739.478) | 636.508 (568.052–721.517) | 75.969 → 74.397 | 552.837 → 551.032 |
+| Nested | 609.772 (568.945–731.817) | 633.682 (588.734–674.269) | 73.929 → 73.117 | 522.488 → 548.161 |
 
 Instructions and modeled cumulative allocation agree exactly before/after for each
 route: parallel reports 6,258,831 instructions and 231,588,397 charged bytes. These
-charges are not RSS. Serial wall/invocation and nested invocation medians increase;
-the nested maximum also increases. All unfavorable samples remain retained.
+charges are not RSS. Nested wall and invocation medians increase. Median sampled
+command RSS also increases for every route: serial 24,478 → 25,142 KiB, parallel
+24,448 → 25,310 KiB and nested 24,782 → 25,266 KiB. All unfavorable samples remain
+retained; these sampled peaks are not exact process maxima.
 
 Resident observations compare the fixed CPU HTTP endpoint beside an independent
 HTTP sibling in one shared process with the same applications in two processes.
@@ -44,10 +49,10 @@ eight warm requests and summed across both processes in the separate layout.
 
 | Executable / layout | Startup, ms | Cold CPU request, ms | Warm CPU median (min–max), ms | Idle RSS, KiB |
 | --- | ---: | ---: | ---: | ---: |
-| Before / shared | 142.950 | 616.635 | 571.913 (470.857–640.074) | 25,940 |
-| After / shared | 141.846 | 552.376 | 470.991 (461.232–573.184) | 25,040 |
-| Before / separate | 81.253 | 487.910 | 518.138 (472.094–566.080) | 45,332 |
-| After / separate | 80.547 | 469.381 | 477.443 (459.901–558.018) | 44,948 |
+| Before / shared | 142.139 | 679.688 | 508.447 (462.009–604.247) | 27,724 |
+| After / shared | 142.578 | 484.842 | 488.737 (465.713–562.022) | 27,764 |
+| Before / separate | 82.005 | 654.741 | 516.022 (478.981–612.871) | 50,080 |
+| After / separate | 82.147 | 636.360 | 475.320 (461.325–557.434) | 49,408 |
 
 The current shared pool completes **14 dispatches using four physical auxiliary
 starts**, peaks at four active dispatches and joins all four workers, with zero
@@ -55,10 +60,11 @@ remaining workers or application tasks. Its physical ceiling is 31. The current
 separate CPU process reports the same reuse; its I/O process starts no auxiliary
 worker. In the four-request batches, the independent sibling returns its exact
 `hello from lkjscript` body while all four CPU requests remain pending: I/O latency
-is 0.607/0.744 ms before/after in shared execution and 1.086/0.538 ms in separate
-execution. Current shared CPU median under that batch is 781.227 ms versus
-675.459 ms in separate execution; shared startup is also slower. These are retained
-tradeoffs, not fairness or universal speedup claims.
+is 0.942/0.548 ms before/after in shared execution and 0.482/0.941 ms in separate
+execution. Current shared CPU median under that batch is 793.919 ms versus
+694.572 ms in separate execution; shared startup is also slower. Shared idle RSS
+rises by 40 KiB before/after. These are retained tradeoffs, not fairness or universal
+speedup claims.
 
 The host reports AMD Ryzen 9 9955HX, Linux 7.2.3-arch1-2 x86-64, 32 available logical
 CPUs, CPU quota `max 100000` and cgroup memory limit `max`. No owned build, test or
@@ -71,9 +77,12 @@ monetary saving is inferred.
 
 All 54 commands (including six excluded warmups), complete bodies, four joined
 resident lifecycles, identities, environment and individual samples remain under
-`.artifacts/20261003-reusable-workers/performance/matched-final-01/`.
-The parent performance evidence root retains the method, driver, exact configuration
-and source snapshot. Earlier harness probes are explicitly noncomparative.
+`.artifacts/20261003-reusable-workers/performance/matched-final-02/`.
+The parent performance evidence root retains the method, driver, exact configuration,
+source snapshot and producing fingerprints. The initial `matched-final-01/` paired
+a post-lifecycle baseline with a workspace-build current executable; their dependency
+feature configurations differed. It remains preserved and explicitly superseded for
+comparative claims. Earlier harness probes are also noncomparative.
 
 ## Native byte inspection (2026-09-24)
 

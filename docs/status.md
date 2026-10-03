@@ -60,12 +60,24 @@ each completing six dispatches with four joined workers.
 These are development results, not fresh full-source or final-byte acceptance.
 Current development logs, literal native authoring inputs, copied executables and
 performance evidence belong under `.artifacts/20261003-reusable-workers/` in the
-selected checkout. Failed intermediate compiler observations remain failed.
+selected checkout. The first fresh full run at source `db542d5a` passed 25 of 26
+gates: all 201 public CLI tests passed, but a checker fixture's independent raw
+PATH launch received Linux `ETXTBSY`. Its original failed receipt is
+`.artifacts/lkjscript-dev/check/1791052581790680700-200853-0/receipt.json`.
+The fixture now uses the existing joined-child writer pattern;
+production executable selection and its security assertions remain unchanged.
+The repaired development-tool library passed 253 tests with 19 existing ignored
+entries under 32 test threads. Clippy and formatting passed again. A direct helper
+test run without Rust on PATH remains a separate failed environment observation.
+Failed intermediate compiler observations and this full run remain failed.
 [Matched measurements](performance.md#reusable-structured-workers-2026-10-03)
 retain all samples and tradeoffs. The shared host completed 14 child dispatches
 using four auxiliary workers and joined every worker. Its warm CPU HTTP median was
-470.991 ms versus 571.913 ms before; shared startup remained slower than separate
-processes. These finite observations establish neither general speedup nor fairness.
+488.737 ms versus 508.447 ms before; nested command timings and shared idle RSS
+increased. The corrected comparison pairs the same post-lifecycle GNU host build
+stage. Initial observations from differing dependency features remain retained and
+superseded for comparison. These finite observations establish neither general
+speedup nor fairness.
 Freeze inputs for fresh dependency-complete 26-gate acceptance before mainline delivery.
 No v0.1.72 candidate has been selected or published.
 
