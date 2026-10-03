@@ -49,11 +49,21 @@ rejection of valid calls. New tests cover exact parallel result types, complete 
 admission, allocation identity, joined cleanup and three-package public authorship.
 The [release notes](releases/v0.1.69.md) describe the compatibility boundary.
 
-Work is on branch `dev/owned-parallel-results-20261003`, checkout
-`/home/coder/workspace/lkjscript-structured-handoff-20261002`, based on main
-`96e7bab0c230cc8c4f4ee116ce50a4a423197b47`. Owned-result implementation and maintained artifact
-regeneration are complete; this successor has no full-source acceptance or publication
-claim yet. Current originals: `.artifacts/20261003-owned-parallel-results/`.
+Exact accepted source: `441995c5dc2e7e54a105afb50031239a1b2ed457`, tree
+`49205904b16a76abb3b89f7be0ffd2a709a5812d`. All 26 full-profile gates passed fresh,
+with stable inputs, zero reuse and no unrun gates. Original run:
+`.artifacts/lkjscript-dev/check/1791015899556306767-2988954-0/receipt.json`, digest
+`verification_548993164a30211baec6804529e21357c98d491bf38ce1128ef1758522a9651a`.
+Remote main was fast-forwarded from `96e7bab0c230cc8c4f4ee116ce50a4a423197b47`
+to this exact source and independently verified through Git and the repository API.
+Later status-only reporting descendants do not relabel that source acceptance.
+
+Current originals: `.artifacts/20261003-owned-parallel-results/`, including the
+complete preserved `full-02-original/`. The retained development checkout is
+`/home/coder/workspace/lkjscript-structured-handoff-20261002`, branch
+`dev/owned-parallel-results-20261003`. Implementation, maintained artifacts,
+compatibility controls and mainline delivery are complete; final-byte release
+acceptance remains separate.
 The predecessor oracle failed all four imported regressions at the expected valid-call
 assertion. The successor passed six oracle tests, 40 parallel tests and 13 custody
 tests (overlapping selectors), including inferred wrapper depth and rehashed artifacts.
@@ -74,16 +84,29 @@ corrected host. Originals, 44 retained literal/artifact/input/result files and e
 executable identities are indexed under `public-witness-03/`; earlier failures stay
 under `public-witness-01/` and `public-witness-02/`. The superseded verifier build
 was cancelled before completion and is not an acceptance claim.
-The first full run on `c2e61f5a52e06a9b43bcfa0af93c06cd8b56f646` completed
-with stable inputs: 23 fresh gates passed; workspace tests, offline-package acceptance
-and service acceptance failed on retained current-format fixture bytes and contract
-or artifact-pin expectations. All 195 public CLI tests passed. Original receipt and
-outputs remain in `full-01-original/`. The current-envelope controls are regenerated
-through their original frozen predecessor readers; predecessor bytes and semantic
-refusal assertions remain unchanged. The exact maintained service artifact pin and
-successor contract expectations are refreshed together.
-Next gates: fresh full-source acceptance from the corrected fixed input set,
-mainline integration, then exact finalized-candidate acceptance/publication.
+The failed first full run remains in `full-01-original/`; its stale current-envelope
+fixtures, successor contract expectations and maintained service pin were corrected
+before the accepted run. `fixture-regeneration-01/` retains the original readers'
+outputs and byte checks. Genuine predecessor bytes and semantic refusal assertions
+remain unchanged. The accepted run includes 1,195 library tests, 195 public CLI
+tests and 253 verifier tests, plus the other required gate owners; each suite's
+existing ignored cases remain explicitly recorded in its original output.
+
+Candidate [37110644675](https://github.com/lkjsxc/lkjscript/actions/runs/37110644675),
+attempt 1, was dispatched once from main with product and controller source both
+`441995c5dc2e7e54a105afb50031239a1b2ed457`. At 08:44 UTC it was in progress at
+locked-dependency acquisition and immutable host-tool construction. The original
+repository/workflow/run/attempt/source observations and unchanged v0.1.68 publication
+selection are retained under `release-0169/`; `candidate-handoff.json` indexes them.
+No v0.1.69 final-candidate acceptance, tag selection or publication is claimed yet.
+
+Remaining work is the external candidate's fresh source and finalized-byte acceptance.
+Read this exact attempt's original terminal and artifacts; do not dispatch a duplicate.
+After `candidate_accepted`, authenticate its finalized assets, select an annotated tag
+at the exact accepted source, and promote the unchanged assets through the maintained
+[release procedure](release.md). Completion requires
+`immutable_published_and_public_verified`, including anonymous installed execution
+and joined cleanup. Until then the public/latest selection remains v0.1.68.
 
 Preserve the older `.artifacts/20261002-structured-parallel/` and
 `.artifacts/20261003-structured-finalization/` evidence, other worktrees and stash.
