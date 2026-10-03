@@ -466,6 +466,7 @@ fn parallel_successor_rebuilds_supported_graph_20_meaning() {
 
 #[test]
 fn parallel_artifact_logical_source_generation_also_bounds_signature_types() {
+    let current = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
     for (ty, use_mode, generation, expected) in [
         ("F64", "", 16, "artifact_f64_graph_generation"),
         (
@@ -493,8 +494,8 @@ fn parallel_artifact_logical_source_generation_also_bounds_signature_types() {
             crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(&input)
                 .unwrap();
         let loaded = artifact_for_source(&source);
-        load_artifact(&rehash_logical_generation(&loaded, 22, 22)).unwrap();
-        let error = load_artifact(&rehash_logical_generation(&loaded, 22, generation))
+        load_artifact(&rehash_logical_generation(&loaded, current, current)).unwrap();
+        let error = load_artifact(&rehash_logical_generation(&loaded, current, generation))
             .map(|_| ())
             .expect_err("current package/derived envelopes cannot upgrade source type permission");
         assert_eq!(error.code, expected, "{error:?}");

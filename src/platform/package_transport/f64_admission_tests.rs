@@ -302,7 +302,7 @@ fn f64_successor_checks_stages_and_rebuilds_genuine_graph16_transaction_library(
             .collect::<Vec<_>>();
         let linked = compile_immutable(package, &container.objects, &dependencies).unwrap();
         let artifact = load_artifact(&linked.artifact.bytes).unwrap();
-        assert_eq!(artifact.manifest.contract_version, 29);
+        assert_eq!(artifact.manifest.contract_version, 30);
         assert_eq!(
             artifact.manifest.root_package,
             package.snapshot.root.package_id
@@ -361,7 +361,7 @@ async fn f64_successor_executes_genuine_graph16_transaction_completion_with_fres
             original,
         );
     let artifact = load_artifact(&reencoded).unwrap();
-    assert_eq!(artifact.manifest.contract_version, 29);
+    assert_eq!(artifact.manifest.contract_version, 30);
     assert_eq!(artifact.manifest.graph_contract_version, 23);
     assert!(artifact.manifest.packages.iter().any(|package| package.package_revision.to_string() == "package_revision_0528bf6c37becea151d02b4ce34f08f897bb76e60f69e1a9a3a203c3abafe1ad"));
     let temporary = tempfile::tempdir().unwrap();
