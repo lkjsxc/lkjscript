@@ -1,7 +1,7 @@
 diff --git a/tools/lkjscript-dev/src/offline_packages/foreground.rs b/tools/lkjscript-dev/src/offline_packages/foreground.rs
 --- a/tools/lkjscript-dev/src/offline_packages/foreground.rs
 +++ b/tools/lkjscript-dev/src/offline_packages/foreground.rs
-@@ -1,5 +1,8 @@
+@@ -1,8 +1,11 @@
  //! Foreground cells in the existing transported effect-library acceptance child.
  use super::*;
  use lkjscript::platform::data::{DataKey, DataKeyPart, DataLimits, DataStore};
@@ -10,6 +10,9 @@ diff --git a/tools/lkjscript-dev/src/offline_packages/foreground.rs b/tools/lkjs
 +#[path = "foreground_policy.rs"]
 +mod policy;
 +
+ #[derive(Clone, Debug, Default, Serialize, Deserialize)]
+ #[serde(deny_unknown_fields)]
+ pub(crate) struct ForegroundReceipt {
 @@ -300,4 +303,5 @@
 -// Observed calibration, retained under campaign 202609121842: N=0 used 44 production
 -// instructions, N=1000 used 32044. The smallest N above the former 10M cutoff is 312499.
