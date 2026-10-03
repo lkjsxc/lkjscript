@@ -205,6 +205,7 @@ pub(super) fn link_prepared(
     let mut types = BTreeSet::new();
     let mut blobs = BTreeMap::new();
     let mut local_units = BTreeMap::new();
+    let mut type_reconstruction_work = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
     for (owner, binding) in bindings {
         let unit_bytes = store
             .read(
@@ -233,6 +234,15 @@ pub(super) fn link_prepared(
             ));
         }
         types.extend(unit.tables.types.iter().copied());
+        let (inferred, read_work) = super::lower::reconstruct_parallel_result_types(
+            view,
+            &unit,
+            &mut type_reconstruction_work,
+        )?;
+        work.repository.add_canonical(read_work);
+        for (key, bytes) in inferred {
+            insert_object(&mut objects, key, bytes)?;
+        }
         for text in &unit.tables.texts {
             if let CompiledText::Blob { digest, bytes } = text
                 && let Some(previous) = blobs.insert(*digest, *bytes)
@@ -343,16 +353,19 @@ pub(super) fn link_prepared(
             continue;
         }
         let key = ObjectKey::from_digest(ObjectDomain::Type, digest.bytes());
-        let bytes = store
-            .read(key, ObjectDomain::Type.maximum_bytes(), &mut work.store)
-            .map_err(store_diagnostic)?
-            .ok_or_else(|| {
-                link_error(
-                    DiagnosticClass::Corrupt,
-                    "artifact_link_type_missing",
-                    "compiler unit references a missing canonical type object",
-                )
-            })?;
+        let bytes = match objects.get(&key) {
+            Some(bytes) => bytes.clone(),
+            None => store
+                .read(key, ObjectDomain::Type.maximum_bytes(), &mut work.store)
+                .map_err(store_diagnostic)?
+                .ok_or_else(|| {
+                    link_error(
+                        DiagnosticClass::Corrupt,
+                        "artifact_link_type_missing",
+                        "compiler unit references a missing canonical type object",
+                    )
+                })?,
+        };
         let object = decode_type_object(&bytes, digest)?;
         types.extend(object.child_types());
         insert_object(&mut objects, key, bytes)?;

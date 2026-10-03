@@ -19,6 +19,15 @@ const SOURCE: &str = r#"declarations.begin
     (returns Unit) (body (unit)))
   (function create buffer (visibility public) (effect (task))
     (parameter create payload (type ByteBuffer) (use consume)) (returns Unit) (body (unit)))
+  (function create tree-result (visibility public) (effect (task))
+    (parameter create payload (type (owned-choice (case empty Unit)
+      (case packet (owned-product (field bytes ByteBuffer) (field cell OwnedI64Cell) (field label Text))))) (use consume))
+    (returns (owned-choice (case empty Unit)
+      (case packet (owned-product (field bytes ByteBuffer) (field cell OwnedI64Cell) (field label Text)))))
+    (body (local payload)))
+  (function create buffer-result (visibility public) (effect (task))
+    (parameter create payload (type ByteBuffer) (use consume))
+    (returns ByteBuffer) (body (local payload)))
   (function create ordered (visibility public) (effect (task))
     (parameter create label (type Text))
     (parameter create payload (type ByteBuffer) (use consume)) (returns Unit) (body (unit)))
@@ -458,4 +467,365 @@ fn sealed_transfer_destination_mismatch_disposes_instead_of_returning_a_foreign_
             .is_err()
     );
     assert_eq!(buffers.live(), (0, 0));
+}
+
+#[test]
+fn sealed_result_returns_nested_custody_without_copying_allocations() {
+    let (program, functions) = fixture();
+    let buffers = Buffers::start();
+    let cells = Cells::start();
+    let products = Products::start();
+    let parent = ValueOrigin::fresh().unwrap();
+    let child = ValueOrigin::fresh().unwrap();
+    let function = functions["tree-result"];
+    let ty = program.functions[function.0 as usize].result;
+    let control = ExecutionControl::uncancelled();
+    let (value, identities, _) = payload(&program, function, parent, parent, false, false);
+    let input = TransferArguments::seal(
+        &program,
+        parent,
+        child,
+        function,
+        vec![value],
+        &control,
+        &mut |value, ty| ordinary(&program, value, ty),
+    )
+    .unwrap();
+    let (_, mut values) = input.adopt(&program, child, &control).unwrap();
+    let value = values.pop().unwrap();
+    let inert = value.clone();
+    let output = TransferResult::seal(
+        &program,
+        child,
+        parent,
+        function,
+        ty,
+        value,
+        &control,
+        &mut |value, ty| ordinary(&program, value, ty),
+    )
+    .unwrap();
+    let value = output
+        .adopt(&program, parent, function, ty, &control)
+        .unwrap();
+    value.memory_validate(parent, true).unwrap();
+    assert!(value.memory_validate(child, true).is_err());
+    assert!(inert.memory_validate(parent, false).is_err());
+    assert!(inert.memory_validate(child, false).is_err());
+    let NormalizedValue::OwnedChoice(choice) = value else {
+        panic!("choice")
+    };
+    let (_, product) = choice.select(parent, ty, &control).unwrap();
+    let NormalizedValue::OwnedProduct(product) = product else {
+        panic!("product")
+    };
+    let product_type = product.ty();
+    let fields = product.unpack(parent, product_type, &control).unwrap();
+    let mut fields = fields.into_iter();
+    let NormalizedValue::ByteBuffer(buffer) = fields.next().unwrap() else {
+        panic!("buffer")
+    };
+    let NormalizedValue::OwnedI64Cell(cell) = fields.next().unwrap() else {
+        panic!("cell")
+    };
+    let NormalizedValue::Text(label) = fields.next().unwrap() else {
+        panic!("metadata")
+    };
+    assert_eq!(
+        [
+            buffer.allocation_identity(),
+            cell.allocation_identity(),
+            label.as_ptr() as usize,
+        ],
+        identities
+    );
+    assert_eq!(&*buffer.freeze().unwrap(), &[197]);
+    assert_eq!(cell.extract().unwrap(), -137);
+    assert_eq!(
+        (buffers.created(), cells.created(), products.created()),
+        (1, 1, 2)
+    );
+    assert_eq!(
+        (buffers.live(), cells.live(), products.live()),
+        ((0, 0), (0, 0), (0, 0))
+    );
+}
+
+#[test]
+fn sealed_result_rejects_foreign_domains_loans_metadata_and_inert_clones() {
+    let (program, functions) = fixture();
+    let function = functions["tree-result"];
+    let ty = program.functions[function.0 as usize].result;
+    for failure in ["foreign", "loan", "metadata", "clone"] {
+        let buffers = Buffers::start();
+        let cells = Cells::start();
+        let products = Products::start();
+        let source = ValueOrigin::fresh().unwrap();
+        let leaf = if failure == "foreign" {
+            ValueOrigin::fresh().unwrap()
+        } else {
+            source
+        };
+        let (value, _, loan) = payload(
+            &program,
+            function,
+            source,
+            leaf,
+            failure == "loan",
+            failure == "metadata",
+        );
+        let (value, retained) = if failure == "clone" {
+            (value.clone(), Some(value))
+        } else {
+            (value, None)
+        };
+        let sealed = TransferResult::seal(
+            &program,
+            source,
+            ValueOrigin::fresh().unwrap(),
+            function,
+            ty,
+            value,
+            &ExecutionControl::uncancelled(),
+            &mut |value, ty| ordinary(&program, value, ty),
+        );
+        assert!(sealed.is_err(), "{failure}");
+        if let Some(retained) = retained {
+            retained.memory_validate(source, true).unwrap();
+            drop(retained);
+        }
+        if let Some(loan) = &loan {
+            assert!(loan.get(0).is_err());
+        }
+        drop(loan);
+        assert_eq!(
+            (buffers.live(), cells.live(), products.live()),
+            ((0, 0), (0, 0), (0, 0)),
+            "{failure}"
+        );
+    }
+}
+
+#[test]
+fn sealed_result_binds_program_target_result_type_and_destination() {
+    let (program, functions) = fixture();
+    let function = functions["buffer-result"];
+    let ty = program.functions[function.0 as usize].result;
+    let control = ExecutionControl::uncancelled();
+    for mismatch in ["program", "target", "type", "destination", "source"] {
+        let buffers = Buffers::start();
+        let child = ValueOrigin::fresh().unwrap();
+        let parent = ValueOrigin::fresh().unwrap();
+        let raw = NormalizedValue::ByteBuffer(ByteBuffer::empty(child));
+        if mismatch == "source" {
+            assert!(
+                TransferResult::seal(
+                    &program,
+                    ValueOrigin::fresh().unwrap(),
+                    parent,
+                    function,
+                    ty,
+                    raw,
+                    &control,
+                    &mut |_, _| panic!("owned result"),
+                )
+                .is_err()
+            );
+        } else {
+            let output = TransferResult::seal(
+                &program,
+                child,
+                parent,
+                function,
+                ty,
+                raw,
+                &control,
+                &mut |_, _| panic!("owned result"),
+            )
+            .unwrap();
+            let mut foreign = (*program).clone();
+            foreign.value_origin = ValueOrigin::fresh().unwrap();
+            let actual_program: &NormalizedProgram = if mismatch == "program" {
+                &foreign
+            } else {
+                &program
+            };
+            let actual_function = if mismatch == "target" {
+                functions["buffer"]
+            } else {
+                function
+            };
+            let actual_type = if mismatch == "type" {
+                program.functions[functions["buffer"].0 as usize].result
+            } else {
+                ty
+            };
+            let actual_parent = if mismatch == "destination" {
+                ValueOrigin::fresh().unwrap()
+            } else {
+                parent
+            };
+            assert!(
+                output
+                    .adopt(
+                        actual_program,
+                        actual_parent,
+                        actual_function,
+                        actual_type,
+                        &control
+                    )
+                    .is_err()
+            );
+        }
+        assert_eq!(buffers.live(), (0, 0), "{mismatch}");
+    }
+    let buffers = Buffers::start();
+    let child = ValueOrigin::fresh().unwrap();
+    assert!(
+        TransferResult::seal(
+            &program,
+            child,
+            ValueOrigin::fresh().unwrap(),
+            functions["buffer"],
+            ty,
+            NormalizedValue::ByteBuffer(ByteBuffer::empty(child)),
+            &control,
+            &mut |_, _| panic!("wrong result type precedes payload admission"),
+        )
+        .is_err()
+    );
+    assert_eq!(buffers.live(), (0, 0));
+}
+
+#[test]
+fn sealed_result_checks_unselected_cases_before_accepting_custody() {
+    let (program, functions) = fixture();
+    let function = functions["tree-result"];
+    let ty = program.functions[function.0 as usize].result;
+    let buffers = Buffers::start();
+    let cells = Cells::start();
+    let products = Products::start();
+    let source = ValueOrigin::fresh().unwrap();
+    let (value, _, _) = payload(&program, function, source, source, false, false);
+    let mut malformed = (*program).clone();
+    let hidden = malformed.functions[functions["hidden-callback"].0 as usize].parameters[0].ty;
+    let TypeForm::OwnedChoice { cases } = &mut malformed.types.get_mut(&ty).unwrap().form else {
+        panic!("choice")
+    };
+    cases[0].ty = hidden;
+    assert!(
+        TransferResult::seal(
+            &malformed,
+            source,
+            ValueOrigin::fresh().unwrap(),
+            function,
+            ty,
+            value,
+            &ExecutionControl::uncancelled(),
+            &mut |_, _| panic!("unselected type precedes value"),
+        )
+        .is_err()
+    );
+    assert_eq!(
+        (buffers.live(), cells.live(), products.live()),
+        ((0, 0), (0, 0), (0, 0))
+    );
+}
+
+#[test]
+fn sealed_result_cancellation_cleans_partial_adoption_and_preserves_unrelated_owner() {
+    let (program, functions) = fixture();
+    let function = functions["tree-result"];
+    let ty = program.functions[function.0 as usize].result;
+    let control = ExecutionControl::uncancelled();
+    for preparing in [true, false] {
+        let mut failed = 0;
+        let mut completed = 0;
+        for checks in 0..24 {
+            let buffers = Buffers::start();
+            let cells = Cells::start();
+            let products = Products::start();
+            let source = ValueOrigin::fresh().unwrap();
+            let destination = ValueOrigin::fresh().unwrap();
+            let unrelated = OwnedI64Cell::new(ValueOrigin::fresh().unwrap(), 911);
+            let (value, _, _) = payload(&program, function, source, source, false, false);
+            let cancelled = ExecutionControl::cancel_after_checks(checks);
+            let output = TransferResult::seal(
+                &program,
+                source,
+                destination,
+                function,
+                ty,
+                value,
+                if preparing { &cancelled } else { &control },
+                &mut |value, ty| ordinary(&program, value, ty),
+            );
+            let adopted = output.and_then(|output| {
+                output.adopt(
+                    &program,
+                    destination,
+                    function,
+                    ty,
+                    if preparing { &control } else { &cancelled },
+                )
+            });
+            match adopted {
+                Ok(value) => {
+                    completed += 1;
+                    super::super::super::value::release_raw_value(value);
+                }
+                Err(error) => {
+                    failed += 1;
+                    assert_eq!(error.class, ExecutionFailureClass::Cancelled);
+                }
+            }
+            // Check 4 during adoption has already retagged the buffer; the next
+            // leaf check cancels. Mixed intermediate domains cannot escape custody.
+            if !preparing && checks == 4 {
+                assert!(cancelled.is_cancelled());
+            }
+            assert_eq!(
+                (buffers.live(), cells.live(), products.live()),
+                ((0, 0), (1, 0), (0, 0))
+            );
+            assert_eq!(unrelated.extract().unwrap(), 911);
+        }
+        assert!(failed > 0 && completed > 0, "preparing={preparing}");
+    }
+}
+
+#[test]
+fn joined_failure_disposes_a_successful_owned_result_envelope() {
+    let (program, functions) = fixture();
+    let function = functions["buffer-result"];
+    let ty = program.functions[function.0 as usize].result;
+    for successful_left in [true, false] {
+        let buffers = Buffers::start();
+        let source = ValueOrigin::fresh().unwrap();
+        let output = TransferResult::seal(
+            &program,
+            source,
+            ValueOrigin::fresh().unwrap(),
+            function,
+            ty,
+            NormalizedValue::ByteBuffer(ByteBuffer::empty(source)),
+            &ExecutionControl::uncancelled(),
+            &mut |_, _| panic!("owned result"),
+        )
+        .unwrap();
+        let error = ExecutionError::resource("test_sibling_failure", "original failure");
+        let joined = if successful_left {
+            super::super::super::parallel::results::<_, TransferResult>(
+                Ok(output),
+                Err(error.clone()),
+            )
+        } else {
+            super::super::super::parallel::results::<TransferResult, _>(
+                Err(error.clone()),
+                Ok(output),
+            )
+        };
+        assert_eq!(joined.err().unwrap(), error);
+        assert_eq!(buffers.live(), (0, 0));
+    }
 }

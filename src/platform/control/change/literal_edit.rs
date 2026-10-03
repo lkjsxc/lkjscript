@@ -124,7 +124,12 @@ fn substitute(
         (A::Sequence { items: a }, A::Sequence { items: x })
         | (A::List { items: a, .. }, A::List { items: x, .. })
         | (A::Call { arguments: a, .. }, A::Call { arguments: x, .. })
-        | (A::CapabilityCall { arguments: a, .. }, A::CapabilityCall { arguments: x, .. }) => {
+        | (A::CapabilityCall { arguments: a, .. }, A::CapabilityCall { arguments: x, .. })
+        | (
+            A::ImplementationCall { arguments: a, .. },
+            A::ImplementationCall { arguments: x, .. },
+        )
+        | (A::MethodCall { arguments: a, .. }, A::MethodCall { arguments: x, .. }) => {
             if a.len() != x.len() {
                 return Ok(false);
             }

@@ -365,8 +365,23 @@ impl Closure<'_> {
                             ty,
                         });
                     }
-                    let object = TypeObject::new(TypeForm::StructuralRecord { fields })
-                        .map_err(|_| failure())?;
+                    let owned = fields.iter().any(|field| {
+                        matches!(
+                            self.types.get(&field.ty).map(|ty| &ty.form),
+                            Some(
+                                TypeForm::ByteBuffer
+                                    | TypeForm::OwnedI64Cell
+                                    | TypeForm::OwnedProduct { .. }
+                                    | TypeForm::OwnedChoice { .. }
+                            )
+                        )
+                    });
+                    let object = TypeObject::new(if owned {
+                        TypeForm::OwnedProduct { fields }
+                    } else {
+                        TypeForm::StructuralRecord { fields }
+                    })
+                    .map_err(|_| failure())?;
                     let (digest, _) = encode_type_object(&object).map_err(|_| failure())?;
                     index_node::<(TypeObjectDigest, TypeObject)>(&mut self.allocated)?;
                     self.types.entry(digest).or_insert(object);
@@ -795,9 +810,7 @@ pub(super) fn complete(
         let DeclarationPayload::Function(function) = &declaration.payload else {
             return Err(failure());
         };
-        if !schema.comparable_types.contains(&function.result) {
-            return Err(failure());
-        }
+        parallel_transfer_type(schema, function.result, 0, &mut visits, control)?;
         let mut seen_owned = false;
         for parameter in &function.parameters {
             control.check()?;
@@ -838,6 +851,36 @@ pub(super) fn complete(
     schema.type_derivation_steps = visits as u64;
     schema.type_metadata_bytes = bytes as u64;
     Ok(())
+}
+
+/// Complete canonical result admission, including unused owned choice cases.
+/// This does not use the prepared program's type or ownership classifications.
+fn parallel_transfer_type(
+    schema: &NormalizedReferenceSchema,
+    ty: TypeObjectDigest,
+    depth: usize,
+    visits: &mut usize,
+    control: &crate::platform::execution::ExecutionControl,
+) -> Result<(), ExecutionError> {
+    control.check()?;
+    *visits = visits
+        .checked_add(1)
+        .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
+        .ok_or_else(failure)?;
+    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+        return Err(failure());
+    }
+    match &schema.types.get(&ty).ok_or_else(failure)?.form {
+        TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Ok(()),
+        TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
+            for field in fields {
+                parallel_transfer_type(schema, field.ty, depth + 1, visits, control)?;
+            }
+            Ok(())
+        }
+        _ if schema.comparable_types.contains(&ty) => Ok(()),
+        _ => Err(failure()),
+    }
 }
 
 impl Closure<'_> {

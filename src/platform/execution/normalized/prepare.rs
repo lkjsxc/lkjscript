@@ -94,6 +94,7 @@ pub enum NormalizedInstruction {
         left_arguments: u32,
         right: FunctionIndex,
         right_arguments: u32,
+        result_type: TypeObjectDigest,
     },
     ChooseOwned {
         choice_type: TypeObjectDigest,
@@ -2724,6 +2725,7 @@ fn translate_code(
                 left_arguments,
                 right,
                 right_arguments,
+                result_type,
             } => {
                 let left = index_copy(&unit.tables.declarations, *left, "left parallel task")?;
                 let right = index_copy(&unit.tables.declarations, *right, "right parallel task")?;
@@ -2732,6 +2734,11 @@ fn translate_code(
                     left_arguments: *left_arguments,
                     right: required_index(&indexes.functions, right, "right parallel task")?,
                     right_arguments: *right_arguments,
+                    result_type: index_copy(
+                        &unit.tables.types,
+                        *result_type,
+                        "parallel result type",
+                    )?,
                 }
             }
             CompiledInstruction::Call {

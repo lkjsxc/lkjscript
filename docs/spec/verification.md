@@ -9,12 +9,19 @@ ownership and reference admission, including unused children and hidden authorit
 in unselected cases or nominal arguments. Flat and structural requests must produce
 the same typed intent; drafts and child-argument edits must retain intended identities.
 Pure enclosing functions and non-task, effectful, borrowed or dynamic children reject
-before publication. Rehashed compiled target swaps and erased parallel instructions
-must fail strict loading independently of the producer.
+before publication. Ordinary/ordinary results retain a structural record; both mixed
+orientations and all-owned results require an owned product. Rehashed compiled target
+swaps, forged result-type references and erased parallel instructions must fail strict
+loading independently of the producer. Exported generic consume, borrow and return
+contracts must be classified in their declaration's package by the independent
+memory oracle, including witness forwarding and invalid untaken branches.
 
 Sealed custody tests observe original buffer/cell allocations and nested carrier
-metadata through a real thread handoff. Foreign origins, wrong destinations, inert
-clones, active loans, invalid metadata and cancellation during recursive adoption
+metadata through real parent-to-child and child-to-parent thread handoffs. Returned
+owners must survive child-local disposal, regain the exact parent's memory identity,
+and support later borrow, mutation and consumption without copying payload storage.
+Foreign origins, wrong destinations, forged result signatures, inert clones, active
+loans, invalid metadata and cancellation during recursive adoption
 must leave no live transferred storage while preserving an unrelated owner's storage.
 Controlled rendezvous inside the actual production child evaluator must demonstrate
 distinct threads and memory identities with a finite test timeout. Scheduler-only
@@ -23,10 +30,15 @@ tests and serial reference agreement do not substitute for that observation.
 Exercise nested groups, caller fallback with occupied worker capacity, quota refusal
 just below measured aggregate work/storage/items and exact-limit success. Ancestor
 call depth and finite structured nesting remain enforced. Trap, cancellation and host
-unwind must join started children before releasing worker capacity. A copied public
-executable must author separate worker/consumer packages, perform independently
-checked CPU reductions and run a source-deleted artifact with the resident task limit
-set to one. Report public worker counts separately from the controlled overlap proof;
+unwind must join started children before releasing worker capacity. Refusal during
+result adoption or pair allocation, and a sibling failure after one owner return,
+must release both pending and already adopted results while preserving the original
+failure. A copied public executable must author library, worker and consumer packages,
+perform independently checked CPU reductions, and return complete buffer payloads
+and exact signed cell values through mixed, nested product and choice results.
+It must borrow, modify and consume those returned owners, retain an identity-preserving
+child edit, reject double consumption and moved-local use, and run a source-deleted
+artifact with the resident task limit set to one. Report public worker counts separately from the controlled overlap proof;
 neither establishes speedup, scheduler fairness or hostile-code containment.
 
 ## Independent correctness mechanisms

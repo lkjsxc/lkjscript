@@ -1,6 +1,174 @@
 //! Admission and composition cases independent of native shape matching.
 use super::*;
 
+const CALL_SOURCE: &str = r#"declarations.begin
+(units (module create call_literals (as $module)
+  (type-alias Row (record (indirect I64) (direct I64)))
+  (owned-contract create Marker (visibility private)
+    (self Self) (type-parameter create Self (constraint owned))
+    (method method_20000000000000000000000000000001 inspect (parameters (I64 unrestricted)) (returns I64))
+    (method method_20000000000000000000000000000002 alternate (parameters (I64 unrestricted)) (returns I64)))
+  (function create identity (visibility private) (parameter create n (type I64))
+    (returns I64) (effect pure) (body (local n)))
+  (owned-implementation create MarkerCell (visibility private) (contract Marker) (self OwnedI64Cell)
+    (method method_20000000000000000000000000000001 identity)
+    (method method_20000000000000000000000000000002 identity))
+  (owned-implementation create OtherCell (visibility private) (contract Marker) (self OwnedI64Cell)
+    (method method_20000000000000000000000000000001 identity)
+    (method method_20000000000000000000000000000002 identity))
+  (function create helper (visibility private) (effect pure)
+    (type-parameter create T (constraint owned))
+    (implementation-parameter implparam_20000000000000000000000000000001 ops Marker T)
+    (parameter create n (type I64)) (returns I64)
+    (body (method-call parameter@helper@implparam_20000000000000000000000000000001
+      Marker method_20000000000000000000000000000001 (local n))))
+  (function create scalars (as $function) (visibility public) (effect pure) (returns Row)
+    (body (let
+      (binding saved (type I64) (implementation-call helper (types OwnedI64Cell)
+        (implementations concrete@MarkerCell) (i64 7)))
+      (binding other (type I64) (method-call concrete@OtherCell Marker
+        method_20000000000000000000000000000001 (i64 17)))
+      (in (record structural (field indirect (local saved)) (field direct (local other)))))))
+  (function create neighbor (as $neighbor) (visibility private) (effect pure)
+    (returns Text) (body (text "neighbor")))
+  (constant create marker (as $marker) (visibility private) (type I64) (value (i64 99)))))
+declarations.end"#;
+
+#[test]
+fn implementation_and_method_literal_edits_retain_every_body_owner() {
+    let fixture = Fixture::from_source(CALL_SOURCE);
+    let before = inventory(&fixture.view(), fixture.function);
+    assert_eq!(
+        before
+            .values()
+            .filter(|record| matches!(record, OwnerRecord::Binding(_)))
+            .count(),
+        4,
+        "the authored binders and both record-order captures are accepted owners"
+    );
+    let original = fixture.draft();
+    let changed = original
+        .replace("(i64 7)", "(i64 8)")
+        .replace("(i64 17)", "(i64 18)");
+    let request = decode_compact_change_in_repository(
+        "call-literal-edit.lkjc",
+        changed.as_bytes(),
+        &fixture.repository,
+    )
+    .unwrap();
+    let updates = literals(&request.semantic);
+    assert_eq!(updates.len(), 2);
+    let changed_owners: BTreeSet<_> = updates
+        .iter()
+        .map(|update| OwnerKey::Expression(update.expression))
+        .collect();
+    let prepared = fixture
+        .repository
+        .prepare_authored_change(&request.semantic, request.options)
+        .unwrap();
+    assert!(prepared.logical_plan.allocations.is_empty());
+    assert!(prepared.logical_plan.retirements.is_empty());
+    fixture.repository.publish(&prepared.publication).unwrap();
+    let after = inventory(&fixture.view(), fixture.function);
+    assert_eq!(
+        before.keys().collect::<Vec<_>>(),
+        after.keys().collect::<Vec<_>>()
+    );
+    for (owner, previous) in before {
+        assert_eq!(
+            previous != after[&owner],
+            changed_owners.contains(&owner),
+            "{owner}"
+        );
+    }
+    assert_eq!(
+        fixture.draft(),
+        changed.replacen(
+            &request.semantic.base.to_string(),
+            &fixture.view().revision().to_string(),
+            1,
+        )
+    );
+}
+
+#[test]
+fn call_literal_comparison_cannot_hide_type_witness_method_or_arity_changes() {
+    let fixture = Fixture::from_source(CALL_SOURCE);
+    let original = fixture.draft();
+    let operand = |name: &str| {
+        original
+            .split_whitespace()
+            .find(|token| token.starts_with(&format!("concrete@ref_{name}_")))
+            .unwrap()
+            .trim_end_matches(')')
+    };
+    let marker = operand("MarkerCell");
+    let other = operand("OtherCell");
+    for (case, source, valid) in [
+        (
+            "type",
+            original.replace("(types OwnedI64Cell)", "(types ByteBuffer)"),
+            false,
+        ),
+        (
+            "implementation-witness",
+            original.replace(marker, other),
+            true,
+        ),
+        ("method-witness", original.replace(other, marker), true),
+        (
+            "method",
+            original.replace(
+                "method_20000000000000000000000000000001",
+                "method_20000000000000000000000000000002",
+            ),
+            true,
+        ),
+        (
+            "arity",
+            original.replace("(i64 7)", "(i64 7) (i64 9)"),
+            false,
+        ),
+    ] {
+        assert_ne!(source, original, "{case}");
+        let source = source.replace("(i64 17)", "(i64 18)");
+        let request = decode_compact_change_in_repository(
+            "call-structural-edit.lkjc",
+            source.as_bytes(),
+            &fixture.repository,
+        )
+        .unwrap();
+        assert!(
+            !request
+                .semantic
+                .changes
+                .iter()
+                .any(|change| matches!(change, AuthoredChange::SetFunctionLiterals { .. })),
+            "{case}"
+        );
+        assert!(
+            request
+                .semantic
+                .changes
+                .iter()
+                .any(|change| matches!(change, AuthoredChange::ReplaceFunctionBody { .. })),
+            "{case}"
+        );
+        let prepared = fixture
+            .repository
+            .prepare_authored_change(&request.semantic, request.options);
+        if valid {
+            assert!(
+                !prepared.unwrap().logical_plan.retirements.is_empty(),
+                "{case}"
+            );
+        } else {
+            assert!(prepared.is_err(), "{case}");
+        }
+        assert_eq!(fixture.view().revision(), request.semantic.base, "{case}");
+    }
+}
+
 #[test]
 fn owned_products_literal_edits_preserve_scope_and_cannot_hide_annotation_changes() {
     let fixture = Fixture::from_source(

@@ -8,6 +8,7 @@ pub(crate) struct ParallelCall {
     pub parameters: Vec<ParameterRecord>,
     pub arguments: Vec<ExpressionId>,
     pub result: TypeObjectDigest,
+    pub result_owned: bool,
 }
 
 fn reject(message: impl Into<String>) -> Diagnostic {
@@ -91,11 +92,7 @@ pub(crate) fn admit_call(
             "parallel child argument count differs from its exact signature",
         ));
     }
-    if !super::owned_contract::ordinary_closed(read, signature.result)? {
-        return Err(reject(
-            "parallel child results require closed ordinary data",
-        ));
-    }
+    let result_owned = admit_result(read, signature.result)?;
     let mut parameters = Vec::new();
     let mut seen_owned = false;
     for id in signature.parameters {
@@ -158,5 +155,30 @@ pub(crate) fn admit_call(
         parameters,
         arguments,
         result: signature.result,
+        result_owned,
     })
+}
+
+/// A returned owner must be a closed transferable carrier. In particular an
+/// unselected choice case or a phantom ordinary argument cannot hide authority.
+pub(crate) fn admit_result(
+    read: &(impl ExpressionRead + ?Sized),
+    result: TypeObjectDigest,
+) -> Result<bool, Diagnostic> {
+    read.validation_work()?;
+    let form = read
+        .type_object(result)?
+        .ok_or_else(|| reject("parallel child result type is absent"))?
+        .form;
+    match form {
+        TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Ok(true),
+        TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. } => {
+            super::owned_product::validate(read, result, None)?;
+            Ok(true)
+        }
+        _ if super::owned_contract::ordinary_closed(read, result)? => Ok(false),
+        _ => Err(reject(
+            "parallel child results require closed ordinary data or closed owned values",
+        )),
+    }
 }

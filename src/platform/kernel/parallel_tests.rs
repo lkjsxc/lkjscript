@@ -1,6 +1,9 @@
 //! Public authoring and independently derived rejection of structured child calls.
 use super::*;
 
+#[path = "parallel_result_tests.rs"]
+mod results;
+
 const SOURCE: &str = r#"declarations.begin
 (units (module create parallel-proof
   (function create child (visibility public)

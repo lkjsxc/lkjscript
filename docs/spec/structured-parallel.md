@@ -1,7 +1,7 @@
 # Structured parallel tasks
 
-Status: normative for development 0.1.68. Exact acceptance evidence belongs to the
-[implementation campaign](../campaigns/20261002-structured-parallel.md).
+Status: normative for development 0.1.69. Current acceptance and publication state
+belong to [status](../status.md).
 
 ## Meaning and admission
 
@@ -21,10 +21,17 @@ effect, requirement or implementation parameters. Its body may call ordinary gen
 libraries and select exact static implementation witnesses under the existing rules.
 An external declaration or dynamic callable is not a child-task identity.
 
-Both results must be closed ordinary data. The expression returns the existing
-structural record type `{left: L, right: R}`. Records and collections gain no ability
-to contain owners. Returning owners from children, task handles, detached lifetime,
-channels and cross-instance communication are separate extensions.
+Each result must be closed ordinary data or a closed ByteBuffer, OwnedI64Cell,
+owned product or owned choice. If both results are ordinary, the expression returns
+the existing structural record type `{left: L, right: R}`. If either result is owned,
+it returns `(owned-product (field left L) (field right R))`, including the ordinary
+field in a mixed pair. Return it directly or bind it to an explicitly typed owned
+local; `unpack-owned` consumes and decomposes the pair under the existing aggregate
+rules. Its returned owners can
+then be borrowed, mutated, consumed or passed into another group. Records and
+collections gain no ability to contain owners. Every result case and type argument
+is admitted, including inactive cases. Task handles, detached lifetime, channels
+and cross-instance communication are separate extensions.
 
 Evaluate every left-call argument, then every right-call argument, exactly once in
 the parent. Only after this preparation can either child body begin. An argument
@@ -43,9 +50,23 @@ updates every nested owned identity without cloning its live token or copying it
 payload allocation. Existing immutable ordinary metadata may retain its sharing.
 Raw host ingress still rejects owners and cannot construct a transfer certificate.
 
-Normal child return disposes of unreturned owners. A trap, quota refusal or
-cancellation also releases child locals, pending arguments and any unadopted or
-partly adopted envelope. Failure requests cooperative cancellation of the sibling;
+A separate nonduplicable result envelope owns each returned carrier between child
+local cleanup and parent adoption. It validates the exact prepared program, child
+task, canonical result type, child source identity, parent destination identity and
+absence of active loans. A child may return an input owner or newly allocated owned
+storage; neither path copies its payload. Both child results must succeed, and the
+parent must reserve the result carrier's modeled storage, before result adoption
+and pair construction. Adoption restores every nested owned identity to the parent
+without cloning live tokens. An owned choice can explicitly retain an owner on a
+typed rejection branch. It remains an owned result when its selected alternative
+contains ordinary data.
+
+Normal child return disposes of unreturned owners while the result envelope keeps
+returned owners alive. A trap, quota refusal or cancellation releases child locals,
+pending arguments and any unadopted or partly adopted input or result envelope.
+This includes a successful sibling's result when the other child fails, and all
+returned storage when parent adoption or result-pair allocation fails.
+Failure requests cooperative cancellation of the sibling;
 every started child is joined before the parent continues or reports failure. The
 originating failure takes precedence over the sibling's consequent cancellation.
 When both independently fail, no temporal ordering of those failures is promised.
@@ -85,13 +106,17 @@ reconstructs canonical control, so retargeting or erasing a compiled parallel
 instruction cannot be authorized by recomputing hashes.
 
 Graph 21 adds the expression and preserves supported historical meaning readers.
-Compiler 19, bytecode 15 and artifact 26 require rebuilding earlier derived artifacts
-from retained accepted meaning. Authored request 25, compact discovery 29, function
-projection 11, CLI observations 35 and semantic validator 24 expose the increment.
+Compiler 20, bytecode 16 and artifact 27 carry an explicit parallel-result type
+reference, which strict loaders independently reconstruct from canonical child
+signatures. Semantic validator 25 admits closed owned results and invalidates older
+derived proofs. Earlier derived artifacts must be rebuilt from retained accepted
+meaning. Authored request 25, compact discovery 29, function projection 11 and CLI
+observations 35 retain their existing forms.
 Existing nonparallel authored intent retains its bytes. This does not upgrade exact
 package selections, replace running services or publish a new public executable.
 
 Acceptance separates canonical and independent semantic checks, rehashed-artifact
-attacks, nested allocation identity and cleanup tests, controlled real-child overlap,
-aggregate quotas, and copied-executable native cross-package computation. Each proves
+attacks including forged result types, nested allocation identity through both
+directions and cleanup tests, controlled real-child overlap, aggregate quotas, and
+copied-executable native cross-package computation with complete returned payloads. Each proves
 a different boundary; none alone establishes all concurrency properties.

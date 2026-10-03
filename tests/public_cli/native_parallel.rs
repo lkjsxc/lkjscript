@@ -3,6 +3,8 @@ use super::*;
 
 const WORKERS: &str = include_str!("../fixtures/parallel-library.lkjc");
 const CONSUMER: &str = include_str!("../../docs/guides/examples/parallel-consumer.lkjc");
+const RESULT_WORKERS: &str = include_str!("../fixtures/parallel-result-workers.lkjc");
+const RESULT_CONSUMER: &str = include_str!("../fixtures/parallel-result-consumer.lkjc");
 const ENTRY: &str = r#"declarations.begin
 (units (module create parallel-entry
   (function create main (visibility public)
@@ -275,6 +277,178 @@ fn native_parallel_three_packages_owned_reduction_edit_and_source_free_execution
             println!(
                 "retained parallel public evidence: {}",
                 public.root.keep().display()
+            );
+        }
+    }
+}
+
+#[test]
+fn native_parallel_owned_results_three_packages_edit_borrow_and_detached_payloads() {
+    let library = Native::new();
+    // Literal generic and uniquely named carrier contracts form one separately
+    // exported library. The witness itself never constructs semantic records.
+    author(
+        &library,
+        &format!(
+            "{}{}",
+            include_str!("../fixtures/owned-witness-library.lkjc"),
+            include_str!("../fixtures/parallel-result-library.lkjc"),
+        ),
+    );
+    unchanged(&library, "abstraction");
+    let p = export(&library);
+    let workers = Native::new();
+    stage(&workers, &p);
+    let imports = format!(
+        "declarations.begin\n(units (use abstraction {} {}) (use buffer {} {}) (use cell {} {}))\ndeclarations.end\n",
+        p.package, p.revision, p.package, p.revision, p.package, p.revision,
+    );
+    author(
+        &workers,
+        &format!("{}{imports}{RESULT_WORKERS}", dependency(&p)),
+    );
+    unchanged(&workers, "result-workers");
+    let w = export(&workers);
+    let consumer = Native::new();
+    stage(&consumer, &p);
+    stage(&consumer, &w);
+    let input = format!(
+        "{}{}{imports}declarations.begin\n(units (use result-workers {} {}))\ndeclarations.end\n{RESULT_CONSUMER}",
+        dependency(&p),
+        dependency(&w),
+        w.package,
+        w.revision,
+    );
+    let before = consumer.revision();
+    for (name, bad) in [
+        (
+            "use-after-transfer",
+            input.replacen(
+                "(implementations concrete@buffer::Octets) (local data)",
+                "(implementations concrete@buffer::Octets) (local value)",
+                1,
+            ),
+        ),
+        (
+            "consume-result-twice",
+            input.replacen(
+                "(in (unpack-owned (type (owned-product (field left ByteBuffer) (field right OwnedI64Cell)))",
+                "(binding duplicate (type (owned-product (field left ByteBuffer) (field right OwnedI64Cell))) (local pair))\n        (in (unpack-owned (type (owned-product (field left ByteBuffer) (field right OwnedI64Cell)))",
+                1,
+            ),
+        ),
+    ] {
+        assert_ne!(bad, input, "{name} must change the literal proposal");
+        let request = consumer.input(
+            &format!("rejected-result-{name}.lkjc"),
+            &format!("request base={before}\n{bad}"),
+        );
+        let rejected = consumer.plan(&request, false);
+        assert!(
+            rejected.iter().any(|r| r.operation == "diagnostic"
+                && compact_field(r, "code") == "kernel_buffer_ownership"),
+            "{name}: {rejected:?}",
+        );
+        assert_eq!(consumer.revision(), before, "{name} must not publish");
+    }
+    author(&consumer, &input);
+    let original = std::fs::read_to_string(unchanged(&consumer, "result-consumer")).unwrap();
+    assert_eq!(original.matches("(parallel").count(), 4);
+    assert!(original.contains("(owned-product"));
+    let before = consumer.revision();
+    let edited = consumer.input(
+        "edited-result-parallel.lkjc",
+        &original.replace("(i64 7)", "(i64 8)"),
+    );
+    let plan = consumer.plan(&edited, true);
+    consumer.apply(&edited, &plan, true);
+    assert_ne!(consumer.revision(), before);
+    assert_eq!(
+        std::fs::read_to_string(unchanged(&consumer, "result-consumer")).unwrap(),
+        original
+            .replacen(&before, &consumer.revision(), 1)
+            .replace("(i64 7)", "(i64 8)"),
+        "an owned-result child edit retains the pair and all accepted owner identities",
+    );
+    consumer.cli(&["check"], true);
+    let artifact = consumer.root.path().join("parallel-results.lkja");
+    consumer.cli(&["build", "--output", path(&artifact)], true);
+    let deployment = consumer.input(
+        "parallel-results.deployment.json",
+        &json!({
+            "artifact": "parallel-results.lkja", "target": "parallel-results", "listen": null,
+            "http": null, "session": null, "worker": null,
+            "runtime": {"maximum_concurrent_tasks": 1, "maximum_queued_tasks": 0,
+                "request_deadline_milliseconds": 30000, "shutdown_grace_milliseconds": 3000,
+                "cancellation_grace_milliseconds": 1000},
+            "streams": {"maximum_chunk_bytes": 65536, "maximum_buffered_chunks": 8,
+                "maximum_total_bytes": 1048576, "maximum_live_streams": 1024},
+            "grants": [], "secrets": [], "configuration": {}
+        })
+        .to_string(),
+    );
+    for detached in [false, true] {
+        if detached {
+            for project in [&library.project, &workers.project, &consumer.project] {
+                std::fs::remove_dir_all(project).unwrap();
+            }
+            for package in [&p.path, &w.path] {
+                std::fs::remove_file(package).unwrap();
+            }
+        }
+        for n in [i64::MIN, -257, 0, i64::MAX] {
+            for accepted in [false, true] {
+                let arguments = consumer.input(
+                    &format!("result-arguments-{detached}-{n}-{accepted}.json"),
+                    &json!([n, accepted]).to_string(),
+                );
+                let output = consumer
+                    .root
+                    .path()
+                    .join(format!("owned-result-{detached}-{n}-{accepted}.json"));
+                let records = consumer.cli(
+                    &[
+                        "run",
+                        "--deployment",
+                        path(&deployment),
+                        "--arguments-file",
+                        path(&arguments),
+                        "--result-file",
+                        path(&output),
+                    ],
+                    true,
+                );
+                let execution = compact_record(&records, "execution");
+                let cleanup: Value =
+                    serde_json::from_str(compact_field(execution, "cleanup")).unwrap();
+                assert_eq!(cleanup["remaining_tasks"], json!(0));
+                assert_eq!(cleanup["cleanup_failures"], json!([]));
+                let observation: Value =
+                    serde_json::from_str(compact_field(execution, "production-observation"))
+                        .unwrap();
+                assert_eq!(observation["parallel_scopes"], json!(5));
+                assert_eq!(observation["capability_calls"], json!(0));
+                // Fixed full-payload literals and the input signed cell value
+                // are independent of the evaluator and authored implementation.
+                assert_eq!(
+                    serde_json::from_slice::<Value>(&std::fs::read(output).unwrap()).unwrap(),
+                    json!({
+                        "all": {"bytes": {"$bytes": "AP+ACAk="}, "length": 4,
+                            "before": n, "after": -81},
+                        "mixed-left": {"bytes": {"$bytes": "AP+ACw=="}, "scalar": n},
+                        "mixed-right": {"ordinary": n, "scalar": n},
+                        "nested": {"bytes": {"$bytes": "AP+AQA=="}, "scalar": n,
+                            "outcome": {"accepted": accepted, "value": n}},
+                    }),
+                );
+            }
+        }
+    }
+    if std::env::var_os("LKJSCRIPT_RETAIN_PRODUCT_EVIDENCE").is_some() {
+        for public in [library, workers, consumer] {
+            println!(
+                "retained parallel owned-result public evidence: {}",
+                public.root.keep().display(),
             );
         }
     }

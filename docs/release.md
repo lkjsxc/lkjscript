@@ -26,22 +26,23 @@ limits or relabel `worktree_changed_during_run` as acceptance. The
 records the concrete four-pack inventory correction. This does not freeze general
 compiler caches into source or make generated artifacts editable semantic authority.
 
-Current public availability belongs to [status](status.md#public-binary-v0164).
+Current public availability belongs to [status](status.md#public-binary).
 The completed v0.1.64 publication is recorded in the
 [owned-choice continuation](campaigns/20261002-owned-choices.md#completed-v0164-publication).
 Historical selections remain in their original archives and the linked immutable
 procedure revision; they are not instructions to restart completed releases.
 
-## Selected structured-parallel successor v0.1.68
+## Published structured-parallel v0.1.68
 
 The [0.1.68 notes](releases/v0.1.68.md) consolidate same-task owned calls and methods,
 runtime mailbox custody and lexical parallel owned tasks. The
 [current status](status.md) records tested source, mainline integration and the
-exact candidate run/attempt; original early development evidence remains in the
-[parallel archive](campaigns/20261002-structured-parallel.md). After fresh
-full-source acceptance and copied-host native package evidence, dispatch one normal
-non-publishing candidate from the integrated source. Preserve every existing source,
-finalized-archive, installed-recovery, pinned-userland and original-reader obligation.
+completed unchanged-asset publication and anonymous verification. Original early
+development evidence remains in the [parallel archive](campaigns/20261002-structured-parallel.md).
+The development 0.1.69 successor follows the same procedure: after fresh full-source
+acceptance and copied-host native package evidence, dispatch one normal non-publishing
+candidate from integrated source. Preserve every source, finalized-archive,
+installed-recovery, pinned-userland and original-reader obligation.
 
 Final candidate acceptance now runs the source-matched public harness against the
 exact executable extracted from the finalized archive. It selects every enumerated
@@ -79,10 +80,19 @@ a corrected successor requires a fresh producer. In particular, producer 3704647
 accepted the earlier 0.1.68 source without the joined-deadline repair and is superseded,
 not a candidate to promote after the repair.
 
-Public/latest remains v0.1.64 until those boundaries complete. A pending external
+Public/latest is v0.1.68 after those boundaries completed. A pending successor
 producer is release-only waiting, not a reason to hold accepted source off main.
 
 ## Content and compatibility
+
+The owned-result successor, development v0.1.69, extends the same mandatory
+`native_parallel` public-harness family with separate supplier/worker/consumer
+packages, full returned payloads, reviewed edits and source-deleted execution.
+All enumerated matching cases remain required against the finalized archive's
+exact executable; there is no separate manual supplement. Its compiler 20,
+bytecode 16 and artifact 27 assets require their own source and candidate
+acceptance. The v0.1.68 producer remains a separate immutable selection and cannot
+serve as evidence for these successor bytes.
 
 The canonical manifest discriminator is `format: "lkjscript-release-content-1"`. It binds the product
 version/intended tag, exact product commit, repository, target/build policy and command, pinned Rust

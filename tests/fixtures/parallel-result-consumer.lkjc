@@ -1,0 +1,127 @@
+declarations.begin
+(units
+  (module create result-consumer
+    (external create freeze (visibility private) (implementation core.buffer.freeze)
+      (parameter create value (type ByteBuffer) (use consume)) (returns Bytes))
+    (external create extract (visibility private) (implementation core.cell.extract)
+      (parameter create value (type OwnedI64Cell) (use consume)) (returns I64))
+    (function create initial-buffer (visibility private) (effect pure) (returns ByteBuffer)
+      (body (let
+        (binding value (type ByteBuffer) (call buffer::buffer-create (i64 0)))
+        (binding value (type ByteBuffer) (call buffer::buffer-update (i64 255) (local value)))
+        (in (call buffer::buffer-update (i64 128) (local value))))))
+    (function create all-owned (visibility private) (effect (task))
+      (parameter create n (type I64))
+      (returns (record (bytes Bytes) (length I64) (before I64) (after I64)))
+      (body (let
+        (binding value (type ByteBuffer) (call initial-buffer))
+        (binding scalar (type OwnedI64Cell) (call cell::cell-create (i64 0)))
+        (binding pair (type (owned-product (field left ByteBuffer) (field right OwnedI64Cell)))
+          (parallel
+            (call result-workers::buffer-job (i64 7) (local value))
+            (call result-workers::cell-job (local n) (local scalar))))
+        (in (unpack-owned (type (owned-product (field left ByteBuffer) (field right OwnedI64Cell)))
+          (local pair)
+          (field left (binding data (type ByteBuffer)))
+          (field right (binding scalar (type OwnedI64Cell)))
+          (in (let
+            (binding length (type I64)
+              (implementation-call abstraction::read-helper (types ByteBuffer)
+                (implementations concrete@buffer::Octets) (local data)))
+            (binding before (type I64)
+              (implementation-call abstraction::read-helper (types OwnedI64Cell)
+                (implementations concrete@cell::Scalar) (local scalar)))
+            (binding data (type ByteBuffer) (call buffer::buffer-update (i64 9) (local data)))
+            (binding scalar (type OwnedI64Cell) (call cell::cell-update (i64 -81) (local scalar)))
+            (in (record structural
+              (field bytes (call freeze (local data))) (field length (local length))
+              (field before (local before)) (field after (call extract (local scalar))))))))))))
+    (function create mixed-left (visibility private) (effect (task))
+      (parameter create n (type I64)) (returns (record (bytes Bytes) (scalar I64)))
+      (body (let
+        (binding data (type ByteBuffer) (call initial-buffer))
+        (binding pair (type (owned-product (field left ByteBuffer) (field right I64)))
+          (parallel
+            (call result-workers::buffer-job (i64 11) (local data))
+            (call result-workers::ordinary-job (local n))))
+        (in (unpack-owned (type (owned-product (field left ByteBuffer) (field right I64)))
+          (local pair)
+          (field left (binding data (type ByteBuffer))) (field right (binding scalar (type I64)))
+          (in (record structural
+            (field bytes (call freeze (local data))) (field scalar (local scalar)))))))))
+    (function create mixed-right (visibility private) (effect (task))
+      (parameter create n (type I64)) (returns (record (ordinary I64) (scalar I64)))
+      (body (let
+        (binding scalar (type OwnedI64Cell) (call cell::cell-create (i64 0)))
+        (binding pair (type (owned-product (field left I64) (field right OwnedI64Cell)))
+          (parallel
+            (call result-workers::ordinary-job (local n))
+            (call result-workers::cell-job (local n) (local scalar))))
+        (in (unpack-owned (type (owned-product (field left I64) (field right OwnedI64Cell)))
+          (local pair)
+          (field left (binding ordinary (type I64)))
+          (field right (binding scalar (type OwnedI64Cell)))
+          (in (record structural
+            (field ordinary (local ordinary)) (field scalar (call extract (local scalar))))))))))
+    (function create nested (visibility private) (effect (task))
+      (parameter create n (type I64)) (parameter create accepted (type Bool))
+      (returns (record (bytes Bytes) (scalar I64) (outcome (record (accepted Bool) (value I64)))))
+      (body (let
+        (binding data (type ByteBuffer) (call initial-buffer))
+        (binding scalar (type OwnedI64Cell) (call cell::cell-create (local n)))
+        (binding pair
+          (type (owned-product
+            (field left (owned-product (field left ByteBuffer) (field right OwnedI64Cell)))
+            (field right (owned-choice (case accepted I64) (case rejected OwnedI64Cell)))))
+          (parallel
+            (call result-workers::nested-job (local n) (local data))
+            (call result-workers::choice-job (local accepted) (local scalar))))
+        (in (unpack-owned
+          (type (owned-product
+            (field left (owned-product (field left ByteBuffer) (field right OwnedI64Cell)))
+            (field right (owned-choice (case accepted I64) (case rejected OwnedI64Cell)))))
+          (local pair)
+          (field left (binding inner
+            (type (owned-product (field left ByteBuffer) (field right OwnedI64Cell)))))
+          (field right (binding outcome
+            (type (owned-choice (case accepted I64) (case rejected OwnedI64Cell)))))
+          (in (unpack-owned (type (owned-product (field left ByteBuffer) (field right OwnedI64Cell)))
+            (local inner)
+            (field left (binding data (type ByteBuffer)))
+            (field right (binding scalar (type OwnedI64Cell)))
+            (in (record structural
+              (field bytes (call freeze (local data)))
+              (field scalar (call extract (local scalar)))
+              (field outcome
+                (match-owned (type (owned-choice (case accepted I64) (case rejected OwnedI64Cell)))
+                  (local outcome)
+                  (case accepted (binding value (type I64))
+                    (in (record structural (field accepted (bool true)) (field value (local value)))))
+                  (case rejected (binding value (type OwnedI64Cell))
+                    (in (record structural
+                      (field accepted (bool false)) (field value (call extract (local value)))))))))))))))))
+    (function create main (visibility public) (effect (task))
+      (parameter create n (type I64)) (parameter create accepted (type Bool))
+      (returns (record
+        (all (record (bytes Bytes) (length I64) (before I64) (after I64)))
+        (mixed-left (record (bytes Bytes) (scalar I64)))
+        (mixed-right (record (ordinary I64) (scalar I64)))
+        (nested (record (bytes Bytes) (scalar I64) (outcome (record (accepted Bool) (value I64)))))))
+      (body (record structural
+        (field all (call all-owned (local n)))
+        (field mixed-left (call mixed-left (local n)))
+        (field mixed-right (call mixed-right (local n)))
+        (field nested (call nested (local n) (local accepted))))))
+    (component create command (visibility private)
+      (port create main
+        (type (task-function (I64 Bool)
+          (record
+            (all (record (bytes Bytes) (length I64) (before I64) (after I64)))
+            (mixed-left (record (bytes Bytes) (scalar I64)))
+            (mixed-right (record (ordinary I64) (scalar I64)))
+            (nested (record (bytes Bytes) (scalar I64) (outcome (record (accepted Bool) (value I64))))))
+          (row)))
+        (function main))))
+  (target create parallel-results (component result-consumer::command)
+    (runner command) (port result-consumer::command::main)))
+declarations.end

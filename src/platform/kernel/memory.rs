@@ -746,9 +746,9 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 super::parallel::admit_call(self.read, right)?;
                 // Admission consumes both argument sets in the same parent state.
                 // No branch-local fork can make one owner available to both children.
-                plain(left, state)?;
-                plain(right, state)?;
-                false
+                let left_owned = self.eval(left, state, ParameterUse::Consume, next)?;
+                let right_owned = self.eval(right, state, ParameterUse::Consume, next)?;
+                left_owned || right_owned
             }
             ExpressionOperation::MethodCall {
                 witness,

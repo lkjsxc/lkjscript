@@ -736,6 +736,7 @@ impl Machine<'_> {
                     left_arguments,
                     right,
                     right_arguments,
+                    result_type,
                 } => {
                     self.charge_allocation(super::value::collection_storage_bytes(
                         u64::from(left_arguments) + u64::from(right_arguments),
@@ -744,7 +745,8 @@ impl Machine<'_> {
                     )?)?;
                     let right_values = self.pop_many(right_arguments as usize)?;
                     let left_values = self.pop_many(left_arguments as usize)?;
-                    let value = self.parallel(left, left_values, right, right_values)?;
+                    let value =
+                        self.parallel(left, left_values, right, right_values, result_type)?;
                     self.push(value)?;
                 }
                 NormalizedInstruction::ImplementationCall { .. }

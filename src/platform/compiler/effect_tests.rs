@@ -258,6 +258,7 @@ fn replace_unit_checked(
         17 => (*b"LKJCUN17", "lkjscript.compiler-unit-envelope.v17"),
         18 => (*b"LKJCUN18", "lkjscript.compiler-unit-envelope.v18"),
         19 => (*b"LKJCUN19", "lkjscript.compiler-unit-envelope.v19"),
+        20 => (*b"LKJCUN20", "lkjscript.compiler-unit-envelope.v20"),
         other => panic!("unexpected forged-unit generation {other}"),
     };
     let bytes = crate::platform::packed::encode(
@@ -281,6 +282,18 @@ fn replace_unit_checked(
             "compiler_unit_contract"
         );
     }
+    replace_unit_encoded(loaded, old, unit, bytes, extra)
+}
+
+/// Test packer for a genuinely frozen instruction layout; no current decoder runs here.
+pub(super) fn replace_unit_encoded(
+    loaded: &LoadedArtifact,
+    old: ObjectKey,
+    unit: &CompilationUnit,
+    bytes: Vec<u8>,
+    extra: Vec<(ObjectKey, Vec<u8>)>,
+) -> Vec<u8> {
+    let key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &bytes);
     let mut objects = loaded.objects.clone();
     objects.remove(&old);
     objects.insert(key, bytes);

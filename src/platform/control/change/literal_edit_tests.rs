@@ -138,6 +138,10 @@ fn inventory(view: &RepositoryView, function: DeclarationId) -> BTreeMap<OwnerKe
                 ExpressionOperation::Record { fields, .. } => {
                     pending.extend(fields.iter().map(|f| OwnerKey::Expression(f.value)))
                 }
+                ExpressionOperation::ImplementationCall { arguments, .. }
+                | ExpressionOperation::MethodCall { arguments, .. } => {
+                    pending.extend(arguments.iter().copied().map(OwnerKey::Expression));
+                }
                 ExpressionOperation::Local { .. }
                 | ExpressionOperation::Bool { .. }
                 | ExpressionOperation::I64 { .. }

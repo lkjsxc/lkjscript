@@ -86,5 +86,7 @@ outcomes belong to the campaign and release owners.
 
 Development 0.1.68 adds a separate [structured parallel boundary](structured-parallel.md):
 two exact empty-effect child tasks consume owned inputs under fresh invocation
-identities and join before continuation. The same-task rules above remain intact.
+identities and join before continuation. Development 0.1.69 also returns closed
+owned child results through a joined OwnedProduct, with separate child-to-parent
+custody and complete consuming decomposition. The same-task rules above remain intact.
 Channels, owner-returning send refusal and receiver lifecycle remain separate work.

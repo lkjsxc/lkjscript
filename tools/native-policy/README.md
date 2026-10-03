@@ -94,15 +94,8 @@ zero-copy I/O. Matched complete-command measurements, failures and source accept
 belong to the [byte campaign](../../docs/campaigns/202609240603.md); the
 [predecessor campaign](../../docs/campaigns/202609240414.md) retains the original costs.
 
-The Owned-generic compiler refresh rebuilds the retained policy artifact through
-public build, preserving its accepted HEAD and exact standard supplier. No native
-policy meaning is changed; older derived artifact generations require rebuilding.
-
-The owned-product metadata continuation repeats this public build for compiler 17,
-bytecode 13 and artifact 24, with the same accepted policy HEAD and exact supplier
-meaning.
-
-The [structured parallel compiler refresh](../../docs/campaigns/20261002-structured-parallel.md)
-rebuilds the retained policy for compiler 19, bytecode 15 and artifact 26 through
-public check/build. All 62 tests pass with equal production/reference results;
-accepted HEAD, exact supplier and policy meaning are unchanged.
+Compiler or artifact contract changes require rebuilding this retained artifact
+through public check/build while preserving accepted HEAD and its exact standard
+supplier. Rebuild the contributor test executable after replacing the artifact.
+The [current release notes](../../docs/releases/v0.1.69.md) identify the selected
+compatibility boundary; [status](../../docs/status.md) owns actual acceptance.

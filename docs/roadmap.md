@@ -12,18 +12,23 @@ These priorities order the next useful experiments, not a waterfall or a feature
 promise. Mechanisms may change when a better complete design has evidence. Memory
 safety, bounded checking and avoidance of unnecessary copying are baseline requirements.
 
-## 1. Complete the structured-parallel boundary
+## 1. Complete ownership round trips through structured parallel tasks
 
-Complete the selected 0.1.68 distribution acceptance and publication under the
-[existing procedure](release.md#selected-structured-parallel-successor-v0168).
-[Status](status.md) records the accepted mainline source and pending producer. Retain
+Retain the completed 0.1.68 distribution acceptance and publication under the
+[existing procedure](release.md#published-structured-parallel-v0168).
+[Status](status.md) records the exact public source and completed producer/promotion. Retain
 the completed source, cross-package, artifact, overlap, quota and cleanup evidence;
 renew proof when its bindings change. Preserve task kind independently of an empty
 effect row throughout authoring, extraction and execution.
 
 Use the [current pair contract](spec/structured-parallel.md) as a small coherent
-foundation. General channels, task handles or effectful children are not prerequisites
-for completing it, and passing one boundary does not certify the others.
+foundation. Development 0.1.69 extends closed child results through the existing
+OwnedProduct pair when either side is owned, with separately sealed result custody
+and complete parent decomposition. First close the independent memory oracle's
+imported Owned-generic signature boundary using actual separate packages. Complete
+source and final-byte acceptance for the returned-owner composition before claiming
+availability. General channels, task handles or effectful children are separate
+extensions, and passing one boundary does not certify the others.
 
 ## 2. Scale structured execution and the shared host
 
@@ -120,8 +125,8 @@ while preserving evidence needed for actual claims. Measure API usage/cost only
 from observed usage; document size alone establishes neither tokens nor money saved.
 
 Turn retained audit hypotheses into small executed counterexamples before further
-changes. Follow up imported Owned-generic coverage in the independent memory oracle,
-immutable sharing of dependency interfaces, and reuse of admitted expression types
+changes. Retain imported Owned-generic coverage in the independent memory oracle;
+follow up immutable sharing of dependency interfaces and reuse of admitted expression types
 within one extraction. The new copy-work admission bounds growth but does not remove
 duplicate metadata. Preserve exact source, substitution and effect scopes when sharing.
 

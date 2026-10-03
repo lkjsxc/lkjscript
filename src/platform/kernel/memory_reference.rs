@@ -11,6 +11,8 @@ struct Rights {
     owned: BTreeSet<LocalValueReference>,
     borrowed: BTreeSet<LocalValueReference>,
 }
+#[path = "imported_memory_oracle_tests.rs"]
+mod imported_tests;
 #[path = "memory_witness_reference.rs"]
 mod witnesses;
 struct Oracle<'a>(
@@ -373,13 +375,47 @@ impl Oracle<'_> {
         }
         true
     }
+    // Application constraints belong to the callee's exact package, but affine
+    // flow belongs to the caller. Resolve direct formals before classifying an
+    // imported signature; a foreign Owned parameter is not ordinary caller data.
+    // This reconstruction deliberately uses canonical records, not production
+    // substitution or memory-classification helpers.
+    fn applied_signature(
+        &self,
+        function: DeclarationReference,
+        arguments: &[TypeObjectDigest],
+    ) -> Option<(Vec<ParameterRecord>, TypeObjectDigest, bool, Option<String>)> {
+        if !self.application(function, arguments) {
+            return None;
+        }
+        let parameters = self.type_parameters(function)?;
+        let substitutions: BTreeMap<_, _> = parameters
+            .into_iter()
+            .zip(arguments.iter().copied())
+            .collect();
+        let substitute = |ty| match self.form(ty) {
+            Some(TypeForm::TypeParameter { parameter }) => {
+                substitutions.get(parameter).copied().unwrap_or(ty)
+            }
+            _ => ty,
+        };
+        let mut signature = self.signature(function)?;
+        for parameter in &mut signature.0 {
+            if parameter.parent != ParameterParent::Function(function.declaration) {
+                return None;
+            }
+            parameter.ty = substitute(parameter.ty);
+        }
+        signature.1 = substitute(signature.1);
+        Some(signature)
+    }
     fn expression(&self, id: ExpressionId) -> Option<&ExpressionOperation> {
         let OwnerRecord::Expression(e) = self.0.owners.get(&OwnerKey::Expression(id))? else {
             return None;
         };
         Some(&e.operation)
     }
-    fn parallel_child(&self, id: ExpressionId) -> Option<()> {
+    fn parallel_child(&self, id: ExpressionId) -> Option<bool> {
         let ExpressionOperation::Call {
             function,
             arguments,
@@ -401,8 +437,11 @@ impl Oracle<'_> {
             || !matches!(&signature.effect, FunctionEffect::Task { requirements, effect_parameters }
                 if requirements.is_empty() && effect_parameters.is_empty())
             || signature.parameters.len() != arguments.len()
-            || !self.ordinary(signature.result)
         {
+            return None;
+        }
+        let result_owned = Oracle(self.0, None).owned_type_in_scope(signature.result);
+        if !result_owned && !self.ordinary(signature.result) {
             return None;
         }
         let mut owned = false;
@@ -432,7 +471,7 @@ impl Oracle<'_> {
                 return None;
             }
         }
-        Some(())
+        Some(result_owned)
     }
     fn arguments(
         &self,
@@ -736,12 +775,13 @@ impl Oracle<'_> {
                 {
                     return None;
                 }
-                let Some(s) = self.signature(*function) else {
+                if self.signature(*function).is_none() {
                     for a in arguments {
                         plain(*a, rights)?;
                     }
                     return Some(false);
-                };
+                }
+                let s = self.applied_signature(*function, type_arguments)?;
                 if !self.legal_signature(&s) || s.0.len() != arguments.len() {
                     return None;
                 }
@@ -764,11 +804,17 @@ impl Oracle<'_> {
                 {
                     return None;
                 }
-                self.parallel_child(*left)?;
-                self.parallel_child(*right)?;
-                plain(*left, rights)?;
-                plain(*right, rights)?;
-                false
+                let left_owned = self.parallel_child(*left)?;
+                let right_owned = self.parallel_child(*right)?;
+                // Both argument inventories consume the same parent rights in
+                // authored order. Child results become fields of one owned pair
+                // whenever either child returns an owner.
+                if self.run(*left, rights, true, depth + 1)? != left_owned
+                    || self.run(*right, rights, true, depth + 1)? != right_owned
+                {
+                    return None;
+                }
+                left_owned || right_owned
             }
             ExpressionOperation::ImplementationCall {
                 function,
@@ -781,7 +827,7 @@ impl Oracle<'_> {
                 {
                     return None;
                 }
-                let s = self.signature(*function)?;
+                let s = self.applied_signature(*function, type_arguments)?;
                 if !self.legal_signature(&s) {
                     return None;
                 }
@@ -823,7 +869,7 @@ impl Oracle<'_> {
                 {
                     return None;
                 }
-                let s = self.signature(*function)?;
+                let s = self.applied_signature(*function, type_arguments)?;
                 if self.contains(s.1) || s.0.iter().any(|p| self.contains(p.ty)) {
                     return None;
                 }

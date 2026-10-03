@@ -3,7 +3,7 @@ use super::super::{parallel, shared_budget::SharedBudget};
 use super::*;
 
 struct ChildOutcome {
-    result: Result<CheckedValue, ExecutionError>,
+    result: Result<transfer::TransferResult, ExecutionError>,
     observation: NormalizedRunObservation,
 }
 
@@ -12,6 +12,7 @@ struct ChildContext<'a> {
     program: &'a NormalizedProgram,
     policy: NormalizedRunPolicy,
     control: &'a ExecutionControl,
+    parent_domain: super::super::value::ValueOrigin,
     structured_depth: usize,
     ancestor_depth: usize,
 }
@@ -49,8 +50,42 @@ impl Machine<'_> {
         left_values: Vec<CheckedValue>,
         right: FunctionIndex,
         right_values: Vec<CheckedValue>,
+        result_type: TypeObjectDigest,
     ) -> Result<CheckedValue, ExecutionError> {
         self.admit_task_call(&[])?;
+        let left_index = left;
+        let right_index = right;
+        let left_type = self
+            .program
+            .functions
+            .get(left.0 as usize)
+            .filter(|_| left.1 == self.program.value_origin)
+            .ok_or_else(|| type_error("missing structured left child"))?
+            .result;
+        let right_type = self
+            .program
+            .functions
+            .get(right.0 as usize)
+            .filter(|_| right.1 == self.program.value_origin)
+            .ok_or_else(|| type_error("missing structured right child"))?
+            .result;
+        let owned = !self.program.comparable_types.contains(&left_type)
+            || !self.program.comparable_types.contains(&right_type);
+        let fields = match self.program.types.get(&result_type).map(|ty| &ty.form) {
+            Some(TypeForm::OwnedProduct { fields }) if owned => fields,
+            Some(TypeForm::StructuralRecord { fields }) if !owned => fields,
+            _ => return Err(type_error("structured result has an invalid pair type")),
+        };
+        if fields.len() != 2
+            || fields[0].name.as_str() != "left"
+            || fields[0].ty != left_type
+            || fields[1].name.as_str() != "right"
+            || fields[1].ty != right_type
+        {
+            return Err(type_error(
+                "structured result differs from exact child types",
+            ));
+        }
         self.observation.parallel_scopes = self.observation.parallel_scopes.saturating_add(1);
         if self.structured_depth >= parallel::MAXIMUM_STRUCTURED_DEPTH {
             return Err(resource_error(
@@ -126,6 +161,7 @@ impl Machine<'_> {
             program,
             policy: self.policy,
             control,
+            parent_domain: source,
             structured_depth: self.structured_depth + 1,
             ancestor_depth: self.ancestor_depth.saturating_add(self.frames.len()),
         };
@@ -145,10 +181,31 @@ impl Machine<'_> {
         self.observation.include_child(&pair.right.observation);
         let (left, right) = super::super::parallel::results(pair.left.result, pair.right.result)?;
         self.control.check()?;
+        if owned {
+            self.charge_collection(2, std::mem::size_of::<NormalizedValue>())?;
+            self.charge_allocation(super::super::owned_product::OwnedProduct::ALLOCATION_BYTES)?;
+            let left = left.adopt(program, source, left_index, left_type, control)?;
+            let left = self.product_child(left, left_type)?;
+            let right = right.adopt(program, source, right_index, right_type, control)?;
+            let right = self.product_child(right, right_type)?;
+            // The complete wrapper storage was reserved before either adoption.
+            let token = super::super::owned_product::OwnedProduct::create(
+                source,
+                result_type,
+                vec![left.into_raw(), right.into_raw()],
+                control,
+                &mut |_| Ok(()),
+            )?;
+            return CheckedValue::memory(program, NormalizedValue::OwnedProduct(token));
+        }
         self.charge_collection(2, std::mem::size_of::<(Name, NormalizedValue)>())?;
         self.charge_allocation(9)?;
         let left_name = Name::new("left").map_err(|_| type_error("invalid structured field"))?;
         let right_name = Name::new("right").map_err(|_| type_error("invalid structured field"))?;
+        let left = left.adopt(program, source, left_index, left_type, control)?;
+        let left = self.admit(left, left_type, None, true)?;
+        let right = right.adopt(program, source, right_index, right_type, control)?;
+        let right = self.admit(right, right_type, None, true)?;
         CheckedValue::record(
             program,
             None,
@@ -168,6 +225,7 @@ fn child(
         program,
         policy,
         control,
+        parent_domain,
         structured_depth,
         ancestor_depth,
     } = context;
@@ -234,12 +292,17 @@ fn child(
         ChildProbe::enter(program.value_origin, memory_domain)?;
         machine.call(function, Arc::from([]), arguments)?;
         let value = finish_admitted(&mut machine)?;
-        if value.class(program, &mut machine.observation.value_work)? != Class::Free {
-            return Err(type_error(
-                "structured child returned nonordinary ownership",
-            ));
-        }
-        Ok(value)
+        let result_type = program.functions[function.0 as usize].result;
+        transfer::TransferResult::seal(
+            program,
+            memory_domain,
+            parent_domain,
+            function,
+            result_type,
+            value.into_raw(),
+            control,
+            &mut |raw, ty| machine.inspect_transfer_data(raw, ty),
+        )
     })();
     if result.is_err() {
         control.cancel();

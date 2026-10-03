@@ -1,13 +1,88 @@
 //! Independent serial meaning of a joined pair, with the same sealed custody boundary.
-use super::super::{parallel, shared_budget::SharedBudget, vm::transfer::TransferArguments};
+use super::super::{
+    parallel,
+    shared_budget::SharedBudget,
+    vm::transfer::{TransferArguments, TransferResult},
+};
 use super::*;
 
 struct ChildOutcome {
-    result: Result<CheckedValue, ExecutionError>,
+    result: Result<TransferResult, ExecutionError>,
     observation: NormalizedReferenceObservation,
 }
 
 impl ReferenceState<'_> {
+    fn parallel_transfer_type(
+        &self,
+        ty: TypeObjectDigest,
+        depth: usize,
+        nodes: &mut u64,
+    ) -> Result<bool, ExecutionError> {
+        self.control.check()?;
+        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+            return Err(reference_type_error(
+                "structured result type exceeds finite depth",
+            ));
+        }
+        *nodes = nodes
+            .checked_add(1)
+            .filter(|n| *n <= super::super::value::MAXIMUM_ADMISSION_ITEMS)
+            .ok_or_else(|| {
+                reference_resource(
+                    "normalized_parallel_transfer_items",
+                    "structured result type exceeds finite admission",
+                )
+            })?;
+        match &self
+            .schema
+            .types
+            .get(&ty)
+            .ok_or_else(|| reference_type_error("missing structured result type"))?
+            .form
+        {
+            TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Ok(true),
+            TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
+                for field in fields {
+                    self.parallel_transfer_type(field.ty, depth + 1, nodes)?;
+                }
+                Ok(true)
+            }
+            _ if self.schema.comparable_types.contains(&ty) => Ok(false),
+            _ => Err(reference_type_error(
+                "structured result requires closed data or owned memory",
+            )),
+        }
+    }
+
+    fn parallel_pair_type(
+        &self,
+        left: TypeObjectDigest,
+        right: TypeObjectDigest,
+        owned: bool,
+    ) -> Result<TypeObjectDigest, ExecutionError> {
+        // Derive from canonical child signatures and canonical structural types;
+        // the compiled Parallel instruction is not a reference type oracle.
+        for (ty, object) in &self.schema.types {
+            self.control.check()?;
+            let fields = match &object.form {
+                TypeForm::OwnedProduct { fields } if owned => fields,
+                TypeForm::StructuralRecord { fields } if !owned => fields,
+                _ => continue,
+            };
+            if fields.len() == 2
+                && fields[0].name.as_str() == "left"
+                && fields[0].ty == left
+                && fields[1].name.as_str() == "right"
+                && fields[1].ty == right
+            {
+                return Ok(*ty);
+            }
+        }
+        Err(reference_type_error(
+            "canonical structured pair type is absent",
+        ))
+    }
+
     fn parallel_call(
         &mut self,
         expression: ExpressionId,
@@ -46,13 +121,13 @@ impl ReferenceState<'_> {
             || !signature.effect_parameters.is_empty()
             || !signature.requirement_parameters.is_empty()
             || signature.has_implementations
-            || !self.schema.comparable_types.contains(&signature.result)
             || signature.parameters.len() != arguments.len()
         {
             return Err(reference_type_error(
-                "parallel child requires an exact empty-row task returning closed data",
+                "parallel child requires an exact empty-row task",
             ));
         }
+        self.parallel_transfer_type(signature.result, 0, &mut 0)?;
         let mut seen_owned = false;
         for parameter in &signature.parameters {
             let memory =
@@ -164,6 +239,11 @@ impl ReferenceState<'_> {
         }
         let (left_function, left_args, left_signature) = self.parallel_call(left)?;
         let (right_function, right_args, right_signature) = self.parallel_call(right)?;
+        let left_type = left_signature.result;
+        let right_type = right_signature.result;
+        let owned = self.parallel_transfer_type(left_type, 0, &mut 0)?
+            | self.parallel_transfer_type(right_type, 0, &mut 0)?;
+        let result_type = self.parallel_pair_type(left_type, right_type, owned)?;
         self.charge_allocation(super::super::value::collection_storage_bytes(
             left_signature
                 .parameters
@@ -262,12 +342,33 @@ impl ReferenceState<'_> {
         self.observation.include_child(&right.observation);
         let (left, right) = parallel::results(left.result, right.result)?;
         self.control.check()?;
+        if owned {
+            self.charge_items(2, std::mem::size_of::<NormalizedValue>())?;
+            self.charge_allocation(super::super::owned_product::OwnedProduct::ALLOCATION_BYTES)?;
+            let left = left.adopt(program, source, left_index, left_type, control)?;
+            let left = self.product_child(left, left_type)?;
+            let right = right.adopt(program, source, right_index, right_type, control)?;
+            let right = self.product_child(right, right_type)?;
+            // The complete wrapper storage was reserved before either adoption.
+            let token = super::super::owned_product::OwnedProduct::create(
+                source,
+                result_type,
+                vec![left.release(), right.release()],
+                control,
+                &mut |_| Ok(()),
+            )?;
+            return CheckedValue::memory(&self.schema, NormalizedValue::OwnedProduct(token));
+        }
         self.charge_items(2, std::mem::size_of::<(Name, NormalizedValue)>())?;
         self.charge_allocation(9)?;
         let left_name =
             Name::new("left").map_err(|_| reference_type_error("invalid structured field"))?;
         let right_name =
             Name::new("right").map_err(|_| reference_type_error("invalid structured field"))?;
+        let left = left.adopt(program, source, left_index, left_type, control)?;
+        let left = self.admit_raw(left, left_type, &BTreeMap::new(), None, true)?;
+        let right = right.adopt(program, source, right_index, right_type, control)?;
+        let right = self.admit_raw(right, right_type, &BTreeMap::new(), None, true)?;
         self.record_value(None, vec![(left_name, left), (right_name, right)])
     }
 
@@ -335,6 +436,7 @@ impl ReferenceState<'_> {
                 ));
             }
             let signature = state.function_signature(declaration)?;
+            let result_type = signature.result;
             state.charge_allocation(super::super::value::collection_storage_bytes(
                 values.len() as u64,
                 std::mem::size_of::<CheckedValue>() as u64,
@@ -352,14 +454,16 @@ impl ReferenceState<'_> {
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             let value = state.call_declaration(declaration, &[], &[], &[], arguments)?;
-            if value.ownership(&state.schema, &mut state.observation.value_work)?
-                != Ownership::Ordinary
-            {
-                return Err(reference_type_error(
-                    "structured child returned nonordinary ownership",
-                ));
-            }
-            Ok(value)
+            TransferResult::seal(
+                self.program,
+                memory_domain,
+                self.memory_domain,
+                index,
+                result_type,
+                value.release(),
+                self.control,
+                &mut |raw, ty| state.inspect_transfer_data(raw, ty),
+            )
         })();
         if result.is_err() {
             self.control.cancel();

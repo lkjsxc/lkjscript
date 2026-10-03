@@ -55,7 +55,6 @@ impl TransferArguments {
             || !selected.effect_parameters.is_empty()
             || !selected.requirement_parameters.is_empty()
             || !selected.implementation_parameters.is_empty()
-            || !program.comparable_types.contains(&selected.result)
         {
             return Err(reject());
         }
@@ -66,6 +65,7 @@ impl TransferArguments {
             return Err(reject());
         }
         let mut work = Work { control, nodes: 0 };
+        validate_type(program, selected.result, 0, &mut work)?;
         let mut seen_owned = false;
         for (argument, parameter) in arguments.iter().zip(selected.parameters.iter()) {
             if parameter.resource_requirement.is_some() {
@@ -127,6 +127,114 @@ impl Drop for TransferArguments {
     fn drop(&mut self) {
         if let Some(values) = self.values.take() {
             release_raw_values(values);
+        }
+    }
+}
+
+/// Sole custody of one child result between joined invocation domains. Result
+/// custody is established before child cleanup and consumed only by its parent.
+pub(in super::super) struct TransferResult {
+    program: ValueOrigin,
+    source: ValueOrigin,
+    destination: ValueOrigin,
+    function: FunctionIndex,
+    ty: TypeObjectDigest,
+    value: Option<NormalizedValue>,
+}
+
+impl TransferResult {
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "sealing binds program, child, result type and both invocation domains explicitly"
+    )]
+    pub(in super::super) fn seal(
+        program: &NormalizedProgram,
+        source: ValueOrigin,
+        destination: ValueOrigin,
+        function: FunctionIndex,
+        ty: TypeObjectDigest,
+        value: NormalizedValue,
+        control: &ExecutionControl,
+        ordinary: &mut impl FnMut(&NormalizedValue, TypeObjectDigest) -> Result<(), ExecutionError>,
+    ) -> Result<Self, ExecutionError> {
+        let transfer = Self {
+            program: program.value_origin,
+            source,
+            destination,
+            function,
+            ty,
+            value: Some(value),
+        };
+        control.check()?;
+        if source == destination || function.1 != program.value_origin {
+            return Err(reject());
+        }
+        let selected = program
+            .functions
+            .get(function.0 as usize)
+            .ok_or_else(reject)?;
+        if !selected.graph_function
+            || selected.result != ty
+            || !matches!(&selected.effect, FunctionEffect::Task { requirements, effect_parameters }
+                if requirements.is_empty() && effect_parameters.is_empty())
+            || !selected.task_requirements.is_empty()
+            || !selected.type_parameters.is_empty()
+            || !selected.effect_parameters.is_empty()
+            || !selected.requirement_parameters.is_empty()
+            || !selected.implementation_parameters.is_empty()
+        {
+            return Err(reject());
+        }
+        let mut work = Work { control, nodes: 0 };
+        validate_type(program, ty, 0, &mut work)?;
+        inspect_value(
+            program,
+            transfer.value.as_ref().ok_or_else(reject)?,
+            ty,
+            source,
+            0,
+            &mut work,
+            ordinary,
+        )?;
+        control.check()?;
+        Ok(transfer)
+    }
+
+    pub(in super::super) fn adopt(
+        mut self,
+        program: &NormalizedProgram,
+        destination: ValueOrigin,
+        function: FunctionIndex,
+        ty: TypeObjectDigest,
+        control: &ExecutionControl,
+    ) -> Result<NormalizedValue, ExecutionError> {
+        control.check()?;
+        if self.program != program.value_origin
+            || self.function != function
+            || function.1 != program.value_origin
+            || self.destination != destination
+            || self.ty != ty
+            || program.functions.get(function.0 as usize).map(|f| f.result) != Some(ty)
+        {
+            return Err(reject());
+        }
+        let mut work = Work { control, nodes: 0 };
+        adopt_value(
+            self.value.as_mut().ok_or_else(reject)?,
+            self.source,
+            destination,
+            0,
+            &mut work,
+        )?;
+        control.check()?;
+        self.value.take().ok_or_else(reject)
+    }
+}
+
+impl Drop for TransferResult {
+    fn drop(&mut self) {
+        if let Some(value) = self.value.take() {
+            super::super::value::release_raw_value(value);
         }
     }
 }

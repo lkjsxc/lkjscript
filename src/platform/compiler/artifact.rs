@@ -48,16 +48,16 @@ use std::fmt;
 #[path = "artifact_code.rs"]
 mod code_admission;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-26";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-26";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 26;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF26";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART26";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN26";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-27";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-27";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 27;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF27";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART27";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN27";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v26";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v26";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v26";
+    "lkjscript.artifact-manifest-envelope.v27";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v27";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v27";
 pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v18";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
@@ -115,6 +115,15 @@ fn artifact_wire(version: u16) -> Result<ArtifactWire, Diagnostic> {
             manifest_domain: "lkjscript.artifact-manifest-envelope.v25",
             digest_domain: "lkjscript.artifact-bundle.v25",
             checksum_domain: "lkjscript.artifact-bundle.complete.v25",
+        }),
+        26 => Ok(ArtifactWire {
+            version,
+            manifest_magic: *b"LKJAMF26",
+            bundle_magic: *b"LKJART26",
+            end_magic: *b"LKJAEN26",
+            manifest_domain: "lkjscript.artifact-manifest-envelope.v26",
+            digest_domain: "lkjscript.artifact-bundle.v26",
+            checksum_domain: "lkjscript.artifact-bundle.complete.v26",
         }),
         ARTIFACT_CONTRACT_VERSION => Ok(ArtifactWire {
             version,
@@ -367,6 +376,8 @@ impl ArtifactManifest {
             20
         } else if bytes.starts_with(b"LKJAMF25") {
             25
+        } else if bytes.starts_with(b"LKJAMF26") {
+            26
         } else {
             ARTIFACT_CONTRACT_VERSION
         })?;
@@ -402,7 +413,7 @@ impl ArtifactManifest {
     fn validate(&self) -> Result<(), Diagnostic> {
         if !matches!(
             self.contract_version,
-            18 | 19 | 20 | 25 | ARTIFACT_CONTRACT_VERSION
+            18 | 19 | 20 | 25 | 26 | ARTIFACT_CONTRACT_VERSION
         ) || (self.contract_version == 18
             && (
                 self.graph_contract_version,
@@ -428,6 +439,7 @@ impl ArtifactManifest {
                     (14, 10, 6) | (15, 11, 7) | (16, 12, 8)
                 ))
             || (self.contract_version == 25 && self.graph_contract_version > 20)
+            || (self.contract_version == 26 && self.compiler_contract_version > 19)
             || !matches!(
                 (
                     self.graph_contract_version,
@@ -444,6 +456,7 @@ impl ArtifactManifest {
                     | (19, 17, 13)
                     | (20, 18, 14)
                     | (21, 19, 15)
+                    | (21, 20, 16)
             )
             || self.compilation_manifest_contract_version != COMPILATION_MANIFEST_CONTRACT_VERSION
         {
@@ -3058,6 +3071,7 @@ fn validate_nominal_instruction_inventory(
                         left_arguments,
                         right,
                         right_arguments,
+                        ..
                     } => {
                         for (function, arguments) in
                             [(*left, *left_arguments), (*right, *right_arguments)]

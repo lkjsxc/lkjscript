@@ -19,8 +19,8 @@ use crate::platform::kernel::{
     DeclarationReference, ExactOwnerKey, ExpressionOperation, ExpressionRecord, FieldReference,
     FieldSelector, FunctionEffect, LocalValueReference, OperationReference, OwnerKey, OwnerRecord,
     PackageId, PackageInterfaceRecord, ParameterParent, ParameterUse, PortImplementation,
-    PortReference, RelationEndpoint, RelationKind, RequirementReference, TextValue, TypeForm,
-    TypeObjectDigest,
+    PortReference, RelationEndpoint, RelationKind, RequirementReference, StructuralTypeField,
+    TextValue, TypeForm, TypeObject, TypeObjectDigest, encode_type_object,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::semantic_id::{
@@ -93,6 +93,7 @@ pub fn compile_unit<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         canonical,
         package: canonical.package_id(),
         tables: TablesBuilder::default(),
+        derived_type_objects: BTreeMap::new(),
         work: CompilationWork {
             witness: summary_read.work,
             ..CompilationWork::default()
@@ -234,6 +235,7 @@ struct UnitBuilder<'a, B: ?Sized> {
     canonical: &'a B,
     package: PackageId,
     tables: TablesBuilder,
+    derived_type_objects: BTreeMap<ObjectKey, Vec<u8>>,
     work: CompilationWork,
 }
 
@@ -298,9 +300,92 @@ pub(super) fn canonical_code<B: CodeRead + ?Sized>(
         canonical: read,
         package,
         tables: TablesBuilder::from_tables(tables),
+        derived_type_objects: BTreeMap::new(),
         work: CompilationWork::default(),
     };
     builder.compile_code(root, parameters)
+}
+
+/// Inferred expression types are recomputable metadata. Recreate their bytes at
+/// the artifact boundary, including when an unchanged compiler unit was cached;
+/// no operational compiler cache write adds objects to accepted semantic authority.
+pub(super) fn reconstruct_parallel_result_types<B: CanonicalBaseRead + ?Sized>(
+    read: &B,
+    unit: &CompilationUnit,
+    remaining: &mut usize,
+) -> Result<(BTreeMap<ObjectKey, Vec<u8>>, CanonicalReadWork), Diagnostic> {
+    let mut builder = UnitBuilder {
+        canonical: read,
+        package: unit.source.package,
+        tables: TablesBuilder::default(),
+        derived_type_objects: BTreeMap::new(),
+        work: CompilationWork::default(),
+    };
+    let mut reconstruct = |code: &CompiledCode| -> Result<(), Diagnostic> {
+        for instruction in &code.instructions {
+            read.validation_checkpoint()?;
+            *remaining = remaining.checked_sub(1).ok_or_else(|| {
+                compiler_error(
+                    DiagnosticClass::Resource,
+                    "compiler_parallel_result_type_limit",
+                    "parallel type reconstruction exceeds the existing validation work bound",
+                )
+            })?;
+            let CompiledInstruction::Parallel {
+                left,
+                right,
+                result_type,
+                ..
+            } = instruction
+            else {
+                continue;
+            };
+            let target = |index: u32| {
+                unit.tables
+                    .declarations
+                    .get(index as usize)
+                    .copied()
+                    .ok_or_else(|| {
+                        compiler_corrupt(
+                            "compiler_parallel_function",
+                            "missing parallel child relocation",
+                        )
+                    })
+            };
+            let left = builder.parallel_function_result(target(*left)?)?;
+            let right = builder.parallel_function_result(target(*right)?)?;
+            let expected = builder.parallel_result_type(left, right)?;
+            if unit.tables.types.get(*result_type as usize)
+                != builder.tables.types.values.get(expected as usize)
+            {
+                return Err(compiler_corrupt(
+                    "compiler_parallel_result_type",
+                    "parallel result operand differs from exact canonical child signatures",
+                ));
+            }
+        }
+        Ok(())
+    };
+    match &unit.payload {
+        CompilationPayload::Function { code, .. } | CompilationPayload::Constant { code, .. } => {
+            reconstruct(code)?
+        }
+        CompilationPayload::Test {
+            actual, expected, ..
+        } => {
+            reconstruct(actual)?;
+            reconstruct(expected)?;
+        }
+        CompilationPayload::Component { ports, .. } => {
+            for port in ports {
+                if let CompiledPortImplementation::Expression(code) = &port.implementation {
+                    reconstruct(code)?;
+                }
+            }
+        }
+        _ => {}
+    }
+    Ok((builder.derived_type_objects, builder.work.canonical))
 }
 
 impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
@@ -1307,6 +1392,91 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
             .value
             .is_some_and(|object| matches!(object.form, TypeForm::CapabilityResource { .. })))
     }
+
+    fn parallel_function_result(
+        &mut self,
+        function: DeclarationReference,
+    ) -> Result<TypeObjectDigest, Diagnostic> {
+        if function.package == self.package {
+            if let OwnerRecord::Declaration(record) = self.required_owner(
+                OwnerKey::Declaration(function.declaration),
+                "parallel child function is missing",
+            )? && let DeclarationPayload::Function(signature) = record.payload
+            {
+                return Ok(signature.result);
+            }
+        } else if let PackageInterfaceRecord::Declaration(record) = self
+            .exact_package_interface_owner(
+                function.package,
+                OwnerKey::Declaration(function.declaration),
+            )?
+            && let crate::platform::kernel::PackageInterfaceDeclarationPayload::Function(signature) =
+                record.payload
+        {
+            return Ok(signature.result);
+        }
+        Err(compiler_corrupt(
+            "compiler_parallel_function",
+            "parallel child must name an exact graph function",
+        ))
+    }
+
+    /// Reconstruct the pair from canonical child signatures. Strict loading calls this
+    /// independently too, so a rehashed table operand cannot select another result type.
+    fn parallel_result_type(
+        &mut self,
+        left: TypeObjectDigest,
+        right: TypeObjectDigest,
+    ) -> Result<u32, Diagnostic> {
+        let mut owned = false;
+        for ty in [left, right] {
+            self.canonical.code_step()?;
+            let read = self.canonical.code_type(ty)?;
+            self.work.canonical.add(read.work);
+            let object = read.value.ok_or_else(|| {
+                compiler_corrupt("compiler_parallel_result_type", "missing child result type")
+            })?;
+            owned |= matches!(
+                object.form,
+                TypeForm::ByteBuffer
+                    | TypeForm::OwnedI64Cell
+                    | TypeForm::OwnedProduct { .. }
+                    | TypeForm::OwnedChoice { .. }
+            );
+        }
+        self.canonical.code_step()?;
+        if self.derived_type_objects.len() >= MAXIMUM_COMPILER_UNIT_ITEMS {
+            return Err(compiler_error(
+                DiagnosticClass::Resource,
+                "compiler_parallel_result_type_limit",
+                "derived parallel result types exceed the compiler-unit bound",
+            ));
+        }
+        let fields = vec![
+            StructuralTypeField {
+                name: crate::platform::kernel::Name::new("left")?,
+                ty: left,
+            },
+            StructuralTypeField {
+                name: crate::platform::kernel::Name::new("right")?,
+                ty: right,
+            },
+        ];
+        let object = TypeObject::new(if owned {
+            TypeForm::OwnedProduct { fields }
+        } else {
+            TypeForm::StructuralRecord { fields }
+        })?;
+        let (digest, bytes) = encode_type_object(&object)?;
+        self.derived_type_objects.insert(
+            ObjectKey::from_digest(
+                crate::platform::storage::object::ObjectDomain::Type,
+                digest.bytes(),
+            ),
+            bytes,
+        );
+        self.tables.ty(digest)
+    }
 }
 
 struct CodeCompiler<'a, 'b, B: ?Sized> {
@@ -1434,7 +1604,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         &mut self,
         expression: ExpressionId,
         depth: usize,
-    ) -> Result<(u32, u32), Diagnostic> {
+    ) -> Result<(u32, u32, TypeObjectDigest), Diagnostic> {
         let operation = self.begin_expression(expression, depth)?;
         let result = (|| {
             let ExpressionOperation::Call {
@@ -1460,6 +1630,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 ));
             }
             let uses = self.unit.function_parameter_uses(function)?;
+            let result = self.unit.parallel_function_result(function)?;
             if uses.len() != arguments.len() {
                 return Err(compiler_corrupt(
                     "compiler_parallel_call",
@@ -1471,7 +1642,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
             for (argument, use_mode) in arguments.into_iter().zip(uses) {
                 self.expression_with_use(argument, depth + 1, use_mode)?;
             }
-            Ok((function, count))
+            Ok((function, count, result))
         })();
         self.active.remove(&expression);
         result
@@ -1485,13 +1656,15 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
     ) -> Result<(), Diagnostic> {
         match operation {
             ExpressionOperation::Parallel { left, right } => {
-                let (left, left_arguments) = self.parallel_call(left, depth)?;
-                let (right, right_arguments) = self.parallel_call(right, depth)?;
+                let (left, left_arguments, left_result) = self.parallel_call(left, depth)?;
+                let (right, right_arguments, right_result) = self.parallel_call(right, depth)?;
+                let result_type = self.unit.parallel_result_type(left_result, right_result)?;
                 self.push(CompiledInstruction::Parallel {
                     left,
                     left_arguments,
                     right,
                     right_arguments,
+                    result_type,
                 })?;
             }
             ExpressionOperation::ChooseOwned {

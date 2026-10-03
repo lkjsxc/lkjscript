@@ -4165,7 +4165,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "kernel_parallel_call",
             DiagnosticClass::Semantic,
-            "A structured child is not an exact monomorphic empty-effect graph task with transferable input and closed ordinary output.",
+            "A structured child is not an exact monomorphic empty-effect graph task with transferable input and closed ordinary or owned output.",
             "Use direct named task calls with ordinary data first and consuming owned arguments last; keep resources, loans, secrets and callables outside the child boundary.",
         ),
         diagnostic(
@@ -4178,13 +4178,31 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_parallel_result",
             DiagnosticClass::Semantic,
             "A structured child result differs from its exact declared result type.",
-            "Preserve each child's canonical result type through its call and the joined structural record.",
+            "Preserve each child's canonical result type through its call and the joined record or owned product.",
         ),
         diagnostic(
             "compiler_parallel_call",
             DiagnosticClass::Corrupt,
             "Canonical structured children disagree with direct monomorphic call lowering.",
             "Preserve the rejected input and rebuild from fully validated accepted meaning.",
+        ),
+        diagnostic(
+            "compiler_parallel_result_type",
+            DiagnosticClass::Corrupt,
+            "A canonical structured child result type is absent during lowering.",
+            "Preserve the rejected input and rebuild from fully validated accepted meaning.",
+        ),
+        diagnostic(
+            "compiler_parallel_function",
+            DiagnosticClass::Corrupt,
+            "A compiled structured child does not name an exact graph function.",
+            "Preserve the rejected input and rebuild from fully validated accepted meaning.",
+        ),
+        diagnostic(
+            "compiler_parallel_result_type_limit",
+            DiagnosticClass::Resource,
+            "Derived parallel result types exceed the compiler unit's finite metadata capacity.",
+            "Reduce the unit's distinct result types; capacity exhaustion does not establish invalid meaning.",
         ),
         diagnostic(
             "kernel_parallel_generation",
@@ -8488,7 +8506,7 @@ fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String
         (
             "structured-parallel-tasks",
             "(parallel (call LEFT-TASK EXPR...) (call RIGHT-TASK EXPR...))",
-            "task-only lexical scope; direct monomorphic graph tasks with closed empty effect rows; closed data parameters before consuming owned parameters; evaluate left then right arguments once in the parent, transfer exact owned custody to fresh child invocations, join both children before returning closed data fields left and right; no borrowed inputs, capabilities, detached lifetime or child quota reset",
+            "task-only lexical scope; direct monomorphic graph tasks with closed empty effect rows; closed data parameters before consuming owned parameters; evaluate left then right arguments once in the parent, transfer exact owned custody to fresh child invocations, join both children before returning fields left and right; two ordinary results form a record, otherwise closed owned results transfer back into an owned product consumed with unpack-owned; no borrowed inputs or results, capabilities, detached lifetime or child quota reset",
         ),
         (
             "normalization",

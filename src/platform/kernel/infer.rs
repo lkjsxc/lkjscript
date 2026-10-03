@@ -121,6 +121,45 @@ impl<R: ExpressionRead + ?Sized> ExpressionRead for CheckedExpressionRead<'_, R>
     }
 }
 
+/// Derived inference types remain visible to contract checks without becoming
+/// accepted graph state. Persisted objects retain the same precedence as the
+/// validator's own type reads.
+struct InferredTypeRead<'a, R: ?Sized> {
+    read: &'a R,
+    types: &'a BTreeMap<TypeObjectDigest, TypeObject>,
+}
+
+impl<R: ExpressionRead + ?Sized> ExpressionRead for InferredTypeRead<'_, R> {
+    fn package_id(&self) -> PackageId {
+        self.read.package_id()
+    }
+    fn owner(&self, owner: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic> {
+        self.read.owner(owner)
+    }
+    fn type_object(&self, digest: TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic> {
+        Ok(self
+            .read
+            .type_object(digest)?
+            .or_else(|| self.types.get(&digest).cloned()))
+    }
+    fn package_interface_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        self.read.package_interface_owner(package, owner)
+    }
+    fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        self.read.has_dependency(package)
+    }
+    fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
+        self.read.validation_checkpoint()
+    }
+    fn validation_work(&self) -> Result<(), Diagnostic> {
+        self.read.validation_work()
+    }
+}
+
 /// Request-local deterministic admissions owned by expression validation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct ExpressionValidationLimits {
@@ -1141,18 +1180,23 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     "kernel_parallel_result",
                     "right child result",
                 )?;
-                self.canonical_type(TypeForm::StructuralRecord {
-                    fields: vec![
-                        StructuralTypeField {
-                            name: super::Name::new("left")?,
-                            ty: left_type,
-                        },
-                        StructuralTypeField {
-                            name: super::Name::new("right")?,
-                            ty: right_type,
-                        },
-                    ],
-                })
+                let fields = vec![
+                    StructuralTypeField {
+                        name: super::Name::new("left")?,
+                        ty: left_type,
+                    },
+                    StructuralTypeField {
+                        name: super::Name::new("right")?,
+                        ty: right_type,
+                    },
+                ];
+                if left_call.result_owned || right_call.result_owned {
+                    let result = self.canonical_type(TypeForm::OwnedProduct { fields })?;
+                    self.owned_read(|read| super::owned_product::validate(read, result, None))?;
+                    Ok(result)
+                } else {
+                    self.canonical_type(TypeForm::StructuralRecord { fields })
+                }
             }
             ExpressionOperation::ImplementationCall {
                 function,
@@ -3736,8 +3780,12 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             used.set(used.get() + 1);
             Ok(())
         };
-        let read = CheckedExpressionRead {
+        let inferred = InferredTypeRead {
             read: self.read,
+            types: &self.ephemeral_types,
+        };
+        let read = CheckedExpressionRead {
+            read: &inferred,
             checkpoint: &checkpoint,
         };
         let result = action(&read);

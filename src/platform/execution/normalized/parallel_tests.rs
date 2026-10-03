@@ -1,6 +1,9 @@
 //! Language child execution, exact outcomes, aggregate budgets and joined cleanup.
 use super::*;
 
+#[path = "parallel_owned_result_tests.rs"]
+mod owned_results;
+
 const INPUT: &str = r#"declarations.begin
 (units (module create parallel-proof
   (external create new-cell (visibility private) (implementation core.cell.create)

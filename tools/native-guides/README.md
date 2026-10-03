@@ -119,16 +119,9 @@ These same-machine command costs are not application-runtime or peak-memory
 measurements. See the [completion campaign](../../docs/campaigns/202609240132.md)
 for the full fresh 26-gate source result, reproducibility, costs and delivery boundary.
 
-The Owned-generic compiler refresh regenerates this derived artifact through the
-public build owner while preserving accepted HEAD and its exact standard supplier.
-The generated reference pages continue to be owned by this native program.
-
-The owned-product metadata continuation rebuilds this same accepted program for
-compiler 17, bytecode 13 and artifact 24. Public `capabilities --generate-docs`
-regenerates the reference, including product syntax and current admission diagnostics.
-The accepted native program and its exact standard supplier are unchanged.
-
-The [structured parallel compiler refresh](../../docs/campaigns/20261002-structured-parallel.md)
-rebuilds this accepted program for compiler 19, bytecode 15 and artifact 26 through
-public check/build. All 79 tests pass with equal production/reference results. Its
-accepted HEAD, exact standard supplier and native page-rendering meaning are unchanged.
+Compiler or artifact contract changes require rebuilding this derived artifact
+through public check/build while preserving accepted HEAD and its exact standard
+supplier. After replacing it, rebuild the host and regenerate/verify the reference
+pages through public capabilities. The native program remains their content owner.
+The [current release notes](../../docs/releases/v0.1.69.md) identify the selected
+compatibility boundary; [status](../../docs/status.md) owns actual acceptance.
