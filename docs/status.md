@@ -4,33 +4,30 @@ Current snapshot: 2026-10-03. This page owns availability and unfinished accepta
 [Direction](direction.md) owns goals, [specifications](spec/) own semantics and
 [roadmap](roadmap.md) orders future language work.
 
-## Public binary and accepted predecessor
+## Public binary
 
-Immutable [v0.1.68](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.68) remains
-public/latest. Source `a7c4222cc669088032689e6620a1082e91478597`, producer
-37100969378/1 and promotion 37106215025/1 completed
-`immutable_published_and_public_verified`; release `402389568` and its three assets
-are unchanged. Original evidence remains in
-`.artifacts/20261003-owned-parallel-results/release-0168/`.
+Immutable [v0.1.69](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.69) is
+public/latest. Exact accepted source: `441995c5dc2e7e54a105afb50031239a1b2ed457`,
+tree `49205904b16a76abb3b89f7be0ffd2a709a5812d`. Its fresh 26-gate source receipt
+is retained under `.artifacts/20261003-owned-parallel-results/`; the
+[prior source record](https://github.com/lkjsxc/lkjscript/blob/86c27c5bd155d25f3b14bec84a42c783e406104e/docs/status.md)
+retains the exact original receipt and failed observations.
 
-The owned-result predecessor v0.1.69 is already integrated and source-accepted at
-`441995c5dc2e7e54a105afb50031239a1b2ed457`, tree
-`49205904b16a76abb3b89f7be0ffd2a709a5812d`. Its fresh 26-gate receipt is
-`.artifacts/lkjscript-dev/check/1791015899556306767-2988954-0/receipt.json`, digest
-`verification_548993164a30211baec6804529e21357c98d491bf38ce1128ef1758522a9651a`.
-The [previous status](https://github.com/lkjsxc/lkjscript/blob/86c27c5bd155d25f3b14bec84a42c783e406104e/docs/status.md)
-retains that exact source, tests, maintained inputs and original failed observations.
+[Producer 37110644675](https://github.com/lkjsxc/lkjscript/actions/runs/37110644675),
+attempt 1, completed `candidate_accepted` with product and controller both at that
+source. [Promotion 37115582930](https://github.com/lkjsxc/lkjscript/actions/runs/37115582930),
+attempt 1, controller `86c27c5bd155d25f3b14bec84a42c783e406104e`, completed
+`immutable_published_and_public_verified`. Release `402454819` is immutable;
+annotated tag object `dcd80145bfb766e16a595d1b4012965d2eafed3f` binds the accepted
+source. Every public asset length and digest matches the original accepted bytes.
+Anonymous exact/latest acquisition, installed execution and joined cleanup passed.
+No publication boundary remains for this selection.
 
-Original candidate [37110644675](https://github.com/lkjsxc/lkjscript/actions/runs/37110644675),
-attempt 1, has completed `candidate_accepted` for v0.1.69 with product and controller
-source both `441995c5dc2e7e54a105afb50031239a1b2ed457`. The exact final-archive
-acceptance includes 20 source gates, six target owners, two pinned userlands,
-installed recovery, the native public harness and joined cleanup. Current authenticated
-API observations and originals are retained in
-`.artifacts/20261003-closed-generic-parallel/release-0169/`. This is not publication:
-select the exact annotated tag and scoped authority, then promote these unchanged
-assets through [the release procedure](release.md). Do not dispatch another v0.1.69
-producer. Publication requires its own `immutable_published_and_public_verified` terminal.
+Original authenticated terminal, public lifecycle archive, receipts, API observations
+and unchanged assets are retained under
+`.artifacts/20261003-closed-generic-parallel/release-0169/`; `completed-publication.json`
+indexes the completed boundaries. Prior immutable v0.1.68 and its evidence under
+`.artifacts/20261003-owned-parallel-results/release-0168/` remain unchanged.
 
 ## Development v0.1.70: closed generic parallel applications
 
@@ -61,11 +58,19 @@ instructions under the current derived envelopes.
 
 Selected checkout: `/home/coder/workspace/lkjscript-structured-handoff-20261002`,
 branch `dev/closed-generic-parallel-20261003`. Evidence and retained failures are
-under `.artifacts/20261003-closed-generic-parallel/`. Next: freeze the reviewed
-implementation and run fresh dependency-complete `check full`; only an exact,
-input-stable 26-gate result authorizes mainline integration and a new v0.1.70
-candidate. No full acceptance, mainline delivery or public v0.1.70 binary is claimed
-by this pre-acceptance source record.
+under `.artifacts/20261003-closed-generic-parallel/`. Implementation
+`682b68aa7144e0dd6171abc49511e6c660028b99` completed 24 fresh gates in its first
+full run, but six stale current-generation assertions failed in two workspace test
+targets. The remaining offline-package owner was explicitly interrupted after that
+failure; its signaled result is not acceptance. Original receipt
+`verification_7920a6a1cb13eb6daf049112e5643a4047248710c63eb6cd4e55394d754b9689`
+and all outputs remain in `full-01-original/`, with the interruption recorded separately.
+The successor corrects only those exact current-generation expectations and records
+completed v0.1.69 publication; genuine predecessor bytes and behavioral rejection
+checks are preserved. Next: run fresh dependency-complete `check full` after this
+repair, then integrate only an exact input-stable 26-gate result. Remote main remains
+`86c27c5bd155d25f3b14bec84a42c783e406104e` until that acceptance. No full-source
+acceptance, mainline delivery or public v0.1.70 binary is claimed by this record.
 
 ## Compatibility and remaining limits
 

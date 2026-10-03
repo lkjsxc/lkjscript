@@ -138,7 +138,7 @@ fn byte_buffer_forged_artifact_cannot_erase_modes_results_moves_or_cleanup() {
             loaded.manifest.compiler_contract_version,
             loaded.manifest.bytecode_contract_version
         ),
-        (20, 16)
+        (21, 17)
     );
     let mut checked = 0;
     for (package, record) in loaded.manifest.packages.iter().enumerate() {

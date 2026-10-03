@@ -251,7 +251,7 @@ fn owned_generation_requires_rebuilding_authentic_predecessor_artifacts() {
 #[test]
 fn f64_artifact_admission_preserves_literal_observation_bits() {
     let (loaded, owner) = literal_artifact(Binary64::from_bits(0).unwrap());
-    assert_eq!(loaded.manifest.contract_version, 27);
+    assert_eq!(loaded.manifest.contract_version, 28);
     let (old, original) = loaded
         .objects
         .iter()

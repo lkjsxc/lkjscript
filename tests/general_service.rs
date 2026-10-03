@@ -174,7 +174,8 @@ fn maintained_descriptors_cover_every_selected_component_requirement() {
 #[test]
 fn checked_in_service_artifact_uses_current_bundle_contract() {
     let bytes = std::fs::read(repository().join(ARTIFACT)).expect("read maintained artifact");
-    assert_eq!(bytes.get(..8), Some(b"LKJART27".as_slice()));
+    assert_eq!(bytes.get(..8), Some(b"LKJART28".as_slice()));
+    assert_ne!(bytes.get(..8), Some(b"LKJART27".as_slice()));
     assert_ne!(bytes.get(..8), Some(b"LKJART24".as_slice()));
     assert_ne!(bytes.get(..8), Some(b"LKJART20".as_slice()));
     assert_ne!(bytes.get(..8), Some(b"LKJART19".as_slice()));
