@@ -3,6 +3,9 @@ use super::*;
 use lkjscript::platform::data::{DataKey, DataKeyPart, DataLimits, DataStore};
 use serde_json::{Value, json};
 
+#[path = "foreground_policy.rs"]
+mod policy;
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ForegroundReceipt {
@@ -297,9 +300,10 @@ pub(super) fn initial(context: &mut Context, consumers: &[Consumer]) -> Result<(
     loops(context, &consumers[0])
 }
 
-// Observed calibration, retained under campaign 202609121842: N=0 used 44 production
-// instructions, N=1000 used 32044. The smallest N above the former 10M cutoff is 312499.
-// This scalar nominal state retains no growing list or capabilities; I64 sum remains exact.
+// Retain the original quota-crossing input, not one allocation-dependent bytecode cost.
+// Nominal field identities can require temporaries to preserve initializer order.
+// Calibrate each immutable artifact and require linear work, fixed live state and
+// an actual crossing of the former 10M quota. The scalar I64 sum remains exact.
 const LONG_LOOP: i64 = 312_499;
 
 fn loops(context: &mut Context, consumer: &Consumer) -> Result<(), DevError> {
@@ -352,10 +356,19 @@ fn loops(context: &mut Context, consumer: &Consumer) -> Result<(), DevError> {
         validate_loop(&cell)?;
         context.receipt.effects.foreground.loops.push(cell);
     }
-    Ok(())
+    policy::validate_series(&context.receipt.effects.foreground.loops)
 }
 
 fn validate_loop(cell: &LoopCell) -> Result<(), DevError> {
+    let observed_output: Value = serde_json::from_str(
+        cell.execution
+            .get("value")
+            .ok_or_else(|| DevError::corrupt("loop output observation absent"))?,
+    )?;
+    require(
+        observed_output == cell.output,
+        "loop output observation substituted",
+    )?;
     require(
         cell.output == json!({"position":cell.n,"total":cell.n*(cell.n-1)/2}),
         "empty-row foreground loop result differs",
@@ -367,12 +380,11 @@ fn validate_loop(cell: &LoopCell) -> Result<(), DevError> {
     )?;
     require(
         production.get("production_tier").is_none()
-            && production["instructions"] == 44 + 32 * cell.n
             && production["capability_calls"] == 0
             && production["maximum_call_depth"] == 3
             && production["live_handles_after"] == 0
             && production["live_transactions_after"] == 0,
-        "loop fixed-state baseline, absent quota or cleanup differs",
+        "loop capability, call-depth or cleanup observation differs",
     )?;
     for (key, value) in [
         ("execution-mode", "production"),
@@ -407,7 +419,11 @@ fn validate_loop(cell: &LoopCell) -> Result<(), DevError> {
             "loop effective policy differs",
         )?;
     }
-    let cleanup: Value = serde_json::from_str(&cell.execution["cleanup"])?;
+    let cleanup: Value = serde_json::from_str(
+        cell.execution
+            .get("cleanup")
+            .ok_or_else(|| DevError::corrupt("loop cleanup absent"))?,
+    )?;
     require(
         cleanup["remaining_tasks"] == 0
             && cleanup["cleanup_failures"] == json!([])
@@ -1128,7 +1144,7 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
             "foreground diagnostic evidence substituted",
         )?;
     }
-    require(receipt.loops.len() == 4, "foreground policy cells missing")?;
+    policy::validate_series(&receipt.loops)?;
     for (cell, (label, n, bounded)) in receipt.loops.iter().zip([
         ("calibration-zero", 0, false),
         ("calibration-thousand", 1000, false),
