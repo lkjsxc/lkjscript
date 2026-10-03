@@ -412,12 +412,9 @@ pub(crate) fn validate_application(
     if operands.is_empty() {
         return Ok(());
     }
-    if types.len() != f.type_parameters.len()
-        || !f.effect_parameters.is_empty()
-        || !f.requirement_parameters.is_empty()
-    {
+    if types.len() != f.type_parameters.len() {
         return Err(reject(
-            "implementation-bearing calls require first-order graph signatures",
+            "implementation-bearing calls require exact type arguments",
         ));
     }
     for _ in types {
@@ -821,12 +818,9 @@ pub(crate) fn validate_parameters(
     if f.implementation_parameters.is_empty() {
         return Ok(());
     }
-    if !f.effect_parameters.is_empty()
-        || !f.requirement_parameters.is_empty()
-        || f.implementation_parameters.len() > contract::MAXIMUM_CHILDREN
-    {
+    if f.implementation_parameters.len() > contract::MAXIMUM_CHILDREN {
         return Err(reject(
-            "witness parameters require bounded first-order graph signatures",
+            "witness parameters require bounded graph signatures",
         ));
     }
     let mut ids = BTreeSet::new();

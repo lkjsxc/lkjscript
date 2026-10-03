@@ -770,6 +770,11 @@ where
         effect_arguments,
         requirement_arguments,
         ..
+    }
+    | ExpressionOperation::ImplementationCall {
+        effect_arguments,
+        requirement_arguments,
+        ..
     } = operation
     {
         for argument in requirement_arguments {

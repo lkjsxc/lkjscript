@@ -750,7 +750,7 @@ fn applications<'a>(
             _ => break,
         };
         if rank <= previous || (!callable && rank != 1) {
-            return Err(block.error(*id, "change_block_application", "application clauses must occur at most once in types/effects/requirements order and only where supported"));
+            return Err(block.error(*id, "change_block_application", "application clauses must occur at most once in types/effects/requirements/implementations order and only where supported"));
         }
         previous = rank;
         let (target, field) = match rank {
@@ -832,14 +832,6 @@ fn lower_node(
             )
         })
         .collect::<Result<Vec<_>, _>>()?;
-    if record.operation == "expression.implementation-call"
-        && (!node.effects.is_empty() || !node.requirements.is_empty())
-    {
-        return Err(inventory_error(
-            record,
-            "implementation calls do not accept effect or requirement applications",
-        ));
-    }
     if !node.implementations.is_empty() && record.operation != "expression.implementation-call" {
         return Err(inventory_error(
             record,
@@ -850,6 +842,8 @@ fn lower_node(
         "expression.implementation-call" => AuthoredExpressionOperation::ImplementationCall {
             function: decoder.parse_declaration_reference(record, "function")?,
             type_arguments: types,
+            effect_arguments: effects,
+            requirement_arguments: requirements,
             implementations: node
                 .implementations
                 .iter()

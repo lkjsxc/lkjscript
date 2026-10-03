@@ -446,9 +446,6 @@ impl Oracle<'_> {
             self.type_parameter(d.package, *id).is_none_or(|p| {
                 p.declaration != d.declaration
                     || p.header.owner != OwnerKey::TypeParameter(*id)
-                    || (p.constraints.has_owned()
-                        && (!f.effect_parameters.is_empty()
-                            || !f.requirement_parameters.is_empty()))
                     || (p.constraints.requires_transfer() && p.header.contract_version < 22)
             })
         }) {
@@ -456,9 +453,6 @@ impl Oracle<'_> {
         }
         if f.implementation_parameters.is_empty() {
             return true;
-        }
-        if !f.effect_parameters.is_empty() || !f.requirement_parameters.is_empty() {
-            return false;
         }
         let mut ids = BTreeSet::new();
         let mut names = BTreeSet::new();

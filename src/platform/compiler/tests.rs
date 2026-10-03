@@ -13,6 +13,8 @@ mod effect_tests;
 mod generic_resource_tests;
 #[path = "owned_closure_tests.rs"]
 mod owned_closure_tests;
+#[path = "owned_effect_admission_tests.rs"]
+mod owned_effect_admission_tests;
 #[path = "parallel_admission_tests.rs"]
 mod parallel_admission_tests;
 #[path = "predecessor_attack_tests.rs"]

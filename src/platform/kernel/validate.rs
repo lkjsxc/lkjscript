@@ -595,7 +595,7 @@ impl FullValidator<'_> {
                         "type parameter",
                     );
                     if parameter.constraints.has_owned()
-                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::OwnedContract(_)) || matches!(&declaration.payload, DeclarationPayload::Function(f) if f.effect_parameters.is_empty() && f.requirement_parameters.is_empty()))
+                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::OwnedContract(_) | DeclarationPayload::Function(_)))
                     {
                         self.error(
                             "kernel_owned_parameter_owner",
@@ -2521,9 +2521,13 @@ impl FullValidator<'_> {
             ),
             ExpressionOperation::ImplementationCall {
                 function,
+                requirement_arguments,
                 implementations,
                 ..
             } => {
+                for argument in requirement_arguments {
+                    self.validate_requirement_operand(OwnerKey::Expression(expression), *argument);
+                }
                 self.require_exact_kind(
                     function.package,
                     OwnerKey::Declaration(function.declaration),

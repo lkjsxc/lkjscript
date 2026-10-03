@@ -42,8 +42,12 @@ pub(crate) fn admit_call(
             function,
             arguments,
             type_arguments,
+            effect_arguments,
+            requirement_arguments,
             implementations,
-        } => (function, arguments, type_arguments, implementations),
+        } if effect_arguments.is_empty() && requirement_arguments.is_empty() => {
+            (function, arguments, type_arguments, implementations)
+        }
         _ => {
             return Err(reject(
                 "parallel children require direct named calls with exact scoped applications",

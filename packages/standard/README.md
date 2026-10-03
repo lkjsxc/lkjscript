@@ -63,10 +63,10 @@ Current identity:
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
 - semantic revision: `rev_85b2be44a8deca911fc6bdf4efdd4fb7b510f53e4a39723fbee263dff4b3a9b2`;
-- package revision: `package_revision_0c0960ee477343e82d8950057fd50adbfc5e1c22ca21ba212f17f96381a62325`;
-- package transport: `package_transport_8bc6ced3f07c972932594b146fe3aea6a659473afcb950ccd901752ed6e26971`;
-- artifact manifest: `artifact_manifest_4c6fcf758559e5c6dd50a338c9066380324258e697896dba715d7a51f01a5a50`;
-- artifact bundle: `artifact_bundle_67a27f564e87366120c6b9c7b7b1b0bf437ca1be2e860df425b34f914e64ec1b`;
+- package revision: `package_revision_7eaa419b59b682163b0d222be02ca67a952b6a51d3d5ce4f103ae9b0b19bde24`;
+- package transport: `package_transport_c4a39f3ecac40b6a24fc4da08cf7b67fe29fc2803355b8add776d6982a32df17`;
+- artifact manifest: `artifact_manifest_48734e3052f98cee2436e421926727b17b857cff52c842ea36d3f569f20bf3a4`;
+- artifact bundle: `artifact_bundle_a8149c846e32f6c6d22fe5dfe7656b8077227c9710b666bce5325c7d8738532e`;
 - 1,626 live semantic owners, 232 compiler units, and 89 graph tests.
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose
@@ -261,9 +261,9 @@ derives the current Graph 21 transport and compiler 19 / bytecode 15 / artifact 
 bundle through public export/build. All 89 graph tests agree between production and
 reference execution; accepted HEAD and standard operations retain their meaning.
 
-The explicit-transferable compiler refresh derives the Graph 22 transport through
+The owned-effect compiler refresh derives the Graph 23 transport through
 public native export and rebuilds the bundle through public check/build for
-compiler 22, bytecode 17 and artifact 29. The same 89 tests agree between production
+compiler 23, bytecode 18 and artifact 30. The same 89 tests agree between production
 and reference execution. The package revision and transport pins above select the
 current graph and interface wrappers; accepted HEAD and standard operations retain
 their existing meaning.

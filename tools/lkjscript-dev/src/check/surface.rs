@@ -22,6 +22,8 @@ const CURRENT_FILES: &[&str] = &[
     "docs/roadmap.md",
     "docs/security.md",
     "docs/status.md",
+    "examples/owned-effects/README.md",
+    "examples/owned-effects/owned-effects.deployment.json",
     "examples/parallel-work/README.md",
     "examples/parallel-work/command.deployment.json",
     "examples/parallel-work/service.deployment.json",
@@ -33,6 +35,7 @@ const CURRENT_DIRECTORIES: &[(&str, &str)] = &[
     ("docs/guides", ".md"),
     ("docs/guides/examples", ".lkjc"),
     ("docs/spec", ".md"),
+    ("examples/owned-effects", ".lkjc"),
     ("examples/parallel-work", ".lkjc"),
 ];
 const HISTORICAL_FILES: &[&str] = &["docs/spec/semantic-diff-merge.md"];
@@ -570,7 +573,11 @@ mod tests {
 
     #[test]
     fn native_examples_receive_the_same_text_audit() {
-        for directory in ["docs/guides/examples", "examples/parallel-work"] {
+        for directory in [
+            "docs/guides/examples",
+            "examples/owned-effects",
+            "examples/parallel-work",
+        ] {
             let root = surface_fixture();
             let relative = format!("{directory}/native.lkjc");
             let path = root.path().join(&relative);
@@ -593,6 +600,8 @@ mod tests {
         assert_eq!(scanned, CURRENT_FILES.len());
         for relative in [
             "docs/guides/examples/editor.deployment.json",
+            "examples/owned-effects/README.md",
+            "examples/owned-effects/owned-effects.deployment.json",
             "examples/parallel-work/README.md",
             "examples/parallel-work/command.deployment.json",
             "examples/parallel-work/service.deployment.json",
@@ -611,6 +620,8 @@ mod tests {
     fn explicit_example_descriptor_still_requires_a_regular_file() {
         for relative in [
             "docs/guides/examples/editor.deployment.json",
+            "examples/owned-effects/README.md",
+            "examples/owned-effects/owned-effects.deployment.json",
             "examples/parallel-work/README.md",
             "examples/parallel-work/command.deployment.json",
             "examples/parallel-work/service.deployment.json",
@@ -643,7 +654,11 @@ mod tests {
 
     #[test]
     fn native_examples_reject_unowned_entries_and_symlinks() {
-        for directory in ["docs/guides/examples", "examples/parallel-work"] {
+        for directory in [
+            "docs/guides/examples",
+            "examples/owned-effects",
+            "examples/parallel-work",
+        ] {
             let root = surface_fixture();
             let examples = root.path().join(directory);
             for name in [
@@ -683,7 +698,11 @@ mod tests {
 
     #[test]
     fn snapshot_inventory_and_surface_audit_share_finite_directory_and_file_bounds() {
-        for directory in ["docs/guides/examples", "examples/parallel-work"] {
+        for directory in [
+            "docs/guides/examples",
+            "examples/owned-effects",
+            "examples/parallel-work",
+        ] {
             let root = surface_fixture();
             let examples = root.path().join(directory);
             let existing = fs::read_dir(&examples).unwrap().count();

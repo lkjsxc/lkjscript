@@ -7,8 +7,8 @@ pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-9";
 pub const WITNESS_CONTRACT_VERSION: u16 = 9;
 pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-9";
 pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 9;
-pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-27";
-pub const VALIDATOR_CONTRACT_VERSION: u16 = 27;
+pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-28";
+pub const VALIDATOR_CONTRACT_VERSION: u16 = 28;
 
 pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT09";
 pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM14";
@@ -64,12 +64,12 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 36] = [
     },
     ValidatorFeatureDescriptor {
         name: "symbolic_owned_parameters",
-        version: 3,
+        version: 4,
     },
     ValidatorFeatureDescriptor {
         name: "explicit_owned_implementation_witnesses",
-        // Exact closed task-method effects; consumption, caller allowances and grants remain distinct.
-        version: 4,
+        // Explicit application schemes preserve consumption, allowances and grants independently.
+        version: 5,
     },
     ValidatorFeatureDescriptor {
         name: "sealed_owned_i64_cells",
@@ -121,7 +121,7 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 36] = [
     },
     ValidatorFeatureDescriptor {
         name: "single_relation_extractor",
-        version: 3,
+        version: 4,
     },
     ValidatorFeatureDescriptor {
         name: "owner_summary_dimensions",

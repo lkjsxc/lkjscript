@@ -37,17 +37,17 @@ exact implementation forwarding and independent bounded proofs. [Status](status.
 owns the exact completed acceptance and publication. Channels, task handles and effectful
 children remain separate extensions.
 
-After that boundary is accepted, prioritize the shared worker/runtime work below,
-then unify generic Owned implementation applications with caller-supplied effects
-and requirements before concurrent semantic transactions. Ordinary calls already
-carry these operands; exact implementation calls must compose through the same
-independently checked authority boundaries before effectful parallel children.
+Public 0.1.72 supplies the shared worker/runtime work below. Development
+0.1.73 composes generic Owned implementation applications with caller-supplied
+effects and requirements through the same independently checked authority
+boundaries as ordinary calls. Complete its acceptance before starting reviewed
+concurrent candidate refresh; [status](status.md) owns the current gate.
 Keep region-local ownership possible: current owned carriers being transferable
 does not make every future owner transferable.
 
 ## 2. Scale structured execution and the shared host
 
-Development 0.1.72 replaces per-child OS thread creation with lazily reused auxiliary
+Public 0.1.72 replaces per-child OS thread creation with lazily reused auxiliary
 workers under an explicit lifetime owner. Nonblocking idle-worker reservation and
 caller fallback preserve nested progress. The maintained native parallel-work
 family compares identical serial/parallel transforms and reductions beside an
@@ -75,13 +75,12 @@ in-process transfer establishes no distributed exactly-once guarantee.
 
 Extend the [Owned library contracts](spec/owned-generics.md), [products](spec/owned-products.md)
 and [choices](spec/owned-choices.md) through one ordinary cross-package composition
-at a time. The next semantic slice is a same-invocation generic task consuming an
-Owned carrier, forwarding an exact implementation witness and using a caller-supplied
-requirement. Extend implementation applications with explicit effect/requirement
-operands and preserve their substitutions and grant checks through transport and
-both evaluators; keep method contracts closed initially. Prove distinct cell/buffer
-implementations and foreign or insufficient authority rejection before expanding
-parallel child effects.
+at a time. Development 0.1.73 adds a same-invocation generic task consuming an Owned
+carrier, forwarding an exact implementation witness, invoking an effect-parametric
+callback and using a caller-supplied requirement. Its [contract](spec/owned-effects.md)
+preserves substitutions and grant checks through transport and both evaluators;
+methods remain closed. Distinct cell/buffer implementations and foreign or
+insufficient authority rejection precede any expansion of parallel child effects.
 
 Then prioritize useful owned containers, borrowing/lifetime relationships and
 typed trait methods over disconnected syntax. Explore associated type families,

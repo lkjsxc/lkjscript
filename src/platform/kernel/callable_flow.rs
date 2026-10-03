@@ -264,8 +264,13 @@ impl<R: ExpressionRead> Flow<'_, R> {
                         function,
                         type_arguments,
                         implementations,
+                        requirement_arguments,
                         ..
                     } => {
+                        self.reserve::<super::RequirementOperand>(requirement_arguments.len())?;
+                        for _ in requirement_arguments {
+                            self.tick()?;
+                        }
                         self.reserve::<super::ImplementationOperand>(implementations.len())?;
                         for operand in implementations {
                             self.tick()?;

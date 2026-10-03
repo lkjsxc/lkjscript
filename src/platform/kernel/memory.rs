@@ -968,9 +968,7 @@ pub(crate) fn validate_owner(
                             }
                     }
                     DeclarationPayload::Function(f) => {
-                        f.effect_parameters.is_empty()
-                            && f.requirement_parameters.is_empty()
-                            && matches!(key, OwnerKey::TypeParameter(id) if f.type_parameters.contains(&id))
+                        matches!(key, OwnerKey::TypeParameter(id) if f.type_parameters.contains(&id))
                     }
                     _ => false,
                 },

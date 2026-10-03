@@ -2,6 +2,31 @@
 
 Status: normative.
 
+## Owned effect and requirement applications
+
+The owned-effects native library must validate before a concrete consumer exists.
+Export its exact contract and generic relay, supply independent buffer/cell
+implementations, and forward type, witness, effect and requirement operands across
+three packages. Compare complete deterministic outputs after removing source
+projects and transports. Preserve canonical draft re-entry and intended identity
+through a reviewed edit. Two same-Self witnesses must remain distinguishable.
+
+Exercise the same witness-specialized function under different effect/requirement
+bindings. Controlled adapters independently observe operation order and canonical
+grant accounting in both evaluators. Live deployment effects execute only once.
+Reject foreign lexical operands, wrong arities, insufficient operation constraints,
+callback row mismatch, missing grants and pure-to-empty-task calls. Unused
+parameters and untaken syntax remain part of complete admission. New operands
+must not admit effectful parallel children or owned callable captures.
+
+Kernel, independent memory/source checks, package admission and strict artifact
+source/code correspondence must retain every operand. Rehashed operand deletion,
+substitution or authority rebinding rejects. Require exact/N-1 quota boundaries,
+trap and cancellation after observed progress, released owners/loans, preserved
+allocation identity where promised, and healthy subsequent execution. Original
+predecessor bytes remain frozen; current derived controls must retain their exact
+canonical source and instruction meaning.
+
 ## Structured parallel ownership
 
 Reusable auxiliary execution requires stable worker identity across successive

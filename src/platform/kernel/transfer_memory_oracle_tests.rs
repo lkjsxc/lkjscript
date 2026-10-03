@@ -360,6 +360,38 @@ declarations.end
         !accepts(&changed),
         "compatible Self cannot substitute a foreign witness parameter"
     );
+
+    for requirement in [false, true] {
+        let mut changed = source.clone();
+        for owner in changed.owners.values_mut() {
+            if let OwnerRecord::Expression(e) = owner
+                && let ExpressionOperation::ImplementationCall {
+                    effect_arguments,
+                    requirement_arguments,
+                    ..
+                } = &mut e.operation
+            {
+                if requirement {
+                    requirement_arguments.push(
+                        RequirementReference {
+                            package: changed.root.package_id,
+                            requirement: crate::platform::semantic_id::RequirementId::migrate(
+                                b"parallel-forbidden-requirement-operand",
+                                0,
+                            ),
+                        }
+                        .into(),
+                    );
+                } else {
+                    effect_arguments.push(EffectRow::default());
+                }
+            }
+        }
+        assert!(
+            !accepts(&changed),
+            "parallel witness calls still forbid explicit authority operands: requirement={requirement}"
+        );
+    }
 }
 
 #[test]

@@ -1089,13 +1089,15 @@ impl Renderer<'_> {
             E::ImplementationCall {
                 function,
                 type_arguments,
+                effect_arguments,
+                requirement_arguments,
                 implementations,
                 arguments,
             } => {
                 let mut text = format!(
                     "(implementation-call {}{} (implementations",
                     self.declaration(function)?,
-                    self.application(type_arguments, &[], &[])?
+                    self.application(type_arguments, effect_arguments, requirement_arguments)?
                 );
                 for operand in implementations {
                     append(

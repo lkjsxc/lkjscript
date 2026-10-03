@@ -126,6 +126,7 @@ struct Writer {
     declaration_body_extension: bool,
     literal_extension: bool,
     transfer_constraint_extension: bool,
+    implementation_authority_extension: bool,
 }
 
 impl Writer {
@@ -145,11 +146,14 @@ impl Writer {
             declaration_body_extension: false,
             literal_extension: false,
             transfer_constraint_extension: false,
+            implementation_authority_extension: false,
         }
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.transfer_constraint_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+        if self.implementation_authority_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR27");
+        } else if self.transfer_constraint_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR26");
         } else if self.parallel_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR25");
@@ -1879,11 +1883,24 @@ impl Writer {
             AuthoredExpressionOperation::ImplementationCall {
                 function,
                 type_arguments,
+                effect_arguments,
+                requirement_arguments,
                 implementations,
                 arguments,
             } => {
                 self.owned_extension = true;
-                self.tag(30)?;
+                if effect_arguments.is_empty() && requirement_arguments.is_empty() {
+                    self.tag(30)?;
+                } else {
+                    self.implementation_authority_extension = true;
+                    self.tag(37)?;
+                    self.list(requirement_arguments, |writer, argument| {
+                        writer.requirement_reference(argument, definitions)
+                    })?;
+                    self.list(effect_arguments, |writer, row| {
+                        writer.effect_row(row, definitions)
+                    })?;
+                }
                 self.declaration_reference(function, definitions)?;
                 self.list(type_arguments, |w, t| w.authored_type(t, definitions, 1))?;
                 self.list(implementations, |w, i| {

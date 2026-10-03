@@ -1,0 +1,55 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create owned-effects
+    (owned-contract create Storage (visibility public)
+      (self Self) (type-parameter create Self (constraint owned))
+      (method method_84000000000000000000000000000001 read
+        (parameters (Self borrow)) (returns I64) (effect pure))
+      (method method_84000000000000000000000000000002 replace
+        (parameters (I64 unrestricted) (Self consume)) (returns Self) (effect pure)))
+    (function create transform (visibility public)
+      (type-parameter create T (constraint owned))
+      (effect-parameter create E)
+      (requirement-parameter create R (interface std::WallClock)
+        (operations std::WallClock::utc-milliseconds))
+      (implementation-parameter implparam_84000000000000000000000000000001 ops Storage T)
+      (parameter create callback (type (task-function (I64) I64 (row (parameter E)))))
+      (parameter create owner (type T) (use consume))
+      (returns T) (effect (task (requirement R) (parameter E)))
+      (body (sequence
+        (capability-call R std::WallClock::utc-milliseconds)
+        (let
+          (binding before (type I64)
+            (method-call parameter@transform@implparam_84000000000000000000000000000001
+              Storage method_84000000000000000000000000000001 (local owner)))
+          (binding after (type I64) (invoke (local callback) (local before)))
+          (in (method-call parameter@transform@implparam_84000000000000000000000000000001
+            Storage method_84000000000000000000000000000002 (local after) (local owner)))))))
+    (function create relay (visibility public)
+      (type-parameter create T (constraint owned))
+      (effect-parameter create E)
+      (requirement-parameter create R (interface std::WallClock)
+        (operations std::WallClock::utc-milliseconds))
+      (implementation-parameter implparam_84000000000000000000000000000002 ops Storage T)
+      (parameter create callback (type (task-function (I64) I64 (row (parameter E)))))
+      (parameter create owner (type T) (use consume))
+      (returns T) (effect (task (requirement R) (parameter E)))
+      (body (implementation-call transform (types T) (effects (row (parameter E)))
+        (requirements R)
+        (implementations parameter@relay@implparam_84000000000000000000000000000002)
+        (local callback) (local owner))))
+    (function create nested-relay (visibility public)
+      (type-parameter create T (constraint owned))
+      (effect-parameter create E)
+      (requirement-parameter create R (interface std::WallClock)
+        (operations std::WallClock::utc-milliseconds))
+      (implementation-parameter implparam_84000000000000000000000000000003 ops Storage T)
+      (parameter create callback (type (task-function (I64) I64 (row (parameter E)))))
+      (parameter create owner (type T) (use consume))
+      (returns T) (effect (task (requirement R) (parameter E)))
+      (body (implementation-call relay (types T) (effects (row (parameter E)))
+        (requirements R)
+        (implementations parameter@nested-relay@implparam_84000000000000000000000000000003)
+        (local callback) (local owner))))))
+declarations.end

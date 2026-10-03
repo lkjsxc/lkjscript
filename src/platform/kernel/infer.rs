@@ -1206,14 +1206,16 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             ExpressionOperation::ImplementationCall {
                 function,
                 type_arguments,
+                effect_arguments,
+                requirement_arguments,
                 implementations,
                 arguments,
             } => {
                 let signature = self.function_signature(
                     function,
                     &type_arguments,
-                    &[],
-                    &[],
+                    &effect_arguments,
+                    &requirement_arguments,
                     &implementations,
                     context,
                 )?;

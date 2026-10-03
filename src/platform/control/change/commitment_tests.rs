@@ -315,7 +315,7 @@ fn unsupported_and_future_magics_keep_the_existing_current_identity_fallback() {
     for intent in [
         b"".as_slice(),
         b"LKJACR13",
-        b"LKJACR27",
+        b"LKJACR28",
         b"LKJACR99",
         b"unknown",
     ] {
@@ -332,4 +332,84 @@ fn unsupported_and_future_magics_keep_the_existing_current_identity_fallback() {
         commitment_codec_identity(b"LKJACR17"),
         "lkjscript-authored-change-codec-17"
     );
+    assert_eq!(
+        commitment_codec_identity(b"LKJACR26"),
+        "lkjscript-authored-change-codec-26"
+    );
+}
+
+#[test]
+fn implementation_authority_uses_codec27_and_empty_application_keeps_frozen_codec21_bytes() {
+    let local = |byte| AuthoredDeclarationReference::Local {
+        declaration: DeclarationSelector::Id {
+            declaration: DeclarationId::from_bytes([byte; 16]).unwrap(),
+        },
+    };
+    let request = |effect_arguments, requirement_arguments| AuthoredChangeSet {
+        base: RevisionId::from_digest([7; 32]),
+        preconditions: Vec::new(),
+        changes: vec![AuthoredChange::ReplaceFunctionBody {
+            function: declaration(),
+            body: expression(AuthoredExpressionOperation::ImplementationCall {
+                function: local(2),
+                type_arguments: Vec::new(),
+                effect_arguments,
+                requirement_arguments,
+                implementations: vec![AuthoredImplementationOperand::Concrete {
+                    implementation: local(3),
+                }],
+                arguments: vec![expression(AuthoredExpressionOperation::I64 { value: 42 })],
+            }),
+        }],
+        budget: frozen_budget(),
+    };
+    // Literal independent wire vectors: generation, base, list framing, change and expression.
+    let prefix = unhex(concat!(
+        "0707070707070707070707070707070707070707070707070707070707070707",
+        "00000000000000000000000000000001",
+    ));
+    let old = request(Vec::new(), Vec::new());
+    let old_bytes = crate::platform::change::canonical_authored_intent_bytes(&old).unwrap();
+    assert_eq!(old_bytes, [
+        b"LKJACR21".as_slice(),
+        &prefix,
+        &unhex("230101010101010101010101010101010101001e010102020202020202020202020202020202000000000000000000000000000000010101010303030303030303030303030303030300000000000000010003000000000000002a"),
+    ].concat());
+    assert_eq!(
+        commitment_codec_identity(&old_bytes),
+        "lkjscript-authored-change-codec-21"
+    );
+
+    let authority = request(
+        vec![AuthoredEffectRow::default()],
+        vec![AuthoredRequirementReference::Exact {
+            package: PackageId::from_bytes([4; 16]).unwrap(),
+            requirement: RequirementId::from_bytes([5; 16]).unwrap(),
+        }],
+    );
+    let bytes = crate::platform::change::canonical_authored_intent_bytes(&authority).unwrap();
+    assert_eq!(bytes, [
+        b"LKJACR27".as_slice(),
+        &prefix,
+        &unhex("23010101010101010101010101010101010100250000000000000001010404040404040404040404040404040405050505050505050505050505050505000000000000000100000000000000000000000000000000010102020202020202020202020202020202000000000000000000000000000000010101010303030303030303030303030303030300000000000000010003000000000000002a"),
+    ].concat());
+    assert_eq!(
+        commitment_codec_identity(&bytes),
+        AUTHORED_CHANGE_CODEC_IDENTITY
+    );
+    for request in [
+        request(vec![AuthoredEffectRow::default()], Vec::new()),
+        request(
+            Vec::new(),
+            vec![AuthoredRequirementReference::Exact {
+                package: PackageId::from_bytes([4; 16]).unwrap(),
+                requirement: RequirementId::from_bytes([5; 16]).unwrap(),
+            }],
+        ),
+    ] {
+        assert_eq!(
+            &crate::platform::change::canonical_authored_intent_bytes(&request).unwrap()[..8],
+            b"LKJACR27",
+        );
+    }
 }

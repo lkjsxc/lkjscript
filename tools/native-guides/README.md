@@ -126,7 +126,7 @@ pages through public capabilities. The native program remains their content owne
 The [current release notes](../../docs/releases/v0.1.69.md) identify the selected
 compatibility boundary; [status](../../docs/status.md) owns actual acceptance.
 
-The current derived bundle uses compiler 22, bytecode 17 and artifact 29:
-`artifact_bundle_92142f184b0c18b7ed69ecafece516b98af1db5045a0affa454305c35b730f6b`,
+The current derived bundle uses compiler 23, bytecode 18 and artifact 30:
+`artifact_bundle_c236b0b1de61547dae47482df4203ea355cc7957a4bb46dd85e66352b02710dd`,
 1,178,021 bytes. Public check/build preserves the accepted native HEAD and its exact
 supplier; all 79 native and supplier tests agree between the two evaluators.

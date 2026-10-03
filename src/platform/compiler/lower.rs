@@ -1535,6 +1535,21 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         self.expression_with_use(expression, depth, ParameterUse::Unrestricted)
     }
 
+    fn application_requirements(
+        &mut self,
+        requirements: &[crate::platform::kernel::RequirementOperand],
+        effects: &[crate::platform::kernel::EffectRow],
+    ) -> Result<(), Diagnostic> {
+        for reference in requirements
+            .iter()
+            .chain(effects.iter().flat_map(|row| &row.requirements))
+            .filter_map(|operand| operand.concrete())
+        {
+            self.unit.tables.requirement(reference)?;
+        }
+        Ok(())
+    }
+
     fn local_is_memory(&mut self, value: LocalValueReference) -> Result<bool, Diagnostic> {
         let key = match value {
             LocalValueReference::FunctionParameter(p) => Some(OwnerKey::Parameter(p)),
@@ -1646,7 +1661,11 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     arguments,
                     type_arguments,
                     implementations,
-                } => (function, arguments, type_arguments, implementations),
+                    effect_arguments,
+                    requirement_arguments,
+                } if effect_arguments.is_empty() && requirement_arguments.is_empty() => {
+                    (function, arguments, type_arguments, implementations)
+                }
                 _ => {
                     return Err(compiler_corrupt(
                         "compiler_parallel_call",
@@ -1940,11 +1959,14 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 }
             }
             ExpressionOperation::ImplementationCall {
+                requirement_arguments,
+                effect_arguments,
                 function,
                 type_arguments,
                 implementations,
                 arguments,
             } => {
+                self.application_requirements(&requirement_arguments, &effect_arguments)?;
                 let uses = self.unit.function_parameter_uses(function)?;
                 if uses.len() != arguments.len() {
                     return Err(compiler_corrupt(
@@ -1965,6 +1987,8 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     self.expression_with_use(argument, depth, use_mode)?;
                 }
                 self.push(CompiledInstruction::ImplementationCall {
+                    requirement_arguments,
+                    effect_arguments,
                     function,
                     type_arguments,
                     implementations,
@@ -2004,9 +2028,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 type_arguments,
                 arguments,
             } => {
-                for reference in requirement_arguments.iter().filter_map(|r| r.concrete()) {
-                    self.unit.tables.requirement(reference)?;
-                }
+                self.application_requirements(&requirement_arguments, &effect_arguments)?;
                 let parameter_uses = self.unit.function_parameter_uses(function)?;
                 if parameter_uses.len() != arguments.len() {
                     return Err(compiler_corrupt(
@@ -2037,9 +2059,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 function,
                 type_arguments,
             } => {
-                for reference in requirement_arguments.iter().filter_map(|r| r.concrete()) {
-                    self.unit.tables.requirement(reference)?;
-                }
+                self.application_requirements(&requirement_arguments, &effect_arguments)?;
                 let function = self.unit.tables.declaration(function)?;
                 let type_arguments = type_arguments
                     .into_iter()

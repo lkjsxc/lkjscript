@@ -112,6 +112,176 @@ fn transfer_constraints_round_trip_native_drafts_without_concrete_callers() {
 }
 
 #[test]
+fn owned_effect_requirement_forwarding_round_trips_drafts_before_concrete_callers() {
+    let temporary = tempfile::tempdir().unwrap();
+    let initial = crate::platform::kernel::tests::witness_snapshot();
+    let created =
+        GraphRepository::create(&temporary.path().join("meaning"), &initial, None).unwrap();
+    let standard = crate::platform::builtin_standard::BuiltinStandard::load().unwrap();
+    created
+        .repository
+        .stage_package_transport(standard.package_transport, &standard.transport().container)
+        .unwrap();
+    let source = r#"declarations.begin
+(units (use std builtin)
+  (module create owned_authority (as $module)
+    (owned-contract create Marker (visibility public)
+      (self Self) (type-parameter create Self (constraint owned))
+      (method method_85000000000000000000000000000001 read
+        (parameters (Self borrow)) (returns I64) (effect pure)))
+    (function create identity (visibility public)
+      (type-parameter create T (constraint owned))
+      (effect-parameter create E)
+      (requirement-parameter create R (interface std::WallClock)
+        (operations std::WallClock::utc-milliseconds))
+      (implementation-parameter implparam_85000000000000000000000000000001 ops Marker T)
+      (parameter create owner (type T) (use consume))
+      (returns T) (effect (task (requirement R) (parameter E)))
+      (body (local owner)))
+    (function create forward (as $forward) (visibility public)
+      (type-parameter create T (constraint owned))
+      (effect-parameter create E)
+      (requirement-parameter create R (interface std::WallClock)
+        (operations std::WallClock::utc-milliseconds))
+      (implementation-parameter implparam_85000000000000000000000000000002 ops Marker T)
+      (parameter create owner (type T) (use consume))
+      (returns T) (effect (task (requirement R) (parameter E)))
+      (body (sequence (i64 7)
+        (implementation-call identity (types T) (effects (row (parameter E)))
+          (requirements R)
+          (implementations parameter@forward@implparam_85000000000000000000000000000002)
+          (local owner)))))))
+declarations.end"#;
+    let input = format!(
+        "request base={}\n{source}\nadd.dependency package={} semantic-revision={} package-revision={}\n",
+        created.current.head.revision,
+        standard.package,
+        standard.semantic_revision,
+        standard.package_revision,
+    );
+    let decoded = decode_compact_change("owned-authority.lkjc", input.as_bytes()).unwrap();
+    assert_eq!(
+        &canonical_authored_intent_bytes(&decoded.semantic).unwrap()[..8],
+        b"LKJACR27"
+    );
+    let prepared = created
+        .repository
+        .prepare_authored_change(&decoded.semantic, decoded.options)
+        .unwrap_or_else(|errors| panic!("generic library admission: {errors:#?}"));
+    let module = prepared.allocated["$module"];
+    created.repository.publish(&prepared.publication).unwrap();
+    let draft = render_native_draft(
+        &created.repository.view_current().unwrap(),
+        &[module.into()],
+        4 * 1_048_576,
+        crate::platform::execution::ExecutionControl::uncancelled(),
+    )
+    .unwrap();
+    let text = std::str::from_utf8(&draft).unwrap();
+    assert!(text.contains("(effects (row (parameter "), "{text}");
+    assert!(text.contains("(requirements "), "{text}");
+    assert!(text.contains("(implementations parameter@"), "{text}");
+    let no_change = decode_compact_change_in_repository(
+        "owned-authority-draft.lkjc",
+        &draft,
+        &created.repository,
+    )
+    .unwrap();
+    let errors = created
+        .repository
+        .prepare_authored_change(&no_change.semantic, no_change.options)
+        .unwrap_err();
+    assert_eq!(errors.len(), 1, "{errors:#?}");
+    assert_eq!(errors[0].code, "publication_semantic_no_change");
+
+    let literal = text.replace("(i64 7)", "(i64 8)");
+    let literal = decode_compact_change_in_repository(
+        "authority-literal.lkjc",
+        literal.as_bytes(),
+        &created.repository,
+    )
+    .unwrap();
+    assert!(
+        literal
+            .semantic
+            .changes
+            .iter()
+            .any(|change| matches!(change, AuthoredChange::SetFunctionLiterals { .. }))
+    );
+    assert!(
+        !literal
+            .semantic
+            .changes
+            .iter()
+            .any(|change| matches!(change, AuthoredChange::ReplaceFunctionBody { .. }))
+    );
+    created
+        .repository
+        .prepare_authored_change(&literal.semantic, literal.options)
+        .unwrap();
+
+    // Changing only the application's row retains the declared allowance but changes intent.
+    let application = text.split_once("(effects ").unwrap().1;
+    let end = application.find(" (requirements ").unwrap();
+    let clause = format!("(effects {}", &application[..end]);
+    let changed = text
+        .replace(&clause, "(effects (row))")
+        .replace("(i64 7)", "(i64 8)");
+    assert_ne!(changed, text);
+    let changed = decode_compact_change_in_repository(
+        "authority-rebinding.lkjc",
+        changed.as_bytes(),
+        &created.repository,
+    )
+    .unwrap();
+    assert!(
+        !changed
+            .semantic
+            .changes
+            .iter()
+            .any(|change| matches!(change, AuthoredChange::SetFunctionLiterals { .. }))
+    );
+    assert!(
+        changed
+            .semantic
+            .changes
+            .iter()
+            .any(|change| matches!(change, AuthoredChange::ReplaceFunctionBody { .. }))
+    );
+    created
+        .repository
+        .prepare_authored_change(&changed.semantic, changed.options)
+        .unwrap();
+
+    let application = text.split_once("(requirements ").unwrap().1;
+    let end = application.find(')').unwrap();
+    let clause = format!("(requirements {})", &application[..end]);
+    let invalid = text.replace(&clause, "(requirements)");
+    let invalid = decode_compact_change_in_repository(
+        "authority-erased.lkjc",
+        invalid.as_bytes(),
+        &created.repository,
+    )
+    .unwrap();
+    assert!(
+        created
+            .repository
+            .prepare_authored_change(&invalid.semantic, invalid.options)
+            .is_err()
+    );
+    assert_eq!(
+        created
+            .repository
+            .view_current()
+            .unwrap()
+            .current()
+            .head
+            .revision,
+        prepared.publication.head.revision
+    );
+}
+
+#[test]
 fn native_owned_task_method_intent_is_distinct_and_pure_predecessor_stays_stable() {
     let literal = "declarations.begin\n(units (module create methods
       (owned-contract create Storage (visibility public)

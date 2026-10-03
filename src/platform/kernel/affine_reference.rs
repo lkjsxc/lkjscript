@@ -277,8 +277,12 @@ impl Reference<'_> {
                 self.plain(*right, live)?;
                 Ok(Value::Plain)
             }
-            ExpressionOperation::ImplementationCall { arguments, .. }
-            | ExpressionOperation::MethodCall { arguments, .. } => {
+            ExpressionOperation::ImplementationCall {
+                function,
+                arguments,
+                ..
+            } => self.function_call(*function, arguments, live),
+            ExpressionOperation::MethodCall { arguments, .. } => {
                 for arg in arguments {
                     self.plain(*arg, live)?;
                 }
@@ -1581,6 +1585,80 @@ fn recursive_generic_resource_contracts_have_independent_affine_admission() {
                 }
                 .accepts(),
                 "reference: {mode}/{tail}"
+            );
+        }
+    }
+}
+
+#[test]
+fn implementation_applications_preserve_exact_resource_flow_with_generic_effects() {
+    for nested in [false, true] {
+        let mut snapshot = crate::platform::execution::normalized::tests::iteration_resource_tests::effect_resource_tests::snapshot(nested, true);
+        let mut converted = 0;
+        for owner in snapshot.owners.values_mut() {
+            let OwnerRecord::Expression(expression) = owner else {
+                continue;
+            };
+            let ExpressionOperation::Call {
+                function,
+                type_arguments,
+                effect_arguments,
+                requirement_arguments,
+                arguments,
+            } = &expression.operation
+            else {
+                continue;
+            };
+            if effect_arguments.is_empty() {
+                continue;
+            }
+            // Isolate the application's affine transfer shape. Witness and
+            // authority admission have separate canonical oracles; neither can
+            // excuse dropping the ordinary function's resource suffix here.
+            expression.operation = ExpressionOperation::ImplementationCall {
+                function: *function,
+                type_arguments: type_arguments.clone(),
+                effect_arguments: effect_arguments.clone(),
+                requirement_arguments: requirement_arguments.clone(),
+                implementations: vec![],
+                arguments: arguments.clone(),
+            };
+            converted += 1;
+        }
+        assert!(converted > 0);
+        assert!(production_accepts(&snapshot));
+        assert!(
+            Reference {
+                snapshot: &snapshot
+            }
+            .accepts()
+        );
+
+        let parameter = snapshot
+            .owners
+            .iter()
+            .find_map(|(key, owner)| {
+                matches!(owner, OwnerRecord::Parameter(p) if p.resource_requirement.is_some())
+                    .then_some(*key)
+            })
+            .unwrap();
+        for fault in ["foreign", "unrestricted"] {
+            let mut broken = snapshot.clone();
+            let OwnerRecord::Parameter(record) = broken.owners.get_mut(&parameter).unwrap() else {
+                unreachable!()
+            };
+            match fault {
+                "foreign" => {
+                    record.resource_requirement.as_mut().unwrap().package =
+                        PackageId::migrate(b"implementation-resource-foreign", 0);
+                }
+                "unrestricted" => record.use_mode = ParameterUse::Unrestricted,
+                _ => unreachable!(),
+            }
+            assert!(!production_accepts(&broken), "production/{nested}/{fault}");
+            assert!(
+                !Reference { snapshot: &broken }.accepts(),
+                "reference/{nested}/{fault}"
             );
         }
     }

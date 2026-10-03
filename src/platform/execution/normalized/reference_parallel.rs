@@ -126,9 +126,13 @@ impl ReferenceState<'_> {
                 ExpressionOperation::ImplementationCall {
                     function,
                     type_arguments,
+                    effect_arguments,
+                    requirement_arguments,
                     implementations,
                     arguments,
-                } => (function, type_arguments, implementations, arguments),
+                } if effect_arguments.is_empty() && requirement_arguments.is_empty() => {
+                    (function, type_arguments, implementations, arguments)
+                }
                 _ => {
                     return Err(reference_type_error(
                         "parallel branches require closed direct named calls",

@@ -18,9 +18,9 @@ a pure helper, with its loans ending before control returns to the task.
 A direct result may be ByteBuffer, OwnedI64Cell, an owned product or choice, or an
 exact in-scope Owned type parameter. Ordinary containers, callable descriptors,
 partial application and capture do not gain permission to contain these values.
-A first-order task can declare Owned type parameters and explicit implementation
-witnesses without effect or requirement parameters. Concrete task effect rows are
-supported, including the empty row. The subsequent [task-method extension](owned-generics.md#nominal-contracts-and-exact-static-operands)
+A task can declare Owned type parameters and explicit implementation witnesses
+together with [effect and requirement parameters](owned-effects.md). Concrete task
+effect rows are supported, including the empty row. The [task-method extension](owned-generics.md#nominal-contracts-and-exact-static-operands)
 also permits monomorphic task methods with exact closed rows and consuming Self
 arguments. A witness selects that exact signature, never the caller's effect
 allowance or an execution grant.

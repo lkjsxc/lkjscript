@@ -10,14 +10,14 @@ The graph is the sole editable authority. Stable identities preserve declaration
 through edits, while names remain useful, changeable locators. Pure functions,
 tasks, exact libraries and standalone application bundles share this model.
 
-**Public:** [v0.1.71](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.71),
-with [explicit transferable contracts](docs/spec/transferable-types.md) so generic
-libraries can form their own parallel groups. Its
-[release notes](docs/releases/v0.1.71.md) describe the exact published boundary. The
-[three-package guide](docs/guides/native-transferable-parallel.md) demonstrates
-reusable builders, exact implementation forwarding and standalone execution.
-Development 0.1.72 adds reusable auxiliary workers with explicit joined lifetime
-management and a [maintained native transform/reduction family](examples/parallel-work/README.md).
+**Public:** [v0.1.72](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.72),
+with reusable auxiliary workers, explicit joined lifetime management and a
+[maintained native transform/reduction family](examples/parallel-work/README.md).
+Its [release notes](docs/releases/v0.1.72.md) describe the exact published boundary.
+[Explicit transferable contracts](docs/spec/transferable-types.md) let generic
+libraries form their own parallel groups. Development 0.1.73 composes
+[Owned generic tasks with caller-supplied effects and requirements](docs/spec/owned-effects.md),
+with a [three-package example](examples/owned-effects/README.md).
 [Current status](docs/status.md) separates source acceptance from public distribution.
 
 [Owned generic libraries](docs/guides/native-owned-generics.md),
@@ -44,10 +44,10 @@ executing it. The exact URL below remains pinned even when a newer release appea
 ```sh
 curl -q --fail --location --proto '=https' --proto-redir '=https' \
   --connect-timeout 15 --max-time 180 --max-filesize 16384 \
-  --output install-v0.1.71.sh \
-  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.71/install.sh
-cat install-v0.1.71.sh
-sh install-v0.1.71.sh --prefix "$HOME/.local"
+  --output install-v0.1.72.sh \
+  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.72/install.sh
+cat install-v0.1.72.sh
+sh install-v0.1.72.sh --prefix "$HOME/.local"
 export PATH="$HOME/.local/bin:$PATH"
 lkjscript --version
 lkjscript runtime list

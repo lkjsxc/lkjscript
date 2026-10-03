@@ -56,10 +56,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-30";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 30;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-26";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 26;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-31";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 31;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-27";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 27;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -2493,6 +2493,31 @@ pub(crate) struct CompactEdgeDescriptor {
 
 pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
     CompactEdgeDescriptor {
+        name: "implementation.argument",
+        parent: "expression.implementation-call",
+        child: "implementation-operand",
+        fields: &[
+            CompactFormField {
+                form: "implementation.argument",
+                name: "parent",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "implementation.argument",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "implementation.argument",
+                name: "implementation",
+                required: true,
+                syntax: "concrete@DECLARATION|parameter@FUNCTION@implparam_HEX",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
         name: "expression.owned-field",
         parent: "expression.pack-owned",
         child: "expression",
@@ -2771,7 +2796,7 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
     },
     CompactEdgeDescriptor {
         name: "requirement.argument",
-        parent: "call-or-function-value",
+        parent: "call-or-function-value-or-implementation-call",
         child: "requirement-operand",
         fields: &[
             CompactFormField {
@@ -2821,7 +2846,7 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
     },
     CompactEdgeDescriptor {
         name: "effect.argument",
-        parent: "call-or-function-value",
+        parent: "call-or-function-value-or-implementation-call",
         child: "effect-row",
         fields: &[
             CompactFormField {
@@ -3525,6 +3550,9 @@ impl Decoder {
                     record,
                     &["parent", "index", "id", "name", "contract", "self"],
                 )?,
+                "implementation.argument" => {
+                    self.insert_indexed_record_edge(record, &["parent", "index", "implementation"])?
+                }
                 "requirement.argument" => {
                     self.insert_indexed_record_edge(record, &["parent", "index", "requirement"])?
                 }
@@ -4839,6 +4867,40 @@ impl Decoder {
                     right: Box::new(self.decode_expression(&right)?),
                 }
             }
+            "expression.implementation-call" => {
+                check_fields(&record, &["as", "function"])?;
+                AuthoredExpressionOperation::ImplementationCall {
+                    effect_arguments: self.decode_effect_arguments(symbol)?,
+                    requirement_arguments: self.decode_requirement_arguments(symbol)?,
+                    function: self.parse_declaration_reference(&record, "function")?,
+                    type_arguments: self
+                        .ordered_edges(symbol, true)?
+                        .into_iter()
+                        .map(|edge| self.decode_type(&edge.value))
+                        .collect::<Result<Vec<_>, _>>()?,
+                    implementations: self
+                        .ordered_record_edges("implementation.argument", symbol)?
+                        .iter()
+                        .map(|edge| {
+                            self.parse_implementation_operand(
+                                &edge.record,
+                                required(&edge.record, "implementation")?,
+                            )
+                        })
+                        .collect::<Result<_, _>>()?,
+                    arguments: self.decode_expression_edges(symbol)?,
+                }
+            }
+            "expression.method-call" => {
+                check_fields(&record, &["as", "witness", "contract", "method"])?;
+                AuthoredExpressionOperation::MethodCall {
+                    witness: self
+                        .parse_implementation_operand(&record, required(&record, "witness")?)?,
+                    contract: self.parse_declaration_reference(&record, "contract")?,
+                    method: parse_field(&record, "method")?,
+                    arguments: self.decode_expression_edges(symbol)?,
+                }
+            }
             "expression.call" => {
                 check_fields(&record, &["as", "function"])?;
                 AuthoredExpressionOperation::Call {
@@ -5346,6 +5408,8 @@ fn commitment_codec_identity(intent: &[u8]) -> &'static str {
         "lkjscript-authored-change-codec-24"
     } else if intent.starts_with(b"LKJACR25") {
         "lkjscript-authored-change-codec-25"
+    } else if intent.starts_with(b"LKJACR26") {
+        "lkjscript-authored-change-codec-26"
     } else {
         // Retain the existing fallback; do not infer identities from unknown/future magics.
         AUTHORED_CHANGE_CODEC_IDENTITY

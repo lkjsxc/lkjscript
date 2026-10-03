@@ -131,6 +131,8 @@ impl Closing<'_, '_> {
                     }
                 }
                 NormalizedInstruction::ImplementationCall {
+                    effect_arguments,
+                    requirement_arguments,
                     function,
                     implementations,
                     type_arguments,
@@ -147,8 +149,8 @@ impl Closing<'_, '_> {
                         function,
                         type_arguments: Arc::clone(type_arguments),
                         arguments: *arguments,
-                        effect_arguments: Arc::from([]),
-                        requirement_arguments: Arc::from([]),
+                        effect_arguments: Arc::clone(effect_arguments),
+                        requirement_arguments: Arc::clone(requirement_arguments),
                     };
                 }
                 NormalizedInstruction::MethodCall {
@@ -409,6 +411,8 @@ mod tests {
             NormalizedInstruction::ImplementationCall {
                 function: FunctionIndex(0, base.value_origin),
                 type_arguments: Arc::from([]),
+                effect_arguments: Arc::from([]),
+                requirement_arguments: Arc::from([]),
                 implementations: Arc::from([]),
                 arguments: 0,
             },

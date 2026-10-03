@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-22";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 22;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-17";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 17;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN22";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v22";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v22";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-23";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 23;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-18";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 18;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN23";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v23";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v23";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -94,6 +94,8 @@ impl CompilationUnitKey {
             "lkjscript.compiler-unit-key.v20"
         } else if compiler_contract_version == 21 {
             "lkjscript.compiler-unit-key.v21"
+        } else if compiler_contract_version == 22 {
+            "lkjscript.compiler-unit-key.v22"
         } else {
             COMPILER_UNIT_KEY_DOMAIN
         });
@@ -303,6 +305,8 @@ pub struct CompiledCode {
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum CompiledInstruction {
     ImplementationCall {
+        requirement_arguments: Vec<crate::platform::kernel::RequirementOperand>,
+        effect_arguments: Vec<crate::platform::kernel::EffectRow>,
         function: u32,
         type_arguments: Vec<u32>,
         implementations: Vec<crate::platform::kernel::ImplementationOperand>,
@@ -532,7 +536,7 @@ impl CompilationUnit {
                 "compiler-unit bytes disagree with their exact object-domain digest",
             ));
         }
-        // Derived generations 10–21 require a rebuild from supported canonical owners.
+        // Derived generations 10–22 require a rebuild from supported canonical owners.
         // Refuse before decoding; old bytes never acquire current instruction meaning.
         if [
             b"LKJCUN10",
@@ -547,6 +551,7 @@ impl CompilationUnit {
             b"LKJCUN19",
             b"LKJCUN20",
             b"LKJCUN21",
+            b"LKJCUN22",
         ]
         .iter()
         .any(|magic| bytes.starts_with(*magic))
@@ -582,7 +587,7 @@ impl CompilationUnit {
                 self.bytecode_contract_version,
                 self.graph_contract_version
             ),
-            (22, 17, 22)
+            (23, 18, 23)
         ) {
             return Err(unit_error(
                 DiagnosticClass::Source,
@@ -1315,7 +1320,10 @@ impl CompiledCode {
 
 impl CompiledInstruction {
     fn validate(&self, code: &CompiledCode, tables: &CompilationTables) -> Result<(), Diagnostic> {
-        if let Self::Call {
+        if let Self::ImplementationCall {
+            effect_arguments, ..
+        }
+        | Self::Call {
             effect_arguments, ..
         }
         | Self::FunctionValue {
@@ -1401,11 +1409,14 @@ impl CompiledInstruction {
                 require_index("jump target", *target, code.instructions.len())
             }
             Self::ImplementationCall {
+                requirement_arguments,
+                effect_arguments: _,
                 function,
                 type_arguments,
                 implementations,
                 arguments,
             } => {
+                require_item_count("requirement arguments", requirement_arguments.len(), true)?;
                 require_index(
                     "implementation call target",
                     *function,

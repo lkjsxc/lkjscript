@@ -25,12 +25,256 @@ pub const DEPENDENCY_BINDING_BYTES: usize = 32;
 pub const RETIREMENT_BINDING_BYTES: usize = 32;
 
 #[cfg(test)]
+mod implementation_application_encoding_tests {
+    use super::*;
+    use crate::platform::kernel::{
+        DeclarationReference, EffectRow, ExpressionOperation, ExpressionRecord,
+        ImplementationOperand, RequirementOperand, RequirementReference, TypeForm,
+    };
+    use crate::platform::semantic_id::{DeclarationId, ExpressionId, RequirementId};
+
+    fn references() -> (ExpressionId, DeclarationReference, RequirementOperand) {
+        let seed = b"implementation-application-codec";
+        let package = "pkg_10000000000000000000000000000001".parse().unwrap();
+        (
+            ExpressionId::migrate(seed, 0),
+            DeclarationReference {
+                package,
+                declaration: DeclarationId::migrate(seed, 0),
+            },
+            RequirementReference {
+                package,
+                requirement: RequirementId::migrate(seed, 0),
+            }
+            .into(),
+        )
+    }
+
+    fn envelope(generation: u16) -> ([u8; 8], String) {
+        (
+            format!("LKJOWN{generation}").as_bytes().try_into().unwrap(),
+            format!("lkjscript.kernel.owner-envelope.v{generation}"),
+        )
+    }
+
+    #[test]
+    fn predecessor_implementation_calls_retain_exact_bytes_and_empty_new_operands() {
+        let (id, function, _) = references();
+        let type_arguments = vec![
+            encode_type_object(&TypeObject::new(TypeForm::I64).unwrap())
+                .unwrap()
+                .0,
+        ];
+        let implementations = vec![ImplementationOperand::Concrete {
+            implementation: function,
+        }];
+        let arguments = vec![ExpressionId::migrate(
+            b"implementation-application-codec",
+            1,
+        )];
+        for generation in 18..=22 {
+            let (magic, domain) = envelope(generation);
+            // Original Graph 18–22 ordinals and fields, independent of both
+            // the current expression enum and its frozen conversion.
+            let original = packed::encode(
+                magic,
+                &domain,
+                &(
+                    9_u32,
+                    generation,
+                    id,
+                    24_u32,
+                    function,
+                    &type_arguments,
+                    &implementations,
+                    &arguments,
+                ),
+                MAXIMUM_OWNER_OBJECT_BYTES,
+            )
+            .unwrap();
+            let digest = OwnerObjectDigest::of(&original);
+            let owner = decode_owner(
+                &original,
+                OwnerKey::Expression(id),
+                OwnerKind::Expression,
+                digest,
+            )
+            .unwrap();
+            assert_eq!(
+                owner,
+                OwnerRecord::Expression(ExpressionRecord {
+                    contract_version: generation,
+                    id,
+                    operation: ExpressionOperation::ImplementationCall {
+                        requirement_arguments: Vec::new(),
+                        effect_arguments: Vec::new(),
+                        function,
+                        type_arguments: type_arguments.clone(),
+                        implementations: implementations.clone(),
+                        arguments: arguments.clone(),
+                    },
+                })
+            );
+            assert_eq!(encode_owner(&owner).unwrap(), (digest, original));
+        }
+    }
+
+    #[test]
+    fn ordinary_call_bytes_are_preserved_in_every_predecessor_generation() {
+        let (id, function, requirement) = references();
+        let effect_arguments = vec![EffectRow {
+            requirements: vec![requirement],
+            parameters: Vec::new(),
+        }];
+        let type_arguments = vec![
+            encode_type_object(&TypeObject::new(TypeForm::I64).unwrap())
+                .unwrap()
+                .0,
+        ];
+        let arguments = vec![ExpressionId::migrate(
+            b"implementation-application-codec",
+            1,
+        )];
+        for generation in 14..=22 {
+            let (magic, domain) = envelope(generation);
+            let requirement_arguments = if generation == 14 {
+                Vec::new()
+            } else {
+                vec![requirement]
+            };
+            let original = if generation == 14 {
+                let effects = effect_arguments
+                    .iter()
+                    .cloned()
+                    .map(super::super::wire14::EffectRow14::try_from)
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap();
+                packed::encode(
+                    magic,
+                    &domain,
+                    &(
+                        9_u32,
+                        generation,
+                        id,
+                        10_u32,
+                        effects,
+                        function,
+                        &type_arguments,
+                        &arguments,
+                    ),
+                    MAXIMUM_OWNER_OBJECT_BYTES,
+                )
+                .unwrap()
+            } else {
+                packed::encode(
+                    magic,
+                    &domain,
+                    &(
+                        9_u32,
+                        generation,
+                        id,
+                        10_u32,
+                        &requirement_arguments,
+                        &effect_arguments,
+                        function,
+                        &type_arguments,
+                        &arguments,
+                    ),
+                    MAXIMUM_OWNER_OBJECT_BYTES,
+                )
+                .unwrap()
+            };
+            let expected = OwnerRecord::Expression(ExpressionRecord {
+                contract_version: generation,
+                id,
+                operation: ExpressionOperation::Call {
+                    requirement_arguments,
+                    effect_arguments: effect_arguments.clone(),
+                    function,
+                    type_arguments: type_arguments.clone(),
+                    arguments: arguments.clone(),
+                },
+            });
+            let digest = OwnerObjectDigest::of(&original);
+            assert_eq!(encode_owner(&expected).unwrap(), (digest, original.clone()));
+            assert_eq!(
+                decode_owner(&original, expected.owner(), expected.kind(), digest).unwrap(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn new_implementation_operands_round_trip_only_in_graph23() {
+        let (id, function, requirement) = references();
+        for (requirement_arguments, effect_arguments) in [
+            (vec![requirement], Vec::new()),
+            (Vec::new(), vec![EffectRow::default()]),
+            (
+                vec![requirement],
+                vec![EffectRow {
+                    requirements: vec![requirement],
+                    parameters: Vec::new(),
+                }],
+            ),
+        ] {
+            let expression = ExpressionRecord::new(
+                id,
+                ExpressionOperation::ImplementationCall {
+                    requirement_arguments,
+                    effect_arguments,
+                    function,
+                    type_arguments: Vec::new(),
+                    implementations: Vec::new(),
+                    arguments: Vec::new(),
+                },
+            )
+            .unwrap();
+            let current = OwnerRecord::Expression(expression.clone());
+            let (digest, bytes) = encode_owner(&current).unwrap();
+            assert_eq!(&bytes[..8], b"LKJOWN23");
+            assert_eq!(
+                decode_owner(&bytes, current.owner(), current.kind(), digest).unwrap(),
+                current
+            );
+            assert_eq!(
+                super::super::wire22::ExpressionRecord22::try_from(expression.clone())
+                    .unwrap_err()
+                    .code,
+                "kernel_owned_effect_generation"
+            );
+            for generation in 18..=22 {
+                let mut predecessor = current.clone();
+                predecessor.set_encoding_for_edit(generation);
+                assert_eq!(
+                    encode_owner(&predecessor).unwrap_err().code,
+                    "kernel_owned_effect_generation"
+                );
+                let (magic, domain) = envelope(generation);
+                let disguised =
+                    packed::encode(magic, &domain, &predecessor, MAXIMUM_OWNER_OBJECT_BYTES)
+                        .unwrap();
+                assert!(
+                    decode_owner(
+                        &disguised,
+                        predecessor.owner(),
+                        predecessor.kind(),
+                        OwnerObjectDigest::of(&disguised),
+                    )
+                    .is_err()
+                );
+            }
+        }
+    }
+}
+
+#[cfg(test)]
 mod nominal_encoding_tests {
     use super::*;
     use crate::platform::kernel::{DeclarationReference, TypeForm};
 
     #[test]
-    fn transfer_constraint_owners_round_trip_only_in_graph22() {
+    fn transfer_constraint_owners_round_trip_from_graph22() {
         use crate::platform::kernel::{
             Name, OwnerHeader, TypeParameterConstraints as C, TypeParameterRecord,
         };
@@ -48,6 +292,13 @@ mod nominal_encoding_tests {
                 name: Name::new("T").unwrap(),
                 constraints: constraint,
             });
+            let (digest, bytes) = encode_owner(&record).unwrap();
+            assert_eq!(&bytes[..8], b"LKJOWN23");
+            assert_eq!(
+                decode_owner(&bytes, key, OwnerKind::TypeParameter, digest).unwrap(),
+                record
+            );
+            record.set_encoding_for_edit(22);
             let (digest, bytes) = encode_owner(&record).unwrap();
             assert_eq!(&bytes[..8], b"LKJOWN22");
             assert_eq!(
@@ -117,13 +368,13 @@ mod nominal_encoding_tests {
         .unwrap();
         let owner = OwnerRecord::Expression(expression.clone());
         let (digest, bytes) = encode_owner(&owner).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOWN22");
+        assert_eq!(&bytes[..8], b"LKJOWN23");
         assert_eq!(
             decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
             owner
         );
         // Scalar meaning remains readable in each supported scalar-era envelope.
-        for generation in [17, 18, 19, 20, 21] {
+        for generation in [17, 18, 19, 20, 21, 22] {
             expression.contract_version = generation;
             let historical = OwnerRecord::Expression(expression.clone());
             let (digest, bytes) = encode_owner(&historical).unwrap();
@@ -530,6 +781,11 @@ pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>)
             super::contract::PARALLEL_OWNER_MAGIC,
             super::contract::PARALLEL_OWNER_ENVELOPE_DOMAIN,
         )
+    } else if record.header().contract_version == super::contract::TRANSFER_GRAPH_CONTRACT_VERSION {
+        (
+            super::contract::TRANSFER_OWNER_MAGIC,
+            super::contract::TRANSFER_OWNER_ENVELOPE_DOMAIN,
+        )
     } else {
         (OWNER_MAGIC, OWNER_ENVELOPE_DOMAIN)
     };
@@ -538,6 +794,13 @@ pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>)
             magic,
             domain,
             &super::wire17::OwnerRecord17::try_from(record.clone())?,
+            MAXIMUM_OWNER_OBJECT_BYTES,
+        )?
+    } else if record.header().contract_version < super::contract::GRAPH_CONTRACT_VERSION {
+        packed::encode(
+            magic,
+            domain,
+            &super::wire22::OwnerRecord22::try_from(record.clone())?,
             MAXIMUM_OWNER_OBJECT_BYTES,
         )?
     } else {
@@ -618,8 +881,8 @@ pub fn decode_owner(
         }
         record
     } else {
-        // Graphs 19–22 append operation/binding and constraint tags. Earlier field layouts
-        // and ordinals are frozen; local admission rejects new tags in old owners.
+        // Graphs 18–22 retain the frozen implementation-call field layout. Local
+        // admission still rejects later operation/binding and constraint tags.
         let (magic, domain, generation) = if bytes.starts_with(&super::contract::OWNED_OWNER_MAGIC)
         {
             (
@@ -645,6 +908,12 @@ pub fn decode_owner(
                 super::contract::PARALLEL_OWNER_ENVELOPE_DOMAIN,
                 21,
             )
+        } else if bytes.starts_with(&super::contract::TRANSFER_OWNER_MAGIC) {
+            (
+                super::contract::TRANSFER_OWNER_MAGIC,
+                super::contract::TRANSFER_OWNER_ENVELOPE_DOMAIN,
+                super::contract::TRANSFER_GRAPH_CONTRACT_VERSION,
+            )
         } else {
             (
                 OWNER_MAGIC,
@@ -652,7 +921,13 @@ pub fn decode_owner(
                 super::contract::GRAPH_CONTRACT_VERSION,
             )
         };
-        let record: OwnerRecord = packed::decode(bytes, magic, domain, MAXIMUM_OWNER_OBJECT_BYTES)?;
+        let record: OwnerRecord = if generation < super::contract::GRAPH_CONTRACT_VERSION {
+            let wire: super::wire22::OwnerRecord22 =
+                packed::decode(bytes, magic, domain, MAXIMUM_OWNER_OBJECT_BYTES)?;
+            wire.into()
+        } else {
+            packed::decode(bytes, magic, domain, MAXIMUM_OWNER_OBJECT_BYTES)?
+        };
         if record.header().contract_version != generation {
             return Err(codec_error(
                 "kernel_owner_encoding_generation",

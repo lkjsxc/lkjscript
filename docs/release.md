@@ -116,6 +116,15 @@ shared-runtime observation 2 distinguish invocation dispatch/fallback from physi
 worker lifetime; semantic graph and artifact generations remain unchanged. Fresh
 source and finalized-byte acceptance remain required for this implementation.
 
+Development v0.1.73 adds explicit effect and requirement applications to Owned
+generic witness calls. The mandatory `native_owned_` family includes its maintained
+three-package example, exact authority/witness selection, canonical edits and
+source-deleted execution. Graph 23, validator 28, compiler 23, bytecode 18 and
+artifact 30 require fresh source and finalized-byte acceptance. Supported semantic
+predecessors remain readable; derived bundles must be rebuilt. Package interface
+13 and type-object 10 retain their layouts. Public projection 13 exposes the new
+operands and rejects predecessor continuations.
+
 The canonical manifest discriminator is `format: "lkjscript-release-content-1"`. It binds the product
 version/intended tag, exact product commit, repository, target/build policy and command, pinned Rust
 and Cargo, lockfile, static ELF executable, license/notices and deterministic packaging. It contains

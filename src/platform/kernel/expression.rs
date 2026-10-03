@@ -99,6 +99,21 @@ impl ExpressionRecord {
                 "structured parallel calls require Graph 21",
             ));
         }
+        if self.contract_version < 23
+            && matches!(
+                &self.operation,
+                ExpressionOperation::ImplementationCall {
+                    effect_arguments,
+                    requirement_arguments,
+                    ..
+                } if !effect_arguments.is_empty() || !requirement_arguments.is_empty()
+            )
+        {
+            return Err(expression_error(
+                "kernel_owned_effect_generation",
+                "implementation effect and requirement arguments require Graph 23",
+            ));
+        }
         validate_operation(&self.operation)
     }
 
@@ -232,6 +247,8 @@ pub enum ExpressionOperation {
         value: crate::platform::binary64::Binary64,
     },
     ImplementationCall {
+        requirement_arguments: Vec<super::RequirementOperand>,
+        effect_arguments: Vec<super::EffectRow>,
         function: DeclarationReference,
         type_arguments: Vec<TypeObjectDigest>,
         implementations: Vec<super::ImplementationOperand>,
@@ -540,11 +557,22 @@ fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic>
         }
         ExpressionOperation::ImplementationCall {
             type_arguments,
+            effect_arguments,
+            requirement_arguments,
             implementations,
             arguments,
             ..
         } => {
             require_count("implementation call types", type_arguments.len(), true)?;
+            require_count("implementation call effects", effect_arguments.len(), true)?;
+            require_count(
+                "implementation call requirements",
+                requirement_arguments.len(),
+                true,
+            )?;
+            for row in effect_arguments {
+                row.validate()?;
+            }
             require_count("implementation call witnesses", implementations.len(), true)?;
             require_count("implementation call arguments", arguments.len(), true)?;
         }

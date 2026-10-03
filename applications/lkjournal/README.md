@@ -23,8 +23,8 @@ Current normalized identity:
 - semantic revision: `rev_a1d97c5d7deda1ece8e2e3383bd7a58ae1e267838368ec5b42678e40c9eb1640`;
 - semantic state: `semantic_state_3832cd12c3fee672d0bdfb975cb363cbc457f6ef45f15cb44a62d40ab47f2dee`;
 - package revision: `package_revision_13035e42572a2c0d087a6cd4880d53eca4387e660a6d18a59f79d94fe7599fc1`;
-- artifact manifest: `artifact_manifest_220c71a0060be2d036e5f5e9fcf9e1f07b319fad91999ffd21ac42cfc58e2209`;
-- artifact bundle: `artifact_bundle_d41162ab19456753a5b4027810045d2ac3dab59ed6b18b7eab879fdfe964ca12`;
+- artifact manifest: `artifact_manifest_2319792586bb2643a22a6adf1afbc8a223308118a587c03bedb80325680137a4`;
+- artifact bundle: `artifact_bundle_a475d3767d6cdf6913c8a718f17568e25171e405d0e88391baaa7afb146ebe45`;
 - 2,044 live root semantic owners and one exact built-in standard dependency.
 
 The original Graph 13 materialization preserved all existing application owner identities and behavior.
@@ -95,7 +95,7 @@ empty 404 and invokes none of them.
 
 All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,375,404-byte
 artifact bundle above (SHA-256
-`2a607f6097e23706ab49cab9a3ced2b4874761f7477d9d24bc29a9e931e50091`). The service descriptor
+`1faf41795f4412c9913ca4ade4c3ca6cbd54721e80d2b2d769ff6064f6607ede`). The service descriptor
 resolves `serve`, the worker descriptor resolves `work`, and `live.deployment.json` resolves
 `lkjournal-live-1`. Preparation strictly loads the standalone bundle,
 validates the runner, route-indexed handler and component requirement closure, grants, secrets, and adapters, and emits
@@ -217,7 +217,7 @@ The structured parallel compiler refresh rebuilds the current bundle for compile
 exact-supplier tests agree between production and reference execution. Accepted
 HEAD, dependency selection, application behavior and operational data are unchanged.
 
-The explicit-transferable compiler refresh rebuilds the current bundle for
-compiler 22, bytecode 17 and artifact 29 through public check/build. All 44 tests
+The owned-effects compiler refresh rebuilds the current bundle for
+compiler 23, bytecode 18 and artifact 30 through public check/build. All 44 tests
 agree between production and reference execution. Accepted HEAD, exact historical
 standard supplier, application behavior and operational data remain unchanged.

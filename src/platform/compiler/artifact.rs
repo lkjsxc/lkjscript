@@ -48,16 +48,16 @@ use std::fmt;
 #[path = "artifact_code.rs"]
 mod code_admission;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-29";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-29";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 29;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF29";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART29";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN29";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-30";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-30";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 30;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF30";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART30";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN30";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v29";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v29";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v29";
+    "lkjscript.artifact-manifest-envelope.v30";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v30";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v30";
 pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v18";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
@@ -142,6 +142,15 @@ fn artifact_wire(version: u16) -> Result<ArtifactWire, Diagnostic> {
             manifest_domain: "lkjscript.artifact-manifest-envelope.v28",
             digest_domain: "lkjscript.artifact-bundle.v28",
             checksum_domain: "lkjscript.artifact-bundle.complete.v28",
+        }),
+        29 => Ok(ArtifactWire {
+            version,
+            manifest_magic: *b"LKJAMF29",
+            bundle_magic: *b"LKJART29",
+            end_magic: *b"LKJAEN29",
+            manifest_domain: "lkjscript.artifact-manifest-envelope.v29",
+            digest_domain: "lkjscript.artifact-bundle.v29",
+            checksum_domain: "lkjscript.artifact-bundle.complete.v29",
         }),
         ARTIFACT_CONTRACT_VERSION => Ok(ArtifactWire {
             version,
@@ -400,6 +409,8 @@ impl ArtifactManifest {
             27
         } else if bytes.starts_with(b"LKJAMF28") {
             28
+        } else if bytes.starts_with(b"LKJAMF29") {
+            29
         } else {
             ARTIFACT_CONTRACT_VERSION
         })?;
@@ -435,7 +446,7 @@ impl ArtifactManifest {
     fn validate(&self) -> Result<(), Diagnostic> {
         if !matches!(
             self.contract_version,
-            18 | 19 | 20 | 25 | 26 | 27 | 28 | ARTIFACT_CONTRACT_VERSION
+            18 | 19 | 20 | 25 | 26 | 27 | 28 | 29 | ARTIFACT_CONTRACT_VERSION
         ) || (self.contract_version == 18
             && (
                 self.graph_contract_version,
@@ -465,6 +476,8 @@ impl ArtifactManifest {
             || (self.contract_version == 27 && self.compiler_contract_version > 20)
             || (self.contract_version == 28
                 && (self.compiler_contract_version > 21 || self.graph_contract_version > 21))
+            || (self.contract_version == 29
+                && (self.compiler_contract_version > 22 || self.graph_contract_version > 22))
             || !matches!(
                 (
                     self.graph_contract_version,
@@ -484,6 +497,7 @@ impl ArtifactManifest {
                     | (21, 20, 16)
                     | (21, 21, 17)
                     | (22, 22, 17)
+                    | (23, 23, 18)
             )
             || self.compilation_manifest_contract_version != COMPILATION_MANIFEST_CONTRACT_VERSION
         {
@@ -2997,13 +3011,15 @@ fn validate_nominal_instruction_inventory(
                 ExpressionOperation::ImplementationCall {
                     function,
                     type_arguments,
+                    effect_arguments,
+                    requirement_arguments,
                     arguments,
                     ..
                 } => Some(Constructor::Call(
                     *function,
                     type_arguments.clone(),
-                    Vec::new(),
-                    Vec::new(),
+                    effect_arguments.clone(),
+                    requirement_arguments.clone(),
                     arguments.len(),
                 )),
                 ExpressionOperation::FunctionValue {
@@ -3152,6 +3168,8 @@ fn validate_nominal_instruction_inventory(
                     CompiledInstruction::ImplementationCall {
                         function,
                         type_arguments,
+                        effect_arguments,
+                        requirement_arguments,
                         arguments,
                         ..
                     } => Some(Constructor::Call(
@@ -3170,8 +3188,8 @@ fn validate_nominal_instruction_inventory(
                                 )
                             })
                             .collect::<Result<_, _>>()?,
-                        Vec::new(),
-                        Vec::new(),
+                        effect_arguments.clone(),
+                        requirement_arguments.clone(),
                         *arguments as usize,
                     )),
                     CompiledInstruction::Call {
@@ -4638,6 +4656,7 @@ fn reference_expression_declarations(operation: &ExpressionOperation) -> Vec<Dec
     match operation {
         ExpressionOperation::Constant { declaration } => vec![*declaration],
         ExpressionOperation::Call { function, .. }
+        | ExpressionOperation::ImplementationCall { function, .. }
         | ExpressionOperation::FunctionValue { function, .. } => vec![*function],
         _ => Vec::new(),
     }

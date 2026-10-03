@@ -1845,13 +1845,21 @@ impl ReferenceState<'_> {
                 ExpressionOperation::ImplementationCall {
                     function,
                     type_arguments,
+                    effect_arguments,
+                    requirement_arguments,
                     implementations,
                     arguments,
                 } => {
                     let uses = self.function_parameter_uses(function)?;
                     let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
-                    let target =
-                        self.witness_call(function, &type_arguments, &implementations, arguments)?;
+                    let target = self.witness_call(
+                        function,
+                        &type_arguments,
+                        &effect_arguments,
+                        &requirement_arguments,
+                        &implementations,
+                        arguments,
+                    )?;
                     return self.transfer_graph_call(target, locals);
                 }
                 ExpressionOperation::MethodCall {
@@ -2272,13 +2280,21 @@ impl ReferenceState<'_> {
             ExpressionOperation::ImplementationCall {
                 function,
                 type_arguments,
+                effect_arguments,
+                requirement_arguments,
                 implementations,
                 arguments,
             } => {
                 let uses = self.function_parameter_uses(function)?;
                 let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
-                let target =
-                    self.witness_call(function, &type_arguments, &implementations, arguments)?;
+                let target = self.witness_call(
+                    function,
+                    &type_arguments,
+                    &effect_arguments,
+                    &requirement_arguments,
+                    &implementations,
+                    arguments,
+                )?;
                 self.execute_witness_call(target)
             }
             ExpressionOperation::MethodCall {

@@ -299,6 +299,8 @@ impl ReferenceState<'_> {
         &mut self,
         function: DeclarationReference,
         types: &[TypeObjectDigest],
+        effects: &[EffectRow],
+        requirements: &[RequirementOperand],
         operands: &[ImplementationOperand],
         arguments: Vec<CheckedValue>,
     ) -> Result<AdmittedGraphCall, ExecutionError> {
@@ -310,6 +312,8 @@ impl ReferenceState<'_> {
             selected.push(self.resolve_implementation(*operand)?);
         }
         let types = self.resolve_type_arguments(types)?;
+        let effects = self.resolve_effect_arguments(effects)?;
+        let requirements = self.resolve_requirement_arguments(requirements)?;
         let DeclarationPayload::Function(declaration) = self.declaration(function)?.payload else {
             return Err(reference_type_error(
                 "witness call requires a graph function",
@@ -321,8 +325,9 @@ impl ReferenceState<'_> {
             arguments,
             ReferenceApplication {
                 types: &types,
+                effects: &effects,
+                requirements: &requirements,
                 implementations: &selected,
-                ..Default::default()
             },
         )
     }
@@ -331,15 +336,17 @@ impl ReferenceState<'_> {
         &mut self,
         target: AdmittedGraphCall,
     ) -> Result<CheckedValue, ExecutionError> {
-        if self.call_depth >= self.policy.maximum_call_depth {
+        if self.call_depth.saturating_add(self.ancestor_depth) >= self.policy.maximum_call_depth {
             return Err(reference_resource(
                 "normalized_reference_call_depth",
                 "witness call exceeds call-depth budget",
             ));
         }
         self.call_depth += 1;
-        self.observation.maximum_call_depth =
-            self.observation.maximum_call_depth.max(self.call_depth);
+        self.observation.maximum_call_depth = self
+            .observation
+            .maximum_call_depth
+            .max(self.call_depth.saturating_add(self.ancestor_depth));
         let package = self.active_package;
         let mut step = self.enter_graph_call(target, false);
         let result = loop {

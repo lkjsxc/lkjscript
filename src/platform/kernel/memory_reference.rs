@@ -11,6 +11,8 @@ struct Rights {
     owned: BTreeSet<LocalValueReference>,
     borrowed: BTreeSet<LocalValueReference>,
 }
+#[path = "implementation_effect_memory_oracle_tests.rs"]
+mod implementation_effect_tests;
 #[path = "imported_memory_oracle_tests.rs"]
 mod imported_tests;
 #[path = "transfer_memory_oracle_tests.rs"]
@@ -477,7 +479,9 @@ impl Oracle<'_> {
                 arguments,
                 type_arguments,
                 implementations,
-            } => (
+                requirement_arguments,
+                effect_arguments,
+            } if requirement_arguments.is_empty() && effect_arguments.is_empty() => (
                 *function,
                 arguments,
                 type_arguments,
@@ -871,6 +875,7 @@ impl Oracle<'_> {
                 type_arguments,
                 implementations,
                 arguments,
+                ..
             } => {
                 if !self.application(*function, type_arguments)
                     || !self.witnesses(*function, type_arguments, implementations)
@@ -1055,9 +1060,6 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                                 && *key == OwnerKey::TypeParameter(c.self_parameter) => {}
                         PackageInterfaceDeclarationPayload::Function(f)
                             if matches!(key, OwnerKey::TypeParameter(id) if f.type_parameters.contains(id))
-                                && (!p.constraints.has_owned()
-                                    || (f.effect_parameters.is_empty()
-                                        && f.requirement_parameters.is_empty()))
                                 && (!p.constraints.requires_transfer()
                                     || p.header.contract_version >= 22) => {}
                         _ => return false,
@@ -1173,11 +1175,7 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                     DeclarationPayload::OwnedContract(c)
                         if !p.constraints.requires_transfer()
                             && *key == OwnerKey::TypeParameter(c.self_parameter) => {}
-                    DeclarationPayload::Function(f)
-                        if (!p.constraints.has_owned()
-                            || (f.effect_parameters.is_empty()
-                                && f.requirement_parameters.is_empty()))
-                            && matches!(key, OwnerKey::TypeParameter(id) if f.type_parameters.contains(id)) =>
+                    DeclarationPayload::Function(f) if matches!(key, OwnerKey::TypeParameter(id) if f.type_parameters.contains(id)) =>
                         {}
                     _ => return false,
                 }

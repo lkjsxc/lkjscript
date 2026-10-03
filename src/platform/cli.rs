@@ -5346,6 +5346,8 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
             ExpressionOperation::ImplementationCall {
                 function,
                 type_arguments,
+                effect_arguments,
+                requirement_arguments,
                 implementations,
                 arguments,
             } => {
@@ -5356,9 +5358,19 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                 ));
                 fields.push(("arguments", arguments.len().to_string()));
                 fields.push(("implementations", implementations.len().to_string()));
+                fields.push(("type-arguments", type_arguments.len().to_string()));
+                fields.push(("effect-arguments", effect_arguments.len().to_string()));
+                fields.push((
+                    "requirement-arguments",
+                    requirement_arguments.len().to_string(),
+                ));
                 self.add_declaration_reference("call_function", owner, 0, *function)?;
                 for (index, ty) in type_arguments.iter().enumerate() {
                     self.add_type_reference("call_type_argument", owner, index, *ty)?;
+                }
+                self.add_effect_arguments(owner, effect_arguments)?;
+                for (index, argument) in requirement_arguments.iter().copied().enumerate() {
+                    self.add_requirement_reference("requirement_argument", owner, index, argument)?;
                 }
                 for (index, operand) in implementations.iter().enumerate() {
                     let (reference, parameter) = match operand {

@@ -11,9 +11,11 @@ be exactly ByteBuffer, OwnedI64Cell, an explicit [owned product](owned-products.
 or an in-scope Owned parameter while checking
 a generic body. Ordinary and CaptureSafe parameters cannot receive an owned type,
 even when the parameter is unused, its container is empty, or the call is in an
-untaken branch. Owned constraints belong to exact first-order graph functions
-without effect or requirement parameters, and to the one Self parameter of an
-owned contract. Named tasks may use them under [same-task transfer](owned-task-transfers.md).
+untaken branch. Owned constraints belong to exact graph functions and to the one
+Self parameter of an owned contract. Graph functions may compose these parameters
+with explicit effect and requirement schemes under
+[owned effect applications](owned-effects.md). Named tasks may use them under
+[same-task transfer](owned-task-transfers.md).
 Nominal records, variants and externals cannot advertise Owned parameters.
 
 Development 0.1.71 adds an orthogonal [transferable obligation](transferable-types.md)

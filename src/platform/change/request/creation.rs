@@ -363,6 +363,8 @@ pub enum AuthoredExpressionOperation {
     ImplementationCall {
         function: AuthoredDeclarationReference,
         type_arguments: Vec<AuthoredType>,
+        effect_arguments: Vec<AuthoredEffectRow>,
+        requirement_arguments: Vec<AuthoredRequirementReference>,
         implementations: Vec<AuthoredImplementationOperand>,
         arguments: Vec<AuthoredExpression>,
     },
@@ -1105,11 +1107,18 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             AuthoredExpressionOperation::ImplementationCall {
                 function,
                 type_arguments,
+                effect_arguments,
+                requirement_arguments,
                 implementations,
                 arguments,
             } => ExpressionOperation::ImplementationCall {
                 function: self.lower_declaration_reference(function)?,
                 type_arguments: self.lower_types(type_arguments)?,
+                effect_arguments: self.lower_effect_rows(effect_arguments)?,
+                requirement_arguments: requirement_arguments
+                    .iter()
+                    .map(|reference| self.lower_requirement_operand(reference))
+                    .collect::<Result<_, _>>()?,
                 implementations: implementations
                     .iter()
                     .map(|i| self.lower_implementation_operand(i))

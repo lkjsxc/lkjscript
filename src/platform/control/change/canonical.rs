@@ -440,11 +440,15 @@ impl<'a> Reader<'a> {
             E::ImplementationCall {
                 function,
                 type_arguments,
+                effect_arguments,
+                requirement_arguments,
                 implementations,
                 arguments,
             } => A::ImplementationCall {
                 function: declaration(function),
                 type_arguments: self.types(type_arguments)?,
+                effect_arguments: effect_arguments.into_iter().map(row).collect(),
+                requirement_arguments: requirement_arguments.into_iter().map(requirement).collect(),
                 implementations: implementations
                     .into_iter()
                     .map(implementation_operand)

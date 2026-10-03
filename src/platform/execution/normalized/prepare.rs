@@ -117,6 +117,8 @@ pub enum NormalizedInstruction {
         locals: Arc<[u32]>,
     },
     ImplementationCall {
+        requirement_arguments: Arc<[crate::platform::kernel::RequirementOperand]>,
+        effect_arguments: Arc<[crate::platform::kernel::EffectRow]>,
         function: FunctionIndex,
         type_arguments: Arc<[TypeObjectDigest]>,
         implementations: Arc<[crate::platform::kernel::ImplementationOperand]>,
@@ -2688,6 +2690,8 @@ fn translate_code(
             CompiledInstruction::JumpIfFalse(target) => NormalizedInstruction::JumpIfFalse(*target),
             CompiledInstruction::Jump(target) => NormalizedInstruction::Jump(*target),
             CompiledInstruction::ImplementationCall {
+                requirement_arguments,
+                effect_arguments,
                 function,
                 type_arguments,
                 implementations,
@@ -2699,6 +2703,8 @@ fn translate_code(
                     "implementation call target",
                 )?;
                 NormalizedInstruction::ImplementationCall {
+                    requirement_arguments: requirement_arguments.clone().into(),
+                    effect_arguments: effect_arguments.clone().into(),
                     function: required_index(
                         &indexes.functions,
                         declaration,

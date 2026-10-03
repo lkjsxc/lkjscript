@@ -4,9 +4,9 @@ These three fixtures are derived controls, not republished official artifacts.
 Their unchanged originals and provenance remain under `../requirement-predecessor/`,
 `../transaction-outcome-predecessor/` and `../cell-participation-predecessor/`.
 
-Current derivation uses compiler 22 / bytecode 17 / artifact 29 under semantic
-validator 27 and requires rebuilding predecessor compiler units. Original canonical
-source generations remain unchanged; Graph 22 is the compiler's current meaning
+Current derivation uses compiler 23 / bytecode 18 / artifact 30 under semantic
+validator 28 and requires rebuilding predecessor compiler units. Original canonical
+source generations remain unchanged; Graph 23 is the compiler's current meaning
 contract. The offline workflow therefore distinguishes exact original format
 refusal from execution of the same canonical source with current derived envelopes. It keeps all public
 rebuild/import paths and independent output, store, authority and cleanup checks.
@@ -54,15 +54,15 @@ An initial generation can fail retained-byte comparison until the new files are
 installed; that failure is not acceptance. No original fixture may be overwritten.
 
 The current envelopes were regenerated on 2026-10-03 with the supported test owner
-for the explicit-transferable parallel successor. Every regenerated control passed
+for the owned-effect application successor. Every regenerated control passed
 strict artifact admission and its exact original source-transport probe before the
 retained-byte comparison.
 
 | Current control | SHA-256 |
 | --- | --- |
-| `requirements.lkja` | `a4062012f85ec933b244c4156015464b48e97da00627ddff124fe536eee5aa6a` |
-| `transactions.lkja` | `030fc29a4cfb8234dddb5aaa47191f5d06e8625d66567ee1b9ac9bf376ffdef3` |
-| `participation.lkja` | `15778bacf522a57405c807de0a2cf9ba4ed6eefe27d7ccdd0e2d1a9d21324115` |
+| `requirements.lkja` | `a4902a11d6e72d8186effe1a7922ae4872d1be95614c80c05b8ab445f7d71d9a` |
+| `transactions.lkja` | `19a9be3ee1a4f6ac65520faed6d7a180ca831364e4a2b6cdeaee3c3f9ee07042` |
+| `participation.lkja` | `333c51a3649f004134723f760c84a7992ad2fba4ebd2b968a52b997d48a78454` |
 
 The execution and receipt owners require original and current material separately.
 Omitting either, substituting an otherwise valid control, changing the selected

@@ -2585,12 +2585,12 @@ fn project_function_definition(
         )?;
         require_exact(
             required_field(projection, "contract")?,
-            "lkjscript-function-definition-projection-12",
+            "lkjscript-function-definition-projection-13",
             "definition contract",
         )?;
         require_exact(
             required_field(projection, "version")?,
-            "12",
+            "13",
             "definition version",
         )?;
         let digest = required_field(projection, "digest")?.to_owned();

@@ -56,6 +56,8 @@ impl Decoder {
                 record.operation.as_str(),
                 "expression.sequence"
                     | "expression.call"
+                    | "expression.implementation-call"
+                    | "expression.method-call"
                     | "expression.bind"
                     | "expression.invoke"
                     | "expression.list"

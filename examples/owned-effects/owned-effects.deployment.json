@@ -1,0 +1,30 @@
+{
+  "artifact": "owned-effects.lkja",
+  "target": "owned-effects",
+  "listen": null,
+  "http": null,
+  "session": null,
+  "worker": null,
+  "streams": {
+    "maximum_chunk_bytes": 65536,
+    "maximum_buffered_chunks": 8,
+    "maximum_total_bytes": 1048576,
+    "maximum_live_streams": 1024
+  },
+  "grants": [
+    {
+      "requirement": "clock-a",
+      "sharing_domain": "owned-effects-a",
+      "authority_revision": "8484848484848484848484848484848484848484848484848484848484848484",
+      "adapter": { "kind": "wall_clock" }
+    },
+    {
+      "requirement": "clock-b",
+      "sharing_domain": "owned-effects-b",
+      "authority_revision": "8585858585858585858585858585858585858585858585858585858585858585",
+      "adapter": { "kind": "wall_clock" }
+    }
+  ],
+  "secrets": [],
+  "configuration": {}
+}

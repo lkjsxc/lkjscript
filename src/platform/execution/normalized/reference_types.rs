@@ -441,9 +441,15 @@ impl Closure<'_> {
                                 ExpressionOperation::ImplementationCall {
                                     function,
                                     type_arguments,
+                                    effect_arguments,
+                                    requirement_arguments,
                                     implementations,
                                     arguments,
-                                } => (function, type_arguments, implementations, arguments),
+                                } if effect_arguments.is_empty()
+                                    && requirement_arguments.is_empty() =>
+                                {
+                                    (function, type_arguments, implementations, arguments)
+                                }
                                 _ => return Err(failure()),
                             };
                         let OwnerRecord::Declaration(declaration) = self
@@ -540,38 +546,6 @@ impl Closure<'_> {
                 } => {
                     self.identity(product_type, bindings, 0)?;
                 }
-                ExpressionOperation::ImplementationCall {
-                    function,
-                    type_arguments,
-                    ..
-                } => {
-                    // Static selection does not erase the generic source body. Its concrete
-                    // applications contribute types independently of prepared witness code.
-                    allocate::<TypeObjectDigest>(&mut self.allocated, type_arguments.len())?;
-                    let mut concrete = Vec::with_capacity(type_arguments.len());
-                    for ty in type_arguments {
-                        concrete.push(self.identity(ty, bindings, 0)?);
-                    }
-                    self.tick()?;
-                    allocate::<(DeclarationReference, Vec<TypeObjectDigest>)>(
-                        &mut self.allocated,
-                        1,
-                    )?;
-                    index_node::<(
-                        DeclarationReference,
-                        Vec<TypeObjectDigest>,
-                        Option<DeclarationReference>,
-                    )>(&mut self.allocated)?;
-                    allocate::<TypeObjectDigest>(&mut self.allocated, concrete.len())?;
-                    self.constrained_applications.insert((
-                        function,
-                        concrete.clone(),
-                        if self.symbolic { scope } else { None },
-                    ));
-                    if !self.symbolic {
-                        calls.push_back((function, concrete, Vec::new(), Vec::new()));
-                    }
-                }
                 ExpressionOperation::Let {
                     bindings: locals, ..
                 } => {
@@ -588,6 +562,13 @@ impl Closure<'_> {
                     }
                 }
                 ExpressionOperation::Call {
+                    function,
+                    type_arguments,
+                    effect_arguments,
+                    requirement_arguments,
+                    ..
+                }
+                | ExpressionOperation::ImplementationCall {
                     function,
                     type_arguments,
                     effect_arguments,

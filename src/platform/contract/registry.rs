@@ -131,7 +131,7 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
     ),
     (
         "implementation-call",
-        "(implementation-call FUNCTION (types TYPE...) (implementations OPERAND...) EXPR...)",
+        "(implementation-call FUNCTION (types TYPE...) (effects ROW...) (requirements REQUIREMENT...) (implementations OPERAND...) EXPR...)",
     ),
     (
         "method-call",
@@ -189,8 +189,8 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
 ];
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-function-definition-projection-12";
-pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 12;
+    "lkjscript-function-definition-projection-13";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 13;
 pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
 pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
 pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -952,7 +952,8 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             predecessor_policy: REJECT,
             magic_values: &[
                 "LKJACR14", "LKJACR15", "LKJACR16", "LKJACR17", "LKJACR18", "LKJACR19", "LKJACR20",
-                "LKJACR21", "LKJACR22", "LKJACR23", "LKJACR24", "LKJACR25", "LKJACR26", "LKJABG01",
+                "LKJACR21", "LKJACR22", "LKJACR23", "LKJACR24", "LKJACR25", "LKJACR26", "LKJACR27",
+                "LKJABG01",
             ],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
@@ -4400,7 +4401,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_owned_parameter_owner",
             DiagnosticClass::Semantic,
             "An Owned constraint belongs to an unsupported declaration or foreign scope.",
-            "Use Owned on an exact first-order graph function without effect/requirement parameters, or the exact owned-contract Self; task memory inputs must consume.",
+            "Use Owned on an exact graph function or the exact owned-contract Self; task memory inputs must consume and implementation applications must supply exact effect and requirement operands.",
         ),
         diagnostic(
             "normalized_cell_token",
@@ -8400,7 +8401,7 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         (
             "implementation-parameter",
             "(implementation-parameter implparam_HEX NAME CONTRACT SELF_TYPE)",
-            "A function-scoped static witness. Operand syntax is concrete@IMPLEMENTATION or parameter@FUNCTION@implparam_HEX. Forwarding must use the exact lexical scope.",
+            "A function-scoped static witness. Operand syntax is concrete@IMPLEMENTATION or parameter@FUNCTION@implparam_HEX. Forwarding must use the exact lexical scope; implementation calls supply ordered type, effect and requirement applications independently of witness selection.",
         ),
         (
             "type-parameter",
@@ -9196,9 +9197,9 @@ mod tests {
             .expect("definition projection contract");
         assert_eq!(
             contract.identity,
-            "lkjscript-function-definition-projection-12"
+            "lkjscript-function-definition-projection-13"
         );
-        assert_eq!(contract.version, 12);
+        assert_eq!(contract.version, 13);
         assert_eq!(
             contract_descriptors()
                 .iter()

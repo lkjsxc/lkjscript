@@ -115,6 +115,92 @@ expression.i64 as=$right-input value=-29\n";
     }
 }
 
+#[test]
+fn implementation_applications_match_independent_flat_operands_and_retain_order() {
+    let base = RevisionId::from_digest([7; 32]);
+    let package = PackageId::from_bytes([2; 16]).unwrap();
+    let function = DeclarationId::from_bytes([3; 16]).unwrap();
+    let witness = DeclarationId::from_bytes([4; 16]).unwrap();
+    let parameter =
+        crate::platform::semantic_id::ImplementationParameterId::from_bytes([5; 16]).unwrap();
+    let requirement = RequirementId::from_bytes([6; 16]).unwrap();
+    let requirement_parameter =
+        crate::platform::semantic_id::RequirementParameterId::from_bytes([8; 16]).unwrap();
+    let function = format!("{package}/{function}");
+    let concrete = format!("concrete@{package}/{witness}");
+    let forwarded = format!("parameter@{function}@{parameter}");
+    let exact_requirement = format!("{package}/{requirement}");
+    let scoped_requirement = format!("parameter:{package}/{requirement_parameter}");
+    let declarations = format!(
+        "create.module as=$module name=implementation-applications\ncreate.function as=$caller module=$module name=caller visibility=private result=i64 effect=task body=$body\neffect.row as=@First\neffect.requirement parent=@First index=0 requirement={exact_requirement}\neffect.row as=@Empty\n"
+    );
+    let flat = format!(
+        "request base={base}\nexpression.implementation-call as=$body function={function}\ntype.argument parent=$body index=0 type=i64\ntype.argument parent=$body index=1 type=text\neffect.argument parent=$body index=0 effect=@First\neffect.argument parent=$body index=1 effect=@Empty\nrequirement.argument parent=$body index=0 requirement={exact_requirement}\nrequirement.argument parent=$body index=1 requirement={scoped_requirement}\nimplementation.argument parent=$body index=0 implementation={concrete}\nimplementation.argument parent=$body index=1 implementation={forwarded}\nexpression.argument parent=$body index=0 expression=$value\nexpression.i64 as=$value value=42\n{declarations}"
+    );
+    let block = format!(
+        "request base={base}\nexpression.block as=$body\n(implementation-call {function} (types i64 text) (effects @First @Empty) (requirements {exact_requirement} {scoped_requirement}) (implementations {concrete} {forwarded}) (i64 42))\nexpression.end\n{declarations}"
+    );
+    let (_, original) = assert_intent_pair(&flat, &block);
+    let bytes = canonical_authored_intent_bytes(&original.semantic).unwrap();
+    assert_eq!(&bytes[..8], b"LKJACR27");
+    for changed in [
+        block.replace("(effects @First @Empty)", "(effects @Empty @First)"),
+        block.replace(
+            &format!("(requirements {exact_requirement} {scoped_requirement})"),
+            &format!("(requirements {scoped_requirement} {exact_requirement})"),
+        ),
+        block.replace(
+            &format!("(implementations {concrete} {forwarded})"),
+            &format!("(implementations {forwarded} {concrete})"),
+        ),
+    ] {
+        assert_ne!(
+            original.request_commitment,
+            decode("rebound.lkjc", &changed).request_commitment
+        );
+    }
+    for changed in [
+        block.replace("(effects @First @Empty)", "(effects @First) (effects @Empty)"),
+        block.replace(
+            &format!("(requirements {exact_requirement} {scoped_requirement}) (implementations {concrete} {forwarded})"),
+            &format!("(implementations {concrete} {forwarded}) (requirements {exact_requirement} {scoped_requirement})"),
+        ),
+        flat.replace("implementation.argument parent=$body index=1", "implementation.argument parent=$body index=2"),
+        flat.replace("implementation.argument parent=$body index=1", "implementation.argument parent=$body index=0"),
+    ] {
+        assert!(decode_compact_change("malformed-applications.lkjc", changed.as_bytes()).is_err());
+    }
+}
+
+#[test]
+fn empty_implementation_applications_and_flat_method_calls_preserve_existing_intent() {
+    let base = RevisionId::from_digest([7; 32]);
+    let package = PackageId::from_bytes([2; 16]).unwrap();
+    let function = DeclarationId::from_bytes([3; 16]).unwrap();
+    let method = crate::platform::semantic_id::MethodId::from_bytes([4; 16]).unwrap();
+    let function = format!("{package}/{function}");
+    let declarations = "create.module as=$module name=empty-implementation-applications\ncreate.function as=$caller module=$module name=caller visibility=private result=i64 effect=pure body=$body\n";
+    let block = format!(
+        "request base={base}\nexpression.block as=$body\n(implementation-call {function} (implementations concrete@{function}) (i64 42))\nexpression.end\n{declarations}"
+    );
+    let empty = block.replace(
+        "(implementations",
+        "(types) (effects) (requirements) (implementations",
+    );
+    let (_, decoded) = assert_intent_pair(&block, &empty);
+    assert_eq!(
+        &canonical_authored_intent_bytes(&decoded.semantic).unwrap()[..8],
+        b"LKJACR21"
+    );
+    let flat = format!(
+        "request base={base}\nexpression.method-call as=$body witness=concrete@{function} contract={function} method={method}\nexpression.argument parent=$body index=0 expression=$value\nexpression.i64 as=$value value=42\n{declarations}"
+    );
+    let block = format!(
+        "request base={base}\nexpression.block as=$body\n(method-call concrete@{function} {function} {method} (i64 42))\nexpression.end\n{declarations}"
+    );
+    assert_intent_pair(&flat, &block);
+}
+
 const SHADOW_FLAT: &str = "\
 expression.local as=$initial value=$parameter
 expression.local as=$previous value=$first

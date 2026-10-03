@@ -640,6 +640,7 @@ fn reference_expression_declarations(
     match operation {
         ExpressionOperation::Constant { declaration } => vec![*declaration],
         ExpressionOperation::Call { function, .. }
+        | ExpressionOperation::ImplementationCall { function, .. }
         | ExpressionOperation::FunctionValue { function, .. } => vec![*function],
         _ => Vec::new(),
     }
