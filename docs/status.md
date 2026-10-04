@@ -43,6 +43,13 @@ discovery were regenerated through the product; all four accepted program HEADs
 are unchanged. Workspace linting and all 14 corrected library regressions passed.
 Original failed runs remain retained.
 
+The first fresh full run on `0e654f72845d7d264fd84d56ead9a68a3a562d29`
+recorded 23 passing gates and three failures from stale verification expectations,
+with stable inputs and no unrun gates. Its original receipt is
+`.artifacts/lkjscript-dev/check/1791138981050628568-2247770-0/receipt.json`.
+The selected successor corrects public discovery, definition-projection and
+maintained service-artifact expectations; complete acceptance must be renewed.
+
 Next: run dependency-complete fresh source acceptance on the stabilized
 implementation. Integrate the accepted source normally and
 select a new release candidate through the [release procedure](release.md).

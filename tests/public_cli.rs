@@ -1111,8 +1111,10 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     let expected_expression_forms = [
         "choose-owned",
         "match-owned",
+        "match-borrowed-owned",
         "pack-owned",
         "unpack-owned",
+        "borrow-owned-field",
         "implementation-call",
         "method-call",
         "unit",
@@ -1185,12 +1187,20 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "(match-owned (type TYPE) (local SOURCE) (case NAME (binding LOCAL (type TYPE)) (in BODY)) ...)",
         ),
         (
+            "match-borrowed-owned",
+            "(match-borrowed-owned (type TYPE) (local SOURCE) (case NAME (binding LOCAL (type TYPE)) (in BODY)) ...)",
+        ),
+        (
             "pack-owned",
             "(pack-owned (type TYPE) (field NAME EXPRESSION) ... )",
         ),
         (
             "unpack-owned",
             "(unpack-owned (type TYPE) (local SOURCE) (field NAME (binding LOCAL (type TYPE))) ... (in BODY))",
+        ),
+        (
+            "borrow-owned-field",
+            "(borrow-owned-field (type TYPE) (local SOURCE) (field NAME (binding LOCAL (type TYPE))) (in BODY))",
         ),
         ("f64", "(f64 DECIMAL|nan|inf|-inf)"),
         (
@@ -1255,6 +1265,8 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "requirement-argument",
             "local",
             "let-scope",
+            "owned-child-read-scope",
+            "borrowed-owned-choice-scope",
             "payload-scope",
             "transaction-scope",
             "transaction-outcome",
