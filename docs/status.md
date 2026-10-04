@@ -1,6 +1,6 @@
 # Status
 
-Current snapshot: 2026-10-03. This page owns availability and unfinished acceptance.
+Current snapshot: 2026-10-04. This page owns availability and unfinished acceptance.
 [Direction](direction.md) owns goals, [specifications](spec/) own semantics and
 [roadmap](roadmap.md) orders future language work.
 
@@ -42,9 +42,18 @@ exact capabilities, slower cases and limits.
 
 ## Development v0.1.73: owned effect applications
 
-Selected checkout: `/home/coder/workspace/lkjscript`, branch `main`, based on
-`62f8e4f910596d6cee8aaf9727747c17c26b543c`. Implementation and maintained assets are
-complete; fresh full source and finalized-byte acceptance remain pending.
+Accepted source: `5d282e89849ba34eabc8d396c4a80041eaee2887`, integrated on `main`
+and independently confirmed through Git and GitHub's ref API. Selected checkout:
+`/home/coder/workspace/lkjscript`. Reporting descendants do not relabel source proof.
+
+Fresh full acceptance passed all 26 gates with stable inputs, zero reused gates
+and no unrun gates. The original receipt is
+`.artifacts/lkjscript-dev/check/1791070896199562685-742122-0/receipt.json`, digest
+`verification_383ca574f1583b005381c991f28c1c41de88ba0e7f2458de556909de0732b486`.
+The source/evidence index is `.artifacts/20261003-owned-effects/source-accepted.json`.
+The workspace run passed 1,285 library, 202 public CLI and 253 verifier tests;
+existing ignored tests retain their original status. Service, native package,
+artifact, HTTP, tail-call and discovery owners passed independently.
 
 The [new semantic contract](spec/owned-effects.md) composes Owned generic tasks
 and exact implementation witnesses with caller-supplied effects and requirements.
@@ -63,9 +72,25 @@ indexed by `public-owned-effects-04.log`. Earlier failures remain preserved.
 Public native checks passed 89 standard, 44 lkjournal, 79 guide and 62 policy tests;
 all four accepted HEADs are unchanged. Their derived bundles and required packs
 were rebuilt through public owners, and generated discovery verifies current.
-These focused observations are not full source acceptance. Next: freeze inputs,
-run all 26 fresh gates, integrate and independently verify remote main, then select
-one finalized-byte candidate for publication.
+The first full run failed on stale generation assertions and the reviewed service
+artifact pin. Its original stable-input receipt remains
+`.artifacts/lkjscript-dev/check/1791067931985781805-632977-0/receipt.json`.
+The corrected source received the complete fresh acceptance above.
+
+Finalized-byte acceptance and publication remain pending.
+[Producer 37163764037/1](https://github.com/lkjsxc/lkjscript/actions/runs/37163764037)
+was dispatched once at 2026-10-04 00:04:07 UTC from that exact accepted source.
+Its event, controller, product source and workflow identity were independently
+checked; checkout and the pinned toolchain passed, with host-tool preparation
+running at handoff. Original observations and source bindings are indexed by
+`.artifacts/20261003-owned-effects/release-0173/candidate-handoff.json`.
+No v0.1.73 tag or promotion has been created. Inspect this exact run/attempt and
+reuse healthy work. After its authenticated `candidate_accepted` terminal,
+nominate the exact source and promote unchanged assets through
+`immutable_published_and_public_verified`.
+Preserve source, final archive, target/userland, installation and public-acquisition
+proofs separately. The two new `native_owned_effects` public cases are required by
+the final-byte harness's existing inventory rule.
 
 ## Compatibility and remaining limits
 
