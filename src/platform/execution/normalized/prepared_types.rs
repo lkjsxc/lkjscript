@@ -676,6 +676,7 @@ fn property_types(
             | TypeForm::OwnedI64Cell
             | TypeForm::OwnedProduct { .. }
             | TypeForm::OwnedChoice { .. }
+            | TypeForm::OwnedSequence { .. }
                 if property == Property::BufferFree =>
             {
                 admitted = false
@@ -692,6 +693,7 @@ fn property_types(
             | TypeForm::OwnedI64Cell
             | TypeForm::OwnedProduct { .. }
             | TypeForm::OwnedChoice { .. }
+            | TypeForm::OwnedSequence { .. }
             | TypeForm::Secret
             | TypeForm::Stream { .. }
             | TypeForm::CapabilityResource { .. }
@@ -713,6 +715,7 @@ fn property_types(
             | TypeForm::OwnedI64Cell
             | TypeForm::OwnedProduct { .. }
             | TypeForm::OwnedChoice { .. }
+            | TypeForm::OwnedSequence { .. }
             | TypeForm::Secret
             | TypeForm::Stream { .. }
             | TypeForm::CapabilityResource { .. }
@@ -811,13 +814,36 @@ fn calls(
         | NormalizedInstruction::MatchBorrowedOwned {
             choice_type: product_type,
             ..
+        }
+        | NormalizedInstruction::SequenceEmpty {
+            sequence_type: product_type,
+        }
+        | NormalizedInstruction::SequenceLength {
+            sequence_type: product_type,
+            ..
+        }
+        | NormalizedInstruction::SequencePush {
+            sequence_type: product_type,
+            ..
+        }
+        | NormalizedInstruction::SequencePop {
+            sequence_type: product_type,
+            ..
+        }
+        | NormalizedInstruction::BorrowOwnedItem {
+            sequence_type: product_type,
+            ..
         } = instruction
         {
             substitute(types, *product_type, bindings, 0, work)?;
         }
         match instruction {
-            NormalizedInstruction::BorrowOwnedField { binding_type, .. } => {
+            NormalizedInstruction::BorrowOwnedField { binding_type, .. }
+            | NormalizedInstruction::BorrowOwnedItem { binding_type, .. } => {
                 substitute(types, *binding_type, bindings, 0, work)?;
+            }
+            NormalizedInstruction::SequencePop { result_type, .. } => {
+                substitute(types, *result_type, bindings, 0, work)?;
             }
             NormalizedInstruction::MatchBorrowedOwned { cases, .. } => {
                 for case in cases.iter() {
@@ -1150,6 +1176,17 @@ fn close_effect_applications(
                     | NormalizedInstruction::MatchOwned {
                         choice_type: product_type,
                         ..
+                    }
+                    | NormalizedInstruction::SequenceEmpty {
+                        sequence_type: product_type,
+                    }
+                    | NormalizedInstruction::SequenceLength {
+                        sequence_type: product_type,
+                        ..
+                    }
+                    | NormalizedInstruction::SequencePush {
+                        sequence_type: product_type,
+                        ..
                     } => {
                         *product_type = substitute_effect_type(
                             self.types,
@@ -1163,6 +1200,16 @@ fn close_effect_applications(
                     NormalizedInstruction::BorrowOwnedField {
                         product_type,
                         binding_type,
+                        ..
+                    }
+                    | NormalizedInstruction::BorrowOwnedItem {
+                        sequence_type: product_type,
+                        binding_type,
+                        ..
+                    }
+                    | NormalizedInstruction::SequencePop {
+                        sequence_type: product_type,
+                        result_type: binding_type,
                         ..
                     } => {
                         *product_type = substitute_effect_type(
@@ -1544,9 +1591,10 @@ fn substitute_effect_type(
                 descend(&mut field.ty)?;
             }
         }
-        TypeForm::List { item } | TypeForm::Option { item } | TypeForm::Stream { item } => {
-            descend(item)?
-        }
+        TypeForm::List { item }
+        | TypeForm::Option { item }
+        | TypeForm::Stream { item }
+        | TypeForm::OwnedSequence { item } => descend(item)?,
         TypeForm::Map { key, value }
         | TypeForm::Result {
             ok: key,
@@ -1608,9 +1656,10 @@ fn substitute(
                 descend(argument)?;
             }
         }
-        TypeForm::List { item } | TypeForm::Option { item } | TypeForm::Stream { item } => {
-            descend(item)?
-        }
+        TypeForm::List { item }
+        | TypeForm::Option { item }
+        | TypeForm::Stream { item }
+        | TypeForm::OwnedSequence { item } => descend(item)?,
         TypeForm::Map { key, value } => {
             descend(key)?;
             descend(value)?;
@@ -1642,6 +1691,185 @@ fn substitute(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn type_in(
+        types: &mut BTreeMap<TypeObjectDigest, TypeObject>,
+        form: TypeForm,
+    ) -> TypeObjectDigest {
+        let object = TypeObject::new(form).unwrap();
+        let digest = encode_type_object(&object).unwrap().0;
+        types.insert(digest, object);
+        digest
+    }
+
+    fn field(ty: TypeObjectDigest) -> crate::platform::kernel::StructuralTypeField {
+        crate::platform::kernel::StructuralTypeField {
+            name: crate::platform::kernel::Name::new("payload").unwrap(),
+            ty,
+        }
+    }
+
+    #[test]
+    fn sequence_instruction_closure_derives_empty_borrowed_and_pop_types_in_untaken_code() {
+        use std::sync::Arc;
+        let parameter = TypeParameterId::migrate(b"prepared-sequence-roots", 0);
+        let mut types = BTreeMap::new();
+        let parameter_type = type_in(&mut types, TypeForm::TypeParameter { parameter });
+        let cell = type_in(&mut types, TypeForm::OwnedI64Cell);
+        let item = type_in(
+            &mut types,
+            TypeForm::OwnedProduct {
+                fields: vec![field(parameter_type)],
+            },
+        );
+        let sequence = type_in(&mut types, TypeForm::OwnedSequence { item });
+        let pop_result = type_in(
+            &mut types,
+            TypeForm::OwnedChoice {
+                cases: vec![field(sequence)],
+            },
+        );
+        let instructions = [
+            NormalizedInstruction::SequenceEmpty {
+                sequence_type: sequence,
+            },
+            NormalizedInstruction::SequenceLength {
+                sequence_type: sequence,
+                source_local: 0,
+            },
+            NormalizedInstruction::SequencePush {
+                sequence_type: sequence,
+                value_local: 1,
+                source_local: 0,
+            },
+            NormalizedInstruction::SequencePop {
+                sequence_type: sequence,
+                result_type: pop_result,
+                source_local: 0,
+            },
+            NormalizedInstruction::BorrowOwnedItem {
+                sequence_type: sequence,
+                source_local: 0,
+                binding_local: 2,
+                binding_type: item,
+            },
+        ];
+        let concrete_item = TypeObject::new(TypeForm::OwnedProduct {
+            fields: vec![field(cell)],
+        })
+        .unwrap();
+        let concrete_item_digest = encode_type_object(&concrete_item).unwrap().0;
+        let concrete_sequence = TypeObject::new(TypeForm::OwnedSequence {
+            item: concrete_item_digest,
+        })
+        .unwrap();
+        let concrete_sequence_digest = encode_type_object(&concrete_sequence).unwrap().0;
+        let concrete_pop = TypeObject::new(TypeForm::OwnedChoice {
+            cases: vec![field(concrete_sequence_digest)],
+        })
+        .unwrap();
+        let concrete_pop_digest = encode_type_object(&concrete_pop).unwrap().0;
+        let control = crate::platform::execution::ExecutionControl::uncancelled();
+        for instruction in instructions {
+            let pop = matches!(instruction, NormalizedInstruction::SequencePop { .. });
+            let mut actual = types.clone();
+            let code = NormalizedCode {
+                parameter_count: 0,
+                local_count: 3,
+                instructions: Arc::from([
+                    NormalizedInstruction::Jump(2),
+                    instruction,
+                    NormalizedInstruction::Unit,
+                ]),
+            };
+            calls(
+                &code,
+                &BTreeMap::from([(parameter, cell)]),
+                &mut actual,
+                &mut BTreeSet::new(),
+                &mut Budget::new(&control),
+                &[],
+                &[],
+            )
+            .unwrap();
+            assert_eq!(actual.get(&concrete_item_digest), Some(&concrete_item));
+            assert_eq!(
+                actual.get(&concrete_sequence_digest),
+                Some(&concrete_sequence)
+            );
+            if pop {
+                assert_eq!(actual.get(&concrete_pop_digest), Some(&concrete_pop));
+            }
+        }
+    }
+
+    #[test]
+    fn empty_sequence_closure_requires_the_complete_item_type() {
+        use std::sync::Arc;
+        let mut types = BTreeMap::new();
+        let missing_cell = encode_type_object(&TypeObject::new(TypeForm::OwnedI64Cell).unwrap())
+            .unwrap()
+            .0;
+        let sequence = type_in(&mut types, TypeForm::OwnedSequence { item: missing_cell });
+        let code = NormalizedCode {
+            parameter_count: 0,
+            local_count: 0,
+            instructions: Arc::from([NormalizedInstruction::SequenceEmpty {
+                sequence_type: sequence,
+            }]),
+        };
+        let control = crate::platform::execution::ExecutionControl::uncancelled();
+        let error = calls(
+            &code,
+            &BTreeMap::new(),
+            &mut types,
+            &mut BTreeSet::new(),
+            &mut Budget::new(&control),
+            &[],
+            &[],
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "normalized_instantiation_scope");
+    }
+
+    #[test]
+    fn sequence_substitution_checks_the_complete_mixed_owned_nesting_depth() {
+        let parameter = TypeParameterId::migrate(b"prepared-sequence-depth", 0);
+        let mut types = BTreeMap::new();
+        let parameter_type = type_in(&mut types, TypeForm::TypeParameter { parameter });
+        let symbolic = type_in(
+            &mut types,
+            TypeForm::OwnedSequence {
+                item: parameter_type,
+            },
+        );
+        let mut closed = type_in(&mut types, TypeForm::OwnedI64Cell);
+        for depth in 0..crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH - 1 {
+            let form = match depth % 3 {
+                0 => TypeForm::OwnedSequence { item: closed },
+                1 => TypeForm::OwnedProduct {
+                    fields: vec![field(closed)],
+                },
+                _ => TypeForm::OwnedChoice {
+                    cases: vec![field(closed)],
+                },
+            };
+            closed = type_in(&mut types, form);
+        }
+        check_product_substitution(
+            types.clone(),
+            symbolic,
+            BTreeMap::from([(parameter, closed)]),
+        )
+        .unwrap();
+        closed = type_in(&mut types, TypeForm::OwnedSequence { item: closed });
+        let error =
+            check_product_substitution(types, symbolic, BTreeMap::from([(parameter, closed)]))
+                .unwrap_err();
+        assert_eq!(error.code, "normalized_product_depth");
+        assert_eq!(error.class, DiagnosticClass::Semantic);
+    }
+
     #[test]
     fn derivation_reservations_fit_exactly_and_fail_before_one_over_growth() {
         let control = crate::platform::execution::ExecutionControl::uncancelled();

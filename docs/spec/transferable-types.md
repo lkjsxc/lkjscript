@@ -44,6 +44,11 @@ child transferable, including inactive cases. Ordinary aggregate metadata may
 contain exact in-scope ordinary transferable parameters. At least one statically
 owned field or case remains required, independent of runtime selection.
 
+[Owned sequences](owned-sequences.md) are transferable when their exact element
+type is transferable, including when empty. Every actual child crosses independent
+source and destination admission. Interrupted adoption retains custody of the whole
+sequence until cleanup; a partially transferred sequence cannot escape.
+
 Every nominal actual argument is checked in its caller scope, including phantom
 arguments. Nominal fields and cases are checked under a separate set of ordinary
 formal assumptions belonging to that declaration. Functions, task functions,

@@ -753,7 +753,12 @@ impl TryFrom<super::ExpressionOperation> for ExpressionOperation14 {
             | super::ExpressionOperation::BorrowOwnedField { .. }
             | super::ExpressionOperation::ChooseOwned { .. }
             | super::ExpressionOperation::MatchOwned { .. }
-            | super::ExpressionOperation::MatchBorrowedOwned { .. } => return Err(extension()),
+            | super::ExpressionOperation::MatchBorrowedOwned { .. }
+            | super::ExpressionOperation::SequenceEmpty { .. }
+            | super::ExpressionOperation::SequenceLength { .. }
+            | super::ExpressionOperation::SequencePush { .. }
+            | super::ExpressionOperation::SequencePop { .. }
+            | super::ExpressionOperation::BorrowOwnedItem { .. } => return Err(extension()),
         })
     }
 }

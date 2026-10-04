@@ -1,5 +1,6 @@
 //! Production admission of reusable symbolic structured groups and their bounds.
 use super::*;
+use std::collections::BTreeMap;
 
 const GROUP: &str = r#"declarations.begin
 (units (module create transfer-proof
@@ -158,4 +159,143 @@ fn transfer_closed_implementation_self_needs_no_function_assumptions() {
         }
     }
     assert_eq!(checked, 2);
+}
+
+#[test]
+fn transfer_symbolic_sequences_require_element_bounds_before_concrete_applications() {
+    let sequence = "(owned-sequence O)";
+    let source = GROUP
+        .replace(
+            "(parameter create value (type O) (use consume))",
+            &format!("(parameter create value (type {sequence}) (use consume))"),
+        )
+        .replace("(returns O)", &format!("(returns {sequence})"))
+        .replace("(field left O)", &format!("(field left {sequence})"));
+    let snapshot = author(&source).unwrap();
+    let scope = named(&snapshot, "group");
+    let child = snapshot
+        .owners
+        .values()
+        .find_map(|owner| match owner {
+            OwnerRecord::Expression(e) => match e.operation {
+                ExpressionOperation::Parallel { left, .. } => Some(left),
+                _ => None,
+            },
+            _ => None,
+        })
+        .unwrap();
+    let call = parallel::admit_call(&snapshot, child, Some(scope)).unwrap();
+    assert!(call.result_owned);
+    assert!(matches!(
+        snapshot.types[&call.result].form,
+        TypeForm::OwnedSequence { .. }
+    ));
+    assert!(transfer::admit(&snapshot, call.result, None).is_err());
+    assert!(!owned_contract::ordinary_transfer(&snapshot, call.result, Some(scope)).unwrap());
+
+    let TypeForm::OwnedSequence { item } = snapshot.types[&call.result].form else {
+        unreachable!()
+    };
+    let TypeForm::TypeParameter { parameter } = snapshot.types[&item].form else {
+        unreachable!()
+    };
+    let mut concrete = snapshot.clone();
+    let object = TypeObject::new(TypeForm::ByteBuffer).unwrap();
+    let buffer = encode_type_object(&object).unwrap().0;
+    concrete.types.insert(buffer, object);
+    let mut applied = parallel_types::AppliedTypes::new(&concrete);
+    let closed = applied
+        .substitute(call.result, &BTreeMap::from([(parameter, buffer)]), 0)
+        .unwrap();
+    assert_eq!(
+        applied.type_object(closed).unwrap().unwrap().form,
+        TypeForm::OwnedSequence { item: buffer }
+    );
+    assert!(transfer::admit(&applied, closed, None).unwrap());
+
+    let mut weakened = snapshot.clone();
+    for owner in weakened.owners.values_mut() {
+        if let OwnerRecord::TypeParameter(p) = owner
+            && p.declaration == scope
+            && p.name.as_str() == "O"
+        {
+            p.constraints = TypeParameterConstraints::Owned;
+        }
+    }
+    assert!(parallel::admit_call(&weakened, child, Some(scope)).is_err());
+}
+
+#[test]
+fn transfer_closed_sequence_witnesses_preserve_exact_self_type() {
+    let source = r#"declarations.begin
+(units (module create sequence-witness
+  (owned-contract create Finish (visibility public)
+    (self Self) (type-parameter create Self (constraint owned))
+    (method method_98000000000000000000000000000001 finish
+      (parameters (Self consume)) (returns I64)))
+  (function create finish-cells (visibility public) (effect pure)
+    (parameter create values (type (owned-sequence OwnedI64Cell)) (use consume))
+    (returns I64) (body (i64 7)))
+  (owned-implementation create Cells (visibility public) (contract Finish)
+    (self (owned-sequence OwnedI64Cell))
+    (method method_98000000000000000000000000000001 finish-cells))))
+declarations.end
+"#;
+    let snapshot = author(source).unwrap();
+    let implementation = snapshot
+        .owners
+        .values()
+        .find_map(|owner| match owner {
+            OwnerRecord::Declaration(d) => match &d.payload {
+                DeclarationPayload::OwnedImplementation(i) => Some(i),
+                _ => None,
+            },
+            _ => None,
+        })
+        .unwrap();
+    owned_contract::validate_implementation(&snapshot, implementation).unwrap();
+    assert!(transfer::admit(&snapshot, implementation.self_type, None).unwrap());
+    assert!(!owned_contract::ordinary_closed(&snapshot, implementation.self_type).unwrap());
+    let mismatch = source.replace(
+        "(self (owned-sequence OwnedI64Cell))",
+        "(self (owned-sequence ByteBuffer))",
+    );
+    assert!(author(&mismatch).is_err());
+}
+
+#[test]
+fn transfer_rejects_owned_sequence_hidden_in_phantom_ordinary_arguments() {
+    let source = r#"declarations.begin
+(units (module create phantom-sequence
+  (record create Marker (visibility public)
+    (type-parameter create T) (field create tag (type I64)))
+  (function create unused (visibility public) (effect pure)
+    (parameter create marker (type (Marker Bytes)))
+    (returns Unit) (body (unit)))))
+declarations.end
+"#;
+    let mut snapshot = author(source).unwrap();
+    let declaration = snapshot
+        .types
+        .values()
+        .find_map(|object| match object.form {
+            TypeForm::Applied { declaration, .. } => Some(declaration),
+            _ => None,
+        })
+        .unwrap();
+    let mut insert_type = |form| {
+        let object = TypeObject::new(form).unwrap();
+        let digest = encode_type_object(&object).unwrap().0;
+        snapshot.types.insert(digest, object);
+        digest
+    };
+    let item = insert_type(TypeForm::ByteBuffer);
+    let sequence = insert_type(TypeForm::OwnedSequence { item });
+    let phantom = insert_type(TypeForm::Applied {
+        declaration,
+        arguments: vec![sequence],
+    });
+    assert!(transfer::admit(&snapshot, sequence, None).unwrap());
+    assert!(transfer::admit(&snapshot, phantom, None).is_err());
+    assert!(!owned_contract::ordinary_closed(&snapshot, phantom).unwrap());
 }

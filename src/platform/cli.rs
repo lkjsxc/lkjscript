@@ -5414,6 +5414,29 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                 fields.push(("field", field.to_string()));
                 self.add_type_reference("owned_product_type", owner, 0, *product_type)?;
             }
+            ExpressionOperation::SequenceEmpty { sequence_type }
+            | ExpressionOperation::SequenceLength { sequence_type, .. }
+            | ExpressionOperation::SequencePush { sequence_type, .. }
+            | ExpressionOperation::SequencePop { sequence_type, .. }
+            | ExpressionOperation::BorrowOwnedItem { sequence_type, .. } => {
+                let form = match &record.operation {
+                    ExpressionOperation::SequenceEmpty { .. } => "sequence_empty",
+                    ExpressionOperation::SequenceLength { .. } => "sequence_length",
+                    ExpressionOperation::SequencePush { .. } => "sequence_push",
+                    ExpressionOperation::SequencePop { result_type, .. } => {
+                        self.add_type_reference(
+                            "owned_sequence_result_type",
+                            owner,
+                            0,
+                            *result_type,
+                        )?;
+                        "sequence_pop"
+                    }
+                    _ => "borrow_owned_item",
+                };
+                fields.push(("form", form.to_owned()));
+                self.add_type_reference("owned_sequence_type", owner, 0, *sequence_type)?;
+            }
             ExpressionOperation::Unit {} => fields.push(("form", "unit".to_owned())),
             ExpressionOperation::Bool { value } => {
                 fields.push(("form", "bool".to_owned()));
@@ -5843,6 +5866,101 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
             ExpressionOperation::MatchBorrowedOwned { .. }
         );
         match record.operation {
+            ExpressionOperation::SequenceEmpty { .. } => {}
+            ExpressionOperation::SequenceLength { source, .. }
+            | ExpressionOperation::SequencePop { source, .. } => {
+                self.visit_expression_child(
+                    owner,
+                    source,
+                    (
+                        ExpressionChildRole::OwnedSequenceSource,
+                        "owned_sequence_source",
+                    ),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+            }
+            ExpressionOperation::SequencePush { value, source, .. } => {
+                self.visit_expression_child(
+                    owner,
+                    value,
+                    (
+                        ExpressionChildRole::OwnedSequenceValue,
+                        "owned_sequence_value",
+                    ),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+                self.visit_expression_child(
+                    owner,
+                    source,
+                    (
+                        ExpressionChildRole::OwnedSequenceSource,
+                        "owned_sequence_source",
+                    ),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+            }
+            ExpressionOperation::BorrowOwnedItem {
+                source,
+                index,
+                binding,
+                body,
+                ..
+            } => {
+                self.visit_expression_child(
+                    owner,
+                    index,
+                    (
+                        ExpressionChildRole::OwnedSequenceIndex,
+                        "owned_sequence_index",
+                    ),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+                self.visit_expression_child(
+                    owner,
+                    source,
+                    (
+                        ExpressionChildRole::OwnedSequenceSource,
+                        "owned_sequence_source",
+                    ),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+                self.visit_binding(
+                    binding,
+                    DefinitionPosition {
+                        parent: owner,
+                        ownership_role: OwnershipRole::ExpressionBinding {
+                            role: BindingContainerRole::OwnedBorrow,
+                            ordinal: 0,
+                        },
+                        slot: "owned_sequence_binding",
+                        index: 0,
+                        label: None,
+                        depth: child_depth,
+                    },
+                    BindingKind::OwnedBorrow,
+                )?;
+                self.visit_expression_child(
+                    owner,
+                    body,
+                    (
+                        ExpressionChildRole::OwnedSequenceBody,
+                        "owned_sequence_body",
+                    ),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+            }
             ExpressionOperation::ChooseOwned { value, .. } => {
                 self.visit_expression_child(
                     owner,

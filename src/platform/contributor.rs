@@ -995,6 +995,20 @@ fn reconstruct_function_extraction(
         .iter()
         .map(|owner| owner.owner.parse::<OwnerKey>())
         .collect::<Result<Vec<_>, _>>()?;
+    if body_owners.iter().any(|owner| {
+        matches!(snapshot.owners.get(owner), Some(OwnerRecord::Expression(record)) if matches!(
+            record.operation,
+            ExpressionOperation::BorrowOwnedField { .. }
+                | ExpressionOperation::BorrowOwnedItem { .. }
+                | ExpressionOperation::MatchBorrowedOwned { .. }
+        ))
+    }) {
+        return Err(oracle_error(
+            DiagnosticClass::Semantic,
+            "contributor_extraction_owned_borrow",
+            "extraction oracle cannot preserve scoped owned borrowing contracts",
+        ));
+    }
     let selected_preorder = &body_owners[selected_index..selected_end];
     let selected_set = selected_preorder.iter().copied().collect::<BTreeSet<_>>();
     let defined_bindings = selected_set
@@ -2449,6 +2463,46 @@ impl DefinitionOracleWalker<'_> {
                     ExpressionChildRole::OwnedProductBody,
                 )?;
             }
+            ExpressionOperation::BorrowOwnedItem {
+                index,
+                source,
+                binding,
+                body,
+                ..
+            } => {
+                self.visit_expression_child(
+                    *index,
+                    owner,
+                    "owned_sequence_index",
+                    0,
+                    child_depth,
+                    ExpressionChildRole::OwnedSequenceIndex,
+                )?;
+                self.visit_expression_child(
+                    *source,
+                    owner,
+                    "owned_sequence_source",
+                    0,
+                    child_depth,
+                    ExpressionChildRole::OwnedSequenceSource,
+                )?;
+                self.visit_binding(
+                    *binding,
+                    owner,
+                    "owned_sequence_binding",
+                    0,
+                    child_depth,
+                    (BindingKind::OwnedBorrow, BindingContainerRole::OwnedBorrow),
+                )?;
+                self.visit_expression_child(
+                    *body,
+                    owner,
+                    "owned_sequence_body",
+                    0,
+                    child_depth,
+                    ExpressionChildRole::OwnedSequenceBody,
+                )?;
+            }
             ExpressionOperation::Match { value, arms } => {
                 self.visit_expression_child(
                     *value,
@@ -2873,6 +2927,11 @@ fn oracle_expression_form(operation: &ExpressionOperation) -> &'static str {
         ExpressionOperation::MatchOwned { .. } => "match_owned",
         ExpressionOperation::MatchBorrowedOwned { .. } => "match_borrowed_owned",
         ExpressionOperation::BorrowOwnedField { .. } => "borrow_owned_field",
+        ExpressionOperation::SequenceEmpty { .. } => "sequence_empty",
+        ExpressionOperation::SequenceLength { .. } => "sequence_length",
+        ExpressionOperation::SequencePush { .. } => "sequence_push",
+        ExpressionOperation::SequencePop { .. } => "sequence_pop",
+        ExpressionOperation::BorrowOwnedItem { .. } => "borrow_owned_item",
     }
 }
 
@@ -2917,6 +2976,10 @@ fn oracle_child_role(role: ExpressionChildRole) -> &'static str {
         ExpressionChildRole::OwnedChoiceValue => "owned_choice_value",
         ExpressionChildRole::OwnedChoiceSource => "owned_choice_source",
         ExpressionChildRole::OwnedChoiceArmBody => "owned_choice_arm_body",
+        ExpressionChildRole::OwnedSequenceValue => "owned_sequence_value",
+        ExpressionChildRole::OwnedSequenceSource => "owned_sequence_source",
+        ExpressionChildRole::OwnedSequenceIndex => "owned_sequence_index",
+        ExpressionChildRole::OwnedSequenceBody => "owned_sequence_body",
     }
 }
 
@@ -2995,8 +3058,8 @@ mod tests {
         let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
         let before = std::fs::read(project.join("HEAD")).expect("standard HEAD before oracle");
         let inventory = semantic_inventory(&project).expect("standard semantic inventory");
-        // Six owned-buffer externals and four native tests add 68 owners in core.
-        assert_eq!(inventory.owners, 1_626);
+        // Five sequence wrappers, three graph helpers and seven tests add 274 owners.
+        assert_eq!(inventory.owners, 1_900);
         assert_eq!(inventory.modules, 13);
         assert!(inventory.functions > 0);
         assert!(inventory.relations > 0);
@@ -3009,6 +3072,79 @@ mod tests {
     #[test]
     fn compact_change_default_is_the_current_batch_authority() {
         assert_eq!(compact_change_default_maximum_operations(), 1_000);
+    }
+
+    #[test]
+    fn indexed_borrow_definition_oracle_retains_binding_provenance_and_evaluation_order() {
+        let source = r#"declarations.begin
+(units (module create sequence-oracle
+  (external create length (visibility private) (implementation core.buffer.length)
+    (parameter create value (type ByteBuffer) (use borrow)) (returns I64))
+  (function create inspect (visibility public) (effect pure)
+    (parameter create source (type (owned-sequence ByteBuffer)) (use borrow))
+    (returns I64)
+    (body (borrow-owned-item (type (owned-sequence ByteBuffer)) (local source)
+      (index (i64 0)) (binding view (type ByteBuffer))
+      (in (call length (local view))))))))
+declarations.end"#;
+        let snapshot =
+            crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(source)
+                .unwrap();
+        let function = snapshot
+            .owners
+            .iter()
+            .find_map(|(owner, record)| match (owner, record) {
+                (OwnerKey::Declaration(id), OwnerRecord::Declaration(record))
+                    if record.name.as_str() == "inspect" =>
+                {
+                    Some(*id)
+                }
+                _ => None,
+            })
+            .unwrap();
+        let temporary = tempfile::tempdir().unwrap();
+        let project = temporary.path().join("meaning");
+        GraphRepository::create(&project, &snapshot, None).unwrap();
+        let before = std::fs::read(project.join("HEAD")).unwrap();
+        let oracle = function_definition_oracle(&project, &function.to_string()).unwrap();
+        assert_eq!(
+            oracle
+                .body_preorder
+                .iter()
+                .map(|owner| owner.form.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "borrow_owned_item",
+                "i64",
+                "local",
+                "binding:owned_borrow",
+                "call",
+                "local",
+            ]
+        );
+        assert_eq!(
+            oracle
+                .body_preorder
+                .iter()
+                .map(|owner| owner.role.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "function_body",
+                "owned_sequence_index",
+                "owned_sequence_source",
+                "owned_sequence_binding",
+                "owned_sequence_body",
+                "call_argument",
+            ]
+        );
+        let selected = &oracle.body_preorder[1].owner;
+        assert_eq!(
+            function_extraction_oracle(&project, &function.to_string(), selected)
+                .unwrap_err()
+                .code,
+            "contributor_extraction_owned_borrow"
+        );
+        assert_eq!(std::fs::read(project.join("HEAD")).unwrap(), before);
     }
 
     #[test]

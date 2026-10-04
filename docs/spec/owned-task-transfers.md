@@ -22,7 +22,8 @@ not admit borrowed task parameters or borrowed task methods. Every exit releases
 child loans before ancestor guards and owners, including cancellation after an
 effect; cleanup does not replay or roll back that effect.
 
-A direct result may be ByteBuffer, OwnedI64Cell, an owned product or choice, or an
+A direct result may be ByteBuffer, OwnedI64Cell, an owned product, choice or
+[sequence](owned-sequences.md), or an
 exact in-scope Owned type parameter. Ordinary containers, callable descriptors,
 partial application and capture do not gain permission to contain these values.
 A task can declare Owned type parameters and explicit implementation witnesses

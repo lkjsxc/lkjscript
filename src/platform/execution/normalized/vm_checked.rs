@@ -45,6 +45,7 @@ impl Value {
                 | NormalizedValue::OwnedI64Cell(_)
                 | NormalizedValue::OwnedProduct(_)
                 | NormalizedValue::OwnedChoice(_)
+                | NormalizedValue::OwnedSequence(_)
         ) {
             return Err(admission_error(
                 "memory constructor requires a sealed token",
@@ -356,6 +357,7 @@ impl Value {
                             | TypeForm::OwnedI64Cell
                             | TypeForm::OwnedProduct { .. }
                             | TypeForm::OwnedChoice { .. }
+                            | TypeForm::OwnedSequence { .. }
                             | TypeForm::CapabilityResource { .. }
                     )
                 });
@@ -481,6 +483,7 @@ impl Value {
                         | TypeForm::OwnedI64Cell
                         | TypeForm::OwnedProduct { .. }
                         | TypeForm::OwnedChoice { .. }
+                        | TypeForm::OwnedSequence { .. }
                         | TypeForm::CapabilityResource { .. }
                 )
             });
@@ -848,6 +851,7 @@ impl Admission<'_> {
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
                 | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. }
                 | TypeForm::CapabilityResource { .. }
                 | TypeForm::TypeParameter { .. } => {
                     return Err(admission_error(
@@ -1079,6 +1083,7 @@ impl Admission<'_> {
                                         | TypeForm::OwnedI64Cell
                                         | TypeForm::OwnedProduct { .. }
                                         | TypeForm::OwnedChoice { .. }
+                                        | TypeForm::OwnedSequence { .. }
                                         | TypeForm::CapabilityResource { .. }
                                 )
                             });
@@ -1427,6 +1432,9 @@ impl Admission<'_> {
                     .collect::<Option<_>>()?,
             },
             TypeForm::List { item } => TypeForm::List {
+                item: descend(*item)?,
+            },
+            TypeForm::OwnedSequence { item } => TypeForm::OwnedSequence {
                 item: descend(*item)?,
             },
             TypeForm::Option { item } => TypeForm::Option {

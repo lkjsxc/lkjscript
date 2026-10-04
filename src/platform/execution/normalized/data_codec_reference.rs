@@ -421,6 +421,7 @@ fn read_reserved_value(
         TypeForm::OwnedI64Cell => Err(unsupported("OwnedI64Cell")),
         TypeForm::OwnedProduct { .. } => Err(unsupported("OwnedProduct")),
         TypeForm::OwnedChoice { .. } => Err(unsupported("OwnedChoice")),
+        TypeForm::OwnedSequence { .. } => Err(unsupported("OwnedSequence")),
         TypeForm::CapabilityResource { .. } => Err(unsupported("CapabilityResource")),
         TypeForm::Stream { .. } => Err(unsupported("Stream")),
         TypeForm::Function { .. } | TypeForm::TaskFunction { .. } => Err(unsupported("Function")),
@@ -556,6 +557,7 @@ fn describe_type(
         | TypeForm::OwnedI64Cell
         | TypeForm::OwnedProduct { .. }
         | TypeForm::OwnedChoice { .. }
+        | TypeForm::OwnedSequence { .. }
         | TypeForm::CapabilityResource { .. } => {
             return Err(unsupported("CapabilityResource"));
         }

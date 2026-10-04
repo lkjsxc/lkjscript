@@ -2,6 +2,89 @@
 use super::*;
 
 #[test]
+fn transfer_application_resolves_owned_sequence_element_substitutions() {
+    use crate::platform::kernel::{TypeObject, TypeParameterConstraints, encode_type_object};
+
+    let (prepared, functions) = fixture();
+    let mut program = (*prepared).clone();
+    let function = functions["fixed-result"];
+    let parameter = program.functions[function.0 as usize].type_parameters[0];
+    let symbolic_object = TypeObject::new(TypeForm::TypeParameter { parameter }).unwrap();
+    let symbolic = encode_type_object(&symbolic_object).unwrap().0;
+    program.types.insert(symbolic, symbolic_object);
+    let template_object = TypeObject::new(TypeForm::OwnedSequence { item: symbolic }).unwrap();
+    let template = encode_type_object(&template_object).unwrap().0;
+    program.types.insert(template, template_object);
+    let mut actuals = Vec::new();
+    for form in [TypeForm::ByteBuffer, TypeForm::OwnedI64Cell] {
+        let object = TypeObject::new(form).unwrap();
+        let item = encode_type_object(&object).unwrap().0;
+        program.types.insert(item, object);
+        let object = TypeObject::new(TypeForm::OwnedSequence { item }).unwrap();
+        let sequence = encode_type_object(&object).unwrap().0;
+        program.types.insert(sequence, object);
+        actuals.push((item, sequence));
+    }
+    let target = &mut Arc::make_mut(&mut program.functions)[function.0 as usize];
+    target.type_parameter_constraints = Arc::from([TypeParameterConstraints::Owned]);
+    Arc::make_mut(&mut target.parameters)[0].ty = template;
+    target.result = template;
+    let control = ExecutionControl::uncancelled();
+    for (item, sequence) in actuals {
+        let application =
+            TaskApplication::bind(&program, function, Arc::from([item]), &control, &mut |_| {
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(application.parameter(&program, 0).unwrap(), sequence);
+        assert_eq!(application.result(), sequence);
+        assert_eq!(
+            resolve_type(
+                &program,
+                template,
+                &BTreeMap::from([(parameter, item)]),
+                &control
+            )
+            .unwrap(),
+            sequence
+        );
+    }
+    assert!(resolve_type(&program, template, &BTreeMap::new(), &control).is_err());
+    assert!(admit_type(&program, template, &control).is_err());
+}
+
+#[test]
+fn sequence_transfer_contract_checks_owned_elements_and_unselected_cases() {
+    use crate::platform::kernel::{TypeObject, encode_type_object};
+
+    let (prepared, functions) = fixture();
+    let mut program = (*prepared).clone();
+    let tree = program.functions[functions["tree-result"].0 as usize].result;
+    let callback = program.functions[functions["hidden-callback"].0 as usize].parameters[0].ty;
+    let text = *program
+        .types
+        .iter()
+        .find(|(_, object)| matches!(object.form, TypeForm::Text))
+        .unwrap()
+        .0;
+    let control = ExecutionControl::uncancelled();
+    for (item, valid) in [(tree, true), (text, false), (callback, false)] {
+        let object = TypeObject::new(TypeForm::OwnedSequence { item }).unwrap();
+        let sequence = encode_type_object(&object).unwrap().0;
+        program.types.insert(sequence, object);
+        assert_eq!(admit_type(&program, sequence, &control).is_ok(), valid);
+    }
+    let object = TypeObject::new(TypeForm::OwnedSequence { item: tree }).unwrap();
+    let sequence = encode_type_object(&object).unwrap().0;
+    program.types.insert(sequence, object);
+    let TypeForm::OwnedChoice { cases } = &mut program.types.get_mut(&tree).unwrap().form else {
+        panic!("choice");
+    };
+    cases[0].ty = callback;
+    assert!(admit_type(&program, sequence, &control).is_err());
+}
+
+#[test]
 fn transfer_application_resolves_wide_structural_signatures_with_only_application_storage() {
     use crate::platform::kernel::{
         Name, StructuralTypeField, TypeObject, TypeParameterConstraints, encode_type_object,

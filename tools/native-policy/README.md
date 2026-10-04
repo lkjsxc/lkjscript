@@ -100,7 +100,7 @@ supplier. Rebuild the contributor test executable after replacing the artifact.
 The [current release notes](../../docs/releases/v0.1.69.md) identify the selected
 compatibility boundary; [status](../../docs/status.md) owns actual acceptance.
 
-The current derived bundle uses compiler 23, bytecode 18 and artifact 30:
-`artifact_bundle_bdd4b3f8f0ae4d9fec3509994db73197f77de413c07744f3a7bf6d8a79fd8f40`,
+The current derived bundle uses compiler 25, bytecode 20 and artifact 32:
+`artifact_bundle_c27304aa778c971daf85e4f3b9d1dde1e66a732ebfac3bc8596700fcf3a2f329`,
 757,988 bytes. Public check/build preserves the accepted native HEAD and its exact
 supplier; all 62 native and supplier tests agree between the two evaluators.

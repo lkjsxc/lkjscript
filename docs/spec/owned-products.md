@@ -90,8 +90,9 @@ Owned parameters may instantiate to products; exact monomorphic owned implementa
 may select a closed product as Self under the existing first-order witness rules.
 There is no implicit witness search or capability grant. Named tasks may consume
 and return products under [same-task transfer](owned-task-transfers.md). Indirect
-callable signatures, capture, general owned-element containers, nominal owned declarations
-and function extraction of product scopes remain unsupported. The separate
+callable signatures, capture, nominal owned declarations
+and function extraction of product scopes remain unsupported. [Owned sequences](owned-sequences.md)
+provide runtime-sized homogeneous storage for products and other owned elements. The separate
 [structured parallel contract](structured-parallel.md) admits closed product inputs
 and, in development 0.1.69, returns owned child results in a joined product. This
 does not permit asynchronous borrowing or detached transfer.

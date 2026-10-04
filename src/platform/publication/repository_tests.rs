@@ -437,7 +437,7 @@ fn concurrent_dependency_apply_has_one_complete_winner_and_one_stale_candidate()
             .check(&crate::platform::execution::ExecutionControl::uncancelled())
             .unwrap()
             .passed,
-        89
+        96
     );
 }
 
@@ -5993,6 +5993,7 @@ fn authored_type_builder_interns_every_unrestricted_graph_nine_type_form() {
             TypeForm::ByteBuffer => "byte_buffer",
             TypeForm::OwnedProduct { .. } => "owned_product",
             TypeForm::OwnedChoice { .. } => "owned_choice",
+            TypeForm::OwnedSequence { .. } => "owned_sequence",
         });
     }
     assert_eq!(observed.len(), 16);

@@ -25,6 +25,22 @@ the [normative scope](../../docs/spec/owned-byte-buffers.md) defines exact param
 modes, transfer, cleanup and unsupported boundaries. Ordinary immutable Bytes remains
 unrestricted; freeze adopts the owned vector and can retain spare capacity.
 
+The pure graph-owned `sequence-empty<T: Owned>`, `sequence-length<T: Owned>`,
+`sequence-push<T: Owned>`, `sequence-pop<T: Owned>` and `sequence-discard<T: Owned>`
+operations compose runtime-sized affine `(owned-sequence T)` values. Length borrows;
+push consumes its element then sequence; pop consumes its sequence and returns
+`empty: Sequence<T>` or `item: {rest: Sequence<T>, value: T}`. Both outcomes retain
+the sequence allocation for reuse. Discard consumes and joins ordinary cleanup.
+Elements must be eligible Owned values, including in empty sequences.
+
+Indexed access uses the lexical `borrow-owned-item` language expression, which binds
+a temporary read view and retains ancestor custody. It is not an escaping reference.
+The [literal native request](requests/20261004-owned-sequences.lkjc) adds these five
+wrappers, private ordinary graph helpers and seven fixed tests for empty reuse,
+repeated indexed reads, LIFO drainage, replacement, nesting and populated cleanup.
+The [normative contract](../../docs/spec/owned-sequences.md) defines admission,
+transfer, reservation, cancellation and unsupported boundaries.
+
 The current package also owns exact-interface affine capability resources and canonical operation
 parameter use. `DurableQueue` has nine operations: claim and heartbeat return the nominal
 absent/live `QueueLeaseState`; `lease-info` borrows its live resource; heartbeat, complete, and fail
@@ -62,12 +78,12 @@ Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_85b2be44a8deca911fc6bdf4efdd4fb7b510f53e4a39723fbee263dff4b3a9b2`;
-- package revision: `package_revision_6d89e8556d3cdebdbc2140a026fd5f4be62fee23f041d74c02a2d976840a8c70`;
-- package transport: `package_transport_22b980d4d7d017905cb3a57cbd1e0dccbd722bc7b10cc0e139cda6d0aa574cd8`;
-- artifact manifest: `artifact_manifest_48734e3052f98cee2436e421926727b17b857cff52c842ea36d3f569f20bf3a4`;
-- artifact bundle: `artifact_bundle_a8149c846e32f6c6d22fe5dfe7656b8077227c9710b666bce5325c7d8738532e`;
-- 1,626 live semantic owners, 232 compiler units, and 89 graph tests.
+- semantic revision: `rev_c3bcf5a07bdc9f8400fdf670fffcd5a0a85b54ff6f86ce7514c2c5f36cab41e4`;
+- package revision: `package_revision_72b6918a9c6fe5891b299ffa19c9f2f3e42e84193d980ae61459b64d8e8a403f`;
+- package transport: `package_transport_6c0ef13390158183a32bd96fd3578cf6de0aaeb9ff20b2e457ccc37100fd3fe8`;
+- artifact manifest: `artifact_manifest_bfed9692b58e209acd027c511bd618305ecf92883e9f231d16ac05e6a9f220de`;
+- artifact bundle: `artifact_bundle_a3c66acb22975cabce6e72e8c0b371e54bfa716209bd8a72eba1c8c1b819b131`;
+- 1,900 live semantic owners, 247 compiler units, and 96 graph tests.
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose
 ordinary parametric records with pure functions. Mapping invokes the first callback then the second,

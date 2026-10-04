@@ -374,7 +374,7 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
                 .unwrap();
         }
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/owned-predecessor-current")
+            .join("tests/fixtures/owned-predecessor-compiler25")
             .join(format!("{name}.lkja"));
         expected_files.push((name, path, current));
     }

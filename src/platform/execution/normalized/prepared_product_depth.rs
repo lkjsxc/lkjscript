@@ -1,4 +1,4 @@
-//! Postorder heights of structural product type DAGs after substitution.
+//! Postorder heights of owned composite type DAGs after substitution.
 use super::*;
 
 pub(super) fn validate(
@@ -12,7 +12,9 @@ pub(super) fn validate(
         step(work)?;
         if !matches!(
             object.form,
-            TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. }
+            TypeForm::OwnedProduct { .. }
+                | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. }
         ) {
             continue;
         }
@@ -36,7 +38,7 @@ pub(super) fn validate(
                     return Err(Diagnostic::new(
                         DiagnosticClass::Semantic,
                         "normalized_product_depth",
-                        "closed owned product exceeds the structural type depth bound",
+                        "closed owned composite exceeds the structural type depth bound",
                     ));
                 }
                 active.remove(&ty);

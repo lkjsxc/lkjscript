@@ -6,6 +6,10 @@ use crate::platform::execution::ExecutionControl;
 use crate::platform::kernel::{self as k, OwnerRecord, TypeForm, TypeObjectDigest};
 use crate::platform::publication::{RepositoryDefinitionReader, RepositoryView};
 
+#[cfg(test)]
+#[path = "sequence_reentry_tests.rs"]
+mod sequence_reentry_tests;
+
 pub(super) struct Reader<'a> {
     pub view: &'a RepositoryView,
     pub reader: RepositoryDefinitionReader<'a>,
@@ -153,16 +157,19 @@ impl<'a> Reader<'a> {
                     T::Applied { arguments, .. } => {
                         pending.extend(arguments.iter().map(|t| (t, depth + 1)))
                     }
-                    T::List { item } | T::Option { item } | T::Stream { item } => {
-                        pending.push((item, depth + 1))
-                    }
+                    T::OwnedSequence { item }
+                    | T::List { item }
+                    | T::Option { item }
+                    | T::Stream { item } => pending.push((item, depth + 1)),
                     T::Map { key, value } => {
                         pending.extend([(key.as_ref(), depth + 1), (value.as_ref(), depth + 1)])
                     }
                     T::Result { ok, error } => {
                         pending.extend([(ok.as_ref(), depth + 1), (error.as_ref(), depth + 1)])
                     }
-                    T::StructuralRecord { fields } => {
+                    T::StructuralRecord { fields }
+                    | T::OwnedProduct { fields }
+                    | T::OwnedChoice { cases: fields } => {
                         pending.extend(fields.iter().map(|f| (&f.ty, depth + 1)))
                     }
                     T::Function { parameters, result }
@@ -190,6 +197,9 @@ impl<'a> Reader<'a> {
             TypeForm::F64 => AuthoredType::F64 {},
             TypeForm::ByteBuffer => AuthoredType::ByteBuffer {},
             TypeForm::OwnedI64Cell => AuthoredType::OwnedI64Cell {},
+            TypeForm::OwnedSequence { item } => AuthoredType::OwnedSequence {
+                item: Box::new(self.ty_at(item, depth + 1)?),
+            },
             TypeForm::OwnedChoice { cases } => AuthoredType::OwnedChoice {
                 cases: cases
                     .into_iter()
@@ -474,6 +484,49 @@ impl<'a> Reader<'a> {
                 binding: Box::new(self.binding_definition(binding)?),
                 body: Box::new(self.expression_at(body, depth + 1)?),
             },
+            E::SequenceEmpty { sequence_type } => A::SequenceEmpty {
+                sequence_type: self.ty(sequence_type)?,
+            },
+            E::SequenceLength {
+                sequence_type,
+                source,
+            } => A::SequenceLength {
+                sequence_type: self.ty(sequence_type)?,
+                source: Box::new(self.expression_at(source, depth + 1)?),
+            },
+            E::SequencePush {
+                sequence_type,
+                value,
+                source,
+            } => A::SequencePush {
+                sequence_type: self.ty(sequence_type)?,
+                value: Box::new(self.expression_at(value, depth + 1)?),
+                source: Box::new(self.expression_at(source, depth + 1)?),
+            },
+            E::SequencePop {
+                sequence_type,
+                source,
+                ..
+            } => A::SequencePop {
+                sequence_type: self.ty(sequence_type)?,
+                source: Box::new(self.expression_at(source, depth + 1)?),
+            },
+            E::BorrowOwnedItem {
+                sequence_type,
+                source,
+                index,
+                binding,
+                body,
+            } => {
+                let index = Box::new(self.expression_at(index, depth + 1)?);
+                A::BorrowOwnedItem {
+                    sequence_type: self.ty(sequence_type)?,
+                    source: Box::new(self.expression_at(source, depth + 1)?),
+                    index,
+                    binding: Box::new(self.binding_definition(binding)?),
+                    body: Box::new(self.expression_at(body, depth + 1)?),
+                }
+            }
             E::Let { bindings, body } => {
                 let mut authored = Vec::new();
                 for id in bindings {

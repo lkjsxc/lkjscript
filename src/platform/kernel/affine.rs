@@ -445,6 +445,27 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
         self.step(expression, depth)?;
         let record = self.expression(expression)?;
         match record.operation {
+            ExpressionOperation::SequenceEmpty { .. } => Ok(EvaluatedValue::Unrestricted),
+            ExpressionOperation::SequenceLength { source, .. }
+            | ExpressionOperation::SequencePop { source, .. } => {
+                self.require_unrestricted(source, state, depth + 1, "owned sequence source")?;
+                Ok(EvaluatedValue::Unrestricted)
+            }
+            ExpressionOperation::SequencePush { value, source, .. } => {
+                self.require_unrestricted(value, state, depth + 1, "owned sequence item")?;
+                self.require_unrestricted(source, state, depth + 1, "owned sequence source")?;
+                Ok(EvaluatedValue::Unrestricted)
+            }
+            ExpressionOperation::BorrowOwnedItem {
+                index,
+                source,
+                body,
+                ..
+            } => {
+                self.require_unrestricted(index, state, depth + 1, "borrowed item index")?;
+                self.require_unrestricted(source, state, depth + 1, "borrowed sequence source")?;
+                self.evaluate(body, state, depth + 1)
+            }
             ExpressionOperation::ChooseOwned { value, .. } => {
                 self.require_unrestricted(value, state, depth + 1, "owned choice payload")?;
                 Ok(EvaluatedValue::Unrestricted)
@@ -1180,7 +1201,10 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 }
                 contains
             }
-            TypeForm::List { item } | TypeForm::Option { item } | TypeForm::Stream { item } => {
+            TypeForm::List { item }
+            | TypeForm::Option { item }
+            | TypeForm::Stream { item }
+            | TypeForm::OwnedSequence { item } => {
                 self.type_contains_resource_inner(item, active_types, active_declarations)?
             }
             TypeForm::Map { key, value }

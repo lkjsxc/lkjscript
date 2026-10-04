@@ -650,7 +650,9 @@ fn kernel_type<R: ExpressionRead + ?Sized>(
         TypeForm::F64 => IntrinsicType::F64,
         TypeForm::ByteBuffer => IntrinsicType::ByteBuffer,
         TypeForm::OwnedI64Cell => IntrinsicType::OwnedI64Cell,
-        TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. } => {
+        TypeForm::OwnedProduct { .. }
+        | TypeForm::OwnedChoice { .. }
+        | TypeForm::OwnedSequence { .. } => {
             return Err(signature_error(
                 "owned structural types are not intrinsic boundary types",
             ));

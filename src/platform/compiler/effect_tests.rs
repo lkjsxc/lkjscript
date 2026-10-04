@@ -46,11 +46,11 @@ fn strict_artifact_rejects_fully_rehashed_expanding_canonical_applications() {
         }
         let retained = match name {
             "direct" => include_bytes!(
-                "../../../tests/fixtures/finite-callable-current/expanding-direct.lkja"
+                "../../../tests/fixtures/finite-callable-compiler25/expanding-direct.lkja"
             )
             .as_slice(),
             "named" => include_bytes!(
-                "../../../tests/fixtures/finite-callable-current/expanding-named.lkja"
+                "../../../tests/fixtures/finite-callable-compiler25/expanding-named.lkja"
             )
             .as_slice(),
             _ => unreachable!(),
@@ -263,6 +263,7 @@ fn replace_unit_checked(
         22 => (*b"LKJCUN22", "lkjscript.compiler-unit-envelope.v22"),
         23 => (*b"LKJCUN23", "lkjscript.compiler-unit-envelope.v23"),
         24 => (*b"LKJCUN24", "lkjscript.compiler-unit-envelope.v24"),
+        25 => (*b"LKJCUN25", "lkjscript.compiler-unit-envelope.v25"),
         other => panic!("unexpected forged-unit generation {other}"),
     };
     let bytes = crate::platform::packed::encode(

@@ -1050,7 +1050,8 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
                 TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
-                | TypeForm::OwnedChoice { .. },
+                | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. },
             ) => true,
             Some(TypeForm::TypeParameter { parameter }) => matches!(
                 self.required_owner(OwnerKey::TypeParameter(parameter), "owned local parameter")?,
@@ -1445,7 +1446,8 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
                 TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
-                | TypeForm::OwnedChoice { .. } => true,
+                | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. } => true,
                 TypeForm::TypeParameter { parameter } => {
                     let OwnerRecord::TypeParameter(record) = self.required_owner(
                         OwnerKey::TypeParameter(parameter),
@@ -1714,6 +1716,110 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         use_mode: ParameterUse,
     ) -> Result<(), Diagnostic> {
         match operation {
+            ExpressionOperation::SequenceEmpty { sequence_type } => {
+                self.sequence_item_type(sequence_type)?;
+                let sequence_type = self.unit.tables.ty(sequence_type)?;
+                self.push(CompiledInstruction::SequenceEmpty { sequence_type })?;
+            }
+            ExpressionOperation::SequenceLength {
+                sequence_type,
+                source,
+            } => {
+                self.sequence_item_type(sequence_type)?;
+                let source_local = self.borrow_source_local(source, sequence_type, depth)?;
+                let sequence_type = self.unit.tables.ty(sequence_type)?;
+                self.push(CompiledInstruction::SequenceLength {
+                    sequence_type,
+                    source_local,
+                })?;
+            }
+            ExpressionOperation::SequencePush {
+                sequence_type,
+                value,
+                source,
+            } => {
+                let item = self.sequence_item_type(sequence_type)?;
+                // The source graph admits exact locals. Preserve element-before-sequence order.
+                let value_local = self.borrow_source_local(value, item, depth)?;
+                let source_local = self.borrow_source_local(source, sequence_type, depth)?;
+                let sequence_type = self.unit.tables.ty(sequence_type)?;
+                self.push(CompiledInstruction::SequencePush {
+                    sequence_type,
+                    value_local,
+                    source_local,
+                })?;
+            }
+            ExpressionOperation::SequencePop {
+                sequence_type,
+                result_type,
+                source,
+            } => {
+                let item = self.sequence_item_type(sequence_type)?;
+                let result_payload =
+                    encode_type_object(&TypeObject::new(TypeForm::OwnedProduct {
+                        fields: vec![
+                            StructuralTypeField {
+                                name: crate::platform::kernel::Name::new("rest")?,
+                                ty: sequence_type,
+                            },
+                            StructuralTypeField {
+                                name: crate::platform::kernel::Name::new("value")?,
+                                ty: item,
+                            },
+                        ],
+                    })?)?
+                    .0;
+                let expected = encode_type_object(&TypeObject::new(TypeForm::OwnedChoice {
+                    cases: vec![
+                        StructuralTypeField {
+                            name: crate::platform::kernel::Name::new("empty")?,
+                            ty: sequence_type,
+                        },
+                        StructuralTypeField {
+                            name: crate::platform::kernel::Name::new("item")?,
+                            ty: result_payload,
+                        },
+                    ],
+                })?)?
+                .0;
+                if expected != result_type {
+                    return Err(compiler_corrupt(
+                        "compiler_sequence_result_type",
+                        "sequence pop result differs from its exact empty/item custody envelope",
+                    ));
+                }
+                let source_local = self.borrow_source_local(source, sequence_type, depth)?;
+                let sequence_type = self.unit.tables.ty(sequence_type)?;
+                let result_type = self.unit.tables.ty(result_type)?;
+                self.push(CompiledInstruction::SequencePop {
+                    sequence_type,
+                    result_type,
+                    source_local,
+                })?;
+            }
+            ExpressionOperation::BorrowOwnedItem {
+                sequence_type,
+                source,
+                index,
+                binding,
+                body,
+            } => {
+                let item = self.sequence_item_type(sequence_type)?;
+                self.expression(index, depth)?;
+                let source_local = self.borrow_source_local(source, sequence_type, depth)?;
+                let (reference, binding_local, binding_type) =
+                    self.borrow_binding(binding, item)?;
+                let sequence_type = self.unit.tables.ty(sequence_type)?;
+                self.push(CompiledInstruction::BorrowOwnedItem {
+                    sequence_type,
+                    source_local,
+                    binding_local,
+                    binding_type,
+                })?;
+                self.expression(body, depth)?;
+                self.push(CompiledInstruction::EndOwnedBorrow { binding_local })?;
+                self.locals.remove(&reference);
+            }
             ExpressionOperation::BorrowOwnedField {
                 product_type,
                 source,
@@ -2484,6 +2590,26 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 .structural_name(name)
                 .map(CompiledFieldSelector::Structural),
         }
+    }
+
+    fn sequence_item_type(
+        &mut self,
+        sequence_type: TypeObjectDigest,
+    ) -> Result<TypeObjectDigest, Diagnostic> {
+        let read = self.unit.canonical.code_type(sequence_type)?;
+        self.unit.work.canonical.add(read.work);
+        let Some(TypeObject {
+            form: TypeForm::OwnedSequence { item },
+            ..
+        }) = read.value
+        else {
+            return Err(compiler_corrupt(
+                "compiler_sequence_type",
+                "sequence operation requires its exact sequence type",
+            ));
+        };
+        self.unit.tables.ty(item)?;
+        Ok(item)
     }
 
     /// Traverse the exact canonical source child while preserving custody in its local slot.

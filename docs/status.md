@@ -6,68 +6,58 @@ Current snapshot: 2026-10-04. This page owns availability and unfinished accepta
 
 ## Public binary
 
-Immutable [v0.1.74](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.74) is
-public/latest. Accepted product source: `9f8610e896bb8f96345054ef17d47501cda2333d`.
-[Producer 37215197861/1](https://github.com/lkjsxc/lkjscript/actions/runs/37215197861)
-completed `candidate_accepted`; [promotion 37221494622/1](https://github.com/lkjsxc/lkjscript/actions/runs/37221494622)
-completed `immutable_published_and_public_verified` at 17:49 UTC. Release
-`403135466` and annotated tag `36e42f70d5fc7543acbfaf3fa7259dd039275909` retain
-that exact source. Anonymous exact/latest identity and all three public asset
-sizes and digests were independently verified. Promotion reused the accepted
-assets without rebuilding the product.
+Immutable [v0.1.75](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.75) is
+public/latest. Accepted product source: `62537a7de98940b2174fe2be4bce61815181e74f`.
+[Producer 37229047605/1](https://github.com/lkjsxc/lkjscript/actions/runs/37229047605)
+completed `candidate_accepted`; [promotion 37235741568/1](https://github.com/lkjsxc/lkjscript/actions/runs/37235741568)
+completed `immutable_published_and_public_verified` at 21:30 UTC. Release
+`403216806` and annotated tag `57fff224c84abf13486b94f64df214ce277e8c73` retain
+that exact source. Anonymous exact, release-ID and latest identity, all three
+public asset sizes and digests, and the archived executable digest were
+independently verified. Promotion reused the accepted assets without rebuilding
+the product.
 
 Original publication evidence is indexed by
-`.artifacts/20261004-refresh/release-0174/completed-publication.json` in
-`/home/coder/workspace/lkjscript`. The [release notes](releases/v0.1.74.md) describe
-reviewed concurrent candidate refresh and its compatibility cut. Its full source
-receipt remains `.artifacts/lkjscript-dev/check/1791128757456244504-1878981-0/receipt.json`:
+`.artifacts/20261004-owned-borrows/release-0175/completed-publication.json` in
+`/home/coder/workspace/lkjscript`. The [release notes](releases/v0.1.75.md) describe
+scoped reads of owned children and the required derived-bundle rebuild. Its full
+source receipt remains `.artifacts/lkjscript-dev/check/1791141767519073420-2430056-0/receipt.json`:
 26 fresh passing gates, zero reused gates, at the exact source above. Later
 reporting commits do not change the source proved by that receipt. Original
 failures and copied-executable inputs remain at their recorded owners.
 
-## Scoped owned reads accepted on main
+## Owned sequences awaiting source acceptance
 
-Accepted product source `62537a7de98940b2174fe2be4bce61815181e74f` adds
-[lexical read access to owned children](spec/owned-borrows.md): generic
-product-field views and exhaustive borrowed choice inspection, with explicit
-ancestor custody and all-exit cleanup. The [maintained example](../examples/owned-borrows/README.md)
-owns the native cross-package witness. The normal mainline push was independently
-verified through Git and the GitHub branch and comparison APIs. This status-only
-reporting descendant does not change the source selected for product acceptance.
+The selected main worktree at `/home/coder/workspace/lkjscript`, based on
+`238dc5f5f85a5340e086493c52bb57d79949aca5`, implements
+[runtime-sized owned sequences](spec/owned-sequences.md) for development v0.1.76.
+It adds generic construction, append, LIFO removal, lexical indexed reads and
+structured transfer under the complete element contract. The
+[three-package example](../examples/owned-sequences/README.md) owns literal native
+inputs and independent full results. [Release notes](releases/v0.1.76.md) describe
+the coordinated format cut and required derived-bundle rebuild.
 
-Fresh full acceptance passed all 26 gates, with zero reused gates, stable inputs
-and no unrun gates. The exact-source receipt is
-`.artifacts/lkjscript-dev/check/1791141767519073420-2430056-0/receipt.json`
-in `/home/coder/workspace/lkjscript`. It includes 1,347 library tests, 213 public
-CLI tests and 253 developer-tool tests passing, alongside the other suites and
-copied-release workflows; intentional ignored cases remain recorded in the logs.
-All three new public borrowing tests passed in that run.
+Source acceptance and v0.1.76 publication remain pending. The current development
+work has exercised independent kernel, compiler, reference, custody and transfer
+checks. Maintained standard, lkjournal, guide and policy checks pass 281 native
+tests collectively; their derived artifacts and discovery have been regenerated
+through the product. Standard adds sequence wrappers and seven graph tests. The
+guide changes one current phrase from a fixed structural-form count; application
+and policy semantic HEADs remain unchanged.
 
-Development evidence remains under `.artifacts/20261004-owned-borrows/`.
-`public-focus-02/tests.log` and `public-focus-02/external-tmpdir.txt` retain the
-earlier copied-product results and outside-checkout literal inputs. Maintained
-bundles, standard transport and discovery were regenerated through the product;
-all four accepted program HEADs are unchanged. Original failed receipts remain
-intact. The [release notes](releases/v0.1.75.md) describe the intentional contract
-changes and required rebuilding of prior derived bundles.
+Development evidence is retained under `.artifacts/20261004-owned-sequences/`.
+Original failed builds and test logs remain intact. All three copied-product cases
+pass in `public-focus-03/tests.log`, with outside-checkout literal inputs retained
+under its recorded temporary root. They include the original 513-element reference
+stack failure, repaired by preserving tail position through consuming matches and
+unpacking. Indexed native cold reproduction passed in `cold-tracked-02/`: all four
+bundles and standard transport match byte for byte, with all 187 packs and four
+semantic HEADs unchanged. The remaining gate is dependency-complete
+`check full --fresh` after all source inputs stabilize. Only a passing exact-source
+receipt permits normal mainline integration and selection of a v0.1.76
+finalized-archive candidate. The predecessor receipt above is not evidence for
+these changes.
 
-## Pending final-archive acceptance
-
-[Candidate producer 37229047605/1](https://github.com/lkjsxc/lkjscript/actions/runs/37229047605)
-was dispatched on 2026-10-04 at 19:38 UTC from exactly
-`62537a7de98940b2174fe2be4bce61815181e74f`. Final-archive acceptance and
-unchanged-asset publication remain separate from completed source acceptance and
-mainline integration. The successor is not yet publicly released; no successor
-tag or publication-control change has been made. Public/latest remains v0.1.74.
-
-Dispatch observations, source acceptance summary and exact release notes are
-retained in `.artifacts/20261004-owned-borrows/release-0175/source-62537a7d/`.
-Next: inspect that producer's terminal result and essential uploads. After
-`candidate_accepted`, refresh release occupancy and mainline reachability, then
-select the ordinary annotated v0.1.75 tag at the accepted source and promote
-producer `37229047605`, attempt `1`, following the [release procedure](release.md).
-Require `immutable_published_and_public_verified` before claiming public closure.
-Reuse this healthy producer; do not dispatch a duplicate while it is pending.
-
-Preserve the other worktrees, unrelated stash, original failures and immutable
-publication history. No application deployment changes are part of this work.
+Preserve the other worktrees, unrelated stash, original fixtures and failures,
+and immutable publication history. No application deployment changes are part
+of this work.

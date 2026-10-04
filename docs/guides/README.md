@@ -20,6 +20,7 @@ owns executable availability; `lkjscript capabilities` discovers the installed s
 | [Structural owned products](native-owned-products.md) | Fixed named affine fields, ordinary metadata, generic Owned payloads and complete consuming decomposition. |
 | [Recoverable owned outcomes](native-owned-choices.md) | Explicit success/rejection cases, owner-returning refusal and exhaustive consuming analysis. |
 | [Scoped reads of owned children](native-owned-borrows.md) | Generic product/choice inspection through exact witnesses while retaining the original owner. |
+| [Dynamic owned sequences](native-owned-sequences.md) | Runtime-sized owned collections, scoped indexed reads, exact element witnesses and consuming drain. |
 | [Joined parallel computation](native-parallel.md) | Empty-effect child tasks, owned inputs, generic reductions, fresh child identities and shared quotas. |
 | [Reusable generic parallel groups](native-transferable-parallel.md) | Explicit transferable bounds, generic builders, mixed results and exact witnesses. |
 | [Immutable byte ranges](native-byte-ranges.md) | Strict binary ranges, explicit backing detachment and source-free package composition. |

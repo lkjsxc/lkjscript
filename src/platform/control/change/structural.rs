@@ -266,6 +266,69 @@ pub(super) fn layout(
                 minimum(&block, id, args, 1)?;
                 node.children.extend_from_slice(args);
             }
+            "sequence-empty" | "sequence-length" | "sequence-push" | "sequence-pop" => {
+                let count = match form {
+                    "sequence-empty" => 1,
+                    "sequence-push" => 3,
+                    _ => 2,
+                };
+                arity(&block, id, args, count)?;
+                let annotation = clause(&block, args[0], "type")?;
+                arity(&block, args[0], annotation, 1)?;
+                node.record.fields.push(block.field(annotation[0], "type")?);
+                node.children.extend_from_slice(&args[1..]);
+            }
+            "borrow-owned-item" => {
+                arity(&block, id, args, 5)?;
+                let annotation = clause(&block, args[0], "type")?;
+                arity(&block, args[0], annotation, 1)?;
+                node.record.fields.push(block.field(annotation[0], "type")?);
+                let index = clause(&block, args[2], "index")?;
+                arity(&block, args[2], index, 1)?;
+                // Admission and allocation follow the declared index-before-loan order.
+                node.children.push(index[0]);
+                node.children.push(args[1]);
+                let (binder, explicit) =
+                    binder_alias(&block, clause(&block, args[3], "binding")?, symbols)?;
+                arity(&block, args[3], &binder, 2)?;
+                let ty = clause(&block, binder[1], "type")?;
+                arity(&block, binder[1], ty, 1)?;
+                let local_name = name(&block, binder[0])?.to_string();
+                let local_symbol = match explicit {
+                    Some(symbol) => symbol,
+                    None => symbols.allocate(&block.syntax[binder[0]].location)?,
+                };
+                let mut record = member_record(&block, args[3]);
+                record.fields.push(block.field(binder[0], "name")?);
+                record.fields.push(block.field(ty[0], "type")?);
+                record.fields.push(CompactField {
+                    name: "as".into(),
+                    value: local_symbol.clone(),
+                    location: record.location.clone(),
+                });
+                node.members.push(record);
+                let body = clause(&block, args[4], "in")?;
+                arity(&block, args[4], body, 1)?;
+                node.children.push(body[0]);
+                work.push(Work::Leave(local_name.clone()));
+                work.push(Work::Expression {
+                    id: body[0],
+                    depth: depth + 1,
+                });
+                work.push(Work::Enter {
+                    name: local_name,
+                    symbol: local_symbol,
+                });
+                work.push(Work::Expression {
+                    id: args[1],
+                    depth: depth + 1,
+                });
+                work.push(Work::Expression {
+                    id: index[0],
+                    depth: depth + 1,
+                });
+                scoped = true;
+            }
             "choose-owned" => {
                 arity(&block, id, args, 3)?;
                 let annotation = clause(&block, args[0], "type")?;
@@ -971,6 +1034,40 @@ fn lower_node(
                 AuthoredExpressionOperation::Invoke { callee, arguments }
             } else {
                 AuthoredExpressionOperation::Bind { callee, arguments }
+            }
+        }
+        "expression.sequence-empty" => AuthoredExpressionOperation::SequenceEmpty {
+            sequence_type: decoder.decode_type(required(record, "type")?)?,
+        },
+        "expression.sequence-length" => AuthoredExpressionOperation::SequenceLength {
+            sequence_type: decoder.decode_type(required(record, "type")?)?,
+            source: Box::new(child()?),
+        },
+        "expression.sequence-push" => AuthoredExpressionOperation::SequencePush {
+            sequence_type: decoder.decode_type(required(record, "type")?)?,
+            value: Box::new(child()?),
+            source: Box::new(child()?),
+        },
+        "expression.sequence-pop" => AuthoredExpressionOperation::SequencePop {
+            sequence_type: decoder.decode_type(required(record, "type")?)?,
+            source: Box::new(child()?),
+        },
+        "expression.borrow-owned-item" => {
+            let member = node.members.first().ok_or_else(|| {
+                inventory_error(record, "borrowed item binding was lost during lowering")
+            })?;
+            let index = Box::new(child()?);
+            let source = Box::new(child()?);
+            AuthoredExpressionOperation::BorrowOwnedItem {
+                sequence_type: decoder.decode_type(required(record, "type")?)?,
+                source,
+                index,
+                binding: Box::new(AuthoredBindingDefinition {
+                    symbol: symbol(member, "as")?,
+                    name: parse_name(member, "name")?,
+                    declared_type: Some(decoder.decode_type(required(member, "type")?)?),
+                }),
+                body: Box::new(child()?),
             }
         }
         "expression.choose-owned" => AuthoredExpressionOperation::ChooseOwned {

@@ -10,6 +10,9 @@ pub struct OwnedChoice {
     case: u32,
 }
 impl OwnedChoice {
+    pub(super) const ALLOCATION_BYTES: u64 = OwnedProduct::ALLOCATION_BYTES
+        + (std::mem::size_of::<NormalizedValue>() + std::mem::size_of::<Self>()
+            - std::mem::size_of::<OwnedProduct>()) as u64;
     pub(super) fn create(
         origin: ValueOrigin,
         ty: TypeObjectDigest,

@@ -349,6 +349,14 @@ fn validate_type(
     work.visit(depth)?;
     match &program.types.get(&ty).ok_or_else(reject)?.form {
         TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Ok(true),
+        TypeForm::OwnedSequence { item } => {
+            // Empty storage is still an owner and grants no exemption from the
+            // complete concrete element contract, including unselected cases.
+            if !validate_type(program, *item, depth + 1, work)? {
+                return Err(reject());
+            }
+            Ok(true)
+        }
         TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
             // Include unselected cases: an empty branch grants no hidden authority.
             for field in fields {
@@ -377,6 +385,16 @@ fn inspect_value(
         (NormalizedValue::ByteBuffer(token), TypeForm::ByteBuffer) => token.validate(source, true),
         (NormalizedValue::OwnedI64Cell(token), TypeForm::OwnedI64Cell) => {
             token.validate(source, true)
+        }
+        (NormalizedValue::OwnedSequence(token), TypeForm::OwnedSequence { item })
+            if token.ty() == ty =>
+        {
+            token.inspect_transfer(source, |values| {
+                for value in values {
+                    inspect_value(program, value, *item, source, depth + 1, work, ordinary)?;
+                }
+                Ok(())
+            })
         }
         (NormalizedValue::OwnedProduct(token), TypeForm::OwnedProduct { fields })
             if token.ty() == ty =>
@@ -425,6 +443,14 @@ fn adopt_value(
     match value {
         NormalizedValue::ByteBuffer(token) => token.adopt_transfer(source, destination),
         NormalizedValue::OwnedI64Cell(token) => token.adopt_transfer(source, destination),
+        NormalizedValue::OwnedSequence(token) => {
+            token.adopt_transfer(source, destination, |values| {
+                for value in values {
+                    adopt_value(value, source, destination, depth + 1, work)?;
+                }
+                Ok(())
+            })
+        }
         NormalizedValue::OwnedProduct(token) => {
             token.adopt_transfer(source, destination, |fields| {
                 for field in fields {

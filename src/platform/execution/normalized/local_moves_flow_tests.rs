@@ -13,6 +13,127 @@ fn binding_switch(a: u32, b: u32, first: Option<u32>, second: Option<u32>) -> I 
     I::SwitchVariant(jumps)
 }
 
+fn borrowed_slot_guard_witness(fallback: bool) {
+    let ty = crate::platform::kernel::TypeObjectDigest::from_bytes([7; 32]);
+    for instruction in [
+        I::BorrowOwnedItem {
+            sequence_type: ty,
+            source_local: 0,
+            binding_local: 1,
+            binding_type: ty,
+        },
+        I::BorrowOwnedField {
+            product_type: ty,
+            source_local: 0,
+            field: 0,
+            binding_local: 1,
+            binding_type: ty,
+        },
+        I::MatchBorrowedOwned {
+            choice_type: ty,
+            source_local: 0,
+            cases: Arc::from([super::super::prepare::NormalizedBorrowedOwnedChoiceJump {
+                target: 3,
+                binding_local: 1,
+                binding_type: ty,
+            }]),
+        },
+    ] {
+        let mut instructions = vec![load(1), I::Drop];
+        if matches!(instruction, I::BorrowOwnedItem { .. }) {
+            instructions.push(I::I64(0));
+        }
+        instructions.extend([
+            instruction,
+            I::Unit,
+            I::EndOwnedBorrow { binding_local: 1 },
+            I::Return,
+        ]);
+        let mut input = code(instructions);
+        let control = ExecutionControl::uncancelled();
+        let mut work = Budget::new(&control);
+        if fallback {
+            derive_linear(&mut input, &mut work).unwrap();
+        } else {
+            derive(&mut input, &mut work).unwrap();
+        }
+        // The borrow reads the destination's old occupancy before installing its view.
+        // Removing that value earlier would change rejection into acceptance.
+        assert_eq!(input.instructions[0], load(1));
+        assert!(future_read(&input.instructions, 0, 1));
+    }
+}
+
+#[test]
+fn precise_borrowed_slot_guards_preserve_earlier_occupancy() {
+    borrowed_slot_guard_witness(false);
+}
+
+#[test]
+fn fallback_borrowed_slot_guards_preserve_earlier_occupancy() {
+    borrowed_slot_guard_witness(true);
+}
+
+#[test]
+fn sequence_implicit_reads_preserve_both_push_operands_in_precise_and_fallback_analysis() {
+    let ty = crate::platform::kernel::TypeObjectDigest::from_bytes([7; 32]);
+    for fallback in [false, true] {
+        for instruction in [
+            I::SequencePush {
+                sequence_type: ty,
+                value_local: 1,
+                source_local: 0,
+            },
+            I::SequenceLength {
+                sequence_type: ty,
+                source_local: 0,
+            },
+            I::SequencePop {
+                sequence_type: ty,
+                result_type: ty,
+                source_local: 0,
+            },
+            I::BorrowOwnedItem {
+                sequence_type: ty,
+                source_local: 0,
+                binding_local: 1,
+                binding_type: ty,
+            },
+        ] {
+            let mut input = code(vec![load(0), load(1), instruction, I::Return]);
+            let control = ExecutionControl::uncancelled();
+            let mut work = Budget::new(&control);
+            if fallback {
+                derive_linear(&mut input, &mut work).unwrap();
+            } else {
+                derive(&mut input, &mut work).unwrap();
+            }
+            assert_eq!(input.instructions[0], load(0));
+            assert!(future_read(&input.instructions, 0, 0));
+            if matches!(input.instructions[2], I::SequencePush { .. }) {
+                assert_eq!(input.instructions[1], load(1));
+                assert!(future_read(&input.instructions, 1, 1));
+            }
+        }
+        let mut invalid = code(vec![
+            I::SequencePush {
+                sequence_type: ty,
+                value_local: 2,
+                source_local: 0,
+            },
+            I::Return,
+        ]);
+        let control = ExecutionControl::uncancelled();
+        let mut work = Budget::new(&control);
+        let result = if fallback {
+            derive_linear(&mut invalid, &mut work)
+        } else {
+            derive(&mut invalid, &mut work)
+        };
+        assert_eq!(result.unwrap_err().code, "normalized_local_move_code");
+    }
+}
+
 #[test]
 fn branches_keep_live_join_values_and_stores_end_only_the_replaced_lifetime() {
     let mut joined = code(vec![

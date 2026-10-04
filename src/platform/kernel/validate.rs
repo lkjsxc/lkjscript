@@ -215,7 +215,10 @@ fn object_child_digests(form: &TypeForm) -> Vec<TypeObjectDigest> {
         TypeForm::StructuralRecord { fields }
         | TypeForm::OwnedProduct { fields }
         | TypeForm::OwnedChoice { cases: fields } => fields.iter().map(|field| field.ty).collect(),
-        TypeForm::List { item } | TypeForm::Option { item } | TypeForm::Stream { item } => {
+        TypeForm::List { item }
+        | TypeForm::Option { item }
+        | TypeForm::Stream { item }
+        | TypeForm::OwnedSequence { item } => {
             vec![*item]
         }
         TypeForm::Map { key, value }
@@ -463,6 +466,14 @@ impl FullValidator<'_> {
         for (digest, object) in &self.snapshot.types {
             if !self.consume_work() {
                 return;
+            }
+            if self.snapshot.root.graph_contract_version < 25
+                && matches!(object.form, TypeForm::OwnedSequence { .. })
+            {
+                self.error(
+                    "kernel_sequence_generation",
+                    "owned sequence types require Graph Contract 25",
+                );
             }
             if self.snapshot.root.graph_contract_version < 20
                 && matches!(object.form, TypeForm::OwnedChoice { .. })
@@ -1526,7 +1537,9 @@ impl FullValidator<'_> {
             }
             if !matches!(
                 object.form,
-                TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. }
+                TypeForm::OwnedProduct { .. }
+                    | TypeForm::OwnedChoice { .. }
+                    | TypeForm::OwnedSequence { .. }
             ) && object.child_types().into_iter().any(|t| {
                 self.snapshot
                     .types
@@ -1539,6 +1552,7 @@ impl FullValidator<'_> {
                                 | TypeForm::OwnedI64Cell
                                 | TypeForm::OwnedProduct { .. }
                                 | TypeForm::OwnedChoice { .. }
+                                | TypeForm::OwnedSequence { .. }
                         )
                     })
             }) {
@@ -2041,7 +2055,8 @@ impl FullValidator<'_> {
         operation: &ExpressionOperation,
     ) {
         match operation {
-            ExpressionOperation::BorrowOwnedField { binding, body, .. } => {
+            ExpressionOperation::BorrowOwnedField { binding, body, .. }
+            | ExpressionOperation::BorrowOwnedItem { binding, body, .. } => {
                 self.binding_containers
                     .entry(*binding)
                     .or_default()

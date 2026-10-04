@@ -923,6 +923,122 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             self.validate_nominal_type(ty, context, 0)?;
         }
         match record.operation {
+            ExpressionOperation::SequenceEmpty { sequence_type } => {
+                self.sequence_item_type(sequence_type)?;
+                Ok(sequence_type)
+            }
+            ExpressionOperation::SequenceLength {
+                sequence_type,
+                source,
+            } => {
+                self.sequence_item_type(sequence_type)?;
+                let actual = self.sequence_source_type(source, context, next)?;
+                require_same(
+                    sequence_type,
+                    actual,
+                    "kernel_owned_sequence",
+                    "sequence length source",
+                )?;
+                self.canonical_type(TypeForm::I64)
+            }
+            ExpressionOperation::SequencePush {
+                sequence_type,
+                value,
+                source,
+            } => {
+                let item = self.sequence_item_type(sequence_type)?;
+                let actual = self.infer(value, context, next)?;
+                require_same(
+                    item,
+                    actual,
+                    "kernel_owned_sequence",
+                    "pushed sequence item",
+                )?;
+                let actual = self.sequence_source_type(source, context, next)?;
+                require_same(
+                    sequence_type,
+                    actual,
+                    "kernel_owned_sequence",
+                    "sequence push source",
+                )?;
+                Ok(sequence_type)
+            }
+            ExpressionOperation::SequencePop {
+                sequence_type,
+                result_type,
+                source,
+            } => {
+                let item = self.sequence_item_type(sequence_type)?;
+                let actual = self.sequence_source_type(source, context, next)?;
+                require_same(
+                    sequence_type,
+                    actual,
+                    "kernel_owned_sequence",
+                    "sequence pop source",
+                )?;
+                let item_result = self.canonical_type(TypeForm::OwnedProduct {
+                    fields: vec![
+                        StructuralTypeField {
+                            name: super::Name::new("rest")?,
+                            ty: sequence_type,
+                        },
+                        StructuralTypeField {
+                            name: super::Name::new("value")?,
+                            ty: item,
+                        },
+                    ],
+                })?;
+                let expected = self.canonical_type(TypeForm::OwnedChoice {
+                    cases: vec![
+                        StructuralTypeField {
+                            name: super::Name::new("empty")?,
+                            ty: sequence_type,
+                        },
+                        StructuralTypeField {
+                            name: super::Name::new("item")?,
+                            ty: item_result,
+                        },
+                    ],
+                })?;
+                require_same(
+                    expected,
+                    result_type,
+                    "kernel_owned_sequence",
+                    "sequence pop result annotation",
+                )?;
+                Ok(result_type)
+            }
+            ExpressionOperation::BorrowOwnedItem {
+                sequence_type,
+                source,
+                index,
+                binding,
+                body,
+            } => {
+                let item = self.sequence_item_type(sequence_type)?;
+                let actual = self.infer(index, context, next)?;
+                let i64_type = self.canonical_type(TypeForm::I64)?;
+                require_same(
+                    i64_type,
+                    actual,
+                    "kernel_owned_borrow",
+                    "borrowed item index",
+                )?;
+                let actual = self.borrow_source_type(source, context, next)?;
+                require_same(
+                    sequence_type,
+                    actual,
+                    "kernel_owned_borrow",
+                    "borrowed sequence source",
+                )?;
+                self.require_borrow_binding(binding, item)?;
+                let mut scoped = self.scoped_context(context)?;
+                self.consume_work()?;
+                scoped
+                    .bindings
+                    .insert(binding, (BindingKind::OwnedBorrow, item));
+                self.infer(body, &scoped, next)
+            }
             ExpressionOperation::BorrowOwnedField {
                 product_type,
                 source,
@@ -1693,6 +1809,39 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         Ok(result)
     }
 
+    fn sequence_item_type(
+        &self,
+        sequence_type: TypeObjectDigest,
+    ) -> Result<TypeObjectDigest, Diagnostic> {
+        let TypeForm::OwnedSequence { item } = self.type_object(sequence_type)?.form else {
+            return Err(type_error(
+                "kernel_owned_sequence",
+                "sequence operation requires an owned sequence type",
+            ));
+        };
+        Ok(item)
+    }
+
+    fn sequence_source_type(
+        &mut self,
+        expression: ExpressionId,
+        context: &ExecutionContext,
+        depth: usize,
+    ) -> Result<TypeObjectDigest, Diagnostic> {
+        self.consume_work()?;
+        if !matches!(
+            self.read.owner(OwnerKey::Expression(expression))?,
+            Some(OwnerRecord::Expression(record))
+                if matches!(record.operation, ExpressionOperation::Local { .. })
+        ) {
+            return Err(type_error(
+                "kernel_owned_sequence",
+                "sequence operation requires an exact local source",
+            ));
+        }
+        self.infer(expression, context, depth)
+    }
+
     fn borrow_source_type(
         &mut self,
         expression: ExpressionId,
@@ -2201,6 +2350,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
                 | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. }
                 | TypeForm::CapabilityResource { .. } => {
                     return Err(type_error(
                         "kernel_type_bind_capture",
@@ -3342,14 +3492,18 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         }
         if matches!(
             object.form,
-            TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. }
+            TypeForm::OwnedProduct { .. }
+                | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. }
         ) {
             self.owned_read(|read| super::owned_product::validate(read, ty, context.declaration))?;
         }
         for child in object.child_types() {
             if !matches!(
                 object.form,
-                TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. }
+                TypeForm::OwnedProduct { .. }
+                    | TypeForm::OwnedChoice { .. }
+                    | TypeForm::OwnedSequence { .. }
             ) && self.type_contains_buffer(child)?
             {
                 return Err(type_error(
@@ -3436,6 +3590,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     | TypeForm::OwnedI64Cell
                     | TypeForm::OwnedProduct { .. }
                     | TypeForm::OwnedChoice { .. }
+                    | TypeForm::OwnedSequence { .. }
             ) || matches!(object.form, TypeForm::TypeParameter { parameter } if matches!(self.read.owner(OwnerKey::TypeParameter(parameter))?, Some(OwnerRecord::TypeParameter(p)) if p.constraints.has_owned()))
             {
                 return Ok(true);
@@ -3463,6 +3618,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
                 | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. }
                 | TypeForm::CapabilityResource { .. }
                 | TypeForm::Stream { .. } => {
                     return Err(type_error(
@@ -3561,6 +3717,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             TypeForm::List { item } => TypeForm::List {
                 item: self.substitute(item, substitutions, next)?,
             },
+            TypeForm::OwnedSequence { item } => TypeForm::OwnedSequence {
+                item: self.substitute(item, substitutions, next)?,
+            },
             TypeForm::Map { key, value } => TypeForm::Map {
                 key: self.substitute(key, substitutions, next)?,
                 value: self.substitute(value, substitutions, next)?,
@@ -3649,9 +3808,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     replace(ty)?;
                 }
             }
-            TypeForm::List { item } | TypeForm::Option { item } | TypeForm::Stream { item } => {
-                replace(item)?
-            }
+            TypeForm::List { item }
+            | TypeForm::Option { item }
+            | TypeForm::Stream { item }
+            | TypeForm::OwnedSequence { item } => replace(item)?,
             TypeForm::Map { key, value }
             | TypeForm::Result {
                 ok: key,

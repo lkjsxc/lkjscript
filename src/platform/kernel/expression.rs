@@ -41,6 +41,21 @@ impl ExpressionRecord {
                 ),
             ));
         }
+        if self.contract_version < 25
+            && matches!(
+                self.operation,
+                ExpressionOperation::SequenceEmpty { .. }
+                    | ExpressionOperation::SequenceLength { .. }
+                    | ExpressionOperation::SequencePush { .. }
+                    | ExpressionOperation::SequencePop { .. }
+                    | ExpressionOperation::BorrowOwnedItem { .. }
+            )
+        {
+            return Err(expression_error(
+                "kernel_sequence_generation",
+                "owned sequences require Graph 25",
+            ));
+        }
         if self.contract_version < 24
             && matches!(
                 self.operation,
@@ -135,6 +150,17 @@ impl ExpressionRecord {
 
     pub fn type_roots(&self) -> Vec<TypeObjectDigest> {
         match &self.operation {
+            ExpressionOperation::SequenceEmpty { sequence_type }
+            | ExpressionOperation::SequenceLength { sequence_type, .. }
+            | ExpressionOperation::SequencePush { sequence_type, .. }
+            | ExpressionOperation::BorrowOwnedItem { sequence_type, .. } => vec![*sequence_type],
+            ExpressionOperation::SequencePop {
+                sequence_type,
+                result_type,
+                ..
+            } => {
+                vec![*sequence_type, *result_type]
+            }
             ExpressionOperation::ChooseOwned { choice_type, .. }
             | ExpressionOperation::MatchOwned { choice_type, .. }
             | ExpressionOperation::MatchBorrowedOwned { choice_type, .. } => vec![*choice_type],
@@ -312,6 +338,32 @@ pub enum ExpressionOperation {
         choice_type: TypeObjectDigest,
         source: ExpressionId,
         arms: Vec<OwnedChoiceArm>,
+    },
+    SequenceEmpty {
+        sequence_type: TypeObjectDigest,
+    },
+    SequenceLength {
+        sequence_type: TypeObjectDigest,
+        source: ExpressionId,
+    },
+    /// The element precedes the sequence in authored evaluation order.
+    SequencePush {
+        sequence_type: TypeObjectDigest,
+        value: ExpressionId,
+        source: ExpressionId,
+    },
+    SequencePop {
+        sequence_type: TypeObjectDigest,
+        result_type: TypeObjectDigest,
+        source: ExpressionId,
+    },
+    /// Evaluate the ordinary index before acquiring source/ancestor loans.
+    BorrowOwnedItem {
+        sequence_type: TypeObjectDigest,
+        source: ExpressionId,
+        index: ExpressionId,
+        binding: BindingId,
+        body: ExpressionId,
     },
 }
 
@@ -492,6 +544,10 @@ pub enum ExpressionChildRole {
     OwnedChoiceArmBody,
     ParallelLeft,
     ParallelRight,
+    OwnedSequenceValue,
+    OwnedSequenceSource,
+    OwnedSequenceIndex,
+    OwnedSequenceBody,
 }
 
 fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic> {
@@ -675,6 +731,11 @@ fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic>
         }
         ExpressionOperation::Unit {}
         | ExpressionOperation::BorrowOwnedField { .. }
+        | ExpressionOperation::SequenceEmpty { .. }
+        | ExpressionOperation::SequenceLength { .. }
+        | ExpressionOperation::SequencePush { .. }
+        | ExpressionOperation::SequencePop { .. }
+        | ExpressionOperation::BorrowOwnedItem { .. }
         | ExpressionOperation::Bool { .. }
         | ExpressionOperation::I64 { .. }
         | ExpressionOperation::F64 { .. }
@@ -736,6 +797,54 @@ fn require_unique<T: Ord + Copy>(
 fn expression_children(operation: &ExpressionOperation) -> Vec<ExpressionChild> {
     let mut children = Vec::new();
     match operation {
+        ExpressionOperation::SequenceLength { source, .. }
+        | ExpressionOperation::SequencePop { source, .. } => {
+            push_child(
+                &mut children,
+                *source,
+                ExpressionChildRole::OwnedSequenceSource,
+                0,
+            );
+        }
+        ExpressionOperation::SequencePush { value, source, .. } => {
+            push_child(
+                &mut children,
+                *value,
+                ExpressionChildRole::OwnedSequenceValue,
+                0,
+            );
+            push_child(
+                &mut children,
+                *source,
+                ExpressionChildRole::OwnedSequenceSource,
+                0,
+            );
+        }
+        ExpressionOperation::BorrowOwnedItem {
+            index,
+            source,
+            body,
+            ..
+        } => {
+            push_child(
+                &mut children,
+                *index,
+                ExpressionChildRole::OwnedSequenceIndex,
+                0,
+            );
+            push_child(
+                &mut children,
+                *source,
+                ExpressionChildRole::OwnedSequenceSource,
+                0,
+            );
+            push_child(
+                &mut children,
+                *body,
+                ExpressionChildRole::OwnedSequenceBody,
+                0,
+            );
+        }
         ExpressionOperation::ChooseOwned { value, .. } => {
             push_child(
                 &mut children,
@@ -889,6 +998,7 @@ fn expression_children(operation: &ExpressionOperation) -> Vec<ExpressionChild> 
             );
         }
         ExpressionOperation::Unit {}
+        | ExpressionOperation::SequenceEmpty { .. }
         | ExpressionOperation::Bool { .. }
         | ExpressionOperation::I64 { .. }
         | ExpressionOperation::F64 { .. }

@@ -232,7 +232,7 @@ mod implementation_application_encoding_tests {
             .unwrap();
             let current = OwnerRecord::Expression(expression.clone());
             let (digest, bytes) = encode_owner(&current).unwrap();
-            assert_eq!(&bytes[..8], b"LKJOWN24");
+            assert_eq!(&bytes[..8], b"LKJOWN25");
             assert_eq!(
                 decode_owner(&bytes, current.owner(), current.kind(), digest).unwrap(),
                 current
@@ -301,7 +301,7 @@ mod nominal_encoding_tests {
                 constraints: constraint,
             });
             let (digest, bytes) = encode_owner(&record).unwrap();
-            assert_eq!(&bytes[..8], b"LKJOWN24");
+            assert_eq!(&bytes[..8], b"LKJOWN25");
             assert_eq!(
                 decode_owner(&bytes, key, OwnerKind::TypeParameter, digest).unwrap(),
                 record
@@ -376,7 +376,7 @@ mod nominal_encoding_tests {
         .unwrap();
         let owner = OwnerRecord::Expression(expression.clone());
         let (digest, bytes) = encode_owner(&owner).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOWN24");
+        assert_eq!(&bytes[..8], b"LKJOWN25");
         assert_eq!(
             decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
             owner
@@ -726,7 +726,7 @@ mod borrow_encoding_tests {
         ];
         for record in records {
             let (digest, bytes) = encode_owner(&record).unwrap();
-            assert_eq!(&bytes[..8], b"LKJOWN24");
+            assert_eq!(&bytes[..8], b"LKJOWN25");
             assert_eq!(
                 decode_owner(&bytes, record.owner(), record.kind(), digest).unwrap(),
                 record
@@ -894,6 +894,11 @@ pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>)
             super::contract::OWNED_EFFECT_OWNER_MAGIC,
             super::contract::OWNED_EFFECT_OWNER_ENVELOPE_DOMAIN,
         )
+    } else if record.header().contract_version == super::contract::BORROW_GRAPH_CONTRACT_VERSION {
+        (
+            super::contract::BORROW_OWNER_MAGIC,
+            super::contract::BORROW_OWNER_ENVELOPE_DOMAIN,
+        )
     } else {
         (OWNER_MAGIC, OWNER_ENVELOPE_DOMAIN)
     };
@@ -1030,6 +1035,12 @@ pub fn decode_owner(
                 super::contract::OWNED_EFFECT_OWNER_ENVELOPE_DOMAIN,
                 super::contract::OWNED_EFFECT_GRAPH_CONTRACT_VERSION,
             )
+        } else if bytes.starts_with(&super::contract::BORROW_OWNER_MAGIC) {
+            (
+                super::contract::BORROW_OWNER_MAGIC,
+                super::contract::BORROW_OWNER_ENVELOPE_DOMAIN,
+                super::contract::BORROW_GRAPH_CONTRACT_VERSION,
+            )
         } else {
             (
                 OWNER_MAGIC,
@@ -1073,6 +1084,15 @@ pub fn decode_owner(
 
 pub fn encode_type_object(object: &TypeObject) -> Result<(TypeObjectDigest, Vec<u8>), Diagnostic> {
     object.validate_local()?;
+    if let super::TypeForm::OwnedSequence { item } = &object.form {
+        let bytes = packed::encode(
+            super::contract::OWNED_SEQUENCE_TYPE_MAGIC,
+            super::contract::OWNED_SEQUENCE_TYPE_ENVELOPE_DOMAIN,
+            &(object.contract_version, 1_u8, item),
+            MAXIMUM_TYPE_OBJECT_BYTES,
+        )?;
+        return Ok((TypeObjectDigest::of(&bytes), bytes));
+    }
     if let super::TypeForm::OwnedChoice { cases } = &object.form {
         let bytes = packed::encode(
             super::contract::OWNED_CHOICE_TYPE_MAGIC,
@@ -1206,6 +1226,33 @@ pub fn decode_type_object(
         TypeObjectDigest::of(bytes).bytes(),
         "type",
     )?;
+    if bytes.starts_with(&super::contract::OWNED_SEQUENCE_TYPE_MAGIC) {
+        let (contract_version, tag, item): (u16, u8, TypeObjectDigest) = packed::decode(
+            bytes,
+            super::contract::OWNED_SEQUENCE_TYPE_MAGIC,
+            super::contract::OWNED_SEQUENCE_TYPE_ENVELOPE_DOMAIN,
+            MAXIMUM_TYPE_OBJECT_BYTES,
+        )?;
+        if tag != 1 {
+            return Err(codec_error(
+                "kernel_sequence_type_tag",
+                "unknown OwnedSequence type tag",
+            ));
+        }
+        let object = TypeObject {
+            contract_version,
+            form: super::TypeForm::OwnedSequence { item },
+        };
+        let (digest, canonical) = encode_type_object(&object)?;
+        verify_canonical(
+            bytes,
+            &canonical,
+            digest.bytes(),
+            expected_digest.bytes(),
+            "type",
+        )?;
+        return Ok(object);
+    }
     if bytes.starts_with(&super::contract::OWNED_CHOICE_TYPE_MAGIC) {
         let (contract_version, tag, cases): (u16, u8, Vec<super::StructuralTypeField>) =
             packed::decode(

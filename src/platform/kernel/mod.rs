@@ -97,6 +97,8 @@ mod owned_contract_tests;
 #[cfg(test)]
 mod owned_effect_tests;
 #[cfg(test)]
+mod owned_sequence_tests;
+#[cfg(test)]
 mod parallel_tests;
 #[cfg(test)]
 mod transfer_adversary_tests;

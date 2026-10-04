@@ -759,6 +759,15 @@ fn validate_interface_dependencies(
             )
         })?;
         for ty in interface.type_objects.values() {
+            if revision.graph_contract_version < 25
+                && matches!(ty.form, TypeForm::OwnedSequence { .. })
+            {
+                return Err(package_error(
+                    DiagnosticClass::Semantic,
+                    "kernel_sequence_generation",
+                    "owned sequence package interface requires Graph 25",
+                ));
+            }
             if revision.graph_contract_version < 20
                 && matches!(ty.form, TypeForm::OwnedChoice { .. })
             {

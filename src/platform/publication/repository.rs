@@ -1971,10 +1971,15 @@ fn candidate_owner_type_root_count(record: &crate::platform::kernel::OwnerRecord
             | ExpressionOperation::MatchOwned { .. }
             | ExpressionOperation::MatchBorrowedOwned { .. }
             | ExpressionOperation::BorrowOwnedField { .. }
+            | ExpressionOperation::SequenceEmpty { .. }
+            | ExpressionOperation::SequenceLength { .. }
+            | ExpressionOperation::SequencePush { .. }
+            | ExpressionOperation::BorrowOwnedItem { .. }
             | ExpressionOperation::PackOwned { .. }
             | ExpressionOperation::UnpackOwned { .. }
             | ExpressionOperation::TransactionOutcome { .. }
             | ExpressionOperation::List { .. } => 1,
+            ExpressionOperation::SequencePop { .. } => 2,
             ExpressionOperation::ImplementationCall { type_arguments, .. }
             | ExpressionOperation::Call { type_arguments, .. }
             | ExpressionOperation::FunctionValue { type_arguments, .. }

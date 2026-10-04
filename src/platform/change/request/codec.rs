@@ -128,6 +128,7 @@ struct Writer {
     transfer_constraint_extension: bool,
     implementation_authority_extension: bool,
     owned_borrow_extension: bool,
+    sequence_extension: bool,
 }
 
 impl Writer {
@@ -149,11 +150,14 @@ impl Writer {
             transfer_constraint_extension: false,
             implementation_authority_extension: false,
             owned_borrow_extension: false,
+            sequence_extension: false,
         }
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.owned_borrow_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+        if self.sequence_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR29");
+        } else if self.owned_borrow_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR28");
         } else if self.implementation_authority_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR27");
@@ -1486,6 +1490,11 @@ impl Writer {
                     self.length(fields.len())?;
                     pending.push(Frame::Fields(fields, next));
                 }
+                AuthoredType::OwnedSequence { item } => {
+                    self.sequence_extension = true;
+                    self.tag(24)?;
+                    pending.push(Frame::Type(item, next));
+                }
                 AuthoredType::List { item }
                 | AuthoredType::Option { item }
                 | AuthoredType::Stream { item } => {
@@ -1758,6 +1767,59 @@ impl Writer {
     ) -> Result<(), Diagnostic> {
         let next = depth.saturating_add(1);
         match value {
+            AuthoredExpressionOperation::SequenceEmpty { sequence_type } => {
+                self.sequence_extension = true;
+                self.tag(39)?;
+                self.authored_type(sequence_type, definitions, 1)
+            }
+            AuthoredExpressionOperation::SequenceLength {
+                sequence_type,
+                source,
+            } => {
+                self.sequence_extension = true;
+                self.tag(40)?;
+                self.authored_type(sequence_type, definitions, 1)?;
+                self.expression(source, definitions, next)
+            }
+            AuthoredExpressionOperation::SequencePush {
+                sequence_type,
+                value,
+                source,
+            } => {
+                self.sequence_extension = true;
+                self.tag(41)?;
+                self.authored_type(sequence_type, definitions, 1)?;
+                self.expression(value, definitions, next)?;
+                self.expression(source, definitions, next)
+            }
+            AuthoredExpressionOperation::SequencePop {
+                sequence_type,
+                source,
+            } => {
+                self.sequence_extension = true;
+                self.tag(42)?;
+                self.authored_type(sequence_type, definitions, 1)?;
+                self.expression(source, definitions, next)
+            }
+            AuthoredExpressionOperation::BorrowOwnedItem {
+                sequence_type,
+                source,
+                index,
+                binding,
+                body,
+            } => {
+                self.sequence_extension = true;
+                self.tag(43)?;
+                self.authored_type(sequence_type, definitions, 1)?;
+                self.expression(index, definitions, next)?;
+                self.expression(source, definitions, next)?;
+                self.symbol(&binding.symbol, definitions)?;
+                self.name(&binding.name)?;
+                self.optional(binding.declared_type.as_ref(), |w, ty| {
+                    w.authored_type(ty, definitions, 1)
+                })?;
+                self.expression(body, definitions, next)
+            }
             AuthoredExpressionOperation::Parallel { left, right } => {
                 self.parallel_extension = true;
                 self.tag(36)?;
@@ -2395,6 +2457,108 @@ mod tests {
             crate::platform::semantic_id::encode_hex(blake3::hash(&first).as_bytes()),
             "073725ec7d23ee566d493e9dceb01fb850964bf2f381e9a21552f12de778a5cf"
         );
+    }
+
+    #[test]
+    fn owned_sequence_intent_selects_generation_for_types_and_each_operation() {
+        let mut type_request = connected_request("$module", "$function", "$parameter", "$body");
+        let AuthoredChange::CreateFunction { result, .. } = &mut type_request.changes[1] else {
+            panic!("fixture function")
+        };
+        *result = AuthoredType::OwnedSequence {
+            item: Box::new(AuthoredType::OwnedI64Cell {}),
+        };
+        let encoded = canonical_authored_intent_bytes(&type_request).unwrap();
+        assert_eq!(&encoded[..8], b"LKJACR29");
+
+        let scalar = |value| {
+            Box::new(AuthoredExpression {
+                symbol: None,
+                operation: AuthoredExpressionOperation::I64 { value },
+            })
+        };
+        // Scalar type metadata deliberately isolates the operation's generation switch;
+        // semantic admission independently rejects this invalid sequence annotation.
+        let operations = [
+            AuthoredExpressionOperation::SequenceEmpty {
+                sequence_type: AuthoredType::I64 {},
+            },
+            AuthoredExpressionOperation::SequenceLength {
+                sequence_type: AuthoredType::I64 {},
+                source: scalar(7),
+            },
+            AuthoredExpressionOperation::SequencePush {
+                sequence_type: AuthoredType::I64 {},
+                value: scalar(2),
+                source: scalar(7),
+            },
+            AuthoredExpressionOperation::SequencePop {
+                sequence_type: AuthoredType::I64 {},
+                source: scalar(7),
+            },
+            AuthoredExpressionOperation::BorrowOwnedItem {
+                sequence_type: AuthoredType::I64 {},
+                source: scalar(7),
+                index: scalar(0),
+                binding: Box::new(AuthoredBindingDefinition {
+                    symbol: "$item".to_owned(),
+                    name: Name::new("item").unwrap(),
+                    declared_type: None,
+                }),
+                body: scalar(3),
+            },
+        ];
+        let mut encodings = BTreeSet::new();
+        for operation in operations {
+            let mut request = connected_request("$module", "$function", "$parameter", "$body");
+            let AuthoredChange::CreateFunction { body, .. } = &mut request.changes[1] else {
+                panic!("fixture function")
+            };
+            body.operation = operation;
+            let encoded = canonical_authored_intent_bytes(&request).unwrap();
+            assert_eq!(&encoded[..8], b"LKJACR29");
+            assert!(encodings.insert(encoded));
+        }
+    }
+
+    #[test]
+    fn owned_sequence_operand_order_and_borrow_index_change_intent() {
+        let scalar = |value| {
+            Box::new(AuthoredExpression {
+                symbol: None,
+                operation: AuthoredExpressionOperation::I64 { value },
+            })
+        };
+        let encode = |operation| {
+            let mut request = connected_request("$module", "$function", "$parameter", "$body");
+            let AuthoredChange::CreateFunction { body, .. } = &mut request.changes[1] else {
+                panic!("fixture function")
+            };
+            body.operation = operation;
+            canonical_authored_intent_bytes(&request).unwrap()
+        };
+        let push = |value, source| AuthoredExpressionOperation::SequencePush {
+            sequence_type: AuthoredType::OwnedSequence {
+                item: Box::new(AuthoredType::OwnedI64Cell {}),
+            },
+            value: scalar(value),
+            source: scalar(source),
+        };
+        assert_ne!(encode(push(2, 7)), encode(push(7, 2)));
+        let borrow = |index| AuthoredExpressionOperation::BorrowOwnedItem {
+            sequence_type: AuthoredType::OwnedSequence {
+                item: Box::new(AuthoredType::OwnedI64Cell {}),
+            },
+            source: scalar(7),
+            index: scalar(index),
+            binding: Box::new(AuthoredBindingDefinition {
+                symbol: "$item".to_owned(),
+                name: Name::new("item").unwrap(),
+                declared_type: Some(AuthoredType::OwnedI64Cell {}),
+            }),
+            body: scalar(3),
+        };
+        assert_ne!(encode(borrow(0)), encode(borrow(1)));
     }
 
     #[test]

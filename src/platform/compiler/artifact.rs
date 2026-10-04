@@ -48,16 +48,16 @@ use std::fmt;
 #[path = "artifact_code.rs"]
 mod code_admission;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-31";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-31";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 31;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF31";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART31";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN31";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-32";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-32";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 32;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF32";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART32";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN32";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v31";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v31";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v31";
+    "lkjscript.artifact-manifest-envelope.v32";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v32";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v32";
 pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v18";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
@@ -80,7 +80,7 @@ struct ArtifactWire {
 }
 fn artifact_wire(version: u16) -> Result<ArtifactWire, Diagnostic> {
     match version {
-        30 => Err(artifact_error(
+        30 | 31 => Err(artifact_error(
             DiagnosticClass::Source,
             "artifact_bundle_contract",
             "predecessor artifacts require rebuilding from canonical meaning",
@@ -418,6 +418,8 @@ impl ArtifactManifest {
             29
         } else if bytes.starts_with(b"LKJAMF30") {
             30
+        } else if bytes.starts_with(b"LKJAMF31") {
+            31
         } else {
             ARTIFACT_CONTRACT_VERSION
         })?;
@@ -506,6 +508,7 @@ impl ArtifactManifest {
                     | (22, 22, 17)
                     | (23, 23, 18)
                     | (24, 24, 19)
+                    | (25, 25, 20)
             )
             || self.compilation_manifest_contract_version != COMPILATION_MANIFEST_CONTRACT_VERSION
         {
@@ -2509,6 +2512,7 @@ fn trace_object_closure(
     let mut predecessor_type_roots = BTreeSet::new();
     let mut preproduct_type_roots = BTreeSet::new();
     let mut prechoice_type_roots = BTreeSet::new();
+    let mut presequence_type_roots = BTreeSet::new();
     let mut predecessor_packages = BTreeSet::new();
     let mut source_generations = BTreeMap::new();
     let mut blobs = BTreeMap::new();
@@ -2617,6 +2621,9 @@ fn trace_object_closure(
                         ));
                     }
                     type_roots.extend(unit.tables.types.iter().copied());
+                    if unit.graph_contract_version < 25 || source_generation < 25 {
+                        presequence_type_roots.extend(unit.tables.types.iter().copied());
+                    }
                     if unit.graph_contract_version < 20 || source_generation < 20 {
                         prechoice_type_roots.extend(unit.tables.types.iter().copied());
                     }
@@ -2710,6 +2717,15 @@ fn trace_object_closure(
             &mut store_work,
         )?;
         let object = decode_type_object(&bytes, digest)?;
+        if manifest.graph_contract_version < 25
+            && matches!(object.form, TypeForm::OwnedSequence { .. })
+        {
+            return Err(artifact_error(
+                DiagnosticClass::Semantic,
+                "kernel_sequence_generation",
+                "owned sequence artifacts require Graph 25",
+            ));
+        }
         if manifest.graph_contract_version < 20
             && matches!(object.form, TypeForm::OwnedChoice { .. })
         {
@@ -2761,6 +2777,7 @@ fn trace_object_closure(
     validate_predecessor_type_closure(predecessor_type_roots, &types)?;
     validate_product_generation_closure(preproduct_type_roots, &types, 18)?;
     validate_product_generation_closure(prechoice_type_roots, &types, 19)?;
+    validate_sequence_generation_closure(presequence_type_roots, &types)?;
     for ((package, _), record) in reference_owners.iter().chain(runtime_owners.iter()) {
         let source_generation = source_generations.get(package).ok_or_else(|| {
             artifact_error(
@@ -4689,7 +4706,8 @@ fn reference_expression_bindings(operation: &ExpressionOperation) -> Vec<Binding
         ExpressionOperation::UnpackOwned { fields, .. } => {
             bindings.extend(fields.iter().map(|field| field.binding))
         }
-        ExpressionOperation::BorrowOwnedField { binding, .. } => bindings.push(*binding),
+        ExpressionOperation::BorrowOwnedField { binding, .. }
+        | ExpressionOperation::BorrowOwnedItem { binding, .. } => bindings.push(*binding),
         ExpressionOperation::Match { arms, .. } => bindings.extend(
             arms.iter()
                 .filter_map(|arm| arm.payload_binding)
@@ -5056,7 +5074,47 @@ fn memory_result_type(
             | TypeForm::OwnedI64Cell
             | TypeForm::OwnedProduct { .. }
             | TypeForm::OwnedChoice { .. }
+            | TypeForm::OwnedSequence { .. }
     ))
+}
+
+fn validate_sequence_generation_closure(
+    mut pending: BTreeSet<TypeObjectDigest>,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+) -> Result<(), Diagnostic> {
+    let mut seen = BTreeSet::new();
+    let mut work = 0usize;
+    while let Some(ty) = pending.pop_first() {
+        if !seen.insert(ty) {
+            continue;
+        }
+        let object = types.get(&ty).ok_or_else(|| {
+            artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_sequence_type",
+                "missing graph-bound type",
+            )
+        })?;
+        work = work
+            .checked_add(object.child_type_count() + 1)
+            .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
+            .ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Resource,
+                    "artifact_sequence_work",
+                    "sequence generation closure exhausted admission work",
+                )
+            })?;
+        if matches!(object.form, TypeForm::OwnedSequence { .. }) {
+            return Err(artifact_error(
+                DiagnosticClass::Semantic,
+                "kernel_sequence_generation",
+                "sequence type closure requires Graph 25 source",
+            ));
+        }
+        pending.extend(object.child_types());
+    }
+    Ok(())
 }
 
 fn validate_product_generation_closure(

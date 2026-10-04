@@ -20,7 +20,9 @@ pub struct TypeObject {
 impl TypeObject {
     pub fn new(form: TypeForm) -> Result<Self, Diagnostic> {
         let object = Self {
-            contract_version: if matches!(form, TypeForm::OwnedChoice { .. }) {
+            contract_version: if matches!(form, TypeForm::OwnedSequence { .. }) {
+                super::contract::OWNED_SEQUENCE_TYPE_CONTRACT_VERSION
+            } else if matches!(form, TypeForm::OwnedChoice { .. }) {
                 super::contract::OWNED_CHOICE_TYPE_CONTRACT_VERSION
             } else if matches!(form, TypeForm::OwnedProduct { .. }) {
                 super::contract::OWNED_PRODUCT_TYPE_CONTRACT_VERSION
@@ -44,7 +46,9 @@ impl TypeObject {
     }
 
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
-        let expected = if matches!(self.form, TypeForm::OwnedChoice { .. }) {
+        let expected = if matches!(self.form, TypeForm::OwnedSequence { .. }) {
+            super::contract::OWNED_SEQUENCE_TYPE_CONTRACT_VERSION
+        } else if matches!(self.form, TypeForm::OwnedChoice { .. }) {
             super::contract::OWNED_CHOICE_TYPE_CONTRACT_VERSION
         } else if matches!(self.form, TypeForm::OwnedProduct { .. }) {
             super::contract::OWNED_PRODUCT_TYPE_CONTRACT_VERSION
@@ -112,6 +116,7 @@ impl TypeObject {
             | TypeForm::Option { .. }
             | TypeForm::Result { .. }
             | TypeForm::Stream { .. } => {}
+            TypeForm::OwnedSequence { .. } => {}
         }
         Ok(())
     }
@@ -122,7 +127,10 @@ impl TypeObject {
             TypeForm::StructuralRecord { fields }
             | TypeForm::OwnedProduct { fields }
             | TypeForm::OwnedChoice { cases: fields } => fields.len(),
-            TypeForm::List { .. } | TypeForm::Option { .. } | TypeForm::Stream { .. } => 1,
+            TypeForm::List { .. }
+            | TypeForm::Option { .. }
+            | TypeForm::Stream { .. }
+            | TypeForm::OwnedSequence { .. } => 1,
             TypeForm::Map { .. } | TypeForm::Result { .. } => 2,
             TypeForm::Function { parameters, .. } | TypeForm::TaskFunction { parameters, .. } => {
                 parameters.len().saturating_add(1)
@@ -139,7 +147,10 @@ impl TypeObject {
             | TypeForm::OwnedChoice { cases: fields } => {
                 fields.iter().map(|field| field.ty).collect()
             }
-            TypeForm::List { item } | TypeForm::Option { item } | TypeForm::Stream { item } => {
+            TypeForm::List { item }
+            | TypeForm::Option { item }
+            | TypeForm::Stream { item }
+            | TypeForm::OwnedSequence { item } => {
                 vec![*item]
             }
             TypeForm::Map { key, value }
@@ -241,6 +252,10 @@ pub enum TypeForm {
     /// Its ownership is invariant under case selection and generic substitution.
     OwnedChoice {
         cases: Vec<StructuralTypeField>,
+    },
+    /// One affine owner of a runtime-sized sequence of exact owned elements.
+    OwnedSequence {
+        item: TypeObjectDigest,
     },
 }
 

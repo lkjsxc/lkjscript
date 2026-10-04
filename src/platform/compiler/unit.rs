@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-24";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 24;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-19";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 19;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN24";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v24";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v24";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-25";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 25;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-20";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 20;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN25";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v25";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v25";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -98,6 +98,8 @@ impl CompilationUnitKey {
             "lkjscript.compiler-unit-key.v22"
         } else if compiler_contract_version == 23 {
             "lkjscript.compiler-unit-key.v23"
+        } else if compiler_contract_version == 24 {
+            "lkjscript.compiler-unit-key.v24"
         } else {
             COMPILER_UNIT_KEY_DOMAIN
         });
@@ -462,6 +464,30 @@ pub enum CompiledInstruction {
     EndOwnedBorrow {
         binding_local: u32,
     },
+    SequenceEmpty {
+        sequence_type: u32,
+    },
+    SequenceLength {
+        sequence_type: u32,
+        source_local: u32,
+    },
+    SequencePush {
+        sequence_type: u32,
+        value_local: u32,
+        source_local: u32,
+    },
+    SequencePop {
+        sequence_type: u32,
+        result_type: u32,
+        source_local: u32,
+    },
+    /// Pop the authored index before entering a lexical item loan.
+    BorrowOwnedItem {
+        sequence_type: u32,
+        source_local: u32,
+        binding_local: u32,
+        binding_type: u32,
+    },
 }
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
@@ -562,7 +588,7 @@ impl CompilationUnit {
                 "compiler-unit bytes disagree with their exact object-domain digest",
             ));
         }
-        // Derived generations 10–23 require a rebuild from supported canonical owners.
+        // Derived generations 10–24 require a rebuild from supported canonical owners.
         // Refuse before decoding; old bytes never acquire current instruction meaning.
         if [
             b"LKJCUN10",
@@ -579,6 +605,7 @@ impl CompilationUnit {
             b"LKJCUN21",
             b"LKJCUN22",
             b"LKJCUN23",
+            b"LKJCUN24",
         ]
         .iter()
         .any(|magic| bytes.starts_with(*magic))
@@ -614,7 +641,7 @@ impl CompilationUnit {
                 self.bytecode_contract_version,
                 self.graph_contract_version
             ),
-            (24, 19, 24)
+            (25, 20, 25)
         ) {
             return Err(unit_error(
                 DiagnosticClass::Source,
@@ -1364,6 +1391,79 @@ impl CompiledInstruction {
             }
         }
         match self {
+            Self::SequenceEmpty { sequence_type } => {
+                require_index("owned sequence type", *sequence_type, tables.types.len())
+            }
+            Self::SequenceLength {
+                sequence_type,
+                source_local,
+            }
+            | Self::SequencePop {
+                sequence_type,
+                source_local,
+                ..
+            } => {
+                require_index("owned sequence type", *sequence_type, tables.types.len())?;
+                require_index(
+                    "sequence source local",
+                    *source_local,
+                    code.local_count as usize,
+                )?;
+                if let Self::SequencePop { result_type, .. } = self {
+                    require_index("sequence pop result type", *result_type, tables.types.len())?;
+                }
+                Ok(())
+            }
+            Self::SequencePush {
+                sequence_type,
+                value_local,
+                source_local,
+            } => {
+                require_index("owned sequence type", *sequence_type, tables.types.len())?;
+                require_index(
+                    "sequence value local",
+                    *value_local,
+                    code.local_count as usize,
+                )?;
+                require_index(
+                    "sequence source local",
+                    *source_local,
+                    code.local_count as usize,
+                )?;
+                if value_local == source_local {
+                    return Err(unit_corrupt(
+                        "compiler_unit_sequence_local",
+                        "sequence push requires distinct value and sequence custody",
+                    ));
+                }
+                Ok(())
+            }
+            Self::BorrowOwnedItem {
+                sequence_type,
+                source_local,
+                binding_local,
+                binding_type,
+            } => {
+                require_index("borrowed sequence type", *sequence_type, tables.types.len())?;
+                require_index(
+                    "borrowed source local",
+                    *source_local,
+                    code.local_count as usize,
+                )?;
+                require_index(
+                    "borrowed binding local",
+                    *binding_local,
+                    code.local_count as usize,
+                )?;
+                require_index("borrowed binding type", *binding_type, tables.types.len())?;
+                if source_local == binding_local || *binding_local < code.parameter_count {
+                    return Err(unit_corrupt(
+                        "compiler_unit_borrow_local",
+                        "scoped read binding must have a distinct lexical destination",
+                    ));
+                }
+                Ok(())
+            }
             Self::BorrowOwnedField {
                 product_type,
                 source_local,
@@ -2093,6 +2193,11 @@ fn verify_owned_borrow_scopes_with_limit(
                 source_local,
                 binding_local,
                 ..
+            }
+            | CompiledInstruction::BorrowOwnedItem {
+                source_local,
+                binding_local,
+                ..
             } => Some((*source_local, *binding_local)),
             _ => None,
         };
@@ -2101,6 +2206,17 @@ fn verify_owned_borrow_scopes_with_limit(
         let destinations: &[u32] = match instruction {
             CompiledInstruction::UnpackOwned { locals, .. } => locals,
             _ => &[],
+        };
+        let sequence_consumes = match instruction {
+            CompiledInstruction::SequencePush {
+                value_local,
+                source_local,
+                ..
+            } => Some([*value_local, *source_local]),
+            CompiledInstruction::SequencePop { source_local, .. } => {
+                Some([*source_local, *source_local])
+            }
+            _ => None,
         };
         let changed = match instruction {
             CompiledInstruction::StoreLocal(local)
@@ -2116,7 +2232,11 @@ fn verify_owned_borrow_scopes_with_limit(
             | CompiledInstruction::CommitTransactionOutcome { binding: local, .. } => Some(*local),
             _ => None,
         };
-        if changed.is_some() || !destinations.is_empty() || enters.is_some() {
+        if changed.is_some()
+            || !destinations.is_empty()
+            || enters.is_some()
+            || sequence_consumes.is_some()
+        {
             let mut ancestor = active;
             while let Some(scope) = ancestor.map(|node| scopes[node]) {
                 reserve()?;
@@ -2129,6 +2249,11 @@ fn verify_owned_borrow_scopes_with_limit(
                     }
                 }
                 if changed.is_some_and(|local| local == scope.source || local == scope.binding)
+                    || sequence_consumes.is_some_and(|locals| {
+                        locals
+                            .iter()
+                            .any(|local| *local == scope.source || *local == scope.binding)
+                    })
                     || writes_custody
                     || enters.is_some_and(|(_, binding)| {
                         binding == scope.source || binding == scope.binding
@@ -2150,7 +2275,7 @@ fn verify_owned_borrow_scopes_with_limit(
                 parent: active,
                 source,
                 binding,
-                entry_depth: depth,
+                entry_depth: depth - stack_effect(instruction)?.0,
             });
         }
         match instruction {
@@ -2268,6 +2393,11 @@ fn stack_effect(instruction: &CompiledInstruction) -> Result<(usize, usize), Dia
         })
     };
     Ok(match instruction {
+        CompiledInstruction::BorrowOwnedItem { .. } => (1, 0),
+        CompiledInstruction::SequenceEmpty { .. }
+        | CompiledInstruction::SequenceLength { .. }
+        | CompiledInstruction::SequencePush { .. }
+        | CompiledInstruction::SequencePop { .. } => (0, 1),
         CompiledInstruction::BorrowOwnedField { .. }
         | CompiledInstruction::MatchBorrowedOwned { .. }
         | CompiledInstruction::EndOwnedBorrow { .. } => (0, 0),
@@ -2526,6 +2656,115 @@ mod borrow_scope_tests {
                 I64(4),
                 EndOwnedBorrow { binding_local: 2 },
                 Jump(7),
+                Return,
+            ])
+            .is_ok()
+        );
+    }
+
+    fn item(source_local: u32, binding_local: u32) -> CompiledInstruction {
+        BorrowOwnedItem {
+            sequence_type: 0,
+            source_local,
+            binding_local,
+            binding_type: 0,
+        }
+    }
+
+    #[test]
+    fn sequence_item_loan_excludes_consumed_index_from_its_operand_prefix() {
+        assert!(
+            check(vec![
+                I64(9),
+                I64(0),
+                item(0, 1),
+                I64(7),
+                EndOwnedBorrow { binding_local: 1 },
+                Drop,
+                Return,
+            ])
+            .is_ok()
+        );
+        assert!(
+            check(vec![
+                I64(0),
+                item(0, 1),
+                I64(1),
+                item(1, 2),
+                I64(7),
+                EndOwnedBorrow { binding_local: 2 },
+                EndOwnedBorrow { binding_local: 1 },
+                Return,
+            ])
+            .is_ok()
+        );
+        let error = check(vec![
+            I64(9),
+            I64(0),
+            item(0, 1),
+            Drop,
+            I64(7),
+            I64(8),
+            EndOwnedBorrow { binding_local: 1 },
+            Drop,
+            Return,
+        ])
+        .unwrap_err();
+        assert_eq!(error.code, "compiler_unit_borrow_stack_prefix");
+        let error = check(vec![
+            I64(0),
+            item(0, 1),
+            EndOwnedBorrow { binding_local: 1 },
+            I64(7),
+            Return,
+        ])
+        .unwrap_err();
+        assert_eq!(error.code, "compiler_unit_borrow_result_stack");
+    }
+
+    #[test]
+    fn sequence_mutation_cannot_consume_an_active_source_or_item_loan() {
+        for mutation in [
+            SequencePush {
+                sequence_type: 0,
+                value_local: 2,
+                source_local: 0,
+            },
+            SequencePush {
+                sequence_type: 0,
+                value_local: 1,
+                source_local: 2,
+            },
+            SequencePop {
+                sequence_type: 0,
+                result_type: 0,
+                source_local: 0,
+            },
+            SequencePop {
+                sequence_type: 0,
+                result_type: 0,
+                source_local: 1,
+            },
+        ] {
+            let error = check(vec![
+                I64(0),
+                item(0, 1),
+                mutation,
+                EndOwnedBorrow { binding_local: 1 },
+                Return,
+            ])
+            .unwrap_err();
+            assert_eq!(error.code, "compiler_unit_borrow_custody");
+        }
+        assert!(
+            check(vec![
+                I64(0),
+                item(0, 1),
+                SequenceLength {
+                    sequence_type: 0,
+                    source_local: 0
+                },
+                EndOwnedBorrow { binding_local: 1 },
                 Return,
             ])
             .is_ok()

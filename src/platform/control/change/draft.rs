@@ -397,6 +397,7 @@ impl Renderer<'_> {
             T::CapabilityResource { interface } => {
                 format!("(resource {})", self.declaration(interface)?)
             }
+            T::OwnedSequence { item } => format!("(owned-sequence {})", self.ty(item)?),
             T::List { item } => format!("(list {})", self.ty(item)?),
             T::Option { item } => format!("(option {})", self.ty(item)?),
             T::Stream { item } => format!("(stream {})", self.ty(item)?),
@@ -1085,6 +1086,62 @@ impl Renderer<'_> {
                 format!(
                     "(borrow-owned-field (type {}) {source} (field {field} (binding {} (as {}) (type {ty}))) (in {body}))",
                     self.ty(product_type)?,
+                    binding.name,
+                    binding.symbol,
+                )
+            }
+            E::SequenceEmpty { sequence_type } => {
+                format!("(sequence-empty (type {}))", self.ty(sequence_type)?)
+            }
+            E::SequenceLength {
+                sequence_type,
+                source,
+            } => format!(
+                "(sequence-length (type {}) {})",
+                self.ty(sequence_type)?,
+                self.expression(source, env)?,
+            ),
+            E::SequencePush {
+                sequence_type,
+                value,
+                source,
+            } => format!(
+                "(sequence-push (type {}) {} {})",
+                self.ty(sequence_type)?,
+                self.expression(value, env)?,
+                self.expression(source, env)?,
+            ),
+            E::SequencePop {
+                sequence_type,
+                source,
+            } => format!(
+                "(sequence-pop (type {}) {})",
+                self.ty(sequence_type)?,
+                self.expression(source, env)?,
+            ),
+            E::BorrowOwnedItem {
+                sequence_type,
+                source,
+                index,
+                binding,
+                body,
+            } => {
+                let ty = self.ty(binding
+                    .declared_type
+                    .as_ref()
+                    .ok_or_else(|| error("borrowed item binding requires a type"))?)?;
+                let index = self.expression(index, env)?;
+                let source = self.expression(source, env)?;
+                env.entry(binding.name.to_string())
+                    .or_default()
+                    .push(binding.symbol.clone());
+                let body = self.expression(body, env)?;
+                if let Some(values) = env.get_mut(binding.name.as_str()) {
+                    values.pop();
+                }
+                format!(
+                    "(borrow-owned-item (type {}) {source} (index {index}) (binding {} (as {}) (type {ty})) (in {body}))",
+                    self.ty(sequence_type)?,
                     binding.name,
                     binding.symbol,
                 )

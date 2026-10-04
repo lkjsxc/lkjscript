@@ -56,10 +56,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-32";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 32;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-28";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 28;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-33";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 33;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-29";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 29;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -1647,6 +1647,7 @@ pub(crate) const COMPACT_CHANGE_PRECONDITION_FIELDS: &[CompactChangePrecondition
     },
 ];
 pub const COMPACT_TYPE_FORMS: &[&str] = &[
+    "owned-sequence",
     "owned-choice",
     "owned-product",
     "owned-i64-cell",
@@ -1680,6 +1681,11 @@ pub(crate) const COMPACT_EFFECT_FORM_FIELDS: &[CompactFormField] = &[CompactForm
     syntax: "@NAME",
 }];
 pub const COMPACT_EXPRESSION_FORMS: &[&str] = &[
+    "sequence-empty",
+    "sequence-length",
+    "sequence-push",
+    "sequence-pop",
+    "borrow-owned-item",
     "choose-owned",
     "match-owned",
     "match-borrowed-owned",
@@ -1724,6 +1730,18 @@ pub(crate) struct CompactFormField {
 }
 
 pub(crate) const COMPACT_TYPE_FORM_FIELDS: &[CompactFormField] = &[
+    CompactFormField {
+        form: "owned-sequence",
+        name: "as",
+        required: true,
+        syntax: "@NAME",
+    },
+    CompactFormField {
+        form: "owned-sequence",
+        name: "item",
+        required: true,
+        syntax: "type-reference",
+    },
     CompactFormField {
         form: "owned-choice",
         name: "as",
@@ -1955,6 +1973,108 @@ pub(crate) const COMPACT_TYPE_FORM_FIELDS: &[CompactFormField] = &[
 ];
 
 pub(crate) const COMPACT_EXPRESSION_FORM_FIELDS: &[CompactFormField] = &[
+    CompactFormField {
+        form: "sequence-empty",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "sequence-empty",
+        name: "type",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "sequence-length",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "sequence-length",
+        name: "type",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "sequence-length",
+        name: "source",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "sequence-push",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "sequence-push",
+        name: "type",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "sequence-push",
+        name: "value",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "sequence-push",
+        name: "source",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "sequence-pop",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "sequence-pop",
+        name: "type",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "sequence-pop",
+        name: "source",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "borrow-owned-item",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "borrow-owned-item",
+        name: "type",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "borrow-owned-item",
+        name: "source",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "borrow-owned-item",
+        name: "index",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "borrow-owned-item",
+        name: "body",
+        required: true,
+        syntax: "$NAME",
+    },
     CompactFormField {
         form: "match-borrowed-owned",
         name: "as",
@@ -2542,6 +2662,43 @@ pub(crate) struct CompactEdgeDescriptor {
 }
 
 pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
+    CompactEdgeDescriptor {
+        name: "expression.item-binding",
+        parent: "expression.borrow-owned-item",
+        child: "binding",
+        fields: &[
+            CompactFormField {
+                form: "expression.item-binding",
+                name: "parent",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "expression.item-binding",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "expression.item-binding",
+                name: "as",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "expression.item-binding",
+                name: "name",
+                required: true,
+                syntax: "name",
+            },
+            CompactFormField {
+                form: "expression.item-binding",
+                name: "type",
+                required: true,
+                syntax: "type-reference",
+            },
+        ],
+    },
     CompactEdgeDescriptor {
         name: "implementation.argument",
         parent: "expression.implementation-call",
@@ -3687,6 +3844,10 @@ impl Decoder {
                     record,
                     &["parent", "index", "field-name", "as", "name", "type"],
                 )?,
+                "expression.item-binding" => self.insert_indexed_record_edge(
+                    record,
+                    &["parent", "index", "as", "name", "type"],
+                )?,
                 "expression.record-field" => self.insert_indexed_record_edge(
                     record,
                     &["parent", "index", "name", "field", "value"],
@@ -4708,8 +4869,16 @@ impl Decoder {
             )
         })?;
         let ty = match record.operation.as_str() {
-            "type.byte-buffer" | "type.unit" | "type.bool" | "type.i64" | "type.f64"
-            | "type.bytes" | "type.text" | "type.static-text" | "type.secret" => {
+            "type.byte-buffer"
+            | "type.owned-i64-cell"
+            | "type.unit"
+            | "type.bool"
+            | "type.i64"
+            | "type.f64"
+            | "type.bytes"
+            | "type.text"
+            | "type.static-text"
+            | "type.secret" => {
                 check_fields(&record, &["as"])?;
                 match record.operation.as_str() {
                     "type.unit" => AuthoredType::Unit {},
@@ -4724,12 +4893,13 @@ impl Decoder {
                     _ => AuthoredType::Secret {},
                 }
             }
-            "type.list" | "type.option" | "type.stream" => {
+            "type.list" | "type.option" | "type.stream" | "type.owned-sequence" => {
                 check_fields(&record, &["as", "item"])?;
                 let item = Box::new(self.decode_type(required(&record, "item")?)?);
                 match record.operation.as_str() {
                     "type.list" => AuthoredType::List { item },
                     "type.option" => AuthoredType::Option { item },
+                    "type.owned-sequence" => AuthoredType::OwnedSequence { item },
                     _ => AuthoredType::Stream { item },
                 }
             }
@@ -5071,6 +5241,64 @@ impl Decoder {
                     choice_type: self.decode_type(required(&record, "type")?)?,
                     case: parse_name(&record, "case")?,
                     value: Box::new(self.decode_expression(required(&record, "value")?)?),
+                }
+            }
+            "expression.sequence-empty" => {
+                check_fields(&record, &["as", "type"])?;
+                AuthoredExpressionOperation::SequenceEmpty {
+                    sequence_type: self.decode_type(required(&record, "type")?)?,
+                }
+            }
+            "expression.sequence-length" | "expression.sequence-pop" => {
+                check_fields(&record, &["as", "type", "source"])?;
+                let sequence_type = self.decode_type(required(&record, "type")?)?;
+                let source = Box::new(self.decode_expression(required(&record, "source")?)?);
+                if record.operation == "expression.sequence-pop" {
+                    AuthoredExpressionOperation::SequencePop {
+                        sequence_type,
+                        source,
+                    }
+                } else {
+                    AuthoredExpressionOperation::SequenceLength {
+                        sequence_type,
+                        source,
+                    }
+                }
+            }
+            "expression.sequence-push" => {
+                check_fields(&record, &["as", "type", "value", "source"])?;
+                AuthoredExpressionOperation::SequencePush {
+                    sequence_type: self.decode_type(required(&record, "type")?)?,
+                    value: Box::new(self.decode_expression(required(&record, "value")?)?),
+                    source: Box::new(self.decode_expression(required(&record, "source")?)?),
+                }
+            }
+            "expression.borrow-owned-item" => {
+                check_fields(&record, &["as", "type", "source", "index", "body"])?;
+                let sequence_type = self.decode_type(required(&record, "type")?)?;
+                let index = Box::new(self.decode_expression(required(&record, "index")?)?);
+                let source = Box::new(self.decode_expression(required(&record, "source")?)?);
+                let mut edges = self.ordered_record_edges("expression.item-binding", symbol)?;
+                if edges.len() != 1 {
+                    return Err(field_error(
+                        &record,
+                        "as",
+                        "change_owned_borrow_binding",
+                        "owned item borrowing requires exactly one child binding",
+                    ));
+                }
+                let edge = edges.remove(0);
+                let binding = AuthoredBindingDefinition {
+                    symbol: symbol_field(&edge.record, "as")?,
+                    name: parse_name(&edge.record, "name")?,
+                    declared_type: Some(self.decode_type(required(&edge.record, "type")?)?),
+                };
+                AuthoredExpressionOperation::BorrowOwnedItem {
+                    sequence_type,
+                    source,
+                    index,
+                    binding: Box::new(binding),
+                    body: Box::new(self.decode_expression(required(&record, "body")?)?),
                 }
             }
             "expression.match-owned" | "expression.match-borrowed-owned" => {

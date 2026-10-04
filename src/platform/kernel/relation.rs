@@ -1005,7 +1005,12 @@ where
         | ExpressionOperation::BorrowOwnedField { .. }
         | ExpressionOperation::ChooseOwned { .. }
         | ExpressionOperation::MatchOwned { .. }
-        | ExpressionOperation::MatchBorrowedOwned { .. } => {}
+        | ExpressionOperation::MatchBorrowedOwned { .. }
+        | ExpressionOperation::SequenceEmpty { .. }
+        | ExpressionOperation::SequenceLength { .. }
+        | ExpressionOperation::SequencePush { .. }
+        | ExpressionOperation::SequencePop { .. }
+        | ExpressionOperation::BorrowOwnedItem { .. } => {}
     }
     Ok(())
 }

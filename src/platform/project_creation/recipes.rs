@@ -650,6 +650,9 @@ fn authored_type(
         TypeForm::F64 => AuthoredType::F64 {},
         TypeForm::ByteBuffer => AuthoredType::ByteBuffer {},
         TypeForm::OwnedI64Cell => AuthoredType::OwnedI64Cell {},
+        TypeForm::OwnedSequence { item } => AuthoredType::OwnedSequence {
+            item: Box::new(authored_type(interner, *item)?),
+        },
         TypeForm::OwnedChoice { cases } => AuthoredType::OwnedChoice {
             cases: cases
                 .iter()

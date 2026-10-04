@@ -255,6 +255,7 @@ pub(super) fn validate<R: SessionShapeRead>(
             | TypeForm::OwnedI64Cell
             | TypeForm::OwnedProduct { .. }
             | TypeForm::OwnedChoice { .. }
+            | TypeForm::OwnedSequence { .. }
             | TypeForm::CapabilityResource { .. }
             | TypeForm::Stream { .. }
             | TypeForm::Function { .. }
@@ -267,4 +268,60 @@ pub(super) fn validate<R: SessionShapeRead>(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::platform::kernel::TypeObjectInterner;
+
+    struct StateTypes(TypeObjectInterner);
+
+    impl SessionShapeRead for StateTypes {
+        fn type_object(&self, digest: TypeObjectDigest) -> Result<TypeObject, Diagnostic> {
+            self.0
+                .get(digest)
+                .cloned()
+                .ok_or_else(|| session_semantic("test_state_type", "state test type is absent"))
+        }
+
+        fn nominal_parameters(
+            &self,
+            _: DeclarationReference,
+        ) -> Result<Vec<TypeParameterId>, Diagnostic> {
+            unreachable!("structural state fixture has no nominal type")
+        }
+
+        fn nominal_shape(
+            &self,
+            _: DeclarationReference,
+        ) -> Result<SessionNominalShape, Diagnostic> {
+            unreachable!("structural state fixture has no nominal type")
+        }
+    }
+
+    #[test]
+    fn owned_sequence_state_rejects_direct_and_nested_custody() {
+        let mut types = TypeObjectInterner::default();
+        let cell = types.intern(TypeForm::OwnedI64Cell).unwrap();
+        let sequence = types
+            .intern(TypeForm::OwnedSequence { item: cell })
+            .unwrap();
+        let list = types.intern(TypeForm::List { item: sequence }).unwrap();
+        let record = types
+            .intern(TypeForm::StructuralRecord {
+                fields: vec![StructuralTypeField {
+                    name: Name::new("pending").unwrap(),
+                    ty: list,
+                }],
+            })
+            .unwrap();
+        let read = StateTypes(types);
+        for root in [sequence, list, record] {
+            assert_eq!(
+                validate(&read, root).unwrap_err().code,
+                "session_state_live_type"
+            );
+        }
+    }
 }

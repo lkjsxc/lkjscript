@@ -105,14 +105,31 @@ use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-20";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 20;
-pub const CLI_CONTRACT_VERSION: u16 = 38;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-21";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 21;
+pub const CLI_CONTRACT_VERSION: u16 = 39;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
 
 const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
+    ("sequence-empty", "(sequence-empty (type SEQUENCE))"),
+    (
+        "sequence-length",
+        "(sequence-length (type SEQUENCE) (local SOURCE))",
+    ),
+    (
+        "sequence-push",
+        "(sequence-push (type SEQUENCE) (local VALUE) (local SOURCE))",
+    ),
+    (
+        "sequence-pop",
+        "(sequence-pop (type SEQUENCE) (local SOURCE))",
+    ),
+    (
+        "borrow-owned-item",
+        "(borrow-owned-item (type SEQUENCE) (local SOURCE) (index EXPRESSION) (binding VIEW (type TYPE)) (in BODY))",
+    ),
     (
         "choose-owned",
         "(choose-owned (type TYPE) (case NAME) EXPRESSION)",
@@ -197,8 +214,8 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
 ];
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-function-definition-projection-14";
-pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 14;
+    "lkjscript-function-definition-projection-15";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 15;
 pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
 pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
 pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -4441,6 +4458,48 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Use a fixed nonempty set of named cases with at least one owned payload; consume an exact live local and cover every case exactly once with its annotated body-only binding.",
         ),
         diagnostic(
+            "kernel_owned_sequence",
+            DiagnosticClass::Semantic,
+            "An owned sequence violates its element, source, result envelope or scoped read contract.",
+            "Use an exact Owned element type, live correctly typed locals, and a lexical read binding matching that element; pop returns the exact empty/item custody envelope.",
+        ),
+        diagnostic(
+            "kernel_sequence_generation",
+            DiagnosticClass::Semantic,
+            "Sequence meaning is labeled with a predecessor source generation.",
+            "Author sequence meaning under Graph 25 and rebuild derived artifacts from accepted meaning.",
+        ),
+        diagnostic(
+            "kernel_sequence_type_tag",
+            DiagnosticClass::Corrupt,
+            "An owned sequence type envelope contains an unsupported tag.",
+            "Preserve the input and regenerate canonical meaning through current authoring.",
+        ),
+        diagnostic(
+            "compiler_sequence_type",
+            DiagnosticClass::Corrupt,
+            "A sequence operation has no exact sequence type during lowering.",
+            "Preserve the rejected input and rebuild from validated accepted meaning.",
+        ),
+        diagnostic(
+            "compiler_sequence_result_type",
+            DiagnosticClass::Corrupt,
+            "A sequence pop result differs from its exact empty/item custody envelope.",
+            "Preserve the sequence in both outcomes and the exact element type in the item product.",
+        ),
+        diagnostic(
+            "compiler_unit_sequence_local",
+            DiagnosticClass::Corrupt,
+            "A compiled sequence operand references an invalid local slot.",
+            "Preserve the rejected compiled unit and rebuild from accepted meaning.",
+        ),
+        diagnostic(
+            "change_authored_sequence_type",
+            DiagnosticClass::Semantic,
+            "A sequence proposal does not identify its exact owned sequence type.",
+            "Supply (type (owned-sequence TYPE)) with an eligible Owned element and preserve its exact argument and result bindings.",
+        ),
+        diagnostic(
             "kernel_choice_generation",
             DiagnosticClass::Semantic,
             "A predecessor graph, owner or package contains an owned choice in its type closure.",
@@ -4625,6 +4684,18 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Semantic,
             "A read index is outside the buffer octets.",
             "Guard with buffer-length and a nonnegative index.",
+        ),
+        diagnostic(
+            "normalized_sequence_index",
+            DiagnosticClass::Semantic,
+            "An owned sequence read index is negative or outside its elements.",
+            "Use sequence-length and guard the I64 index before entering a scoped item read.",
+        ),
+        diagnostic(
+            "normalized_sequence_storage",
+            DiagnosticClass::Resource,
+            "Owned sequence growth exceeded finite item or modeled storage bounds, or allocation failed.",
+            "Reduce the sequence workload or selected allocation policy; cleanup does not undo completed effects.",
         ),
         diagnostic(
             "normalized_buffer_storage",
@@ -8641,7 +8712,7 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         ),
         (
             "types",
-            "Unit|Bool|I64|F64|Text|Bytes|StaticText|Secret|ByteBuffer|OwnedI64Cell|NAME|(NAME TYPE...)|(list TYPE)|(map TYPE TYPE)|(result TYPE TYPE)|(option TYPE)|(stream TYPE)|(record (NAME TYPE)...)|(owned-product (field NAME TYPE)...)|(owned-choice (case NAME TYPE)...)|(function (TYPE...) TYPE)|(task-function (TYPE...) TYPE ROW)|(resource INTERFACE)|(parameter-type EXACT_PARAMETER)",
+            "Unit|Bool|I64|F64|Text|Bytes|StaticText|Secret|ByteBuffer|OwnedI64Cell|NAME|(NAME TYPE...)|(list TYPE)|(map TYPE TYPE)|(result TYPE TYPE)|(option TYPE)|(stream TYPE)|(record (NAME TYPE)...)|(owned-product (field NAME TYPE)...)|(owned-choice (case NAME TYPE)...)|(owned-sequence TYPE)|(function (TYPE...) TYPE)|(task-function (TYPE...) TYPE ROW)|(resource INTERFACE)|(parameter-type EXACT_PARAMETER)",
             "Inline composition; (type-alias NAME TYPE) is scoped notation and is admitted even when unused.",
         ),
         (
@@ -8792,6 +8863,16 @@ fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String
             "owned-child-read-scope",
             "(borrow-owned-field (type PRODUCT) (local SOURCE) (field NAME (binding VIEW (type TYPE))) (in BODY))",
             "one exact direct owned product field becomes a scoped read view; SOURCE is a live owning or borrowed local; the exact child annotation and all ancestor loans remain checked through BODY; nested inspection and explicit borrow calls are allowed; consumption, escape, capture, storage and task transfer reject; the original source remains available after the scope",
+        ),
+        (
+            "owned-sequence",
+            "(owned-sequence TYPE)",
+            "runtime-sized affine sequence of exact owned elements, including when empty; sequence-empty constructs, sequence-length borrows, sequence-push consumes VALUE then SOURCE and appends, sequence-pop consumes SOURCE and returns owned-choice empty:SEQUENCE or item:owned-product rest:SEQUENCE,value:TYPE; pop preserves reusable sequence capacity; allocation and cancellation failures release custody without rollback",
+        ),
+        (
+            "owned-item-read-scope",
+            "(borrow-owned-item (type SEQUENCE) (local SOURCE) (index EXPRESSION) (binding VIEW (type TYPE)) (in BODY))",
+            "evaluate the I64 index once before acquiring the exact source and ancestor loans; negative or out-of-range indices trap; VIEW has only lexical read rights and cannot escape, be consumed, stored or transferred; retain scope custody through all exits and release internal storage locks before BODY",
         ),
         (
             "borrowed-owned-choice-scope",
@@ -9418,9 +9499,9 @@ mod tests {
             .expect("definition projection contract");
         assert_eq!(
             contract.identity,
-            "lkjscript-function-definition-projection-14"
+            "lkjscript-function-definition-projection-15"
         );
-        assert_eq!(contract.version, 14);
+        assert_eq!(contract.version, 15);
         assert_eq!(
             contract_descriptors()
                 .iter()

@@ -833,6 +833,7 @@ fn append_type(
         | TypeForm::Text
         | TypeForm::StaticText
         | TypeForm::Secret
+        | TypeForm::OwnedSequence { .. }
         | TypeForm::List { .. }
         | TypeForm::Map { .. }
         | TypeForm::Option { .. }
@@ -913,7 +914,10 @@ fn append_type(
                 append_type(standard, &child, field.ty, records, depth + 1)?;
             }
         }
-        TypeForm::List { item } | TypeForm::Option { item } | TypeForm::Stream { item } => {
+        TypeForm::List { item }
+        | TypeForm::Option { item }
+        | TypeForm::Stream { item }
+        | TypeForm::OwnedSequence { item } => {
             append_type(standard, &format!("{path}.item"), *item, records, depth + 1)?;
         }
         TypeForm::Map { key, value } => {
@@ -1044,6 +1048,7 @@ fn type_form_name(form: &TypeForm) -> &'static str {
         TypeForm::OwnedI64Cell => "owned-i64-cell",
         TypeForm::OwnedProduct { .. } => "owned-product",
         TypeForm::OwnedChoice { .. } => "owned-choice",
+        TypeForm::OwnedSequence { .. } => "owned-sequence",
         TypeForm::Bytes => "bytes",
         TypeForm::Text => "text",
         TypeForm::StaticText => "static-text",

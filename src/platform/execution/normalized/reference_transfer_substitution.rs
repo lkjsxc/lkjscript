@@ -56,6 +56,7 @@ impl Search<'_> {
         Ok(match (&source.form, &target.form) {
             (TypeForm::List { item: a }, TypeForm::List { item: b })
             | (TypeForm::Option { item: a }, TypeForm::Option { item: b })
+            | (TypeForm::OwnedSequence { item: a }, TypeForm::OwnedSequence { item: b })
             | (TypeForm::Stream { item: a }, TypeForm::Stream { item: b }) => {
                 self.same(*a, *b, depth + 1)?
             }
@@ -380,5 +381,39 @@ mod tests {
             bindings.values().next().copied().unwrap()
         );
         assert_eq!(search.remaining, 0);
+    }
+
+    #[test]
+    fn reference_sequence_substitution_preserves_exact_element_identity() {
+        let mut schema = NormalizedReferenceSchema::default();
+        let parameter = TypeParameterId::from_bytes([98; 16]).unwrap();
+        let symbolic = intern(&mut schema, TypeForm::TypeParameter { parameter });
+        let cell = intern(&mut schema, TypeForm::OwnedI64Cell);
+        let buffer = intern(&mut schema, TypeForm::ByteBuffer);
+        let template = intern(&mut schema, TypeForm::OwnedSequence { item: symbolic });
+        let concrete = intern(&mut schema, TypeForm::OwnedSequence { item: cell });
+        let other = intern(&mut schema, TypeForm::OwnedSequence { item: buffer });
+        let control = ExecutionControl::uncancelled();
+        assert_eq!(
+            schema
+                .transfer_type_identity(template, &BTreeMap::from([(parameter, cell)]), &control)
+                .unwrap(),
+            concrete
+        );
+        assert_eq!(
+            schema
+                .transfer_type_identity(template, &BTreeMap::from([(parameter, buffer)]), &control)
+                .unwrap(),
+            other
+        );
+        assert!(
+            schema
+                .transfer_type_identity(template, &BTreeMap::new(), &control)
+                .is_err()
+        );
+        assert_eq!(
+            schema.instantiated_identity(template, &BTreeMap::from([(parameter, cell)]), 0),
+            Some(concrete)
+        );
     }
 }

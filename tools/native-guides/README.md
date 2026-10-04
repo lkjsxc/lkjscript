@@ -126,7 +126,10 @@ pages through public capabilities. The native program remains their content owne
 The [current release notes](../../docs/releases/v0.1.69.md) identify the selected
 compatibility boundary; [status](../../docs/status.md) owns actual acceptance.
 
-The current derived bundle uses compiler 23, bytecode 18 and artifact 30:
-`artifact_bundle_c236b0b1de61547dae47482df4203ea355cc7957a4bb46dd85e66352b02710dd`,
-1,178,021 bytes. Public check/build preserves the accepted native HEAD and its exact
-supplier; all 79 native and supplier tests agree between the two evaluators.
+The current derived bundle uses compiler 25, bytecode 20 and artifact 32:
+`artifact_bundle_f13a95181ee22c77fd76663a1fd3a5330babb4ca064464415e9fc4ea4d799962`,
+1,178,035 bytes. The [canonical edit](requests/20261004-structural-forms.lkjc)
+replaces a stale structural-form count with “All supported structural forms”,
+updating exactly one Text expression while preserving owner identities and the exact
+standard supplier. Public check/build runs all 79 native and supplier tests with
+agreement between the two evaluators.

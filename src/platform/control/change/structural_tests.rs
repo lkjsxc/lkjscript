@@ -800,6 +800,107 @@ fn flat_owned_borrow_preflight_admits_complete_source_and_arm_dependencies() {
 }
 
 #[test]
+fn structural_owned_sequence_forms_match_independent_flat_requests() {
+    let header = format!("request base={}\n", RevisionId::from_digest([7; 32]));
+    let declarations = format!(
+        "{}type.owned-sequence as=@Sequence item=@Payload\n",
+        owned_borrow_declarations("@Sequence"),
+    );
+    for (flat, structural) in [
+        (
+            "expression.sequence-empty as=$body type=@Sequence\n",
+            "(sequence-empty (type @Sequence))",
+        ),
+        (
+            "expression.sequence-length as=$body type=@Sequence source=$input\nexpression.local as=$input value=$source\n",
+            "(sequence-length (type @Sequence) (local $source))",
+        ),
+        (
+            "expression.sequence-push as=$body type=@Sequence value=$value source=$input\nexpression.local as=$value value=$source\nexpression.local as=$input value=$source\n",
+            "(sequence-push (type @Sequence) (local $source) (local $source))",
+        ),
+        (
+            "expression.sequence-pop as=$body type=@Sequence source=$input\nexpression.local as=$input value=$source\n",
+            "(sequence-pop (type @Sequence) (local $source))",
+        ),
+        (
+            "expression.borrow-owned-item as=$body type=@Sequence source=$input index=$index body=$read\nexpression.item-binding parent=$body index=0 as=$view name=view type=@Payload\nexpression.local as=$input value=$source\nexpression.i64 as=$index value=2\nexpression.local as=$read value=$view\n",
+            "(borrow-owned-item (type @Sequence) (local $source) (index (i64 2)) (binding view (as $view) (type @Payload)) (in (local view)))",
+        ),
+    ] {
+        let (_, decoded) = assert_intent_pair(
+            &format!("{header}{flat}{declarations}"),
+            &format!(
+                "{header}expression.block as=$body\n{structural}\nexpression.end\n{declarations}"
+            ),
+        );
+        if let AuthoredChange::CreateFunction { body, .. } = &decoded.semantic.changes[1]
+            && let AuthoredExpressionOperation::BorrowOwnedItem { binding, body, .. } =
+                &body.operation
+        {
+            assert_eq!(binding.symbol, "$view");
+            assert!(
+                matches!(&body.operation, AuthoredExpressionOperation::Local {
+                value: AuthoredLocalReference::Symbol { symbol }
+            } if symbol == &binding.symbol)
+            );
+        }
+    }
+}
+
+#[test]
+fn structural_owned_item_binding_is_private_to_body_and_does_not_shadow_index_or_source() {
+    let declarations = format!(
+        "{}type.owned-sequence as=@Sequence item=@Payload\n",
+        owned_borrow_declarations("@Sequence"),
+    );
+    let source = format!(
+        "request base={}\nexpression.block as=$body\n(let (binding view (i64 4)) (in (borrow-owned-item (type @Sequence) (local $source) (index (local view)) (binding view (type @Payload)) (in (local view)))))\nexpression.end\n{declarations}",
+        RevisionId::from_digest([7; 32]),
+    );
+    let decoded = decode("item-shadowing.lkjc", &source);
+    let AuthoredChange::CreateFunction { body, .. } = &decoded.semantic.changes[1] else {
+        panic!("reader");
+    };
+    let AuthoredExpressionOperation::Let { bindings, body } = &body.operation else {
+        panic!("outer binding");
+    };
+    let AuthoredExpressionOperation::BorrowOwnedItem {
+        index,
+        binding,
+        body,
+        ..
+    } = &body.operation
+    else {
+        panic!("item scope");
+    };
+    assert_ne!(binding.symbol, bindings[0].symbol);
+    assert!(
+        matches!(&index.operation, AuthoredExpressionOperation::Local {
+        value: AuthoredLocalReference::Symbol { symbol }
+    } if symbol == &bindings[0].symbol)
+    );
+    assert!(
+        matches!(&body.operation, AuthoredExpressionOperation::Local {
+        value: AuthoredLocalReference::Symbol { symbol }
+    } if symbol == &binding.symbol)
+    );
+
+    for body in [
+        "(borrow-owned-item (type @Sequence) (local $source) (index (local view)) (binding view (type @Payload)) (in (unit)))",
+        "(sequence (borrow-owned-item (type @Sequence) (local $source) (index (i64 0)) (binding view (type @Payload)) (in (unit))) (local view))",
+        "(borrow-owned-item (type @Sequence) (local $source) (i64 0) (binding view (type @Payload)) (in (unit)))",
+        "(borrow-owned-item (type @Sequence) (local $source) (index (i64 0)) (binding view) (in (unit)))",
+    ] {
+        let malformed = format!(
+            "request base={}\nexpression.block as=$body\n{body}\nexpression.end\n{declarations}",
+            RevisionId::from_digest([7; 32]),
+        );
+        assert!(decode_compact_change("bad-item-scope.lkjc", malformed.as_bytes()).is_err());
+    }
+}
+
+#[test]
 fn transaction_outcome_rejects_wrong_nominal_authority_body_type_and_missing_operation_before_acceptance()
  {
     let temporary = tempfile::tempdir().unwrap();

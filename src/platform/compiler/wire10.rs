@@ -677,6 +677,11 @@ impl TryFrom<CompiledInstruction> for CompiledInstruction10 {
             | CompiledInstruction::BorrowOwnedField { .. }
             | CompiledInstruction::MatchBorrowedOwned { .. }
             | CompiledInstruction::EndOwnedBorrow { .. }
+            | CompiledInstruction::SequenceEmpty { .. }
+            | CompiledInstruction::SequenceLength { .. }
+            | CompiledInstruction::SequencePush { .. }
+            | CompiledInstruction::SequencePop { .. }
+            | CompiledInstruction::BorrowOwnedItem { .. }
             | CompiledInstruction::MatchOwned { .. } => return Err(extension()),
         })
     }

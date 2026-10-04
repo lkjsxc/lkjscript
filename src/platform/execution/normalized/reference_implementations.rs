@@ -56,6 +56,7 @@ impl ReferenceState<'_> {
                     | TypeForm::OwnedI64Cell
                     | TypeForm::OwnedProduct { .. }
                     | TypeForm::OwnedChoice { .. }
+                    | TypeForm::OwnedSequence { .. }
             )
         ) {
             return Err(reference_type_error("implementation has a non-owned Self"));
@@ -420,6 +421,7 @@ impl ReferenceState<'_> {
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
                 | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. }
                 | TypeForm::Secret
                 | TypeForm::Stream { .. } => return Ok(false),
                 TypeForm::StructuralRecord { fields } => fields.len(),
@@ -459,6 +461,7 @@ impl ReferenceState<'_> {
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
                 | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. }
                 | TypeForm::Secret
                 | TypeForm::Stream { .. } => return Ok(false),
                 TypeForm::TypeParameter { parameter } => {

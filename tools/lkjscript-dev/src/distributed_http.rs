@@ -1209,8 +1209,8 @@ fn run_workflow(
         isolated_root,
     )?;
     let check_records = compact_records("check", &checked.stdout)?;
-    // The current standard contributes 89 tests; the HTTP recipe contributes one.
-    require_field(&check_records, "tests", "passed", "90")?;
+    // The current standard contributes 96 tests; the HTTP recipe contributes one.
+    require_field(&check_records, "tests", "passed", "97")?;
     require_field(&check_records, "tests", "failed", "0")?;
     require_field(&check_records, "tests", "differential", "equal")?;
     let check_compilation = compiler_observation(&check_records)?;
@@ -2585,12 +2585,12 @@ fn project_function_definition(
         )?;
         require_exact(
             required_field(projection, "contract")?,
-            "lkjscript-function-definition-projection-14",
+            "lkjscript-function-definition-projection-15",
             "definition contract",
         )?;
         require_exact(
             required_field(projection, "version")?,
-            "14",
+            "15",
             "definition version",
         )?;
         let digest = required_field(projection, "digest")?.to_owned();

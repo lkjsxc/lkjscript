@@ -22,6 +22,8 @@ mod object;
 mod owned_choice;
 mod owned_i64_cell;
 mod owned_product;
+mod owned_sequence;
+mod owned_storage;
 mod parallel;
 mod password;
 mod prepare;

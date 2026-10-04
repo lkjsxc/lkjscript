@@ -920,7 +920,8 @@ pub(crate) fn aggregation_children(
                 )
             }));
             match &record.operation {
-                ExpressionOperation::BorrowOwnedField { binding, .. } => children.push((
+                ExpressionOperation::BorrowOwnedField { binding, .. }
+                | ExpressionOperation::BorrowOwnedItem { binding, .. } => children.push((
                     OwnershipRole::ExpressionBinding {
                         role: BindingContainerRole::OwnedBorrow,
                         ordinal: 0,

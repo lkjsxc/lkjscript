@@ -1787,10 +1787,18 @@ fn canonical_kernel_codec_manifest_is_frozen() {
     let (mut snapshot, _) = historical_prototype_snapshot();
     assert_eq!(
         manifest(&snapshot, contract::GRAPH_CONTRACT_IDENTITY),
-        "c2b40dac1f262ac83cb44b552d02ebaae616258b946314ef734d0f1104a4dd7e"
+        "00b10b6ede010be8c55d992fbbc70448ee3548bbe3b0829e99d5a15f46448dc6"
     );
     // The current identity and owner envelopes advance together. Keep the previous
     // golden under its original generation instead of relabeling its bytes.
+    snapshot.root.graph_contract_version = 24;
+    for owner in snapshot.owners.values_mut() {
+        owner.set_encoding_for_edit(24);
+    }
+    assert_eq!(
+        manifest(&snapshot, "lkjscript-meaning-graph-24"),
+        "c2b40dac1f262ac83cb44b552d02ebaae616258b946314ef734d0f1104a4dd7e"
+    );
     snapshot.root.graph_contract_version = 23;
     for owner in snapshot.owners.values_mut() {
         owner.set_encoding_for_edit(23);

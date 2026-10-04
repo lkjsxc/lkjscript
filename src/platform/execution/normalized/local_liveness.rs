@@ -24,7 +24,9 @@ enum Edges<'a> {
 
 struct Flow<'a> {
     read: Option<u32>,
+    read_extra: Option<u32>,
     write: Option<u32>,
+    write_extra: Option<u32>,
     writes: &'a [u32],
     edges: Edges<'a>,
 }
@@ -34,6 +36,10 @@ fn flow(instruction: &I) -> Flow<'_> {
     // be classified when an instruction is added. A derived move is still a read.
     let (read, write, edges) = match instruction {
         I::LoadLocal { local, .. } | I::MoveLocal(local) => (Some(*local), None, Edges::Next),
+        I::SequenceLength { source_local, .. } => (Some(*source_local), None, Edges::Next),
+        I::SequencePush { source_local, .. } | I::SequencePop { source_local, .. } => {
+            (Some(*source_local), Some(*source_local), Edges::Next)
+        }
         I::StoreLocal(local) => (None, Some(*local), Edges::Next),
         // Begin observes the old slot's emptiness before defining its token.
         // Moving an earlier value must not turn that guard into acceptance.
@@ -53,6 +59,11 @@ fn flow(instruction: &I) -> Flow<'_> {
             source_local,
             binding_local,
             ..
+        }
+        | I::BorrowOwnedItem {
+            source_local,
+            binding_local,
+            ..
         } => (Some(*source_local), Some(*binding_local), Edges::Next),
         I::MatchBorrowedOwned {
             source_local,
@@ -65,6 +76,7 @@ fn flow(instruction: &I) -> Flow<'_> {
         // Without callee proof, preserve the possible continuation's live values.
         I::TailInvoke { .. } => (None, None, Edges::Next),
         I::Unit
+        | I::SequenceEmpty { .. }
         | I::ChooseOwned { .. }
         | I::PackOwned { .. }
         | I::UnpackOwned { .. }
@@ -97,7 +109,17 @@ fn flow(instruction: &I) -> Flow<'_> {
     };
     Flow {
         read,
+        read_extra: match instruction {
+            I::SequencePush { value_local, .. } => Some(*value_local),
+            I::BorrowOwnedField { binding_local, .. }
+            | I::BorrowOwnedItem { binding_local, .. } => Some(*binding_local),
+            _ => None,
+        },
         write,
+        write_extra: match instruction {
+            I::SequencePush { value_local, .. } => Some(*value_local),
+            _ => None,
+        },
         writes,
         edges,
     }
@@ -115,7 +137,15 @@ fn validate(code: &NormalizedCode, work: &mut Budget<'_>) -> Result<bool, Diagno
     for (pc, instruction) in code.instructions.iter().enumerate() {
         work.step()?;
         let access = flow(instruction);
-        for operand in [access.read, access.write].into_iter().flatten() {
+        for operand in [
+            access.read,
+            access.read_extra,
+            access.write,
+            access.write_extra,
+        ]
+        .into_iter()
+        .flatten()
+        {
             local(code, operand)?;
         }
         for operand in access.writes {
@@ -283,14 +313,25 @@ pub(super) fn derive_with_limits(
                 let Some(out) = live.outgoing(access.edges, pc, word, &mut meter, work)? else {
                     return Ok(false);
                 };
-                let mut kills = mask(access.write, word);
+                let mut kills = mask(access.write, word) | mask(access.write_extra, word);
                 for local in access.writes {
                     if !meter.step(work)? {
                         return Ok(false);
                     }
                     kills |= mask(Some(*local), word);
                 }
-                let before = (out & !kills) | mask(access.read, word);
+                let mut reads = mask(access.read, word) | mask(access.read_extra, word);
+                // A borrowed choice checks the selected destination's prior occupancy
+                // before replacing it. Preserve every possible selected guard.
+                if let Edges::BorrowedChoice(cases) = access.edges {
+                    for case in cases {
+                        if !meter.step(work)? {
+                            return Ok(false);
+                        }
+                        reads |= mask(Some(case.binding_local), word);
+                    }
+                }
+                let before = (out & !kills) | reads;
                 let slot = &mut live.before[pc * words + word];
                 changed |= *slot != before;
                 *slot = before;

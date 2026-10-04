@@ -436,6 +436,11 @@ fn visit_expression(
         | ExpressionOperation::ChooseOwned { .. }
         | ExpressionOperation::MatchOwned { .. }
         | ExpressionOperation::BorrowOwnedField { .. }
+        | ExpressionOperation::SequenceEmpty { .. }
+        | ExpressionOperation::SequenceLength { .. }
+        | ExpressionOperation::SequencePush { .. }
+        | ExpressionOperation::SequencePop { .. }
+        | ExpressionOperation::BorrowOwnedItem { .. }
         | ExpressionOperation::MatchBorrowedOwned { .. } => {
             panic!("owned products are outside the ordinary web template projection");
         }

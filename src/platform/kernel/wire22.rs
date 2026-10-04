@@ -604,6 +604,17 @@ impl TryFrom<ExpressionOperation> for ExpressionOperation22 {
                 arms,
             },
             ExpressionOperation::Parallel { left, right } => Self::Parallel { left, right },
+            ExpressionOperation::SequenceEmpty { .. }
+            | ExpressionOperation::SequenceLength { .. }
+            | ExpressionOperation::SequencePush { .. }
+            | ExpressionOperation::SequencePop { .. }
+            | ExpressionOperation::BorrowOwnedItem { .. } => {
+                return Err(crate::platform::diagnostic::Diagnostic::new(
+                    crate::platform::diagnostic::DiagnosticClass::Source,
+                    "kernel_sequence_generation",
+                    "owned sequences require Graph 25",
+                ));
+            }
             ExpressionOperation::BorrowOwnedField { .. }
             | ExpressionOperation::MatchBorrowedOwned { .. } => {
                 return Err(crate::platform::diagnostic::Diagnostic::new(

@@ -320,6 +320,9 @@ impl NormalizedReferenceSchema {
                 let resolved = substitutions.get(parameter)?;
                 return self.types.contains_key(resolved).then_some(*resolved);
             }
+            TypeForm::OwnedSequence { item } => TypeForm::OwnedSequence {
+                item: descend(*item)?,
+            },
             TypeForm::OwnedChoice { cases } => TypeForm::OwnedChoice {
                 cases: cases
                     .iter()

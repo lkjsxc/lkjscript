@@ -459,7 +459,7 @@ fn parallel_successor_rebuilds_supported_graph_20_meaning() {
     }
     crate::platform::kernel::validate_full(&source).unwrap();
     let loaded = artifact_for_source(&source);
-    assert_eq!(loaded.manifest.graph_contract_version, 24);
+    assert_eq!(loaded.manifest.graph_contract_version, 25);
     // The transport producer can also remain at Graph 20 around old source.
     load_artifact(&rehash_logical_generation(&loaded, 20, 20)).unwrap();
 }

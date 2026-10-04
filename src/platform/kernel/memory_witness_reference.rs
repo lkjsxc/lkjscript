@@ -247,6 +247,7 @@ impl Oracle<'_> {
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
                 | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. }
                 | TypeForm::Secret
                 | TypeForm::Stream { .. } => return false,
                 TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
@@ -387,12 +388,17 @@ impl Oracle<'_> {
                         | TypeForm::OwnedI64Cell
                         | TypeForm::OwnedProduct { .. }
                         | TypeForm::OwnedChoice { .. }
+                        | TypeForm::OwnedSequence { .. }
                 )
             )
             || i.methods.windows(2).any(|w| w[0].method >= w[1].method)
             || matches!(
                 self.form(i.self_type),
-                Some(TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. })
+                Some(
+                    TypeForm::OwnedProduct { .. }
+                        | TypeForm::OwnedChoice { .. }
+                        | TypeForm::OwnedSequence { .. },
+                )
             ) && !Oracle(self.0, None).product_shape(i.self_type)
         {
             return false;

@@ -1211,6 +1211,216 @@ impl ReferenceState<'_> {
         }
     }
 
+    fn sequence_item_type(
+        &mut self,
+        sequence_type: TypeObjectDigest,
+    ) -> Result<(TypeObjectDigest, TypeObjectDigest), ExecutionError> {
+        let ty = self.resolve_type_arguments(&[sequence_type])?[0];
+        let Some(TypeForm::OwnedSequence { item }) =
+            self.schema.types.get(&ty).map(|object| &object.form)
+        else {
+            return Err(reference_type_error(
+                "sequence requires a closed owned sequence type",
+            ));
+        };
+        let item = *item;
+        if direct_memory_type(&self.schema, item, &BTreeMap::new(), self.control)?.is_none() {
+            return Err(reference_type_error("sequence element must be owned"));
+        }
+        Ok((ty, item))
+    }
+
+    fn sequence_pop_types(
+        &mut self,
+        sequence: TypeObjectDigest,
+        item: TypeObjectDigest,
+        result_type: TypeObjectDigest,
+    ) -> Result<(TypeObjectDigest, TypeObjectDigest), ExecutionError> {
+        let result = self.resolve_type_arguments(&[result_type])?[0];
+        let Some(TypeForm::OwnedChoice { cases }) =
+            self.schema.types.get(&result).map(|object| &object.form)
+        else {
+            return Err(reference_type_error(
+                "sequence pop requires its exact owned result choice",
+            ));
+        };
+        if cases.len() != 2
+            || cases[0].name.as_str() != "empty"
+            || cases[0].ty != sequence
+            || cases[1].name.as_str() != "item"
+        {
+            return Err(reference_type_error(
+                "sequence pop result cases disagree with its sequence",
+            ));
+        }
+        let product = cases[1].ty;
+        let Some(TypeForm::OwnedProduct { fields }) =
+            self.schema.types.get(&product).map(|object| &object.form)
+        else {
+            return Err(reference_type_error(
+                "sequence pop item case requires an owned product",
+            ));
+        };
+        if fields.len() != 2
+            || fields[0].name.as_str() != "rest"
+            || fields[0].ty != sequence
+            || fields[1].name.as_str() != "value"
+            || fields[1].ty != item
+        {
+            return Err(reference_type_error(
+                "sequence pop item fields disagree with its element type",
+            ));
+        }
+        Ok((result, product))
+    }
+
+    fn consume_sequence_local(
+        &mut self,
+        source: ExpressionId,
+        locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
+    ) -> Result<CheckedValue, ExecutionError> {
+        if !matches!(
+            self.owner(OwnerKey::Expression(source))?,
+            Some(OwnerRecord::Expression(record))
+                if matches!(record.operation, ExpressionOperation::Local { .. })
+        ) {
+            return Err(reference_type_error(
+                "sequence consumption requires an exact owning local",
+            ));
+        }
+        self.evaluate_with_use(source, locals, ParameterUse::Consume)
+    }
+
+    fn bind_owned_choice(
+        &mut self,
+        choice_type: TypeObjectDigest,
+        source: ExpressionId,
+        arms: &[crate::platform::kernel::OwnedChoiceArm],
+        locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
+    ) -> Result<(ExpressionId, LocalValueReference), ExecutionError> {
+        let ty = self.resolve_type_arguments(&[choice_type])?[0];
+        let Some(TypeForm::OwnedChoice { cases }) =
+            self.schema.types.get(&ty).map(|object| &object.form)
+        else {
+            return Err(reference_type_error(
+                "owned match requires a closed owned choice type",
+            ));
+        };
+        if cases.len() != arms.len()
+            || cases
+                .iter()
+                .zip(arms)
+                .any(|(case, arm)| case.name != arm.name)
+        {
+            return Err(reference_type_error("owned match case coverage mismatch"));
+        }
+        self.charge_allocation(
+            (std::mem::size_of::<LocalValueReference>() + std::mem::size_of::<CheckedValue>())
+                as u64,
+        )?;
+        self.control.check()?;
+        let NormalizedValue::OwnedChoice(token) = self.evaluate(source, locals)?.release() else {
+            return Err(reference_type_error("owned match requires a choice token"));
+        };
+        let (selected, payload) = token.select(self.memory_domain, ty, self.control)?;
+        let arm = arms
+            .get(selected as usize)
+            .ok_or_else(|| reference_type_error("invalid selected choice arm"))?;
+        let TypeForm::OwnedChoice { cases } = &self.schema.types[&ty].form else {
+            return Err(reference_type_error("missing choice shape"));
+        };
+        let payload_type = cases[selected as usize].ty;
+        let binding = self.binding(arm.binding, BindingKind::OwnedChoicePayload)?;
+        let declared = binding
+            .declared_type
+            .ok_or_else(|| reference_type_error("owned choice binding lacks type"))?;
+        if self.resolve_type_arguments(&[declared])?[0] != payload_type {
+            return Err(reference_type_error("owned choice payload type mismatch"));
+        }
+        let local = LocalValueReference::LexicalBinding(arm.binding);
+        if locals.contains_key(&local) {
+            return Err(reference_type_error(
+                "owned choice binding aliases a live local",
+            ));
+        }
+        let payload = self.product_child(payload, payload_type)?;
+        locals.insert(local, payload);
+        Ok((arm.body, local))
+    }
+
+    fn bind_owned_product(
+        &mut self,
+        product_type: TypeObjectDigest,
+        source: ExpressionId,
+        fields: &[crate::platform::kernel::OwnedProductBinding],
+        locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
+    ) -> Result<(), ExecutionError> {
+        let ty = self.resolve_type_arguments(&[product_type])?[0];
+        let Some(TypeForm::OwnedProduct { fields: expected }) =
+            self.schema.types.get(&ty).map(|o| &o.form)
+        else {
+            return Err(reference_type_error(
+                "unpack requires a closed product type",
+            ));
+        };
+        if expected.len() != fields.len()
+            || expected.iter().zip(fields).any(|(a, b)| a.name != b.name)
+        {
+            return Err(reference_type_error("unpack field coverage mismatch"));
+        }
+        if fields
+            .iter()
+            .any(|field| locals.contains_key(&LocalValueReference::LexicalBinding(field.binding)))
+        {
+            return Err(reference_type_error("duplicate unpack local"));
+        }
+        self.charge_allocation(super::value::collection_storage_bytes(
+            fields.len() as u64,
+            (std::mem::size_of::<LocalValueReference>() + std::mem::size_of::<CheckedValue>())
+                as u64,
+            "normalized_product_allocation",
+        )?)?;
+        self.control.check()?;
+        let NormalizedValue::OwnedProduct(token) = self.evaluate(source, locals)?.release() else {
+            return Err(reference_type_error("unpack requires product token"));
+        };
+        let values = token.unpack(self.memory_domain, ty, self.control)?;
+        if values.len() != fields.len() {
+            return Err(reference_type_error("product storage count mismatch"));
+        }
+        let mut bound = 0;
+        let result = (|| {
+            for (index, (field, value)) in fields.iter().zip(values).enumerate() {
+                let TypeForm::OwnedProduct { fields: expected } = &self.schema.types[&ty].form
+                else {
+                    return Err(reference_type_error("missing product shape"));
+                };
+                let expected = expected[index].ty;
+                let binding = self.binding(field.binding, BindingKind::OwnedUnpack)?;
+                let declared = binding
+                    .declared_type
+                    .ok_or_else(|| reference_type_error("unpack binding lacks type"))?;
+                if self.resolve_type_arguments(&[declared])?[0] != expected {
+                    return Err(reference_type_error("unpack local type mismatch"));
+                }
+                let value = self.product_child(value, expected)?;
+                let local = LocalValueReference::LexicalBinding(field.binding);
+                if locals.contains_key(&local) {
+                    return Err(reference_type_error("duplicate unpack local"));
+                }
+                locals.insert(local, value);
+                bound += 1;
+            }
+            Ok(())
+        })();
+        if result.is_err() {
+            for field in &fields[..bound] {
+                locals.remove(&LocalValueReference::LexicalBinding(field.binding));
+            }
+        }
+        result
+    }
+
     fn borrow_parent(
         &mut self,
         source: ExpressionId,
@@ -1587,6 +1797,7 @@ impl ReferenceState<'_> {
                         | TypeForm::OwnedI64Cell
                         | TypeForm::OwnedProduct { .. }
                         | TypeForm::OwnedChoice { .. }
+                        | TypeForm::OwnedSequence { .. }
                 )
             );
             if owned != constraint.has_owned()
@@ -1934,6 +2145,23 @@ impl ReferenceState<'_> {
                     }
                     expression = arm.body;
                 }
+                ExpressionOperation::MatchOwned {
+                    choice_type,
+                    source,
+                    arms,
+                } => {
+                    let (body, _) = self.bind_owned_choice(choice_type, source, &arms, locals)?;
+                    expression = body;
+                }
+                ExpressionOperation::UnpackOwned {
+                    product_type,
+                    source,
+                    fields,
+                    body,
+                } => {
+                    self.bind_owned_product(product_type, source, &fields, locals)?;
+                    expression = body;
+                }
                 ExpressionOperation::ImplementationCall {
                     function,
                     type_arguments,
@@ -2163,6 +2391,124 @@ impl ReferenceState<'_> {
         )?;
         match operation {
             ExpressionOperation::Parallel { left, right } => self.parallel(left, right, locals),
+            ExpressionOperation::SequenceEmpty { sequence_type } => {
+                let (ty, _) = self.sequence_item_type(sequence_type)?;
+                let control = self.control;
+                let token = super::owned_sequence::OwnedSequence::create(
+                    self.memory_domain,
+                    ty,
+                    control,
+                    &mut |bytes| self.charge_allocation(bytes),
+                )?;
+                CheckedValue::memory(&self.schema, NormalizedValue::OwnedSequence(token))
+            }
+            ExpressionOperation::SequenceLength {
+                sequence_type,
+                source,
+            } => {
+                let (ty, _) = self.sequence_item_type(sequence_type)?;
+                let parent = self.borrow_parent(source, locals)?;
+                let NormalizedValue::OwnedSequence(token) = parent.raw() else {
+                    return Err(reference_type_error(
+                        "sequence length requires a sequence token",
+                    ));
+                };
+                if token.ty() != ty {
+                    return Err(reference_type_error("sequence length source type mismatch"));
+                }
+                let length = token.len(self.memory_domain, self.control)?;
+                CheckedValue::primitive(
+                    &self.schema,
+                    NormalizedValue::I64(reference_length(length)?),
+                )
+            }
+            ExpressionOperation::SequencePush {
+                sequence_type,
+                value,
+                source,
+            } => {
+                let (ty, item) = self.sequence_item_type(sequence_type)?;
+                let child = self.consume_sequence_local(value, locals)?.release();
+                let child = self.product_child(child, item)?.release();
+                let NormalizedValue::OwnedSequence(token) =
+                    self.consume_sequence_local(source, locals)?.release()
+                else {
+                    return Err(reference_type_error(
+                        "sequence push requires a sequence token",
+                    ));
+                };
+                if token.ty() != ty {
+                    return Err(reference_type_error("sequence push source type mismatch"));
+                }
+                let control = self.control;
+                let token = token.push(self.memory_domain, child, control, &mut |bytes| {
+                    self.charge_allocation(bytes)
+                })?;
+                CheckedValue::memory(&self.schema, NormalizedValue::OwnedSequence(token))
+            }
+            ExpressionOperation::SequencePop {
+                sequence_type,
+                result_type,
+                source,
+            } => {
+                let (ty, item) = self.sequence_item_type(sequence_type)?;
+                let (result, product) = self.sequence_pop_types(ty, item, result_type)?;
+                let NormalizedValue::OwnedSequence(token) =
+                    self.consume_sequence_local(source, locals)?.release()
+                else {
+                    return Err(reference_type_error(
+                        "sequence pop requires a sequence token",
+                    ));
+                };
+                if token.ty() != ty {
+                    return Err(reference_type_error("sequence pop source type mismatch"));
+                }
+                let control = self.control;
+                let result =
+                    token.pop(self.memory_domain, result, product, control, &mut |bytes| {
+                        self.charge_allocation(bytes)
+                    })?;
+                CheckedValue::memory(&self.schema, result)
+            }
+            ExpressionOperation::BorrowOwnedItem {
+                sequence_type,
+                source,
+                index,
+                binding,
+                body,
+            } => {
+                let (ty, item) = self.sequence_item_type(sequence_type)?;
+                let record = self.binding(binding, BindingKind::OwnedBorrow)?;
+                let declared = record.declared_type.ok_or_else(|| {
+                    reference_type_error("borrowed sequence item binding lacks type")
+                })?;
+                if self.resolve_type_arguments(&[declared])?[0] != item {
+                    return Err(reference_type_error("borrowed sequence item type mismatch"));
+                }
+                self.charge_allocation(
+                    (std::mem::size_of::<LocalValueReference>()
+                        + std::mem::size_of::<CheckedValue>()) as u64,
+                )?;
+                let NormalizedValue::I64(index) = self.evaluate(index, locals)?.release() else {
+                    return Err(reference_type_error("sequence index requires I64"));
+                };
+                let parent = self.borrow_parent(source, locals)?;
+                let NormalizedValue::OwnedSequence(token) = parent.raw() else {
+                    return Err(reference_type_error(
+                        "borrow source requires a sequence token",
+                    ));
+                };
+                if token.ty() != ty {
+                    return Err(reference_type_error("borrow source sequence type mismatch"));
+                }
+                let control = self.control;
+                let child =
+                    token.borrow_item(self.memory_domain, index, control, &mut |bytes| {
+                        self.charge_allocation(bytes)
+                    })?;
+                let child = self.borrowed_product_child(child, item)?;
+                self.evaluate_borrowed_body(parent, binding, child, body, locals)
+            }
             ExpressionOperation::BorrowOwnedField {
                 product_type,
                 source,
@@ -2324,55 +2670,8 @@ impl ReferenceState<'_> {
                 source,
                 arms,
             } => {
-                let ty = self.resolve_type_arguments(&[choice_type])?[0];
-                let Some(TypeForm::OwnedChoice { cases }) =
-                    self.schema.types.get(&ty).map(|object| &object.form)
-                else {
-                    return Err(reference_type_error(
-                        "owned match requires a closed owned choice type",
-                    ));
-                };
-                if cases.len() != arms.len()
-                    || cases
-                        .iter()
-                        .zip(&arms)
-                        .any(|(case, arm)| case.name != arm.name)
-                {
-                    return Err(reference_type_error("owned match case coverage mismatch"));
-                }
-                self.charge_allocation(
-                    (std::mem::size_of::<LocalValueReference>()
-                        + std::mem::size_of::<CheckedValue>()) as u64,
-                )?;
-                self.control.check()?;
-                let NormalizedValue::OwnedChoice(token) = self.evaluate(source, locals)?.release()
-                else {
-                    return Err(reference_type_error("owned match requires a choice token"));
-                };
-                let (selected, payload) = token.select(self.memory_domain, ty, self.control)?;
-                let arm = arms
-                    .get(selected as usize)
-                    .ok_or_else(|| reference_type_error("invalid selected choice arm"))?;
-                let TypeForm::OwnedChoice { cases } = &self.schema.types[&ty].form else {
-                    return Err(reference_type_error("missing choice shape"));
-                };
-                let payload_type = cases[selected as usize].ty;
-                let binding = self.binding(arm.binding, BindingKind::OwnedChoicePayload)?;
-                let declared = binding
-                    .declared_type
-                    .ok_or_else(|| reference_type_error("owned choice binding lacks type"))?;
-                if self.resolve_type_arguments(&[declared])?[0] != payload_type {
-                    return Err(reference_type_error("owned choice payload type mismatch"));
-                }
-                let local = LocalValueReference::LexicalBinding(arm.binding);
-                if locals.contains_key(&local) {
-                    return Err(reference_type_error(
-                        "owned choice binding aliases a live local",
-                    ));
-                }
-                let payload = self.product_child(payload, payload_type)?;
-                locals.insert(local, payload);
-                let result = self.evaluate(arm.body, locals);
+                let (body, local) = self.bind_owned_choice(choice_type, source, &arms, locals)?;
+                let result = self.evaluate(body, locals);
                 locals.remove(&local);
                 result
             }
@@ -2437,59 +2736,8 @@ impl ReferenceState<'_> {
                 fields,
                 body,
             } => {
-                let ty = self.resolve_type_arguments(&[product_type])?[0];
-                let Some(TypeForm::OwnedProduct { fields: expected }) =
-                    self.schema.types.get(&ty).map(|o| &o.form)
-                else {
-                    return Err(reference_type_error(
-                        "unpack requires a closed product type",
-                    ));
-                };
-                if expected.len() != fields.len()
-                    || expected.iter().zip(&fields).any(|(a, b)| a.name != b.name)
-                {
-                    return Err(reference_type_error("unpack field coverage mismatch"));
-                }
-                self.charge_allocation(super::value::collection_storage_bytes(
-                    fields.len() as u64,
-                    (std::mem::size_of::<LocalValueReference>()
-                        + std::mem::size_of::<CheckedValue>()) as u64,
-                    "normalized_product_allocation",
-                )?)?;
-                self.control.check()?;
-                let NormalizedValue::OwnedProduct(token) = self.evaluate(source, locals)?.release()
-                else {
-                    return Err(reference_type_error("unpack requires product token"));
-                };
-                let values = token.unpack(self.memory_domain, ty, self.control)?;
-                if values.len() != fields.len() {
-                    return Err(reference_type_error("product storage count mismatch"));
-                }
-                let result = (|| {
-                    for (index, (field, value)) in fields.iter().zip(values).enumerate() {
-                        let TypeForm::OwnedProduct { fields: expected } =
-                            &self.schema.types[&ty].form
-                        else {
-                            return Err(reference_type_error("missing product shape"));
-                        };
-                        let expected = expected[index].ty;
-                        let binding = self.binding(field.binding, BindingKind::OwnedUnpack)?;
-                        let declared = binding
-                            .declared_type
-                            .ok_or_else(|| reference_type_error("unpack binding lacks type"))?;
-                        if self.resolve_type_arguments(&[declared])?[0] != expected {
-                            return Err(reference_type_error("unpack local type mismatch"));
-                        }
-                        let value = self.product_child(value, expected)?;
-                        if locals
-                            .insert(LocalValueReference::LexicalBinding(field.binding), value)
-                            .is_some()
-                        {
-                            return Err(reference_type_error("duplicate unpack local"));
-                        }
-                    }
-                    self.evaluate(body, locals)
-                })();
+                self.bind_owned_product(product_type, source, &fields, locals)?;
+                let result = self.evaluate(body, locals);
                 for field in fields {
                     locals.remove(&LocalValueReference::LexicalBinding(field.binding));
                 }
@@ -2552,6 +2800,7 @@ impl ReferenceState<'_> {
                             | NormalizedValue::OwnedI64Cell(_)
                             | NormalizedValue::OwnedProduct(_)
                             | NormalizedValue::OwnedChoice(_)
+                            | NormalizedValue::OwnedSequence(_)
                     )
                 }) {
                     locals[&value]
@@ -5032,6 +5281,25 @@ fn reference_compare(
                 "live resources do not support semantic equality",
             ))
         }
+        (
+            NormalizedValue::ByteBuffer(_)
+            | NormalizedValue::OwnedI64Cell(_)
+            | NormalizedValue::OwnedProduct(_)
+            | NormalizedValue::OwnedChoice(_)
+            | NormalizedValue::OwnedSequence(_),
+            _,
+        )
+        | (
+            _,
+            NormalizedValue::ByteBuffer(_)
+            | NormalizedValue::OwnedI64Cell(_)
+            | NormalizedValue::OwnedProduct(_)
+            | NormalizedValue::OwnedChoice(_)
+            | NormalizedValue::OwnedSequence(_),
+        ) => Err(reference_trap(
+            "normalized_reference_value_not_comparable",
+            "owned memory does not support semantic equality",
+        )),
         _ => {
             reference_compare(left, left, observation)?;
             reference_compare(right, right, observation)?;
@@ -5195,7 +5463,8 @@ fn reference_value_cost(value: &NormalizedValue) -> Result<(u64, u64), Execution
             NormalizedValue::ByteBuffer(_)
             | NormalizedValue::OwnedI64Cell(_)
             | NormalizedValue::OwnedProduct(_)
-            | NormalizedValue::OwnedChoice(_) => {
+            | NormalizedValue::OwnedChoice(_)
+            | NormalizedValue::OwnedSequence(_) => {
                 return Err(ExecutionError::resource(
                     "normalized_buffer_boundary",
                     "ByteBuffer cannot cross raw/adapter boundaries",
@@ -5391,6 +5660,11 @@ fn direct_memory_type(
         {
             TypeForm::ByteBuffer => return Ok(Some(super::value::MemoryForm::ByteBuffer)),
             TypeForm::OwnedI64Cell => return Ok(Some(super::value::MemoryForm::OwnedI64Cell)),
+            TypeForm::OwnedSequence { .. } => {
+                return Ok(Some(super::value::MemoryForm::Sequence(
+                    schema.transfer_type_identity(ty, substitutions, control)?,
+                )));
+            }
             TypeForm::OwnedChoice { .. } => {
                 return Ok(Some(super::value::MemoryForm::Choice(
                     schema.transfer_type_identity(ty, substitutions, control)?,

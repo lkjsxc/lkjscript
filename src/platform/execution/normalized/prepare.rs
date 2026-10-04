@@ -89,6 +89,30 @@ pub struct NormalizedCode {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NormalizedInstruction {
+    SequenceEmpty {
+        sequence_type: TypeObjectDigest,
+    },
+    SequenceLength {
+        sequence_type: TypeObjectDigest,
+        source_local: u32,
+    },
+    SequencePush {
+        sequence_type: TypeObjectDigest,
+        value_local: u32,
+        source_local: u32,
+    },
+    SequencePop {
+        sequence_type: TypeObjectDigest,
+        result_type: TypeObjectDigest,
+        source_local: u32,
+    },
+    /// The evaluated index is popped before the source's lexical read begins.
+    BorrowOwnedItem {
+        sequence_type: TypeObjectDigest,
+        source_local: u32,
+        binding_local: u32,
+        binding_type: TypeObjectDigest,
+    },
     Parallel {
         left_types: Arc<[TypeObjectDigest]>,
         left_implementations: Arc<[crate::platform::kernel::ImplementationOperand]>,
@@ -690,6 +714,9 @@ impl NormalizedProgram {
                         })
                     })
                     .collect::<Option<Vec<_>>>()?,
+            },
+            TypeForm::OwnedSequence { item } => TypeForm::OwnedSequence {
+                item: self.substitute_type(*item, substitutions, next)?,
             },
             TypeForm::Applied {
                 declaration,
@@ -1581,7 +1608,8 @@ fn validate_normalized_resource_signature(
                 TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
-                | TypeForm::OwnedChoice { .. },
+                | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. },
             ) => true,
             Some(TypeForm::TypeParameter { parameter }) => {
                 matches!(exact_runtime_owner(owners, declaration.package, OwnerKey::TypeParameter(*parameter), "owned signature type parameter")?, OwnerRecord::TypeParameter(p) if p.constraints.has_owned())
@@ -2650,6 +2678,75 @@ fn translate_code(
     let mut instructions = Vec::with_capacity(code.instructions.len());
     for instruction in &code.instructions {
         let translated = match instruction {
+            CompiledInstruction::SequenceEmpty { sequence_type } => {
+                NormalizedInstruction::SequenceEmpty {
+                    sequence_type: index_copy(
+                        &unit.tables.types,
+                        *sequence_type,
+                        "owned sequence type",
+                    )?,
+                }
+            }
+            CompiledInstruction::SequenceLength {
+                sequence_type,
+                source_local,
+            } => NormalizedInstruction::SequenceLength {
+                sequence_type: index_copy(
+                    &unit.tables.types,
+                    *sequence_type,
+                    "owned sequence type",
+                )?,
+                source_local: *source_local,
+            },
+            CompiledInstruction::SequencePush {
+                sequence_type,
+                value_local,
+                source_local,
+            } => NormalizedInstruction::SequencePush {
+                sequence_type: index_copy(
+                    &unit.tables.types,
+                    *sequence_type,
+                    "owned sequence type",
+                )?,
+                value_local: *value_local,
+                source_local: *source_local,
+            },
+            CompiledInstruction::SequencePop {
+                sequence_type,
+                result_type,
+                source_local,
+            } => NormalizedInstruction::SequencePop {
+                sequence_type: index_copy(
+                    &unit.tables.types,
+                    *sequence_type,
+                    "owned sequence type",
+                )?,
+                result_type: index_copy(
+                    &unit.tables.types,
+                    *result_type,
+                    "owned sequence pop result type",
+                )?,
+                source_local: *source_local,
+            },
+            CompiledInstruction::BorrowOwnedItem {
+                sequence_type,
+                source_local,
+                binding_local,
+                binding_type,
+            } => NormalizedInstruction::BorrowOwnedItem {
+                sequence_type: index_copy(
+                    &unit.tables.types,
+                    *sequence_type,
+                    "owned sequence type",
+                )?,
+                source_local: *source_local,
+                binding_local: *binding_local,
+                binding_type: index_copy(
+                    &unit.tables.types,
+                    *binding_type,
+                    "owned sequence item binding type",
+                )?,
+            },
             CompiledInstruction::Unit => NormalizedInstruction::Unit,
             CompiledInstruction::Bool(value) => NormalizedInstruction::Bool(*value),
             CompiledInstruction::I64(value) => NormalizedInstruction::I64(*value),

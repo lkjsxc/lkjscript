@@ -86,6 +86,7 @@ fn substitute(
         (A::Unit {}, A::Unit {})
         | (A::Local { .. }, A::Local { .. })
         | (A::Constant { .. }, A::Constant { .. })
+        | (A::SequenceEmpty { .. }, A::SequenceEmpty { .. })
         | (A::FunctionValue { .. }, A::FunctionValue { .. }) => {}
         (
             A::If {
@@ -192,6 +193,44 @@ fn substitute(
             pairs.extend([(a.as_mut(), x.as_ref()), (b.as_mut(), y.as_ref())]);
         }
         (A::ChooseOwned { value: a, .. }, A::ChooseOwned { value: x, .. }) => pairs.push((a, x)),
+        (A::SequenceLength { source: a, .. }, A::SequenceLength { source: x, .. })
+        | (A::SequencePop { source: a, .. }, A::SequencePop { source: x, .. }) => {
+            pairs.push((a, x));
+        }
+        (
+            A::SequencePush {
+                value: a,
+                source: b,
+                ..
+            },
+            A::SequencePush {
+                value: x,
+                source: y,
+                ..
+            },
+        ) => {
+            pairs.extend([(a.as_mut(), x.as_ref()), (b.as_mut(), y.as_ref())]);
+        }
+        (
+            A::BorrowOwnedItem {
+                index: a,
+                source: b,
+                body: c,
+                ..
+            },
+            A::BorrowOwnedItem {
+                index: x,
+                source: y,
+                body: z,
+                ..
+            },
+        ) => {
+            pairs.extend([
+                (a.as_mut(), x.as_ref()),
+                (b.as_mut(), y.as_ref()),
+                (c.as_mut(), z.as_ref()),
+            ]);
+        }
         (A::Parallel { left: a, right: b }, A::Parallel { left: x, right: y }) => {
             pairs.extend([(a.as_mut(), x.as_ref()), (b.as_mut(), y.as_ref())]);
         }

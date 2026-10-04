@@ -103,6 +103,7 @@ fn matches(
             Ok(true)
         }
         (TypeForm::List { item: t }, TypeForm::List { item: a })
+        | (TypeForm::OwnedSequence { item: t }, TypeForm::OwnedSequence { item: a })
         | (TypeForm::Option { item: t }, TypeForm::Option { item: a })
         | (TypeForm::Stream { item: t }, TypeForm::Stream { item: a }) => child(*t, *a),
         (TypeForm::Map { key: tk, value: tv }, TypeForm::Map { key: ak, value: av }) => {

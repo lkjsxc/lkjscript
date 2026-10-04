@@ -97,7 +97,10 @@ impl Scratch<'_> {
                         .ok_or_else(capacity)?;
                 }
             }
-            TypeForm::List { item } | TypeForm::Option { item } | TypeForm::Stream { item } => {
+            TypeForm::List { item }
+            | TypeForm::Option { item }
+            | TypeForm::Stream { item }
+            | TypeForm::OwnedSequence { item } => {
                 self.walk(*item, depth + 1)?;
             }
             TypeForm::Map { key, value }

@@ -272,6 +272,7 @@ pub(crate) fn validate_implementation(
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
                 | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. }
         )
     ) {
         return Err(reject(
@@ -280,7 +281,11 @@ pub(crate) fn validate_implementation(
     }
     if matches!(
         read.type_object(implementation.self_type)?.map(|t| t.form),
-        Some(TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. })
+        Some(
+            TypeForm::OwnedProduct { .. }
+                | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. }
+        )
     ) {
         super::owned_product::validate(read, implementation.self_type, None)?;
     }
@@ -634,6 +639,7 @@ pub(super) fn ordinary_with_assumptions(
             | TypeForm::OwnedI64Cell
             | TypeForm::OwnedProduct { .. }
             | TypeForm::OwnedChoice { .. }
+            | TypeForm::OwnedSequence { .. }
             | TypeForm::Secret
             | TypeForm::Stream { .. }
             | TypeForm::Function { .. }

@@ -130,7 +130,7 @@ fn native_literal_edit_preserves_imported_list_app_and_both_default_policies() {
     );
     let checked = public.cli(&["check"], true);
     let tests = compact_record(&checked, "tests");
-    assert_eq!(compact_field(tests, "passed"), "125"); // 36 local + 89 standard.
+    assert_eq!(compact_field(tests, "passed"), "132"); // 36 local + 96 standard.
     assert_eq!(compact_field(tests, "failed"), "0");
     assert_eq!(compact_field(tests, "differential"), "equal");
     let after = public.root.path().join("after.lkja");
@@ -197,6 +197,6 @@ fn native_literal_edit_preserves_imported_list_app_and_both_default_policies() {
     }
     assert_eq!(std::fs::read(&before).unwrap(), before_bytes);
     eprintln!(
-        "native literal list proof: plan_bytes={plan_bytes} created=0 updated=1 deleted=0 retirements=0 graph_tests=121 differential=equal detached_snapshots=2 http_observations=6"
+        "native literal list proof: plan_bytes={plan_bytes} created=0 updated=1 deleted=0 retirements=0 graph_tests=132 differential=equal detached_snapshots=2 http_observations=6"
     );
 }

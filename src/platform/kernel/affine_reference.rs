@@ -67,7 +67,8 @@ impl Reference<'_> {
                 TypeForm::ByteBuffer
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
-                | TypeForm::OwnedChoice { .. },
+                | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. },
             ) => true,
             Some(TypeForm::TypeParameter { parameter }) => {
                 let key = OwnerKey::TypeParameter(*parameter);
@@ -239,6 +240,27 @@ impl Reference<'_> {
             _ => return Err(()),
         };
         match operation {
+            ExpressionOperation::SequenceEmpty { .. } => Ok(Value::Plain),
+            ExpressionOperation::SequenceLength { source, .. }
+            | ExpressionOperation::SequencePop { source, .. } => {
+                self.plain(*source, live)?;
+                Ok(Value::Plain)
+            }
+            ExpressionOperation::SequencePush { value, source, .. } => {
+                self.plain(*value, live)?;
+                self.plain(*source, live)?;
+                Ok(Value::Plain)
+            }
+            ExpressionOperation::BorrowOwnedItem {
+                index,
+                source,
+                body,
+                ..
+            } => {
+                self.plain(*index, live)?;
+                self.plain(*source, live)?;
+                self.eval(*body, live)
+            }
             ExpressionOperation::ChooseOwned { value, .. } => {
                 self.plain(*value, live)?;
                 Ok(Value::Plain)

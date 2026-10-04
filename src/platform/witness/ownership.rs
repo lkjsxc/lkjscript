@@ -216,7 +216,8 @@ pub(crate) fn ownership_contributions(
                 )?;
             }
             match &record.operation {
-                ExpressionOperation::BorrowOwnedField { binding, .. } => insert_binding_parent(
+                ExpressionOperation::BorrowOwnedField { binding, .. }
+                | ExpressionOperation::BorrowOwnedItem { binding, .. } => insert_binding_parent(
                     &mut ownership,
                     *binding,
                     record.id,

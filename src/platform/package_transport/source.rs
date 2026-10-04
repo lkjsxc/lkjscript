@@ -318,6 +318,12 @@ impl PackageContainer {
                     != Some(crate::platform::kernel::contract::CHOICE_OWNER_MAGIC.as_slice())
                 && object.get(..8)
                     != Some(crate::platform::kernel::contract::PARALLEL_OWNER_MAGIC.as_slice())
+                && object.get(..8)
+                    != Some(crate::platform::kernel::contract::TRANSFER_OWNER_MAGIC.as_slice())
+                && object.get(..8)
+                    != Some(crate::platform::kernel::contract::OWNED_EFFECT_OWNER_MAGIC.as_slice())
+                && object.get(..8)
+                    != Some(crate::platform::kernel::contract::BORROW_OWNER_MAGIC.as_slice())
             {
                 return Err(package_error(
                     DiagnosticClass::Source,
@@ -1162,14 +1168,15 @@ mod tests {
 
     include!("f64_admission_tests.rs");
     include!("owned_product_admission_tests.rs");
+    include!("owned_sequence_admission_tests.rs");
     include!("dependency_copy_admission_tests.rs");
 
     #[test]
-    fn source_transport_preserves_supported_product_and_choice_owner_envelopes() {
+    fn source_transport_preserves_supported_composite_and_task_owner_envelopes() {
         let source = crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(
             "declarations.begin\n(units (module create historical (function create value (visibility private) (returns I64) (effect pure) (body (i64 37)))))\ndeclarations.end\n",
         ).unwrap();
-        for generation in [19, 20] {
+        for generation in [19, 20, 21, 22, 23, 24] {
             let mut historical = source.clone();
             for owner in historical.owners.values_mut() {
                 owner.set_encoding_for_edit(generation);
@@ -1683,6 +1690,17 @@ mod tests {
     /// Hostile encoder, not an authoring path: coherently rehash an unvalidated private owner
     /// and all enclosing source identities while retaining the same committed public interface.
     fn rehash_owner(original: &AdmittedClosure, replacement: OwnerRecord) -> PackageContainer {
+        let (digest, bytes) = encode_owner(&replacement).unwrap();
+        rehash_encoded_owner(original, replacement, digest, bytes)
+    }
+
+    /// Accept literal hostile owner bytes independently of the production encoder's rejection.
+    fn rehash_encoded_owner(
+        original: &AdmittedClosure,
+        replacement: OwnerRecord,
+        digest: OwnerObjectDigest,
+        bytes: Vec<u8>,
+    ) -> PackageContainer {
         use crate::platform::persistent_map::MemoryPageStore;
         let package = &original.packages[&original.container.root.package_revision];
         assert!(package.revision.dependencies.is_empty());
@@ -1701,7 +1719,6 @@ mod tests {
             ObjectDomain::Owner,
             old_digest.bytes(),
         ));
-        let (digest, bytes) = encode_owner(&replacement).unwrap();
         objects.insert(
             ObjectKey::from_digest(ObjectDomain::Owner, digest.bytes()),
             bytes,

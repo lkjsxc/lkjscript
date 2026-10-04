@@ -97,7 +97,10 @@ fn visit(
             child(*result)?;
             parameters.len() + 1
         }
-        TypeForm::List { item } | TypeForm::Option { item } | TypeForm::Stream { item } => {
+        TypeForm::List { item }
+        | TypeForm::OwnedSequence { item }
+        | TypeForm::Option { item }
+        | TypeForm::Stream { item } => {
             child(*item)?;
             1
         }

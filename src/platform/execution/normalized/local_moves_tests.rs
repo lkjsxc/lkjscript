@@ -50,6 +50,33 @@ pub(super) fn future_read(instructions: &[I], at: usize, local: u32) -> bool {
             continue;
         }
         match &instructions[pc] {
+            I::SequenceLength { source_local, .. }
+            | I::SequencePop { source_local, .. }
+            | I::BorrowOwnedItem { source_local, .. }
+                if *source_local == local =>
+            {
+                return true;
+            }
+            I::SequencePush {
+                value_local,
+                source_local,
+                ..
+            } if *value_local == local || *source_local == local => return true,
+            I::BorrowOwnedItem { binding_local, .. }
+            | I::BorrowOwnedField { binding_local, .. }
+                if *binding_local == local =>
+            {
+                return true;
+            }
+            I::BorrowOwnedField { source_local, .. } if *source_local == local => return true,
+            I::MatchBorrowedOwned {
+                source_local,
+                cases,
+                ..
+            } if *source_local == local || cases.iter().any(|case| case.binding_local == local) => {
+                return true;
+            }
+            I::EndOwnedBorrow { binding_local } if *binding_local == local => continue,
             I::LoadLocal { local: read, .. } | I::MoveLocal(read) if *read == local => return true,
             I::BeginTransaction { binding, .. }
             | I::BeginParameterTransaction { binding, .. }

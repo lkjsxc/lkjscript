@@ -15,7 +15,7 @@ pub(crate) fn require_generation(
     roots: Vec<TypeObjectDigest>,
     generation: u16,
 ) -> Result<(), Diagnostic> {
-    if generation >= 20 {
+    if generation >= 25 {
         return Ok(());
     }
     let mut pending = roots;
@@ -28,7 +28,14 @@ pub(crate) fn require_generation(
         let object = read
             .type_object(ty)?
             .ok_or_else(|| reject("missing graph-bound type"))?;
-        if matches!(object.form, TypeForm::OwnedChoice { .. }) {
+        if generation < 25 && matches!(object.form, TypeForm::OwnedSequence { .. }) {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Semantic,
+                "kernel_sequence_generation",
+                "owned sequence type closure requires Graph 25",
+            ));
+        }
+        if generation < 20 && matches!(object.form, TypeForm::OwnedChoice { .. }) {
             return Err(Diagnostic::new(
                 DiagnosticClass::Semantic,
                 "kernel_choice_generation",
@@ -54,13 +61,10 @@ pub(crate) fn validate(
 ) -> Result<(), Diagnostic> {
     read.validation_work()?;
     let ordinary_assumptions = super::transfer::ordinary_assumptions(read, scope)?;
-    let code = if matches!(
-        read.type_object(ty)?.map(|t| t.form),
-        Some(TypeForm::OwnedChoice { .. })
-    ) {
-        "kernel_owned_choice"
-    } else {
-        "kernel_owned_product"
+    let code = match read.type_object(ty)?.map(|t| t.form) {
+        Some(TypeForm::OwnedSequence { .. }) => "kernel_owned_sequence",
+        Some(TypeForm::OwnedChoice { .. }) => "kernel_owned_choice",
+        _ => "kernel_owned_product",
     };
     let reject = |message| Diagnostic::new(DiagnosticClass::Semantic, code, message);
     // A digest first reached through a short path may occur on a longer path
@@ -104,26 +108,38 @@ pub(crate) fn validate(
         let object = read
             .type_object(ty)?
             .ok_or_else(|| reject("missing owned product type"))?;
-        let (TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields }) =
-            object.form
-        else {
-            return Err(reject(
-                "explicit composite operand requires an owned product or choice type",
-            ));
+        let (sequence_item, fields) = match object.form {
+            TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
+                (None, fields)
+            }
+            TypeForm::OwnedSequence { item } => (Some(item), Vec::new()),
+            _ => {
+                return Err(reject(
+                    "explicit composite operand requires an owned product, choice or sequence type",
+                ));
+            }
         };
+        let require_owned = sequence_item.is_some();
         let mut owned = false;
-        for field in fields {
+        for child_type in sequence_item
+            .into_iter()
+            .chain(fields.into_iter().map(|field| field.ty))
+        {
             read.validation_work()?;
             let child = read
-                .type_object(field.ty)?
+                .type_object(child_type)?
                 .ok_or_else(|| reject("missing owned product field type"))?;
             match child.form {
-                TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. } => {
+                TypeForm::OwnedProduct { .. }
+                | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. } => {
                     owned = true;
-                    pending.push((field.ty, depth + 1));
+                    pending.push((child_type, depth + 1));
                 }
                 TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => owned = true,
-                TypeForm::TypeParameter { parameter } if super::memory::direct(read, field.ty)? => {
+                TypeForm::TypeParameter { parameter }
+                    if super::memory::direct(read, child_type)? =>
+                {
                     let Some(OwnerRecord::TypeParameter(p)) =
                         read.owner(OwnerKey::TypeParameter(parameter))?
                     else {
@@ -153,9 +169,12 @@ pub(crate) fn validate(
                     }
                     owned = true;
                 }
+                _ if require_owned => {
+                    return Err(reject("owned sequence elements require exact owned types"));
+                }
                 _ if !super::owned_contract::ordinary_with_assumptions(
                     read,
-                    field.ty,
+                    child_type,
                     scope,
                     &ordinary_assumptions,
                 )? =>

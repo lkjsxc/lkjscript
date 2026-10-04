@@ -124,7 +124,11 @@ pub(crate) fn admit(
     let assumptions = ordinary_assumptions(read, scope)?;
     if matches!(
         read.type_object(ty)?.map(|t| t.form),
-        Some(TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. })
+        Some(
+            TypeForm::OwnedProduct { .. }
+                | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. }
+        )
     ) {
         super::owned_product::validate(read, ty, scope)?;
     }
@@ -159,6 +163,10 @@ pub(crate) fn admit(
                     read.validation_work()?;
                     pending.push((field.ty, depth + 1));
                 }
+            }
+            TypeForm::OwnedSequence { item } => {
+                read.validation_work()?;
+                pending.push((item, depth + 1));
             }
             _ if super::owned_contract::ordinary_with_assumptions(
                 read,

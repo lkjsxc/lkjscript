@@ -61,6 +61,79 @@ fn index_node<T>(allocated: &mut usize) -> Result<(), ExecutionError> {
 }
 
 impl Closure<'_> {
+    fn sequence(
+        &mut self,
+        ty: TypeObjectDigest,
+        bindings: &Bindings,
+        scope: Option<DeclarationReference>,
+    ) -> Result<(TypeObjectDigest, TypeObjectDigest), ExecutionError> {
+        let ty = self.identity(ty, bindings, 0)?;
+        let Some(TypeForm::OwnedSequence { item }) = self.types.get(&ty).map(|ty| &ty.form) else {
+            return Err(failure());
+        };
+        let item = *item;
+        if !self.scoped_owned(item, scope)? {
+            return Err(failure());
+        }
+        Ok((ty, item))
+    }
+
+    fn sequence_elements(&mut self) -> Result<(), ExecutionError> {
+        allocate::<TypeObjectDigest>(&mut self.allocated, self.types.len())?;
+        let mut items = Vec::with_capacity(self.types.len());
+        for object in self.types.values() {
+            self.control.check()?;
+            if let TypeForm::OwnedSequence { item } = object.form {
+                items.push(item);
+            }
+        }
+        for item in items {
+            self.tick()?;
+            let scope = if let Some(TypeForm::TypeParameter { parameter }) =
+                self.types.get(&item).map(|object| &object.form)
+            {
+                self.visits = self
+                    .visits
+                    .checked_add(self.snapshots.len())
+                    .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
+                    .ok_or_else(|| {
+                        ExecutionError::resource(
+                            "reference_instantiation_work",
+                            "sequence element scope lookup exceeded finite work",
+                        )
+                    })?;
+                let mut scope = None;
+                for snapshot in self.snapshots.values() {
+                    self.control.check()?;
+                    if let Some(OwnerRecord::TypeParameter(record)) =
+                        snapshot.owners.get(&OwnerKey::TypeParameter(*parameter))
+                    {
+                        let Some(OwnerRecord::Declaration(owner)) = snapshot
+                            .owners
+                            .get(&OwnerKey::Declaration(record.declaration))
+                        else {
+                            return Err(failure());
+                        };
+                        if !owner.payload.type_parameters().contains(parameter) || scope.is_some() {
+                            return Err(failure());
+                        }
+                        scope = Some(DeclarationReference {
+                            package: snapshot.root.package_id,
+                            declaration: record.declaration,
+                        });
+                    }
+                }
+                scope
+            } else {
+                None
+            };
+            if !self.scoped_owned(item, scope)? {
+                return Err(failure());
+            }
+        }
+        Ok(())
+    }
+
     fn scoped_owned(
         &mut self,
         ty: TypeObjectDigest,
@@ -71,7 +144,8 @@ impl Closure<'_> {
             TypeForm::ByteBuffer
             | TypeForm::OwnedI64Cell
             | TypeForm::OwnedProduct { .. }
-            | TypeForm::OwnedChoice { .. } => Ok(true),
+            | TypeForm::OwnedChoice { .. }
+            | TypeForm::OwnedSequence { .. } => Ok(true),
             TypeForm::TypeParameter { parameter } => {
                 let declaration = scope.ok_or_else(failure)?;
                 let OwnerRecord::TypeParameter(record) =
@@ -170,7 +244,9 @@ impl Closure<'_> {
             self.control.check()?;
             if matches!(
                 object.form,
-                TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. }
+                TypeForm::OwnedProduct { .. }
+                    | TypeForm::OwnedChoice { .. }
+                    | TypeForm::OwnedSequence { .. }
             ) {
                 allocate::<(TypeObjectDigest, usize)>(&mut self.allocated, 1)?;
                 queue.push_back((*ty, 0usize));
@@ -254,6 +330,9 @@ impl Closure<'_> {
                     .collect::<Result<_, _>>()?,
             },
             TypeForm::List { item } => TypeForm::List {
+                item: self.identity(item, bindings, depth + 1)?,
+            },
+            TypeForm::OwnedSequence { item } => TypeForm::OwnedSequence {
                 item: self.identity(item, bindings, depth + 1)?,
             },
             TypeForm::Option { item } => TypeForm::Option {
@@ -550,6 +629,45 @@ impl Closure<'_> {
                     ..
                 } => {
                     self.identity(product_type, bindings, 0)?;
+                }
+                ExpressionOperation::SequenceEmpty { sequence_type }
+                | ExpressionOperation::SequenceLength { sequence_type, .. }
+                | ExpressionOperation::SequencePush { sequence_type, .. }
+                | ExpressionOperation::BorrowOwnedItem { sequence_type, .. } => {
+                    self.sequence(sequence_type, bindings, scope)?;
+                }
+                ExpressionOperation::SequencePop {
+                    sequence_type,
+                    result_type,
+                    ..
+                } => {
+                    let (sequence, item) = self.sequence(sequence_type, bindings, scope)?;
+                    let result = self.identity(result_type, bindings, 0)?;
+                    let Some(TypeForm::OwnedChoice { cases }) =
+                        self.types.get(&result).map(|object| &object.form)
+                    else {
+                        return Err(failure());
+                    };
+                    if cases.len() != 2
+                        || cases[0].name.as_str() != "empty"
+                        || cases[0].ty != sequence
+                        || cases[1].name.as_str() != "item"
+                    {
+                        return Err(failure());
+                    }
+                    let Some(TypeForm::OwnedProduct { fields }) =
+                        self.types.get(&cases[1].ty).map(|object| &object.form)
+                    else {
+                        return Err(failure());
+                    };
+                    if fields.len() != 2
+                        || fields[0].name.as_str() != "rest"
+                        || fields[0].ty != sequence
+                        || fields[1].name.as_str() != "value"
+                        || fields[1].ty != item
+                    {
+                        return Err(failure());
+                    }
                 }
                 ExpressionOperation::Let {
                     bindings: locals, ..
@@ -969,6 +1087,7 @@ pub(super) fn complete(
         &mut schema.record_instances,
         &mut schema.variant_instances,
     )?;
+    closure.sequence_elements()?;
     closure.product_depths()?;
     let parallel_targets = std::mem::take(&mut closure.parallel_targets);
     let constrained_applications = std::mem::take(&mut closure.constrained_applications);
@@ -1206,7 +1325,8 @@ fn scoped_owned(
         TypeForm::ByteBuffer
         | TypeForm::OwnedI64Cell
         | TypeForm::OwnedProduct { .. }
-        | TypeForm::OwnedChoice { .. } => Ok(true),
+        | TypeForm::OwnedChoice { .. }
+        | TypeForm::OwnedSequence { .. } => Ok(true),
         TypeForm::TypeParameter { parameter } => {
             let declaration = scope.ok_or_else(failure)?;
             let OwnerRecord::TypeParameter(record) =
@@ -1277,6 +1397,13 @@ fn parallel_transfer_type(
             | TypeForm::Text
             | TypeForm::StaticText => {}
             TypeForm::ByteBuffer | TypeForm::OwnedI64Cell if owners_allowed => {}
+            TypeForm::OwnedSequence { item } if owners_allowed => {
+                if !scoped_owned(schema, snapshots, *item, context.declaration)? {
+                    return Err(failure());
+                }
+                allocate::<Vertex>(allocated, 1)?;
+                edges.push((*item, context, true));
+            }
             TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields }
                 if owners_allowed =>
             {
@@ -1722,13 +1849,14 @@ fn property_types(
                     | TypeForm::OwnedI64Cell
                     | TypeForm::OwnedProduct { .. }
                     | TypeForm::OwnedChoice { .. }
+                    | TypeForm::OwnedSequence { .. }
             ))
             || retention == Retention::NoApplication
             || retention != Retention::BufferFree
                 && !matches!(
                     object.form,
                     TypeForm::ByteBuffer | TypeForm::OwnedI64Cell
-                        | TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. }
+                        | TypeForm::OwnedProduct { .. } | TypeForm::OwnedChoice { .. } | TypeForm::OwnedSequence { .. }
                         if retention != Retention::Transfer
                 )
                 && !matches!(
@@ -1770,6 +1898,7 @@ fn property_types(
                                 | TypeForm::OwnedI64Cell
                                 | TypeForm::OwnedProduct { .. }
                                 | TypeForm::OwnedChoice { .. }
+                                | TypeForm::OwnedSequence { .. }
                         )))
             };
             let accepted = match &object.form {
@@ -1777,6 +1906,7 @@ fn property_types(
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
                 | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. }
                     if retention == Retention::BufferFree =>
                 {
                     false
@@ -1793,6 +1923,7 @@ fn property_types(
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
                 | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. }
                 | TypeForm::Secret
                 | TypeForm::Stream { .. }
                 | TypeForm::CapabilityResource { .. }
@@ -1806,6 +1937,18 @@ fn property_types(
                 {
                     true
                 }
+                TypeForm::OwnedSequence { item } if retention == Retention::Transfer => {
+                    tick(visits)?;
+                    let child = schema.types.get(item).ok_or_else(failure)?;
+                    matches!(
+                        child.form,
+                        TypeForm::ByteBuffer
+                            | TypeForm::OwnedI64Cell
+                            | TypeForm::OwnedProduct { .. }
+                            | TypeForm::OwnedChoice { .. }
+                            | TypeForm::OwnedSequence { .. }
+                    ) && safe.contains(item)
+                }
                 TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields }
                     if retention == Retention::Transfer =>
                 {
@@ -1817,6 +1960,7 @@ fn property_types(
                                     | TypeForm::OwnedI64Cell
                                     | TypeForm::OwnedProduct { .. }
                                     | TypeForm::OwnedChoice { .. }
+                                    | TypeForm::OwnedSequence { .. }
                             )
                         )
                     });
@@ -1870,6 +2014,7 @@ fn property_types(
                                                 | TypeForm::OwnedI64Cell
                                                 | TypeForm::OwnedProduct { .. }
                                                 | TypeForm::OwnedChoice { .. }
+                                                | TypeForm::OwnedSequence { .. }
                                         ));
                             }
                         }
@@ -1975,6 +2120,63 @@ declarations.begin
     (parameter create value (type U)) (returns U) (effect pure) (body (local value)))))
 declarations.end
 "#;
+
+    #[test]
+    fn canonical_sequence_inventory_rejects_unused_ordinary_elements() {
+        let snapshot = source(PARAMETERS);
+        let mut schema = schema(&snapshot);
+        let cell = intern(&mut schema, TypeForm::OwnedI64Cell);
+        let sequence = intern(&mut schema, TypeForm::OwnedSequence { item: cell });
+        let nested = intern(&mut schema, TypeForm::OwnedSequence { item: sequence });
+        complete(&mut schema, &[&snapshot], &ExecutionControl::uncancelled()).unwrap();
+        for ty in [sequence, nested] {
+            assert!(schema.transferable_types.contains(&ty));
+            assert!(!schema.ordinary_types.contains(&ty));
+            assert!(!schema.buffer_free_types.contains(&ty));
+            assert!(!schema.capture_safe_types.contains(&ty));
+            assert!(!schema.comparable_types.contains(&ty));
+        }
+        let scalar = intern(&mut schema, TypeForm::I64);
+        intern(&mut schema, TypeForm::OwnedSequence { item: scalar });
+        assert!(complete(&mut schema, &[&snapshot], &ExecutionControl::uncancelled()).is_err());
+    }
+
+    #[test]
+    fn canonical_sequence_transfer_requires_the_complete_element_bound() {
+        let mut snapshot = source(PARAMETERS);
+        let scope = declaration(&snapshot, "keep");
+        let OwnerRecord::Declaration(owner) =
+            &snapshot.owners[&OwnerKey::Declaration(scope.declaration)]
+        else {
+            panic!("function owner");
+        };
+        let DeclarationPayload::Function(function) = &owner.payload else {
+            panic!("function");
+        };
+        let item = function.result;
+        let parameter = function.type_parameters[0];
+        let mut schema = schema(&snapshot);
+        let sequence = intern(&mut schema, TypeForm::OwnedSequence { item });
+        for (constraint, accepted) in [
+            (TypeParameterConstraints::Owned, false),
+            (TypeParameterConstraints::OwnedTransferable, true),
+            (TypeParameterConstraints::Transferable, false),
+        ] {
+            let OwnerRecord::TypeParameter(record) = snapshot
+                .owners
+                .get_mut(&OwnerKey::TypeParameter(parameter))
+                .unwrap()
+            else {
+                panic!("type parameter");
+            };
+            record.constraints = constraint;
+            assert_eq!(
+                prove(&schema, &snapshot, sequence, Some(scope)).is_ok(),
+                accepted
+            );
+            assert!(prove(&schema, &snapshot, sequence, None).is_err());
+        }
+    }
 
     #[test]
     fn canonical_transfer_parameters_require_exact_scope_and_explicit_bounds() {

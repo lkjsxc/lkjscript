@@ -97,6 +97,7 @@ impl<'a, R: ExpressionRead + ?Sized> AppliedTypes<'a, R> {
                     .collect::<Result<_, _>>()?,
             },
             TypeForm::List { item } => TypeForm::List { item: child(item)? },
+            TypeForm::OwnedSequence { item } => TypeForm::OwnedSequence { item: child(item)? },
             TypeForm::Map { key, value } => TypeForm::Map {
                 key: child(key)?,
                 value: child(value)?,

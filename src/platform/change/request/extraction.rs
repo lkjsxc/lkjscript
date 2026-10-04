@@ -567,6 +567,7 @@ fn walk_expression<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     let next = depth.saturating_add(1);
     match record.operation {
         ExpressionOperation::BorrowOwnedField { .. }
+        | ExpressionOperation::BorrowOwnedItem { .. }
         | ExpressionOperation::MatchBorrowedOwned { .. } => {
             return Err(extract_error(
                 "change_extract_owned_borrow",
@@ -1502,6 +1503,7 @@ fn replace_expression_reference(
     };
     match operation {
         ExpressionOperation::BorrowOwnedField { .. }
+        | ExpressionOperation::BorrowOwnedItem { .. }
         | ExpressionOperation::MatchBorrowedOwned { .. } => {
             return Err(extract_error(
                 "change_extract_owned_borrow",
@@ -1511,6 +1513,12 @@ fn replace_expression_reference(
         ExpressionOperation::Parallel { left, right } => {
             replace(left);
             replace(right);
+        }
+        ExpressionOperation::SequenceLength { source, .. }
+        | ExpressionOperation::SequencePop { source, .. } => replace(source),
+        ExpressionOperation::SequencePush { value, source, .. } => {
+            replace(value);
+            replace(source);
         }
         ExpressionOperation::ChooseOwned { .. } | ExpressionOperation::MatchOwned { .. } => {
             return Err(extract_error(
@@ -1575,6 +1583,7 @@ fn replace_expression_reference(
             arms.iter_mut().for_each(|arm| replace(&mut arm.body));
         }
         ExpressionOperation::Unit {}
+        | ExpressionOperation::SequenceEmpty { .. }
         | ExpressionOperation::Bool { .. }
         | ExpressionOperation::I64 { .. }
         | ExpressionOperation::F64 { .. }
@@ -1918,6 +1927,7 @@ fn resource_class<B: CanonicalBaseRead + ?Sized>(
         TypeForm::CapabilityResource { interface } => ResourceClass::Direct(interface),
         TypeForm::ByteBuffer
         | TypeForm::OwnedI64Cell
+        | TypeForm::OwnedSequence { .. }
         | TypeForm::OwnedProduct { .. }
         | TypeForm::OwnedChoice { .. } => ResourceClass::Memory,
         TypeForm::Named { declaration } => {

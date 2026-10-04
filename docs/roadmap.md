@@ -20,10 +20,11 @@ The acceptance witness combines a symbolic reader with independent buffer/scalar
 implementations, nested composites, exact package transports and detached artifacts.
 Loan provenance, cleanup and inactive branches require independent checking.
 
-Build useful owned containers on that foundation, then associated scoped views
-and explicit lifetime relationships. Select each extension through an ordinary
-library that cannot be expressed cleanly with the current fixed products and
-choices. Consider associated type families, higher-ranked borrowing and bounded
+Use [dynamic owned sequences](spec/owned-sequences.md) to compose runtime-sized
+collections with scoped reads and exact element witnesses. Select associated
+scoped views and explicit lifetime relationships when a second useful storage
+representation exposes an abstraction that those native algorithms cannot express
+cleanly. Consider associated type families, higher-ranked borrowing and bounded
 value/region parameters where they make that abstraction sound and useful.
 
 Keep implementation identity explicit and contracts independently checkable.
@@ -95,6 +96,12 @@ Move libraries, tools, compiler and runtime toward complete self-hosting, includ
 possible removal of Rust. Replace a host boundary when its native successor owns
 the relevant semantics and failure behavior. Native development must remain usable
 without an external semantic generator.
+
+Use a native compiler or tooling pass over provisional typed proposals as the next
+substantial ownership workload. Its working collection or future region owns only
+candidate data; the ordinary admission and publication boundary remains responsible
+for accepted meaning. This workload should justify further storage and view
+abstractions before selecting general region mechanisms.
 
 ## Evidence and development cost
 

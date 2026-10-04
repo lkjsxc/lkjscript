@@ -1819,6 +1819,41 @@ old derived execution proof. Rebuild maintained artifacts through public owners
 without changing accepted meaning HEADs. The integrator owns dependency-complete
 acceptance after implementation source stabilizes.
 
+## Dynamic owned-sequence obligations
+
+The [owned sequence contract](owned-sequences.md) extends the existing source,
+reference, public CLI, package and finalized-byte acceptance owners. The mandatory
+`native_owned_sequence_` cases freshly author a generic element-witness library
+before its ByteBuffer and OwnedI64Cell implementations, then a consumer selecting
+exact witnesses, including distinguishable implementations for one Self. Retain
+literal inputs, independently expected complete results, exact dependency bindings,
+unchanged draft re-entry, supported identity-preserving edits and detached execution
+after removal of authoring projects and transports.
+
+Exercise runtime-variable construction, empty and nonempty pop, LIFO order, repeated
+indexed reads followed by consumption, empty-capacity reuse, nested sequences,
+products and choices, authorized task effects and structured owned transfer.
+Tail-recursive build, read and drain witnesses must keep bounded VM and reference
+call and control depth as runtime input grows. Consuming choice matches and product
+unpacking preserve tail position; borrowed scopes retain their pending cleanup.
+Every sequence child retains its original payload allocation through moves; vector
+handle relocation does not establish whole-program zero-copy behavior. Growth work
+and retained storage observations are distinct from invocation time and RSS.
+
+Independent production and reference admission must reject invalid item types even
+for empty values, hidden/unused substitutions and untaken syntax. Cover wrong types,
+origins, inert tokens, moved sources, protected ancestors, escaping views, capture,
+ordinary/codec/raw boundaries, malformed pop envelopes and forged source generations.
+Consistently rehashed transported or compiled content must not erase those obligations.
+
+Reserve creation, growth and pop-result storage before mutation. Inject reservation
+refusal and cancellation before and after reservation, in nested read bodies, while
+adopting children into another invocation and during result delivery. Observe every
+child released once, inner loans released before ancestors, no storage mutex retained
+across user code and a healthy subsequent invocation. Failure disposal uses no growing
+worklist: runtime sequence breadth is visited under the existing finite type-depth
+bound. Keep complete type and value traversal under current resource limits.
+
 ## Scoped owned-child read obligations
 
 The [lexical read contract](owned-borrows.md) extends existing ownership,

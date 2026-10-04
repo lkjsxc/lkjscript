@@ -3,6 +3,9 @@
 #[path = "memory_borrow_tests.rs"]
 mod borrow_tests;
 #[cfg(test)]
+#[path = "memory_sequence_tests.rs"]
+mod sequence_tests;
+#[cfg(test)]
 #[path = "memory_work_tests.rs"]
 mod work_tests;
 use super::infer::ExpressionRead;
@@ -40,7 +43,8 @@ pub(crate) fn direct_in(
             TypeForm::ByteBuffer
             | TypeForm::OwnedI64Cell
             | TypeForm::OwnedProduct { .. }
-            | TypeForm::OwnedChoice { .. } => true,
+            | TypeForm::OwnedChoice { .. }
+            | TypeForm::OwnedSequence { .. } => true,
             TypeForm::TypeParameter { parameter } => {
                 if package == read.package_id() {
                     matches!(read.owner(OwnerKey::TypeParameter(parameter))?,
@@ -371,6 +375,34 @@ struct Check<'a, R: ?Sized> {
     scope: Option<crate::platform::semantic_id::DeclarationId>,
 }
 impl<R: ExpressionRead + ?Sized> Check<'_, R> {
+    fn sequence_item(&self, ty: TypeObjectDigest) -> Result<TypeObjectDigest, Diagnostic> {
+        super::owned_product::validate(self.read, ty, self.scope)?;
+        let TypeForm::OwnedSequence { item } = self
+            .read
+            .type_object(ty)?
+            .ok_or_else(|| reject("missing owned sequence type"))?
+            .form
+        else {
+            return Err(reject("sequence operation requires an owned sequence type"));
+        };
+        Ok(item)
+    }
+
+    fn consume_local(
+        &self,
+        expression: ExpressionId,
+        ty: TypeObjectDigest,
+        state: &mut State,
+        depth: usize,
+    ) -> Result<(), Diagnostic> {
+        // Admission proves exact local identity and type before changing custody.
+        self.source_local(expression, ty, state, depth)?;
+        if !self.eval(expression, state, ParameterUse::Consume, depth)? {
+            return Err(reject("sequence operand requires an exact live owner"));
+        }
+        Ok(())
+    }
+
     fn source_local(
         &self,
         expression: ExpressionId,
@@ -481,6 +513,61 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 .map(|_| ())
         };
         let owned = match e.operation {
+            ExpressionOperation::SequenceEmpty { sequence_type } => {
+                self.sequence_item(sequence_type)?;
+                true
+            }
+            ExpressionOperation::SequenceLength {
+                sequence_type,
+                source,
+            } => {
+                self.sequence_item(sequence_type)?;
+                self.source_local(source, sequence_type, state, next)?;
+                false
+            }
+            ExpressionOperation::SequencePush {
+                sequence_type,
+                value,
+                source,
+            } => {
+                let item = self.sequence_item(sequence_type)?;
+                // Authored evaluation order consumes the element before the sequence.
+                self.consume_local(value, item, state, next)?;
+                self.consume_local(source, sequence_type, state, next)?;
+                true
+            }
+            ExpressionOperation::SequencePop {
+                sequence_type,
+                result_type,
+                source,
+            } => {
+                self.sequence_item(sequence_type)?;
+                super::owned_product::validate(self.read, result_type, self.scope)?;
+                self.consume_local(source, sequence_type, state, next)?;
+                true
+            }
+            ExpressionOperation::BorrowOwnedItem {
+                sequence_type,
+                source,
+                index,
+                binding,
+                body,
+            } => {
+                let item = self.sequence_item(sequence_type)?;
+                self.borrow_binding(binding, item)?;
+                // An effectful index can move the source. Check its liveness afterwards.
+                plain(index, state)?;
+                let source = self.source_local(source, sequence_type, state, next)?;
+                self.loan(source, state, true)?;
+                let local = LocalValueReference::LexicalBinding(binding);
+                if state.insert(local, Slot::view(source)).is_some() {
+                    return Err(reject("duplicate sequence read binding"));
+                }
+                let result = self.eval(body, state, mode, next)?;
+                state.remove(&local);
+                self.loan(source, state, false)?;
+                result
+            }
             ExpressionOperation::BorrowOwnedField {
                 product_type,
                 source,
@@ -1131,11 +1218,28 @@ pub(crate) fn validate_owner(
     key: OwnerKey,
     record: &OwnerRecord,
 ) -> Result<(), Diagnostic> {
-    super::owned_product::require_generation(
-        read,
-        record.type_roots(),
-        record.header().contract_version,
-    )?;
+    let mut roots = record.type_roots();
+    if record.header().contract_version < 25
+        && let OwnerRecord::Declaration(declaration) = record
+    {
+        let parameters = match &declaration.payload {
+            DeclarationPayload::Function(function) => function.parameters.as_slice(),
+            DeclarationPayload::External(external) => external.parameters.as_slice(),
+            _ => &[],
+        };
+        // Parameter owners have their own headers. A newer parameter cannot
+        // grant its enclosing older declaration authority for a new type.
+        for parameter in parameters {
+            read.validation_work()?;
+            let OwnerRecord::Parameter(parameter) =
+                owner(read, read.package_id(), OwnerKey::Parameter(*parameter))?
+            else {
+                return Err(reject("wrong generation-bound signature parameter kind"));
+            };
+            roots.push(parameter.ty);
+        }
+    }
+    super::owned_product::require_generation(read, roots, record.header().contract_version)?;
     match record {
         OwnerRecord::TypeParameter(p) if p.constraints.has_owned() => {
             let allowed = match read.owner(OwnerKey::Declaration(p.declaration))? {

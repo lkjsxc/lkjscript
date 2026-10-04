@@ -8,7 +8,8 @@ are checked projections of that graph.
 
 `Owned`, `CaptureSafe` and `None` are distinct constraints. An Owned argument must
 be exactly ByteBuffer, OwnedI64Cell, an explicit [owned product](owned-products.md)
-or [owned choice](owned-choices.md),
+or [owned choice](owned-choices.md), an [owned sequence](owned-sequences.md)
+whose exact element type satisfies Owned,
 or an in-scope Owned parameter while checking
 a generic body. Ordinary and CaptureSafe parameters cannot receive an owned type,
 even when the parameter is unused, its container is empty, or the call is in an
@@ -49,7 +50,8 @@ provenance and exact borrowed method selection. Scope bodies may return unrelate
 owners and use authorized effects; protected sources and views cannot be consumed
 or escape. Borrowed task parameters remain unsupported.
 
-General owned containers, mutable borrows, escaping captures, memory-bearing indirect
+Owned sequences provide dynamic homogeneous collections under their separate
+contract. General nominal owned containers, mutable borrows, escaping captures, memory-bearing indirect
 function descriptors, cross-task memory transfer and generic implementation schemes
 are outside this increment. Ordinary generic and CaptureSafe contracts retain
 their previous meaning. Graph 19 adds fixed structural owned products with complete

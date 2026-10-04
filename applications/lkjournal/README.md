@@ -23,8 +23,8 @@ Current normalized identity:
 - semantic revision: `rev_a1d97c5d7deda1ece8e2e3383bd7a58ae1e267838368ec5b42678e40c9eb1640`;
 - semantic state: `semantic_state_3832cd12c3fee672d0bdfb975cb363cbc457f6ef45f15cb44a62d40ab47f2dee`;
 - package revision: `package_revision_13035e42572a2c0d087a6cd4880d53eca4387e660a6d18a59f79d94fe7599fc1`;
-- artifact manifest: `artifact_manifest_2319792586bb2643a22a6adf1afbc8a223308118a587c03bedb80325680137a4`;
-- artifact bundle: `artifact_bundle_a475d3767d6cdf6913c8a718f17568e25171e405d0e88391baaa7afb146ebe45`;
+- artifact manifest: `artifact_manifest_b24dc057d99834cb35d0bf1a9d0783415b6e7e0b2f442ead8f7055432c77cd17`;
+- artifact bundle: `artifact_bundle_6d1b6c5a7d13b8d1b3be21dae8afdfedc3da689075610f0f037e6361d183169b`;
 - 2,044 live root semantic owners and one exact built-in standard dependency.
 
 The original Graph 13 materialization preserved all existing application owner identities and behavior.
@@ -95,7 +95,7 @@ empty 404 and invokes none of them.
 
 All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,375,404-byte
 artifact bundle above (SHA-256
-`1faf41795f4412c9913ca4ade4c3ca6cbd54721e80d2b2d769ff6064f6607ede`). The service descriptor
+`dc154814996428b4e4fbacc0a788b07022d8a93486083b3b6b73e4d082d3be1a`). The service descriptor
 resolves `serve`, the worker descriptor resolves `work`, and `live.deployment.json` resolves
 `lkjournal-live-1`. Preparation strictly loads the standalone bundle,
 validates the runner, route-indexed handler and component requirement closure, grants, secrets, and adapters, and emits
@@ -217,7 +217,7 @@ The structured parallel compiler refresh rebuilds the current bundle for compile
 exact-supplier tests agree between production and reference execution. Accepted
 HEAD, dependency selection, application behavior and operational data are unchanged.
 
-The owned-effects compiler refresh rebuilds the current bundle for
-compiler 23, bytecode 18 and artifact 30 through public check/build. All 44 tests
+The owned-sequence compiler refresh rebuilds the current bundle for
+compiler 25, bytecode 20 and artifact 32 through public check/build. All 44 tests
 agree between production and reference execution. Accepted HEAD, exact historical
 standard supplier, application behavior and operational data remain unchanged.

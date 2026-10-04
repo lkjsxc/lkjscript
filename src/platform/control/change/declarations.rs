@@ -709,7 +709,7 @@ impl Lowering<'_> {
         let label = self.allocate('@')?;
         let mut fields = vec![("as", label.clone())];
         let operation = match form.as_str() {
-            "list" | "option" | "stream" => {
+            "list" | "option" | "stream" | "owned-sequence" => {
                 if args.len() != 1 {
                     return Err(self.error(id, "type constructor requires one type"));
                 }

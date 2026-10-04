@@ -667,7 +667,8 @@ fn reference_expression_bindings(
         ExpressionOperation::UnpackOwned { fields, .. } => {
             bindings.extend(fields.iter().map(|field| field.binding))
         }
-        ExpressionOperation::BorrowOwnedField { binding, .. } => bindings.push(*binding),
+        ExpressionOperation::BorrowOwnedField { binding, .. }
+        | ExpressionOperation::BorrowOwnedItem { binding, .. } => bindings.push(*binding),
         ExpressionOperation::Match { arms, .. } => {
             bindings.extend(arms.iter().filter_map(|arm| arm.payload_binding));
         }

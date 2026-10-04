@@ -4,6 +4,7 @@ use crate::platform::execution::normalized::{
     owned_choice::OwnedChoice,
     owned_i64_cell::{OwnedI64Cell, StorageObservation as Cells},
     owned_product::{OwnedProduct, StorageObservation as Products},
+    owned_sequence::OwnedSequence,
     tests::byte_buffer_tests,
 };
 use crate::platform::kernel::{DeclarationReference, OwnerKey, OwnerRecord};
@@ -143,6 +144,204 @@ fn ordinary(
             "test_metadata",
             "unexpected metadata",
         )),
+    }
+}
+
+fn sequence_fixture() -> (NormalizedProgram, FunctionIndex, TypeObjectDigest) {
+    use crate::platform::kernel::{TypeObject, encode_type_object};
+    let (prepared, functions) = fixture();
+    let mut program = (*prepared).clone();
+    let item = *program
+        .types
+        .iter()
+        .find(|(_, object)| matches!(object.form, TypeForm::OwnedI64Cell))
+        .unwrap()
+        .0;
+    let object = TypeObject::new(TypeForm::OwnedSequence { item }).unwrap();
+    let ty = encode_type_object(&object).unwrap().0;
+    program.types.insert(ty, object);
+    let function = functions["buffer-result"];
+    let target = &mut Arc::make_mut(&mut program.functions)[function.0 as usize];
+    Arc::make_mut(&mut target.parameters)[0].ty = ty;
+    target.result = ty;
+    (program, function, ty)
+}
+
+fn sequence_payload(
+    origin: ValueOrigin,
+    ty: TypeObjectDigest,
+    scalars: &[i64],
+) -> (NormalizedValue, Vec<usize>) {
+    let control = ExecutionControl::uncancelled();
+    let mut sequence = OwnedSequence::create(origin, ty, &control, &mut |_| Ok(())).unwrap();
+    let mut identities = Vec::new();
+    for scalar in scalars {
+        let cell = OwnedI64Cell::new(origin, *scalar);
+        identities.push(cell.allocation_identity());
+        sequence = sequence
+            .push(
+                origin,
+                NormalizedValue::OwnedI64Cell(cell),
+                &control,
+                &mut |_| Ok(()),
+            )
+            .unwrap();
+    }
+    (NormalizedValue::OwnedSequence(sequence), identities)
+}
+
+#[test]
+fn sequence_transfer_preserves_empty_affinity_and_every_item_allocation() {
+    let (program, function, ty) = sequence_fixture();
+    let control = ExecutionControl::uncancelled();
+    for scalars in [&[][..], &[2, 3, 7][..]] {
+        let cells = Cells::start();
+        let products = Products::start();
+        let parent = ValueOrigin::fresh().unwrap();
+        let child = ValueOrigin::fresh().unwrap();
+        let (value, identities) = sequence_payload(parent, ty, scalars);
+        let inert = value.clone();
+        let input = TransferArguments::seal(
+            &program,
+            parent,
+            child,
+            function,
+            vec![value],
+            &control,
+            &mut |_, _| panic!("sequence elements are owners"),
+        )
+        .unwrap();
+        let (_, mut values) = input.adopt(&program, child, &control).unwrap();
+        let value = values.pop().unwrap();
+        value.memory_validate(child, true).unwrap();
+        assert!(value.memory_validate(parent, true).is_err());
+        let output = TransferResult::seal(
+            &program,
+            child,
+            parent,
+            function,
+            ty,
+            value,
+            &control,
+            &mut |_, _| panic!("sequence elements are owners"),
+        )
+        .unwrap();
+        let value = output
+            .adopt(&program, parent, function, ty, &control)
+            .unwrap();
+        assert!(inert.memory_validate(parent, false).is_err());
+        assert!(inert.memory_validate(child, false).is_err());
+        let NormalizedValue::OwnedSequence(sequence) = &value else {
+            panic!("sequence");
+        };
+        assert_eq!(sequence.len(parent, &control).unwrap(), scalars.len());
+        sequence
+            .inspect_transfer(parent, |values| {
+                for ((value, scalar), identity) in values.iter().zip(scalars).zip(&identities) {
+                    let NormalizedValue::OwnedI64Cell(cell) = value else {
+                        panic!("cell");
+                    };
+                    cell.validate(parent, true).unwrap();
+                    assert_eq!(cell.read().unwrap(), *scalar);
+                    assert_eq!(cell.allocation_identity(), *identity);
+                }
+                Ok(())
+            })
+            .unwrap();
+        super::super::super::value::release_raw_value(value);
+        drop(inert);
+        assert_eq!(cells.created(), scalars.len());
+        assert_eq!(products.created(), 1);
+        assert_eq!((cells.live(), products.live()), ((0, 0), (0, 0)));
+    }
+}
+
+#[test]
+fn cancelled_sequence_transfer_reclaims_items_with_intermediate_origins() {
+    let (program, function, ty) = sequence_fixture();
+    let control = ExecutionControl::uncancelled();
+    let mut failed = 0;
+    let mut completed = 0;
+    for checks in 0..10 {
+        let cells = Cells::start();
+        let products = Products::start();
+        let source = ValueOrigin::fresh().unwrap();
+        let destination = ValueOrigin::fresh().unwrap();
+        let unrelated = OwnedI64Cell::new(ValueOrigin::fresh().unwrap(), 911);
+        let (value, _) = sequence_payload(source, ty, &[2, 3]);
+        let output = TransferResult::seal(
+            &program,
+            source,
+            destination,
+            function,
+            ty,
+            value,
+            &control,
+            &mut |_, _| panic!("sequence elements are owners"),
+        )
+        .unwrap();
+        let cancelled = ExecutionControl::cancel_after_checks(checks);
+        match output.adopt(&program, destination, function, ty, &cancelled) {
+            Ok(value) => {
+                completed += 1;
+                super::super::super::value::release_raw_value(value);
+            }
+            Err(error) => {
+                failed += 1;
+                assert_eq!(error.class, ExecutionFailureClass::Cancelled);
+            }
+        }
+        // Check four interrupts the second item after the first item has been
+        // retagged, while the sequence still belongs to the source invocation.
+        if checks == 3 {
+            assert!(cancelled.is_cancelled());
+        }
+        assert_eq!((cells.live(), products.live()), ((1, 0), (0, 0)));
+        assert_eq!(unrelated.extract().unwrap(), 911);
+    }
+    assert!(failed > 0 && completed > 0);
+}
+
+#[test]
+fn sequence_transfer_rejects_borrowed_envelopes_and_inert_clones() {
+    let (program, function, ty) = sequence_fixture();
+    let control = ExecutionControl::uncancelled();
+    for clone in [false, true] {
+        let cells = Cells::start();
+        let products = Products::start();
+        let source = ValueOrigin::fresh().unwrap();
+        let (value, _) = sequence_payload(source, ty, &[7]);
+        let NormalizedValue::OwnedSequence(sequence) = &value else {
+            panic!("sequence");
+        };
+        let loan = (!clone).then(|| sequence.borrow().unwrap());
+        let (value, retained) = if clone {
+            (value.clone(), Some(value))
+        } else {
+            (value, None)
+        };
+        assert!(
+            TransferResult::seal(
+                &program,
+                source,
+                ValueOrigin::fresh().unwrap(),
+                function,
+                ty,
+                value,
+                &control,
+                &mut |_, _| panic!("sequence elements are owners"),
+            )
+            .is_err()
+        );
+        if let Some(value) = retained {
+            value.memory_validate(source, true).unwrap();
+            super::super::super::value::release_raw_value(value);
+        }
+        if let Some(loan) = &loan {
+            assert!(loan.len(source, &control).is_err());
+        }
+        drop(loan);
+        assert_eq!((cells.live(), products.live()), ((0, 0), (0, 0)));
     }
 }
 

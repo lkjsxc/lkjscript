@@ -89,6 +89,10 @@ fn publish(repository: &GraphRepository, source: &str) {
 }
 
 fn imported() -> KernelSnapshot {
+    imported_group(GROUP)
+}
+
+fn imported_group(group: &str) -> KernelSnapshot {
     let temporary = tempfile::tempdir().unwrap();
     let workers = GraphRepository::create(
         &temporary.path().join("workers"),
@@ -112,7 +116,7 @@ fn imported() -> KernelSnapshot {
     publish(
         &caller,
         &format!(
-            "add.dependency package={} semantic-revision={} package-revision={}\ndeclarations.begin\n(units (use workers {} {}))\ndeclarations.end\n{GROUP}",
+            "add.dependency package={} semantic-revision={} package-revision={}\ndeclarations.begin\n(units (use workers {} {}))\ndeclarations.end\n{group}",
             exported.revision.package,
             exported.revision.revision.revision_id().unwrap(),
             exported.revision_digest,
@@ -469,4 +473,87 @@ fn transfer_memory_oracle_checks_all_generic_owned_choice_alternatives() {
         !accepts(&hidden),
         "ordinary authority cannot hide in an unselected choice case"
     );
+}
+
+#[test]
+fn transfer_memory_oracle_checks_imported_sequence_elements_and_inactive_choices() {
+    let sequence = "(owned-sequence (owned-choice (case ready ByteBuffer) (case pending O)))";
+    let group = GROUP
+        .replace(
+            "(parameter create value (type O) (use consume))",
+            &format!("(parameter create value (type {sequence}) (use consume))"),
+        )
+        .replace("(field left O)", &format!("(field left {sequence})"))
+        .replace("(types O)", &format!("(types {sequence})"));
+    for source in [author(&format!("{WORKERS}{group}")), imported_group(&group)] {
+        assert!(accepts(&source));
+        let joined = named(&source, "joined");
+        let mut weakened = source.clone();
+        for owner in weakened.owners.values_mut() {
+            if let OwnerRecord::TypeParameter(p) = owner
+                && p.declaration == joined
+                && p.name.as_str() == "O"
+            {
+                p.constraints = TypeParameterConstraints::Owned;
+            }
+        }
+        assert!(
+            !accepts(&weakened),
+            "all possible sequence elements require their transferable proof"
+        );
+        for form in [TypeForm::Secret, TypeForm::I64] {
+            let mut invalid = source.clone();
+            let object = TypeObject::new(form).unwrap();
+            let item = encode_type_object(&object).unwrap().0;
+            invalid.types.insert(item, object);
+            let mut replaced = false;
+            for object in invalid.types.values_mut() {
+                if let TypeForm::OwnedSequence { item: existing } = &mut object.form {
+                    *existing = item;
+                    replaced = true;
+                }
+            }
+            assert!(replaced);
+            assert!(
+                !accepts(&invalid),
+                "ordinary data and authority cannot become owned sequence elements"
+            );
+        }
+    }
+}
+
+#[test]
+fn transfer_memory_oracle_rejects_sequences_in_unused_transfer_type_arguments() {
+    let source = r#"declarations.begin
+(units (module create unused-sequence
+  (function create ignore (visibility private) (effect pure)
+    (type-parameter create T (constraint transferable))
+    (returns Unit) (body (unit)))
+  (function create invoke (visibility public) (effect pure)
+    (returns Unit) (body (call ignore (types I64))))))
+declarations.end
+"#;
+    let mut snapshot = author(source);
+    assert!(accepts(&snapshot));
+    let object = TypeObject::new(TypeForm::OwnedI64Cell).unwrap();
+    let item = encode_type_object(&object).unwrap().0;
+    snapshot.types.insert(item, object);
+    let object = TypeObject::new(TypeForm::OwnedSequence { item }).unwrap();
+    let sequence = encode_type_object(&object).unwrap().0;
+    snapshot.types.insert(sequence, object);
+    let mut changed = false;
+    for owner in snapshot.owners.values_mut() {
+        if let OwnerRecord::Expression(e) = owner
+            && let ExpressionOperation::Call { type_arguments, .. } = &mut e.operation
+        {
+            *type_arguments = vec![sequence];
+            changed = true;
+        }
+    }
+    assert!(changed);
+    assert!(
+        !accepts(&snapshot),
+        "an unused ordinary formal cannot admit a sequence token"
+    );
+    assert!(validate_full(&snapshot).is_err());
 }

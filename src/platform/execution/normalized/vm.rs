@@ -886,6 +886,125 @@ impl Machine<'_> {
                     let value = self.pop()?;
                     self.set_local(local, Some(value))?;
                 }
+                NormalizedInstruction::SequenceEmpty { sequence_type } => {
+                    let ty = self.resolve_type_arguments(&[sequence_type])?[0];
+                    self.sequence_item_type(ty)?;
+                    let control = self.control;
+                    let token = super::owned_sequence::OwnedSequence::create(
+                        self.memory_domain,
+                        ty,
+                        control,
+                        &mut |bytes| self.charge_allocation(bytes),
+                    )?;
+                    let value =
+                        CheckedValue::memory(self.program, NormalizedValue::OwnedSequence(token))?;
+                    self.push(value)?;
+                }
+                NormalizedInstruction::SequenceLength {
+                    sequence_type,
+                    source_local,
+                } => {
+                    let ty = self.resolve_type_arguments(&[sequence_type])?[0];
+                    self.sequence_item_type(ty)?;
+                    let source = self.borrow_owned_source(source_local)?;
+                    let NormalizedValue::OwnedSequence(token) = source.raw() else {
+                        return Err(type_error("sequence length requires a sequence token"));
+                    };
+                    if token.ty() != ty {
+                        return Err(type_error("sequence length has a foreign sequence type"));
+                    }
+                    let length = token.len(self.memory_domain, self.control)?;
+                    self.push_scalar(NormalizedValue::I64(length as i64))?;
+                }
+                NormalizedInstruction::SequencePush {
+                    sequence_type,
+                    value_local,
+                    source_local,
+                } => {
+                    if value_local == source_local {
+                        return Err(type_error("sequence push requires distinct owning locals"));
+                    }
+                    let ty = self.resolve_type_arguments(&[sequence_type])?[0];
+                    let item_type = self.sequence_item_type(ty)?;
+                    self.load_local(value_local, ParameterUse::Consume, false)?;
+                    let raw = self.pop()?.into_raw();
+                    let value = self.product_child(raw, item_type)?.into_raw();
+                    self.load_local(source_local, ParameterUse::Consume, false)?;
+                    let NormalizedValue::OwnedSequence(token) = self.pop()?.into_raw() else {
+                        return Err(type_error("sequence push requires a sequence token"));
+                    };
+                    if token.ty() != ty {
+                        return Err(type_error("sequence push has a foreign sequence type"));
+                    }
+                    let control = self.control;
+                    let token = token.push(self.memory_domain, value, control, &mut |bytes| {
+                        self.charge_allocation(bytes)
+                    })?;
+                    let value =
+                        CheckedValue::memory(self.program, NormalizedValue::OwnedSequence(token))?;
+                    self.push(value)?;
+                }
+                NormalizedInstruction::SequencePop {
+                    sequence_type,
+                    result_type,
+                    source_local,
+                } => {
+                    let ty = self.resolve_type_arguments(&[sequence_type])?[0];
+                    let result_type = self.resolve_type_arguments(&[result_type])?[0];
+                    let item_type = self.sequence_item_type(ty)?;
+                    let item_product_type =
+                        self.sequence_pop_product_type(ty, item_type, result_type)?;
+                    self.load_local(source_local, ParameterUse::Consume, false)?;
+                    let NormalizedValue::OwnedSequence(token) = self.pop()?.into_raw() else {
+                        return Err(type_error("sequence pop requires a sequence token"));
+                    };
+                    if token.ty() != ty {
+                        return Err(type_error("sequence pop has a foreign sequence type"));
+                    }
+                    let control = self.control;
+                    let raw = token.pop(
+                        self.memory_domain,
+                        result_type,
+                        item_product_type,
+                        control,
+                        &mut |bytes| self.charge_allocation(bytes),
+                    )?;
+                    let value = CheckedValue::memory(self.program, raw)?;
+                    self.push(value)?;
+                }
+                NormalizedInstruction::BorrowOwnedItem {
+                    sequence_type,
+                    source_local,
+                    binding_local,
+                    binding_type,
+                } => {
+                    let NormalizedValue::I64(index) = self.pop()?.into_raw() else {
+                        return Err(type_error("owned sequence index must be I64"));
+                    };
+                    let ty = self.resolve_type_arguments(&[sequence_type])?[0];
+                    let binding_type = self.resolve_type_arguments(&[binding_type])?[0];
+                    if self.sequence_item_type(ty)? != binding_type {
+                        return Err(type_error(
+                            "owned sequence borrow has an inexact element type",
+                        ));
+                    }
+                    self.validate_owned_borrow_binding(source_local, binding_local)?;
+                    self.charge_allocation(std::mem::size_of::<OwnedLoanScope>() as u64)?;
+                    let parent = self.borrow_owned_source(source_local)?;
+                    let NormalizedValue::OwnedSequence(token) = parent.raw() else {
+                        return Err(type_error("owned item borrow requires a sequence token"));
+                    };
+                    if token.ty() != ty {
+                        return Err(type_error("owned item borrow has a foreign sequence type"));
+                    }
+                    let control = self.control;
+                    let raw =
+                        token.borrow_item(self.memory_domain, index, control, &mut |bytes| {
+                            self.charge_allocation(bytes)
+                        })?;
+                    let child = self.borrowed_product_child(raw, binding_type)?;
+                    self.start_owned_borrow(binding_local, parent, child)?;
+                }
                 NormalizedInstruction::ChooseOwned { choice_type, case } => {
                     let ty = self.resolve_type_arguments(&[choice_type])?[0];
                     let payload_type = self.choice_payload_type(ty, case, None)?;
@@ -1584,6 +1703,59 @@ impl Machine<'_> {
         }
     }
 
+    fn sequence_item_type(&self, ty: TypeObjectDigest) -> Result<TypeObjectDigest, ExecutionError> {
+        let Some(crate::platform::kernel::TypeObject {
+            form: TypeForm::OwnedSequence { item },
+            ..
+        }) = self.program.types.get(&ty)
+        else {
+            return Err(type_error("missing closed owned sequence type"));
+        };
+        if direct_memory_type(self.program, *item, &BTreeMap::new(), self.control)?.is_none() {
+            return Err(type_error("owned sequence requires an owned element type"));
+        }
+        Ok(*item)
+    }
+
+    fn sequence_pop_product_type(
+        &self,
+        sequence: TypeObjectDigest,
+        item: TypeObjectDigest,
+        result: TypeObjectDigest,
+    ) -> Result<TypeObjectDigest, ExecutionError> {
+        let Some(crate::platform::kernel::TypeObject {
+            form: TypeForm::OwnedChoice { cases },
+            ..
+        }) = self.program.types.get(&result)
+        else {
+            return Err(type_error("sequence pop requires the exact result choice"));
+        };
+        if cases.len() != 2
+            || cases[0].name.as_str() != "empty"
+            || cases[0].ty != sequence
+            || cases[1].name.as_str() != "item"
+        {
+            return Err(type_error("sequence pop requires the exact result cases"));
+        }
+        let product = cases[1].ty;
+        let Some(crate::platform::kernel::TypeObject {
+            form: TypeForm::OwnedProduct { fields },
+            ..
+        }) = self.program.types.get(&product)
+        else {
+            return Err(type_error("sequence pop requires the exact item product"));
+        };
+        if fields.len() != 2
+            || fields[0].name.as_str() != "rest"
+            || fields[0].ty != sequence
+            || fields[1].name.as_str() != "value"
+            || fields[1].ty != item
+        {
+            return Err(type_error("sequence pop requires the exact item fields"));
+        }
+        Ok(product)
+    }
+
     fn choice_payload_type(
         &self,
         ty: TypeObjectDigest,
@@ -2170,6 +2342,7 @@ impl Machine<'_> {
                         | TypeForm::OwnedI64Cell
                         | TypeForm::OwnedProduct { .. }
                         | TypeForm::OwnedChoice { .. }
+                        | TypeForm::OwnedSequence { .. }
                 )
             );
             if (constraint.has_owned() && !owned)
@@ -3014,7 +3187,8 @@ fn value_cost(value: &NormalizedValue) -> Result<(u64, u64), ExecutionError> {
             NormalizedValue::ByteBuffer(_)
             | NormalizedValue::OwnedI64Cell(_)
             | NormalizedValue::OwnedProduct(_)
-            | NormalizedValue::OwnedChoice(_) => {
+            | NormalizedValue::OwnedChoice(_)
+            | NormalizedValue::OwnedSequence(_) => {
                 return Err(ExecutionError::resource(
                     "normalized_buffer_boundary",
                     "ByteBuffer cannot cross raw/adapter boundaries",
@@ -4107,6 +4281,10 @@ fn normalized_compare(
         (NormalizedValue::Map(left), NormalizedValue::Map(right)) => {
             normalized_map_compare(left, right, observation)
         }
+        _ if left.memory_form().is_some() || right.memory_form().is_some() => Err(trap_error(
+            "normalized_value_not_comparable",
+            "owned memory does not support semantic equality",
+        )),
         (NormalizedValue::Function { .. }, _) | (_, NormalizedValue::Function { .. }) => {
             Err(trap_error(
                 "normalized_value_not_comparable",
@@ -4329,6 +4507,17 @@ fn direct_memory_type(
                         substitutions,
                         control,
                         "unclosed product type",
+                    )?,
+                )));
+            }
+            TypeForm::OwnedSequence { .. } => {
+                return Ok(Some(super::value::MemoryForm::Sequence(
+                    resolve_runtime_type(
+                        program,
+                        ty,
+                        substitutions,
+                        control,
+                        "unclosed sequence type",
                     )?,
                 )));
             }

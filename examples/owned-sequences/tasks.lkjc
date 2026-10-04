@@ -1,0 +1,72 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create owned-sequence-tasks
+    (function create cell-relay (visibility public) (effect (task))
+      (parameter create values (type (owned-sequence OwnedI64Cell)) (use consume))
+      (returns (owned-sequence OwnedI64Cell))
+      (body (let
+        (binding value (type OwnedI64Cell) (call sequence-carriers::cell-create (i64 11)))
+        (in (sequence-push (type (owned-sequence OwnedI64Cell)) (local value) (local values))))))
+    (function create buffer-relay (visibility public) (effect (task))
+      (parameter create values (type (owned-sequence ByteBuffer)) (use consume))
+      (returns (owned-sequence ByteBuffer))
+      (body (let
+        (binding value (type ByteBuffer) (call sequence-carriers::buffer-create (i64 11)))
+        (in (sequence-push (type (owned-sequence ByteBuffer)) (local value) (local values))))))
+    (function create main (visibility public)
+      (effect (task (requirement command::clock)))
+      (parameter create inputs (type (list I64)))
+      (returns (record (read I64) (unrelated I64) (scalar (list I64)) (bytes (list I64))))
+      (body (let
+        (binding cells (type (owned-sequence OwnedI64Cell))
+          (implementation-call owned-sequences::build (types OwnedI64Cell)
+            (implementations concrete@sequence-carriers::Scalar) (local inputs)))
+        (binding bytes (type (owned-sequence ByteBuffer))
+          (implementation-call owned-sequences::build (types ByteBuffer)
+            (implementations concrete@sequence-carriers::Octets) (local inputs)))
+        (binding read (type I64)
+          (borrow-owned-item (type (owned-sequence OwnedI64Cell)) (local cells)
+            (index (i64 0)) (binding view (type OwnedI64Cell))
+            (in (call sequence-carriers::cell-read (local view)))))
+        (binding unrelated (type OwnedI64Cell)
+          (borrow-owned-item (type (owned-sequence OwnedI64Cell)) (local cells)
+            (index (sequence
+              (capability-call command::clock std::WallClock::utc-milliseconds) (i64 0)))
+            (binding view (type OwnedI64Cell))
+            (in (sequence
+              (call sequence-carriers::cell-read (local view))
+              (call sequence-carriers::cell-create (i64 77))))))
+        (binding unrelated-value (type I64) (call sequence-carriers::cell-finish (local unrelated)))
+        (binding joined (type (owned-product
+          (field left (owned-sequence OwnedI64Cell)) (field right (owned-sequence ByteBuffer))))
+          (parallel (call cell-relay (local cells)) (call buffer-relay (local bytes))))
+        (in (unpack-owned (type (owned-product
+          (field left (owned-sequence OwnedI64Cell)) (field right (owned-sequence ByteBuffer)))) (local joined)
+          (field left (binding cells (type (owned-sequence OwnedI64Cell))))
+          (field right (binding bytes (type (owned-sequence ByteBuffer))))
+          (in (let
+            (binding cells (type (owned-product (field rest (owned-sequence OwnedI64Cell)) (field values (list I64))))
+              (implementation-call owned-sequences::drain (types OwnedI64Cell)
+                (implementations concrete@sequence-carriers::Scalar) (local cells)))
+            (binding bytes (type (owned-product (field rest (owned-sequence ByteBuffer)) (field values (list I64))))
+              (implementation-call owned-sequences::drain (types ByteBuffer)
+                (implementations concrete@sequence-carriers::Octets) (local bytes)))
+            (in (unpack-owned (type (owned-product (field rest (owned-sequence OwnedI64Cell)) (field values (list I64)))) (local cells)
+              (field rest (binding cells-rest (type (owned-sequence OwnedI64Cell))))
+              (field values (binding cell-values (type (list I64))))
+              (in (unpack-owned (type (owned-product (field rest (owned-sequence ByteBuffer)) (field values (list I64)))) (local bytes)
+                (field rest (binding bytes-rest (type (owned-sequence ByteBuffer))))
+                (field values (binding byte-values (type (list I64))))
+                (in (record structural
+                  (field read (local read)) (field unrelated (local unrelated-value))
+                  (field scalar (local cell-values)) (field bytes (local byte-values)))))))))))))))
+    (component create command (visibility private)
+      (requirement create clock (interface std::WallClock)
+        (operations std::WallClock::utc-milliseconds) (limits (maximum_calls 1 calls)))
+      (port create main
+        (type (task-function ((list I64)) (record (read I64) (unrelated I64) (scalar (list I64)) (bytes (list I64)))
+          (row (requirement clock)))) (function main))))
+  (target create owned-sequence-tasks (component owned-sequence-tasks::command)
+    (runner command) (port owned-sequence-tasks::command::main)))
+declarations.end

@@ -622,6 +622,16 @@ charges. Task frames, including empty-requirement tasks, and ancestor transactio
 
 ## Artifact and execution boundaries
 
+Dynamic owned sequences are one finite structural type containing runtime-variable
+numbers of owned children. Products, choices and sequences use the same sealed
+composite custody carrier; shape remains independently checked at each semantic
+and execution boundary. Indexed reads retain sequence and ancestor guards without
+holding a storage mutex across user code. Push moves an element into the vector;
+pop preserves the vector in an existing owned-choice/product result envelope.
+Allocation-free cleanup traverses arbitrary sequence breadth under the admitted
+type-depth bound. This does not introduce recursive nominal ownership, escaping
+references or a second editable representation of program meaning.
+
 The artifact bundle binds the root repository/package/revision/state, every dependency package
 revision, compiler and bytecode compatibility, compiler-unit maps, runtime owner metadata, public
 interfaces, and exact immutable closure. The decoder rejects predecessor magic, noncanonical

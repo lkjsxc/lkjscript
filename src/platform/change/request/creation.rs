@@ -152,6 +152,66 @@ mod supplied_type_tests {
             }
         }
     }
+
+    #[test]
+    fn sequence_pop_derives_exact_closed_custody_and_charges_generated_types() {
+        let base = crate::platform::kernel::tests::witness_snapshot();
+        let witness = crate::platform::witness::rebuild_full_witness(&base).unwrap();
+        for maximum in [3, 4] {
+            let mut budget = ChangeBudget::default();
+            budget.canonical_edits.maximum_type_edits = maximum;
+            let mut lowerer = AuthoredLowerer::new(
+                &base,
+                &witness,
+                AuthoredLoweringInputs {
+                    intent_base: crate::platform::semantic_id::RevisionId::from_digest([0; 32]),
+                    allocation_seed: [0; 32],
+                    deletion_change: ChangeDigest::of(b"sequence pop type admission"),
+                    allocated: BTreeMap::new(),
+                    definitions: BTreeMap::new(),
+                    allocations: vec![],
+                    budget,
+                },
+            )
+            .unwrap();
+            let sequence = lowerer
+                .lower_type(&AuthoredType::OwnedSequence {
+                    item: Box::new(AuthoredType::OwnedI64Cell {}),
+                })
+                .unwrap();
+            let result = lowerer.sequence_pop_result_type(sequence);
+            if maximum == 3 {
+                assert_eq!(
+                    result.unwrap_err().code,
+                    "change_budget_canonical_type_edits"
+                );
+                continue;
+            }
+            let result = result.unwrap();
+            let TypeForm::OwnedSequence { item: element } =
+                &lowerer.types.get(sequence).unwrap().form
+            else {
+                panic!("sequence type")
+            };
+            let TypeForm::OwnedChoice { cases } = &lowerer.types.get(result).unwrap().form else {
+                panic!("pop result is an owned choice")
+            };
+            assert_eq!(cases.len(), 2);
+            assert_eq!(cases[0].name.as_str(), "empty");
+            assert_eq!(cases[0].ty, sequence);
+            assert_eq!(cases[1].name.as_str(), "item");
+            let TypeForm::OwnedProduct { fields } = &lowerer.types.get(cases[1].ty).unwrap().form
+            else {
+                panic!("pop item retains both owners")
+            };
+            assert_eq!(fields.len(), 2);
+            assert_eq!(fields[0].name.as_str(), "rest");
+            assert_eq!(fields[0].ty, sequence);
+            assert_eq!(fields[1].name.as_str(), "value");
+            assert_eq!(fields[1].ty, *element);
+            assert_eq!(lowerer.work.type_nodes_interned, 4);
+        }
+    }
 }
 
 mod declarations;
@@ -188,7 +248,7 @@ use crate::platform::kernel::{
     FunctionDeclaration, FunctionEffect, LocalValueReference, MapExpressionEntry,
     MatchExpressionArm, Name, OperationReference, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord,
     ParameterParent, ParameterRecord, ParameterUse, RecordExpressionField, RequirementReference,
-    StructuralTypeField, TextValue, TypeForm, TypeObjectDigest, TypeParameterRecord,
+    StructuralTypeField, TextValue, TypeForm, TypeObject, TypeObjectDigest, TypeParameterRecord,
 };
 use crate::platform::semantic_id::{
     BindingId, CaseId, DeclarationId, FieldId, OperationId, ParameterId, RequirementId,
@@ -256,6 +316,9 @@ pub enum AuthoredFunctionEffect {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredType {
+    OwnedSequence {
+        item: Box<AuthoredType>,
+    },
     OwnedChoice {
         cases: Vec<AuthoredStructuralTypeField>,
     },
@@ -428,6 +491,29 @@ pub struct AuthoredExpression {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredExpressionOperation {
+    SequenceEmpty {
+        sequence_type: AuthoredType,
+    },
+    SequenceLength {
+        sequence_type: AuthoredType,
+        source: Box<AuthoredExpression>,
+    },
+    SequencePush {
+        sequence_type: AuthoredType,
+        value: Box<AuthoredExpression>,
+        source: Box<AuthoredExpression>,
+    },
+    SequencePop {
+        sequence_type: AuthoredType,
+        source: Box<AuthoredExpression>,
+    },
+    BorrowOwnedItem {
+        sequence_type: AuthoredType,
+        source: Box<AuthoredExpression>,
+        index: Box<AuthoredExpression>,
+        binding: Box<AuthoredBindingDefinition>,
+        body: Box<AuthoredExpression>,
+    },
     Parallel {
         left: Box<AuthoredExpression>,
         right: Box<AuthoredExpression>,
@@ -697,6 +783,26 @@ pub(super) fn collect_expression_symbols(
         let next = depth + 1;
         // Reverse pushes preserve the original preorder and per-kind allocation ordinals.
         match &expression.operation {
+            AuthoredExpressionOperation::SequenceLength { source, .. }
+            | AuthoredExpressionOperation::SequencePop { source, .. } => {
+                stack.push(Visit::Expression(source, next));
+            }
+            AuthoredExpressionOperation::SequencePush { value, source, .. } => {
+                stack.push(Visit::Expression(source, next));
+                stack.push(Visit::Expression(value, next));
+            }
+            AuthoredExpressionOperation::BorrowOwnedItem {
+                source,
+                index,
+                binding,
+                body,
+                ..
+            } => {
+                stack.push(Visit::Expression(body, next));
+                stack.push(Visit::Binding(&binding.symbol, SymbolKind::LexicalBinding));
+                stack.push(Visit::Expression(source, next));
+                stack.push(Visit::Expression(index, next));
+            }
             AuthoredExpressionOperation::Parallel { left, right } => {
                 stack.push(Visit::Expression(right, next));
                 stack.push(Visit::Expression(left, next));
@@ -816,6 +922,7 @@ pub(super) fn collect_expression_symbols(
                 ));
             }
             AuthoredExpressionOperation::Unit {}
+            | AuthoredExpressionOperation::SequenceEmpty { .. }
             | AuthoredExpressionOperation::Bool { .. }
             | AuthoredExpressionOperation::I64 { .. }
             | AuthoredExpressionOperation::F64 { .. }
@@ -997,6 +1104,9 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 lowered.sort_by(|a, b| a.name.cmp(&b.name));
                 TypeForm::OwnedProduct { fields: lowered }
             }
+            AuthoredType::OwnedSequence { item } => TypeForm::OwnedSequence {
+                item: self.lower_type(item)?,
+            },
             AuthoredType::List { item } => TypeForm::List {
                 item: self.lower_type(item)?,
             },
@@ -1034,6 +1144,10 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 }
             }
         };
+        self.intern_authored_type(form)
+    }
+
+    fn intern_authored_type(&mut self, form: TypeForm) -> Result<TypeObjectDigest, Diagnostic> {
         let digest = self.types.intern(form).map_err(|diagnostic| {
             if diagnostic.code == "kernel_type_interner_exhausted" {
                 request_error(
@@ -1048,6 +1162,47 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         self.work.type_nodes_interned = u64::try_from(self.types.len()).unwrap_or(u64::MAX);
         self.classify_interned_type(digest)?;
         Ok(digest)
+    }
+
+    fn sequence_pop_result_type(
+        &mut self,
+        sequence_type: TypeObjectDigest,
+    ) -> Result<TypeObjectDigest, Diagnostic> {
+        let Some(TypeObject {
+            form: TypeForm::OwnedSequence { item },
+            ..
+        }) = self.candidate_type_object(sequence_type)?
+        else {
+            return Err(request_error(
+                DiagnosticClass::Semantic,
+                "change_authored_sequence_type",
+                "sequence.pop requires an exact OwnedSequence type",
+            ));
+        };
+        let item_type = self.intern_authored_type(TypeForm::OwnedProduct {
+            fields: vec![
+                StructuralTypeField {
+                    name: Name::new("rest")?,
+                    ty: sequence_type,
+                },
+                StructuralTypeField {
+                    name: Name::new("value")?,
+                    ty: item,
+                },
+            ],
+        })?;
+        self.intern_authored_type(TypeForm::OwnedChoice {
+            cases: vec![
+                StructuralTypeField {
+                    name: Name::new("empty")?,
+                    ty: sequence_type,
+                },
+                StructuralTypeField {
+                    name: Name::new("item")?,
+                    ty: item_type,
+                },
+            ],
+        })
     }
 
     fn classify_interned_type(&mut self, digest: TypeObjectDigest) -> Result<(), Diagnostic> {
@@ -1197,6 +1352,71 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
     ) -> Result<crate::platform::semantic_id::ExpressionId, Diagnostic> {
         let id = self.expression_identity(authored.symbol.as_deref())?;
         let operation = match &authored.operation {
+            AuthoredExpressionOperation::SequenceEmpty { sequence_type } => {
+                ExpressionOperation::SequenceEmpty {
+                    sequence_type: self.lower_type(sequence_type)?,
+                }
+            }
+            AuthoredExpressionOperation::SequenceLength {
+                sequence_type,
+                source,
+            } => ExpressionOperation::SequenceLength {
+                sequence_type: self.lower_type(sequence_type)?,
+                source: self.lower_expression(source)?,
+            },
+            AuthoredExpressionOperation::SequencePush {
+                sequence_type,
+                value,
+                source,
+            } => ExpressionOperation::SequencePush {
+                sequence_type: self.lower_type(sequence_type)?,
+                value: self.lower_expression(value)?,
+                source: self.lower_expression(source)?,
+            },
+            AuthoredExpressionOperation::SequencePop {
+                sequence_type,
+                source,
+            } => {
+                let sequence_type = self.lower_type(sequence_type)?;
+                ExpressionOperation::SequencePop {
+                    sequence_type,
+                    result_type: self.sequence_pop_result_type(sequence_type)?,
+                    source: self.lower_expression(source)?,
+                }
+            }
+            AuthoredExpressionOperation::BorrowOwnedItem {
+                sequence_type,
+                source,
+                index,
+                binding,
+                body,
+            } => {
+                let sequence_type = self.lower_type(sequence_type)?;
+                let index = self.lower_expression(index)?;
+                let source = self.lower_expression(source)?;
+                let id = self.lexical_binding_symbol(&binding.symbol)?;
+                let declared_type = binding
+                    .declared_type
+                    .as_ref()
+                    .map(|ty| self.lower_type(ty))
+                    .transpose()?;
+                self.insert_created(OwnerRecord::Binding(
+                    crate::platform::kernel::BindingRecord {
+                        header: OwnerHeader::new(OwnerKey::Binding(id), OwnerKind::Binding),
+                        name: binding.name.clone(),
+                        kind: crate::platform::kernel::BindingKind::OwnedBorrow,
+                        value: None,
+                        declared_type,
+                    },
+                ))?;
+                ExpressionOperation::BorrowOwnedItem {
+                    sequence_type,
+                    source,
+                    index,
+                    binding: id,
+                    body: self.lower_expression(body)?,
+                }
+            }
             AuthoredExpressionOperation::Parallel { left, right } => {
                 ExpressionOperation::Parallel {
                     left: self.lower_expression(left)?,

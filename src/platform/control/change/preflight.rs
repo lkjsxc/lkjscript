@@ -45,6 +45,9 @@ impl Decoder {
                 "expression.invoke" => &["function"],
                 "expression.field" | "expression.match" => &["value"],
                 "expression.choose-owned" => &["value"],
+                "expression.sequence-length" | "expression.sequence-pop" => &["source"],
+                "expression.sequence-push" => &["value", "source"],
+                "expression.borrow-owned-item" => &["index", "source", "body"],
                 "expression.match-owned" | "expression.match-borrowed-owned" => &["source"],
                 "expression.unpack-owned" | "expression.borrow-owned-field" => &["source", "body"],
                 "expression.variant" => &["payload"],
@@ -112,7 +115,7 @@ impl Decoder {
         for (symbol, record) in &self.types {
             let mut children = Vec::new();
             let direct: &[&str] = match record.operation.as_str() {
-                "type.list" | "type.option" | "type.stream" => &["item"],
+                "type.list" | "type.option" | "type.stream" | "type.owned-sequence" => &["item"],
                 "type.map" => &["key", "value"],
                 "type.result" => &["ok", "error"],
                 "type.function" | "type.task-function" => &["result"],

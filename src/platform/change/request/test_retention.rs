@@ -268,7 +268,25 @@ fn remap(operation: &mut E, identities: &BTreeMap<OwnerKey, OwnerKey>) {
             binding(id);
             expression(body);
         }
+        E::BorrowOwnedItem {
+            source,
+            index,
+            binding: id,
+            body,
+            ..
+        } => {
+            expression(source);
+            expression(index);
+            binding(id);
+            expression(body);
+        }
+        E::SequenceLength { source, .. } | E::SequencePop { source, .. } => expression(source),
+        E::SequencePush { value, source, .. } => {
+            expression(value);
+            expression(source);
+        }
         E::Unit {}
+        | E::SequenceEmpty { .. }
         | E::Bool { .. }
         | E::I64 { .. }
         | E::F64 { .. }

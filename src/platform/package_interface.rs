@@ -1365,6 +1365,20 @@ fn validate_type_closure<S: ImmutableObjectStore + ?Sized>(
                 )
             })?;
         let object = decode_type_object(&bytes, digest)?;
+        if matches!(object.form, TypeForm::OwnedSequence { .. })
+            && (owners
+                .get(&source)
+                .is_some_and(|owner| owner.record.header().contract_version < 25)
+                || semantic_declaration(source, owners)
+                    .and_then(|declaration| owners.get(&OwnerKey::Declaration(declaration)))
+                    .is_some_and(|owner| owner.record.header().contract_version < 25))
+        {
+            return Err(interface_error(
+                DiagnosticClass::Semantic,
+                "kernel_sequence_generation",
+                "owned sequence interface type closure requires Graph 25 owners",
+            ));
+        }
         if matches!(object.form, TypeForm::OwnedChoice { .. })
             && owners
                 .get(&source)
@@ -1538,6 +1552,7 @@ fn validate_interface_type_reference(
         | TypeForm::OwnedI64Cell
         | TypeForm::OwnedProduct { .. }
         | TypeForm::OwnedChoice { .. }
+        | TypeForm::OwnedSequence { .. }
         | TypeForm::Bytes
         | TypeForm::Text
         | TypeForm::StaticText
@@ -2067,6 +2082,60 @@ mod tests {
                 .code,
             "package_interface_owner_missing"
         );
+    }
+
+    #[test]
+    fn owned_sequence_interface_closure_requires_generation25_on_each_signature_owner() {
+        let snapshot =
+            crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(
+                r#"declarations.begin
+(units (module create sequence-interface
+  (function create relay (visibility public) (effect pure)
+    (parameter create p (type (owned-sequence ByteBuffer)) (use consume))
+    (returns Unit) (body (unit)))))
+declarations.end"#,
+            )
+            .unwrap();
+        let witness = rebuild_full_witness(&snapshot).unwrap();
+        let selection =
+            PackageInterfaceSelection::from_records(snapshot.root.package_id, &snapshot.owners)
+                .unwrap();
+        let owners = snapshot
+            .owners
+            .iter()
+            .filter_map(|(key, record)| {
+                PackageInterfaceOwner::project(record, &witness.summaries[key], &selection)
+                    .unwrap()
+                    .map(|owner| (*key, owner))
+            })
+            .collect::<BTreeMap<_, _>>();
+        let types = snapshot
+            .types
+            .iter()
+            .map(|(digest, object)| (*digest, encode_type_object(object).unwrap().1))
+            .collect();
+        let validate = |owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>| {
+            let build = build_package_interface(owners, &types).unwrap();
+            let mut store = MemoryPackedStore::default();
+            let mut work = StoreWork::default();
+            for (key, bytes) in &build.objects {
+                store.stage(*key, bytes, &mut work).unwrap();
+            }
+            validate_package_interface(snapshot.root.package_id, build.root, &store, &mut work)
+        };
+        assert!(validate(&owners).is_ok());
+        for key in owners.keys() {
+            let mut hostile = owners.clone();
+            match &mut hostile.get_mut(key).unwrap().record {
+                PackageInterfaceRecord::Declaration(record) => record.header.contract_version = 24,
+                PackageInterfaceRecord::Parameter(record) => record.header.contract_version = 24,
+                _ => continue,
+            }
+            assert_eq!(
+                validate(&hostile).unwrap_err().code,
+                "kernel_sequence_generation"
+            );
+        }
     }
 
     #[test]

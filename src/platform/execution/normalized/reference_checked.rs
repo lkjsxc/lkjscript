@@ -38,6 +38,7 @@ impl Value {
                 | NormalizedValue::OwnedI64Cell(_)
                 | NormalizedValue::OwnedProduct(_)
                 | NormalizedValue::OwnedChoice(_)
+                | NormalizedValue::OwnedSequence(_)
         ) {
             return Err(reject("memory constructor requires a sealed token"));
         }
@@ -301,6 +302,7 @@ impl Value {
                         | TypeForm::OwnedI64Cell
                         | TypeForm::OwnedProduct { .. }
                         | TypeForm::OwnedChoice { .. }
+                        | TypeForm::OwnedSequence { .. }
                         | TypeForm::CapabilityResource { .. }
                 )
             }) {
@@ -523,6 +525,7 @@ impl ReferenceState<'_> {
                             | TypeForm::OwnedI64Cell
                             | TypeForm::OwnedProduct { .. }
                             | TypeForm::OwnedChoice { .. }
+                            | TypeForm::OwnedSequence { .. }
                             | TypeForm::CapabilityResource { .. }
                     )
                 }) {
@@ -860,6 +863,7 @@ impl ReferenceState<'_> {
                                                 | TypeForm::OwnedI64Cell
                                                 | TypeForm::OwnedProduct { .. }
                                                 | TypeForm::OwnedChoice { .. }
+                                                | TypeForm::OwnedSequence { .. }
                                                 | TypeForm::CapabilityResource { .. }
                                         )
                                     });
@@ -1370,6 +1374,7 @@ impl ReferenceState<'_> {
                         | TypeForm::OwnedI64Cell
                         | TypeForm::OwnedProduct { .. }
                         | TypeForm::OwnedChoice { .. }
+                        | TypeForm::OwnedSequence { .. }
                 )
             );
             if owned != constraint.has_owned()
@@ -1697,6 +1702,7 @@ impl ReferenceState<'_> {
                 | TypeForm::OwnedI64Cell
                 | TypeForm::OwnedProduct { .. }
                 | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. }
                 | TypeForm::CapabilityResource { .. }
                 | TypeForm::TypeParameter { .. } => {
                     return Err(reject(

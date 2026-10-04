@@ -208,6 +208,7 @@ impl CompilationManifest {
                     | (22, 22, 17)
                     | (23, 23, 18)
                     | (24, 24, 19)
+                    | (25, 25, 20)
             )
         {
             return Err(manifest_error(
