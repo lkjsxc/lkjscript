@@ -43,12 +43,15 @@ discovery were regenerated through the product; all four accepted program HEADs
 are unchanged. Workspace linting and all 14 corrected library regressions passed.
 Original failed runs remain retained.
 
-The first fresh full run on `0e654f72845d7d264fd84d56ead9a68a3a562d29`
-recorded 23 passing gates and three failures from stale verification expectations,
-with stable inputs and no unrun gates. Its original receipt is
-`.artifacts/lkjscript-dev/check/1791138981050628568-2247770-0/receipt.json`.
-The selected successor corrects public discovery, definition-projection and
-maintained service-artifact expectations; complete acceptance must be renewed.
+The latest completed full run on `5f4c6ff1e4fc6c72c84ae7b022c2d61aa62176ab`
+recorded 25 fresh passing gates, with stable inputs and no unrun gates. Its original
+receipt is `.artifacts/lkjscript-dev/check/1791140502347407909-2343140-0/receipt.json`.
+The remaining failure was the distributed HTTP verifier's numeric definition
+projection expectation. The selected successor corrects it; complete acceptance
+must be renewed. Focused distributed HTTP verification passed 46 commands and two
+runners against the unchanged release executable; its original receipt is
+`.artifacts/lkjscript-dev/distributed-http/1791141683632082818-2428024-0/receipt.json`.
+Earlier failed receipts remain intact.
 
 Next: run dependency-complete fresh source acceptance on the stabilized
 implementation. Integrate the accepted source normally and
