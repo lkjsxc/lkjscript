@@ -19,7 +19,7 @@ the published owned-effects boundary.
 
 ## Reviewed concurrent changes
 
-The selected implementation adds [explicit reviewed refresh](spec/concurrent-changes.md).
+Mainline now includes [explicit reviewed refresh](spec/concurrent-changes.md).
 An author keeps the original proposal and review token, selects an exact current
 revision, reviews the renewed candidate and applies its new token. Complete intent
 guards reject changed positive or negative observations; independent edits preserve
@@ -46,23 +46,36 @@ unchanged. The eight reference pages were generated and verified through the
 product. Development logs, including the original failed fixture/golden checks,
 remain in `.artifacts/20261004-refresh/`.
 
-## Remaining acceptance
+## Accepted source and pending release
 
-The first fresh full run at `9190e7474ee307e8acdd6656503949ef9eece059`
-passed 25 of 26 gates. Its offline-package predecessor fixture still expected an
-old transaction to replay under the current encoding; the original failure is
-retained in `.artifacts/lkjscript-dev/check/1791126369788118222-1725336-0/receipt.json`.
-The fixture now checks explicit rejection and immutable history separately from
-successful compiler-cache rebuilding. The focused validator-upgrade owner passed
-against the same retained product executable; its original receipt is
+Accepted source: `9f8610e896bb8f96345054ef17d47501cda2333d`, integrated by normal
+fast-forward and independently verified on remote `main`. All 26 full-profile
+gates passed fresh, with zero reused gates. Original receipt:
+`.artifacts/lkjscript-dev/check/1791128757456244504-1878981-0/receipt.json`;
+digest `verification_8a57065e6c7f28bbed52294082d2f142c90f0eb5f65efbd00ebaf419e2b0436e`.
+This includes 1,308 kernel/library, 210 public CLI and 253 developer-tool passing
+tests; the receipt retains all selected and ignored outcomes. Later documentation
+commits report this proof without changing its tested source.
+
+The original failed full run remains at
+`.artifacts/lkjscript-dev/check/1791126369788118222-1725336-0/receipt.json`.
+The corrected predecessor proof independently checks legacy-key rejection,
+unchanged history and successful current repair retries. Its focused receipt is
 `.artifacts/20261004-refresh/validator-upgrade-03/receipt.json`.
-Repeat the fresh 26-gate profile with the corrected verifier.
 
-Full source acceptance, mainline integration and finalized-byte publication remain
-pending. After acceptance, dispatch one source-bound candidate from integrated main. Final
-candidate contract 3 requires every `native_refresh` public case in addition to
-the established source, target, userland and installation owners. Source and
-development-host evidence do not substitute for final-byte acceptance.
+[Candidate 37215197861/1](https://github.com/lkjsxc/lkjscript/actions/runs/37215197861)
+was dispatched from the exact accepted source on 2026-10-04 at 16:01 UTC and is
+pending hosted acceptance. The dispatch observation is retained in
+`.artifacts/20261004-refresh/candidate-dispatched.json`. No tag or release occupied
+`v0.1.74` at dispatch. Final candidate contract 3 requires every `native_refresh`
+public case alongside the source, target, userland and installation owners.
+
+Next: inspect that exact producer/attempt for `candidate_accepted`, then follow
+the [configured promotion procedure](release.md#select-promote-and-resume) using
+its unchanged accepted assets. Publication remains incomplete until
+`immutable_published_and_public_verified`. Do not dispatch a duplicate candidate
+while this run remains healthy. Source proof does not substitute for final-byte
+or public acceptance.
 
 Selected checkout: `/home/coder/workspace/lkjscript`, branch `main`. Preserve the
 other worktrees, unrelated stash, original failures and immutable publication

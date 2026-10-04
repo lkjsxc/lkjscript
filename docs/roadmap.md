@@ -42,8 +42,8 @@ Public 0.1.72 supplies the shared worker/runtime work below. Public
 effects and requirements through the same independently checked authority
 boundaries as ordinary calls. Its source, finalized-byte and public acceptance
 are complete. [Reviewed concurrent candidate refresh](spec/concurrent-changes.md)
-is the selected semantic increment under implementation; source and final-byte
-acceptance remain pending. [Status](status.md) owns the exact current evidence.
+has completed fresh source acceptance and mainline integration; finalized-byte
+acceptance remains pending. [Status](status.md) owns the exact current evidence.
 Keep region-local ownership possible: current owned carriers being transferable
 does not make every future owner transferable.
 
@@ -111,13 +111,12 @@ workloads, including cache/NUMA and large working-set behavior.
 
 ## 5. Support concurrent semantic development
 
-Complete the selected [explicit candidate refresh](spec/concurrent-changes.md)
-before expanding concurrent authoring. Preserve the original request, allocation
-identities and authored after-values; guard complete intent reads including negative
-lookups and empty relation ranges, then renew semantic validation, impact and tests.
-Two candidates must independently prove disjoint publication, hidden conflicts,
-stale races and exact accepted retries through the copied public executable.
-Implementation alone does not complete source or finalized-byte acceptance.
+Source acceptance for [explicit candidate refresh](spec/concurrent-changes.md) is
+complete. It preserves the original request, allocation identities and authored
+after-values; guards complete intent reads including negative lookups and empty
+relation ranges; and renews semantic validation, impact and tests. Copied public
+executables prove disjoint publication, hidden conflicts, stale races and exact
+accepted retries. Finalized-byte acceptance remains a separate pending gate.
 
 After that acceptance, use the retained evidence to select larger concurrent-agent
 experiments and finer dependency capture on authorized resources. Different edited
