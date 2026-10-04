@@ -763,12 +763,9 @@ fn retain_retirements_and_mark_deleted<
     lowerer: &mut AuthoredLowerer<'_, B, W>,
     closure: &BTreeSet<OwnerKey>,
 ) -> Result<(), Diagnostic> {
-    let revision = lowerer.base.exact_revision().ok_or_else(|| {
-        delete_corrupt(
-            "change_delete_revision",
-            "authored deletion requires one exact accepted base revision",
-        )
-    })?;
+    // A reviewed refresh changes the publication parent, while retirement provenance remains
+    // part of the original authored intent and must not silently change its after-value.
+    let revision = lowerer.intent_base;
     for owner in closure {
         let original = lowerer.owners[owner].original.clone().ok_or_else(|| {
             delete_error(

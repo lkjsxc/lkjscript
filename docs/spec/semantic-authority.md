@@ -153,6 +153,14 @@ Predecessor repository markers are rejected before mutation, cache work, or deri
 no graph edition, migration command, compatibility flag, fallback reader, dual dispatch, or dual
 write. Arbitrary predecessor conversion is not supported.
 
+Transaction 6, semantic diff 4 and receipt 6 bind the complete supplied type inventory
+independently of physical deduplication. Exact transaction-5, diff-3 and receipt-5 envelopes
+remain readable with their original storage-addition interpretation. Replanning a request
+already accepted under that predecessor transaction identity produces a current transaction;
+reusing its occupied key reports `publication_repository_idempotency_conflict` and publishes
+nothing. Original accepted revisions and receipts remain intact. Exact current-transaction
+retries retain their immutable accepted result.
+
 All paths, authored files, transports, artifacts, caches, continuations, deployment descriptors,
 and runtime inputs are hostile bounded boundaries. The system does not claim hostile-code
 sandboxing, multi-tenant isolation, encrypted graph storage, signed artifacts, distributed

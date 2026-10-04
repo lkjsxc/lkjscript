@@ -1,6 +1,7 @@
 //! Strict, bounded public graph-native command projection.
 
 mod history;
+mod refresh;
 
 use super::builtin_discovery::{
     BUILTIN_QUERY_DEFAULT_BYTES, BUILTIN_QUERY_DEFAULT_ITEMS, BUILTIN_QUERY_ORDERING,
@@ -2177,6 +2178,7 @@ pub fn execute_status(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ChangeAction {
     Plan,
+    Refresh,
     Apply,
 }
 
@@ -2185,6 +2187,7 @@ struct ChangeCommandRequest {
     reviewed: Option<ChangePlanToken>,
     input_file: Option<String>,
     output_file: Option<String>,
+    onto: Option<RevisionId>,
 }
 
 /// Plans or applies one transport-neutral authored request through the normalized repository
@@ -2216,7 +2219,7 @@ fn execute_change_on_stack(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagno
     }
     let action = arguments.get(1).map(String::as_str).ok_or_else(|| {
         single_diagnostic(usage_error(
-            "change requires draft, plan or apply; use 'capabilities change'",
+            "change requires draft, plan, refresh or apply; use 'capabilities change'",
         ))
     })?;
     if action == "draft" {
@@ -2224,10 +2227,11 @@ fn execute_change_on_stack(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagno
     }
     let action = match action {
         "plan" => ChangeAction::Plan,
+        "refresh" => ChangeAction::Refresh,
         "apply" => ChangeAction::Apply,
         other => {
             return Err(single_diagnostic(usage_error(format!(
-                "unknown change action '{other}'; use draft, plan or apply"
+                "unknown change action '{other}'; use draft, plan, refresh or apply"
             ))));
         }
     };
@@ -2376,6 +2380,7 @@ fn decode_record_change(
 ) -> Result<ChangeCommandRequest, Vec<Diagnostic>> {
     let allowed = match action {
         ChangeAction::Plan => &["--input", "--input-file", "--output"][..],
+        ChangeAction::Refresh => &["--input", "--input-file", "--plan", "--onto", "--output"][..],
         ChangeAction::Apply => &["--input", "--input-file", "--plan"][..],
     };
     ensure_options(options, allowed, &[]).map_err(single_diagnostic)?;
@@ -2415,19 +2420,49 @@ fn decode_record_change(
         }
     };
     let repository = open_normalized_repository(project).map_err(single_diagnostic)?;
-    let normalized =
-        super::control::decode_compact_change_in_repository(&source, &bytes, &repository)?;
     let reviewed = option_value(options, "--plan")
         .map_err(single_diagnostic)?
         .map(|value| value.parse::<ChangePlanToken>())
         .transpose()
         .map_err(single_diagnostic)?;
+    let onto = refresh::parse_onto(action, options).map_err(single_diagnostic)?;
+    let normalized = if action == ChangeAction::Refresh
+        || reviewed.is_some_and(|token| token.refresh.is_some())
+    {
+        let (base, key) = super::control::compact_change_origin(&source, &bytes)?;
+        let current = repository.view_current().map_err(single_diagnostic)?;
+        if let Some(onto) = onto {
+            refresh::require_target(&current, onto).map_err(single_diagnostic)?;
+        }
+        let target = if let Some(refresh) = reviewed.and_then(|token| token.refresh)
+            && action == ChangeAction::Apply
+        {
+            let retained = key
+                .as_deref()
+                .map(|key| repository.view_idempotency_base(key, refresh.onto))
+                .transpose()
+                .map_err(single_diagnostic)?
+                .flatten();
+            let target = retained.unwrap_or(current);
+            refresh::require_target(&target, refresh.onto).map_err(single_diagnostic)?;
+            target
+        } else {
+            current
+        };
+        let origin = repository
+            .view_ancestor_from(&target, base, &ExecutionControl::uncancelled())
+            .map_err(single_diagnostic)?;
+        super::control::decode_compact_change_in_view(&source, &bytes, &origin)?
+    } else {
+        super::control::decode_compact_change_in_repository(&source, &bytes, &repository)?
+    };
     let output_file = option_value(options, "--output").map_err(single_diagnostic)?;
     Ok(ChangeCommandRequest {
         normalized,
         reviewed,
         input_file: Some(source),
         output_file,
+        onto,
     })
 }
 
@@ -2451,6 +2486,16 @@ fn decode_direct_rename(
             "--idempotency",
             "--intent",
             "--plan",
+        ][..],
+        ChangeAction::Refresh => &[
+            "--base",
+            "--owner",
+            "--name",
+            "--idempotency",
+            "--intent",
+            "--plan",
+            "--onto",
+            "--output",
         ][..],
     };
     ensure_options(options, allowed, &[])?;
@@ -2484,6 +2529,7 @@ fn decode_direct_rename(
         reviewed,
         input_file: None,
         output_file: option_value(options, "--output")?,
+        onto: refresh::parse_onto(action, options)?,
     })
 }
 
@@ -2511,6 +2557,18 @@ fn decode_direct_extract_function(
             "--idempotency",
             "--intent",
             "--plan",
+        ][..],
+        ChangeAction::Refresh => &[
+            "--base",
+            "--as",
+            "--function",
+            "--expression",
+            "--name",
+            "--idempotency",
+            "--intent",
+            "--plan",
+            "--onto",
+            "--output",
         ][..],
     };
     ensure_options(options, allowed, &[])?;
@@ -2550,6 +2608,7 @@ fn decode_direct_extract_function(
         reviewed,
         input_file: None,
         output_file: option_value(options, "--output")?,
+        onto: refresh::parse_onto(action, options)?,
     })
 }
 
@@ -2587,10 +2646,15 @@ fn require_reviewed_change_request(
     match (action, reviewed) {
         (ChangeAction::Plan, None) => Ok(()),
         (ChangeAction::Plan, Some(_)) => Err(usage_error("change plan does not accept --plan")),
-        (ChangeAction::Apply, None) => Err(usage_error(
-            "change apply requires the exact --plan TOKEN returned by change plan",
+        (ChangeAction::Apply | ChangeAction::Refresh, None) => Err(usage_error(
+            "change apply and refresh require an exact --plan TOKEN",
         )),
-        (ChangeAction::Apply, Some(reviewed)) if reviewed.request != expected => {
+        (ChangeAction::Refresh, Some(reviewed)) if reviewed.refresh.is_some() => Err(usage_error(
+            "change refresh requires the original plan token; refresh again from the original request and plan",
+        )),
+        (ChangeAction::Apply | ChangeAction::Refresh, Some(reviewed))
+            if reviewed.request != expected =>
+        {
             Err(Diagnostic::new(
                 DiagnosticClass::Semantic,
                 "change_request_commitment_mismatch",
@@ -2600,7 +2664,7 @@ fn require_reviewed_change_request(
                 ),
             ))
         }
-        (ChangeAction::Apply, Some(_)) => Ok(()),
+        (ChangeAction::Apply | ChangeAction::Refresh, Some(_)) => Ok(()),
     }
 }
 
@@ -2609,11 +2673,19 @@ fn execute_normalized_change(
     action: ChangeAction,
     request: ChangeCommandRequest,
 ) -> Result<Vec<u8>, Vec<Diagnostic>> {
+    if action == ChangeAction::Refresh
+        || request
+            .reviewed
+            .is_some_and(|token| token.refresh.is_some())
+    {
+        return refresh::execute(project, action, request);
+    }
     let ChangeCommandRequest {
         normalized,
         reviewed,
         input_file,
         output_file,
+        onto: _,
     } = request;
     let request_commitment = normalized.request_commitment;
     let repository = open_normalized_repository(project).map_err(single_diagnostic)?;
@@ -2632,7 +2704,7 @@ fn execute_normalized_change(
     let mut source_owners = std::collections::BTreeMap::new();
     let preparation = base_view.prepare_authored_change_with_source_owners(
         &normalized.semantic,
-        normalized.options,
+        normalized.options.clone(),
         Some(&mut source_owners),
     );
     if action == ChangeAction::Plan
@@ -2686,17 +2758,7 @@ fn execute_normalized_change(
             }
             errors
         })?;
-    // Only user-authored labels are exported. Logical plans retain every allocated owner by
-    // domain/ordinal; private adapter symbols never become public request addressing syntax.
-    prepared
-        .allocated
-        .retain(|symbol, _| !normalized.origins.private.contains(symbol));
-    if let Some(extraction) = &mut prepared.logical_plan.extraction {
-        extraction.base_definition = Some(
-            function_definition_digest_for_extraction(&base_view, extraction.function)
-                .map_err(single_diagnostic)?,
-        );
-    }
+    finish_authored_review(&mut prepared, &base_view, &normalized)?;
     let logical_plan =
         LogicalChangePlan::new(request_commitment, &prepared).map_err(single_diagnostic)?;
     if action == ChangeAction::Plan {
@@ -2742,10 +2804,40 @@ fn execute_normalized_change(
             ),
         )));
     }
+    apply_prepared_change(&repository, &prepared, encoding)
+}
+
+fn finish_authored_review(
+    prepared: &mut PreparedAuthoredPublication,
+    base: &RepositoryView,
+    normalized: &NormalizedChangeRequest,
+) -> Result<(), Vec<Diagnostic>> {
+    // Only authored labels are public addressing syntax. All allocations remain in the proof.
+    prepared
+        .allocated
+        .retain(|symbol, _| !normalized.origins.private.contains(symbol));
+    prepared
+        .intent_reads
+        .merge(&normalized.native_reads)
+        .map_err(single_diagnostic)?;
+    if let Some(extraction) = &mut prepared.logical_plan.extraction {
+        extraction.base_definition = Some(
+            function_definition_digest_for_extraction(base, extraction.function)
+                .map_err(single_diagnostic)?,
+        );
+    }
+    Ok(())
+}
+
+fn apply_prepared_change(
+    repository: &GraphRepository,
+    prepared: &PreparedAuthoredPublication,
+    encoding: LogicalPlanEncoding,
+) -> Result<Vec<u8>, Vec<Diagnostic>> {
     // The cache is disposable derived state. Capture an exact base binding while the prepared
     // publication is still in memory, but never let cache discovery or maintenance decide the
     // semantic publication outcome.
-    let base_cache = match load_current_compilation(&repository) {
+    let base_cache = match load_current_compilation(repository) {
         Ok(Some(compilation)) => DerivedCacheHandoff::Available(compilation.digest),
         Ok(None) => DerivedCacheHandoff::Unavailable,
         Err(diagnostic) => DerivedCacheHandoff::Failed(diagnostic),
@@ -2757,7 +2849,7 @@ fn execute_normalized_change(
         GraphPublicationOutcome::Accepted { current, .. } => {
             let cache = match base_cache {
                 DerivedCacheHandoff::Available(base) => {
-                    match build_incremental(&repository, base, &prepared.publication) {
+                    match build_incremental(repository, base, &prepared.publication) {
                         Ok(receipt) => DerivedCacheObservation {
                             status: "updated",
                             manifest: Some(receipt.manifest_digest.to_string()),
@@ -2805,8 +2897,8 @@ fn execute_normalized_change(
         }
     };
     compact_change_response(
-        &repository,
-        &prepared,
+        repository,
+        prepared,
         status,
         encoding,
         None,
@@ -3086,7 +3178,11 @@ fn compact_change_response(
             (
                 "command",
                 if status == "prepared" {
-                    "change.plan"
+                    if plan.token.refresh.is_some() {
+                        "change.refresh"
+                    } else {
+                        "change.plan"
+                    }
                 } else {
                     "change.apply"
                 }
@@ -3123,6 +3219,26 @@ fn compact_change_response(
             ("prepared-commitment", plan.token.prepared.to_string()),
         ],
     )?;
+    if let Some(refresh) = plan.token.refresh {
+        let original = ChangePlanToken {
+            request: plan.token.request,
+            prepared: refresh.original_prepared,
+            refresh: None,
+        };
+        append_compact_record(
+            &mut output,
+            "refresh",
+            &[
+                ("onto", refresh.onto.to_string()),
+                ("original-plan", original.to_string()),
+                ("intent-reads", encode_hex(&prepared.intent_reads.digest())),
+                (
+                    "intent-read-guards",
+                    prepared.intent_reads.len().to_string(),
+                ),
+            ],
+        )?;
+    }
     if let Some(plan_output) = plan_output {
         append_compact_record(
             &mut output,
@@ -3161,7 +3277,7 @@ fn compact_change_response(
             ("created", counts.owners_created.to_string()),
             ("updated", counts.owners_updated.to_string()),
             ("deleted", counts.owners_deleted.to_string()),
-            ("types", counts.type_objects_added.to_string()),
+            ("supplied-types", counts.type_objects_supplied.to_string()),
             ("dependencies", counts.dependencies_changed.to_string()),
             ("retirements", counts.retirements_changed.to_string()),
             ("witness", counts.witness_entries_changed.to_string()),

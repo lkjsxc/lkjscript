@@ -51,8 +51,8 @@ pub use receipt::{
 };
 pub use repository::{
     CreatedRepository, CurrentPublication, GraphRepository, InitialPackageTransport,
-    PackageTransportStageReceipt, PublicationOutcome, PublicationPoint, ReconciliationResult,
-    ReconciliationStatus, ReconciliationWork,
+    MAXIMUM_REFRESH_ANCESTOR_REVISIONS, PackageTransportStageReceipt, PublicationOutcome,
+    PublicationPoint, ReconciliationResult, ReconciliationStatus, ReconciliationWork,
 };
 pub use revision::{
     AcceptedBinding, HeadRecord, ParentRevision, PublicationBinding, RevisionCore, RevisionRecord,
@@ -63,6 +63,8 @@ pub use transaction::{
     RetirementTransactionEdit, TransactionBody,
 };
 
+#[cfg(test)]
+mod refresh_tests;
 #[cfg(test)]
 mod repository_tests;
 #[cfg(test)]

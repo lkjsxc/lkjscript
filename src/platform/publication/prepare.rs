@@ -100,7 +100,7 @@ pub fn prepare_initial_publication<S: ImmutableObjectStore + ?Sized>(
     };
     let counts = ChangeCounts {
         owners_created: full.snapshot.owners.len() as u64,
-        type_objects_added: full.snapshot.types.len() as u64,
+        type_objects_supplied: full.snapshot.types.len() as u64,
         dependencies_changed: full.snapshot.dependencies.len() as u64,
         retirements_changed: full.snapshot.retirements.len() as u64,
         witness_entries_changed: witness_entry_count(&full.witness),
@@ -219,12 +219,17 @@ pub(crate) fn prepare_change_publication_with_facts<
         .budget
         .canonical_map_admission(staged_base_work, "semantic map update")
         .map_err(single)?;
+    analysis
+        .budget
+        .check_observed(analysis.budget_work, "retained refresh candidate staging")
+        .map_err(single)?;
+    let prior_staging = analysis.budget_work.staging;
     let mut stage = ObjectStage::with_limits_and_read_admission(
         store,
         ObjectStageLimits {
-            maximum_objects: analysis.budget.staging.maximum_objects,
-            maximum_bytes: analysis.budget.staging.maximum_bytes,
-            maximum_pages: analysis.budget.staging.maximum_pages,
+            maximum_objects: analysis.budget.staging.maximum_objects - prior_staging.objects,
+            maximum_bytes: analysis.budget.staging.maximum_bytes - prior_staging.bytes,
+            maximum_pages: analysis.budget.staging.maximum_pages - prior_staging.pages,
         },
         read_admission,
     );
@@ -337,11 +342,7 @@ pub(crate) fn prepare_change_publication_with_facts<
         .canonical_map_update
         .bytes_encoded
         .saturating_add(bound.history_map_work.bytes_encoded);
-    budget_work.staging = crate::platform::change::StagingBudgetWork {
-        objects: u64::try_from(stage.len()).unwrap_or(u64::MAX),
-        bytes: stage.staged_byte_count(),
-        pages: stage.staged_page_count(),
-    };
+    budget_work.staging = retained_stage_work(prior_staging, &stage).map_err(single)?;
     analysis
         .budget
         .check_observed(budget_work, "publication object staging")
@@ -375,6 +376,29 @@ struct BoundHistory {
     history_map_work: MapWork,
 }
 
+fn retained_stage_work<S: ImmutableObjectStore + ?Sized>(
+    prior: crate::platform::change::StagingBudgetWork,
+    stage: &ObjectStage<'_, S>,
+) -> Result<crate::platform::change::StagingBudgetWork, Diagnostic> {
+    let add = |before: u64, after: u64| {
+        before.checked_add(after).ok_or_else(|| {
+            publication_error(
+                DiagnosticClass::Resource,
+                "change_refresh_preparation_capacity",
+                "retained original and refreshed candidate staging observation overflowed",
+            )
+        })
+    };
+    Ok(crate::platform::change::StagingBudgetWork {
+        objects: add(
+            prior.objects,
+            u64::try_from(stage.len()).unwrap_or(u64::MAX),
+        )?,
+        bytes: add(prior.bytes, stage.staged_byte_count())?,
+        pages: add(prior.pages, stage.staged_page_count())?,
+    })
+}
+
 #[allow(
     clippy::too_many_arguments,
     reason = "one exact history binding has these closed inputs"
@@ -393,6 +417,7 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
     history_map_admission: MapAdmission,
     stage: &mut ObjectStage<'_, S>,
 ) -> Result<BoundHistory, Vec<Diagnostic>> {
+    let prior_staging = work.budget.staging;
     let repository_id = authority.semantic.root.repository_id;
     if transaction.repository_id != repository_id
         || semantic_diff.repository_id != repository_id
@@ -489,11 +514,7 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
         .canonical_map_update
         .bytes_encoded
         .saturating_add(idempotency_map_work.bytes_encoded);
-    work.budget.staging = crate::platform::change::StagingBudgetWork {
-        objects: u64::try_from(stage.len()).unwrap_or(u64::MAX),
-        bytes: stage.staged_byte_count(),
-        pages: stage.staged_page_count(),
-    };
+    work.budget.staging = retained_stage_work(prior_staging, stage).map_err(single)?;
     if let Some(budget) = budget {
         budget
             .check_observed(work.budget, "publication receipt observation")
@@ -635,6 +656,16 @@ pub(super) fn validate_history_base(
     transaction: &NormalizedTransaction,
     semantic_diff: &SemanticDiff,
 ) -> Result<(), Diagnostic> {
+    if !matches!(
+        (transaction.contract_version, semantic_diff.contract_version),
+        (TRANSACTION_CONTRACT_VERSION, SEMANTIC_DIFF_CONTRACT_VERSION) | (5, 3)
+    ) {
+        return Err(publication_error(
+            DiagnosticClass::Corrupt,
+            "publication_history_type_contract",
+            "transaction and semantic diff disagree on the supplied-type inventory contract",
+        ));
+    }
     match (base, status, &transaction.body, &semantic_diff.body) {
         (
             None,
@@ -654,7 +685,7 @@ pub(super) fn validate_history_base(
                 base: transaction_base,
                 base_root: transaction_base_root,
                 owners: transaction_owners,
-                type_additions: transaction_types,
+                supplied_types: transaction_types,
                 dependencies: transaction_dependencies,
                 retirements: transaction_retirements,
                 ..
@@ -663,7 +694,7 @@ pub(super) fn validate_history_base(
                 base: diff_base,
                 base_root: diff_base_root,
                 owners: diff_owners,
-                type_additions: diff_types,
+                supplied_types: diff_types,
                 dependencies: diff_dependencies,
                 retirements: diff_retirements,
                 ..
@@ -793,7 +824,7 @@ fn transaction_for_change(
                     },
                 })
                 .collect(),
-            type_additions: delta.type_additions.keys().copied().collect(),
+            supplied_types: delta.type_additions.keys().copied().collect(),
             dependencies: delta
                 .dependencies
                 .iter()
@@ -963,7 +994,7 @@ fn diff_for_change(
             base_root: base.semantic_root,
             result_root: authority.semantic.digest,
             owners: owners.into_values().collect(),
-            type_additions: analysis.canonical.type_additions.keys().copied().collect(),
+            supplied_types: analysis.canonical.type_additions.keys().copied().collect(),
             dependencies: analysis
                 .canonical
                 .dependencies
@@ -1067,7 +1098,7 @@ fn change_counts(analysis: &PreparedChangeAnalysis) -> ChangeCounts {
             (None, None) => {}
         }
     }
-    counts.type_objects_added = analysis.canonical.type_additions.len() as u64;
+    counts.type_objects_supplied = analysis.canonical.type_additions.len() as u64;
     counts.dependencies_changed = analysis.canonical.dependencies.len() as u64;
     counts.retirements_changed = analysis.canonical.retirements.len() as u64;
     counts.witness_entries_changed = analysis

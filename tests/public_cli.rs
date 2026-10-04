@@ -1268,20 +1268,55 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         ]
     );
     assert_eq!(
-        compact_field(change_contract, "plan-hex-characters"),
-        Some("128")
+        compact_record_values(change_contract),
+        vec![
+            ("request-model", "change_request"),
+            ("request-record", "request"),
+            ("plan-prefix", "plan_"),
+            ("plan-hex-characters", "128"),
+            ("refresh-prefix", "refresh_"),
+            ("refresh-hex-characters", "256"),
+            ("request-commitment", "opaque-digest"),
+            ("prepared-plan", "opaque-commitment"),
+            ("plan-output-action", "plan|refresh"),
+            ("type-count", "supplied-types-complete-closure"),
+            ("expression-notations", "flat|block"),
+        ]
     );
     assert_eq!(
-        compact_field(change_contract, "request-commitment"),
-        Some("opaque-digest")
+        compact_record_values(compact_record(&change_section, "change.refresh")),
+        vec![
+            (
+                "usage",
+                "change refresh INPUT --plan ORIGINAL_TOKEN --onto REVISION [--output PATH]"
+            ),
+            ("input", "original-request-original-base"),
+            ("original-plan", "ordinary-token-only"),
+            ("onto", "explicit-current-single-parent-descendant"),
+            ("reads", "complete-positive-negative-points-and-ranges"),
+            (
+                "preserves",
+                "selector-identities-allocation-sequence-authored-after-values"
+            ),
+            ("validation", "complete-renewed-candidate-impact-and-tests"),
+            (
+                "publication",
+                "explicit-apply-exact-onto-no-automatic-retry"
+            ),
+        ]
     );
     assert_eq!(
-        compact_field(change_contract, "prepared-plan"),
-        Some("opaque-commitment")
-    );
-    assert_eq!(
-        compact_field(change_contract, "plan-output-action"),
-        Some("plan-only")
+        change_section
+            .iter()
+            .filter(|record| record.operation == "change.refresh-response-field")
+            .map(|record| compact_record_values(record))
+            .collect::<Vec<_>>(),
+        vec![
+            vec![("record", "refresh"), ("name", "onto")],
+            vec![("record", "refresh"), ("name", "original-plan")],
+            vec![("record", "refresh"), ("name", "intent-reads")],
+            vec![("record", "refresh"), ("name", "intent-read-guards")],
+        ]
     );
     assert_eq!(
         change_section
@@ -1306,6 +1341,22 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             && compact_field(record, "record") == Some("logical-plan.digest")
             && compact_field(record, "name") == Some("token")
     }));
+    assert_eq!(
+        change_section
+            .iter()
+            .filter(|record| record.operation == "change.plan-record-field"
+                && compact_field(record, "record") == Some("logical-plan.request"))
+            .filter_map(|record| compact_field(record, "name"))
+            .collect::<Vec<_>>(),
+        vec![
+            "commitment",
+            "intent-reads",
+            "intent-read-guards",
+            "refresh-present",
+            "original-prepared",
+            "onto",
+        ]
+    );
     let operations = change_section
         .iter()
         .filter(|record| record.operation == "change.operation")
@@ -6731,6 +6782,39 @@ fn reviewed_change_plan_body_replacement_exports_exact_owned_relation_closure() 
         &std::fs::read(&replacement_output).expect("read replacement logical plan"),
     )
     .expect("parse replacement logical plan records");
+    let plan_request = compact_record(&replacement_records, "logical-plan.request");
+    assert_eq!(
+        compact_record_values(plan_request)
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect::<Vec<_>>(),
+        vec![
+            "commitment",
+            "intent-reads",
+            "intent-read-guards",
+            "refresh-present",
+            "original-prepared",
+            "onto",
+        ]
+    );
+    assert_eq!(
+        compact_field(plan_request, "commitment"),
+        Some(decoded.request_commitment.as_str())
+    );
+    assert_eq!(
+        compact_field(plan_request, "intent-reads"),
+        Some(decoded.intent_reads_digest.as_str())
+    );
+    assert_eq!(decoded.intent_reads_digest.len(), 64);
+    assert!(decoded.intent_read_guards > 0);
+    assert_eq!(
+        compact_field(plan_request, "refresh-present"),
+        Some("false")
+    );
+    assert_eq!(compact_field(plan_request, "original-prepared"), Some(""));
+    assert_eq!(compact_field(plan_request, "onto"), Some(""));
+    assert!(decoded.original_prepared_plan_commitment.is_none());
+    assert!(decoded.onto_revision.is_none());
     let plan_header = compact_record(&replacement_records, "logical-plan");
     assert_eq!(compact_field(plan_header, "product"), Some("lkjscript"));
     assert_eq!(

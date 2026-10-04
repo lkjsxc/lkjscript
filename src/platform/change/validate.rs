@@ -1014,25 +1014,54 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> IncrementalVali
             .values()
             .filter_map(|edit| edit.after.as_ref())
             .flat_map(|(_, record)| record.type_roots())
-            .map(|digest| (digest, 0_usize))
+            .chain(self.canonical.type_additions.keys().copied())
+            .map(|digest| (digest, None::<Vec<TypeObjectDigest>>))
             .collect::<Vec<_>>();
-        let mut visited = BTreeSet::new();
-        while let Some((digest, depth)) = pending.pop() {
+        let mut heights = BTreeMap::<TypeObjectDigest, Option<usize>>::new();
+        let mut active = BTreeSet::new();
+        while let Some((digest, completed_children)) = pending.pop() {
             if self.budget_error.is_some() {
                 return;
             }
-            if !visited.insert(digest) {
+            if let Err(diagnostic) = self.overlay.validation_checkpoint() {
+                self.push_diagnostic(diagnostic);
+                return;
+            }
+            if let Some(children) = completed_children {
+                active.remove(&digest);
+                let height = children.iter().try_fold(0_usize, |height, child| {
+                    heights
+                        .get(child)
+                        .copied()
+                        .flatten()
+                        .map(|child_height| height.max(child_height.saturating_add(1)))
+                });
+                if height.is_some_and(|height| {
+                    height > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
+                }) {
+                    self.error(
+                        "change_validate_type_depth",
+                        "candidate type closure exceeds the hostile-input depth bound",
+                    );
+                    heights.insert(digest, None);
+                } else {
+                    heights.insert(digest, height);
+                }
+                continue;
+            }
+            if heights.contains_key(&digest) {
+                continue;
+            }
+            if !active.insert(digest) {
+                self.error(
+                    "change_validate_type_cycle",
+                    "candidate type objects contain a structural cycle",
+                );
+                heights.insert(digest, None);
                 continue;
             }
             if !self.charge_type_object() {
                 return;
-            }
-            if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-                self.error(
-                    "change_validate_type_depth",
-                    "candidate type closure exceeds the hostile-input depth bound",
-                );
-                continue;
             }
             let object = match self.overlay.type_object(digest) {
                 Ok(Some(object)) => object,
@@ -1041,10 +1070,14 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> IncrementalVali
                         "change_validate_type_missing",
                         format!("candidate type object {digest} is missing"),
                     );
+                    active.remove(&digest);
+                    heights.insert(digest, None);
                     continue;
                 }
                 Err(diagnostic) => {
                     self.push_diagnostic(diagnostic);
+                    active.remove(&digest);
+                    heights.insert(digest, None);
                     continue;
                 }
             };
@@ -1060,23 +1093,86 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> IncrementalVali
                 ),
                 Err(diagnostic) => self.push_diagnostic(diagnostic),
             }
-            pending.extend(
-                object
-                    .child_types()
-                    .into_iter()
-                    .map(|child| (child, depth.saturating_add(1))),
-            );
-        }
-        for digest in self.canonical.type_additions.keys() {
-            if self.budget_error.is_some() {
-                return;
+            if self.canonical.type_additions.contains_key(&digest) {
+                self.validate_supplied_type_references(&object.form);
             }
-            if !visited.contains(digest) {
-                self.error(
-                    "change_validate_type_unreachable",
-                    format!("new type object {digest} is unreachable from changed meaning"),
+            let children = object.child_types();
+            pending.push((digest, Some(children.clone())));
+            pending.extend(children.into_iter().rev().map(|child| (child, None)));
+        }
+    }
+
+    fn validate_supplied_type_references(&mut self, form: &crate::platform::kernel::TypeForm) {
+        use crate::platform::kernel::{OwnerKind, RequirementOperand, TypeForm};
+        match form {
+            TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
+                self.require_type_reference(
+                    declaration.package,
+                    OwnerKey::Declaration(declaration.declaration),
+                    &[OwnerKind::Record, OwnerKind::Variant],
                 );
             }
+            TypeForm::CapabilityResource { interface } => self.require_type_reference(
+                interface.package,
+                OwnerKey::Declaration(interface.declaration),
+                &[OwnerKind::Interface],
+            ),
+            TypeForm::TypeParameter { parameter } => self.require_type_reference(
+                self.overlay.package_id(),
+                OwnerKey::TypeParameter(*parameter),
+                &[OwnerKind::TypeParameter],
+            ),
+            TypeForm::TaskFunction { effect, .. } => {
+                for requirement in &effect.requirements {
+                    let kind = match requirement {
+                        RequirementOperand::Concrete(_) => OwnerKind::Requirement,
+                        RequirementOperand::Parameter(_) => OwnerKind::RequirementParameter,
+                    };
+                    self.require_type_reference(
+                        requirement.package(),
+                        requirement.owner(),
+                        &[kind],
+                    );
+                }
+                for parameter in &effect.parameters {
+                    self.require_type_reference(
+                        parameter.package,
+                        OwnerKey::EffectParameter(parameter.parameter),
+                        &[OwnerKind::EffectParameter],
+                    );
+                }
+            }
+            _ => {}
+        }
+        // Lexical type/effect scopes belong to an owner use. They remain checked by the
+        // semantic frontier; supplied metadata alone does not create such a use or authority.
+    }
+
+    fn require_type_reference(
+        &mut self,
+        package: PackageId,
+        owner: OwnerKey,
+        kinds: &[crate::platform::kernel::OwnerKind],
+    ) {
+        if self.budget_error.is_some() || !self.charge_owner_record() {
+            return;
+        }
+        let actual = if package == self.overlay.package_id() {
+            self.overlay
+                .owner(owner)
+                .map(|record| record.map(|record| record.kind()))
+        } else {
+            self.overlay
+                .package_interface_owner(package, owner)
+                .map(|record| record.map(|record| record.header().kind))
+        };
+        match actual {
+            Ok(Some(kind)) if kinds.contains(&kind) => {}
+            Ok(_) => self.error(
+                "change_validate_type_reference",
+                "supplied type refers to a missing or incompatible exact owner",
+            ),
+            Err(diagnostic) => self.push_diagnostic(diagnostic),
         }
     }
 
@@ -1223,5 +1319,157 @@ impl<B: CanonicalBaseRead + ?Sized> ExpressionRead for KernelOverlay<'_, B> {
 
     fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
         Ok(self.dependency(package)?.is_some())
+    }
+}
+
+#[cfg(test)]
+mod supplied_type_tests {
+    use super::*;
+    use crate::platform::change::{PrimitiveEdit, derive_local_delta};
+    use crate::platform::kernel::{TypeForm, encode_type_object};
+
+    #[test]
+    fn supplied_child_roots_cannot_hide_an_oversized_parent_depth() {
+        let base = crate::platform::kernel::tests::witness_snapshot();
+        let witness = crate::platform::witness::rebuild_full_witness(&base).unwrap();
+        let unit = TypeObject::new(TypeForm::Unit).unwrap();
+        let mut child = encode_type_object(&unit).unwrap().0;
+        let mut edits = vec![PrimitiveEdit::AddTypeObject {
+            digest: child,
+            object: unit,
+        }];
+        for depth in 1..=crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH + 1 {
+            let object = TypeObject::new(TypeForm::Option { item: child }).unwrap();
+            child = encode_type_object(&object).unwrap().0;
+            edits.push(PrimitiveEdit::AddTypeObject {
+                digest: child,
+                object,
+            });
+            if depth >= crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+                let canonical = CanonicalDelta::normalize(&base, edits.clone()).unwrap();
+                let overlay = KernelOverlay::new(&base, &canonical);
+                let derived = derive_local_delta(&overlay, &canonical, &witness).unwrap();
+                let result = validate_structural_frontier(&overlay, &canonical, &derived, &witness);
+                if depth == crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+                    assert_eq!(
+                        result.unwrap().work.type_objects_checked,
+                        (depth + 1) as u64
+                    );
+                } else {
+                    assert!(
+                        result
+                            .unwrap_err()
+                            .iter()
+                            .any(|diagnostic| diagnostic.code == "change_validate_type_depth")
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn supplied_types_are_checked_even_without_owner_edits_or_new_storage() {
+        let base = crate::platform::kernel::tests::witness_snapshot();
+        let witness = crate::platform::witness::rebuild_full_witness(&base).unwrap();
+        let unit = TypeObject::new(TypeForm::Unit).unwrap();
+        let unit_digest = encode_type_object(&unit).unwrap().0;
+        assert!(base.types.contains_key(&unit_digest));
+        let optional = TypeObject::new(TypeForm::Option { item: unit_digest }).unwrap();
+        let optional_digest = encode_type_object(&optional).unwrap().0;
+        let canonical = CanonicalDelta::normalize(
+            &base,
+            vec![
+                PrimitiveEdit::AddTypeObject {
+                    digest: unit_digest,
+                    object: unit,
+                },
+                PrimitiveEdit::AddTypeObject {
+                    digest: optional_digest,
+                    object: optional,
+                },
+            ],
+        )
+        .unwrap();
+        assert!(canonical.is_empty());
+        let overlay = KernelOverlay::new(&base, &canonical);
+        let derived = derive_local_delta(&overlay, &canonical, &witness).unwrap();
+        let report =
+            validate_structural_frontier(&overlay, &canonical, &derived, &witness).unwrap();
+        assert_eq!(report.work.type_objects_checked, 2);
+        let admission = ValidationAdmission {
+            maximum_type_objects: 1,
+            ..ValidationAdmission::default()
+        };
+        assert_eq!(
+            validate_structural_frontier_with_admission(
+                &overlay, &canonical, &derived, &witness, admission,
+            )
+            .unwrap_err()[0]
+                .code,
+            "change_budget_validation_type_objects"
+        );
+    }
+
+    #[test]
+    fn unused_supplied_type_closure_rejects_missing_child_and_wrong_nominal_kind() {
+        let base = crate::platform::kernel::tests::witness_snapshot();
+        let witness = crate::platform::witness::rebuild_full_witness(&base).unwrap();
+        let absent = TypeObjectDigest::from_bytes([0x9a; 32]);
+        let callee = base
+            .owners
+            .values()
+            .find_map(|owner| {
+                let OwnerRecord::Declaration(declaration) = owner else {
+                    return None;
+                };
+                if declaration.name.as_str() != "callee" {
+                    return None;
+                };
+                let OwnerKey::Declaration(id) = declaration.header.owner else {
+                    panic!("declaration")
+                };
+                Some(id)
+            })
+            .unwrap();
+        for (form, expected) in [
+            (
+                TypeForm::Option { item: absent },
+                "change_validate_type_missing",
+            ),
+            (
+                TypeForm::Named {
+                    declaration: DeclarationReference {
+                        package: base.root.package_id,
+                        declaration: callee,
+                    },
+                },
+                "change_validate_type_reference",
+            ),
+            (
+                TypeForm::TypeParameter {
+                    parameter: crate::platform::semantic_id::TypeParameterId::migrate(
+                        b"supplied-type-missing",
+                        0,
+                    ),
+                },
+                "change_validate_type_reference",
+            ),
+        ] {
+            let object = TypeObject::new(form).unwrap();
+            let digest = encode_type_object(&object).unwrap().0;
+            let canonical = CanonicalDelta::normalize(
+                &base,
+                vec![PrimitiveEdit::AddTypeObject { digest, object }],
+            )
+            .unwrap();
+            let overlay = KernelOverlay::new(&base, &canonical);
+            let derived = derive_local_delta(&overlay, &canonical, &witness).unwrap();
+            assert!(
+                validate_structural_frontier(&overlay, &canonical, &derived, &witness)
+                    .unwrap_err()
+                    .iter()
+                    .any(|diagnostic| diagnostic.code == expected)
+            );
+        }
     }
 }

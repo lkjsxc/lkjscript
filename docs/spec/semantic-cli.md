@@ -428,8 +428,16 @@ Record input uses:
 
 ```text
 change plan (--input RECORDS | --input-file PATH) [--output PATH]
+change refresh (--input RECORDS | --input-file PATH) --plan ORIGINAL_TOKEN --onto REVISION [--output PATH]
 change apply (--input RECORDS | --input-file PATH) --plan TOKEN
 ```
+
+Explicit [candidate refresh](concurrent-changes.md) retains an ordinary reviewed
+request's original base and intent while preparing it at one exact current
+descendant. Complete authored read guards, including negative lookups and empty
+relation ranges, must agree. Inspect the renewed candidate and `refresh_` token,
+then explicitly apply the original input. A publication race is stale; no automatic
+retry or refreshed-token chain changes the reviewed intent.
 
 One direct adapter exists for exact owner rename. Its full usage and the exhaustive compact record,
 type, expression, precondition, selector, and field vocabularies are capability-owned.

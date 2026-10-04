@@ -4,12 +4,13 @@ use serde_json::Value;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-const FAMILIES: [&str; 5] = [
+const FAMILIES: [&str; 6] = [
     "native_owned_",
     "native_byte_buffer_",
     "native_byte_ranges_",
     "resident_policy",
     "native_parallel",
+    "native_refresh",
 ];
 const TOPOLOGY: &str = "copied_binary_authors_builds_and_serves_interactive_topology_from_minimal";
 const MAXIMUM_TESTS: usize = 4096;

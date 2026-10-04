@@ -305,3 +305,83 @@ fn native_owned_effects_reject_bad_operands_then_preserve_identity_through_revie
         }
     }
 }
+
+#[test]
+fn native_owned_effects_native_refresh_keeps_three_package_witnesses_and_detached_results() {
+    let packages = Packages::stage();
+    packages.accept();
+    let public = &packages.consumer;
+    let mut proposals = Vec::new();
+    for (name, increment) in [("increment-a", 2), ("increment-b", 3)] {
+        let draft = public
+            .root
+            .path()
+            .join(format!("{name}-refresh-draft.lkjc"));
+        let declaration = format!("owned-effects-app::{name}");
+        public.cli(
+            &[
+                "change",
+                "draft",
+                "--declaration",
+                &declaration,
+                "--output",
+                path(&draft),
+            ],
+            true,
+        );
+        let literal = std::fs::read_to_string(draft).unwrap();
+        assert!(literal.contains("(i64 1)"));
+        let input = public.input(
+            &format!("{name}-refresh-original.lkjc"),
+            &literal.replacen("(i64 1)", &format!("(i64 {increment})"), 1),
+        );
+        let review = public.plan(&input, true);
+        proposals.push((input, review));
+    }
+    public.apply(&proposals[1].0, &proposals[1].1, true);
+    let onto = public.revision();
+    let plan_file = public.root.path().join("owned-effects-refreshed.lkjplan");
+    let refreshed = super::native_refresh::refresh(
+        public,
+        &proposals[0].0,
+        &proposals[0].1,
+        &onto,
+        Some(&plan_file),
+        true,
+    );
+    public.apply(&proposals[0].0, &refreshed, true);
+    public.cli(&["check"], true);
+    let artifact = public.root.path().join("owned-effects.lkja");
+    public.cli(&["build", "--output", path(&artifact)], true);
+    let deployment = public.input("owned-effects.deployment.json", &descriptor().to_string());
+    packages.detach();
+    let result = public.root.path().join("refreshed-detached-result.json");
+    let records = public.cli(
+        &[
+            "run",
+            "--deployment",
+            path(&deployment),
+            "--result-file",
+            path(&result),
+        ],
+        true,
+    );
+    let observation: Value = serde_json::from_str(compact_field(
+        compact_record(&records, "execution"),
+        "production-observation",
+    ))
+    .unwrap();
+    assert_eq!(observation["capability_calls"], json!(8));
+    assert_eq!(
+        serde_json::from_slice::<Value>(&std::fs::read(result).unwrap()).unwrap(),
+        json!({"scalar":45,"rebound":44,"alternate":102,"bytes":{"$bytes":"SQM="}}),
+    );
+    if std::env::var_os("LKJSCRIPT_RETAIN_PRODUCT_EVIDENCE").is_some() {
+        for public in [packages.library, packages.carriers, packages.consumer] {
+            println!(
+                "retained owned-effects refresh evidence: {}",
+                public.root.keep().display()
+            );
+        }
+    }
+}

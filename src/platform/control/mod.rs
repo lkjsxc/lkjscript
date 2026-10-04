@@ -17,8 +17,9 @@ pub(crate) use change::{
     COMPACT_REFERENCE_NAMESPACES, COMPACT_TYPE_FORM_FIELDS, COMPACT_TYPE_FORMS,
     ChangeRequestCommitment, CompactChangeFieldForm, CompactChangeOperation,
     MAXIMUM_STRUCTURAL_SYNTAX_NODES, MAXIMUM_STRUCTURAL_TOKENS, NativeDraftSelection,
-    NormalizedChangeRequest, compact_change_operation_descriptor,
-    decode_compact_change_in_repository, normalize_change_request, render_native_draft,
+    NormalizedChangeRequest, compact_change_operation_descriptor, compact_change_origin,
+    decode_compact_change_in_repository, decode_compact_change_in_view, normalize_change_request,
+    render_native_draft,
 };
 pub use compact::{
     CompactField, CompactRecord, CompactResponseLimits, CompactResponseWriter,

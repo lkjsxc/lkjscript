@@ -36,6 +36,7 @@ mod effect_admission_tests {
                 &base,
                 &witness,
                 AuthoredLoweringInputs {
+                    intent_base: crate::platform::semantic_id::RevisionId::from_digest([0; 32]),
                     allocation_seed: [0; 32],
                     deletion_change: ChangeDigest::of(b"effect normalization admission"),
                     allocated: BTreeMap::new(),
@@ -58,6 +59,97 @@ mod effect_admission_tests {
             }
             assert_eq!(lowerer.work.effect_normalization_steps, 13);
             assert!(lowerer.owner_edits.is_empty() && lowerer.type_additions.is_empty());
+        }
+    }
+}
+
+#[cfg(test)]
+mod supplied_type_tests {
+    use super::super::AuthoredLoweringInputs;
+    use super::*;
+    use crate::platform::change::{ChangeBudget, PrimitiveEdit};
+    use crate::platform::kernel::{ChangeDigest, TypeObject};
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn authored_type_closure_and_budget_do_not_depend_on_physical_availability() {
+        let cold = crate::platform::kernel::tests::witness_snapshot();
+        let witness = crate::platform::witness::rebuild_full_witness(&cold).unwrap();
+        let mut warm = cold.clone();
+        let scalar = TypeObject::new(TypeForm::I64).unwrap();
+        let scalar_digest = crate::platform::kernel::encode_type_object(&scalar)
+            .unwrap()
+            .0;
+        let optional = TypeObject::new(TypeForm::Option {
+            item: scalar_digest,
+        })
+        .unwrap();
+        let optional_digest = crate::platform::kernel::encode_type_object(&optional)
+            .unwrap()
+            .0;
+        let list = TypeObject::new(TypeForm::List {
+            item: optional_digest,
+        })
+        .unwrap();
+        let list_digest = crate::platform::kernel::encode_type_object(&list)
+            .unwrap()
+            .0;
+        let closure = BTreeMap::from([
+            (scalar_digest, scalar),
+            (optional_digest, optional),
+            (list_digest, list),
+        ]);
+        warm.types.extend(closure.clone());
+        let authored = AuthoredType::List {
+            item: Box::new(AuthoredType::Option {
+                item: Box::new(AuthoredType::I64 {}),
+            }),
+        };
+        for base in [&cold, &warm] {
+            for maximum in [2, 3] {
+                let mut budget = ChangeBudget::default();
+                budget.canonical_edits.maximum_type_edits = maximum;
+                let mut lowerer = AuthoredLowerer::new(
+                    base,
+                    &witness,
+                    AuthoredLoweringInputs {
+                        intent_base: crate::platform::semantic_id::RevisionId::from_digest([0; 32]),
+                        allocation_seed: [0; 32],
+                        deletion_change: ChangeDigest::of(b"supplied type admission"),
+                        allocated: BTreeMap::new(),
+                        definitions: BTreeMap::new(),
+                        allocations: vec![],
+                        budget,
+                    },
+                )
+                .unwrap();
+                let result = lowerer.lower_type(&authored);
+                assert_eq!(
+                    lowerer.work.canonical,
+                    crate::platform::change::CanonicalReadWork::default()
+                );
+                if maximum == 2 {
+                    assert_eq!(
+                        result.unwrap_err().code,
+                        "change_budget_canonical_type_edits"
+                    );
+                } else {
+                    assert_eq!(result.unwrap(), list_digest);
+                    let supplied = lowerer
+                        .finish()
+                        .unwrap()
+                        .edits
+                        .into_iter()
+                        .map(|edit| {
+                            let PrimitiveEdit::AddTypeObject { digest, object } = edit else {
+                                panic!("type-only lowerer emitted a non-type edit")
+                            };
+                            (digest, object)
+                        })
+                        .collect::<BTreeMap<_, _>>();
+                    assert_eq!(supplied, closure);
+                }
+            }
         }
     }
 }
@@ -936,29 +1028,13 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
     }
 
     fn classify_interned_type(&mut self, digest: TypeObjectDigest) -> Result<(), Diagnostic> {
-        if !self.base_types.contains_key(&digest) {
-            let read = self.base.read_type_object(digest)?;
-            self.work.canonical.add(read.work);
-            self.base_types.insert(digest, read.value);
-            self.check_budget("authored type base read")?;
-        }
-        let object = self.types.get(digest).ok_or_else(|| {
+        self.types.get(digest).ok_or_else(|| {
             request_error(
                 DiagnosticClass::Corrupt,
                 "change_authored_type_interner",
                 "request-local type interner lost an exact type object",
             )
         })?;
-        if let Some(base) = self.base_types.get(&digest).and_then(Option::as_ref) {
-            if base != object {
-                return Err(request_error(
-                    DiagnosticClass::Corrupt,
-                    "change_authored_type_collision",
-                    "accepted authority binds one type digest to different canonical meaning",
-                ));
-            }
-            return Ok(());
-        }
         if self.type_additions.contains(&digest) {
             return Ok(());
         }
@@ -967,7 +1043,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             u64::try_from(self.type_additions.len().saturating_add(1)).unwrap_or(u64::MAX),
             u64::try_from(self.dependency_edits.len()).unwrap_or(u64::MAX),
             u64::try_from(self.retirement_edits.len()).unwrap_or(u64::MAX),
-            "authored canonical type edit admission",
+            "authored supplied type admission",
         )?;
         self.type_additions.insert(digest);
         Ok(())

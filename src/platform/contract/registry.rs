@@ -107,7 +107,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-19";
 pub const REGISTRY_CONTRACT_VERSION: u16 = 19;
-pub const CLI_CONTRACT_VERSION: u16 = 36;
+pub const CLI_CONTRACT_VERSION: u16 = 37;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -670,6 +670,7 @@ impl ContractAuthority {
 #[serde(rename_all = "snake_case")]
 pub enum PredecessorPolicy {
     Reject,
+    ReadHistorical,
     NotApplicable,
 }
 
@@ -677,6 +678,7 @@ impl PredecessorPolicy {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Reject => "reject",
+            Self::ReadHistorical => "read_historical",
             Self::NotApplicable => "not_applicable",
         }
     }
@@ -847,10 +849,11 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             version: RECEIPT_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::AcceptedHistory,
-            predecessor_policy: REJECT,
-            magic_values: &["LKJRCPT5"],
+            predecessor_policy: PredecessorPolicy::ReadHistorical,
+            magic_values: &["LKJRCPT6", "LKJRCPT5"],
             digest_domains: &[
                 RECEIPT_ENVELOPE_DOMAIN,
+                "lkjscript.receipt-envelope.v5",
                 storage_contract::RECEIPT_OBJECT_DIGEST_DOMAIN,
             ],
         },
@@ -861,10 +864,11 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             version: TRANSACTION_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::AcceptedHistory,
-            predecessor_policy: REJECT,
-            magic_values: &["LKJTXN05"],
+            predecessor_policy: PredecessorPolicy::ReadHistorical,
+            magic_values: &["LKJTXN06", "LKJTXN05"],
             digest_domains: &[
                 TRANSACTION_ENVELOPE_DOMAIN,
+                "lkjscript.transaction-envelope.v5",
                 storage_contract::TRANSACTION_OBJECT_DIGEST_DOMAIN,
             ],
         },
@@ -875,10 +879,11 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             version: SEMANTIC_DIFF_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::AcceptedHistory,
-            predecessor_policy: REJECT,
-            magic_values: &["LKJDIFF3"],
+            predecessor_policy: PredecessorPolicy::ReadHistorical,
+            magic_values: &["LKJDIFF4", "LKJDIFF3"],
             digest_domains: &[
                 SEMANTIC_DIFF_ENVELOPE_DOMAIN,
+                "lkjscript.semantic-diff-envelope.v3",
                 storage_contract::SEMANTIC_DIFF_OBJECT_DIGEST_DOMAIN,
             ],
         },
@@ -1561,8 +1566,8 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         ),
         operation(
             PublicOperation::Change,
-            "Draft exact accepted declarations, prepare a reviewed change, or atomically apply its complete candidate.",
-            "change draft (--owner OWNER | --module NAME | --declaration MODULE::NAME | --target NAME)... --output PATH [--bytes N] | change plan ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] | extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT]) [--output PATH] | change apply ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] | extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT]) --plan TOKEN",
+            "Draft accepted declarations, prepare or explicitly refresh a reviewed candidate, and atomically apply its complete meaning.",
+            "change draft (--owner OWNER | --module NAME | --declaration MODULE::NAME | --target NAME)... --output PATH [--bytes N] | change plan ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] | extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT]) [--output PATH] | change refresh ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] | extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT]) --plan ORIGINAL_TOKEN --onto REVISION [--output PATH] | change apply ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] | extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT]) --plan TOKEN",
             (ControlModel::ChangeRequest, ControlModel::CompactResult),
             AuthorityEffect::AcceptedOnCommit,
             ProjectRequirement::Required,
@@ -1952,6 +1957,27 @@ pub fn limit_descriptors() -> &'static [LimitDescriptor] {
             MAXIMUM_LOGICAL_PLAN_RECORDS as usize,
             LimitClass::DeterministicOperationBudget,
             LimitUnit::Records,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "change_refresh_guards",
+            crate::platform::change::MAXIMUM_REFRESH_GUARDS,
+            LimitClass::DeterministicOperationBudget,
+            LimitUnit::Items,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "change_refresh_guard_bytes",
+            crate::platform::change::MAXIMUM_REFRESH_GUARD_BYTES,
+            LimitClass::DeterministicOperationBudget,
+            LimitUnit::Bytes,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "change_refresh_ancestor_revisions",
+            crate::platform::publication::MAXIMUM_REFRESH_ANCESTOR_REVISIONS,
+            LimitClass::DeterministicOperationBudget,
+            LimitUnit::Items,
             OverridePolicy::Fixed,
         ),
         limit(
@@ -3449,13 +3475,13 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "change_plan_domain",
             DiagnosticClass::Source,
             "A reviewed plan token has the wrong typed prefix.",
-            "Use the exact plan_ token returned by change plan.",
+            "Use the exact plan_ token from change plan or refresh_ token from change refresh.",
         ),
         diagnostic(
             "change_plan_length",
             DiagnosticClass::Source,
-            "A reviewed plan token has the wrong two-component length.",
-            "Use the complete 128-hex-character plan_ token returned by change plan.",
+            "A reviewed plan token has the wrong component length.",
+            "Retain all 128 hex characters after plan_ or 256 after refresh_.",
         ),
         diagnostic(
             "change_request_commitment_field_length",
@@ -3467,7 +3493,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "change_plan_hex",
             DiagnosticClass::Source,
             "A reviewed plan token has noncanonical hexadecimal bytes.",
-            "Use the lowercase plan_ token returned by change plan.",
+            "Use the complete lowercase plan_ or refresh_ token returned by preparation.",
         ),
         diagnostic(
             "change_request_commitment_mismatch",
@@ -3897,7 +3923,139 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "change_authored_stale_base",
             DiagnosticClass::Semantic,
             "The request base is not the currently observed accepted revision.",
-            "Refresh status and rebuild the request against the observed revision.",
+            "Explicitly refresh a reviewed original candidate or author a new request against current status.",
+        ),
+        diagnostic(
+            "change_refresh_conflict",
+            DiagnosticClass::Semantic,
+            "An authored read, complete query result, or exact write binding changed at the refresh target.",
+            "Inspect the intervening meaning and author a new proposal; the original intent cannot be refreshed unchanged.",
+        ),
+        diagnostic(
+            "change_refresh_stale_target",
+            DiagnosticClass::Semantic,
+            "The explicit refresh target differs from the captured current accepted revision.",
+            "Observe current status and explicitly select its exact revision for another reviewed refresh.",
+        ),
+        diagnostic(
+            "change_refresh_origin_binding",
+            DiagnosticClass::Corrupt,
+            "The original prepared candidate has no matching accepted base, repository or package binding.",
+            "Preserve the original input and repository for investigation; do not publish this candidate.",
+        ),
+        diagnostic(
+            "change_refresh_footprint_inconsistent",
+            DiagnosticClass::Corrupt,
+            "One immutable original revision produced contradictory authored-read observations.",
+            "Preserve the repository, original input and diagnostic for investigation.",
+        ),
+        diagnostic(
+            "change_refresh_interface_encoding",
+            DiagnosticClass::Infrastructure,
+            "Encoding an independently admitted dependency-interface observation failed.",
+            "Retain the request and diagnostic and use a verified executable.",
+        ),
+        diagnostic(
+            "change_refresh_origin",
+            DiagnosticClass::Source,
+            "Refresh was supplied another refreshed token instead of an ordinary original review.",
+            "Retain and supply the exact plan_ token from the original change plan.",
+        ),
+        diagnostic(
+            "change_refresh_request",
+            DiagnosticClass::Source,
+            "The refreshed plan does not preserve the original reviewed request commitment.",
+            "Supply the original input and ordinary plan token without changing its base or authored intent.",
+        ),
+        diagnostic(
+            "change_plan_file_intent_reads_length",
+            DiagnosticClass::Source,
+            "A logical plan authored-read digest has an invalid encoded length.",
+            "Regenerate the plan and retain its complete 64-character lowercase hexadecimal read commitment.",
+        ),
+        diagnostic(
+            "change_plan_file_intent_read_guards",
+            DiagnosticClass::Resource,
+            "A logical plan declares more authored-read guards than the fixed admission permits.",
+            "Reduce the complete authored proposal and regenerate its reviewed plan within discovery limits.",
+        ),
+        diagnostic(
+            "change_plan_file_refresh_onto",
+            DiagnosticClass::Source,
+            "A logical plan refresh target differs from its prepared authority base.",
+            "Regenerate the reviewed plan for one exact explicit target revision.",
+        ),
+        diagnostic(
+            "change_plan_file_intent_reads",
+            DiagnosticClass::Source,
+            "A logical plan omits its authored-read metadata.",
+            "Reject the incomplete file and regenerate it through the selected executable.",
+        ),
+        diagnostic(
+            "change_refresh_invalid_origin",
+            DiagnosticClass::Semantic,
+            "The original revision lacks the current valid semantic witness required to authenticate its reviewed candidate.",
+            "Use a valid accepted origin and its exact ordinary review token, or author a new proposal.",
+        ),
+        diagnostic(
+            "change_refresh_origin_unreachable",
+            DiagnosticClass::Semantic,
+            "The original revision is not reachable through the target's authenticated single-parent history.",
+            "Select an ordinary reviewed ancestor of the exact current target or author a new proposal.",
+        ),
+        diagnostic(
+            "change_refresh_incomplete_footprint",
+            DiagnosticClass::Resource,
+            "An authored relation query was truncated, so its complete dependency range cannot be guarded.",
+            "Reduce the authored query closure; no incomplete footprint permits refresh.",
+        ),
+        diagnostic(
+            "change_refresh_footprint_capacity",
+            DiagnosticClass::Resource,
+            "The complete authored read footprint exceeds its fixed guard or byte admission.",
+            "Reduce the complete authored proposal and prepare it again within discovery limits.",
+        ),
+        diagnostic(
+            "change_refresh_history_capacity",
+            DiagnosticClass::Resource,
+            "Authenticating the original revision exceeds the fixed ancestry or shared canonical-read admission.",
+            "Author a new proposal nearer the current revision; exhausted history is not an intent conflict.",
+        ),
+        diagnostic(
+            "change_refresh_preparation_capacity",
+            DiagnosticClass::Resource,
+            "Combined refresh preparation work exceeds its representable observation bound.",
+            "Reduce the proposal; original reconstruction, guards and renewed preparation share one allowance.",
+        ),
+        diagnostic(
+            "change_validate_type_cycle",
+            DiagnosticClass::Semantic,
+            "Supplied type objects contain a structural cycle.",
+            "Supply a finite type-object closure; nominal recursion belongs to declaration references.",
+        ),
+        diagnostic(
+            "change_validate_type_reference",
+            DiagnosticClass::Semantic,
+            "A supplied type refers to a missing or incompatible exact owner.",
+            "Correct the type's nominal, parameter or effect reference and prepare the complete proposal again.",
+        ),
+        diagnostic(
+            "change_refresh_history_lineage",
+            DiagnosticClass::Corrupt,
+            "Refresh ancestry contains a cycle or disagrees with exact accepted revision authority.",
+            "Preserve the repository and original input and report the diagnostic; do not publish from this history.",
+        ),
+        diagnostic(
+            "change_refresh_allocation_mismatch",
+            DiagnosticClass::Corrupt,
+            "Renewed lowering changes the original allocation sequence despite unchanged authored guards.",
+            "Preserve the request, original review and refresh diagnostic for investigation.",
+        ),
+        diagnostic(
+            "change_refresh_intent_mismatch",
+            DiagnosticClass::Corrupt,
+            "Renewed lowering changes an original authored after-value despite unchanged guards.",
+            "Preserve the request, original review and refresh diagnostic for investigation.",
         ),
         diagnostic(
             "change_authored_allocation_records",
@@ -3921,7 +4079,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "change_stale_base",
             DiagnosticClass::Semantic,
             "HEAD changed after preparation and before publication.",
-            "Refresh status, re-plan the request, and review its new plan token.",
+            "Observe current status and explicitly refresh the original reviewed candidate or author and review a new proposal.",
         ),
         diagnostic(
             "change_expression_inventory",
@@ -6748,12 +6906,39 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ("request-record", "request".to_owned()),
                     ("plan-prefix", "plan_".to_owned()),
                     ("plan-hex-characters", "128".to_owned()),
+                    ("refresh-prefix", "refresh_".to_owned()),
+                    ("refresh-hex-characters", "256".to_owned()),
                     ("request-commitment", "opaque-digest".to_owned()),
                     ("prepared-plan", "opaque-commitment".to_owned()),
-                    ("plan-output-action", "plan-only".to_owned()),
+                    ("plan-output-action", "plan|refresh".to_owned()),
+                    ("type-count", "supplied-types-complete-closure".to_owned()),
                     ("expression-notations", "flat|block".to_owned()),
                 ],
             )?);
+            records.push(compact_record(
+                "change.refresh",
+                &[
+                    ("usage", "change refresh INPUT --plan ORIGINAL_TOKEN --onto REVISION [--output PATH]".to_owned()),
+                    ("input", "original-request-original-base".to_owned()),
+                    ("original-plan", "ordinary-token-only".to_owned()),
+                    ("onto", "explicit-current-single-parent-descendant".to_owned()),
+                    ("reads", "complete-positive-negative-points-and-ranges".to_owned()),
+                    ("preserves", "selector-identities-allocation-sequence-authored-after-values".to_owned()),
+                    ("validation", "complete-renewed-candidate-impact-and-tests".to_owned()),
+                    ("publication", "explicit-apply-exact-onto-no-automatic-retry".to_owned()),
+                ],
+            )?);
+            for field in [
+                "onto",
+                "original-plan",
+                "intent-reads",
+                "intent-read-guards",
+            ] {
+                records.push(compact_record(
+                    "change.refresh-response-field",
+                    &[("record", "refresh".to_owned()), ("name", field.to_owned())],
+                )?);
+            }
             structural_expression_records(&mut records)?;
             native_declaration_records(&mut records)?;
             for descriptor in LOGICAL_PLAN_RECORD_DESCRIPTORS {

@@ -10,10 +10,12 @@ mod base_read;
 mod budget;
 mod delta;
 mod derived;
+mod footprint;
 mod impact;
 mod logical_plan;
 mod overlay;
 mod prepare;
+mod refresh;
 mod relation_view;
 mod repair;
 mod request;
@@ -43,6 +45,7 @@ pub use budget::{
 pub(crate) use budget::{MAXIMUM_CHANGE_ALLOCATED_IDENTITIES, MAXIMUM_CHANGE_AUTHORED_TYPE_NODES};
 pub use delta::{CanonicalDelta, CanonicalNormalization, ExactEdit, PrimitiveEdit};
 pub use derived::{DerivedDelta, DerivedValueEdit, RelationDelta, derive_local_delta};
+pub use footprint::{AuthoredReadFootprint, MAXIMUM_REFRESH_GUARD_BYTES, MAXIMUM_REFRESH_GUARDS};
 pub use impact::{
     ImpactPlan, ImpactReason, ImpactReasonKind, ImpactWork, PlannedSummaries,
     SummaryDimensionChange, plan_impact_and_summaries, summary_dimension_change,
@@ -55,6 +58,10 @@ pub use logical_plan::{
 pub use overlay::KernelOverlay;
 pub use prepare::{
     PreparedChangeAnalysis, prepare_change_analysis, prepare_change_analysis_with_budget,
+};
+pub(crate) use refresh::{
+    RecordedCanonicalBase, RecordedWitnessBase, include_prior_refresh_work,
+    remaining_refresh_budget,
 };
 pub(crate) use repair::prepare_repair_analysis;
 #[cfg(test)]
@@ -82,7 +89,7 @@ pub use request::{
 };
 pub(crate) use request::{
     canonical_authored_budget_bytes, canonical_authored_intent_bytes,
-    lower_authored_changes_with_source_owners,
+    lower_authored_changes_with_publication_base, lower_authored_changes_with_source_owners,
 };
 pub use summary_delta::{
     OwnerSummaryEdit, SummaryDelta, derive_summary_delta, derive_summary_delta_for,

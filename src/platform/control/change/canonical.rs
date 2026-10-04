@@ -1,6 +1,7 @@
 //! Complete canonical reads for disposable declaration proposals, with the maintained aggregate
 //! definition admission. No historical authoring source or rendered inspection text is consumed.
 use super::*;
+use crate::platform::change::AuthoredReadFootprint;
 use crate::platform::execution::ExecutionControl;
 use crate::platform::kernel::{self as k, OwnerRecord, TypeForm, TypeObjectDigest};
 use crate::platform::publication::{RepositoryDefinitionReader, RepositoryView};
@@ -15,6 +16,7 @@ pub(super) struct Reader<'a> {
     interface_names: BTreeMap<PackageId, BTreeMap<OwnerKey, Name>>,
     remaining_type_nodes: u64,
     control: ExecutionControl,
+    intent_reads: Option<AuthoredReadFootprint>,
 }
 
 pub(super) fn error(message: impl Into<String>) -> Diagnostic {
@@ -33,7 +35,18 @@ impl<'a> Reader<'a> {
             interface_names: BTreeMap::new(),
             remaining_type_nodes: crate::platform::change::MAXIMUM_CHANGE_AUTHORED_TYPE_NODES,
             control,
+            intent_reads: None,
         }
+    }
+
+    pub fn for_intent(view: &'a RepositoryView, control: ExecutionControl) -> Self {
+        let mut reader = Self::new(view, control);
+        reader.intent_reads = Some(AuthoredReadFootprint::default());
+        reader
+    }
+
+    pub fn take_intent_reads(&mut self) -> AuthoredReadFootprint {
+        self.intent_reads.take().unwrap_or_default()
     }
 
     pub fn check(&self) -> Result<(), Diagnostic> {
@@ -47,12 +60,30 @@ impl<'a> Reader<'a> {
         if let Some(owner) = self.owners.get(&id) {
             return Ok(owner.clone());
         }
-        let owner = self
-            .reader
-            .owner(id)?
+        let owner = self.reader.owner(id)?;
+        if let Some(reads) = &mut self.intent_reads {
+            reads.record_owner(id, owner.as_ref())?;
+        }
+        let owner = owner
             .ok_or_else(|| error(format!("selected owner {id} is absent at the bound base")))?;
         self.owners.insert(id, owner.clone());
         Ok(owner)
+    }
+
+    pub fn incoming(
+        &mut self,
+        owner: OwnerKey,
+        kind: k::RelationKind,
+        maximum: usize,
+    ) -> Result<Vec<k::RelationEdge>, Diagnostic> {
+        self.check()?;
+        // The maintained reader rejects truncated ranges before this guard is admitted.
+        // Empty ranges are retained as dependencies on the absence of implicit children.
+        let edges = self.reader.incoming(owner, kind, maximum)?;
+        if let Some(reads) = &mut self.intent_reads {
+            reads.record_relations(owner, Some(kind), true, maximum, &edges, false)?;
+        }
+        Ok(edges)
     }
 
     pub fn reference_name(
@@ -713,5 +744,186 @@ pub(super) fn implementation_operand(
             function: declaration(function),
             parameter,
         },
+    }
+}
+
+#[cfg(test)]
+mod intent_read_tests {
+    use super::*;
+    use crate::platform::change::{CanonicalBaseRead, ChangeBudget};
+    use crate::platform::publication::GraphRepository;
+
+    fn publish(repository: &GraphRepository, input: &str) {
+        let request = decode_compact_change_in_repository(
+            "concurrent-change.lkjc",
+            input.as_bytes(),
+            repository,
+        )
+        .unwrap();
+        let prepared = repository
+            .prepare_authored_change(&request.semantic, request.options)
+            .unwrap();
+        repository.publish(&prepared.publication).unwrap();
+    }
+
+    #[test]
+    fn native_origin_decode_retains_body_reads_without_unrelated_module_members() {
+        let temporary = tempfile::tempdir().unwrap();
+        let initial = crate::platform::kernel::tests::witness_snapshot();
+        let created =
+            GraphRepository::create(&temporary.path().join("meaning"), &initial, None).unwrap();
+        let input = format!(
+            "request base={}\ndeclarations.begin\n\
+             (units (module create native_refresh_reads (as $module)\n\
+               (function create chosen (as $chosen) (visibility private)\n\
+                 (returns I64) (effect pure) (body (sequence (i64 1) (i64 7))))))\n\
+             declarations.end\n",
+            created.current.head.revision
+        );
+        let request = decode_compact_change_in_repository(
+            "native-origin.lkjc",
+            input.as_bytes(),
+            &created.repository,
+        )
+        .unwrap();
+        let prepared = created
+            .repository
+            .prepare_authored_change(&request.semantic, request.options)
+            .unwrap();
+        created.repository.publish(&prepared.publication).unwrap();
+        let function = prepared.allocated["$chosen"];
+        let module = prepared.allocated["$module"];
+        let origin = created.repository.view_current().unwrap();
+        let draft = render_native_draft(
+            &origin,
+            &[function.into()],
+            4 * 1_048_576,
+            ExecutionControl::uncancelled(),
+        )
+        .unwrap();
+        let edit = String::from_utf8(draft)
+            .unwrap()
+            .replace("(i64 7)", "(i64 8)");
+        let original =
+            decode_compact_change_in_view("edit.lkjc", edit.as_bytes(), &origin).unwrap();
+        // The exact module, function and three body expressions are consumed by native
+        // normalization. Its module's aggregate summaries and other members are not.
+        assert_eq!(original.native_reads.len(), 5);
+
+        publish(
+            &created.repository,
+            &format!(
+                "request base={}\nexpression.i64 as=$value value=99\n\
+                 create.constant as=$neighbor module={module} name=neighbor visibility=private type=i64 value=$value\n",
+                origin.revision()
+            ),
+        );
+        let current = created.repository.view_current().unwrap();
+        original
+            .native_reads
+            .check_against(&current, &current, ChangeBudget::default())
+            .unwrap();
+        let pinned =
+            decode_compact_change_in_view("pinned.lkjc", edit.as_bytes(), &origin).unwrap();
+        assert_eq!(pinned.request_commitment, original.request_commitment);
+        assert_eq!(pinned.native_reads.digest(), original.native_reads.digest());
+        assert_eq!(
+            decode_compact_change_in_repository("stale.lkjc", edit.as_bytes(), &created.repository)
+                .unwrap_err()[0]
+                .code,
+            "change_unit_base"
+        );
+        assert_eq!(
+            decode_compact_change_in_view("wrong-view.lkjc", edit.as_bytes(), &current)
+                .unwrap_err()[0]
+                .code,
+            "change_unit_base"
+        );
+
+        let draft = render_native_draft(
+            &current,
+            &[function.into()],
+            4 * 1_048_576,
+            ExecutionControl::uncancelled(),
+        )
+        .unwrap();
+        publish(
+            &created.repository,
+            &String::from_utf8(draft)
+                .unwrap()
+                .replace("(i64 1)", "(i64 2)"),
+        );
+        let changed = created.repository.view_current().unwrap();
+        assert_eq!(
+            original
+                .native_reads
+                .check_against(&changed, &changed, ChangeBudget::default())
+                .unwrap_err()
+                .code,
+            "change_refresh_conflict"
+        );
+    }
+
+    #[test]
+    fn native_target_decode_guards_the_complete_empty_incoming_route_range() {
+        let temporary = tempfile::tempdir().unwrap();
+        let initial = crate::platform::kernel::tests::witness_snapshot();
+        let created =
+            GraphRepository::create(&temporary.path().join("meaning"), &initial, None).unwrap();
+        let target = *initial
+            .owners
+            .keys()
+            .find(|owner| matches!(owner, OwnerKey::Target(_)))
+            .unwrap();
+        let view = created.repository.view_current().unwrap();
+        let draft = render_native_draft(
+            &view,
+            &[target.into()],
+            4 * 1_048_576,
+            ExecutionControl::uncancelled(),
+        )
+        .unwrap();
+        let decoded = decode_compact_change_in_view("target.lkjc", &draft, &view).unwrap();
+        let mut expected = AuthoredReadFootprint::default();
+        expected
+            .record_owner(target, view.read_owner(target).unwrap().value.as_ref())
+            .unwrap();
+        expected
+            .record_relations(
+                target,
+                Some(k::RelationKind::HttpRouteTarget),
+                true,
+                crate::platform::change::MAXIMUM_AUTHORED_CHANGES,
+                &[],
+                false,
+            )
+            .unwrap();
+        assert_eq!(decoded.native_reads.len(), 2);
+        assert_eq!(decoded.native_reads.digest(), expected.digest());
+    }
+
+    #[test]
+    fn refresh_base_header_requires_one_bounded_request_with_valid_fields() {
+        let base = RevisionId::from_digest([17; 32]);
+        assert_eq!(
+            compact_change_origin("base.lkjc", format!("request base={base}\n").as_bytes())
+                .unwrap(),
+            (base, None)
+        );
+        for (input, code) in [
+            (
+                format!("request base={base}\nrequest base={base}\n"),
+                "change_request_duplicate",
+            ),
+            (
+                format!("request base={base} unknown=value\n"),
+                "change_field_unknown",
+            ),
+        ] {
+            assert_eq!(
+                compact_change_origin("invalid.lkjc", input.as_bytes()).unwrap_err()[0].code,
+                code
+            );
+        }
     }
 }

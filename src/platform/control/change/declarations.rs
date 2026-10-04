@@ -116,7 +116,7 @@ pub(super) fn lower(
             let reader = reader
                 .as_deref_mut()
                 .ok_or_else(|| canonical::error("target edit requires its base"))?;
-            for edge in reader.reader.incoming(
+            for edge in reader.incoming(
                 owner,
                 crate::platform::kernel::RelationKind::HttpRouteTarget,
                 crate::platform::change::MAXIMUM_AUTHORED_CHANGES,

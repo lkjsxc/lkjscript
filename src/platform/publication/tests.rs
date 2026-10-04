@@ -7,6 +7,201 @@ use crate::platform::storage::memory::MemoryPackedStore;
 use crate::platform::storage::object::{ImmutableObjectStore, ObjectDomain, ObjectKey, StoreWork};
 
 #[test]
+fn supplied_type_commitments_and_counts_survive_storage_deduplication() {
+    use crate::platform::binary64::Binary64;
+    use crate::platform::kernel::{
+        DeclarationRecord, DeclarationVisibility, ExpressionRecord, OwnerHeader, OwnerKind,
+        TypeForm, TypeObject, encode_type_object,
+    };
+    use crate::platform::semantic_id::{DeclarationId, ExpressionId};
+
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let mut cold = MemoryPackedStore::default();
+    let initial = prepare_initial_publication(&logical, &cold, None).unwrap();
+    install(&mut cold, &initial.publication);
+    let object = TypeObject::new(TypeForm::F64).unwrap();
+    let (digest, bytes) = encode_type_object(&object).unwrap();
+    let key = ObjectKey::from_digest(ObjectDomain::Type, digest.bytes());
+    assert!(!cold.contains(key, &mut StoreWork::default()).unwrap());
+    let mut warm = cold.clone();
+    warm.stage(key, &bytes, &mut StoreWork::default()).unwrap();
+    let module = initial
+        .snapshot
+        .owners
+        .values()
+        .find_map(|record| {
+            let OwnerRecord::Module(module) = record else {
+                return None;
+            };
+            Some(module.header.owner)
+        })
+        .unwrap();
+    let OwnerKey::Module(module) = module else {
+        panic!("module")
+    };
+    let declaration = DeclarationId::migrate(b"supplied-type-storage", 0);
+    let expression = ExpressionId::migrate(b"supplied-type-storage", 0);
+    let delta = CanonicalDelta::normalize(
+        &initial.snapshot,
+        vec![
+            PrimitiveEdit::AddTypeObject { digest, object },
+            PrimitiveEdit::InsertOwner {
+                record: OwnerRecord::Declaration(DeclarationRecord {
+                    header: OwnerHeader::new(
+                        OwnerKey::Declaration(declaration),
+                        OwnerKind::Constant,
+                    ),
+                    module,
+                    name: Name::new("supplied-float").unwrap(),
+                    visibility: DeclarationVisibility::Private,
+                    payload: DeclarationPayload::Constant {
+                        ty: digest,
+                        value: expression,
+                    },
+                }),
+            },
+            PrimitiveEdit::InsertOwner {
+                record: OwnerRecord::Expression(
+                    ExpressionRecord::new(
+                        expression,
+                        ExpressionOperation::F64 {
+                            value: Binary64::from_float(2.5),
+                        },
+                    )
+                    .unwrap(),
+                ),
+            },
+        ],
+    )
+    .unwrap();
+    let analysis = prepare_change_analysis(&initial.snapshot, &initial.witness, delta).unwrap();
+    let prepare = |store: &MemoryPackedStore| {
+        prepare_change_publication(
+            initial.publication.accepted,
+            &initial.snapshot,
+            &initial.witness,
+            &analysis,
+            store,
+            PublicationOptions::default(),
+        )
+        .unwrap()
+    };
+    let before_storage = prepare(&cold);
+    let after_storage = prepare(&warm);
+    assert_eq!(
+        before_storage.transaction_bytes,
+        after_storage.transaction_bytes
+    );
+    assert_eq!(
+        before_storage.semantic_diff_bytes,
+        after_storage.semantic_diff_bytes
+    );
+    assert_eq!(before_storage.head.revision, after_storage.head.revision);
+    assert_eq!(before_storage.receipt.counts, after_storage.receipt.counts);
+    assert_eq!(before_storage.receipt.counts.type_objects_supplied, 1);
+    assert_eq!(
+        before_storage.authority.semantic.digest,
+        after_storage.authority.semantic.digest
+    );
+    assert!(before_storage.objects.contains_key(&key));
+    assert!(!after_storage.objects.contains_key(&key));
+    assert_eq!(before_storage.objects[&key], bytes);
+    assert_ne!(
+        before_storage.receipt.work.bytes_staged,
+        after_storage.receipt.work.bytes_staged
+    );
+    let TransactionBody::Change { supplied_types, .. } = &before_storage.transaction.body else {
+        panic!("change transaction")
+    };
+    assert_eq!(supplied_types, &[digest]);
+    let SemanticDiffBody::Change { supplied_types, .. } = &before_storage.semantic_diff.body else {
+        panic!("change diff")
+    };
+    assert_eq!(supplied_types, &[digest]);
+}
+
+#[test]
+fn immutable_predecessor_history_uses_its_original_envelope_and_bytes() {
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let initial =
+        prepare_initial_publication(&logical, &MemoryPackedStore::default(), None).unwrap();
+    let mut transaction = initial.publication.transaction;
+    transaction.contract_version = 5;
+    let transaction_bytes = crate::platform::packed::encode(
+        *b"LKJTXN05",
+        "lkjscript.transaction-envelope.v5",
+        &transaction,
+        super::contract::MAXIMUM_TRANSACTION_BYTES,
+    )
+    .unwrap();
+    let transaction_digest = TransactionDigest::of(&transaction_bytes);
+    let decoded = NormalizedTransaction::decode(&transaction_bytes, transaction_digest).unwrap();
+    assert_eq!(decoded, transaction);
+    assert_eq!(
+        decoded.encode().unwrap(),
+        (transaction_digest, transaction_bytes)
+    );
+
+    let mut diff = initial.publication.semantic_diff;
+    diff.contract_version = 3;
+    let diff_bytes = crate::platform::packed::encode(
+        *b"LKJDIFF3",
+        "lkjscript.semantic-diff-envelope.v3",
+        &diff,
+        super::contract::MAXIMUM_SEMANTIC_DIFF_BYTES,
+    )
+    .unwrap();
+    let diff_digest = SemanticDiffDigest::of(&diff_bytes);
+    let decoded = SemanticDiff::decode(&diff_bytes, diff_digest).unwrap();
+    assert_eq!(decoded, diff);
+    assert_eq!(decoded.encode().unwrap(), (diff_digest, diff_bytes));
+
+    let mut receipt = initial.publication.receipt;
+    receipt.contract_version = 5;
+    receipt.transaction = transaction_digest;
+    receipt.semantic_diff = diff_digest;
+    let receipt_bytes = crate::platform::packed::encode(
+        *b"LKJRCPT5",
+        "lkjscript.receipt-envelope.v5",
+        &receipt,
+        super::contract::MAXIMUM_RECEIPT_BYTES,
+    )
+    .unwrap();
+    let receipt_digest = ReceiptObjectDigest::of(&receipt_bytes);
+    let decoded = PublicationReceipt::decode(&receipt_bytes, receipt_digest).unwrap();
+    assert_eq!(decoded, receipt);
+    assert_eq!(decoded.encode().unwrap(), (receipt_digest, receipt_bytes));
+
+    // Rehashing a foreign envelope does not authorize a payload's different contract.
+    let forged = crate::platform::packed::encode(
+        super::contract::TRANSACTION_MAGIC,
+        super::contract::TRANSACTION_ENVELOPE_DOMAIN,
+        &transaction,
+        super::contract::MAXIMUM_TRANSACTION_BYTES,
+    )
+    .unwrap();
+    assert_eq!(
+        NormalizedTransaction::decode(&forged, TransactionDigest::of(&forged))
+            .unwrap_err()
+            .code,
+        "publication_transaction_canonical"
+    );
+    let mut current_diff = diff;
+    current_diff.contract_version = super::contract::SEMANTIC_DIFF_CONTRACT_VERSION;
+    assert_eq!(
+        super::prepare::validate_history_base(
+            None,
+            PublicationStatus::ProjectCreated,
+            &transaction,
+            &current_diff
+        )
+        .unwrap_err()
+        .code,
+        "publication_history_type_contract"
+    );
+}
+
+#[test]
 fn historical_acceptance_retains_identity_but_requires_rebuilt_current_proof() {
     use crate::platform::witness::{
         ValidationCertificateDigest, ValidatorContractDigest, decode_historical_witness_manifest,

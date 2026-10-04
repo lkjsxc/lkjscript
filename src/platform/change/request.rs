@@ -609,12 +609,35 @@ pub(crate) fn lower_authored_changes_with_source_owners<
     base: &B,
     witness: &W,
     request: &AuthoredChangeSet,
+    source_owners: Option<&mut BTreeMap<String, OwnerKey>>,
+) -> Result<AuthoredLowering, Diagnostic> {
+    lower_authored_changes_with_publication_base(
+        base,
+        witness,
+        request,
+        request.base,
+        request.budget,
+        source_owners,
+    )
+}
+
+/// Original intent retains its encoding/allocation base while a checked refresh lowers against
+/// another exact accepted publication base. Only the reviewed refresh owner selects that base.
+pub(crate) fn lower_authored_changes_with_publication_base<
+    B: CanonicalBaseRead + ?Sized,
+    W: WitnessBaseRead + ?Sized,
+>(
+    base: &B,
+    witness: &W,
+    request: &AuthoredChangeSet,
+    publication_base: RevisionId,
+    preparation_budget: ChangeBudget,
     mut source_owners: Option<&mut BTreeMap<String, OwnerKey>>,
 ) -> Result<AuthoredLowering, Diagnostic> {
     if let Some(owners) = source_owners.as_deref_mut() {
         owners.clear();
     }
-    if base.exact_revision() != Some(request.base) {
+    if base.exact_revision() != Some(publication_base) {
         return Err(request_error(
             DiagnosticClass::Semantic,
             "change_authored_stale_base",
@@ -642,9 +665,8 @@ pub(crate) fn lower_authored_changes_with_source_owners<
     }
     let operation_count = references::admitted_operations(request)?;
     let bindings = references::inventory(request)?;
-    let budget = request
-        .budget
-        .validate_request_counts(operation_count, request.preconditions.len())?;
+    let budget =
+        preparation_budget.validate_request_counts(operation_count, request.preconditions.len())?;
 
     let (definitions, total_identity_count) =
         collect_symbol_definitions(request, budget.authored.maximum_allocated_identities)?;
@@ -662,6 +684,7 @@ pub(crate) fn lower_authored_changes_with_source_owners<
         base,
         witness,
         AuthoredLoweringInputs {
+            intent_base: request.base,
             allocation_seed: seed,
             deletion_change,
             allocated,
@@ -1511,6 +1534,7 @@ struct WorkingDependency {
 }
 
 struct AuthoredLoweringInputs {
+    intent_base: RevisionId,
     allocation_seed: [u8; 32],
     deletion_change: ChangeDigest,
     allocated: BTreeMap<String, OwnerKey>,
@@ -1520,6 +1544,7 @@ struct AuthoredLoweringInputs {
 }
 
 struct AuthoredLowerer<'a, B: ?Sized, W: ?Sized> {
+    intent_base: RevisionId,
     resolutions: ResolvedReferenceBindings,
     base: &'a B,
     witness: &'a W,
@@ -1591,6 +1616,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 )
             })?;
         Ok(Self {
+            intent_base: inputs.intent_base,
             resolutions: ResolvedReferenceBindings::default(),
             base,
             witness,

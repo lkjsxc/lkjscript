@@ -68,6 +68,8 @@ pub struct ExactEdit<D, V> {
 pub struct CanonicalDelta {
     pub(crate) accepted_retry_encoding: Option<u16>,
     pub owners: BTreeMap<OwnerKey, ExactEdit<OwnerObjectDigest, OwnerRecord>>,
+    /// Every type object supplied by this proposal, including objects already in storage.
+    /// Physical deduplication belongs to staging and cannot change normalized meaning.
     pub type_additions: BTreeMap<TypeObjectDigest, TypeObject>,
     pub dependencies: BTreeMap<PackageId, ExactEdit<DependencyObjectDigest, DependencyRecord>>,
     pub retirements: BTreeMap<OwnerKey, ExactEdit<RetirementObjectDigest, RetirementRecord>>,
@@ -145,18 +147,7 @@ impl CanonicalDelta {
                     reject_duplicate(&mut seen_types, digest, "type object")?;
                     let (actual, _) = encode_type_object(&object)?;
                     require_expected("type object", actual, digest)?;
-                    match base.type_object(digest)? {
-                        Some(existing) if existing == &object => {}
-                        Some(_) => {
-                            return Err(change_corrupt(
-                                "change_type_collision",
-                                "one type digest is bound to different canonical values",
-                            ));
-                        }
-                        None => {
-                            delta.type_additions.insert(digest, object);
-                        }
-                    }
+                    delta.type_additions.insert(digest, object);
                 }
                 PrimitiveEdit::InsertDependency { record } => {
                     let package = record.package;
@@ -261,10 +252,8 @@ impl CanonicalDelta {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.owners.is_empty()
-            && self.type_additions.is_empty()
-            && self.dependencies.is_empty()
-            && self.retirements.is_empty()
+        // Supplied type metadata alone does not edit the authoritative graph.
+        self.owners.is_empty() && self.dependencies.is_empty() && self.retirements.is_empty()
     }
 
     pub fn changed_owner_count(&self) -> usize {
@@ -380,7 +369,6 @@ fn validate_live_retired_exclusion<R: CanonicalBaseRead + ?Sized>(
 struct NormalizationBase<'a, R: ?Sized> {
     base: &'a R,
     owners: BTreeMap<OwnerKey, Option<OwnerRecord>>,
-    types: BTreeMap<TypeObjectDigest, Option<TypeObject>>,
     dependencies: BTreeMap<PackageId, Option<DependencyRecord>>,
     retirements: BTreeMap<OwnerKey, Option<RetirementRecord>>,
     work: CanonicalReadWork,
@@ -391,7 +379,6 @@ impl<'a, R: CanonicalBaseRead + ?Sized> NormalizationBase<'a, R> {
         Self {
             base,
             owners: BTreeMap::new(),
-            types: BTreeMap::new(),
             dependencies: BTreeMap::new(),
             retirements: BTreeMap::new(),
             work: CanonicalReadWork::default(),
@@ -405,15 +392,6 @@ impl<'a, R: CanonicalBaseRead + ?Sized> NormalizationBase<'a, R> {
             self.owners.insert(owner, read.value);
         }
         Ok(self.owners.get(&owner).and_then(Option::as_ref))
-    }
-
-    fn type_object(&mut self, digest: TypeObjectDigest) -> Result<Option<&TypeObject>, Diagnostic> {
-        if !self.types.contains_key(&digest) {
-            let read = self.base.read_type_object(digest)?;
-            self.work.add(read.work);
-            self.types.insert(digest, read.value);
-        }
-        Ok(self.types.get(&digest).and_then(Option::as_ref))
     }
 
     fn dependency(&mut self, package: PackageId) -> Result<Option<&DependencyRecord>, Diagnostic> {
@@ -439,6 +417,64 @@ fn change_error(code: &str, message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Semantic, code, message)
 }
 
-fn change_corrupt(code: &str, message: impl Into<String>) -> Diagnostic {
-    Diagnostic::new(DiagnosticClass::Corrupt, code, message)
+#[cfg(test)]
+mod supplied_type_tests {
+    use super::*;
+    use crate::platform::kernel::TypeForm;
+
+    #[test]
+    fn supplied_type_normalization_is_independent_of_base_storage() {
+        let cold = crate::platform::kernel::tests::witness_snapshot();
+        let object = TypeObject::new(TypeForm::F64).unwrap();
+        let digest = encode_type_object(&object).unwrap().0;
+        let mut warm = cold.clone();
+        warm.types.insert(digest, object.clone());
+        let edits = vec![PrimitiveEdit::AddTypeObject {
+            digest,
+            object: object.clone(),
+        }];
+        let cold_result = CanonicalDelta::normalize_from(&cold, edits.clone()).unwrap();
+        let warm_result = CanonicalDelta::normalize_from(&warm, edits).unwrap();
+        assert_eq!(
+            cold_result.canonical.type_additions,
+            BTreeMap::from([(digest, object)])
+        );
+        assert_eq!(
+            cold_result.canonical.type_additions,
+            warm_result.canonical.type_additions
+        );
+        assert_eq!(cold_result.work, CanonicalReadWork::default());
+        assert_eq!(warm_result.work, CanonicalReadWork::default());
+        assert!(cold_result.canonical.is_empty());
+        assert!(warm_result.canonical.is_empty());
+    }
+
+    #[test]
+    fn supplied_type_normalization_rejects_false_digest_and_duplicate_supply() {
+        let base = crate::platform::kernel::tests::witness_snapshot();
+        let object = TypeObject::new(TypeForm::F64).unwrap();
+        let digest = encode_type_object(&object).unwrap().0;
+        let foreign = encode_type_object(&TypeObject::new(TypeForm::Bool).unwrap())
+            .unwrap()
+            .0;
+        assert_eq!(
+            CanonicalDelta::normalize(
+                &base,
+                vec![PrimitiveEdit::AddTypeObject {
+                    digest: foreign,
+                    object: object.clone()
+                }],
+            )
+            .unwrap_err()
+            .code,
+            "change_exact_precondition"
+        );
+        let supplied = PrimitiveEdit::AddTypeObject { digest, object };
+        assert_eq!(
+            CanonicalDelta::normalize(&base, vec![supplied.clone(), supplied])
+                .unwrap_err()
+                .code,
+            "change_duplicate_primitive"
+        );
+    }
 }

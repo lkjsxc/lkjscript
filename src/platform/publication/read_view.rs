@@ -3,15 +3,16 @@
 use super::validation::{RevalidatedBase, ViewStore};
 use super::{CurrentPublication, PreparedPublication, PublicationOptions};
 use crate::platform::change::{
-    AuthoredAllocation, AuthoredChangeSet, AuthoredLoweringWork, BoundOwnerSummary,
-    BudgetedCanonicalBase, BudgetedWitnessBase, CanonicalBaseRead, CanonicalDelta, CanonicalRead,
-    CanonicalReadAdmission, CanonicalReadWork, ChangeBudget, DerivedDelta, HttpRoutePlanEvidence,
-    LogicalChangePlanEvidence, LogicalDependencyValues, LogicalRetirementValues,
-    PreparedChangeAnalysis, PrimitiveEdit, SummaryDelta, TestDependencyDelta, WitnessBaseRead,
+    AuthoredAllocation, AuthoredChangeSet, AuthoredLoweringWork, AuthoredReadFootprint,
+    BoundOwnerSummary, BudgetedCanonicalBase, BudgetedWitnessBase, CanonicalBaseRead,
+    CanonicalDelta, CanonicalRead, CanonicalReadAdmission, CanonicalReadWork, ChangeBudget,
+    ChangeBudgetWork, DerivedDelta, HttpRoutePlanEvidence, LogicalChangePlanEvidence,
+    LogicalDependencyValues, LogicalRetirementValues, PreparedChangeAnalysis, PrimitiveEdit,
+    RecordedCanonicalBase, RecordedWitnessBase, SummaryDelta, TestDependencyDelta, WitnessBaseRead,
     WitnessMapAdmission, WitnessMapBase, WitnessMapUpdate, WitnessRead, WitnessReadAdmission,
-    WitnessReadWork, WitnessRelationRead, WitnessTestDependencyRead,
-    lower_authored_changes_with_source_owners, prepare_change_analysis_with_budget,
-    update_witness_maps_from,
+    WitnessReadWork, WitnessRelationRead, WitnessTestDependencyRead, include_prior_refresh_work,
+    lower_authored_changes_with_publication_base, prepare_change_analysis_with_budget,
+    remaining_refresh_budget, update_witness_maps_from,
 };
 use crate::platform::contract::{
     MAXIMUM_FUNCTION_DEFINITION_CANONICAL_RECORD_READS, MAXIMUM_FUNCTION_DEFINITION_FACT_READS,
@@ -490,6 +491,8 @@ pub struct PreparedAuthoredPublication {
     pub allocated: BTreeMap<String, OwnerKey>,
     pub lowering_work: AuthoredLoweringWork,
     pub logical_plan: LogicalChangePlanEvidence,
+    pub intent_reads: AuthoredReadFootprint,
+    origin_was_valid: bool,
 }
 
 struct PreparedChangeWithAnalysis {
@@ -1011,21 +1014,53 @@ impl RepositoryView {
         options: PublicationOptions,
         source_owners: Option<&mut BTreeMap<String, OwnerKey>>,
     ) -> Result<PreparedAuthoredPublication, Vec<Diagnostic>> {
+        self.prepare_authored_change_at(
+            request,
+            options,
+            request.base,
+            source_owners,
+            ChangeBudgetWork::default(),
+        )
+    }
+
+    fn prepare_authored_change_at(
+        &self,
+        request: &AuthoredChangeSet,
+        options: PublicationOptions,
+        publication_base: RevisionId,
+        source_owners: Option<&mut BTreeMap<String, OwnerKey>>,
+        previous_preparation: ChangeBudgetWork,
+    ) -> Result<PreparedAuthoredPublication, Vec<Diagnostic>> {
+        let preparation_budget = remaining_refresh_budget(request.budget, previous_preparation)
+            .map_err(|error| vec![error])?;
         let canonical = BudgetedCanonicalBase::new(
             self,
-            request.budget.canonical_reads,
+            preparation_budget.canonical_reads,
             self.validation_read_work,
         )
         .map_err(|diagnostic| vec![diagnostic])?;
         let witness = BudgetedWitnessBase::new(
             self,
-            request.budget.witness_reads,
+            preparation_budget.witness_reads,
             WitnessReadWork::default(),
         )
         .map_err(|diagnostic| vec![diagnostic])?;
-        let lowering =
-            lower_authored_changes_with_source_owners(&canonical, &witness, request, source_owners)
-                .map_err(|diagnostic| vec![diagnostic])?;
+        let reads = RefCell::new(AuthoredReadFootprint::default());
+        let lowering = lower_authored_changes_with_publication_base(
+            &RecordedCanonicalBase {
+                base: &canonical,
+                reads: &reads,
+            },
+            &RecordedWitnessBase {
+                base: &witness,
+                reads: &reads,
+            },
+            request,
+            publication_base,
+            preparation_budget,
+            source_owners,
+        )
+        .map_err(|diagnostic| vec![diagnostic])?;
         let crate::platform::change::AuthoredLowering {
             resolutions,
             edits,
@@ -1034,10 +1069,93 @@ impl RepositoryView {
             dependency_befores,
             http_route_befores,
             extraction,
-            work: lowering_work,
+            work: mut lowering_work,
         } = lowering;
-        let prepared =
-            self.prepare_change_with_prior_work(edits, options, lowering_work, request.budget)?;
+        for edit in &edits {
+            let mut footprint = reads.borrow_mut();
+            let named_record = match edit {
+                PrimitiveEdit::InsertOwner { record } => {
+                    footprint
+                        .record_owner_digest(record.owner(), None)
+                        .map_err(|error| vec![error])?;
+                    Some(record)
+                }
+                PrimitiveEdit::ReplaceOwner { expected, record } => {
+                    footprint
+                        .record_owner_digest(record.owner(), Some(expected.bytes()))
+                        .map_err(|error| vec![error])?;
+                    Some(record)
+                }
+                PrimitiveEdit::DeleteOwner { owner, expected } => {
+                    footprint
+                        .record_owner_digest(*owner, Some(expected.bytes()))
+                        .map_err(|error| vec![error])?;
+                    None
+                }
+                PrimitiveEdit::InsertDependency { record } => {
+                    footprint
+                        .record_dependency_digest(record.package, None)
+                        .map_err(|error| vec![error])?;
+                    None
+                }
+                PrimitiveEdit::ReplaceDependency { expected, record } => {
+                    footprint
+                        .record_dependency_digest(record.package, Some(expected.bytes()))
+                        .map_err(|error| vec![error])?;
+                    None
+                }
+                PrimitiveEdit::DeleteDependency { package, expected } => {
+                    footprint
+                        .record_dependency_digest(*package, Some(expected.bytes()))
+                        .map_err(|error| vec![error])?;
+                    None
+                }
+                PrimitiveEdit::InsertRetirement { record } => {
+                    footprint
+                        .record_retirement_digest(record.owner, None)
+                        .map_err(|error| vec![error])?;
+                    None
+                }
+                PrimitiveEdit::ReplaceRetirement { expected, record } => {
+                    footprint
+                        .record_retirement_digest(record.owner, Some(expected.bytes()))
+                        .map_err(|error| vec![error])?;
+                    None
+                }
+                PrimitiveEdit::DeleteRetirement { owner, expected } => {
+                    footprint
+                        .record_retirement_digest(*owner, Some(expected.bytes()))
+                        .map_err(|error| vec![error])?;
+                    None
+                }
+                PrimitiveEdit::AddTypeObject { .. } => None,
+            };
+            if let Some(record) = named_record
+                && let Some(namespace) = crate::platform::kernel::owner_namespace(record)
+            {
+                let namespace = NamespaceKey {
+                    parent: namespace.parent,
+                    class: namespace.class,
+                    name: namespace.name.clone(),
+                };
+                let observed = witness
+                    .read_namespace(&namespace)
+                    .map_err(|error| vec![error])?;
+                footprint
+                    .record_namespace(&namespace, observed.value)
+                    .map_err(|error| vec![error])?;
+            }
+        }
+        lowering_work.canonical = canonical.work();
+        lowering_work.witness = witness.work();
+        let prepared = self.prepare_change_with_previous_preparation(
+            edits,
+            options,
+            lowering_work,
+            preparation_budget,
+            request.budget,
+            previous_preparation,
+        )?;
         let mut logical_plan = logical_plan_evidence(
             prepared.analysis,
             allocations,
@@ -1070,7 +1188,105 @@ impl RepositoryView {
             allocated,
             lowering_work,
             logical_plan,
+            intent_reads: reads.into_inner(),
+            origin_was_valid: self.witness_contract_is_current()
+                && self
+                    .revalidated
+                    .as_ref()
+                    .is_none_or(|base| base.current.is_ok()),
         })
+    }
+
+    /// Preserve reviewed original intent and allocation while renewing the complete candidate
+    /// proof against this exact accepted target. Public control authenticates the origin token.
+    pub fn prepare_refreshed_authored_change(
+        &self,
+        request: &AuthoredChangeSet,
+        options: PublicationOptions,
+        origin: &PreparedAuthoredPublication,
+        native_reads: &AuthoredReadFootprint,
+    ) -> Result<PreparedAuthoredPublication, Vec<Diagnostic>> {
+        self.validation_checkpoint().map_err(|error| vec![error])?;
+        if !origin.origin_was_valid
+            || !self.witness_contract_is_current()
+            || self
+                .revalidated
+                .as_ref()
+                .is_some_and(|base| base.current.is_err())
+        {
+            return Err(vec![read_error(
+                DiagnosticClass::Semantic,
+                "change_refresh_invalid_origin",
+                "reviewed refresh requires currently valid origin and target authority; repair invalid meaning with an ordinary reviewed change",
+            )]);
+        }
+        let Some(origin_base) = origin.publication.expected_base else {
+            return Err(vec![read_error(
+                DiagnosticClass::Corrupt,
+                "change_refresh_origin_binding",
+                "authored refresh origin has no exact accepted base",
+            )]);
+        };
+        if origin_base.revision != request.base
+            || origin_base.repository_id != self.current.head.repository_id
+            || origin.publication.authority.semantic.root.package_id != self.package()
+        {
+            return Err(vec![read_error(
+                DiagnosticClass::Corrupt,
+                "change_refresh_origin_binding",
+                "authored refresh origin request and target do not share one repository and package",
+            )]);
+        }
+        let mut guards = origin.intent_reads.clone();
+        guards.merge(native_reads).map_err(|error| vec![error])?;
+        let previous = guards
+            .check_against_with_prior(self, self, request.budget, origin.publication.budget_work)
+            .map_err(|error| vec![error])?;
+        let mut renewed =
+            self.prepare_authored_change_at(request, options, self.revision(), None, previous)?;
+        if renewed.logical_plan.allocations != origin.logical_plan.allocations {
+            return Err(vec![read_error(
+                DiagnosticClass::Corrupt,
+                "change_refresh_allocation_mismatch",
+                "refreshed proposal changed original typed identity allocation",
+            )]);
+        }
+        match (
+            &origin.publication.transaction.body,
+            &renewed.publication.transaction.body,
+        ) {
+            (
+                super::TransactionBody::Change {
+                    owners: old_owners,
+                    supplied_types: old_types,
+                    dependencies: old_dependencies,
+                    retirements: old_retirements,
+                    ..
+                },
+                super::TransactionBody::Change {
+                    owners,
+                    supplied_types,
+                    dependencies,
+                    retirements,
+                    ..
+                },
+            ) if old_owners == owners
+                && old_types == supplied_types
+                && old_dependencies == dependencies
+                && old_retirements == retirements => {}
+            _ => {
+                return Err(vec![read_error(
+                    DiagnosticClass::Corrupt,
+                    "change_refresh_intent_mismatch",
+                    "refreshed proposal changed reviewed owner, type, dependency or retirement intent",
+                )]);
+            }
+        }
+        renewed
+            .intent_reads
+            .merge(&guards)
+            .map_err(|error| vec![error])?;
+        Ok(renewed)
     }
 
     fn prepare_change_with_prior_work(
@@ -1079,6 +1295,25 @@ impl RepositoryView {
         options: PublicationOptions,
         prior_work: AuthoredLoweringWork,
         budget: ChangeBudget,
+    ) -> Result<PreparedChangeWithAnalysis, Vec<Diagnostic>> {
+        self.prepare_change_with_previous_preparation(
+            edits,
+            options,
+            prior_work,
+            budget,
+            budget,
+            ChangeBudgetWork::default(),
+        )
+    }
+
+    fn prepare_change_with_previous_preparation(
+        &self,
+        edits: Vec<PrimitiveEdit>,
+        options: PublicationOptions,
+        prior_work: AuthoredLoweringWork,
+        budget: ChangeBudget,
+        declared_budget: ChangeBudget,
+        previous_preparation: ChangeBudgetWork,
     ) -> Result<PreparedChangeWithAnalysis, Vec<Diagnostic>> {
         self.validation_checkpoint().map_err(|error| vec![error])?;
         let canonical =
@@ -1158,6 +1393,22 @@ impl RepositoryView {
         };
         analysis.canonical_read_work.add(budget_reads.canonical);
         analysis.witness_read_work.add(prior_work.witness);
+        analysis.budget_work =
+            include_prior_refresh_work(analysis.budget_work, previous_preparation)
+                .map_err(|error| vec![error])?;
+        analysis
+            .canonical_read_work
+            .add(previous_preparation.canonical_reads);
+        analysis
+            .witness_read_work
+            .add(previous_preparation.witness_reads);
+        analysis.budget = declared_budget;
+        declared_budget
+            .check_observed(
+                analysis.budget_work,
+                "complete reviewed refresh preparation",
+            )
+            .map_err(|error| vec![error])?;
         let publication = super::prepare::prepare_change_publication_with_facts(
             self.current.accepted,
             self,

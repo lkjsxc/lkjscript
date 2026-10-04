@@ -41,8 +41,9 @@ Public 0.1.72 supplies the shared worker/runtime work below. Public
 0.1.73 composes generic Owned implementation applications with caller-supplied
 effects and requirements through the same independently checked authority
 boundaries as ordinary calls. Its source, finalized-byte and public acceptance
-are complete. Reviewed concurrent candidate refresh is the next semantic
-milestone; [status](status.md) owns the exact current evidence.
+are complete. [Reviewed concurrent candidate refresh](spec/concurrent-changes.md)
+is the selected semantic increment under implementation; source and final-byte
+acceptance remain pending. [Status](status.md) owns the exact current evidence.
 Keep region-local ownership possible: current owned carriers being transferable
 does not make every future owner transferable.
 
@@ -110,11 +111,18 @@ workloads, including cache/NUMA and large working-set behavior.
 
 ## 5. Support concurrent semantic development
 
-Prepare private candidates from immutable revisions concurrently, then revalidate
-semantic dependency footprints, including negative lookups, at publication. Test disjoint edits and hidden
-conflicts through types, witnesses, effects and references; different edited owners
-alone do not prove independence. A short serialized publication point is acceptable.
-Start with two candidates before a larger agent experiment on authorized resources.
+Complete the selected [explicit candidate refresh](spec/concurrent-changes.md)
+before expanding concurrent authoring. Preserve the original request, allocation
+identities and authored after-values; guard complete intent reads including negative
+lookups and empty relation ranges, then renew semantic validation, impact and tests.
+Two candidates must independently prove disjoint publication, hidden conflicts,
+stale races and exact accepted retries through the copied public executable.
+Implementation alone does not complete source or finalized-byte acceptance.
+
+After that acceptance, use the retained evidence to select larger concurrent-agent
+experiments and finer dependency capture on authorized resources. Different edited
+owners do not establish independence; a short serialized publication point remains
+acceptable. Branching and multi-parent merges require their own selected contract.
 
 Select conventional revision, branch/tag, difference, merge and retained-root semantics.
 Preserve useful stable identities without retaining every recomputable analysis.

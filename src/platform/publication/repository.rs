@@ -54,6 +54,83 @@ const REPOSITORY_STAGE_PREFIX: &str = ".lkjscript-graph9-stage-";
 const PACKAGE_TRANSPORT_DIRECTORY: &str = "PACKAGE-TRANSPORTS";
 const PACKAGE_TRANSPORT_SELECTION_FILE: &str = "CURRENT";
 const PACKAGE_TRANSPORT_SELECTION_STAGE_PREFIX: &str = ".CURRENT-stage-";
+pub const MAXIMUM_REFRESH_ANCESTOR_REVISIONS: usize = 10_000;
+
+struct AncestorStore<'a> {
+    base: &'a PackDirectoryStore,
+    admission: RefCell<StoreReadAdmission>,
+    control: &'a crate::platform::execution::ExecutionControl,
+}
+
+impl ImmutableObjectStore for AncestorStore<'_> {
+    fn stage(
+        &mut self,
+        _key: ObjectKey,
+        _bytes: &[u8],
+        _work: &mut StoreWork,
+    ) -> Result<StageOutcome, StoreError> {
+        Err(StoreError {
+            class: StoreErrorClass::Input,
+            code: "change_refresh_history_read_only",
+            message: "authenticated ancestry reader grants no object staging authority".to_owned(),
+        })
+    }
+    fn read(
+        &self,
+        key: ObjectKey,
+        maximum_bytes: usize,
+        work: &mut StoreWork,
+    ) -> Result<Option<Vec<u8>>, StoreError> {
+        self.read_admitted(
+            key,
+            maximum_bytes,
+            &mut StoreReadAdmission::unbounded(),
+            work,
+        )
+    }
+
+    fn read_admitted(
+        &self,
+        key: ObjectKey,
+        maximum_bytes: usize,
+        external: &mut StoreReadAdmission,
+        work: &mut StoreWork,
+    ) -> Result<Option<Vec<u8>>, StoreError> {
+        self.control.check().map_err(|error| StoreError {
+            class: StoreErrorClass::Input,
+            code: "change_refresh_history_cancelled",
+            message: error.message,
+        })?;
+        let own = self.admission.borrow().remaining();
+        let other = external.remaining();
+        let permitted = StoreReadLimits {
+            maximum_catalog_lookups: own
+                .maximum_catalog_lookups
+                .min(other.maximum_catalog_lookups),
+            maximum_objects: own.maximum_objects.min(other.maximum_objects),
+            maximum_bytes: own.maximum_bytes.min(other.maximum_bytes),
+        };
+        let mut merged = StoreReadAdmission::new(permitted);
+        let result = self
+            .base
+            .read_admitted(key, maximum_bytes, &mut merged, work);
+        let after = merged.remaining();
+        let used = StoreReadLimits {
+            maximum_catalog_lookups: permitted.maximum_catalog_lookups
+                - after.maximum_catalog_lookups,
+            maximum_objects: permitted.maximum_objects - after.maximum_objects,
+            maximum_bytes: permitted.maximum_bytes - after.maximum_bytes,
+        };
+        let remaining = |before: StoreReadLimits| StoreReadLimits {
+            maximum_catalog_lookups: before.maximum_catalog_lookups - used.maximum_catalog_lookups,
+            maximum_objects: before.maximum_objects - used.maximum_objects,
+            maximum_bytes: before.maximum_bytes - used.maximum_bytes,
+        };
+        *self.admission.borrow_mut() = StoreReadAdmission::new(remaining(own));
+        *external = StoreReadAdmission::new(remaining(other));
+        result
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct GraphRepository {
@@ -712,9 +789,16 @@ impl GraphRepository {
                 &mut map_work,
             )?
         };
-        let Some(binding) = binding.filter(|binding| binding.base == base) else {
+        let Some(binding) = binding else {
             return Ok(None);
         };
+        if binding.base != base {
+            return Err(repository_error(
+                DiagnosticClass::Source,
+                "publication_repository_idempotency_conflict",
+                "accepted history binds this idempotency key to a different publication parent",
+            ));
+        }
         let accepted = read_publication(&store, binding.result)?;
         validate_idempotency_result(&binding, &accepted)?;
         let [parent] = accepted.revision.publication.parents.as_slice() else {
@@ -737,9 +821,12 @@ impl GraphRepository {
         let mut base_publication = read_publication(&store, base_head)?;
         base_publication.store_work.add(parent_work);
         let hidden_type_objects = match &accepted.semantic_diff.body {
-            crate::platform::publication::SemanticDiffBody::Change { type_additions, .. } => {
-                type_additions.iter().copied().collect()
+            crate::platform::publication::SemanticDiffBody::Change { supplied_types, .. }
+                if accepted.transaction.contract_version == 5 =>
+            {
+                supplied_types.iter().copied().collect()
             }
+            crate::platform::publication::SemanticDiffBody::Change { .. } => BTreeSet::new(),
             crate::platform::publication::SemanticDiffBody::Bootstrap { .. } => {
                 return Err(repository_error(
                     DiagnosticClass::Corrupt,
@@ -757,6 +844,137 @@ impl GraphRepository {
             )
             .reconcile_validation()?,
         ))
+    }
+
+    /// Reopen an authenticated origin from a previously authenticated accepted target view.
+    /// Later descendants do not consume the target's complete ancestry admission.
+    pub(crate) fn view_ancestor_from(
+        &self,
+        anchor: &RepositoryView,
+        origin: crate::platform::semantic_id::RevisionId,
+        control: &crate::platform::execution::ExecutionControl,
+    ) -> Result<RepositoryView, Diagnostic> {
+        self.view_ancestor_from_bounded(anchor, origin, control, MAXIMUM_REFRESH_ANCESTOR_REVISIONS)
+    }
+
+    #[cfg(test)]
+    pub(super) fn view_ancestor_from_with_limit(
+        &self,
+        anchor: &RepositoryView,
+        origin: crate::platform::semantic_id::RevisionId,
+        control: &crate::platform::execution::ExecutionControl,
+        maximum_revisions: usize,
+    ) -> Result<RepositoryView, Diagnostic> {
+        self.view_ancestor_from_bounded(anchor, origin, control, maximum_revisions)
+    }
+
+    fn view_ancestor_from_bounded(
+        &self,
+        anchor: &RepositoryView,
+        origin: crate::platform::semantic_id::RevisionId,
+        control: &crate::platform::execution::ExecutionControl,
+        maximum_revisions: usize,
+    ) -> Result<RepositoryView, Diagnostic> {
+        let checkpoint = || {
+            control.check().map_err(|error| {
+                Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message)
+            })
+        };
+        checkpoint()?;
+        let root_directory = open_directory(&self.root)?;
+        let lock = open_lock(&root_directory)?;
+        FileExt::lock_shared(&lock).map_err(|error| {
+            io_diagnostic("publication_repository_view_lock", &self.root, error)
+        })?;
+        let store = open_store_shared(&root_directory, &self.root, &lock)?;
+        let limits = CanonicalReadAdmission::default();
+        let head_bytes = read_optional_regular_at(
+            &root_directory,
+            HEAD_FILE,
+            MAXIMUM_HEAD_BYTES,
+            "publication_repository_head_read",
+        )?
+        .ok_or_else(|| {
+            repository_error(
+                DiagnosticClass::Source,
+                "publication_repository_unpublished",
+                "repository has no accepted HEAD",
+            )
+        })?;
+        let observed_head = HeadRecord::decode(&head_bytes)?;
+        let anchor_head = anchor.current().head;
+        if observed_head.repository_id != anchor_head.repository_id {
+            return Err(repository_error(
+                DiagnosticClass::Corrupt,
+                "change_refresh_origin_binding",
+                "authenticated target view belongs to a different repository",
+            ));
+        }
+        drop(lock);
+        let bounded = AncestorStore {
+            base: &store,
+            admission: RefCell::new(StoreReadAdmission::new(StoreReadLimits {
+                maximum_catalog_lookups: limits.maximum_catalog_lookups,
+                maximum_objects: limits.maximum_objects,
+                maximum_bytes: limits.maximum_bytes,
+            })),
+            control,
+        };
+        let result = (|| {
+            let mut current = read_publication(&bounded, anchor_head)?;
+            let package = anchor.package();
+            let mut visited = BTreeSet::new();
+            for _ in 0..maximum_revisions {
+                checkpoint()?;
+                if current.head.repository_id != anchor_head.repository_id
+                    || current.semantic_root.package_id != package
+                    || !visited.insert(current.head.record)
+                {
+                    return Err(repository_error(
+                        DiagnosticClass::Corrupt,
+                        "change_refresh_history_lineage",
+                        "accepted refresh history changes authority or repeats an immutable revision record",
+                    ));
+                }
+                if current.head.revision == origin {
+                    return Ok(current);
+                }
+                let parent = match current.revision.publication.parents.as_slice() {
+                    [parent] => *parent,
+                    [] => {
+                        return Err(repository_error(
+                            DiagnosticClass::Semantic,
+                            "change_refresh_origin_unreachable",
+                            "original proposal base and publication target are not on the selected accepted branch",
+                        ));
+                    }
+                    _ => {
+                        return Err(repository_error(
+                            DiagnosticClass::Semantic,
+                            "change_refresh_invalid_origin",
+                            "reviewed refresh requires one-parent accepted history",
+                        ));
+                    }
+                };
+                let parent = load_parent_binding(
+                    &bounded,
+                    anchor_head.repository_id,
+                    parent,
+                    &mut StoreWork::default(),
+                )?;
+                current = read_publication(&bounded, parent.head)?;
+            }
+            Err(repository_error(
+                DiagnosticClass::Resource,
+                "change_refresh_history_capacity",
+                "authenticated refresh ancestry exceeds its complete history admission",
+            ))
+        })();
+        checkpoint()?;
+        let current = result?;
+        RepositoryView::new(current, store)
+            .with_control(control)
+            .reconcile_validation()
     }
 
     /// Prepares one exact change against the currently observed revision without publishing it.
@@ -1148,9 +1366,9 @@ fn classify_publication(
     }
 }
 
-fn read_current_optional(
+fn read_current_optional<S: ImmutableObjectStore + ?Sized>(
     root_directory: &File,
-    store: &PackDirectoryStore,
+    store: &S,
 ) -> Result<Option<CurrentPublication>, Diagnostic> {
     let Some(head_bytes) = read_optional_regular_at(
         root_directory,
@@ -1165,8 +1383,8 @@ fn read_current_optional(
     read_publication(store, head).map(Some)
 }
 
-fn read_publication(
-    store: &PackDirectoryStore,
+fn read_publication<S: ImmutableObjectStore + ?Sized>(
+    store: &S,
     head: HeadRecord,
 ) -> Result<CurrentPublication, Diagnostic> {
     let mut store_work = StoreWork::default();
@@ -1199,6 +1417,20 @@ fn read_publication(
         &mut store_work,
     )?;
     let semantic_diff = SemanticDiff::decode(&diff_bytes, revision.publication.semantic_diff)?;
+    if !matches!(
+        (
+            transaction.contract_version,
+            semantic_diff.contract_version,
+            receipt.contract_version
+        ),
+        (5, 3, 5) | (6, 4, 6)
+    ) {
+        return Err(repository_error(
+            DiagnosticClass::Corrupt,
+            "publication_repository_history_contract",
+            "accepted transaction, semantic diff and receipt do not share one type-inventory interpretation",
+        ));
+    }
     let root_bytes = read_required(
         store,
         ObjectDomain::SemanticRoot,
@@ -1287,8 +1519,8 @@ fn read_publication(
     })
 }
 
-fn load_parent_binding(
-    store: &PackDirectoryStore,
+fn load_parent_binding<S: ImmutableObjectStore + ?Sized>(
+    store: &S,
     repository_id: crate::platform::semantic_id::RepositoryId,
     parent: super::ParentRevision,
     work: &mut StoreWork,
@@ -1344,8 +1576,8 @@ fn load_parent_binding(
     )
 }
 
-fn validate_idempotency_transition(
-    store: &PackDirectoryStore,
+fn validate_idempotency_transition<S: ImmutableObjectStore + ?Sized>(
+    store: &S,
     observed: crate::platform::persistent_map::MapRoot,
     base: Option<AcceptedBinding>,
     work: &mut StoreWork,
@@ -1378,8 +1610,8 @@ fn validate_candidate_idempotency_transition(
     validate_idempotency_pages(store, &generated, Some(objects), work)
 }
 
-fn derive_idempotency_transition(
-    store: &PackDirectoryStore,
+fn derive_idempotency_transition<S: ImmutableObjectStore + ?Sized>(
+    store: &S,
     base: Option<AcceptedBinding>,
     work: &mut StoreWork,
 ) -> Result<(crate::platform::persistent_map::MapRoot, MemoryPageStore), Diagnostic> {
@@ -1410,8 +1642,8 @@ fn derive_idempotency_transition(
     }
 }
 
-fn validate_idempotency_pages(
-    store: &PackDirectoryStore,
+fn validate_idempotency_pages<S: ImmutableObjectStore + ?Sized>(
+    store: &S,
     generated: &MemoryPageStore,
     candidate: Option<&BTreeMap<ObjectKey, Vec<u8>>>,
     work: &mut StoreWork,
@@ -1622,8 +1854,8 @@ fn verify_prepared_closure(
     Ok(())
 }
 
-fn read_required(
-    store: &PackDirectoryStore,
+fn read_required<S: ImmutableObjectStore + ?Sized>(
+    store: &S,
     domain: ObjectDomain,
     digest: [u8; 32],
     work: &mut StoreWork,
@@ -1781,7 +2013,7 @@ fn verify_candidate_references(
     let mut types = BTreeSet::new();
     if let TransactionBody::Change {
         owners,
-        type_additions,
+        supplied_types,
         dependencies,
         retirements,
         ..
@@ -1799,8 +2031,8 @@ fn verify_candidate_references(
                 )?;
             }
         }
-        admission.admit_visits(type_additions.len())?;
-        types.extend(type_additions.iter().copied());
+        admission.admit_visits(supplied_types.len())?;
+        types.extend(supplied_types.iter().copied());
         admission.admit_visits(dependencies.len())?;
         for edit in dependencies {
             if let Some(digest) = edit.objects.after {

@@ -778,7 +778,8 @@ fn named_reference_wrong_parents_scope_and_large_shared_prelude_leave_head_uncha
     .unwrap();
     assert_eq!(prepared.logical_plan.resolutions.owners.len(), 1);
     assert_eq!(prepared.lowering_work.operations_lowered, 1_000);
-    assert_eq!(prepared.lowering_work.witness.point_reads, 1);
+    // Shared aliases resolve once; creation separately guards the absent destination name.
+    assert_eq!(prepared.lowering_work.witness.point_reads, 2);
     assert_eq!(prepared.allocated.len(), 1);
     let mut exhausted = request.semantic;
     exhausted.budget.witness_reads.maximum_point_reads = 0;

@@ -50,8 +50,8 @@ fn terminal() -> Terminal {
         source_commit: "1".repeat(40),
         controller_source_commit: "1".repeat(40),
         tag: "v0.1.39".to_owned(),
-        acceptance_contract: "lkjscript-final-candidate-acceptance-2".to_owned(),
-        workload: "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-2"
+        acceptance_contract: "lkjscript-final-candidate-acceptance-3".to_owned(),
+        workload: "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-3"
             .to_owned(),
         target_triple: "x86_64-unknown-linux-musl".to_owned(),
         target_policy_sha256: target::policy_sha256().expect("current target policy"),
@@ -317,6 +317,10 @@ fn candidate_real_stage_retains_failure_timeout_and_cancellation_without_accepta
 fn candidate_requires_native_public_proof_without_relabelling_the_old_contract() {
     let original = terminal();
     assert!(validate_terminal(&original).is_ok());
+    let mut before_refresh = original.clone();
+    before_refresh.acceptance_contract = "lkjscript-final-candidate-acceptance-2".to_owned();
+    before_refresh.workload = "release-source+six-target-owners+two-pinned-userlands+installed-recovery+native-public-harness-2".to_owned();
+    assert!(validate_terminal(&before_refresh).is_err());
     let mut missing = original.clone();
     missing
         .proofs

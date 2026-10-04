@@ -3283,6 +3283,7 @@ pub(crate) struct NormalizedChangeRequest {
     pub options: PublicationOptions,
     pub request_commitment: ChangeRequestCommitment,
     pub origins: origins::InputOrigins,
+    pub native_reads: crate::platform::change::AuthoredReadFootprint,
 }
 
 #[cfg(test)]
@@ -3302,17 +3303,7 @@ pub(crate) fn decode_compact_change_in_repository(
     if parsed.units.is_empty() {
         return decode_parsed_change(parsed, None);
     }
-    let header = parsed
-        .records
-        .iter()
-        .find(|r| r.operation == "request")
-        .ok_or_else(|| {
-            vec![Diagnostic::new(
-                DiagnosticClass::Source,
-                "change_request_missing",
-                "native units require an exact request base",
-            )]
-        })?;
+    let header = compact_change_header(&parsed)?;
     let base = parse_field::<RevisionId>(header, "base").map_err(|e| vec![e])?;
     let retry = optional(header, "idempotency")
         .map(|key| repository.view_idempotency_base(key, base))
@@ -3323,6 +3314,60 @@ pub(crate) fn decode_compact_change_in_repository(
         Some(view) => view,
         None => repository.view_current().map_err(|e| vec![e])?,
     };
+    decode_parsed_change_in_view(parsed, &view)
+}
+
+/// Read only the bounded request header before selecting an authenticated accepted origin.
+pub(crate) fn compact_change_origin(
+    path: &str,
+    input: &[u8],
+) -> Result<(RevisionId, Option<String>), Vec<Diagnostic>> {
+    let parsed = input::parse(path, input)?;
+    let header = compact_change_header(&parsed)?;
+    let base = parse_field::<RevisionId>(header, "base").map_err(|e| vec![e])?;
+    Ok((base, optional(header, "idempotency").map(str::to_owned)))
+}
+
+/// Resolve native intent against the explicitly supplied accepted view. Selecting and
+/// authenticating a historical origin belongs to the repository refresh operation.
+pub(crate) fn decode_compact_change_in_view(
+    path: &str,
+    input: &[u8],
+    view: &crate::platform::publication::RepositoryView,
+) -> Result<NormalizedChangeRequest, Vec<Diagnostic>> {
+    decode_parsed_change_in_view(input::parse(path, input)?, view)
+}
+
+fn compact_change_header(parsed: &input::ChangeInput) -> Result<&CompactRecord, Vec<Diagnostic>> {
+    let mut headers = parsed.records.iter().filter(|r| r.operation == "request");
+    let header = headers.next().ok_or_else(|| {
+        vec![Diagnostic::new(
+            DiagnosticClass::Source,
+            "change_request_missing",
+            "compact change requires one request record with an exact base revision",
+        )]
+    })?;
+    if let Some(duplicate) = headers.next() {
+        return Err(vec![record_error(
+            duplicate,
+            "change_request_duplicate",
+            "compact change contains more than one request record",
+        )]);
+    }
+    check_fields(
+        header,
+        &["base", "idempotency", "intent", "repository", "package"],
+    )
+    .map_err(|e| vec![e])?;
+    Ok(header)
+}
+
+fn decode_parsed_change_in_view(
+    parsed: input::ChangeInput,
+    view: &crate::platform::publication::RepositoryView,
+) -> Result<NormalizedChangeRequest, Vec<Diagnostic>> {
+    let header = compact_change_header(&parsed)?;
+    let base = parse_field::<RevisionId>(header, "base").map_err(|e| vec![e])?;
     if view.revision() != base {
         return Err(vec![field_error(
             header,
@@ -3346,8 +3391,11 @@ pub(crate) fn decode_compact_change_in_repository(
             )]);
         }
     }
-    let mut reader = canonical::Reader::new(
-        &view,
+    if parsed.units.is_empty() {
+        return decode_parsed_change(parsed, None);
+    }
+    let mut reader = canonical::Reader::for_intent(
+        view,
         crate::platform::execution::ExecutionControl::uncancelled(),
     );
     decode_parsed_change(parsed, Some(&mut reader))
@@ -3425,9 +3473,12 @@ fn decode_parsed_change(
     origins.symbols.extend(symbols.locations);
     match decoder.decode() {
         Ok(decoded) => {
-            let mut decoded =
-                declarations::finish(decoded, lowered, reader).map_err(|error| vec![error])?;
+            let mut decoded = declarations::finish(decoded, lowered, reader.as_deref_mut())
+                .map_err(|error| vec![error])?;
             decoded.origins = origins;
+            if let Some(reader) = reader {
+                decoded.native_reads = reader.take_intent_reads();
+            }
             Ok(decoded)
         }
         Err(mut diagnostic) => {
@@ -5364,6 +5415,7 @@ pub(crate) fn normalize_change_request(
         options,
         request_commitment,
         origins: Default::default(),
+        native_reads: Default::default(),
     })
 }
 

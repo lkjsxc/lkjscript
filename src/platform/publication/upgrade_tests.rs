@@ -195,17 +195,44 @@ fn authentic_predecessor_validity_repair_history_and_retry() {
                 "an old prepared token requires re-planning without changing its historical result"
             );
             let token = plan(&root, request);
-            let retry = apply(&root, request, &token);
-            assert_eq!(field(&retry, "result", "status"), "already-accepted");
+            assert_eq!(old.transaction.contract_version, 5);
+            assert_eq!(old.semantic_diff.contract_version, 3);
+            assert_eq!(old.receipt.contract_version, 5);
+            let decoded = crate::platform::control::decode_compact_change_in_repository(
+                "legacy-retry",
+                request.as_bytes(),
+                &repository,
+            )
+            .unwrap();
+            let origin = repository
+                .view_idempotency_base("baseline-permutation", decoded.semantic.base)
+                .unwrap()
+                .unwrap();
+            let prepared = origin
+                .prepare_authored_change(&decoded.semantic, decoded.options)
+                .unwrap();
             assert_eq!(
-                field(&retry, "receipt", "digest"),
-                old.accepted.receipt.to_string()
+                prepared.publication.transaction.contract_version,
+                super::contract::TRANSACTION_CONTRACT_VERSION
             );
+            assert_ne!(
+                prepared.publication.transaction_digest,
+                old.receipt.transaction
+            );
+            let errors = cli::execute_change(args(
+                &root,
+                &["change", "apply", "--input", request, "--plan", &token],
+            ))
+            .unwrap_err();
+            // Current transactions bind every supplied type and use their current envelope.
+            // They cannot recreate predecessor acceptance under its occupied immutable key.
             assert_eq!(
-                field(&retry, "receipt", "revision-record"),
-                old.head.record.to_string()
+                errors[0].code,
+                "publication_repository_idempotency_conflict"
             );
+            assert_eq!(inventory(&root), before_retry);
             assert_eq!(repository.current().unwrap().head, old.head);
+            assert_eq!(repository.current().unwrap().accepted, old.accepted);
         } else {
             assert_eq!(
                 view.require_current_validation().unwrap_err().code,
@@ -227,6 +254,10 @@ fn authentic_predecessor_validity_repair_history_and_retry() {
             let result = apply(&root, &request, &token);
             assert_eq!(field(&result, "result", "status"), "accepted");
             let repaired = repository.current().unwrap();
+            assert_eq!(
+                repaired.transaction.contract_version,
+                super::contract::TRANSACTION_CONTRACT_VERSION
+            );
             assert_eq!(
                 repaired.revision.publication.parents,
                 vec![old.accepted.parent()]

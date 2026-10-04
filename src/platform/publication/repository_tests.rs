@@ -5550,20 +5550,26 @@ fn authored_budget_dimensions_exhaust_independently_without_advancing_head() {
     };
     let mut existing_type_budget = ChangeBudget::default();
     existing_type_budget.canonical_edits.maximum_type_edits = 0;
+    reject(
+        existing_type_budget,
+        vec![create_with_unit.clone()],
+        "change_budget_canonical_type_edits",
+    );
+    existing_type_budget.canonical_edits.maximum_type_edits = 1;
     let existing_type = created
         .repository
         .prepare_authored_change(
             &default_request(vec![create_with_unit], existing_type_budget),
             PublicationOptions::default(),
         )
-        .expect("accepted unit type must not consume a canonical type-edit admission");
+        .expect("supplied unit type is admitted independently of physical storage");
     assert_eq!(
         existing_type
             .publication
             .budget_work
             .canonical_edits
             .type_edits,
-        0
+        1
     );
     assert_eq!(existing_type.publication.budget_work.authored_type_nodes, 1);
 
@@ -5706,7 +5712,7 @@ fn authored_request_creates_a_typed_function_and_test_from_forward_references() 
         .expect("prepare function and test creation");
     assert_eq!(prepared.publication.receipt.counts.owners_created, 8);
     assert_eq!(prepared.publication.receipt.counts.owners_updated, 0);
-    assert_eq!(prepared.publication.receipt.counts.type_objects_added, 1);
+    assert_eq!(prepared.publication.receipt.counts.type_objects_supplied, 1);
     assert_eq!(prepared.publication.receipt.validation.tests_selected, 1);
     assert_eq!(prepared.allocated.len(), 7);
     assert!(matches!(
@@ -5921,8 +5927,11 @@ fn authored_type_builder_interns_every_unrestricted_graph_nine_type_form() {
         .repository
         .prepare_authored_change(&request, PublicationOptions::default())
         .expect("every type form must lower and validate");
-    // The base fixture already owns canonical `unit`; all other requested shapes are new.
-    assert_eq!(prepared.publication.receipt.counts.type_objects_added, 15);
+    // All sixteen requested shapes are supplied, including Unit already in physical storage.
+    assert_eq!(
+        prepared.publication.receipt.counts.type_objects_supplied,
+        16
+    );
     assert_eq!(prepared.publication.receipt.counts.owners_created, 19);
     assert!(matches!(
         created
@@ -5934,6 +5943,7 @@ fn authored_type_builder_interns_every_unrestricted_graph_nine_type_form() {
 
     let view = created.repository.view_current().expect("advanced view");
     let mut observed = std::collections::BTreeSet::new();
+    let mut observed_types = BTreeSet::new();
     for symbol in [
         "$p_unit",
         "$p_bool",
@@ -5956,6 +5966,7 @@ fn authored_type_builder_interns_every_unrestricted_graph_nine_type_form() {
         let Some(OwnerRecord::Parameter(parameter)) = view.owner(owner).unwrap().value else {
             panic!("created type-form parameter must remain readable")
         };
+        observed_types.insert(parameter.ty);
         let form = view.type_object(parameter.ty).unwrap().value.unwrap().form;
         observed.insert(match form {
             TypeForm::Unit => "unit",
@@ -5985,6 +5996,14 @@ fn authored_type_builder_interns_every_unrestricted_graph_nine_type_form() {
         });
     }
     assert_eq!(observed.len(), 16);
+    let TransactionBody::Change { supplied_types, .. } = &prepared.publication.transaction.body
+    else {
+        panic!("authored type builder has a change transaction")
+    };
+    assert_eq!(
+        supplied_types.iter().copied().collect::<BTreeSet<_>>(),
+        observed_types
+    );
 }
 
 #[test]
@@ -6236,8 +6255,44 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
         .expect("all foundational owners must lower and validate through one request");
     assert_eq!(prepared.allocated.len(), 24);
     assert_eq!(prepared.publication.receipt.counts.owners_created, 26);
-    // Unit is reused. The new named record, T, Option<T> and pure `() -> unit` are distinct.
-    assert_eq!(prepared.publication.receipt.counts.type_objects_added, 4);
+    // Unit, the named record, T, Option<T> and pure `() -> Unit` are all supplied.
+    assert_eq!(prepared.publication.receipt.counts.type_objects_supplied, 5);
+    let type_digest = |form| {
+        encode_type_object(&TypeObject::new(form).unwrap())
+            .unwrap()
+            .0
+    };
+    let unit = type_digest(TypeForm::Unit);
+    let OwnerKey::TypeParameter(parameter) = prepared.allocated["$external_type"] else {
+        panic!("external type parameter")
+    };
+    let parameter = type_digest(TypeForm::TypeParameter { parameter });
+    let OwnerKey::Declaration(record) = prepared.allocated["$record"] else {
+        panic!("record declaration")
+    };
+    let expected_types = BTreeSet::from([
+        unit,
+        type_digest(TypeForm::Named {
+            declaration: crate::platform::kernel::DeclarationReference {
+                package: created.current.semantic_root.package_id,
+                declaration: record,
+            },
+        }),
+        parameter,
+        type_digest(TypeForm::Option { item: parameter }),
+        type_digest(TypeForm::Function {
+            parameters: Vec::new(),
+            result: unit,
+        }),
+    ]);
+    let TransactionBody::Change { supplied_types, .. } = &prepared.publication.transaction.body
+    else {
+        panic!("foundational owner request has a change transaction")
+    };
+    assert_eq!(
+        supplied_types.iter().copied().collect::<BTreeSet<_>>(),
+        expected_types
+    );
     assert_eq!(
         prepared.publication.receipt.validation.profile,
         ValidationProfile::IncrementalOwnerFrontier
@@ -6246,8 +6301,8 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
         prepared.publication.receipt.validation.full_oracle,
         FullOracleStatus::NotRun
     );
-    // Each of those four types plus reused Unit requires one exact cached base read.
-    assert_eq!(prepared.lowering_work.canonical.point_reads, 5);
+    // Supplied types require no physical-presence classification reads.
+    assert_eq!(prepared.lowering_work.canonical.point_reads, 0);
     assert!(matches!(
         created
             .repository
@@ -7375,7 +7430,7 @@ fn locked_publication_accepts_once_reconciles_exact_retry_and_rejects_stale() {
 }
 
 #[test]
-fn idempotent_authored_reprepare_hides_child_type_objects_from_its_exact_base() {
+fn idempotent_authored_reprepare_ignores_physical_child_type_availability() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
     let destination = temporary.path().join("meaning");
     let logical = crate::platform::kernel::tests::witness_snapshot();
@@ -7433,7 +7488,7 @@ fn idempotent_authored_reprepare_hides_child_type_objects_from_its_exact_base() 
         .repository
         .prepare_authored_change(&normalized.semantic, normalized.options.clone())
         .expect("prepare first authored request");
-    assert!(first.publication.receipt.counts.type_objects_added > 0);
+    assert!(first.publication.receipt.counts.type_objects_supplied > 0);
     let first_plan =
         crate::platform::control::LogicalChangePlan::new(normalized.request_commitment, &first)
             .expect("first logical plan");

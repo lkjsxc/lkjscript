@@ -1657,6 +1657,8 @@ mod native_history;
 mod native_literal_edits;
 #[path = "native_named_drafts.rs"]
 mod native_named_drafts;
+#[path = "native_refresh.rs"]
+mod native_refresh;
 #[path = "web_starter.rs"]
 mod web_starter;
 

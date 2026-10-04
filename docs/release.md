@@ -47,7 +47,7 @@ installed-recovery, pinned-userland and original-reader obligation.
 Final candidate acceptance now runs the source-matched public harness against the
 exact executable extracted from the finalized archive. It selects every enumerated
 case matching `native_owned_`, `native_byte_buffer_`, `native_byte_ranges_`,
-`resident_policy` and `native_parallel`, plus the exact
+`resident_policy`, `native_parallel` and `native_refresh`, plus the exact
 `copied_binary_authors_builds_and_serves_interactive_topology_from_minimal` case.
 Every family must be present. The native owner rejects missing, duplicate, ignored,
 failed or unexpectedly substituted cases even when the harness exits successfully.
@@ -72,7 +72,7 @@ substitute for final-byte acceptance. Normal promotion and anonymous acquisition
 still use the unchanged assets and existing authority; no credentials, protections,
 immutable tags or prior assets are changed.
 
-`lkjscript-final-candidate-acceptance-2` requires the native-public proof in addition
+`lkjscript-final-candidate-acceptance-3` requires the native-public proof in addition
 to all previous source, six target-owner, two userland and installation boundaries.
 The current controller intentionally rejects predecessor acceptance terminals rather
 than relabelling them. Their original contracts and evidence remain historical facts;

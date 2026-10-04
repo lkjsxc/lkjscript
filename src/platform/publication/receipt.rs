@@ -10,6 +10,10 @@ use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::{RepositoryId, RevisionId};
 use bincode::{Decode, Encode};
 
+const PREDECESSOR_RECEIPT_CONTRACT_VERSION: u16 = 5;
+const PREDECESSOR_RECEIPT_MAGIC: [u8; 8] = *b"LKJRCPT5";
+const PREDECESSOR_RECEIPT_ENVELOPE_DOMAIN: &str = "lkjscript.receipt-envelope.v5";
+
 #[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum PublicationStatus {
     AcceptedChange,
@@ -37,7 +41,9 @@ pub struct ChangeCounts {
     pub owners_created: u64,
     pub owners_updated: u64,
     pub owners_deleted: u64,
-    pub type_objects_added: u64,
+    /// Complete proposal-supplied type inventory in receipt 6. Historical receipt 5
+    /// retains its original count of storage additions, without upgrading that evidence.
+    pub type_objects_supplied: u64,
     pub dependencies_changed: u64,
     pub retirements_changed: u64,
     pub witness_entries_changed: u64,
@@ -103,12 +109,8 @@ pub struct PublicationReceipt {
 impl PublicationReceipt {
     pub fn encode(&self) -> Result<(ReceiptObjectDigest, Vec<u8>), Diagnostic> {
         self.validate()?;
-        let bytes = crate::platform::packed::encode(
-            RECEIPT_MAGIC,
-            RECEIPT_ENVELOPE_DOMAIN,
-            self,
-            MAXIMUM_RECEIPT_BYTES,
-        )?;
+        let (magic, domain) = receipt_envelope(self.contract_version)?;
+        let bytes = crate::platform::packed::encode(magic, domain, self, MAXIMUM_RECEIPT_BYTES)?;
         Ok((ReceiptObjectDigest::of(&bytes), bytes))
     }
 
@@ -120,12 +122,13 @@ impl PublicationReceipt {
                 "receipt bytes disagree with their object digest",
             ));
         }
-        let value: Self = crate::platform::packed::decode(
-            bytes,
-            RECEIPT_MAGIC,
-            RECEIPT_ENVELOPE_DOMAIN,
-            MAXIMUM_RECEIPT_BYTES,
-        )?;
+        let (magic, domain) = if bytes.starts_with(&PREDECESSOR_RECEIPT_MAGIC) {
+            receipt_envelope(PREDECESSOR_RECEIPT_CONTRACT_VERSION)?
+        } else {
+            receipt_envelope(RECEIPT_CONTRACT_VERSION)?
+        };
+        let value: Self =
+            crate::platform::packed::decode(bytes, magic, domain, MAXIMUM_RECEIPT_BYTES)?;
         value.validate()?;
         if value.encode()?.1 != bytes {
             return Err(receipt_error(
@@ -138,15 +141,16 @@ impl PublicationReceipt {
     }
 
     fn validate(&self) -> Result<(), Diagnostic> {
-        if self.contract_version != RECEIPT_CONTRACT_VERSION
-            || !crate::platform::kernel::contract::supported_graph_contract(
-                self.graph_contract_version,
-            )
-        {
+        if !matches!(
+            self.contract_version,
+            RECEIPT_CONTRACT_VERSION | PREDECESSOR_RECEIPT_CONTRACT_VERSION
+        ) || !crate::platform::kernel::contract::supported_graph_contract(
+            self.graph_contract_version,
+        ) {
             return Err(receipt_error(
                 DiagnosticClass::Source,
                 "publication_receipt_contract",
-                "receipt uses a predecessor or foreign contract",
+                "receipt uses an unsupported contract",
             ));
         }
         if self.bases.len() > 2
@@ -222,6 +226,21 @@ impl PublicationReceipt {
             ));
         }
         Ok(())
+    }
+}
+
+fn receipt_envelope(version: u16) -> Result<([u8; 8], &'static str), Diagnostic> {
+    match version {
+        RECEIPT_CONTRACT_VERSION => Ok((RECEIPT_MAGIC, RECEIPT_ENVELOPE_DOMAIN)),
+        PREDECESSOR_RECEIPT_CONTRACT_VERSION => Ok((
+            PREDECESSOR_RECEIPT_MAGIC,
+            PREDECESSOR_RECEIPT_ENVELOPE_DOMAIN,
+        )),
+        _ => Err(receipt_error(
+            DiagnosticClass::Source,
+            "publication_receipt_contract",
+            "receipt uses an unsupported contract",
+        )),
     }
 }
 

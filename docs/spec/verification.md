@@ -2,6 +2,53 @@
 
 Status: normative.
 
+## Reviewed concurrent change obligations
+
+The [concurrent-change contract](concurrent-changes.md) requires independent
+accepted-meaning, reviewed-intent and publication evidence. A successful refresh
+command alone does not establish safe concurrent development.
+
+- Prepare two literal candidates from one revision. Publish the first, prove the
+  ordinary second apply is stale without mutation, then explicitly refresh and
+  apply the unchanged second input. Check both complete results, original created
+  identities and authored values; build and execute through a copied binary after
+  removing authoring sources.
+- Exercise disjoint edits under one module and shared type insertions. Changes to
+  aggregate derived summaries must permit independent intent, and equal stored
+  type bytes must retain complete supplied closure and stable review bindings.
+- Reject changed positive and negative namespace/dependency/retirement/ownership
+  observations, original-name retargeting, overlapping exact writes and changed
+  complete relation-query results, including insertion into an originally empty
+  incoming range. Before/after accepted revision and full prior results are the
+  oracle; separate edited owners are insufficient evidence.
+- Renew target-dependent validation, impact and selected tests. A valid original
+  proposal with unchanged intent guards must still reject an invalid complete
+  target candidate. Preserve independently expected results and failures rather
+  than comparing two outputs from the changed machinery alone.
+- Race two refreshed candidates reviewed at one onto revision. Exactly one can
+  expose accepted meaning; the stale loser preserves all accepted identity and
+  state. Retry an accepted keyed refresh after descendants and require its original
+  receipt/result; changed onto or reviewed candidate under the same key conflicts.
+- Reject substituted requests, original/prepared/onto/renewed token components,
+  refreshed origins, missing/disconnected/two-parent/corrupt history and incomplete
+  footprints. Exercise guard-count/byte, shared ancestry-read and combined
+  original/guard/renewed request-work exhaustion,
+  cancellation during origin traversal/preparation/staging and interruption around
+  atomic exposure. Resource, semantic, corrupt and cancelled outcomes retain their
+  actual class and cannot become partial publication.
+- Strictly round-trip ordinary and refreshed logical plans through their native
+  codec. Bind authored-read digest/count and explicit refresh provenance; reject
+  malformed, excessive or contradictory fields and predecessor encodings. Preserve
+  exact complete original and renewed review evidence.
+
+The finalized public-harness owner requires every enumerated `native_refresh`
+case alongside its existing native families. Inventory omission, ignored cases,
+substitution, incomplete output, failure, cancellation or unjoined cleanup blocks
+acceptance. The source-matched copied harness runs the exact executable extracted
+from the finalized archive outside the checkout. Candidate acceptance contract 3
+requires this new obligation; historical terminals retain their original contract
+and cannot be relabelled as refresh acceptance.
+
 ## Owned effect and requirement applications
 
 The owned-effects native library must validate before a concrete consumer exists.

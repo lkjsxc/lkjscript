@@ -15,6 +15,10 @@ use crate::platform::semantic_id::{RepositoryId, RevisionId};
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
+const PREDECESSOR_DIFF_CONTRACT_VERSION: u16 = 3;
+const PREDECESSOR_DIFF_MAGIC: [u8; 8] = *b"LKJDIFF3";
+const PREDECESSOR_DIFF_ENVELOPE_DOMAIN: &str = "lkjscript.semantic-diff-envelope.v3";
+
 #[derive(Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SummaryDimensions {
@@ -109,7 +113,9 @@ pub enum SemanticDiffBody {
         base_root: SemanticRootDigest,
         result_root: SemanticRootDigest,
         owners: Vec<OwnerDiffEntry>,
-        type_additions: Vec<TypeObjectDigest>,
+        /// Proposal-supplied type closure; these entries do not claim new physical storage.
+        /// Contract 3 retains its original storage-addition inventory when read historically.
+        supplied_types: Vec<TypeObjectDigest>,
         dependencies: Vec<DependencyDiffEntry>,
         retirements: Vec<RetirementDiffEntry>,
     },
@@ -127,12 +133,9 @@ pub struct SemanticDiff {
 impl SemanticDiff {
     pub fn encode(&self) -> Result<(SemanticDiffDigest, Vec<u8>), Diagnostic> {
         self.validate()?;
-        let bytes = crate::platform::packed::encode(
-            SEMANTIC_DIFF_MAGIC,
-            SEMANTIC_DIFF_ENVELOPE_DOMAIN,
-            self,
-            MAXIMUM_SEMANTIC_DIFF_BYTES,
-        )?;
+        let (magic, domain) = diff_envelope(self.contract_version)?;
+        let bytes =
+            crate::platform::packed::encode(magic, domain, self, MAXIMUM_SEMANTIC_DIFF_BYTES)?;
         Ok((SemanticDiffDigest::of(&bytes), bytes))
     }
 
@@ -144,12 +147,13 @@ impl SemanticDiff {
                 "semantic diff bytes disagree with their object digest",
             ));
         }
-        let value: Self = crate::platform::packed::decode(
-            bytes,
-            SEMANTIC_DIFF_MAGIC,
-            SEMANTIC_DIFF_ENVELOPE_DOMAIN,
-            MAXIMUM_SEMANTIC_DIFF_BYTES,
-        )?;
+        let (magic, domain) = if bytes.starts_with(&PREDECESSOR_DIFF_MAGIC) {
+            diff_envelope(PREDECESSOR_DIFF_CONTRACT_VERSION)?
+        } else {
+            diff_envelope(SEMANTIC_DIFF_CONTRACT_VERSION)?
+        };
+        let value: Self =
+            crate::platform::packed::decode(bytes, magic, domain, MAXIMUM_SEMANTIC_DIFF_BYTES)?;
         value.validate()?;
         if value.encode()?.1 != bytes {
             return Err(diff_error(
@@ -169,22 +173,23 @@ impl SemanticDiff {
     }
 
     fn validate(&self) -> Result<(), Diagnostic> {
-        if self.contract_version != SEMANTIC_DIFF_CONTRACT_VERSION
-            || !crate::platform::kernel::contract::supported_graph_contract(
-                self.graph_contract_version,
-            )
-        {
+        if !matches!(
+            self.contract_version,
+            SEMANTIC_DIFF_CONTRACT_VERSION | PREDECESSOR_DIFF_CONTRACT_VERSION
+        ) || !crate::platform::kernel::contract::supported_graph_contract(
+            self.graph_contract_version,
+        ) {
             return Err(diff_error(
                 DiagnosticClass::Source,
                 "publication_diff_contract",
-                "semantic diff uses a predecessor or foreign contract",
+                "semantic diff uses an unsupported contract",
             ));
         }
         let SemanticDiffBody::Change {
             base_root,
             result_root,
             owners,
-            type_additions,
+            supplied_types,
             dependencies,
             retirements,
             ..
@@ -201,7 +206,7 @@ impl SemanticDiff {
         }
         let entries = owners
             .len()
-            .checked_add(type_additions.len())
+            .checked_add(supplied_types.len())
             .and_then(|count| count.checked_add(dependencies.len()))
             .and_then(|count| count.checked_add(retirements.len()))
             .ok_or_else(|| {
@@ -221,7 +226,7 @@ impl SemanticDiff {
             ));
         }
         validate_sorted(owners, |entry| entry.owner, "owner")?;
-        validate_sorted(type_additions, |digest| *digest, "type addition")?;
+        validate_sorted(supplied_types, |digest| *digest, "supplied type")?;
         validate_sorted(dependencies, |entry| entry.package, "dependency")?;
         validate_sorted(retirements, |entry| entry.owner, "retirement")?;
         for entry in owners {
@@ -234,6 +239,20 @@ impl SemanticDiff {
             validate_digest_edit(entry.objects, "retirement")?;
         }
         Ok(())
+    }
+}
+
+fn diff_envelope(version: u16) -> Result<([u8; 8], &'static str), Diagnostic> {
+    match version {
+        SEMANTIC_DIFF_CONTRACT_VERSION => Ok((SEMANTIC_DIFF_MAGIC, SEMANTIC_DIFF_ENVELOPE_DOMAIN)),
+        PREDECESSOR_DIFF_CONTRACT_VERSION => {
+            Ok((PREDECESSOR_DIFF_MAGIC, PREDECESSOR_DIFF_ENVELOPE_DOMAIN))
+        }
+        _ => Err(diff_error(
+            DiagnosticClass::Source,
+            "publication_diff_contract",
+            "semantic diff uses an unsupported contract",
+        )),
     }
 }
 

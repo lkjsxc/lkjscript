@@ -9,7 +9,7 @@ use super::change::ChangeRequestCommitment;
 use super::{CompactRecord, parse_records, render_record};
 use crate::platform::change::{
     AuthoredAllocation, ChangeBudget, FunctionExtractionEvidence, HttpRoutePlanEvidence,
-    ImpactReason, ImpactReasonKind, LogicalChangePlanEvidence,
+    ImpactReason, ImpactReasonKind, LogicalChangePlanEvidence, MAXIMUM_REFRESH_GUARDS,
 };
 use crate::platform::contract::{
     MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS, MAXIMUM_FUNCTION_EXTRACTION_CAPTURE_USES,
@@ -42,9 +42,9 @@ use std::fmt;
 use std::io::{BufRead, Read};
 use std::str::FromStr;
 
-pub const LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY: &str = "lkjscript-logical-change-plan-5";
-pub const LOGICAL_CHANGE_PLAN_CONTRACT_VERSION: u16 = 5;
-pub const PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN: &str = "lkjscript.logical-change-plan.v5";
+pub const LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY: &str = "lkjscript-logical-change-plan-6";
+pub const LOGICAL_CHANGE_PLAN_CONTRACT_VERSION: u16 = 6;
+pub const PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN: &str = "lkjscript.logical-change-plan.v6";
 const INTERNAL_PLAN_BINDING_LABEL: &[u8] = b"lkjscript.logical-change-plan.internal-registry\0";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -69,7 +69,17 @@ pub(crate) const LOGICAL_PLAN_RECORD_DESCRIPTORS: &[LogicalPlanRecordDescriptor]
         "logical-plan.authority",
         ["repository", "package", "base", "result", "semantic-state"]
     ),
-    plan_record!("logical-plan.request", ["commitment"]),
+    plan_record!(
+        "logical-plan.request",
+        [
+            "commitment",
+            "intent-reads",
+            "intent-read-guards",
+            "refresh-present",
+            "original-prepared",
+            "onto"
+        ]
+    ),
     plan_record!(
         "logical-plan.budget-authored",
         [
@@ -465,7 +475,7 @@ pub const MAXIMUM_LOGICAL_PLAN_RECORDS: u64 = 20_001
 // admissions and current typed text forms. The fixed total includes every singleton/budget record
 // and the maximally escaped 4,096-byte intent. A unit test renders each maximum and requires exact
 // equality, so vocabulary or field-bound growth must deliberately revise this contract.
-const MAXIMUM_FIXED_RECORDS_BYTES: u64 = 27_608;
+const MAXIMUM_FIXED_RECORDS_BYTES: u64 = 28_031;
 const MAXIMUM_PACKAGE_RECORD_BYTES: u64 = 352;
 const MAXIMUM_ALLOCATION_RECORD_BYTES: u64 = 111;
 const MAXIMUM_OWNER_RECORD_BYTES: u64 = 857;
@@ -525,12 +535,27 @@ impl fmt::Display for PreparedPlanCommitment {
 pub(crate) struct ChangePlanToken {
     pub request: ChangeRequestCommitment,
     pub prepared: PreparedPlanCommitment,
+    pub refresh: Option<RefreshedPlanOrigin>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) struct RefreshedPlanOrigin {
+    pub original_prepared: PreparedPlanCommitment,
+    pub onto: RevisionId,
 }
 
 impl fmt::Display for ChangePlanToken {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("plan_")?;
+        formatter.write_str(if self.refresh.is_some() {
+            "refresh_"
+        } else {
+            "plan_"
+        })?;
         formatter.write_str(&encode_hex(&self.request.bytes()))?;
+        if let Some(origin) = self.refresh {
+            formatter.write_str(&encode_hex(&origin.original_prepared.bytes()))?;
+            formatter.write_str(&encode_hex(&origin.onto.bytes()))?;
+        }
         formatter.write_str(&encode_hex(&self.prepared.bytes()))
     }
 }
@@ -539,33 +564,47 @@ impl FromStr for ChangePlanToken {
     type Err = Diagnostic;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        let encoded = value.strip_prefix("plan_").ok_or_else(|| {
-            plan_source_error(
+        let (encoded, refreshed) = if let Some(encoded) = value.strip_prefix("plan_") {
+            (encoded, false)
+        } else if let Some(encoded) = value.strip_prefix("refresh_") {
+            (encoded, true)
+        } else {
+            return Err(plan_source_error(
                 "change_plan_domain",
-                "reviewed plan token must start with 'plan_'",
-            )
-        })?;
-        if encoded.len() != 128 {
+                "reviewed plan token must start with 'plan_' or 'refresh_'",
+            ));
+        };
+        let expected_length = if refreshed { 256 } else { 128 };
+        if encoded.len() != expected_length {
             return Err(plan_source_error(
                 "change_plan_length",
-                "reviewed plan token must contain 128 lowercase hexadecimal characters",
+                format!(
+                    "reviewed plan token must contain {expected_length} lowercase hexadecimal characters"
+                ),
             ));
         }
         if let Some(index) = encoded.bytes().position(|byte| lower_hex(byte).is_none()) {
-            // Preserve component diagnostics when byte 64 is a UTF-8 boundary.
-            let component = if index < 64 {
-                encoded.get(..64)
-            } else {
-                encoded.get(64..)
-            }
-            .unwrap_or(encoded);
+            // Validate all bytes before slicing components, including UTF-8 crossing any boundary.
+            let start = index / 64 * 64;
+            let component = encoded.get(start..start + 64).unwrap_or(encoded);
             return Err(invalid_plan_hex(component));
         }
         let request = decode_hex_32(&encoded[..64])?;
-        let prepared = decode_hex_32(&encoded[64..])?;
+        let refresh = if refreshed {
+            Some(RefreshedPlanOrigin {
+                original_prepared: PreparedPlanCommitment::from_bytes(decode_hex_32(
+                    &encoded[64..128],
+                )?),
+                onto: RevisionId::from_digest(decode_hex_32(&encoded[128..192])?),
+            })
+        } else {
+            None
+        };
+        let prepared = decode_hex_32(&encoded[expected_length - 64..])?;
         Ok(Self {
             request: ChangeRequestCommitment::from_bytes(request),
             prepared: PreparedPlanCommitment::from_bytes(prepared),
+            refresh,
         })
     }
 }
@@ -579,6 +618,7 @@ pub(crate) struct LogicalChangePlan<'a> {
     dependencies: &'a [DependencyDiffEntry],
     retirements: &'a [RetirementDiffEntry],
     base: RevisionId,
+    refresh: Option<RefreshedPlanOrigin>,
 }
 
 impl<'a> LogicalChangePlan<'a> {
@@ -597,7 +637,7 @@ impl<'a> LogicalChangePlan<'a> {
             base: diff_base,
             result_root,
             owners,
-            type_additions,
+            supplied_types,
             dependencies,
             retirements,
             ..
@@ -634,11 +674,37 @@ impl<'a> LogicalChangePlan<'a> {
             request,
             publication,
             owners,
-            types: type_additions,
+            types: supplied_types,
             dependencies,
             retirements,
             base: *base,
+            refresh: None,
         })
+    }
+
+    pub(crate) fn refreshed(
+        request: ChangeRequestCommitment,
+        publication: &'a PreparedAuthoredPublication,
+        original_token: ChangePlanToken,
+    ) -> Result<Self, Diagnostic> {
+        if original_token.refresh.is_some() {
+            return Err(plan_source_error(
+                "change_refresh_origin",
+                "a refreshed plan must originate from an ordinary reviewed plan",
+            ));
+        }
+        if original_token.request != request {
+            return Err(plan_source_error(
+                "change_refresh_request",
+                "a refreshed plan must preserve the original reviewed request commitment",
+            ));
+        }
+        let mut plan = Self::new(request, publication)?;
+        plan.refresh = Some(RefreshedPlanOrigin {
+            original_prepared: original_token.prepared,
+            onto: plan.base,
+        });
+        Ok(plan)
     }
 
     fn prepared(&self) -> &PreparedAuthoredPublication {
@@ -702,6 +768,7 @@ where
     let token = ChangePlanToken {
         request: plan.request,
         prepared,
+        refresh: plan.refresh,
     };
     encoder.append_trailer(
         "logical-plan.digest",
@@ -862,7 +929,28 @@ where
     )?;
     encoder.append(
         "logical-plan.request",
-        &[("commitment", plan.request.to_string())],
+        &[
+            ("commitment", plan.request.to_string()),
+            (
+                "intent-reads",
+                encode_hex(&plan.publication.intent_reads.digest()),
+            ),
+            (
+                "intent-read-guards",
+                count(plan.publication.intent_reads.len())?,
+            ),
+            ("refresh-present", plan.refresh.is_some().to_string()),
+            (
+                "original-prepared",
+                plan.refresh
+                    .map_or_else(String::new, |origin| origin.original_prepared.to_string()),
+            ),
+            (
+                "onto",
+                plan.refresh
+                    .map_or_else(String::new, |origin| origin.onto.to_string()),
+            ),
+        ],
     )?;
     encode_budget(evidence.budget, encoder)?;
     encoder.append(
@@ -1950,6 +2038,10 @@ struct ExtractionExpectedCounts {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DecodedLogicalPlan {
     pub request_commitment: String,
+    pub intent_reads_digest: String,
+    pub intent_read_guards: u64,
+    pub original_prepared_plan_commitment: Option<String>,
+    pub onto_revision: Option<String>,
     pub prepared_plan_commitment: String,
     pub token: String,
     pub counts: LogicalPlanCounts,
@@ -2030,7 +2122,10 @@ struct PlanDecoder {
     next_fixed: usize,
     phase: usize,
     trailer_seen: bool,
+    base: Option<RevisionId>,
     request: Option<ChangeRequestCommitment>,
+    intent_reads: Option<([u8; 32], u64)>,
+    refresh: Option<RefreshedPlanOrigin>,
     prepared: Option<PreparedPlanCommitment>,
     token: Option<ChangePlanToken>,
     budget: ChangeBudget,
@@ -2080,7 +2175,10 @@ impl PlanDecoder {
             next_fixed: 0,
             phase: 16,
             trailer_seen: false,
+            base: None,
             request: None,
+            intent_reads: None,
+            refresh: None,
             prepared: None,
             token: None,
             budget: ChangeBudget::default(),
@@ -2248,11 +2346,12 @@ impl PlanDecoder {
                 bind_internal_registry(&mut self.hasher, &internal_registry_digest);
                 Ok(())
             }
-            2 => validate_authority(record),
-            3 => {
-                self.request = Some(parse_request_commitment(field(record, 0))?);
+            2 => {
+                validate_authority(record)?;
+                self.base = Some(field(record, 2).parse::<RevisionId>()?);
                 Ok(())
             }
+            3 => self.decode_request(record),
             4 => decode_budget_authored(record, &mut self.budget),
             5 => decode_budget_canonical_edits(record, &mut self.budget),
             6 => decode_budget_canonical_reads(record, &mut self.budget),
@@ -2311,6 +2410,47 @@ impl PlanDecoder {
                 "logical plan descriptor has no typed decoder",
             )),
         }
+    }
+
+    fn decode_request(&mut self, record: &CompactRecord) -> Result<(), Diagnostic> {
+        let request = parse_request_commitment(field(record, 0))?;
+        let digest = field(record, 1);
+        if digest.len() != 64 {
+            return Err(plan_source_error(
+                "change_plan_file_intent_reads_length",
+                "authored intent read digest must contain 64 lowercase hexadecimal characters",
+            ));
+        }
+        let digest = decode_hex_32(digest)?;
+        let guards = parse_u64(field(record, 2), "authored intent read guard count")?;
+        if guards > u64::try_from(MAXIMUM_REFRESH_GUARDS).unwrap_or(u64::MAX) {
+            return Err(plan_resource_error(
+                "change_plan_file_intent_read_guards",
+                "authored intent read guard count exceeds complete refresh footprint admission",
+            ));
+        }
+        let present = parse_bool(field(record, 3), "refreshed plan origin presence")?;
+        let refresh = if present {
+            let original_prepared = parse_prepared_commitment(field(record, 4))?;
+            let onto = field(record, 5).parse::<RevisionId>()?;
+            if self.base != Some(onto) {
+                return Err(plan_source_error(
+                    "change_plan_file_refresh_onto",
+                    "refreshed plan onto revision must equal its prepared authority base",
+                ));
+            }
+            Some(RefreshedPlanOrigin {
+                original_prepared,
+                onto,
+            })
+        } else {
+            require_empty(record, &[4, 5], "refreshed plan origin absence")?;
+            None
+        };
+        self.request = Some(request);
+        self.intent_reads = Some((digest, guards));
+        self.refresh = refresh;
+        Ok(())
     }
 
     fn decode_extraction(&mut self, record: &CompactRecord) -> Result<(), Diagnostic> {
@@ -3037,6 +3177,7 @@ impl PlanDecoder {
             || prepared != observed
             || token.request != request
             || token.prepared != prepared
+            || token.refresh != self.refresh
         {
             return Err(plan_source_error(
                 "change_plan_file_digest",
@@ -3099,6 +3240,12 @@ impl PlanDecoder {
                 "logical plan file is missing its prepared-plan commitment",
             )
         })?;
+        let (intent_reads_digest, intent_read_guards) = self.intent_reads.ok_or_else(|| {
+            plan_source_error(
+                "change_plan_file_intent_reads",
+                "logical plan file is missing its authored intent read commitment",
+            )
+        })?;
         let token = self.token.ok_or_else(|| {
             plan_source_error(
                 "change_plan_file_token",
@@ -3107,6 +3254,12 @@ impl PlanDecoder {
         })?;
         Ok(DecodedLogicalPlan {
             request_commitment: request.to_string(),
+            intent_reads_digest: encode_hex(&intent_reads_digest),
+            intent_read_guards,
+            original_prepared_plan_commitment: self
+                .refresh
+                .map(|origin| origin.original_prepared.to_string()),
+            onto_revision: self.refresh.map(|origin| origin.onto.to_string()),
             prepared_plan_commitment: prepared.to_string(),
             token: token.to_string(),
             counts: self.counts,
@@ -4332,12 +4485,52 @@ fn plan_corrupt(code: &str, message: impl Into<String>) -> Diagnostic {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::platform::change::{AuthoredChange, AuthoredChangeSet};
+    use crate::platform::control::normalize_change_request;
+    use crate::platform::project_creation::{ProjectTemplate, create_project};
+    use crate::platform::publication::{GraphRepository, PublicationOptions};
+    use std::io::Cursor;
+
+    fn encode_test_plan(plan: &LogicalChangePlan<'_>) -> (LogicalPlanEncoding, String) {
+        let mut bytes = Vec::new();
+        let encoding = encode_logical_change_plan(plan, |part| {
+            bytes.extend_from_slice(part);
+            Ok(())
+        })
+        .unwrap();
+        (encoding, String::from_utf8(bytes).unwrap())
+    }
+
+    fn with_prepared_plan(test: impl FnOnce(ChangeRequestCommitment, PreparedAuthoredPublication)) {
+        let temporary = tempfile::tempdir().unwrap();
+        let project = temporary.path().join("project");
+        create_project(&project, "review-codec", ProjectTemplate::Minimal).unwrap();
+        let repository = GraphRepository::open(&project).unwrap();
+        let request = normalize_change_request(
+            AuthoredChangeSet {
+                base: repository.view_current().unwrap().revision(),
+                preconditions: Vec::new(),
+                changes: vec![AuthoredChange::CreateModule {
+                    symbol: "$new_module".to_owned(),
+                    name: Name::new("reviewed").unwrap(),
+                }],
+                budget: ChangeBudget::default(),
+            },
+            PublicationOptions::default(),
+        )
+        .unwrap();
+        let prepared = repository
+            .prepare_authored_change(&request.semantic, request.options)
+            .unwrap();
+        test(request.request_commitment, prepared);
+    }
 
     #[test]
     fn reviewed_change_plan_token_is_strict_current_and_golden() {
         let token = ChangePlanToken {
             request: ChangeRequestCommitment::from_bytes([1; 32]),
             prepared: PreparedPlanCommitment::from_bytes([2; 32]),
+            refresh: None,
         };
         let expected = format!("plan_{}{}", "01".repeat(32), "02".repeat(32));
         assert_eq!(token.to_string(), expected);
@@ -4402,8 +4595,157 @@ mod tests {
     }
 
     #[test]
+    fn refreshed_change_plan_token_is_strict_and_golden() {
+        let token = ChangePlanToken {
+            request: ChangeRequestCommitment::from_bytes([1; 32]),
+            prepared: PreparedPlanCommitment::from_bytes([4; 32]),
+            refresh: Some(RefreshedPlanOrigin {
+                original_prepared: PreparedPlanCommitment::from_bytes([2; 32]),
+                onto: RevisionId::from_digest([3; 32]),
+            }),
+        };
+        let expected = format!(
+            "refresh_{}{}{}{}",
+            "01".repeat(32),
+            "02".repeat(32),
+            "03".repeat(32),
+            "04".repeat(32)
+        );
+        assert_eq!(token.to_string(), expected);
+        assert_eq!(expected.len(), 264);
+        assert_eq!(expected.parse::<ChangePlanToken>().unwrap(), token);
+        for rejected in [
+            format!("plan_{}", "0".repeat(256)),
+            format!("refresh_{}", "0".repeat(128)),
+            format!("{expected}0"),
+            expected.to_uppercase(),
+        ] {
+            assert!(rejected.parse::<ChangePlanToken>().is_err(), "{rejected}");
+        }
+        for index in [0, 63, 64, 127, 128, 191, 192, 255] {
+            let mut encoded = "0".repeat(256);
+            encoded.replace_range(index..index + 1, "A");
+            let error = format!("refresh_{encoded}")
+                .parse::<ChangePlanToken>()
+                .unwrap_err();
+            assert_eq!(error.code, "change_plan_hex");
+        }
+        for boundary in [64, 128, 192] {
+            let mut encoded = "0".repeat(256);
+            encoded.replace_range(boundary - 1..boundary + 1, "é");
+            assert!(!encoded.is_char_boundary(boundary));
+            let error = format!("refresh_{encoded}")
+                .parse::<ChangePlanToken>()
+                .unwrap_err();
+            assert_eq!(error.code, "change_plan_hex");
+        }
+    }
+
+    #[test]
+    fn refreshed_change_plan_round_trip_binds_origin_and_intent_reads() {
+        with_prepared_plan(|request, publication| {
+            let ordinary = LogicalChangePlan::new(request, &publication).unwrap();
+            let (original, ordinary_bytes) = encode_test_plan(&ordinary);
+            let ordinary_decoded =
+                decode_logical_change_plan(Cursor::new(ordinary_bytes.as_bytes())).unwrap();
+            assert!(ordinary_decoded.original_prepared_plan_commitment.is_none());
+            assert!(ordinary_decoded.onto_revision.is_none());
+            assert_eq!(
+                ordinary_decoded.intent_reads_digest,
+                encode_hex(&publication.intent_reads.digest())
+            );
+            assert_eq!(
+                ordinary_decoded.intent_read_guards,
+                publication.intent_reads.len() as u64
+            );
+
+            let refreshed =
+                LogicalChangePlan::refreshed(request, &publication, original.token).unwrap();
+            let (renewed, refreshed_bytes) = encode_test_plan(&refreshed);
+            let decoded =
+                decode_logical_change_plan(Cursor::new(refreshed_bytes.as_bytes())).unwrap();
+            assert_eq!(decoded.token, renewed.token.to_string());
+            assert_eq!(
+                decoded.original_prepared_plan_commitment,
+                Some(original.token.prepared.to_string())
+            );
+            assert_eq!(decoded.onto_revision, Some(refreshed.base.to_string()));
+            assert_eq!(
+                decoded.intent_reads_digest,
+                ordinary_decoded.intent_reads_digest
+            );
+            assert_eq!(
+                decoded.intent_read_guards,
+                ordinary_decoded.intent_read_guards
+            );
+            assert_ne!(renewed.token.prepared, original.token.prepared);
+            assert!(LogicalChangePlan::refreshed(request, &publication, renewed.token).is_err());
+            assert!(
+                LogicalChangePlan::refreshed(
+                    ChangeRequestCommitment::from_bytes([9; 32]),
+                    &publication,
+                    original.token
+                )
+                .is_err()
+            );
+
+            for replacement in [
+                refreshed_bytes.replacen(
+                    &format!("original-prepared={}", original.token.prepared),
+                    &format!("original-prepared=prepared_{}", "f".repeat(64)),
+                    1,
+                ),
+                refreshed_bytes.replacen("refresh-present=true", "refresh-present=false", 1),
+                refreshed_bytes.replacen(
+                    &format!("onto={}", refreshed.base),
+                    &format!("onto=rev_{}", "f".repeat(64)),
+                    1,
+                ),
+                refreshed_bytes.replacen(
+                    &format!("intent-reads={}", decoded.intent_reads_digest),
+                    &format!("intent-reads={}", "f".repeat(64)),
+                    1,
+                ),
+                refreshed_bytes.replacen(
+                    &format!("intent-read-guards={}", decoded.intent_read_guards),
+                    &format!("intent-read-guards={}", decoded.intent_read_guards + 1),
+                    1,
+                ),
+                refreshed_bytes.replacen(
+                    &format!("intent-read-guards={}", decoded.intent_read_guards),
+                    "intent-read-guards=18446744073709551615",
+                    1,
+                ),
+            ] {
+                assert!(decode_logical_change_plan(Cursor::new(replacement.as_bytes())).is_err());
+            }
+            // The token's provenance is checked separately from the renewed body commitment.
+            let mut foreign_token = renewed.token;
+            foreign_token.refresh.as_mut().unwrap().original_prepared =
+                PreparedPlanCommitment::from_bytes([7; 32]);
+            let tampered =
+                refreshed_bytes.replacen(&renewed.token.to_string(), &foreign_token.to_string(), 1);
+            let error = decode_logical_change_plan(Cursor::new(tampered.as_bytes())).unwrap_err();
+            assert_eq!(error.code, "change_plan_file_digest");
+        });
+    }
+
+    #[test]
+    fn ordinary_change_plan_commitment_binds_authored_read_footprint() {
+        with_prepared_plan(|request, mut publication| {
+            assert!(!publication.intent_reads.is_empty());
+            let before =
+                encode_test_plan(&LogicalChangePlan::new(request, &publication).unwrap()).0;
+            publication.intent_reads = Default::default();
+            let after = encode_test_plan(&LogicalChangePlan::new(request, &publication).unwrap()).0;
+            assert_eq!(before.token.request, after.token.request);
+            assert_ne!(before.token.prepared, after.token.prepared);
+        });
+    }
+
+    #[test]
     fn reviewed_change_plan_every_body_field_changes_the_prepared_commitment() {
-        for descriptor in &LOGICAL_PLAN_RECORD_DESCRIPTORS[..33] {
+        for descriptor in &LOGICAL_PLAN_RECORD_DESCRIPTORS[..40] {
             for changed in 0..descriptor.fields.len() {
                 let baseline = descriptor
                     .fields
@@ -4508,7 +4850,7 @@ mod tests {
                 .saturating_add(budget.impact.maximum_affected_owners)
         );
         assert_eq!(MAXIMUM_LOGICAL_PLAN_RECORDS, 832_791);
-        assert_eq!(MAXIMUM_LOGICAL_PLAN_BYTES, 1_646_862_584);
+        assert_eq!(MAXIMUM_LOGICAL_PLAN_BYTES, 1_646_863_007);
 
         let owner = format!("annotation_{}", "f".repeat(32));
         let owner_object = format!("owner_object_{}", "f".repeat(64));
@@ -4768,7 +5110,17 @@ mod tests {
                     ("semantic-state", &state),
                 ],
             );
-            add("logical-plan.request", &[("commitment", &request)]);
+            add(
+                "logical-plan.request",
+                &[
+                    ("commitment", &request),
+                    ("intent-reads", &"f".repeat(64)),
+                    ("intent-read-guards", &MAXIMUM_REFRESH_GUARDS.to_string()),
+                    ("refresh-present", "true"),
+                    ("original-prepared", &format!("prepared_{}", "f".repeat(64))),
+                    ("onto", &revision),
+                ],
+            );
         }
 
         let mut budget_bytes = 0_u64;
@@ -4821,7 +5173,7 @@ mod tests {
                 .collect::<Vec<_>>(),
         );
         let prepared = format!("prepared_{}", "f".repeat(64));
-        let token = format!("plan_{}", "f".repeat(128));
+        let token = format!("refresh_{}", "f".repeat(256));
         add(
             "logical-plan.digest",
             &[
