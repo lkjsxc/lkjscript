@@ -44,6 +44,9 @@ impl Decoder {
                 "expression.bind" => &["callee"],
                 "expression.invoke" => &["function"],
                 "expression.field" | "expression.match" => &["value"],
+                "expression.choose-owned" => &["value"],
+                "expression.match-owned" | "expression.match-borrowed-owned" => &["source"],
+                "expression.unpack-owned" | "expression.borrow-owned-field" => &["source", "body"],
                 "expression.variant" => &["payload"],
                 _ => &[],
             };
@@ -75,6 +78,10 @@ impl Decoder {
                 "expression.record" => ("expression.record-field", &["value"]),
                 "expression.map" => ("expression.map-entry", &["key", "value"]),
                 "expression.match" => ("expression.match-arm", &["body"]),
+                "expression.pack-owned" => ("expression.owned-field", &["value"]),
+                "expression.match-owned" | "expression.match-borrowed-owned" => {
+                    ("expression.choice-arm", &["body"])
+                }
                 _ => ("", &[]),
             };
             if let Some(edges) = self
@@ -127,10 +134,15 @@ impl Decoder {
                         .map(|edge| (edge.value.clone(), edge.location.clone())),
                 );
             }
-            if record.operation == "type.structural-record"
+            let type_edge = match record.operation.as_str() {
+                "type.structural-record" | "type.owned-product" => Some("type.field"),
+                "type.owned-choice" => Some("type.case"),
+                _ => None,
+            };
+            if let Some(edge) = type_edge
                 && let Some(edges) = self
                     .record_edges
-                    .get("type.field")
+                    .get(edge)
                     .and_then(|parents| parents.get(symbol))
             {
                 for edge in edges {

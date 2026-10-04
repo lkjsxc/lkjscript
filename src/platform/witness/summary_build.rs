@@ -920,6 +920,24 @@ pub(crate) fn aggregation_children(
                 )
             }));
             match &record.operation {
+                ExpressionOperation::BorrowOwnedField { binding, .. } => children.push((
+                    OwnershipRole::ExpressionBinding {
+                        role: BindingContainerRole::OwnedBorrow,
+                        ordinal: 0,
+                    },
+                    OwnerKey::Binding(*binding),
+                )),
+                ExpressionOperation::MatchBorrowedOwned { arms, .. } => {
+                    for (ordinal, arm) in arms.iter().enumerate() {
+                        children.push((
+                            OwnershipRole::ExpressionBinding {
+                                role: BindingContainerRole::OwnedBorrow,
+                                ordinal: summary_ordinal(ordinal)?,
+                            },
+                            OwnerKey::Binding(arm.binding),
+                        ));
+                    }
+                }
                 ExpressionOperation::MatchOwned { arms, .. } => {
                     for (ordinal, arm) in arms.iter().enumerate() {
                         children.push((

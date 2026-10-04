@@ -551,6 +551,7 @@ impl ReferenceState<'_> {
             remaining_expressions: self.policy.instruction_steps,
             call_depth: 0,
             control_frames: 0,
+            lexical_loan_scopes: 0,
             local_counts: Vec::new(),
             next_transaction: 0,
             transactions: BTreeMap::new(),

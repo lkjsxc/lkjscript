@@ -85,6 +85,7 @@ impl OwnedProduct {
                     storage: Arc::downgrade(&product.storage),
                     packed: allocation_identities(product.lock().fields.as_ref().unwrap()),
                     unpacked: None,
+                    revoked_with_loans: None,
                 });
             }
         });
@@ -124,6 +125,35 @@ impl OwnedProduct {
     }
     pub(super) fn owns_live_loans(&self) -> bool {
         self.mode == Mode::Owner && self.lock().loans != 0
+    }
+    /// Project a read token while a separately retained parent loan keeps the
+    /// complete product in custody. The storage lock never crosses evaluation
+    /// of the caller's lexical body.
+    pub(super) fn borrow_field(
+        &self,
+        origin: ValueOrigin,
+        index: usize,
+        control: &ExecutionControl,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<NormalizedValue, ExecutionError> {
+        self.validate(origin, false)?;
+        if self.mode != Mode::Read {
+            return Err(reject());
+        }
+        control.check()?;
+        {
+            let storage = self.lock();
+            let value = storage
+                .fields
+                .as_ref()
+                .and_then(|fields| fields.get(index))
+                .ok_or_else(reject)?;
+            if value.memory_form().is_some() {
+                value.memory_validate(origin, false)?;
+                return value.memory_borrow();
+            }
+        }
+        self.read_metadata(origin, index, control, reserve)
     }
     /// Borrowed inspection cannot expose a child owner beyond the callback.
     pub(super) fn inspect_transfer<R>(
@@ -240,7 +270,18 @@ impl OwnedProduct {
             return None;
         }
         self.mode = Mode::Inert;
-        self.lock().fields.take()
+        let mut storage = self.lock();
+        #[cfg(test)]
+        OBSERVED.with(|entries| {
+            if let Some(entries) = entries.borrow_mut().as_mut()
+                && let Some(entry) = entries
+                    .iter_mut()
+                    .find(|entry| entry.storage.ptr_eq(&Arc::downgrade(&self.storage)))
+            {
+                entry.revoked_with_loans = Some(storage.loans);
+            }
+        });
+        storage.fields.take()
     }
 }
 
@@ -251,6 +292,7 @@ struct Observed {
     storage: std::sync::Weak<Mutex<Storage>>,
     packed: Vec<usize>,
     unpacked: Option<Vec<usize>>,
+    revoked_with_loans: Option<usize>,
 }
 #[cfg(test)]
 fn allocation_identities(fields: &[NormalizedValue]) -> Vec<usize> {
@@ -306,6 +348,18 @@ impl StorageObservation {
                 })
                 .fold((0, 0), |(a, b), (x, y)| (a + x, b + y))
         })
+    }
+    pub(super) fn assert_owners_released_after_loans(&self) {
+        OBSERVED.with(|entries| {
+            assert!(
+                entries
+                    .borrow()
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .all(|entry| entry.revoked_with_loans.is_none_or(|loans| loans == 0))
+            );
+        });
     }
 }
 #[cfg(test)]

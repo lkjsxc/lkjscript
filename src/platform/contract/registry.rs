@@ -105,9 +105,9 @@ use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-19";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 19;
-pub const CLI_CONTRACT_VERSION: u16 = 37;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-20";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 20;
+pub const CLI_CONTRACT_VERSION: u16 = 38;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -122,12 +122,20 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
         "(match-owned (type TYPE) (local SOURCE) (case NAME (binding LOCAL (type TYPE)) (in BODY)) ...)",
     ),
     (
+        "match-borrowed-owned",
+        "(match-borrowed-owned (type TYPE) (local SOURCE) (case NAME (binding LOCAL (type TYPE)) (in BODY)) ...)",
+    ),
+    (
         "pack-owned",
         "(pack-owned (type TYPE) (field NAME EXPRESSION) ... )",
     ),
     (
         "unpack-owned",
         "(unpack-owned (type TYPE) (local SOURCE) (field NAME (binding LOCAL (type TYPE))) ... (in BODY))",
+    ),
+    (
+        "borrow-owned-field",
+        "(borrow-owned-field (type TYPE) (local SOURCE) (field NAME (binding LOCAL (type TYPE))) (in BODY))",
     ),
     (
         "implementation-call",
@@ -189,8 +197,8 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
 ];
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-function-definition-projection-13";
-pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 13;
+    "lkjscript-function-definition-projection-14";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 14;
 pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
 pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
 pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -369,6 +377,8 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("definition.expression", "entries"),
     ("definition.expression", "arms"),
     ("definition.expression", "fields"),
+    ("definition.expression", "field"),
+    ("definition.expression", "cases"),
     ("definition.expression", "nominal-type"),
     ("definition.expression", "case"),
     ("definition.expression", "payload"),
@@ -895,7 +905,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
-            magic_values: &["LKJSUM13"],
+            magic_values: &["LKJSUM15"],
             digest_domains: &[
                 witness_contract::OWNER_SUMMARY_ENVELOPE_DOMAIN,
                 witness_contract::OWNER_SUMMARY_DIGEST_DOMAIN,
@@ -958,7 +968,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             magic_values: &[
                 "LKJACR14", "LKJACR15", "LKJACR16", "LKJACR17", "LKJACR18", "LKJACR19", "LKJACR20",
                 "LKJACR21", "LKJACR22", "LKJACR23", "LKJACR24", "LKJACR25", "LKJACR26", "LKJACR27",
-                "LKJABG01",
+                "LKJACR28", "LKJABG01",
             ],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
@@ -3039,6 +3049,12 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Preserve the original request and report the lowering invariant failure.",
         ),
         diagnostic(
+            "change_owned_borrow_binding",
+            DiagnosticClass::Source,
+            "A compact owned field read scope does not select exactly one matching typed child binding.",
+            "Supply one owned-binding edge at index zero whose field-name agrees with the selected field.",
+        ),
+        diagnostic(
             "change_request_missing",
             DiagnosticClass::Source,
             "A compact change has no request record.",
@@ -3322,6 +3338,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         extraction_resource_diagnostic("change_extract_ordinal"),
         extraction_semantic_diagnostic("change_extract_owned_product"),
         extraction_semantic_diagnostic("change_extract_owned_choice"),
+        extraction_semantic_diagnostic("change_extract_owned_borrow"),
         extraction_semantic_diagnostic("change_extract_recursive_target"),
         extraction_resource_diagnostic("change_extract_requirement_limit"),
         extraction_semantic_diagnostic("change_extract_resource_ambiguity"),
@@ -7508,6 +7525,15 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 "capability_call",
                 "transaction",
                 "transaction_outcome",
+                "parallel",
+                "implementation_call",
+                "method_call",
+                "pack_owned",
+                "unpack_owned",
+                "choose_owned",
+                "match_owned",
+                "borrow_owned_field",
+                "match_borrowed_owned",
             ] {
                 records.push(compact_record(
                     "inspection.definition-expression",
@@ -8763,6 +8789,16 @@ fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String
             "sequential and nested shadowing are allowed; resolve each initializer before introducing its distinct binder; restore the outer binding on scope exit; unbound self and forward locals reject",
         ),
         (
+            "owned-child-read-scope",
+            "(borrow-owned-field (type PRODUCT) (local SOURCE) (field NAME (binding VIEW (type TYPE))) (in BODY))",
+            "one exact direct owned product field becomes a scoped read view; SOURCE is a live owning or borrowed local; the exact child annotation and all ancestor loans remain checked through BODY; nested inspection and explicit borrow calls are allowed; consumption, escape, capture, storage and task transfer reject; the original source remains available after the scope",
+        ),
+        (
+            "borrowed-owned-choice-scope",
+            "(match-borrowed-owned (type CHOICE) (local SOURCE) (case NAME (binding VIEW (type TYPE)) (in BODY)) ...)",
+            "exhaustive unique cases with exact child annotations and a common body result; the selected owned payload becomes a read view and ordinary payloads use their admitted copy rules; retain a whole-source read loan through the selected arm and check every arm independently; no loan may escape; function extraction containing either owned child read scope rejects before publication",
+        ),
+        (
             "payload-scope",
             "(arm CASE (payload NAME TYPE) BODY)",
             "a payload binding exists only in its own arm body",
@@ -9382,9 +9418,9 @@ mod tests {
             .expect("definition projection contract");
         assert_eq!(
             contract.identity,
-            "lkjscript-function-definition-projection-13"
+            "lkjscript-function-definition-projection-14"
         );
-        assert_eq!(contract.version, 13);
+        assert_eq!(contract.version, 14);
         assert_eq!(
             contract_descriptors()
                 .iter()

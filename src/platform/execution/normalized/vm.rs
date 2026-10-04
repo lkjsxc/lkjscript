@@ -502,8 +502,7 @@ impl<'a> NormalizedVm<'a> {
         })();
         if result.is_err() {
             machine.rollback_all();
-            machine.frames.clear();
-            machine.stack.clear();
+            machine.clear_execution_values();
             resources.release_all();
         }
         machine.observation.live_call_frames_after = machine.frames.len();
@@ -534,7 +533,7 @@ impl<'a> NormalizedVm<'a> {
                     "ByteBuffer cannot cross a raw result boundary; freeze it",
                 ));
             }
-            Ok((value.into_raw(), machine.observation))
+            Ok((value.into_raw(), std::mem::take(&mut machine.observation)))
         })
     }
 }
@@ -559,8 +558,51 @@ struct Frame {
     code: NormalizedCode,
     instruction: usize,
     locals: Vec<Option<CheckedValue>>,
+    owned_loans: Vec<OwnedLoanScope>,
     type_arguments: BTreeMap<TypeParameterId, TypeObjectDigest>,
     stack_base: usize,
+}
+
+struct OwnedLoanScope {
+    binding_local: u32,
+    stack_base: usize,
+    parent: CheckedValue,
+}
+
+impl Frame {
+    fn clear_owned_loans(&mut self) {
+        // Defensive non-lexical aliases must end before the lexical custody
+        // chain. Accepted code stores read tokens only in these scope bindings.
+        for (local, value) in self.locals.iter_mut().enumerate() {
+            if value.as_ref().is_some_and(|v| v.raw().memory_is_borrowed())
+                && !self
+                    .owned_loans
+                    .iter()
+                    .any(|scope| scope.binding_local as usize == local)
+            {
+                drop(value.take());
+            }
+        }
+        while let Some(scope) = self.owned_loans.pop() {
+            if let Some(value) = self.locals.get_mut(scope.binding_local as usize) {
+                drop(value.take());
+            }
+            drop(scope.parent);
+        }
+    }
+}
+
+impl Drop for Frame {
+    fn drop(&mut self) {
+        self.clear_owned_loans();
+        // Drop read parameters before any owning ancestor in this activation.
+        for value in &mut self.locals {
+            if value.as_ref().is_some_and(|v| v.raw().memory_is_borrowed()) {
+                drop(value.take());
+            }
+        }
+        self.locals.clear();
+    }
 }
 
 struct ActiveTransaction {
@@ -596,7 +638,24 @@ struct Machine<'a> {
     observation: NormalizedRunObservation,
 }
 
+impl Drop for Machine<'_> {
+    fn drop(&mut self) {
+        // Vec's default order would destroy ancestors before younger read
+        // activations. Unwind each operand continuation and frame explicitly.
+        self.clear_execution_values();
+    }
+}
+
 impl Machine<'_> {
+    fn clear_execution_values(&mut self) {
+        while let Some(frame) = self.frames.pop() {
+            while self.stack.len() > frame.stack_base {
+                drop(self.stack.pop());
+            }
+            drop(frame);
+        }
+        while self.stack.pop().is_some() {}
+    }
     fn select_root_allowance(
         &mut self,
         entry: &NormalizedEntryPoint,
@@ -858,6 +917,85 @@ impl Machine<'_> {
                     let value = self.product_child(payload, payload_type)?;
                     self.set_local(arm.binding_local, Some(value))?;
                     self.jump(arm.target)?;
+                }
+                NormalizedInstruction::BorrowOwnedField {
+                    product_type,
+                    source_local,
+                    field,
+                    binding_local,
+                    binding_type,
+                } => {
+                    let ty = self.resolve_type_arguments(&[product_type])?[0];
+                    let binding_type = self.resolve_type_arguments(&[binding_type])?[0];
+                    let fields = self.product_field_types(ty)?;
+                    if fields.get(field as usize) != Some(&binding_type)
+                        || direct_memory_type(
+                            self.program,
+                            binding_type,
+                            &BTreeMap::new(),
+                            self.control,
+                        )?
+                        .is_none()
+                    {
+                        return Err(type_error(
+                            "owned field borrow has an inexact owned child type",
+                        ));
+                    }
+                    self.validate_owned_borrow_binding(source_local, binding_local)?;
+                    self.charge_allocation(std::mem::size_of::<OwnedLoanScope>() as u64)?;
+                    let parent = self.borrow_owned_source(source_local)?;
+                    let NormalizedValue::OwnedProduct(token) = parent.raw() else {
+                        return Err(type_error("owned field borrow requires a product token"));
+                    };
+                    if token.ty() != ty {
+                        return Err(type_error("owned field borrow has a foreign product type"));
+                    }
+                    let control = self.control;
+                    let raw = token.borrow_field(
+                        self.memory_domain,
+                        field as usize,
+                        control,
+                        &mut |bytes| self.charge_allocation(bytes),
+                    )?;
+                    let child = self.borrowed_product_child(raw, binding_type)?;
+                    self.start_owned_borrow(binding_local, parent, child)?;
+                }
+                NormalizedInstruction::MatchBorrowedOwned {
+                    choice_type,
+                    source_local,
+                    cases,
+                } => {
+                    let ty = self.resolve_type_arguments(&[choice_type])?[0];
+                    self.charge_allocation(std::mem::size_of::<OwnedLoanScope>() as u64)?;
+                    let parent = self.borrow_owned_source(source_local)?;
+                    let NormalizedValue::OwnedChoice(token) = parent.raw() else {
+                        return Err(type_error("borrowed owned match requires a choice token"));
+                    };
+                    if token.ty() != ty {
+                        return Err(type_error("borrowed owned match has a foreign choice type"));
+                    }
+                    let case = token.case();
+                    let payload_type = self.choice_payload_type(ty, case, Some(cases.len()))?;
+                    let arm = cases
+                        .get(case as usize)
+                        .ok_or_else(|| type_error("missing borrowed owned choice arm"))?;
+                    let binding_type = self.resolve_type_arguments(&[arm.binding_type])?[0];
+                    if payload_type != binding_type {
+                        return Err(type_error(
+                            "borrowed owned match has an inexact payload type",
+                        ));
+                    }
+                    self.validate_owned_borrow_binding(source_local, arm.binding_local)?;
+                    let control = self.control;
+                    let raw = token.borrow_payload(self.memory_domain, control, &mut |bytes| {
+                        self.charge_allocation(bytes)
+                    })?;
+                    let child = self.borrowed_product_child(raw, binding_type)?;
+                    self.start_owned_borrow(arm.binding_local, parent, child)?;
+                    self.jump(arm.target)?;
+                }
+                NormalizedInstruction::EndOwnedBorrow { binding_local } => {
+                    self.end_owned_borrow(binding_local)?;
                 }
                 NormalizedInstruction::PackOwned {
                     product_type,
@@ -1425,6 +1563,12 @@ impl Machine<'_> {
                             "normalized function returned with an active transaction",
                         ));
                     }
+                    if !frame.owned_loans.is_empty() {
+                        return Err(type_error(
+                            "function returned with an active lexical owned loan",
+                        ));
+                    }
+                    drop(frame);
                     if self.frames.is_empty() {
                         if !self.stack.is_empty() {
                             return Err(runtime_error(
@@ -1538,6 +1682,115 @@ impl Machine<'_> {
         } else {
             self.admit(raw, ty, None, false)
         }
+    }
+
+    fn borrowed_product_child(
+        &mut self,
+        raw: NormalizedValue,
+        ty: TypeObjectDigest,
+    ) -> Result<CheckedValue, ExecutionError> {
+        if let Some(expected) =
+            direct_memory_type(self.program, ty, &BTreeMap::new(), self.control)?
+        {
+            if raw.memory_form() != Some(expected) || !raw.memory_is_borrowed() {
+                return Err(type_error(
+                    "owned child projection requires an exact read token",
+                ));
+            }
+            raw.memory_validate(self.memory_domain, false)?;
+            CheckedValue::memory(self.program, raw)
+        } else {
+            self.admit(raw, ty, None, false)
+        }
+    }
+
+    fn validate_owned_borrow_binding(
+        &self,
+        source: u32,
+        binding: u32,
+    ) -> Result<(), ExecutionError> {
+        if source == binding
+            || self
+                .current_frame()?
+                .locals
+                .get(binding as usize)
+                .is_none_or(Option::is_some)
+        {
+            return Err(type_error(
+                "owned borrow requires a distinct empty binding local",
+            ));
+        }
+        Ok(())
+    }
+
+    fn borrow_owned_source(&self, source: u32) -> Result<CheckedValue, ExecutionError> {
+        let source = self
+            .current_frame()?
+            .locals
+            .get(source as usize)
+            .and_then(Option::as_ref)
+            .ok_or_else(|| type_error("owned borrow source is uninitialized or consumed"))?;
+        source.raw().memory_validate(self.memory_domain, false)?;
+        source.duplicate(ParameterUse::Borrow)
+    }
+
+    fn start_owned_borrow(
+        &mut self,
+        binding_local: u32,
+        parent: CheckedValue,
+        child: CheckedValue,
+    ) -> Result<(), ExecutionError> {
+        let stack_base = self.stack.len();
+        let frame = self.current_frame_mut()?;
+        let destination = frame
+            .locals
+            .get_mut(binding_local as usize)
+            .ok_or_else(|| type_error("owned borrow binding local is foreign"))?;
+        if destination.is_some() {
+            return Err(type_error("owned borrow binding local is occupied"));
+        }
+        frame.owned_loans.push(OwnedLoanScope {
+            binding_local,
+            stack_base,
+            parent,
+        });
+        *destination = Some(child);
+        Ok(())
+    }
+
+    fn end_owned_borrow(&mut self, binding_local: u32) -> Result<(), ExecutionError> {
+        let frame = self.current_frame()?;
+        let Some(scope) = frame
+            .owned_loans
+            .last()
+            .filter(|scope| scope.binding_local == binding_local)
+        else {
+            return Err(type_error("owned loan scopes must end in lexical order"));
+        };
+        if self.stack.len() != scope.stack_base.saturating_add(1) {
+            return Err(type_error("owned loan body has an inexact operand result"));
+        }
+        if self
+            .stack
+            .last()
+            .is_some_and(|value| value.raw().memory_is_borrowed())
+        {
+            return Err(type_error("owned read view cannot escape its lexical body"));
+        }
+        let frame = self.current_frame_mut()?;
+        let scope = frame
+            .owned_loans
+            .pop()
+            .ok_or_else(|| type_error("missing owned loan scope"))?;
+        drop(
+            frame
+                .locals
+                .get_mut(binding_local as usize)
+                .ok_or_else(|| type_error("foreign owned loan local"))?
+                .take(),
+        );
+        drop(scope.parent);
+        Ok(())
     }
 
     fn resolve_type_arguments(
@@ -1986,15 +2239,16 @@ impl Machine<'_> {
             }
         }
         self.validate_call_resources(function, &type_arguments_by_parameter, &arguments)?;
-        // A retained ancestor owns the storage for read-only reborrows. Only an outgoing
-        // owner with live loans prevents replacing this activation.
+        // A lexical projection retains parent custody even when its source is
+        // itself a borrowed parameter. Its cleanup continuation cannot transfer.
         let tail = tail
             && !self.frames.last().is_some_and(|frame| {
-                frame
-                    .locals
-                    .iter()
-                    .flatten()
-                    .any(|value| value.raw().memory_owns_live_loans())
+                !frame.owned_loans.is_empty()
+                    || frame
+                        .locals
+                        .iter()
+                        .flatten()
+                        .any(|value| value.raw().memory_owns_live_loans())
             });
         if tail {
             self.validate_tail_caller()?;
@@ -2217,6 +2471,7 @@ impl Machine<'_> {
             code,
             instruction: 0,
             locals,
+            owned_loans: Vec::new(),
             type_arguments,
             stack_base: self.stack.len(),
         });
@@ -2555,48 +2810,52 @@ impl Machine<'_> {
         use_mode: ParameterUse,
         move_ordinary: bool,
     ) -> Result<(), ExecutionError> {
-        let value = if move_ordinary || use_mode == ParameterUse::Consume {
-            self.frames
-                .last_mut()
-                .and_then(|frame| frame.locals.get_mut(local as usize))
-                .and_then(Option::take)
-        } else {
-            self.frames
-                .last()
-                .and_then(|frame| frame.locals.get(local as usize))
-                .and_then(Option::as_ref)
-                .map(|value| value.duplicate(use_mode))
-                .transpose()?
-        }
-        .ok_or_else(|| {
-            runtime_error(
-                "normalized_local_uninitialized",
-                "normalized code read an uninitialized or consumed local",
-            )
-        })?;
-        let class = value.class(self.program, &mut self.observation.value_work)?;
+        let source = self
+            .frames
+            .last()
+            .and_then(|frame| frame.locals.get(local as usize))
+            .and_then(Option::as_ref)
+            .ok_or_else(|| {
+                runtime_error(
+                    "normalized_local_uninitialized",
+                    "normalized code read an uninitialized or consumed local",
+                )
+            })?;
+        // Validate custody before a destructive take. A rejected consume or
+        // forged ordinary move must leave the parent owner in its activation
+        // until the lexical child/ancestor loan cleanup has completed.
+        let class = source.class(self.program, &mut self.observation.value_work)?;
         let valid = match use_mode {
             ParameterUse::Unrestricted => class == Class::Free,
             ParameterUse::Borrow => matches!(class, Class::Direct | Class::Memory),
             ParameterUse::Consume => class != Class::Free,
         };
-        if !valid {
+        if !valid || (move_ordinary && class != Class::Free) {
             return Err(runtime_error(
                 "normalized_local_resource_use",
                 "normalized local use disagrees with the checked ownership classification",
             ));
         }
-        if value.raw().memory_form().is_some() {
-            value
+        if source.raw().memory_form().is_some() {
+            source
                 .raw()
                 .memory_validate(self.memory_domain, use_mode == ParameterUse::Consume)?;
         }
-        if let NormalizedValue::Resource(handle) = value.raw() {
+        if let NormalizedValue::Resource(handle) = source.raw() {
             if use_mode == ParameterUse::Consume {
                 handle.require_owned()?;
             }
             self.resources.validate_admission(*handle, None, None)?;
         }
+        let value = if move_ordinary || use_mode == ParameterUse::Consume {
+            self.frames
+                .last_mut()
+                .and_then(|frame| frame.locals.get_mut(local as usize))
+                .and_then(Option::take)
+                .ok_or_else(|| type_error("validated local disappeared"))?
+        } else {
+            source.duplicate(use_mode)?
+        };
         if use_mode == ParameterUse::Unrestricted {
             let count = if move_ordinary {
                 &mut self.observation.value_work.local_value_moves
@@ -2609,16 +2868,30 @@ impl Machine<'_> {
     }
 
     fn set_local(&mut self, local: u32, value: Option<CheckedValue>) -> Result<(), ExecutionError> {
-        let destination = self
-            .current_frame_mut()?
-            .locals
-            .get_mut(local as usize)
-            .ok_or_else(|| {
-                runtime_error(
-                    "normalized_local_index",
-                    "normalized local index escaped its verified frame",
-                )
-            })?;
+        let frame = self.current_frame_mut()?;
+        if frame
+            .owned_loans
+            .iter()
+            .any(|scope| scope.binding_local == local)
+        {
+            return Err(type_error(
+                "lexical owned read binding cannot be overwritten",
+            ));
+        }
+        let destination = frame.locals.get_mut(local as usize).ok_or_else(|| {
+            runtime_error(
+                "normalized_local_index",
+                "normalized local index escaped its verified frame",
+            )
+        })?;
+        if destination
+            .as_ref()
+            .is_some_and(|value| value.raw().memory_owns_live_loans())
+        {
+            return Err(type_error(
+                "owned source cannot be overwritten with active loans",
+            ));
+        }
         *destination = value;
         Ok(())
     }

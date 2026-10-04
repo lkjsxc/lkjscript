@@ -63,8 +63,8 @@ Current identity:
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
 - semantic revision: `rev_85b2be44a8deca911fc6bdf4efdd4fb7b510f53e4a39723fbee263dff4b3a9b2`;
-- package revision: `package_revision_7eaa419b59b682163b0d222be02ca67a952b6a51d3d5ce4f103ae9b0b19bde24`;
-- package transport: `package_transport_c4a39f3ecac40b6a24fc4da08cf7b67fe29fc2803355b8add776d6982a32df17`;
+- package revision: `package_revision_6d89e8556d3cdebdbc2140a026fd5f4be62fee23f041d74c02a2d976840a8c70`;
+- package transport: `package_transport_22b980d4d7d017905cb3a57cbd1e0dccbd722bc7b10cc0e139cda6d0aa574cd8`;
 - artifact manifest: `artifact_manifest_48734e3052f98cee2436e421926727b17b857cff52c842ea36d3f569f20bf3a4`;
 - artifact bundle: `artifact_bundle_a8149c846e32f6c6d22fe5dfe7656b8077227c9710b666bce5325c7d8738532e`;
 - 1,626 live semantic owners, 232 compiler units, and 89 graph tests.

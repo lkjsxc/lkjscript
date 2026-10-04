@@ -82,9 +82,9 @@ The [composition fixture](../../tests/fixtures/owned-choices.lkjc) nests a choic
 inside a product inside another choice and restores the selected payload. The
 [closed-Self fixture](../../tests/fixtures/owned-choices-witness.lkjc) implements
 an exact consuming method for a three-case choice and exercises recursive generic
-transfer and synchronous whole-owner reborrowing. Whole-choice loans cannot inspect
-or select a child. Field borrowing and asynchronous ownership transfer are not
-provided by these examples.
+transfer and synchronous whole-owner reborrowing. For inspection that preserves
+the choice, use [scoped borrowed case analysis](native-owned-borrows.md).
+The consuming examples here do not provide asynchronous ownership transfer.
 
 ## Failure and availability
 

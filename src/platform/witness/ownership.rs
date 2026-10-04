@@ -216,6 +216,24 @@ pub(crate) fn ownership_contributions(
                 )?;
             }
             match &record.operation {
+                ExpressionOperation::BorrowOwnedField { binding, .. } => insert_binding_parent(
+                    &mut ownership,
+                    *binding,
+                    record.id,
+                    BindingContainerRole::OwnedBorrow,
+                    0,
+                )?,
+                ExpressionOperation::MatchBorrowedOwned { arms, .. } => {
+                    for (ordinal, arm) in arms.iter().enumerate() {
+                        insert_binding_parent(
+                            &mut ownership,
+                            arm.binding,
+                            record.id,
+                            BindingContainerRole::OwnedBorrow,
+                            ordinal,
+                        )?;
+                    }
+                }
                 ExpressionOperation::MatchOwned { arms, .. } => {
                     for (ordinal, arm) in arms.iter().enumerate() {
                         insert_binding_parent(

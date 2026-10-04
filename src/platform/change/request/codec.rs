@@ -127,6 +127,7 @@ struct Writer {
     literal_extension: bool,
     transfer_constraint_extension: bool,
     implementation_authority_extension: bool,
+    owned_borrow_extension: bool,
 }
 
 impl Writer {
@@ -147,11 +148,14 @@ impl Writer {
             literal_extension: false,
             transfer_constraint_extension: false,
             implementation_authority_extension: false,
+            owned_borrow_extension: false,
         }
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.implementation_authority_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+        if self.owned_borrow_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR28");
+        } else if self.implementation_authority_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR27");
         } else if self.transfer_constraint_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR26");
@@ -1830,6 +1834,25 @@ impl Writer {
                     w.expression(body, definitions, next)
                 })
             }
+            AuthoredExpressionOperation::MatchBorrowedOwned {
+                choice_type,
+                source,
+                arms,
+            } => {
+                self.owned_borrow_extension = true;
+                self.tag(38)?;
+                self.authored_type(choice_type, definitions, 1)?;
+                self.expression(source, definitions, next)?;
+                self.list(arms, |w, (name, binding, body)| {
+                    w.name(name)?;
+                    w.symbol(&binding.symbol, definitions)?;
+                    w.name(&binding.name)?;
+                    w.optional(binding.declared_type.as_ref(), |w, ty| {
+                        w.authored_type(ty, definitions, 1)
+                    })?;
+                    w.expression(body, definitions, next)
+                })
+            }
             AuthoredExpressionOperation::PackOwned {
                 product_type,
                 fields,
@@ -1859,6 +1882,25 @@ impl Writer {
                     w.optional(b.declared_type.as_ref(), |w, ty| {
                         w.authored_type(ty, definitions, 1)
                     })
+                })?;
+                self.expression(body, definitions, next)
+            }
+            AuthoredExpressionOperation::BorrowOwnedField {
+                product_type,
+                source,
+                field,
+                binding,
+                body,
+            } => {
+                self.owned_borrow_extension = true;
+                self.tag(37)?;
+                self.authored_type(product_type, definitions, 1)?;
+                self.expression(source, definitions, next)?;
+                self.name(field)?;
+                self.symbol(&binding.symbol, definitions)?;
+                self.name(&binding.name)?;
+                self.optional(binding.declared_type.as_ref(), |w, ty| {
+                    w.authored_type(ty, definitions, 1)
                 })?;
                 self.expression(body, definitions, next)
             }

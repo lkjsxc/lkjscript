@@ -53,6 +53,14 @@ impl OwnedChoice {
     pub(super) fn case(&self) -> u32 {
         self.case
     }
+    pub(super) fn borrow_payload(
+        &self,
+        origin: ValueOrigin,
+        control: &ExecutionControl,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<NormalizedValue, ExecutionError> {
+        self.storage.borrow_field(origin, 0, control, reserve)
+    }
     pub(super) fn inspect_transfer<R>(
         &self,
         source: ValueOrigin,

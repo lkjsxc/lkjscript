@@ -1,0 +1,12 @@
+declarations.begin
+(units
+  (module create borrowed-task-parameter
+    (function create invalid-task (visibility public) (effect (task))
+      (type-parameter create T (constraint owned))
+      (parameter create packet (type (owned-product (field payload T) (field tag I64))) (use borrow))
+      (returns I64)
+      (body (borrow-owned-field
+        (type (owned-product (field payload T) (field tag I64))) (local packet)
+        (field payload (binding view (type T)))
+        (in (field (local packet) (name tag))))))))
+declarations.end

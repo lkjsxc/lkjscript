@@ -442,6 +442,11 @@ pub enum AuthoredExpressionOperation {
         source: Box<AuthoredExpression>,
         arms: Vec<(Name, AuthoredBindingDefinition, AuthoredExpression)>,
     },
+    MatchBorrowedOwned {
+        choice_type: AuthoredType,
+        source: Box<AuthoredExpression>,
+        arms: Vec<(Name, AuthoredBindingDefinition, AuthoredExpression)>,
+    },
     PackOwned {
         product_type: AuthoredType,
         fields: Vec<(Name, AuthoredExpression)>,
@@ -450,6 +455,13 @@ pub enum AuthoredExpressionOperation {
         product_type: AuthoredType,
         source: Box<AuthoredExpression>,
         fields: Vec<(Name, AuthoredBindingDefinition)>,
+        body: Box<AuthoredExpression>,
+    },
+    BorrowOwnedField {
+        product_type: AuthoredType,
+        source: Box<AuthoredExpression>,
+        field: Name,
+        binding: Box<AuthoredBindingDefinition>,
         body: Box<AuthoredExpression>,
     },
     ImplementationCall {
@@ -701,7 +713,8 @@ pub(super) fn collect_expression_symbols(
             AuthoredExpressionOperation::ChooseOwned { value, .. } => {
                 stack.push(Visit::Expression(value, next));
             }
-            AuthoredExpressionOperation::MatchOwned { source, arms, .. } => {
+            AuthoredExpressionOperation::MatchOwned { source, arms, .. }
+            | AuthoredExpressionOperation::MatchBorrowedOwned { source, arms, .. } => {
                 for (_, binding, body) in arms.iter().rev() {
                     stack.push(Visit::Expression(body, next));
                     stack.push(Visit::Binding(&binding.symbol, SymbolKind::LexicalBinding));
@@ -723,6 +736,16 @@ pub(super) fn collect_expression_symbols(
                 for (_, binding) in fields.iter().rev() {
                     stack.push(Visit::Binding(&binding.symbol, SymbolKind::LexicalBinding));
                 }
+                stack.push(Visit::Expression(source, next));
+            }
+            AuthoredExpressionOperation::BorrowOwnedField {
+                source,
+                binding,
+                body,
+                ..
+            } => {
+                stack.push(Visit::Expression(body, next));
+                stack.push(Visit::Binding(&binding.symbol, SymbolKind::LexicalBinding));
                 stack.push(Visit::Expression(source, next));
             }
             AuthoredExpressionOperation::Let { bindings, body } => {
@@ -1262,7 +1285,16 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 choice_type,
                 source,
                 arms,
+            }
+            | AuthoredExpressionOperation::MatchBorrowedOwned {
+                choice_type,
+                source,
+                arms,
             } => {
+                let borrowed = matches!(
+                    authored.operation,
+                    AuthoredExpressionOperation::MatchBorrowedOwned { .. }
+                );
                 let choice_type = self.lower_type(choice_type)?;
                 let source = self.lower_expression(source)?;
                 let mut lowered = Vec::with_capacity(arms.len());
@@ -1277,7 +1309,11 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                         crate::platform::kernel::BindingRecord {
                             header: OwnerHeader::new(OwnerKey::Binding(id), OwnerKind::Binding),
                             name: binding.name.clone(),
-                            kind: crate::platform::kernel::BindingKind::OwnedChoicePayload,
+                            kind: if borrowed {
+                                crate::platform::kernel::BindingKind::OwnedBorrow
+                            } else {
+                                crate::platform::kernel::BindingKind::OwnedChoicePayload
+                            },
                             value: None,
                             declared_type,
                         },
@@ -1289,10 +1325,18 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                     });
                 }
                 lowered.sort_by(|a, b| a.name.cmp(&b.name));
-                ExpressionOperation::MatchOwned {
-                    choice_type,
-                    source,
-                    arms: lowered,
+                if borrowed {
+                    ExpressionOperation::MatchBorrowedOwned {
+                        choice_type,
+                        source,
+                        arms: lowered,
+                    }
+                } else {
+                    ExpressionOperation::MatchOwned {
+                        choice_type,
+                        source,
+                        arms: lowered,
+                    }
                 }
             }
             AuthoredExpressionOperation::PackOwned {
@@ -1345,6 +1389,38 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                     product_type,
                     source,
                     fields: lowered,
+                    body: self.lower_expression(body)?,
+                }
+            }
+            AuthoredExpressionOperation::BorrowOwnedField {
+                product_type,
+                source,
+                field,
+                binding,
+                body,
+            } => {
+                let product_type = self.lower_type(product_type)?;
+                let source = self.lower_expression(source)?;
+                let id = self.lexical_binding_symbol(&binding.symbol)?;
+                let declared_type = binding
+                    .declared_type
+                    .as_ref()
+                    .map(|ty| self.lower_type(ty))
+                    .transpose()?;
+                self.insert_created(OwnerRecord::Binding(
+                    crate::platform::kernel::BindingRecord {
+                        header: OwnerHeader::new(OwnerKey::Binding(id), OwnerKind::Binding),
+                        name: binding.name.clone(),
+                        kind: crate::platform::kernel::BindingKind::OwnedBorrow,
+                        value: None,
+                        declared_type,
+                    },
+                ))?;
+                ExpressionOperation::BorrowOwnedField {
+                    product_type,
+                    source,
+                    field: field.clone(),
+                    binding: id,
                     body: self.lower_expression(body)?,
                 }
             }

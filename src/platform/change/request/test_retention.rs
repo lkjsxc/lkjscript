@@ -251,12 +251,22 @@ fn remap(operation: &mut E, identities: &BTreeMap<OwnerKey, OwnerKey>) {
                 binding(&mut field.binding);
             }
         }
-        E::MatchOwned { source, arms, .. } => {
+        E::MatchOwned { source, arms, .. } | E::MatchBorrowedOwned { source, arms, .. } => {
             expression(source);
             for arm in arms {
                 binding(&mut arm.binding);
                 expression(&mut arm.body);
             }
+        }
+        E::BorrowOwnedField {
+            source,
+            binding: id,
+            body,
+            ..
+        } => {
+            expression(source);
+            binding(id);
+            expression(body);
         }
         E::Unit {}
         | E::Bool { .. }

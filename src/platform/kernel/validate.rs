@@ -62,6 +62,7 @@ enum BindingContainerKind {
     Transaction,
     OwnedUnpack,
     OwnedChoicePayload,
+    OwnedBorrow,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -2040,6 +2041,28 @@ impl FullValidator<'_> {
         operation: &ExpressionOperation,
     ) {
         match operation {
+            ExpressionOperation::BorrowOwnedField { binding, body, .. } => {
+                self.binding_containers
+                    .entry(*binding)
+                    .or_default()
+                    .push(BindingContainer {
+                        expression,
+                        scope_roots: vec![*body],
+                        kind: BindingContainerKind::OwnedBorrow,
+                    });
+            }
+            ExpressionOperation::MatchBorrowedOwned { arms, .. } => {
+                for arm in arms {
+                    self.binding_containers
+                        .entry(arm.binding)
+                        .or_default()
+                        .push(BindingContainer {
+                            expression,
+                            scope_roots: vec![arm.body],
+                            kind: BindingContainerKind::OwnedBorrow,
+                        });
+                }
+            }
             ExpressionOperation::MatchOwned { arms, .. } => {
                 for arm in arms {
                     self.binding_containers
@@ -2290,6 +2313,7 @@ impl FullValidator<'_> {
                 BindingContainerKind::Transaction => BindingKind::Transaction,
                 BindingContainerKind::OwnedUnpack => BindingKind::OwnedUnpack,
                 BindingContainerKind::OwnedChoicePayload => BindingKind::OwnedChoicePayload,
+                BindingContainerKind::OwnedBorrow => BindingKind::OwnedBorrow,
             };
             if kind != expected {
                 self.error(
@@ -2768,6 +2792,11 @@ impl FullValidator<'_> {
                     return;
                 };
                 let expected = match reference {
+                    LocalValueReference::LexicalBinding(_)
+                        if container.kind == BindingContainerKind::OwnedBorrow =>
+                    {
+                        BindingContainerKind::OwnedBorrow
+                    }
                     LocalValueReference::LexicalBinding(_)
                         if container.kind == BindingContainerKind::OwnedChoicePayload =>
                     {

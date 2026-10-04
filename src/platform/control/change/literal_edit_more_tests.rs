@@ -279,6 +279,100 @@ fn literal_edit_equal_values_keep_distinct_owned_positions() {
 }
 
 #[test]
+fn nested_owned_child_read_drafts_reenter_and_literal_edits_preserve_every_owner() {
+    let fixture = Fixture::from_source(
+        r#"declarations.begin
+(units (module create child_reads (as $module)
+  (function create inspect (as $function) (visibility public) (effect pure)
+    (type-parameter create T (constraint owned))
+    (parameter create data (type T) (use consume)) (returns I64)
+    (body (let
+      (binding outcome (type (owned-choice (case accepted I64) (case rejected T)))
+        (choose-owned (type (owned-choice (case accepted I64) (case rejected T)))
+          (case rejected) (local data)))
+      (binding packet (type (owned-product (field payload (owned-choice (case accepted I64) (case rejected T)))))
+        (pack-owned (type (owned-product (field payload (owned-choice (case accepted I64) (case rejected T)))))
+          (field payload (local outcome))))
+      (binding observed (type I64)
+        (borrow-owned-field
+          (type (owned-product (field payload (owned-choice (case accepted I64) (case rejected T)))))
+          (local packet)
+          (field payload (binding choice (type (owned-choice (case accepted I64) (case rejected T)))))
+          (in (match-borrowed-owned (type (owned-choice (case accepted I64) (case rejected T)))
+            (local choice)
+            (case accepted (binding scalar (type I64)) (in (i64 7)))
+            (case rejected (binding view (type T)) (in (i64 17)))))))
+      (in (unpack-owned
+        (type (owned-product (field payload (owned-choice (case accepted I64) (case rejected T)))))
+        (local packet)
+        (field payload (binding choice (type (owned-choice (case accepted I64) (case rejected T)))))
+        (in (match-owned (type (owned-choice (case accepted I64) (case rejected T))) (local choice)
+          (case accepted (binding scalar (type I64)) (in (local observed)))
+          (case rejected (binding owner (type T)) (in (local observed))))))))))
+  (function create neighbor (as $neighbor) (visibility private) (effect pure)
+    (returns Text) (body (text "neighbor")))
+  (constant create marker (as $marker) (visibility private) (type I64) (value (i64 99)))))
+declarations.end"#,
+    );
+    let original = fixture.draft();
+    assert!(original.contains("borrow-owned-field"));
+    assert!(original.contains("match-borrowed-owned"));
+    let unchanged = decode_compact_change_in_repository(
+        "child-read-noop.lkjc",
+        original.as_bytes(),
+        &fixture.repository,
+    )
+    .unwrap();
+    assert!(!unchanged.semantic.changes.iter().any(|change| matches!(
+        change,
+        AuthoredChange::SetFunctionLiterals { .. } | AuthoredChange::ReplaceFunctionBody { .. }
+    )));
+    let before = inventory(&fixture.view(), fixture.function);
+    let changed = original
+        .replace("(i64 7)", "(i64 8)")
+        .replace("(i64 17)", "(i64 18)");
+    let request = decode_compact_change_in_repository(
+        "child-read-literals.lkjc",
+        changed.as_bytes(),
+        &fixture.repository,
+    )
+    .unwrap();
+    let updates = literals(&request.semantic);
+    assert_eq!(updates.len(), 2);
+    let selected = updates
+        .iter()
+        .map(|update| OwnerKey::Expression(update.expression))
+        .collect::<BTreeSet<_>>();
+    let prepared = fixture
+        .repository
+        .prepare_authored_change(&request.semantic, request.options)
+        .unwrap();
+    assert!(prepared.logical_plan.allocations.is_empty());
+    assert!(prepared.logical_plan.retirements.is_empty());
+    fixture.repository.publish(&prepared.publication).unwrap();
+    let after = inventory(&fixture.view(), fixture.function);
+    assert_eq!(
+        before.keys().collect::<Vec<_>>(),
+        after.keys().collect::<Vec<_>>()
+    );
+    for (owner, previous) in before {
+        assert_eq!(
+            previous != after[&owner],
+            selected.contains(&owner),
+            "{owner}"
+        );
+    }
+    assert_eq!(
+        fixture.draft(),
+        changed.replacen(
+            &request.semantic.base.to_string(),
+            &fixture.view().revision().to_string(),
+            1,
+        )
+    );
+}
+
+#[test]
 fn literal_edit_follows_current_candidate_after_other_body_operations() {
     let fixture = Fixture::new();
     let original = fixture.edit();

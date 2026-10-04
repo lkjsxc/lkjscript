@@ -128,7 +128,17 @@ fn inventory(view: &RepositoryView, function: DeclarationId) -> BTreeMap<OwnerKe
                 pending.push(OwnerKey::Expression(function.body));
             }
             OwnerRecord::Binding(binding) => {
-                pending.push(OwnerKey::Expression(binding.value.unwrap()))
+                if let Some(value) = binding.value {
+                    pending.push(OwnerKey::Expression(value));
+                } else {
+                    assert!(matches!(
+                        binding.kind,
+                        crate::platform::kernel::BindingKind::OwnedUnpack
+                            | crate::platform::kernel::BindingKind::OwnedChoicePayload
+                            | crate::platform::kernel::BindingKind::OwnedBorrow
+                    ));
+                    assert!(binding.declared_type.is_some());
+                }
             }
             OwnerRecord::Expression(expression) => match &expression.operation {
                 ExpressionOperation::Let { bindings, body } => {
@@ -141,6 +151,40 @@ fn inventory(view: &RepositoryView, function: DeclarationId) -> BTreeMap<OwnerKe
                 ExpressionOperation::ImplementationCall { arguments, .. }
                 | ExpressionOperation::MethodCall { arguments, .. } => {
                     pending.extend(arguments.iter().copied().map(OwnerKey::Expression));
+                }
+                ExpressionOperation::ChooseOwned { value, .. } => {
+                    pending.push(OwnerKey::Expression(*value));
+                }
+                ExpressionOperation::PackOwned { fields, .. } => {
+                    pending.extend(fields.iter().map(|field| OwnerKey::Expression(field.value)));
+                }
+                ExpressionOperation::UnpackOwned {
+                    source,
+                    fields,
+                    body,
+                    ..
+                } => {
+                    pending.push(OwnerKey::Expression(*source));
+                    pending.extend(fields.iter().map(|field| OwnerKey::Binding(field.binding)));
+                    pending.push(OwnerKey::Expression(*body));
+                }
+                ExpressionOperation::BorrowOwnedField {
+                    source,
+                    binding,
+                    body,
+                    ..
+                } => {
+                    pending.push(OwnerKey::Expression(*source));
+                    pending.push(OwnerKey::Binding(*binding));
+                    pending.push(OwnerKey::Expression(*body));
+                }
+                ExpressionOperation::MatchOwned { source, arms, .. }
+                | ExpressionOperation::MatchBorrowedOwned { source, arms, .. } => {
+                    pending.push(OwnerKey::Expression(*source));
+                    for arm in arms {
+                        pending.push(OwnerKey::Binding(arm.binding));
+                        pending.push(OwnerKey::Expression(arm.body));
+                    }
                 }
                 ExpressionOperation::Local { .. }
                 | ExpressionOperation::Bool { .. }

@@ -2,7 +2,9 @@
 //! Stores kill the previous value; switch payload writes kill only their edge.
 //! A fixed point handles cycles. An unfinished proof never authorizes a move.
 
-use super::super::prepare::{NormalizedOwnedChoiceJump, NormalizedVariantJump};
+use super::super::prepare::{
+    NormalizedBorrowedOwnedChoiceJump, NormalizedOwnedChoiceJump, NormalizedVariantJump,
+};
 use super::{Budget, Diagnostic, I, NormalizedCode, ParameterUse, corrupt};
 use std::sync::Arc;
 
@@ -16,6 +18,7 @@ enum Edges<'a> {
     Branch(u32),
     Switch(&'a [NormalizedVariantJump]),
     Choice(&'a [NormalizedOwnedChoiceJump]),
+    BorrowedChoice(&'a [NormalizedBorrowedOwnedChoiceJump]),
     Exit,
 }
 
@@ -46,6 +49,17 @@ fn flow(instruction: &I) -> Flow<'_> {
         I::JumpIfFalse(target) => (None, None, Edges::Branch(*target)),
         I::SwitchVariant(jumps) => (None, None, Edges::Switch(jumps)),
         I::MatchOwned { cases, .. } => (None, None, Edges::Choice(cases)),
+        I::BorrowOwnedField {
+            source_local,
+            binding_local,
+            ..
+        } => (Some(*source_local), Some(*binding_local), Edges::Next),
+        I::MatchBorrowedOwned {
+            source_local,
+            cases,
+            ..
+        } => (Some(*source_local), None, Edges::BorrowedChoice(cases)),
+        I::EndOwnedBorrow { binding_local } => (None, Some(*binding_local), Edges::Next),
         I::Return | I::TailCall { .. } => (None, None, Edges::Exit),
         // Dynamic external callees return to this frame; graph callees transfer.
         // Without callee proof, preserve the possible continuation's live values.
@@ -134,6 +148,12 @@ fn validate(code: &NormalizedCode, work: &mut Budget<'_>) -> Result<bool, Diagno
                     local(code, case.binding_local)?;
                 }
             }
+            Edges::BorrowedChoice(cases) => {
+                for case in cases {
+                    target(case.target)?;
+                    local(code, case.binding_local)?;
+                }
+            }
             Edges::Next | Edges::Exit => {}
         }
     }
@@ -197,6 +217,16 @@ impl Live {
                 out
             }
             Edges::Choice(cases) => {
+                let mut out = 0;
+                for case in cases {
+                    if !meter.step(work)? {
+                        return Ok(None);
+                    }
+                    out |= at(case.target as usize) & !mask(Some(case.binding_local), word);
+                }
+                out
+            }
+            Edges::BorrowedChoice(cases) => {
                 let mut out = 0;
                 for case in cases {
                     if !meter.step(work)? {

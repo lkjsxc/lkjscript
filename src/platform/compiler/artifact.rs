@@ -48,16 +48,16 @@ use std::fmt;
 #[path = "artifact_code.rs"]
 mod code_admission;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-30";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-30";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 30;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF30";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART30";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN30";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-31";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-31";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 31;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF31";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART31";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN31";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v30";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v30";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v30";
+    "lkjscript.artifact-manifest-envelope.v31";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v31";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v31";
 pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v18";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
@@ -80,6 +80,11 @@ struct ArtifactWire {
 }
 fn artifact_wire(version: u16) -> Result<ArtifactWire, Diagnostic> {
     match version {
+        30 => Err(artifact_error(
+            DiagnosticClass::Source,
+            "artifact_bundle_contract",
+            "predecessor artifacts require rebuilding from canonical meaning",
+        )),
         18 => Ok(ArtifactWire {
             version,
             manifest_magic: *b"LKJAMF18",
@@ -411,6 +416,8 @@ impl ArtifactManifest {
             28
         } else if bytes.starts_with(b"LKJAMF29") {
             29
+        } else if bytes.starts_with(b"LKJAMF30") {
+            30
         } else {
             ARTIFACT_CONTRACT_VERSION
         })?;
@@ -498,6 +505,7 @@ impl ArtifactManifest {
                     | (21, 21, 17)
                     | (22, 22, 17)
                     | (23, 23, 18)
+                    | (24, 24, 19)
             )
             || self.compilation_manifest_contract_version != COMPILATION_MANIFEST_CONTRACT_VERSION
         {
@@ -4674,12 +4682,14 @@ fn reference_expression_bindings(operation: &ExpressionOperation) -> Vec<Binding
         ExpressionOperation::Let {
             bindings: declared, ..
         } => bindings.extend(declared.iter().copied()),
-        ExpressionOperation::MatchOwned { arms, .. } => {
+        ExpressionOperation::MatchOwned { arms, .. }
+        | ExpressionOperation::MatchBorrowedOwned { arms, .. } => {
             bindings.extend(arms.iter().map(|arm| arm.binding))
         }
         ExpressionOperation::UnpackOwned { fields, .. } => {
             bindings.extend(fields.iter().map(|field| field.binding))
         }
+        ExpressionOperation::BorrowOwnedField { binding, .. } => bindings.push(*binding),
         ExpressionOperation::Match { arms, .. } => bindings.extend(
             arms.iter()
                 .filter_map(|arm| arm.payload_binding)

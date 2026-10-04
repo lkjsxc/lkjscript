@@ -1,0 +1,41 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create owned-borrow-task
+    (function create main (visibility public)
+      (parameter create n (type I64))
+      (returns (record (read I64) (unrelated I64) (original I64)))
+      (effect (task (requirement command::clock)))
+      (body (let
+        (binding c (type OwnedI64Cell) (call owned-borrow-carriers::cell-create (local n)))
+        (binding packet (type (owned-product (field payload OwnedI64Cell) (field tag I64)))
+          (call owned-borrows::packet (types OwnedI64Cell) (i64 7) (local c)))
+        (binding read (type I64)
+          (borrow-owned-field
+            (type (owned-product (field payload OwnedI64Cell) (field tag I64))) (local packet)
+            (field payload (binding view (type OwnedI64Cell)))
+            (in (sequence
+              (capability-call command::clock std::WallClock::utc-milliseconds)
+              (call owned-borrow-carriers::cell-read (local view))))))
+        (binding unrelated (type OwnedI64Cell)
+          (borrow-owned-field
+            (type (owned-product (field payload OwnedI64Cell) (field tag I64))) (local packet)
+            (field payload (binding view (type OwnedI64Cell)))
+            (in (sequence
+              (implementation-call owned-borrows::read-helper (types OwnedI64Cell)
+                (implementations concrete@owned-borrow-carriers::Scalar) (local view))
+              (call owned-borrow-carriers::cell-create (i64 77))))))
+        (binding unrelated-value (type I64) (call owned-borrow-carriers::cell-finish (local unrelated)))
+        (binding c (type OwnedI64Cell) (call owned-borrows::take-packet (types OwnedI64Cell) (local packet)))
+        (binding original (type I64) (call owned-borrow-carriers::cell-finish (local c)))
+        (in (record structural
+          (field read (local read)) (field unrelated (local unrelated-value)) (field original (local original)))))))
+    (component create command (visibility private)
+      (requirement create clock (interface std::WallClock)
+        (operations std::WallClock::utc-milliseconds) (limits (maximum_calls 1 calls)))
+      (port create main
+        (type (task-function (I64) (record (read I64) (unrelated I64) (original I64))
+          (row (requirement clock)))) (function main))))
+  (target create owned-borrow-task (component owned-borrow-task::command)
+    (runner command) (port owned-borrow-task::command::main)))
+declarations.end

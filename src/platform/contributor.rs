@@ -2341,7 +2341,12 @@ impl DefinitionOracleWalker<'_> {
                     ExpressionChildRole::OwnedChoiceValue,
                 )?;
             }
-            ExpressionOperation::MatchOwned { source, arms, .. } => {
+            ExpressionOperation::MatchOwned { source, arms, .. }
+            | ExpressionOperation::MatchBorrowedOwned { source, arms, .. } => {
+                let borrowed = matches!(
+                    record.operation,
+                    ExpressionOperation::MatchBorrowedOwned { .. }
+                );
                 self.visit_expression_child(
                     *source,
                     owner,
@@ -2358,8 +2363,16 @@ impl DefinitionOracleWalker<'_> {
                         oracle_ordinal(index)?,
                         child_depth,
                         (
-                            BindingKind::OwnedChoicePayload,
-                            BindingContainerRole::OwnedChoicePayload,
+                            if borrowed {
+                                BindingKind::OwnedBorrow
+                            } else {
+                                BindingKind::OwnedChoicePayload
+                            },
+                            if borrowed {
+                                BindingContainerRole::OwnedBorrow
+                            } else {
+                                BindingContainerRole::OwnedChoicePayload
+                            },
                         ),
                     )?;
                     self.visit_expression_child(
@@ -2396,6 +2409,37 @@ impl DefinitionOracleWalker<'_> {
                         (BindingKind::OwnedUnpack, BindingContainerRole::OwnedUnpack),
                     )?;
                 }
+                self.visit_expression_child(
+                    *body,
+                    owner,
+                    "owned_product_body",
+                    0,
+                    child_depth,
+                    ExpressionChildRole::OwnedProductBody,
+                )?;
+            }
+            ExpressionOperation::BorrowOwnedField {
+                source,
+                binding,
+                body,
+                ..
+            } => {
+                self.visit_expression_child(
+                    *source,
+                    owner,
+                    "owned_product_source",
+                    0,
+                    child_depth,
+                    ExpressionChildRole::OwnedProductSource,
+                )?;
+                self.visit_binding(
+                    *binding,
+                    owner,
+                    "owned_product_binding",
+                    0,
+                    child_depth,
+                    (BindingKind::OwnedBorrow, BindingContainerRole::OwnedBorrow),
+                )?;
                 self.visit_expression_child(
                     *body,
                     owner,
@@ -2827,6 +2871,8 @@ fn oracle_expression_form(operation: &ExpressionOperation) -> &'static str {
         ExpressionOperation::UnpackOwned { .. } => "unpack_owned",
         ExpressionOperation::ChooseOwned { .. } => "choose_owned",
         ExpressionOperation::MatchOwned { .. } => "match_owned",
+        ExpressionOperation::MatchBorrowedOwned { .. } => "match_borrowed_owned",
+        ExpressionOperation::BorrowOwnedField { .. } => "borrow_owned_field",
     }
 }
 
@@ -2837,6 +2883,7 @@ fn oracle_binding_kind(kind: BindingKind) -> &'static str {
         BindingKind::Transaction => "transaction",
         BindingKind::OwnedUnpack => "owned_unpack",
         BindingKind::OwnedChoicePayload => "owned_choice_payload",
+        BindingKind::OwnedBorrow => "owned_borrow",
     }
 }
 

@@ -1714,6 +1714,111 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         use_mode: ParameterUse,
     ) -> Result<(), Diagnostic> {
         match operation {
+            ExpressionOperation::BorrowOwnedField {
+                product_type,
+                source,
+                field,
+                binding,
+                body,
+            } => {
+                let source_local = self.borrow_source_local(source, product_type, depth)?;
+                let read = self.unit.canonical.code_type(product_type)?;
+                self.unit.work.canonical.add(read.work);
+                let object = read.value.ok_or_else(|| {
+                    compiler_corrupt("compiler_product_type", "missing borrowed product type")
+                })?;
+                let TypeForm::OwnedProduct { fields } = object.form else {
+                    return Err(compiler_corrupt(
+                        "compiler_product_type",
+                        "field borrowing requires a product type",
+                    ));
+                };
+                let mut selected = None;
+                for (index, candidate) in fields.into_iter().enumerate() {
+                    self.unit.canonical.code_step()?;
+                    if candidate.name == field {
+                        selected =
+                            Some((u32_count("borrowed product field", index)?, candidate.ty));
+                    }
+                }
+                let (field, ty) = selected.ok_or_else(|| {
+                    compiler_corrupt("compiler_product_field", "unknown borrowed product field")
+                })?;
+                let (reference, binding_local, binding_type) = self.borrow_binding(binding, ty)?;
+                let product_type = self.unit.tables.ty(product_type)?;
+                self.push(CompiledInstruction::BorrowOwnedField {
+                    product_type,
+                    source_local,
+                    field,
+                    binding_local,
+                    binding_type,
+                })?;
+                self.expression(body, depth)?;
+                self.push(CompiledInstruction::EndOwnedBorrow { binding_local })?;
+                self.locals.remove(&reference);
+            }
+            ExpressionOperation::MatchBorrowedOwned {
+                choice_type,
+                source,
+                arms,
+            } => {
+                let source_local = self.borrow_source_local(source, choice_type, depth)?;
+                let read = self.unit.canonical.code_type(choice_type)?;
+                self.unit.work.canonical.add(read.work);
+                let object = read.value.ok_or_else(|| {
+                    compiler_corrupt("compiler_choice_type", "missing borrowed choice type")
+                })?;
+                let TypeForm::OwnedChoice { cases: expected } = object.form else {
+                    return Err(compiler_corrupt(
+                        "compiler_choice_type",
+                        "borrowed matching requires a choice type",
+                    ));
+                };
+                if expected.len() != arms.len() || arms.is_empty() {
+                    return Err(compiler_corrupt(
+                        "compiler_choice_case",
+                        "borrowed matching must cover the complete choice",
+                    ));
+                }
+                let choice_type = self.unit.tables.ty(choice_type)?;
+                let switch = self.push(CompiledInstruction::MatchBorrowedOwned {
+                    choice_type,
+                    source_local,
+                    cases: Vec::new(),
+                })?;
+                let mut cases = Vec::with_capacity(arms.len());
+                let mut exits = Vec::with_capacity(arms.len());
+                for (arm, expected) in arms.into_iter().zip(expected) {
+                    self.unit.canonical.code_step()?;
+                    if arm.name != expected.name {
+                        return Err(compiler_corrupt(
+                            "compiler_choice_case",
+                            "borrowed choice arms differ from exact case order",
+                        ));
+                    }
+                    let target = self.next_instruction()?;
+                    let (reference, binding_local, binding_type) =
+                        self.borrow_binding(arm.binding, expected.ty)?;
+                    self.expression(arm.body, depth)?;
+                    self.push(CompiledInstruction::EndOwnedBorrow { binding_local })?;
+                    self.locals.remove(&reference);
+                    cases.push(super::unit::CompiledBorrowedOwnedChoiceJump {
+                        target,
+                        binding_local,
+                        binding_type,
+                    });
+                    exits.push(self.push(CompiledInstruction::Jump(u32::MAX))?);
+                }
+                let end = self.next_instruction()?;
+                for exit in exits {
+                    self.instructions[exit as usize] = CompiledInstruction::Jump(end);
+                }
+                self.instructions[switch as usize] = CompiledInstruction::MatchBorrowedOwned {
+                    choice_type,
+                    source_local,
+                    cases,
+                };
+            }
             ExpressionOperation::Parallel { left, right } => {
                 let left = self.parallel_call(left, depth)?;
                 let right = self.parallel_call(right, depth)?;
@@ -2379,6 +2484,75 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 .structural_name(name)
                 .map(CompiledFieldSelector::Structural),
         }
+    }
+
+    /// Traverse the exact canonical source child while preserving custody in its local slot.
+    fn borrow_source_local(
+        &mut self,
+        expression: ExpressionId,
+        expected: TypeObjectDigest,
+        depth: usize,
+    ) -> Result<u32, Diagnostic> {
+        let operation = self.begin_expression(expression, depth)?;
+        let result = (|| {
+            let ExpressionOperation::Local { value } = operation else {
+                return Err(compiler_corrupt(
+                    "compiler_borrow_source",
+                    "lexical read source must be an exact live local",
+                ));
+            };
+            let local = self.locals.get(&value).copied().ok_or_else(|| {
+                compiler_corrupt(
+                    "compiler_borrow_source",
+                    "lexical read source is outside the compiled scope",
+                )
+            })?;
+            let key = match value {
+                LocalValueReference::FunctionParameter(parameter) => OwnerKey::Parameter(parameter),
+                LocalValueReference::LexicalBinding(binding) => OwnerKey::Binding(binding),
+                _ => {
+                    return Err(compiler_corrupt(
+                        "compiler_borrow_source",
+                        "lexical read source has no owning or borrowed local custody",
+                    ));
+                }
+            };
+            let actual = match self
+                .unit
+                .required_owner(key, "borrowed source local type")?
+            {
+                OwnerRecord::Parameter(record) => Some(record.ty),
+                OwnerRecord::Binding(record) => record.declared_type,
+                _ => None,
+            };
+            if actual != Some(expected) {
+                return Err(compiler_corrupt(
+                    "compiler_borrow_source_type",
+                    "lexical read source differs from its exact carrier type",
+                ));
+            }
+            Ok(local)
+        })();
+        self.active.remove(&expression);
+        result
+    }
+
+    fn borrow_binding(
+        &mut self,
+        binding: BindingId,
+        expected: TypeObjectDigest,
+    ) -> Result<(LocalValueReference, u32, u32), Diagnostic> {
+        let record = self.binding(binding, BindingKind::OwnedBorrow)?;
+        if record.value.is_some() || record.declared_type != Some(expected) {
+            return Err(compiler_corrupt(
+                "compiler_borrow_binding",
+                "scoped read binding requires the exact child annotation and no initializer",
+            ));
+        }
+        let reference = LocalValueReference::LexicalBinding(binding);
+        let local = self.bind(reference)?;
+        let ty = self.unit.tables.ty(expected)?;
+        Ok((reference, local, ty))
     }
 
     fn binding(

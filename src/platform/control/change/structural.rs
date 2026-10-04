@@ -276,7 +276,7 @@ pub(super) fn layout(
                 node.record.fields.push(block.field(case[0], "case")?);
                 node.children.push(args[2]);
             }
-            "match-owned" => {
+            "match-owned" | "match-borrowed-owned" => {
                 minimum(&block, id, args, 3)?;
                 let annotation = clause(&block, args[0], "type")?;
                 arity(&block, args[0], annotation, 1)?;
@@ -319,6 +319,53 @@ pub(super) fn layout(
                     });
                     work.push(Work::Enter { name, symbol });
                 }
+                work.push(Work::Expression {
+                    id: args[1],
+                    depth: depth + 1,
+                });
+                scoped = true;
+            }
+            "borrow-owned-field" => {
+                arity(&block, id, args, 4)?;
+                let annotation = clause(&block, args[0], "type")?;
+                arity(&block, args[0], annotation, 1)?;
+                node.record.fields.push(block.field(annotation[0], "type")?);
+                node.children.push(args[1]);
+                let parts = clause(&block, args[2], "field")?;
+                arity(&block, args[2], parts, 2)?;
+                node.record.fields.push(block.field(parts[0], "field")?);
+                let (binder, explicit) =
+                    binder_alias(&block, clause(&block, parts[1], "binding")?, symbols)?;
+                arity(&block, parts[1], &binder, 2)?;
+                let ty = clause(&block, binder[1], "type")?;
+                arity(&block, binder[1], ty, 1)?;
+                let local_name = name(&block, binder[0])?.to_string();
+                let local_symbol = match explicit {
+                    Some(symbol) => symbol,
+                    None => symbols.allocate(&block.syntax[binder[0]].location)?,
+                };
+                let mut record = member_record(&block, args[2]);
+                record.fields.push(block.field(parts[0], "field-name")?);
+                record.fields.push(block.field(binder[0], "name")?);
+                record.fields.push(block.field(ty[0], "type")?);
+                record.fields.push(CompactField {
+                    name: "as".into(),
+                    value: local_symbol.clone(),
+                    location: record.location.clone(),
+                });
+                node.members.push(record);
+                let body = clause(&block, args[3], "in")?;
+                arity(&block, args[3], body, 1)?;
+                node.children.push(body[0]);
+                work.push(Work::Leave(local_name.clone()));
+                work.push(Work::Expression {
+                    id: body[0],
+                    depth: depth + 1,
+                });
+                work.push(Work::Enter {
+                    name: local_name,
+                    symbol: local_symbol,
+                });
                 work.push(Work::Expression {
                     id: args[1],
                     depth: depth + 1,
@@ -931,7 +978,7 @@ fn lower_node(
             case: parse_name(record, "case")?,
             value: Box::new(child()?),
         },
-        "expression.match-owned" => {
+        "expression.match-owned" | "expression.match-borrowed-owned" => {
             let choice_type = decoder.decode_type(required(record, "type")?)?;
             let source = Box::new(child()?);
             let mut arms = Vec::new();
@@ -946,10 +993,34 @@ fn lower_node(
                     child()?,
                 ));
             }
-            AuthoredExpressionOperation::MatchOwned {
-                choice_type,
-                source,
-                arms,
+            if record.operation == "expression.match-borrowed-owned" {
+                AuthoredExpressionOperation::MatchBorrowedOwned {
+                    choice_type,
+                    source,
+                    arms,
+                }
+            } else {
+                AuthoredExpressionOperation::MatchOwned {
+                    choice_type,
+                    source,
+                    arms,
+                }
+            }
+        }
+        "expression.borrow-owned-field" => {
+            let member = node.members.first().ok_or_else(|| {
+                inventory_error(record, "borrowed field binding was lost during lowering")
+            })?;
+            AuthoredExpressionOperation::BorrowOwnedField {
+                product_type: decoder.decode_type(required(record, "type")?)?,
+                source: Box::new(child()?),
+                field: parse_name(record, "field")?,
+                binding: Box::new(AuthoredBindingDefinition {
+                    symbol: symbol(member, "as")?,
+                    name: parse_name(member, "name")?,
+                    declared_type: Some(decoder.decode_type(required(member, "type")?)?),
+                }),
+                body: Box::new(child()?),
             }
         }
         "expression.pack-owned" => {

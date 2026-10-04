@@ -1002,8 +1002,10 @@ where
         | ExpressionOperation::Map { .. } => {}
         ExpressionOperation::PackOwned { .. }
         | ExpressionOperation::UnpackOwned { .. }
+        | ExpressionOperation::BorrowOwnedField { .. }
         | ExpressionOperation::ChooseOwned { .. }
-        | ExpressionOperation::MatchOwned { .. } => {}
+        | ExpressionOperation::MatchOwned { .. }
+        | ExpressionOperation::MatchBorrowedOwned { .. } => {}
     }
     Ok(())
 }

@@ -15,6 +15,13 @@ unused `borrow` parameter is invalid. A pure helper may still borrow and reborro
 synchronously, and cannot retain, return or consume a loan. A task may call such
 a pure helper, with its loans ending before control returns to the task.
 
+A task body may also enter a [scoped owned-child read](owned-borrows.md) over a
+local product or choice. It may perform authorized effects or return an unrelated
+owner from that scope while retaining child and ancestor read guards. This does
+not admit borrowed task parameters or borrowed task methods. Every exit releases
+child loans before ancestor guards and owners, including cancellation after an
+effect; cleanup does not replay or roll back that effect.
+
 A direct result may be ByteBuffer, OwnedI64Cell, an owned product or choice, or an
 exact in-scope Owned type parameter. Ordinary containers, callable descriptors,
 partial application and capture do not gain permission to contain these values.

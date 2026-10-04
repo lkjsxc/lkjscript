@@ -180,6 +180,14 @@ fn substitute(
             A::UnpackOwned {
                 source: x, body: y, ..
             },
+        )
+        | (
+            A::BorrowOwnedField {
+                source: a, body: b, ..
+            },
+            A::BorrowOwnedField {
+                source: x, body: y, ..
+            },
         ) => {
             pairs.extend([(a.as_mut(), x.as_ref()), (b.as_mut(), y.as_ref())]);
         }
@@ -192,6 +200,14 @@ fn substitute(
                 source: a, arms: b, ..
             },
             A::MatchOwned {
+                source: x, arms: y, ..
+            },
+        )
+        | (
+            A::MatchBorrowedOwned {
+                source: a, arms: b, ..
+            },
+            A::MatchBorrowedOwned {
                 source: x, arms: y, ..
             },
         ) => {

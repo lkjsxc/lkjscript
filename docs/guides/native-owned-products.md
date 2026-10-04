@@ -34,7 +34,8 @@ Pack expressions evaluate fields in authored order, even though the type sorts
 fields by name. Owned operands are live locals. To destructure, give the exact type,
 source local, all fields and explicitly typed bindings, followed by `(in BODY)`.
 The parent is consumed; the new bindings exist only inside BODY. Unused owners are
-released at exit. A borrowed product cannot be unpacked or expose an owned child.
+released at exit. A borrowed product cannot be unpacked. Use a
+[scoped child read](native-owned-borrows.md) to inspect an owned field.
 
 ## Inspecting metadata without dismantling the owner
 
@@ -63,7 +64,8 @@ it passes through the copied optimized development executable.
 `(name tag)` is a structural selector. A bare member is a nominal record selector.
 Selecting `payload` here is rejected because it owns memory. Reading metadata from
 an owned temporary requires first binding that temporary to an explicit local.
-These reads are not general field borrowing or lifetime-polymorphic references.
+For an owned field, use `borrow-owned-field` with an explicitly typed scoped view.
+Neither operation introduces an escaping lifetime-polymorphic reference.
 
 Metadata must be closed first-order data, such as I64, Bytes, or a closed ordinary
 nominal record. An open unconstrained or CaptureSafe parameter is insufficient.

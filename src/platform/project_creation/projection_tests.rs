@@ -434,7 +434,9 @@ fn visit_expression(
         ExpressionOperation::PackOwned { .. }
         | ExpressionOperation::UnpackOwned { .. }
         | ExpressionOperation::ChooseOwned { .. }
-        | ExpressionOperation::MatchOwned { .. } => {
+        | ExpressionOperation::MatchOwned { .. }
+        | ExpressionOperation::BorrowOwnedField { .. }
+        | ExpressionOperation::MatchBorrowedOwned { .. } => {
             panic!("owned products are outside the ordinary web template projection");
         }
         ExpressionOperation::If {

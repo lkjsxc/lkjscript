@@ -46,14 +46,14 @@ consumes the parent, binds every field exactly once, and introduces simultaneous
 disjoint lexical identities visible only in its body. Binding annotations must
 match the complete product shape. The consumed parent cannot be used again. Fields
 left unused drop at lexical exit; nested children transfer without cloning their
-storage. The operation has no partial-move form or borrowed owned-child projection.
-Unpacking a loan remains invalid.
+storage. The operation has no partial-move form. Unpacking a loan remains invalid;
+[scoped child reads](owned-borrows.md) inspect an owned field without consuming it.
 
 ### Closed ordinary metadata reads (development 0.1.63)
 
 `(field (local packet) (name tag))` reads a closed ordinary field through a short
 whole-product read loan. The source must be an exact live owning local or a live
-borrowed parameter of the exact product type. A generic product can contain scoped
+borrowed parameter/view of the exact product type. A generic product can contain scoped
 Owned parameters while its selected metadata remains closed ordinary data. Direct
 reads, helper calls and synchronous reborrows leave the original ownership rights
 unchanged. A later complete move or unpack remains possible after the read returns.
@@ -67,6 +67,16 @@ explicitly before inspecting it. Ordinary record projections retain their behavi
 
 Accepted source, independent public witnesses and the separate distribution
 boundary are recorded in the [metadata continuation](../campaigns/20261001-owned-product-metadata.md).
+
+### Scoped owned-field reads
+
+`borrow-owned-field` selects one direct owned field from an exact live owning or
+borrowed local. Its borrowed binding is visible only in the body. A whole-source
+guard and every ancestor custodian remain live until that body exits. Nested
+inspection, synchronous reborrowing and exact pure borrowed implementation methods
+are supported; consumption and escape reject. The body may return an unrelated
+owner and perform normally authorized effects. See [owned child borrowing](owned-borrows.md)
+for exact syntax, active-scope tail-call barriers and ordered cleanup.
 
 Unchanged native drafts retain accepted bodies. Same-kind literal-only edits traverse
 pack fields in authored order and unpack source/body slots, then compare the complete
@@ -135,9 +145,11 @@ source acceptance does not establish a public binary release.
 Development 0.1.64 also admits [owned choices](owned-choices.md) as explicit owned
 product children. Both composite forms share bounded mixed-depth validation and
 iterative cleanup; ordinary record/Option/Result containment remains rejected.
-The current compiler/bytecode/artifact cut is 18/14/25; the historical 0.1.63
+The choice increment selected compiler/bytecode/artifact cut 18/14/25; the historical 0.1.63
 encoding paragraph above describes that increment's exact source, not current
 permission to execute its derived artifacts.
+The [child-borrow contract](owned-borrows.md#encodings-and-evidence) owns subsequent
+scope-operation, borrowed-binding and derived-layout cuts.
 
 See the [native guide](../guides/native-owned-products.md) and
 [campaign](../campaigns/20261001-owned-products.md) for literal programs, actual

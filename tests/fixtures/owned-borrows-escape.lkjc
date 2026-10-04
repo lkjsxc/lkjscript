@@ -1,0 +1,10 @@
+declarations.begin
+(units
+  (module create escaped-owned-view
+    (function create escape (visibility public) (effect pure)
+      (type-parameter create T (constraint owned))
+      (parameter create packet (type (owned-product (field payload T))) (use consume))
+      (returns T)
+      (body (borrow-owned-field (type (owned-product (field payload T))) (local packet)
+        (field payload (binding view (type T))) (in (local view)))))))
+declarations.end

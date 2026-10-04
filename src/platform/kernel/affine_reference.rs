@@ -243,7 +243,8 @@ impl Reference<'_> {
                 self.plain(*value, live)?;
                 Ok(Value::Plain)
             }
-            ExpressionOperation::MatchOwned { source, arms, .. } => {
+            ExpressionOperation::MatchOwned { source, arms, .. }
+            | ExpressionOperation::MatchBorrowedOwned { source, arms, .. } => {
                 self.plain(*source, live)?;
                 let before = live.clone();
                 let mut joined = None;
@@ -268,7 +269,8 @@ impl Reference<'_> {
                 }
                 Ok(Value::Plain)
             }
-            ExpressionOperation::UnpackOwned { source, body, .. } => {
+            ExpressionOperation::UnpackOwned { source, body, .. }
+            | ExpressionOperation::BorrowOwnedField { source, body, .. } => {
                 self.plain(*source, live)?;
                 self.eval(*body, live)
             }

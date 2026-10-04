@@ -330,6 +330,7 @@ impl<'a> Reader<'a> {
         };
         use AuthoredExpressionOperation as A;
         use k::ExpressionOperation as E;
+        let borrowed_choice = matches!(expression.operation, E::MatchBorrowedOwned { .. });
         let operation = match expression.operation {
             E::Parallel { left, right } => A::Parallel {
                 left: Box::new(self.expression_at(left, depth + 1)?),
@@ -387,6 +388,11 @@ impl<'a> Reader<'a> {
                 choice_type,
                 source,
                 arms,
+            }
+            | E::MatchBorrowedOwned {
+                choice_type,
+                source,
+                arms,
             } => {
                 let mut authored = Vec::new();
                 for arm in arms {
@@ -404,10 +410,20 @@ impl<'a> Reader<'a> {
                         self.expression_at(arm.body, depth + 1)?,
                     ));
                 }
-                A::MatchOwned {
-                    choice_type: self.ty(choice_type)?,
-                    source: Box::new(self.expression_at(source, depth + 1)?),
-                    arms: authored,
+                let choice_type = self.ty(choice_type)?;
+                let source = Box::new(self.expression_at(source, depth + 1)?);
+                if borrowed_choice {
+                    A::MatchBorrowedOwned {
+                        choice_type,
+                        source,
+                        arms: authored,
+                    }
+                } else {
+                    A::MatchOwned {
+                        choice_type,
+                        source,
+                        arms: authored,
+                    }
                 }
             }
             E::PackOwned {
@@ -445,6 +461,19 @@ impl<'a> Reader<'a> {
                     body: Box::new(self.expression_at(body, depth + 1)?),
                 }
             }
+            E::BorrowOwnedField {
+                product_type,
+                source,
+                field,
+                binding,
+                body,
+            } => A::BorrowOwnedField {
+                product_type: self.ty(product_type)?,
+                source: Box::new(self.expression_at(source, depth + 1)?),
+                field,
+                binding: Box::new(self.binding_definition(binding)?),
+                body: Box::new(self.expression_at(body, depth + 1)?),
+            },
             E::Let { bindings, body } => {
                 let mut authored = Vec::new();
                 for id in bindings {

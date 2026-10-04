@@ -11,6 +11,8 @@ mod byte_buffer_tests;
 mod effect_tests;
 #[path = "generic_resource_tests.rs"]
 mod generic_resource_tests;
+#[path = "owned_borrow_admission_tests.rs"]
+mod owned_borrow_admission_tests;
 #[path = "owned_closure_tests.rs"]
 mod owned_closure_tests;
 #[path = "owned_effect_admission_tests.rs"]
@@ -1080,6 +1082,16 @@ fn compiler_unit_decoder_rejects_foreign_identity_predecessor_and_bad_dense_inde
             "packed_contract"
         );
     }
+
+    let mut previous = receipt.bytes.clone();
+    previous[..8].copy_from_slice(b"LKJCUN23");
+    let previous_key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &previous);
+    assert_eq!(
+        CompilationUnit::decode(&previous, previous_key)
+            .expect_err("the scoped-read compiler cut requires rebuilding prior units")
+            .code,
+        "compiler_unit_contract"
+    );
 
     let mut invalid = receipt.unit;
     let CompilationPayload::Function { code, .. } = &mut invalid.payload else {
@@ -2219,6 +2231,16 @@ fn graph11_artifact_rejects_predecessor_corruption_and_inexact_closures() {
             "artifact_bundle_contract"
         );
     }
+
+    let mut previous = linked.artifact.bytes.clone();
+    previous[..8].copy_from_slice(b"LKJART30");
+    previous[8..10].copy_from_slice(&30_u16.to_be_bytes());
+    assert_eq!(
+        load_artifact(&previous)
+            .expect_err("the scoped-read artifact cut requires rebuilding prior artifacts")
+            .code,
+        "artifact_bundle_contract"
+    );
 
     let mut wrong_manifest = linked.artifact.bytes.clone();
     wrong_manifest[28] ^= 0x80;

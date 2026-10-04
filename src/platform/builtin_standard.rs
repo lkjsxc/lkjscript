@@ -1,6 +1,6 @@
 //! Exact first-party standard package material embedded in the released executable.
 //!
-//! The maintained Graph 17 package owns both generated assets. This module validates the complete
+//! The maintained standard package owns both generated assets. This module validates the complete
 //! package transport and artifact closure before exposing either one to project creation, linking,
 //! inspection, or export.
 
@@ -34,9 +34,9 @@ const STANDARD_PACKAGE: &str = "pkg_10000000000000000000000000000001";
 const STANDARD_SEMANTIC_REVISION: &str =
     "rev_85b2be44a8deca911fc6bdf4efdd4fb7b510f53e4a39723fbee263dff4b3a9b2";
 const STANDARD_PACKAGE_REVISION: &str =
-    "package_revision_7eaa419b59b682163b0d222be02ca67a952b6a51d3d5ce4f103ae9b0b19bde24";
+    "package_revision_6d89e8556d3cdebdbc2140a026fd5f4be62fee23f041d74c02a2d976840a8c70";
 const STANDARD_PACKAGE_TRANSPORT: &str =
-    "package_transport_c4a39f3ecac40b6a24fc4da08cf7b67fe29fc2803355b8add776d6982a32df17";
+    "package_transport_22b980d4d7d017905cb3a57cbd1e0dccbd722bc7b10cc0e139cda6d0aa574cd8";
 const COMMAND_TEXT_FROM_STATIC: &str = "text-from-static";
 const COMMAND_TEXT_FROM_STATIC_IMPLEMENTATION: &str = "core.text.from-static";
 const HTTP_BYTES_FROM_TEXT: &str = "bytes-from-text";

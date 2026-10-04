@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-23";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 23;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-18";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 18;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN23";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v23";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v23";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-24";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 24;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-19";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 19;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN24";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v24";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v24";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -96,6 +96,8 @@ impl CompilationUnitKey {
             "lkjscript.compiler-unit-key.v21"
         } else if compiler_contract_version == 22 {
             "lkjscript.compiler-unit-key.v22"
+        } else if compiler_contract_version == 23 {
+            "lkjscript.compiler-unit-key.v23"
         } else {
             COMPILER_UNIT_KEY_DOMAIN
         });
@@ -443,6 +445,30 @@ pub enum CompiledInstruction {
         right_arguments: u32,
         result_type: u32,
     },
+    /// Enter a lexical read loan without removing the source local's custody.
+    BorrowOwnedField {
+        product_type: u32,
+        source_local: u32,
+        field: u32,
+        binding_local: u32,
+        binding_type: u32,
+    },
+    MatchBorrowedOwned {
+        choice_type: u32,
+        source_local: u32,
+        cases: Vec<CompiledBorrowedOwnedChoiceJump>,
+    },
+    /// Clear the scoped child before releasing its parent loan; preserve the body result.
+    EndOwnedBorrow {
+        binding_local: u32,
+    },
+}
+
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+pub struct CompiledBorrowedOwnedChoiceJump {
+    pub target: u32,
+    pub binding_local: u32,
+    pub binding_type: u32,
 }
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
@@ -536,7 +562,7 @@ impl CompilationUnit {
                 "compiler-unit bytes disagree with their exact object-domain digest",
             ));
         }
-        // Derived generations 10–22 require a rebuild from supported canonical owners.
+        // Derived generations 10–23 require a rebuild from supported canonical owners.
         // Refuse before decoding; old bytes never acquire current instruction meaning.
         if [
             b"LKJCUN10",
@@ -552,6 +578,7 @@ impl CompilationUnit {
             b"LKJCUN20",
             b"LKJCUN21",
             b"LKJCUN22",
+            b"LKJCUN23",
         ]
         .iter()
         .any(|magic| bytes.starts_with(*magic))
@@ -587,7 +614,7 @@ impl CompilationUnit {
                 self.bytecode_contract_version,
                 self.graph_contract_version
             ),
-            (23, 18, 23)
+            (24, 19, 24)
         ) {
             return Err(unit_error(
                 DiagnosticClass::Source,
@@ -1314,7 +1341,8 @@ impl CompiledCode {
         for instruction in &self.instructions {
             instruction.validate(self, tables)?;
         }
-        verify_stack(self)
+        let depths = verify_stack(self)?;
+        verify_owned_borrow_scopes(self, &depths)
     }
 }
 
@@ -1336,6 +1364,84 @@ impl CompiledInstruction {
             }
         }
         match self {
+            Self::BorrowOwnedField {
+                product_type,
+                source_local,
+                field,
+                binding_local,
+                binding_type,
+            } => {
+                require_index("borrowed product type", *product_type, tables.types.len())?;
+                require_index(
+                    "borrowed source local",
+                    *source_local,
+                    code.local_count as usize,
+                )?;
+                require_index(
+                    "borrowed field",
+                    *field,
+                    crate::platform::kernel::contract::MAXIMUM_CHILDREN,
+                )?;
+                require_index(
+                    "borrowed binding local",
+                    *binding_local,
+                    code.local_count as usize,
+                )?;
+                require_index("borrowed binding type", *binding_type, tables.types.len())?;
+                if source_local == binding_local || *binding_local < code.parameter_count {
+                    return Err(unit_corrupt(
+                        "compiler_unit_borrow_local",
+                        "scoped read binding must have a distinct lexical destination",
+                    ));
+                }
+                Ok(())
+            }
+            Self::MatchBorrowedOwned {
+                choice_type,
+                source_local,
+                cases,
+            } => {
+                require_index("borrowed choice type", *choice_type, tables.types.len())?;
+                require_index(
+                    "borrowed source local",
+                    *source_local,
+                    code.local_count as usize,
+                )?;
+                require_item_count("borrowed choice cases", cases.len(), false)?;
+                let mut locals = BTreeSet::new();
+                for case in cases {
+                    require_index(
+                        "borrowed choice target",
+                        case.target,
+                        code.instructions.len(),
+                    )?;
+                    require_index(
+                        "borrowed choice binding",
+                        case.binding_local,
+                        code.local_count as usize,
+                    )?;
+                    require_index(
+                        "borrowed choice binding type",
+                        case.binding_type,
+                        tables.types.len(),
+                    )?;
+                    if case.binding_local == *source_local
+                        || case.binding_local < code.parameter_count
+                        || !locals.insert(case.binding_local)
+                    {
+                        return Err(unit_corrupt(
+                            "compiler_unit_borrow_local",
+                            "borrowed choice arms require distinct lexical destinations",
+                        ));
+                    }
+                }
+                Ok(())
+            }
+            Self::EndOwnedBorrow { binding_local } => require_index(
+                "borrowed binding local",
+                *binding_local,
+                code.local_count as usize,
+            ),
             Self::ChooseOwned { choice_type, case } => {
                 require_index("owned choice type", *choice_type, tables.types.len())?;
                 require_index(
@@ -1749,7 +1855,7 @@ fn require_runtime_count(label: &str, count: u32) -> Result<(), Diagnostic> {
     Ok(())
 }
 
-fn verify_stack(code: &CompiledCode) -> Result<(), Diagnostic> {
+fn verify_stack(code: &CompiledCode) -> Result<Vec<usize>, Diagnostic> {
     // Persistent, bounded binding states avoid copying an operand bitmap at every instruction.
     // A live binding protects its callee and admitted prefix from ordinary stack consumers.
     #[derive(Clone, Copy)]
@@ -1888,6 +1994,13 @@ fn verify_stack(code: &CompiledCode) -> Result<(), Diagnostic> {
                         .map(|case| (case.target as usize, next_depth, next_binding)),
                 );
             }
+            CompiledInstruction::MatchBorrowedOwned { cases, .. } => {
+                pending.extend(
+                    cases
+                        .iter()
+                        .map(|case| (case.target as usize, next_depth, next_binding)),
+                );
+            }
             CompiledInstruction::SwitchVariant(arms) => {
                 pending.extend(
                     arms.iter()
@@ -1903,6 +2016,244 @@ fn verify_stack(code: &CompiledCode) -> Result<(), Diagnostic> {
             "compiled code contains an unreachable instruction",
         ));
     }
+    Ok(depths
+        .into_iter()
+        .flatten()
+        .map(|(depth, _)| depth)
+        .collect())
+}
+
+/// Admit lexical loan custody independently of operand-stack shape. Persistent scope nodes
+/// keep branch states small; every traversal, including rejected input, shares a finite bound.
+fn verify_owned_borrow_scopes(code: &CompiledCode, depths: &[usize]) -> Result<(), Diagnostic> {
+    verify_owned_borrow_scopes_with_limit(
+        code,
+        depths,
+        crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
+    )
+}
+
+fn verify_owned_borrow_scopes_with_limit(
+    code: &CompiledCode,
+    depths: &[usize],
+    mut remaining: usize,
+) -> Result<(), Diagnostic> {
+    #[derive(Clone, Copy)]
+    struct Scope {
+        parent: Option<usize>,
+        source: u32,
+        binding: u32,
+        entry_depth: usize,
+    }
+    let mut reserve = || {
+        remaining = remaining.checked_sub(1).ok_or_else(|| {
+            unit_error(
+                DiagnosticClass::Resource,
+                "compiler_unit_borrow_work",
+                "lexical loan admission exceeds the validation work bound",
+            )
+        })?;
+        Ok::<_, Diagnostic>(())
+    };
+    let mut scopes = Vec::<Scope>::new();
+    let mut pending = vec![(0_usize, None::<usize>)];
+    let mut states = vec![None::<Option<usize>>; code.instructions.len()];
+    while let Some((index, active)) = pending.pop() {
+        reserve()?;
+        let slot = states.get_mut(index).ok_or_else(|| {
+            unit_corrupt(
+                "compiler_unit_borrow_control",
+                "lexical loan reaches beyond the instruction stream",
+            )
+        })?;
+        if let Some(previous) = *slot {
+            if previous != active {
+                return Err(unit_corrupt(
+                    "compiler_unit_borrow_merge",
+                    "control-flow paths merge with different active lexical loans",
+                ));
+            }
+            continue;
+        }
+        *slot = Some(active);
+        let instruction = &code.instructions[index];
+        let depth = depths[index];
+        if let Some(scope) = active.map(|node| scopes[node]) {
+            let (consumed, _) = stack_effect(instruction)?;
+            if depth - consumed < scope.entry_depth {
+                return Err(unit_corrupt(
+                    "compiler_unit_borrow_stack_prefix",
+                    "lexical read body consumes its enclosing operand prefix",
+                ));
+            }
+        }
+        let mut next = active;
+        let enters = match instruction {
+            CompiledInstruction::BorrowOwnedField {
+                source_local,
+                binding_local,
+                ..
+            } => Some((*source_local, *binding_local)),
+            _ => None,
+        };
+        // A forged assignment or consuming load cannot destroy any ancestor custody. The
+        // canonical correspondence check additionally verifies exact types and view uses.
+        let destinations: &[u32] = match instruction {
+            CompiledInstruction::UnpackOwned { locals, .. } => locals,
+            _ => &[],
+        };
+        let changed = match instruction {
+            CompiledInstruction::StoreLocal(local)
+            | CompiledInstruction::LoadLocal {
+                local,
+                use_mode: ParameterUse::Consume,
+            }
+            | CompiledInstruction::BeginTransaction { binding: local, .. }
+            | CompiledInstruction::BeginParameterTransaction { binding: local, .. }
+            | CompiledInstruction::BeginTransactionOutcome { binding: local, .. }
+            | CompiledInstruction::CommitTransaction { binding: local, .. }
+            | CompiledInstruction::CommitParameterTransaction { binding: local, .. }
+            | CompiledInstruction::CommitTransactionOutcome { binding: local, .. } => Some(*local),
+            _ => None,
+        };
+        if changed.is_some() || !destinations.is_empty() || enters.is_some() {
+            let mut ancestor = active;
+            while let Some(scope) = ancestor.map(|node| scopes[node]) {
+                reserve()?;
+                let mut writes_custody = false;
+                for local in destinations {
+                    reserve()?;
+                    if *local == scope.source || *local == scope.binding {
+                        writes_custody = true;
+                        break;
+                    }
+                }
+                if changed.is_some_and(|local| local == scope.source || local == scope.binding)
+                    || writes_custody
+                    || enters.is_some_and(|(_, binding)| {
+                        binding == scope.source || binding == scope.binding
+                    })
+                {
+                    return Err(unit_corrupt(
+                        "compiler_unit_borrow_custody",
+                        "compiled instruction overwrites or consumes an active lexical loan",
+                    ));
+                }
+                ancestor = scope.parent;
+            }
+        }
+        if let Some((source, binding)) = enters {
+            reserve()?;
+            require_item_count("lexical loan scope states", scopes.len() + 1, false)?;
+            next = Some(scopes.len());
+            scopes.push(Scope {
+                parent: active,
+                source,
+                binding,
+                entry_depth: depth,
+            });
+        }
+        match instruction {
+            CompiledInstruction::EndOwnedBorrow { binding_local } => {
+                let scope = active
+                    .map(|node| scopes[node])
+                    .filter(|scope| scope.binding == *binding_local)
+                    .ok_or_else(|| {
+                        unit_corrupt(
+                            "compiler_unit_borrow_end",
+                            "lexical loan end must release its exact innermost binding",
+                        )
+                    })?;
+                if depth != scope.entry_depth + 1 {
+                    return Err(unit_corrupt(
+                        "compiler_unit_borrow_result_stack",
+                        "lexical read body must leave exactly one independent result above its enclosing prefix",
+                    ));
+                }
+                pending.push((index + 1, scope.parent));
+            }
+            CompiledInstruction::MatchBorrowedOwned {
+                source_local,
+                cases,
+                ..
+            } => {
+                for case in cases {
+                    reserve()?;
+                    let mut ancestor = active;
+                    while let Some(scope) = ancestor.map(|node| scopes[node]) {
+                        reserve()?;
+                        if case.binding_local == scope.source || case.binding_local == scope.binding
+                        {
+                            return Err(unit_corrupt(
+                                "compiler_unit_borrow_custody",
+                                "borrowed choice binding overwrites active loan custody",
+                            ));
+                        }
+                        ancestor = scope.parent;
+                    }
+                    let scope = scopes.len();
+                    require_item_count("lexical loan scope states", scope + 1, false)?;
+                    scopes.push(Scope {
+                        parent: active,
+                        source: *source_local,
+                        binding: case.binding_local,
+                        entry_depth: depth,
+                    });
+                    pending.push((case.target as usize, Some(scope)));
+                }
+            }
+            CompiledInstruction::Return if active.is_some() => {
+                return Err(unit_corrupt(
+                    "compiler_unit_borrow_escape",
+                    "compiled return leaves an active lexical loan",
+                ));
+            }
+            CompiledInstruction::Return => {}
+            CompiledInstruction::Jump(target) => pending.push((*target as usize, next)),
+            CompiledInstruction::JumpIfFalse(target) => {
+                pending.push((*target as usize, next));
+                pending.push((index + 1, next));
+            }
+            CompiledInstruction::MatchOwned { cases, .. } => {
+                for case in cases {
+                    reserve()?;
+                    let mut ancestor = active;
+                    while let Some(scope) = ancestor.map(|node| scopes[node]) {
+                        reserve()?;
+                        if case.binding_local == scope.source || case.binding_local == scope.binding
+                        {
+                            return Err(unit_corrupt(
+                                "compiler_unit_borrow_custody",
+                                "owned choice binding overwrites active loan custody",
+                            ));
+                        }
+                        ancestor = scope.parent;
+                    }
+                    pending.push((case.target as usize, next));
+                }
+            }
+            CompiledInstruction::SwitchVariant(arms) => {
+                for arm in arms {
+                    reserve()?;
+                    if let Some(binding) = arm.binding_local {
+                        let mut ancestor = active;
+                        while let Some(scope) = ancestor.map(|node| scopes[node]) {
+                            reserve()?;
+                            if binding == scope.source || binding == scope.binding {
+                                return Err(unit_corrupt(
+                                    "compiler_unit_borrow_custody",
+                                    "variant payload binding overwrites active loan custody",
+                                ));
+                            }
+                            ancestor = scope.parent;
+                        }
+                    }
+                    pending.push((arm.target as usize, next));
+                }
+            }
+            _ => pending.push((index + 1, next)),
+        }
+    }
     Ok(())
 }
 
@@ -1917,6 +2268,9 @@ fn stack_effect(instruction: &CompiledInstruction) -> Result<(usize, usize), Dia
         })
     };
     Ok(match instruction {
+        CompiledInstruction::BorrowOwnedField { .. }
+        | CompiledInstruction::MatchBorrowedOwned { .. }
+        | CompiledInstruction::EndOwnedBorrow { .. } => (0, 0),
         CompiledInstruction::ChooseOwned { .. } => (1, 1),
         CompiledInstruction::MatchOwned { .. } => (1, 0),
         CompiledInstruction::PackOwned { fields, .. } => (fields.len(), 1),
@@ -2103,5 +2457,263 @@ mod binding_tests {
                 "{result:?}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod borrow_scope_tests {
+    use super::*;
+    use CompiledInstruction::*;
+
+    fn field(source_local: u32, binding_local: u32) -> CompiledInstruction {
+        BorrowOwnedField {
+            product_type: 0,
+            source_local,
+            field: 0,
+            binding_local,
+            binding_type: 0,
+        }
+    }
+
+    fn check(instructions: Vec<CompiledInstruction>) -> Result<(), Diagnostic> {
+        let code = CompiledCode {
+            parameter_count: 1,
+            local_count: 4,
+            instructions,
+        };
+        let depths = verify_stack(&code)?;
+        verify_owned_borrow_scopes(&code, &depths)
+    }
+
+    #[test]
+    fn lexical_loan_admission_preserves_nested_and_choice_scopes_across_merges() {
+        assert!(
+            check(vec![
+                field(0, 1),
+                Bool(true),
+                JumpIfFalse(7),
+                field(1, 2),
+                I64(1),
+                EndOwnedBorrow { binding_local: 2 },
+                Jump(8),
+                I64(2),
+                EndOwnedBorrow { binding_local: 1 },
+                Return,
+            ])
+            .is_ok()
+        );
+        assert!(
+            check(vec![
+                MatchBorrowedOwned {
+                    choice_type: 0,
+                    source_local: 0,
+                    cases: vec![
+                        CompiledBorrowedOwnedChoiceJump {
+                            target: 1,
+                            binding_local: 1,
+                            binding_type: 0
+                        },
+                        CompiledBorrowedOwnedChoiceJump {
+                            target: 4,
+                            binding_local: 2,
+                            binding_type: 0
+                        },
+                    ],
+                },
+                I64(3),
+                EndOwnedBorrow { binding_local: 1 },
+                Jump(7),
+                I64(4),
+                EndOwnedBorrow { binding_local: 2 },
+                Jump(7),
+                Return,
+            ])
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn lexical_loan_admission_rejects_missing_forged_and_out_of_order_guards() {
+        for (instructions, expected) in [
+            (
+                vec![field(0, 1), Unit, Return],
+                "compiler_unit_borrow_escape",
+            ),
+            (
+                vec![
+                    field(0, 1),
+                    Unit,
+                    EndOwnedBorrow { binding_local: 2 },
+                    Return,
+                ],
+                "compiler_unit_borrow_end",
+            ),
+            (
+                vec![Unit, EndOwnedBorrow { binding_local: 1 }, Return],
+                "compiler_unit_borrow_end",
+            ),
+            (
+                vec![
+                    field(0, 1),
+                    field(1, 2),
+                    Unit,
+                    EndOwnedBorrow { binding_local: 1 },
+                    EndOwnedBorrow { binding_local: 2 },
+                    Return,
+                ],
+                "compiler_unit_borrow_end",
+            ),
+            (
+                vec![
+                    field(0, 1),
+                    LoadLocal {
+                        local: 0,
+                        use_mode: ParameterUse::Consume,
+                    },
+                    Drop,
+                    Unit,
+                    EndOwnedBorrow { binding_local: 1 },
+                    Return,
+                ],
+                "compiler_unit_borrow_custody",
+            ),
+            (
+                vec![
+                    field(0, 1),
+                    Unit,
+                    StoreLocal(1),
+                    Unit,
+                    EndOwnedBorrow { binding_local: 1 },
+                    Return,
+                ],
+                "compiler_unit_borrow_custody",
+            ),
+            (
+                vec![
+                    field(0, 1),
+                    field(1, 1),
+                    Unit,
+                    EndOwnedBorrow { binding_local: 1 },
+                    EndOwnedBorrow { binding_local: 1 },
+                    Return,
+                ],
+                "compiler_unit_borrow_custody",
+            ),
+            (
+                vec![
+                    Bool(true),
+                    JumpIfFalse(4),
+                    field(0, 1),
+                    Jump(5),
+                    field(0, 2),
+                    Unit,
+                    EndOwnedBorrow { binding_local: 1 },
+                    Return,
+                ],
+                "compiler_unit_borrow_merge",
+            ),
+        ] {
+            let error = check(instructions).unwrap_err();
+            assert_eq!(error.code, expected, "{error:?}");
+        }
+    }
+
+    #[test]
+    fn lexical_loan_admission_rejects_branch_payload_writes_to_ancestor_custody() {
+        for branch in [
+            MatchOwned {
+                choice_type: 0,
+                cases: vec![CompiledOwnedChoiceJump {
+                    target: 3,
+                    binding_local: 1,
+                }],
+            },
+            SwitchVariant(vec![CompiledVariantJump {
+                case: 0,
+                target: 3,
+                binding_local: Some(0),
+            }]),
+        ] {
+            let error = check(vec![
+                field(0, 1),
+                Unit,
+                branch,
+                Unit,
+                EndOwnedBorrow { binding_local: 1 },
+                Return,
+            ])
+            .unwrap_err();
+            assert_eq!(error.code, "compiler_unit_borrow_custody", "{error:?}");
+        }
+    }
+
+    #[test]
+    fn lexical_loan_admission_binds_body_result_to_its_entry_operand_prefix() {
+        for (instructions, expected) in [
+            (
+                vec![
+                    I64(1),
+                    field(0, 1),
+                    Drop,
+                    I64(2),
+                    EndOwnedBorrow { binding_local: 1 },
+                    Return,
+                ],
+                "compiler_unit_borrow_stack_prefix",
+            ),
+            (
+                vec![
+                    I64(1),
+                    field(0, 1),
+                    EndOwnedBorrow { binding_local: 1 },
+                    Return,
+                ],
+                "compiler_unit_borrow_result_stack",
+            ),
+        ] {
+            let error = check(instructions).unwrap_err();
+            assert_eq!(error.code, expected, "{error:?}");
+        }
+    }
+
+    #[test]
+    fn lexical_loan_work_bound_distinguishes_exhaustion_from_nested_branch_corruption() {
+        let code = |destination| CompiledCode {
+            parameter_count: 1,
+            local_count: 4,
+            instructions: vec![
+                field(0, 1),
+                field(1, 2),
+                Unit,
+                MatchOwned {
+                    choice_type: 0,
+                    cases: vec![CompiledOwnedChoiceJump {
+                        target: 4,
+                        binding_local: destination,
+                    }],
+                },
+                Unit,
+                EndOwnedBorrow { binding_local: 2 },
+                EndOwnedBorrow { binding_local: 1 },
+                Return,
+            ],
+        };
+        let invalid = code(0);
+        let depths = verify_stack(&invalid).expect("the adversary has valid operand flow");
+        // The smaller allowance reaches the inner scope but cannot inspect the outer
+        // ancestor. One more step exposes the forbidden write instead of exhaustion.
+        let exhausted = verify_owned_borrow_scopes_with_limit(&invalid, &depths, 9).unwrap_err();
+        assert_eq!(exhausted.class, DiagnosticClass::Resource);
+        assert_eq!(exhausted.code, "compiler_unit_borrow_work");
+        let corrupt = verify_owned_borrow_scopes_with_limit(&invalid, &depths, 10).unwrap_err();
+        assert_eq!(corrupt.class, DiagnosticClass::Corrupt);
+        assert_eq!(corrupt.code, "compiler_unit_borrow_custody");
+
+        let valid = code(3);
+        let depths = verify_stack(&valid).unwrap();
+        assert!(verify_owned_borrow_scopes_with_limit(&valid, &depths, 14).is_ok());
+        let exhausted = verify_owned_borrow_scopes_with_limit(&valid, &depths, 13).unwrap_err();
+        assert_eq!(exhausted.class, DiagnosticClass::Resource);
+        assert_eq!(exhausted.code, "compiler_unit_borrow_work");
     }
 }

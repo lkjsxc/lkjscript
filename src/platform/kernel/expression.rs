@@ -41,6 +41,18 @@ impl ExpressionRecord {
                 ),
             ));
         }
+        if self.contract_version < 24
+            && matches!(
+                self.operation,
+                ExpressionOperation::BorrowOwnedField { .. }
+                    | ExpressionOperation::MatchBorrowedOwned { .. }
+            )
+        {
+            return Err(expression_error(
+                "kernel_borrow_generation",
+                "scoped owned-child reads require Graph 24",
+            ));
+        }
         if matches!(
             self.operation,
             ExpressionOperation::TransactionOutcome { .. }
@@ -124,9 +136,11 @@ impl ExpressionRecord {
     pub fn type_roots(&self) -> Vec<TypeObjectDigest> {
         match &self.operation {
             ExpressionOperation::ChooseOwned { choice_type, .. }
-            | ExpressionOperation::MatchOwned { choice_type, .. } => vec![*choice_type],
+            | ExpressionOperation::MatchOwned { choice_type, .. }
+            | ExpressionOperation::MatchBorrowedOwned { choice_type, .. } => vec![*choice_type],
             ExpressionOperation::PackOwned { product_type, .. }
-            | ExpressionOperation::UnpackOwned { product_type, .. } => vec![*product_type],
+            | ExpressionOperation::UnpackOwned { product_type, .. }
+            | ExpressionOperation::BorrowOwnedField { product_type, .. } => vec![*product_type],
             ExpressionOperation::ImplementationCall { type_arguments, .. }
             | ExpressionOperation::Call { type_arguments, .. }
             | ExpressionOperation::FunctionValue { type_arguments, .. }
@@ -286,6 +300,18 @@ pub enum ExpressionOperation {
     Parallel {
         left: ExpressionId,
         right: ExpressionId,
+    },
+    BorrowOwnedField {
+        product_type: TypeObjectDigest,
+        source: ExpressionId,
+        field: Name,
+        binding: BindingId,
+        body: ExpressionId,
+    },
+    MatchBorrowedOwned {
+        choice_type: TypeObjectDigest,
+        source: ExpressionId,
+        arms: Vec<OwnedChoiceArm>,
     },
 }
 
@@ -471,7 +497,8 @@ pub enum ExpressionChildRole {
 fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic> {
     match operation {
         ExpressionOperation::ChooseOwned { .. } => {}
-        ExpressionOperation::MatchOwned { arms, .. } => {
+        ExpressionOperation::MatchOwned { arms, .. }
+        | ExpressionOperation::MatchBorrowedOwned { arms, .. } => {
             require_count("owned choice arms", arms.len(), false)?;
             require_unique("owned choice binding", arms.iter().map(|arm| arm.binding))?;
             if arms.windows(2).any(|pair| pair[0].name >= pair[1].name) {
@@ -647,6 +674,7 @@ fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic>
             require_count("capability arguments", arguments.len(), true)?;
         }
         ExpressionOperation::Unit {}
+        | ExpressionOperation::BorrowOwnedField { .. }
         | ExpressionOperation::Bool { .. }
         | ExpressionOperation::I64 { .. }
         | ExpressionOperation::F64 { .. }
@@ -716,7 +744,8 @@ fn expression_children(operation: &ExpressionOperation) -> Vec<ExpressionChild> 
                 0,
             );
         }
-        ExpressionOperation::MatchOwned { source, arms, .. } => {
+        ExpressionOperation::MatchOwned { source, arms, .. }
+        | ExpressionOperation::MatchBorrowedOwned { source, arms, .. } => {
             push_child(
                 &mut children,
                 *source,
@@ -742,7 +771,8 @@ fn expression_children(operation: &ExpressionOperation) -> Vec<ExpressionChild> 
                 );
             }
         }
-        ExpressionOperation::UnpackOwned { source, body, .. } => {
+        ExpressionOperation::UnpackOwned { source, body, .. }
+        | ExpressionOperation::BorrowOwnedField { source, body, .. } => {
             push_child(
                 &mut children,
                 *source,

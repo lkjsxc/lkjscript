@@ -597,6 +597,208 @@ fn standalone(body: &str) -> String {
     )
 }
 
+fn owned_borrow_standalone(body: &str, source_type: &str) -> String {
+    format!(
+        "request base={}\nexpression.block as=$body\n{body}\nexpression.end\n{}",
+        RevisionId::from_digest([7; 32]),
+        owned_borrow_declarations(source_type),
+    )
+}
+
+fn owned_borrow_declarations(source_type: &str) -> String {
+    format!(
+        "create.module as=$module name=scoped-owned-read\n\
+create.function as=$reader module=$module name=reader visibility=private result=i64 effect=pure body=$body\n\
+add.parameter as=$source function=$reader name=source type={source_type}\n\
+type.byte-buffer as=@Payload\n\
+type.owned-product as=@Carrier\n\
+type.field parent=@Carrier index=0 name=payload type=@Payload\n\
+type.owned-choice as=@Choice\n\
+type.case parent=@Choice index=0 name=accepted type=i64\n\
+type.case parent=@Choice index=1 name=rejected type=@Payload\n"
+    )
+}
+
+#[test]
+fn structural_owned_field_borrow_matches_independent_flat_binding_and_body() {
+    let flat = format!(
+        "request base={}\n\
+expression.borrow-owned-field as=$body type=@Carrier source=$read-source field=payload body=$read-view\n\
+expression.owned-binding parent=$body index=0 field-name=payload as=$child name=view type=@Payload\n\
+expression.local as=$read-source value=$source\n\
+expression.local as=$read-view value=$child\n{}",
+        RevisionId::from_digest([7; 32]),
+        owned_borrow_declarations("@Carrier"),
+    );
+    let block = owned_borrow_standalone(
+        "(borrow-owned-field (type @Carrier) (local $source) (field payload (binding view (as $child) (type @Payload))) (in (local view)))",
+        "@Carrier",
+    );
+    let (_, decoded) = assert_intent_pair(&flat, &block);
+    let AuthoredChange::CreateFunction { body, .. } = &decoded.semantic.changes[1] else {
+        panic!("reader function")
+    };
+    let AuthoredExpressionOperation::BorrowOwnedField {
+        field,
+        binding,
+        body,
+        ..
+    } = &body.operation
+    else {
+        panic!("owned field borrow")
+    };
+    assert_eq!(field.as_str(), "payload");
+    assert_eq!(binding.symbol, "$child");
+    assert!(
+        matches!(&body.operation, AuthoredExpressionOperation::Local { value: AuthoredLocalReference::Symbol { symbol } } if symbol == &binding.symbol)
+    );
+    let implicit = decode(
+        "implicit-owned-borrow.lkjc",
+        &block.replace("(as $child) ", ""),
+    );
+    assert_eq!(decoded.request_commitment, implicit.request_commitment);
+}
+
+#[test]
+fn structural_borrowed_choice_matches_flat_arms_and_preserves_exact_binder_aliases() {
+    let flat = format!(
+        "request base={}\n\
+expression.match-borrowed-owned as=$body type=@Choice source=$read-source\n\
+expression.choice-arm parent=$body index=0 case=accepted as=$accepted name=value type=i64 body=$accepted-body\n\
+expression.choice-arm parent=$body index=1 case=rejected as=$rejected name=value type=@Payload body=$rejected-body\n\
+expression.local as=$read-source value=$source\n\
+expression.local as=$accepted-body value=$accepted\n\
+expression.local as=$rejected-body value=$rejected\n{}",
+        RevisionId::from_digest([7; 32]),
+        owned_borrow_declarations("@Choice"),
+    );
+    let block = owned_borrow_standalone(
+        "(match-borrowed-owned (type @Choice) (local $source) (case accepted (binding value (type i64) (as $accepted)) (in (local value))) (case rejected (binding value (as $rejected) (type @Payload)) (in (local value))))",
+        "@Choice",
+    );
+    let (_, decoded) = assert_intent_pair(&flat, &block);
+    let AuthoredChange::CreateFunction { body, .. } = &decoded.semantic.changes[1] else {
+        panic!("reader function")
+    };
+    let AuthoredExpressionOperation::MatchBorrowedOwned { arms, .. } = &body.operation else {
+        panic!("borrowed choice match")
+    };
+    assert_eq!(arms.len(), 2);
+    for ((case, binding, body), (expected_case, expected_alias)) in arms
+        .iter()
+        .zip([("accepted", "$accepted"), ("rejected", "$rejected")])
+    {
+        assert_eq!(case.as_str(), expected_case);
+        assert_eq!(binding.symbol, expected_alias);
+        assert!(
+            matches!(&body.operation, AuthoredExpressionOperation::Local { value: AuthoredLocalReference::Symbol { symbol } } if symbol == &binding.symbol)
+        );
+    }
+}
+
+#[test]
+fn structural_owned_borrow_sources_precede_shadowing_and_scopes_restore_outer_locals() {
+    let input = owned_borrow_standalone(
+        "(let (binding source (local $source)) (in (sequence (borrow-owned-field (type @Carrier) (local source) (field payload (binding source (type @Payload))) (in (local source))) (match-borrowed-owned (type @Choice) (local source) (case accepted (binding source (type i64)) (in (local source))) (case rejected (binding source (type @Payload)) (in (local source)))) (local source))))",
+        "@Carrier",
+    );
+    let decoded = decode("owned-borrow-shadowing.lkjc", &input);
+    let AuthoredChange::CreateFunction { body, .. } = &decoded.semantic.changes[1] else {
+        panic!("reader function")
+    };
+    let AuthoredExpressionOperation::Let { bindings, body } = &body.operation else {
+        panic!("outer binding")
+    };
+    let outer = &bindings[0].symbol;
+    let AuthoredExpressionOperation::Sequence { items } = &body.operation else {
+        panic!("sequence")
+    };
+    let AuthoredExpressionOperation::BorrowOwnedField {
+        source,
+        binding,
+        body,
+        ..
+    } = &items[0].operation
+    else {
+        panic!("owned field borrow")
+    };
+    assert_ne!(&binding.symbol, outer);
+    assert!(
+        matches!(&source.operation, AuthoredExpressionOperation::Local { value: AuthoredLocalReference::Symbol { symbol } } if symbol == outer)
+    );
+    assert!(
+        matches!(&body.operation, AuthoredExpressionOperation::Local { value: AuthoredLocalReference::Symbol { symbol } } if symbol == &binding.symbol)
+    );
+    let AuthoredExpressionOperation::MatchBorrowedOwned { source, arms, .. } = &items[1].operation
+    else {
+        panic!("borrowed choice match")
+    };
+    assert!(
+        matches!(&source.operation, AuthoredExpressionOperation::Local { value: AuthoredLocalReference::Symbol { symbol } } if symbol == outer)
+    );
+    assert_ne!(arms[0].1.symbol, arms[1].1.symbol);
+    for (_, binding, body) in arms {
+        assert_ne!(&binding.symbol, outer);
+        assert!(
+            matches!(&body.operation, AuthoredExpressionOperation::Local { value: AuthoredLocalReference::Symbol { symbol } } if symbol == &binding.symbol)
+        );
+    }
+    assert!(
+        matches!(&items[2].operation, AuthoredExpressionOperation::Local { value: AuthoredLocalReference::Symbol { symbol } } if symbol == outer)
+    );
+}
+
+#[test]
+fn structural_owned_borrow_rejects_missing_annotations_bad_shapes_and_leaked_bindings() {
+    for body in [
+        "(borrow-owned-field (type @Carrier) (local $source) (field payload (binding view)) (in (unit)))",
+        "(borrow-owned-field (type @Carrier) (local $source) (field payload (binding view (type @Payload))) (field extra (binding other (type @Payload))) (in (unit)))",
+        "(borrow-owned-field (type @Carrier) (local $source) (field payload (binding view (type @Payload))) (body (unit)))",
+        "(borrow-owned-field (type @Carrier) (local view) (field payload (binding view (type @Payload))) (in (unit)))",
+        "(sequence (borrow-owned-field (type @Carrier) (local $source) (field payload (binding view (type @Payload))) (in (unit))) (local view))",
+        "(borrow-owned-field (type @Carrier) (local $source) (field payload (binding view (as $first) (as $second) (type @Payload))) (in (unit)))",
+        "(match-borrowed-owned (type @Choice) (local $source) (case accepted (binding value) (in (unit))))",
+        "(match-borrowed-owned (type @Choice) (local $source) (case accepted (binding first (type i64)) (in (unit))) (case rejected (binding second (type @Payload)) (in (local first))))",
+        "(sequence (match-borrowed-owned (type @Choice) (local $source) (case accepted (binding view (type i64)) (in (unit)))) (local view))",
+    ] {
+        let errors = decode_compact_change(
+            "malformed-owned-borrow.lkjc",
+            owned_borrow_standalone(body, "@Carrier").as_bytes(),
+        )
+        .unwrap_err();
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.location.as_ref().is_some_and(|location| {
+                    location.path == "malformed-owned-borrow.lkjc" && location.line == 3
+                })),
+            "{body}: {errors:#?}"
+        );
+    }
+}
+
+#[test]
+fn flat_owned_borrow_preflight_admits_complete_source_and_arm_dependencies() {
+    let header = format!("request base={}\n", RevisionId::from_digest([7; 32]));
+    let declarations = owned_borrow_declarations("@Carrier");
+    for body in [
+        "expression.borrow-owned-field as=$body type=@Carrier source=$body field=payload body=$value\nexpression.i64 as=$value value=1\nexpression.owned-binding parent=$body index=0 field-name=payload as=$view name=view type=@Payload\n",
+        "expression.match-borrowed-owned as=$body type=@Choice source=$source-value\nexpression.local as=$source-value value=$source\nexpression.choice-arm parent=$body index=0 case=accepted as=$view name=view type=i64 body=$body\n",
+    ] {
+        let errors = decode_compact_change(
+            "owned-read-cycle.lkjc",
+            format!("{header}{body}{declarations}").as_bytes(),
+        )
+        .unwrap_err();
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.code == "change_expression_cycle"),
+            "{errors:#?}"
+        );
+    }
+}
+
 #[test]
 fn transaction_outcome_rejects_wrong_nominal_authority_body_type_and_missing_operation_before_acceptance()
  {

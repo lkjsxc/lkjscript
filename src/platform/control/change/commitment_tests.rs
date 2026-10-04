@@ -315,7 +315,7 @@ fn unsupported_and_future_magics_keep_the_existing_current_identity_fallback() {
     for intent in [
         b"".as_slice(),
         b"LKJACR13",
-        b"LKJACR28",
+        b"LKJACR29",
         b"LKJACR99",
         b"unknown",
     ] {
@@ -395,7 +395,7 @@ fn implementation_authority_uses_codec27_and_empty_application_keeps_frozen_code
     ].concat());
     assert_eq!(
         commitment_codec_identity(&bytes),
-        AUTHORED_CHANGE_CODEC_IDENTITY
+        "lkjscript-authored-change-codec-27"
     );
     for request in [
         request(vec![AuthoredEffectRow::default()], Vec::new()),

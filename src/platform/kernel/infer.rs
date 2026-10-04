@@ -923,6 +923,105 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             self.validate_nominal_type(ty, context, 0)?;
         }
         match record.operation {
+            ExpressionOperation::BorrowOwnedField {
+                product_type,
+                source,
+                field,
+                binding,
+                body,
+            } => {
+                let actual = self.borrow_source_type(source, context, next)?;
+                require_same(
+                    product_type,
+                    actual,
+                    "kernel_owned_borrow",
+                    "borrowed product source",
+                )?;
+                let TypeForm::OwnedProduct { fields } = self.type_object(product_type)?.form else {
+                    return Err(type_error(
+                        "kernel_owned_borrow",
+                        "field borrowing requires an owned product type",
+                    ));
+                };
+                let mut selected = None;
+                for candidate in fields {
+                    self.consume_work()?;
+                    if candidate.name == field {
+                        selected = Some(candidate.ty);
+                    }
+                }
+                let ty = selected.ok_or_else(|| {
+                    type_error("kernel_owned_borrow", "unknown borrowed product field")
+                })?;
+                if !self.owned_read(|read| super::memory::direct(read, ty))? {
+                    return Err(type_error(
+                        "kernel_owned_borrow",
+                        "borrowed product field must have a direct owned type",
+                    ));
+                }
+                self.require_borrow_binding(binding, ty)?;
+                let mut scoped = self.scoped_context(context)?;
+                self.consume_work()?;
+                scoped
+                    .bindings
+                    .insert(binding, (BindingKind::OwnedBorrow, ty));
+                self.infer(body, &scoped, next)
+            }
+            ExpressionOperation::MatchBorrowedOwned {
+                choice_type,
+                source,
+                arms,
+            } => {
+                let actual = self.borrow_source_type(source, context, next)?;
+                require_same(
+                    choice_type,
+                    actual,
+                    "kernel_owned_borrow",
+                    "borrowed choice source",
+                )?;
+                let TypeForm::OwnedChoice { cases } = self.type_object(choice_type)?.form else {
+                    return Err(type_error(
+                        "kernel_owned_borrow",
+                        "borrowed match requires an owned choice type",
+                    ));
+                };
+                if cases.len() != arms.len() || arms.is_empty() {
+                    return Err(type_error(
+                        "kernel_owned_borrow",
+                        "borrowed match must cover every case exactly once",
+                    ));
+                }
+                let mut result = None;
+                for (arm, case) in arms.into_iter().zip(cases) {
+                    self.consume_work()?;
+                    if arm.name != case.name {
+                        return Err(type_error(
+                            "kernel_owned_borrow",
+                            "borrowed match cases must match the exact choice cases",
+                        ));
+                    }
+                    self.require_borrow_binding(arm.binding, case.ty)?;
+                    let mut scoped = self.scoped_context(context)?;
+                    self.consume_work()?;
+                    scoped
+                        .bindings
+                        .insert(arm.binding, (BindingKind::OwnedBorrow, case.ty));
+                    let actual = self.infer(arm.body, &scoped, next)?;
+                    if let Some(expected) = result {
+                        require_same(
+                            expected,
+                            actual,
+                            "kernel_owned_borrow",
+                            "borrowed choice arm result",
+                        )?;
+                    } else {
+                        result = Some(actual);
+                    }
+                }
+                result.ok_or_else(|| {
+                    type_error("kernel_owned_borrow", "borrowed match has no result")
+                })
+            }
             ExpressionOperation::ChooseOwned {
                 choice_type,
                 case,
@@ -1594,6 +1693,51 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         Ok(result)
     }
 
+    fn borrow_source_type(
+        &mut self,
+        expression: ExpressionId,
+        context: &ExecutionContext,
+        depth: usize,
+    ) -> Result<TypeObjectDigest, Diagnostic> {
+        self.consume_work()?;
+        if !matches!(
+            self.read.owner(OwnerKey::Expression(expression))?,
+            Some(OwnerRecord::Expression(record))
+                if matches!(record.operation, ExpressionOperation::Local { .. })
+        ) {
+            return Err(type_error(
+                "kernel_owned_borrow",
+                "scoped borrowing requires an exact local source",
+            ));
+        }
+        self.infer(expression, context, depth)
+    }
+
+    fn require_borrow_binding(
+        &mut self,
+        binding: BindingId,
+        ty: TypeObjectDigest,
+    ) -> Result<(), Diagnostic> {
+        self.consume_work()?;
+        let Some(OwnerRecord::Binding(record)) = self.read.owner(OwnerKey::Binding(binding))?
+        else {
+            return Err(type_error(
+                "kernel_owned_borrow",
+                "missing borrowed child binding",
+            ));
+        };
+        if record.kind != BindingKind::OwnedBorrow
+            || record.value.is_some()
+            || record.declared_type != Some(ty)
+        {
+            return Err(type_error(
+                "kernel_owned_borrow",
+                "borrowed child binding kind or exact annotation mismatch",
+            ));
+        }
+        Ok(())
+    }
+
     fn local_type(
         &mut self,
         reference: LocalValueReference,
@@ -1669,6 +1813,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         BindingKind::Let
                             | BindingKind::OwnedUnpack
                             | BindingKind::OwnedChoicePayload
+                            | BindingKind::OwnedBorrow
                     ),
                     LocalValueReference::MatchPayload(_) => kind == BindingKind::MatchPayload,
                     _ => false,

@@ -7,7 +7,8 @@ meaning authority. Native notation, package interfaces, specialization and code
 are checked projections of that graph.
 
 `Owned`, `CaptureSafe` and `None` are distinct constraints. An Owned argument must
-be exactly ByteBuffer, OwnedI64Cell, an explicit [owned product](owned-products.md),
+be exactly ByteBuffer, OwnedI64Cell, an explicit [owned product](owned-products.md)
+or [owned choice](owned-choices.md),
 or an in-scope Owned parameter while checking
 a generic body. Ordinary and CaptureSafe parameters cannot receive an owned type,
 even when the parameter is unused, its container is empty, or the call is in an
@@ -40,6 +41,13 @@ affine rules as its concrete carrier:
 - Scope exit disposes of remaining local owners. Traps, cancellation and exhausted
   quotas dispose of all remaining owners and loans. This cleanup invokes no
   user-defined method and confers no capability authority.
+
+[Scoped child reads](owned-borrows.md) add borrowed lexical bindings with exact
+symbolic `Owned` types. A generic product or choice reader is checked before any
+concrete implementation exists. Substitution preserves child/ancestor loan
+provenance and exact borrowed method selection. Scope bodies may return unrelated
+owners and use authorized effects; protected sources and views cannot be consumed
+or escape. Borrowed task parameters remain unsupported.
 
 General owned containers, mutable borrows, escaping captures, memory-bearing indirect
 function descriptors, cross-task memory transfer and generic implementation schemes
@@ -121,8 +129,10 @@ implementation references; existing type/effect closure machinery checks type
 applications separately. The resulting Self must equal the actual type binding.
 An unbound template is not callable or capturable through ordinary entry. Witness
 edges participate in closure and recursion analysis. Tail forwarding is derived
-after witness calls have selected their exact graph targets. Read-loan lifetime
-and cleanup obligations remain valid through tail transfers and nested calls.
+after witness calls have selected their exact graph targets. An active child-read
+scope prevents activation replacement, including when it borrows a parameter and
+owns no storage. Read-loan lifetime and cleanup obligations remain valid through
+other eligible tail transfers and nested calls.
 The source-derived interpreter resolves the source witness scope and method maps
 independently of these prepared instances.
 
@@ -137,7 +147,7 @@ Package interface generation 12 changes method/function layout; interface 10 and
 11 have separate frozen representations. In particular, interface-11 function,
 constant and component bytes are not interpreted using generation-12 enum tags.
 
-Current compilation uses compiler unit 18, bytecode 14 and artifact 25. Derived
+The task-method increment selected compiler unit 18, bytecode 14 and artifact 25. Derived
 predecessor artifacts require rebuilding from supported accepted meaning; an old
 proof or compiler artifact does not silently become current permission. Authored
 pure owned-only requests retain codec 21; product-bearing requests select codec 22
@@ -148,6 +158,8 @@ predecessor intent bytes. Compact changes use contract 28. Semantic validator 23
 invalidates prior acceptance and summary reuse for task-method effects.
 Public discovery advertises the actual generations.
 Regeneration of maintained artifacts preserves accepted meaning HEADs.
+The [child-borrow contract](owned-borrows.md#encodings-and-evidence) owns subsequent
+scope-operation, borrowed-binding and derived-layout cuts.
 
 Complete admission includes unused arguments, methods and unreachable expressions.
 Canonical source, code and runtime metadata must agree, and independent affine

@@ -3,15 +3,13 @@
 A language and application platform for agents. Build, inspect, change, test and
 run typed programs through one executable.
 
-The accepted typed meaning graph is the program's editable authority. Native
-text proposes changes; reviewed publication accepts their meaning. Stable
-identities preserve declarations through edits, while names remain useful,
-changeable locators. Types, ownership, effects and exact library dependencies
-make composition and execution authority explicit.
+The accepted typed meaning graph is the program's editable authority. Native text
+proposes reviewed changes; stable identities preserve declarations through edits.
+Types, ownership, effects and exact dependencies make execution authority explicit.
 
-Ordinary application and library development uses the installed product. Explore
-[the language direction](docs/direction.md), [current status](docs/status.md) and
-[roadmap](docs/roadmap.md) for the implemented boundary and future work.
+Ordinary application and library development uses the installed product.
+[Current status](docs/status.md) owns availability; [direction](docs/direction.md)
+and [roadmap](docs/roadmap.md) explain the language's design and next priorities.
 
 ## Get started
 
@@ -64,15 +62,15 @@ add an expected-value test and publish a reviewed change.
 | Capability | Explore |
 | --- | --- |
 | Ordinary generic libraries and exact offline dependencies | [Native libraries](docs/guides/native-library.md), [standard supplier](packages/standard/README.md) |
-| Owned memory, generic implementation witnesses and explicit authority | [Owned generics](docs/guides/native-owned-generics.md), [products](docs/guides/native-owned-products.md), [recoverable outcomes](docs/guides/native-owned-choices.md), [effectful composition](examples/owned-effects/README.md) |
+| Owned memory, scoped child reads and exact implementation witnesses | [Owned generics](docs/guides/native-owned-generics.md), [products](docs/guides/native-owned-products.md), [recoverable outcomes](docs/guides/native-owned-choices.md), [scoped borrowing](docs/guides/native-owned-borrows.md), [effectful composition](examples/owned-effects/README.md) |
 | Transferable generic parallel groups and joined reusable workers | [Parallel guide](docs/guides/native-transferable-parallel.md), [transformation and reduction](examples/parallel-work/README.md) |
 | Typed web applications and form handling | [Web starter](docs/guides/native-web.md), [HTTP](docs/guides/native-http.md), [forms](docs/guides/native-forms.md) |
 | Stateful applications, subscriptions and durable work | [Native editor](docs/guides/native-editor.md), [stateful HTTP](docs/generated/stateful-http-authoring.md), [lkjournal](applications/lkjournal/README.md) |
 | Multiple services in one process with private instance authority | [Shared runtime](docs/spec/shared-runtime.md), [resident execution policy](docs/guides/resident-policy.md) |
 
 Use `lkjscript capabilities` to discover the selected executable's operations,
-grammar, authority boundaries and limits. [Guides](docs/guides/) retain their
-original tested examples; [specifications](docs/spec/) define language semantics.
+grammar, authority boundaries and limits. [Guides](docs/guides/) explain authoring;
+[specifications](docs/spec/) define language semantics.
 [Security](docs/security.md) describes execution grants and trust boundaries.
 
 ## Inspect and change programs
@@ -84,9 +82,9 @@ lkjscript --project hello query find module application
 lkjscript --project hello query owners --limit 20
 ```
 
-Revision-bound queries identify the accepted program. Author a native proposal,
-use `change plan --input-file ...` to inspect its effects, then apply the same
-request with its exact token and run `check`. Rejected proposals cannot partially publish meaning.
+Author a native proposal, inspect it with `change plan --input-file ...`, apply
+the same request with its exact token, then run `check`. Rejected proposals cannot
+partially publish meaning.
 
 When another candidate publishes first, [refresh your reviewed proposal](docs/spec/concurrent-changes.md)
 at the revision from current `status`, retaining the original input and plan:
@@ -95,23 +93,18 @@ at the revision from current `status`, retaining the original input and plan:
 lkjscript --project hello change refresh --input-file proposal.lkjc --plan ORIGINAL_TOKEN --onto CURRENT_REVISION
 ```
 
-Check `lkjscript capabilities change` for refresh in your selected executable;
-[current status](docs/status.md) records public availability.
-
 Review the renewed token before applying the original input. Conflicting meaning
 rejects refresh; disjoint edits compose with preserved identities.
 
-`change draft` reconstructs editable declarations from accepted owners. The
-original proposal file is not a synchronized second source. Follow the
-[command guide](docs/guides/native-command.md), [generated grammar](docs/generated/change-grammar.md)
+`change draft` reconstructs declarations from accepted owners. Follow the
+[command guide](docs/guides/native-command.md), [grammar](docs/generated/change-grammar.md)
 and [function inspection](docs/generated/function-definition.md).
 
 ## Develop the language
 
-Contributors use the pinned Rust toolchain and locked dependencies. Rust currently
-implements the kernel and host adapters; complete self-hosting remains the
-long-term goal. Read [repository guidance](AGENTS.md), [architecture](docs/architecture.md),
-[verification](docs/spec/verification.md) and [measured performance](docs/performance.md).
+Use the pinned Rust toolchain and locked dependencies. Read
+[repository guidance](AGENTS.md), [architecture](docs/architecture.md) and
+[verification](docs/spec/verification.md) before changing the language.
 
 ```sh
 cargo build --release --locked -p lkjscript-dev
@@ -120,14 +113,8 @@ cargo run --release --locked -p lkjscript-dev -- check full --fresh --machine
 ```
 
 `changed` selects current Git-status paths; a clean-tree run does not prove a
-committed change. `full --fresh` requires every gate fresh. Set `CARGO_BUILD_JOBS`
-and checker `--jobs` independently for the host's capacity. The
-[release procedure](docs/release.md#coverage-and-admission) owns the separate source,
-finalized-byte and installation acceptance boundaries. Evidence lives in
-`.artifacts/`, and failed runs retain their actual outcome.
-
-The independent [Rust documentation server](docs/guides/rust-site.md) publishes an
-explicit document catalog with server-side rendering and search. The
-[native guide tool](tools/native-guides/README.md) owns capability-reference rendering.
+committed change. Set `CARGO_BUILD_JOBS` and checker `--jobs` independently.
+[Release acceptance](docs/release.md#coverage-and-admission) checks source and final bytes
+separately. Retain evidence in `.artifacts/`.
 
 lkjscript is licensed under [Apache-2.0](LICENSE).

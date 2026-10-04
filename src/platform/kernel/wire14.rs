@@ -750,8 +750,10 @@ impl TryFrom<super::ExpressionOperation> for ExpressionOperation14 {
             | super::ExpressionOperation::F64 { .. }
             | super::ExpressionOperation::PackOwned { .. }
             | super::ExpressionOperation::UnpackOwned { .. }
+            | super::ExpressionOperation::BorrowOwnedField { .. }
             | super::ExpressionOperation::ChooseOwned { .. }
-            | super::ExpressionOperation::MatchOwned { .. } => return Err(extension()),
+            | super::ExpressionOperation::MatchOwned { .. }
+            | super::ExpressionOperation::MatchBorrowedOwned { .. } => return Err(extension()),
         })
     }
 }

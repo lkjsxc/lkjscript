@@ -568,6 +568,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
             remaining_expressions: self.policy.instruction_steps,
             call_depth: 0,
             control_frames: 0,
+            lexical_loan_scopes: 0,
             local_counts: Vec::new(),
             next_transaction: 0,
             transactions: BTreeMap::new(),
@@ -711,6 +712,7 @@ struct ReferenceState<'a> {
     remaining_expressions: Option<u64>,
     call_depth: usize,
     control_frames: usize,
+    lexical_loan_scopes: usize,
     local_counts: Vec<usize>,
     next_transaction: u64,
     transactions: BTreeMap<RequirementReference, ReferenceTransaction>,
@@ -730,6 +732,20 @@ struct ReferenceState<'a> {
 enum ReferenceStep {
     Value(CheckedValue),
     Tail(Box<AdmittedGraphCall>),
+}
+
+/// Lexical custody is retained across body execution and host unwind. Removing
+/// the child before dropping the parent also preserves nested loan order.
+struct ReferenceLoanScope<'a> {
+    _parent: CheckedValue,
+    locals: &'a mut BTreeMap<LocalValueReference, CheckedValue>,
+    local: LocalValueReference,
+}
+
+impl Drop for ReferenceLoanScope<'_> {
+    fn drop(&mut self) {
+        self.locals.remove(&self.local);
+    }
 }
 
 /// One internal transition, constructed only by canonical call admission in this state.
@@ -1178,6 +1194,80 @@ impl ReferenceState<'_> {
         }
     }
 
+    fn borrowed_product_child(
+        &mut self,
+        raw: NormalizedValue,
+        ty: TypeObjectDigest,
+    ) -> Result<CheckedValue, ExecutionError> {
+        let expected = direct_memory_type(&self.schema, ty, &BTreeMap::new(), self.control)?;
+        if let Some(expected) = expected {
+            if raw.memory_form() != Some(expected) || !raw.memory_is_borrowed() {
+                return Err(reference_type_error("borrowed child type or loan mismatch"));
+            }
+            raw.memory_validate(self.memory_domain, false)?;
+            CheckedValue::memory(&self.schema, raw)
+        } else {
+            self.admit_raw(raw, ty, &BTreeMap::new(), None, false)
+        }
+    }
+
+    fn borrow_parent(
+        &mut self,
+        source: ExpressionId,
+        locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
+    ) -> Result<CheckedValue, ExecutionError> {
+        if !matches!(
+            self.owner(OwnerKey::Expression(source))?,
+            Some(OwnerRecord::Expression(record))
+                if matches!(record.operation, ExpressionOperation::Local { .. })
+        ) {
+            return Err(reference_type_error(
+                "borrow source requires an exact live local",
+            ));
+        }
+        self.evaluate_with_use(source, locals, ParameterUse::Borrow)
+    }
+
+    fn evaluate_borrowed_body(
+        &mut self,
+        parent: CheckedValue,
+        binding: BindingId,
+        value: CheckedValue,
+        body: ExpressionId,
+        locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
+    ) -> Result<CheckedValue, ExecutionError> {
+        let local = LocalValueReference::LexicalBinding(binding);
+        if locals.contains_key(&local) {
+            return Err(reference_type_error(
+                "borrowed child aliases a live binding",
+            ));
+        }
+        let loan_scopes = self.lexical_loan_scopes.checked_add(1).ok_or_else(|| {
+            reference_resource(
+                "normalized_reference_loan_scopes",
+                "loan scope count overflowed",
+            )
+        })?;
+        locals.insert(local, value);
+        let scope = ReferenceLoanScope {
+            _parent: parent,
+            locals,
+            local,
+        };
+        self.lexical_loan_scopes = loan_scopes;
+        let result = self.evaluate(body, scope.locals).and_then(|value| {
+            if value.raw().memory_is_borrowed() {
+                return Err(reference_type_error(
+                    "borrowed child escaped its lexical scope",
+                ));
+            }
+            Ok(value)
+        });
+        self.lexical_loan_scopes -= 1;
+        drop(scope);
+        result
+    }
+
     fn resolve_type_arguments(
         &mut self,
         type_arguments: &[TypeObjectDigest],
@@ -1588,6 +1678,7 @@ impl ReferenceState<'_> {
         if tail {
             self.observation.tail_transfers = self.observation.tail_transfers.saturating_add(1);
         }
+        let lexical_loan_scopes = std::mem::replace(&mut self.lexical_loan_scopes, 0);
         let result = self.evaluate_tail(target.function.body, &mut locals);
         let result = result.and_then(|step| {
             if let ReferenceStep::Value(value) = &step {
@@ -1625,6 +1716,7 @@ impl ReferenceState<'_> {
         self.effect_scopes.pop();
         self.requirement_scopes.pop();
         self.allowances.pop();
+        self.lexical_loan_scopes = lexical_loan_scopes;
         result
     }
 
@@ -1963,12 +2055,14 @@ impl ReferenceState<'_> {
     ) -> Result<ReferenceStep, ExecutionError> {
         self.charge_allocation(std::mem::size_of::<AdmittedGraphCall>() as u64)?;
         self.control.check()?;
-        if locals.values().any(|v| v.raw().memory_owns_live_loans()) {
+        if self.lexical_loan_scopes != 0
+            || locals.values().any(|v| v.raw().memory_owns_live_loans())
+        {
             if self.call_depth.saturating_add(self.ancestor_depth) >= self.policy.maximum_call_depth
             {
                 return Err(reference_resource(
                     "normalized_reference_call_depth",
-                    "retained memory owner exceeded call-depth limit",
+                    "retained memory loan scope exceeded call-depth limit",
                 ));
             }
             self.call_depth += 1;
@@ -2069,6 +2163,130 @@ impl ReferenceState<'_> {
         )?;
         match operation {
             ExpressionOperation::Parallel { left, right } => self.parallel(left, right, locals),
+            ExpressionOperation::BorrowOwnedField {
+                product_type,
+                source,
+                field,
+                binding,
+                body,
+            } => {
+                let ty = self.resolve_type_arguments(&[product_type])?[0];
+                let Some(TypeForm::OwnedProduct { fields }) =
+                    self.schema.types.get(&ty).map(|object| &object.form)
+                else {
+                    return Err(reference_type_error(
+                        "borrow requires a closed owned product",
+                    ));
+                };
+                let (index, selected) = fields
+                    .iter()
+                    .enumerate()
+                    .find(|(_, candidate)| candidate.name == field)
+                    .ok_or_else(|| reference_type_error("unknown borrowed product field"))?;
+                let payload_type = selected.ty;
+                if direct_memory_type(&self.schema, payload_type, &BTreeMap::new(), self.control)?
+                    .is_none()
+                {
+                    return Err(reference_type_error("borrowed product field must be owned"));
+                }
+                let record = self.binding(binding, BindingKind::OwnedBorrow)?;
+                let declared = record
+                    .declared_type
+                    .ok_or_else(|| reference_type_error("borrowed child binding lacks type"))?;
+                if self.resolve_type_arguments(&[declared])?[0] != payload_type {
+                    return Err(reference_type_error("borrowed product field type mismatch"));
+                }
+                self.charge_allocation(
+                    (std::mem::size_of::<LocalValueReference>()
+                        + std::mem::size_of::<CheckedValue>()) as u64,
+                )?;
+                self.control.check()?;
+                let parent = self.borrow_parent(source, locals)?;
+                let NormalizedValue::OwnedProduct(token) = parent.raw() else {
+                    return Err(reference_type_error(
+                        "borrow source requires a product token",
+                    ));
+                };
+                if token.ty() != ty {
+                    return Err(reference_type_error("borrow source product type mismatch"));
+                }
+                token.validate(self.memory_domain, false)?;
+                let control = self.control;
+                let value =
+                    token.borrow_field(self.memory_domain, index, control, &mut |bytes| {
+                        self.charge_allocation(bytes)
+                    })?;
+                let value = self.borrowed_product_child(value, payload_type)?;
+                self.evaluate_borrowed_body(parent, binding, value, body, locals)
+            }
+            ExpressionOperation::MatchBorrowedOwned {
+                choice_type,
+                source,
+                arms,
+            } => {
+                let ty = self.resolve_type_arguments(&[choice_type])?[0];
+                let Some(TypeForm::OwnedChoice { cases }) =
+                    self.schema.types.get(&ty).map(|object| &object.form)
+                else {
+                    return Err(reference_type_error(
+                        "borrowed match requires an owned choice",
+                    ));
+                };
+                if cases.len() != arms.len()
+                    || cases
+                        .iter()
+                        .zip(&arms)
+                        .any(|(case, arm)| case.name != arm.name)
+                {
+                    return Err(reference_type_error(
+                        "borrowed match case coverage mismatch",
+                    ));
+                }
+                for (index, arm) in arms.iter().enumerate() {
+                    let TypeForm::OwnedChoice { cases } = &self.schema.types[&ty].form else {
+                        return Err(reference_type_error("missing borrowed choice shape"));
+                    };
+                    let payload_type = cases[index].ty;
+                    let record = self.binding(arm.binding, BindingKind::OwnedBorrow)?;
+                    let declared = record.declared_type.ok_or_else(|| {
+                        reference_type_error("borrowed choice binding lacks type")
+                    })?;
+                    if self.resolve_type_arguments(&[declared])?[0] != payload_type {
+                        return Err(reference_type_error(
+                            "borrowed choice payload type mismatch",
+                        ));
+                    }
+                }
+                self.charge_allocation(
+                    (std::mem::size_of::<LocalValueReference>()
+                        + std::mem::size_of::<CheckedValue>()) as u64,
+                )?;
+                self.control.check()?;
+                let parent = self.borrow_parent(source, locals)?;
+                let NormalizedValue::OwnedChoice(token) = parent.raw() else {
+                    return Err(reference_type_error(
+                        "borrowed match requires a choice token",
+                    ));
+                };
+                if token.ty() != ty {
+                    return Err(reference_type_error("borrowed choice source type mismatch"));
+                }
+                token.validate(self.memory_domain, false)?;
+                let selected = token.case() as usize;
+                let arm = arms
+                    .get(selected)
+                    .ok_or_else(|| reference_type_error("invalid borrowed choice arm"))?;
+                let TypeForm::OwnedChoice { cases } = &self.schema.types[&ty].form else {
+                    return Err(reference_type_error("missing borrowed choice shape"));
+                };
+                let payload_type = cases[selected].ty;
+                let control = self.control;
+                let value = token.borrow_payload(self.memory_domain, control, &mut |bytes| {
+                    self.charge_allocation(bytes)
+                })?;
+                let value = self.borrowed_product_child(value, payload_type)?;
+                self.evaluate_borrowed_body(parent, arm.binding, value, arm.body, locals)
+            }
             ExpressionOperation::ChooseOwned {
                 choice_type,
                 case,
@@ -2336,6 +2554,9 @@ impl ReferenceState<'_> {
                             | NormalizedValue::OwnedChoice(_)
                     )
                 }) {
+                    locals[&value]
+                        .raw()
+                        .memory_validate(self.memory_domain, true)?;
                     let result = locals
                         .remove(&value)
                         .ok_or_else(|| reference_type_error("missing memory owner"))?;
@@ -2743,7 +2964,16 @@ impl ReferenceState<'_> {
         };
         let value = if let Some(local) = local {
             match use_mode {
-                ParameterUse::Consume => locals.remove(&local),
+                ParameterUse::Consume => {
+                    // Invalid consuming syntax must leave its source in custody
+                    // until all lexical child scopes release their loans.
+                    if let Some(value) = locals.get(&local)
+                        && value.raw().memory_form().is_some()
+                    {
+                        value.raw().memory_validate(self.memory_domain, true)?;
+                    }
+                    locals.remove(&local)
+                }
                 ParameterUse::Unrestricted | ParameterUse::Borrow => locals
                     .get(&local)
                     .map(|value| value.duplicate(use_mode))
@@ -2816,6 +3046,11 @@ impl ReferenceState<'_> {
                 .transpose()?
                 .is_some_and(|ownership| ownership != Ownership::Ordinary)
         {
+            if let Some(value) = locals.get(&local)
+                && value.raw().memory_form().is_some()
+            {
+                value.raw().memory_validate(self.memory_domain, true)?;
+            }
             return locals.remove(&local).ok_or_else(|| {
                 reference_error(
                     "normalized_reference_local_missing",

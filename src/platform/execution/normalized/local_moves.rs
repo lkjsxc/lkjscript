@@ -115,6 +115,18 @@ fn derive_linear(code: &mut NormalizedCode, work: &mut Budget<'_>) -> Result<(),
                 }
                 None
             }
+            I::BorrowOwnedField { source_local, .. } => Some(*source_local),
+            I::MatchBorrowedOwned {
+                source_local,
+                cases,
+                ..
+            } => {
+                for case in cases.iter() {
+                    edge(&mut ends, index, case.target, work)?;
+                }
+                Some(*source_local)
+            }
+            I::EndOwnedBorrow { .. } => None,
             I::SwitchVariant(jumps) => {
                 for jump in jumps.iter() {
                     edge(&mut ends, index, jump.target, work)?;

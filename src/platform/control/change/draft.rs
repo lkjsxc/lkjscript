@@ -968,9 +968,19 @@ impl Renderer<'_> {
                 choice_type,
                 source,
                 arms,
+            }
+            | E::MatchBorrowedOwned {
+                choice_type,
+                source,
+                arms,
             } => {
                 let mut text = format!(
-                    "(match-owned (type {}) {}",
+                    "({} (type {}) {}",
+                    if matches!(expression.operation, E::MatchBorrowedOwned { .. }) {
+                        "match-borrowed-owned"
+                    } else {
+                        "match-owned"
+                    },
                     self.ty(choice_type)?,
                     self.expression(source, env)?
                 );
@@ -1052,6 +1062,32 @@ impl Renderer<'_> {
                     }
                 }
                 text
+            }
+            E::BorrowOwnedField {
+                product_type,
+                source,
+                field,
+                binding,
+                body,
+            } => {
+                let ty = self.ty(binding
+                    .declared_type
+                    .as_ref()
+                    .ok_or_else(|| error("borrowed field binding requires a type"))?)?;
+                let source = self.expression(source, env)?;
+                env.entry(binding.name.to_string())
+                    .or_default()
+                    .push(binding.symbol.clone());
+                let body = self.expression(body, env)?;
+                if let Some(values) = env.get_mut(binding.name.as_str()) {
+                    values.pop();
+                }
+                format!(
+                    "(borrow-owned-field (type {}) {source} (field {field} (binding {} (as {}) (type {ty}))) (in {body}))",
+                    self.ty(product_type)?,
+                    binding.name,
+                    binding.symbol,
+                )
             }
             E::Let { bindings, body } => {
                 let mut text = "(let".to_owned();

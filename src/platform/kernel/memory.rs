@@ -1,5 +1,8 @@
 //! Direct owned-memory flow, independent of capability-resource provenance.
 #[cfg(test)]
+#[path = "memory_borrow_tests.rs"]
+mod borrow_tests;
+#[cfg(test)]
 #[path = "memory_work_tests.rs"]
 mod work_tests;
 use super::infer::ExpressionRead;
@@ -313,6 +316,28 @@ fn admit_signature(read: &(impl ExpressionRead + ?Sized), s: &Signature) -> Resu
 struct Slot {
     borrowed: bool,
     live: bool,
+    /// Lexical parent custody for a projected read view.
+    parent: Option<LocalValueReference>,
+    /// Active lexical scopes freeze every source in their provenance chain.
+    loans: u32,
+}
+impl Slot {
+    fn owner(borrowed: bool) -> Self {
+        Self {
+            borrowed,
+            live: true,
+            parent: None,
+            loans: 0,
+        }
+    }
+    fn view(parent: LocalValueReference) -> Self {
+        Self {
+            borrowed: true,
+            live: true,
+            parent: Some(parent),
+            loans: 0,
+        }
+    }
 }
 type State = BTreeMap<LocalValueReference, Slot>;
 fn fork(read: &(impl ExpressionRead + ?Sized), state: &State) -> Result<State, Diagnostic> {
@@ -331,7 +356,10 @@ fn join(read: &(impl ExpressionRead + ?Sized), a: &mut State, b: &State) -> Resu
         let other = b
             .get(key)
             .ok_or_else(|| reject("memory scope disagreement at join"))?;
-        if slot.borrowed != other.borrowed {
+        if slot.borrowed != other.borrowed
+            || slot.parent != other.parent
+            || slot.loans != other.loans
+        {
             return Err(reject("memory borrow disagreement at join"));
         }
         slot.live &= other.live;
@@ -343,6 +371,96 @@ struct Check<'a, R: ?Sized> {
     scope: Option<crate::platform::semantic_id::DeclarationId>,
 }
 impl<R: ExpressionRead + ?Sized> Check<'_, R> {
+    fn source_local(
+        &self,
+        expression: ExpressionId,
+        ty: TypeObjectDigest,
+        state: &mut State,
+        depth: usize,
+    ) -> Result<LocalValueReference, Diagnostic> {
+        let Some(OwnerRecord::Expression(ExpressionRecord {
+            operation: ExpressionOperation::Local { value },
+            ..
+        })) = self.read.owner(OwnerKey::Expression(expression))?
+        else {
+            return Err(reject("child reads require an exact local source"));
+        };
+        let actual = match value {
+            LocalValueReference::FunctionParameter(parameter) => {
+                match self.read.owner(OwnerKey::Parameter(parameter))? {
+                    Some(OwnerRecord::Parameter(record)) => Some(record.ty),
+                    _ => None,
+                }
+            }
+            LocalValueReference::LexicalBinding(binding) => {
+                match self.read.owner(OwnerKey::Binding(binding))? {
+                    Some(OwnerRecord::Binding(record)) => record.declared_type,
+                    _ => None,
+                }
+            }
+            _ => None,
+        };
+        if actual != Some(ty) || !state.contains_key(&value) {
+            return Err(reject(
+                "child read source requires an exact typed live owner or view",
+            ));
+        }
+        self.eval(expression, state, ParameterUse::Borrow, depth)?;
+        Ok(value)
+    }
+
+    fn loan(
+        &self,
+        source: LocalValueReference,
+        state: &mut State,
+        acquire: bool,
+    ) -> Result<(), Diagnostic> {
+        let mut current = Some(source);
+        let mut remaining = state.len();
+        while let Some(local) = current {
+            self.read.validation_work()?;
+            if remaining == 0 {
+                return Err(reject("cyclic child read provenance"));
+            }
+            remaining -= 1;
+            let slot = state
+                .get_mut(&local)
+                .ok_or_else(|| reject("missing child read ancestor"))?;
+            if !slot.live {
+                return Err(reject("child read ancestor is no longer live"));
+            }
+            slot.loans = if acquire {
+                slot.loans
+                    .checked_add(1)
+                    .ok_or_else(|| reject("child read loan overflow"))?
+            } else {
+                slot.loans
+                    .checked_sub(1)
+                    .ok_or_else(|| reject("missing child read loan"))?
+            };
+            current = slot.parent;
+        }
+        Ok(())
+    }
+
+    fn borrow_binding(
+        &self,
+        binding: crate::platform::semantic_id::BindingId,
+        ty: TypeObjectDigest,
+    ) -> Result<(), Diagnostic> {
+        let Some(OwnerRecord::Binding(record)) = self.read.owner(OwnerKey::Binding(binding))?
+        else {
+            return Err(reject("missing child read binding"));
+        };
+        if record.kind != BindingKind::OwnedBorrow
+            || record.value.is_some()
+            || record.declared_type != Some(ty)
+        {
+            return Err(reject("child read binding contract mismatch"));
+        }
+        Ok(())
+    }
+
     fn eval(
         &self,
         id: ExpressionId,
@@ -363,6 +481,94 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 .map(|_| ())
         };
         let owned = match e.operation {
+            ExpressionOperation::BorrowOwnedField {
+                product_type,
+                source,
+                field,
+                binding,
+                body,
+            } => {
+                super::owned_product::validate(self.read, product_type, self.scope)?;
+                let TypeForm::OwnedProduct { fields } = self
+                    .read
+                    .type_object(product_type)?
+                    .ok_or_else(|| reject("missing child read product type"))?
+                    .form
+                else {
+                    return Err(reject("field read requires an owned product"));
+                };
+                let mut selected = None;
+                for candidate in fields {
+                    self.read.validation_work()?;
+                    if candidate.name == field {
+                        selected = Some(candidate.ty);
+                    }
+                }
+                let selected = selected.ok_or_else(|| reject("unknown child read field"))?;
+                if !direct(self.read, selected)? {
+                    return Err(reject("field read binding requires a direct owned child"));
+                }
+                self.borrow_binding(binding, selected)?;
+                let source = self.source_local(source, product_type, state, next)?;
+                self.loan(source, state, true)?;
+                let local = LocalValueReference::LexicalBinding(binding);
+                if state.insert(local, Slot::view(source)).is_some() {
+                    return Err(reject("duplicate child read binding"));
+                }
+                let result = self.eval(body, state, mode, next)?;
+                state.remove(&local);
+                self.loan(source, state, false)?;
+                result
+            }
+            ExpressionOperation::MatchBorrowedOwned {
+                choice_type,
+                source,
+                arms,
+            } => {
+                super::owned_product::validate(self.read, choice_type, self.scope)?;
+                let TypeForm::OwnedChoice { cases } = self
+                    .read
+                    .type_object(choice_type)?
+                    .ok_or_else(|| reject("missing child read choice type"))?
+                    .form
+                else {
+                    return Err(reject("borrowed match requires an owned choice"));
+                };
+                if cases.len() != arms.len() || arms.is_empty() {
+                    return Err(reject("borrowed match must cover every case exactly once"));
+                }
+                let source = self.source_local(source, choice_type, state, next)?;
+                self.loan(source, state, true)?;
+                let mut joined: Option<(State, bool)> = None;
+                for (arm, case) in arms.into_iter().zip(cases) {
+                    self.read.validation_work()?;
+                    if arm.name != case.name {
+                        return Err(reject("borrowed match case mismatch"));
+                    }
+                    self.borrow_binding(arm.binding, case.ty)?;
+                    let mut branch = fork(self.read, state)?;
+                    let local = LocalValueReference::LexicalBinding(arm.binding);
+                    if direct(self.read, case.ty)?
+                        && branch.insert(local, Slot::view(source)).is_some()
+                    {
+                        return Err(reject("duplicate borrowed match binding"));
+                    }
+                    let result = self.eval(arm.body, &mut branch, mode, next)?;
+                    branch.remove(&local);
+                    if let Some((prior, prior_result)) = &mut joined {
+                        if *prior_result != result {
+                            return Err(reject("borrowed match result ownership disagreement"));
+                        }
+                        join(self.read, prior, &branch)?;
+                    } else {
+                        joined = Some((branch, result));
+                    }
+                }
+                let (joined, result) = joined.ok_or_else(|| reject("empty borrowed match"))?;
+                *state = joined;
+                self.loan(source, state, false)?;
+                result
+            }
             ExpressionOperation::ChooseOwned {
                 choice_type,
                 case,
@@ -452,15 +658,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                     let mut branch = fork(self.read, state)?;
                     let local = LocalValueReference::LexicalBinding(arm.binding);
                     if direct(self.read, case.ty)?
-                        && branch
-                            .insert(
-                                local,
-                                Slot {
-                                    borrowed: false,
-                                    live: true,
-                                },
-                            )
-                            .is_some()
+                        && branch.insert(local, Slot::owner(false)).is_some()
                     {
                         return Err(reject("duplicate owned choice local"));
                     }
@@ -573,16 +771,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                     }
                     if direct(self.read, expected.ty)? {
                         let local = LocalValueReference::LexicalBinding(field.binding);
-                        if state
-                            .insert(
-                                local,
-                                Slot {
-                                    borrowed: false,
-                                    live: true,
-                                },
-                            )
-                            .is_some()
-                        {
+                        if state.insert(local, Slot::owner(false)).is_some() {
                             return Err(reject("duplicate unpack local"));
                         }
                         scoped.push(local);
@@ -598,7 +787,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 if let Some(slot) = state.get_mut(&value) {
                     if !slot.live
                         || mode == ParameterUse::Unrestricted
-                        || (slot.borrowed && mode == ParameterUse::Consume)
+                        || ((slot.borrowed || slot.loans != 0) && mode == ParameterUse::Consume)
                     {
                         return Err(reject(
                             "buffer copied, consumed twice, or borrowed parameter consumed/returned",
@@ -638,16 +827,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                             OwnerKey::Binding(id) => id,
                             _ => return Err(reject("wrong binding identity")),
                         });
-                        if state
-                            .insert(
-                                local,
-                                Slot {
-                                    borrowed: false,
-                                    live: true,
-                                },
-                            )
-                            .is_some()
-                        {
+                        if state.insert(local, Slot::owner(false)).is_some() {
                             return Err(reject("duplicate buffer binding"));
                         }
                         scoped.push(local);
@@ -1079,10 +1259,7 @@ pub(crate) fn validate_owner(
                         };
                         state.insert(
                             LocalValueReference::FunctionParameter(id),
-                            Slot {
-                                borrowed: p.use_mode == ParameterUse::Borrow,
-                                live: true,
-                            },
+                            Slot::owner(p.use_mode == ParameterUse::Borrow),
                         );
                     }
                 }

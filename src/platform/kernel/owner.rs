@@ -813,6 +813,14 @@ impl BindingRecord {
     fn validate_local(&self) -> Result<(), Diagnostic> {
         validate_header_domain(self.header, OwnerKind::Binding)?;
         validate_names([&self.name])?;
+        if self.kind == BindingKind::OwnedBorrow
+            && (self.header.contract_version < 24 || self.declared_type.is_none())
+        {
+            return Err(owner_error(
+                "kernel_borrow_binding",
+                "borrowed child bindings require Graph 24 and exact type annotations",
+            ));
+        }
         if self.kind == BindingKind::OwnedChoicePayload
             && (self.header.contract_version < 20 || self.declared_type.is_none())
         {
@@ -847,6 +855,7 @@ pub enum BindingKind {
     Transaction,
     OwnedUnpack,
     OwnedChoicePayload,
+    OwnedBorrow,
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]

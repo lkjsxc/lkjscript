@@ -108,6 +108,21 @@ pub enum NormalizedInstruction {
         choice_type: TypeObjectDigest,
         cases: Arc<[NormalizedOwnedChoiceJump]>,
     },
+    BorrowOwnedField {
+        product_type: TypeObjectDigest,
+        source_local: u32,
+        field: u32,
+        binding_local: u32,
+        binding_type: TypeObjectDigest,
+    },
+    MatchBorrowedOwned {
+        choice_type: TypeObjectDigest,
+        source_local: u32,
+        cases: Arc<[NormalizedBorrowedOwnedChoiceJump]>,
+    },
+    EndOwnedBorrow {
+        binding_local: u32,
+    },
     PackOwned {
         product_type: TypeObjectDigest,
         fields: Arc<[u32]>,
@@ -265,6 +280,13 @@ pub enum NormalizedFieldSelector {
 pub struct NormalizedOwnedChoiceJump {
     pub target: u32,
     pub binding_local: u32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NormalizedBorrowedOwnedChoiceJump {
+    pub target: u32,
+    pub binding_local: u32,
+    pub binding_type: TypeObjectDigest,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -2670,6 +2692,59 @@ fn translate_code(
                         })
                         .collect::<Vec<_>>()
                         .into(),
+                }
+            }
+            CompiledInstruction::BorrowOwnedField {
+                product_type,
+                source_local,
+                field,
+                binding_local,
+                binding_type,
+            } => NormalizedInstruction::BorrowOwnedField {
+                product_type: index_copy(
+                    &unit.tables.types,
+                    *product_type,
+                    "owned borrow product type",
+                )?,
+                source_local: *source_local,
+                field: *field,
+                binding_local: *binding_local,
+                binding_type: index_copy(
+                    &unit.tables.types,
+                    *binding_type,
+                    "owned borrow binding type",
+                )?,
+            },
+            CompiledInstruction::MatchBorrowedOwned {
+                choice_type,
+                source_local,
+                cases,
+            } => NormalizedInstruction::MatchBorrowedOwned {
+                choice_type: index_copy(
+                    &unit.tables.types,
+                    *choice_type,
+                    "borrowed owned choice type",
+                )?,
+                source_local: *source_local,
+                cases: cases
+                    .iter()
+                    .map(|case| {
+                        Ok(NormalizedBorrowedOwnedChoiceJump {
+                            target: case.target,
+                            binding_local: case.binding_local,
+                            binding_type: index_copy(
+                                &unit.tables.types,
+                                case.binding_type,
+                                "owned borrow binding type",
+                            )?,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, Diagnostic>>()?
+                    .into(),
+            },
+            CompiledInstruction::EndOwnedBorrow { binding_local } => {
+                NormalizedInstruction::EndOwnedBorrow {
+                    binding_local: *binding_local,
                 }
             }
             CompiledInstruction::PackOwned {

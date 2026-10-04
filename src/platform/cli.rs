@@ -5369,8 +5369,22 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
             }
             ExpressionOperation::MatchOwned {
                 choice_type, arms, ..
+            }
+            | ExpressionOperation::MatchBorrowedOwned {
+                choice_type, arms, ..
             } => {
-                fields.push(("form", "match_owned".into()));
+                fields.push((
+                    "form",
+                    if matches!(
+                        record.operation,
+                        ExpressionOperation::MatchBorrowedOwned { .. }
+                    ) {
+                        "match_borrowed_owned"
+                    } else {
+                        "match_owned"
+                    }
+                    .into(),
+                ));
                 fields.push(("cases", arms.len().to_string()));
                 self.add_type_reference("owned_choice_type", owner, 0, *choice_type)?;
             }
@@ -5389,6 +5403,15 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
             } => {
                 fields.push(("form", "unpack_owned".into()));
                 fields.push(("fields", members.len().to_string()));
+                self.add_type_reference("owned_product_type", owner, 0, *product_type)?;
+            }
+            ExpressionOperation::BorrowOwnedField {
+                product_type,
+                field,
+                ..
+            } => {
+                fields.push(("form", "borrow_owned_field".into()));
+                fields.push(("field", field.to_string()));
                 self.add_type_reference("owned_product_type", owner, 0, *product_type)?;
             }
             ExpressionOperation::Unit {} => fields.push(("form", "unit".to_owned())),
@@ -5815,6 +5838,10 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
         }
 
         let child_depth = definition_child_depth(position.depth)?;
+        let borrowed_choice = matches!(
+            record.operation,
+            ExpressionOperation::MatchBorrowedOwned { .. }
+        );
         match record.operation {
             ExpressionOperation::ChooseOwned { value, .. } => {
                 self.visit_expression_child(
@@ -5826,7 +5853,8 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                     child_depth,
                 )?;
             }
-            ExpressionOperation::MatchOwned { source, arms, .. } => {
+            ExpressionOperation::MatchOwned { source, arms, .. }
+            | ExpressionOperation::MatchBorrowedOwned { source, arms, .. } => {
                 self.visit_expression_child(
                     owner,
                     source,
@@ -5844,7 +5872,11 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                         DefinitionPosition {
                             parent: owner,
                             ownership_role: OwnershipRole::ExpressionBinding {
-                                role: BindingContainerRole::OwnedChoicePayload,
+                                role: if borrowed_choice {
+                                    BindingContainerRole::OwnedBorrow
+                                } else {
+                                    BindingContainerRole::OwnedChoicePayload
+                                },
                                 ordinal: definition_ordinal(index)?,
                             },
                             slot: "owned_choice_binding",
@@ -5852,7 +5884,11 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                             label: Some(arm.name.to_string()),
                             depth: child_depth,
                         },
-                        BindingKind::OwnedChoicePayload,
+                        if borrowed_choice {
+                            BindingKind::OwnedBorrow
+                        } else {
+                            BindingKind::OwnedChoicePayload
+                        },
                     )?;
                     self.visit_expression_child(
                         owner,
@@ -5916,6 +5952,48 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                         BindingKind::OwnedUnpack,
                     )?;
                 }
+                self.visit_expression_child(
+                    owner,
+                    body,
+                    (ExpressionChildRole::OwnedProductBody, "owned_product_body"),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+            }
+            ExpressionOperation::BorrowOwnedField {
+                source,
+                field,
+                binding,
+                body,
+                ..
+            } => {
+                self.visit_expression_child(
+                    owner,
+                    source,
+                    (
+                        ExpressionChildRole::OwnedProductSource,
+                        "owned_product_source",
+                    ),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+                self.visit_binding(
+                    binding,
+                    DefinitionPosition {
+                        parent: owner,
+                        ownership_role: OwnershipRole::ExpressionBinding {
+                            role: BindingContainerRole::OwnedBorrow,
+                            ordinal: 0,
+                        },
+                        slot: "owned_product_binding",
+                        index: 0,
+                        label: Some(field.to_string()),
+                        depth: child_depth,
+                    },
+                    BindingKind::OwnedBorrow,
+                )?;
                 self.visit_expression_child(
                     owner,
                     body,
@@ -7013,6 +7091,7 @@ fn definition_binding_kind_name(value: BindingKind) -> &'static str {
         BindingKind::Transaction => "transaction",
         BindingKind::OwnedUnpack => "owned_unpack",
         BindingKind::OwnedChoicePayload => "owned_choice_payload",
+        BindingKind::OwnedBorrow => "owned_borrow",
     }
 }
 

@@ -56,10 +56,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-31";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 31;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-27";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 27;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-32";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 32;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-28";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 28;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -1682,8 +1682,10 @@ pub(crate) const COMPACT_EFFECT_FORM_FIELDS: &[CompactFormField] = &[CompactForm
 pub const COMPACT_EXPRESSION_FORMS: &[&str] = &[
     "choose-owned",
     "match-owned",
+    "match-borrowed-owned",
     "pack-owned",
     "unpack-owned",
+    "borrow-owned-field",
     "implementation-call",
     "method-call",
     "unit",
@@ -1953,6 +1955,54 @@ pub(crate) const COMPACT_TYPE_FORM_FIELDS: &[CompactFormField] = &[
 ];
 
 pub(crate) const COMPACT_EXPRESSION_FORM_FIELDS: &[CompactFormField] = &[
+    CompactFormField {
+        form: "match-borrowed-owned",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "match-borrowed-owned",
+        name: "type",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "match-borrowed-owned",
+        name: "source",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "borrow-owned-field",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "borrow-owned-field",
+        name: "type",
+        required: true,
+        syntax: "type-reference",
+    },
+    CompactFormField {
+        form: "borrow-owned-field",
+        name: "source",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "borrow-owned-field",
+        name: "field",
+        required: true,
+        syntax: "name",
+    },
+    CompactFormField {
+        form: "borrow-owned-field",
+        name: "body",
+        required: true,
+        syntax: "$NAME",
+    },
     CompactFormField {
         form: "parallel",
         name: "as",
@@ -2550,7 +2600,7 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
     },
     CompactEdgeDescriptor {
         name: "expression.choice-arm",
-        parent: "expression.match-owned",
+        parent: "expression.match-owned|expression.match-borrowed-owned",
         child: "binding-and-body",
         fields: &[
             CompactFormField {
@@ -2599,7 +2649,7 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
     },
     CompactEdgeDescriptor {
         name: "expression.owned-binding",
-        parent: "expression.unpack-owned",
+        parent: "expression.unpack-owned|expression.borrow-owned-field",
         child: "binding",
         fields: &[
             CompactFormField {
@@ -5023,7 +5073,7 @@ impl Decoder {
                     value: Box::new(self.decode_expression(required(&record, "value")?)?),
                 }
             }
-            "expression.match-owned" => {
+            "expression.match-owned" | "expression.match-borrowed-owned" => {
                 check_fields(&record, &["as", "type", "source"])?;
                 let choice_type = self.decode_type(required(&record, "type")?)?;
                 let source = Box::new(self.decode_expression(required(&record, "source")?)?);
@@ -5039,10 +5089,18 @@ impl Decoder {
                         self.decode_expression(required(&edge.record, "body")?)?,
                     ));
                 }
-                AuthoredExpressionOperation::MatchOwned {
-                    choice_type,
-                    source,
-                    arms,
+                if record.operation == "expression.match-borrowed-owned" {
+                    AuthoredExpressionOperation::MatchBorrowedOwned {
+                        choice_type,
+                        source,
+                        arms,
+                    }
+                } else {
+                    AuthoredExpressionOperation::MatchOwned {
+                        choice_type,
+                        source,
+                        arms,
+                    }
                 }
             }
             "expression.pack-owned" => {
@@ -5081,6 +5139,43 @@ impl Decoder {
                     product_type,
                     source,
                     fields,
+                    body,
+                }
+            }
+            "expression.borrow-owned-field" => {
+                check_fields(&record, &["as", "type", "source", "field", "body"])?;
+                let product_type = self.decode_type(required(&record, "type")?)?;
+                let source = Box::new(self.decode_expression(required(&record, "source")?)?);
+                let field = parse_name(&record, "field")?;
+                let mut edges = self.ordered_record_edges("expression.owned-binding", symbol)?;
+                if edges.len() != 1 {
+                    return Err(field_error(
+                        &record,
+                        "as",
+                        "change_owned_borrow_binding",
+                        "owned field borrowing requires exactly one child binding",
+                    ));
+                }
+                let edge = edges.remove(0);
+                if parse_name(&edge.record, "field-name")? != field {
+                    return Err(field_error(
+                        &edge.record,
+                        "field-name",
+                        "change_owned_borrow_binding",
+                        "borrowed field and child binding must select the same field",
+                    ));
+                }
+                let binding = AuthoredBindingDefinition {
+                    symbol: symbol_field(&edge.record, "as")?,
+                    name: parse_name(&edge.record, "name")?,
+                    declared_type: Some(self.decode_type(required(&edge.record, "type")?)?),
+                };
+                let body = Box::new(self.decode_expression(required(&record, "body")?)?);
+                AuthoredExpressionOperation::BorrowOwnedField {
+                    product_type,
+                    source,
+                    field,
+                    binding: Box::new(binding),
                     body,
                 }
             }
@@ -5462,6 +5557,8 @@ fn commitment_codec_identity(intent: &[u8]) -> &'static str {
         "lkjscript-authored-change-codec-25"
     } else if intent.starts_with(b"LKJACR26") {
         "lkjscript-authored-change-codec-26"
+    } else if intent.starts_with(b"LKJACR27") {
+        "lkjscript-authored-change-codec-27"
     } else {
         // Retain the existing fallback; do not infer identities from unknown/future magics.
         AUTHORED_CHANGE_CODEC_IDENTITY

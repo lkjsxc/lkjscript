@@ -566,6 +566,13 @@ fn walk_expression<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
 
     let next = depth.saturating_add(1);
     match record.operation {
+        ExpressionOperation::BorrowOwnedField { .. }
+        | ExpressionOperation::MatchBorrowedOwned { .. } => {
+            return Err(extract_error(
+                "change_extract_owned_borrow",
+                "function extraction containing scoped owned borrowing is unsupported",
+            ));
+        }
         ExpressionOperation::ChooseOwned { .. } | ExpressionOperation::MatchOwned { .. } => {
             return Err(extract_error(
                 "change_extract_owned_choice",
@@ -769,6 +776,7 @@ fn walk_binding<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         BindingContainerRole::Transaction => BindingKind::Transaction,
         BindingContainerRole::OwnedUnpack => BindingKind::OwnedUnpack,
         BindingContainerRole::OwnedChoicePayload => BindingKind::OwnedChoicePayload,
+        BindingContainerRole::OwnedBorrow => BindingKind::OwnedBorrow,
     };
     if record.kind != expected_kind {
         return Err(extract_corrupt(
@@ -1493,6 +1501,13 @@ fn replace_expression_reference(
         }
     };
     match operation {
+        ExpressionOperation::BorrowOwnedField { .. }
+        | ExpressionOperation::MatchBorrowedOwned { .. } => {
+            return Err(extract_error(
+                "change_extract_owned_borrow",
+                "function extraction containing scoped owned borrowing is unsupported",
+            ));
+        }
         ExpressionOperation::Parallel { left, right } => {
             replace(left);
             replace(right);

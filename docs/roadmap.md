@@ -1,172 +1,111 @@
 # Roadmap
 
-Improve the language's compositional type, generic, trait, ownership, lifetime,
-effect and concurrency design. Reliable agent development is the secondary objective;
-personal application completion, immediate benchmark wins and new application
-starters do not determine the order. The accepted meaning graph remains the sole
-editable program authority. [Direction](direction.md) contains the durable choices,
-[status](status.md) owns availability, and [specifications](spec/) define implemented
-contracts. Historical prompts are not additional prerequisites.
+Build composable types, generics, traits, ownership, lifetimes, effects and
+concurrency around the accepted meaning graph. Reliable agent development is a
+secondary objective. [Direction](direction.md) owns durable architectural choices,
+[status](status.md) owns availability and unfinished publication, and
+[specifications](spec/) own language contracts. Completed delivery belongs to Git
+and release notes.
 
-These priorities order the next useful experiments, not a waterfall or a feature
-promise. Mechanisms may change when a better complete design has evidence. Memory
-safety, bounded checking and avoidance of unnecessary copying are baseline requirements.
+These priorities guide useful experiments. A complete capability needs ordinary
+public authoring, cross-package composition, independent admission and meaningful
+failure evidence. Memory safety, bounded checking and avoiding unnecessary copies
+remain baseline requirements.
 
-## 1. Compose generic contracts with structured ownership
+## Compose ownership and generic contracts
 
-Retain the completed 0.1.68 distribution acceptance and publication under the
-[existing procedure](release.md#published-structured-parallel-v0168).
-[Status](status.md) records the exact public source and completed producer/promotion. Retain
-the completed source, cross-package, artifact, overlap, quota and cleanup evidence;
-renew proof when its bindings change. Preserve task kind independently of an empty
-effect row throughout authoring, extraction and execution.
+Use [scoped reads of owned children](spec/owned-borrows.md) to inspect products and
+choices through exact implementation witnesses, then consume the preserved owner.
+The acceptance witness combines a symbolic reader with independent buffer/scalar
+implementations, nested composites, exact package transports and detached artifacts.
+Loan provenance, cleanup and inactive branches require independent checking.
 
-Use the [current pair contract](spec/structured-parallel.md) as a small coherent
-foundation. Owned results now return through a separately sealed pair; public
-0.1.70 added exact closed generic child applications and nominal implementation
-selection without mandatory monomorphic wrappers. Preserve the independent canonical
-and memory oracles, complete type closure, cross-package source-free composition,
-allocation identity, shared quotas and joined failure cleanup. Source and final-byte
-acceptance remain separate facts in [status](status.md).
+Build useful owned containers on that foundation, then associated scoped views
+and explicit lifetime relationships. Select each extension through an ordinary
+library that cannot be expressed cleanly with the current fixed products and
+choices. Consider associated type families, higher-ranked borrowing and bounded
+value/region parameters where they make that abstraction sound and useful.
 
-Public 0.1.71 adds [explicit transferable contracts](spec/transferable-types.md)
-for reusable generic code that itself forms child groups. Transferability is
-independent of ownership and capture safety; symbolic proofs become exact at
-execution. Acceptance includes nominal/phantom closure, mixed generic result pairs,
-exact implementation forwarding and independent bounded proofs. [Status](status.md)
-owns the exact completed acceptance and publication. Channels, task handles and effectful
-children remain separate extensions.
+Keep implementation identity explicit and contracts independently checkable.
+Inference must retain boundary evidence; bounded proof-search exhaustion remains
+distinct from invalid meaning. Effect allowances, witnesses and deployment grants
+stay separate. Typed failures must compose with cancellation and resource completion.
 
-Public 0.1.72 supplies the shared worker/runtime work below. Public
-0.1.73 composes generic Owned implementation applications with caller-supplied
-effects and requirements through the same independently checked authority
-boundaries as ordinary calls. Its source, finalized-byte and public acceptance
-are complete. [Reviewed concurrent candidate refresh](spec/concurrent-changes.md)
-has completed fresh source acceptance and mainline integration; finalized-byte
-acceptance remains pending. [Status](status.md) owns the exact current evidence.
-Keep region-local ownership possible: current owned carriers being transferable
-does not make every future owner transferable.
+## Establish region custody and memory policies
 
-## 2. Scale structured execution and the shared host
+Extend scoped access into explicit region custody. Define escape, cross-region
+roots, freezing, transfer and reclamation before selecting placement mechanisms.
+Compare unique regions, scoped aliases, local tracing for cycles and transitively
+immutable shared segments. A mandatory global tracing heap and universal Arc-style
+ownership are not architectural requirements.
 
-Public 0.1.72 replaces per-child OS thread creation with lazily reused auxiliary
-workers under an explicit lifetime owner. Nonblocking idle-worker reservation and
-caller fallback preserve nested progress. The maintained native parallel-work
-family compares identical serial/parallel transforms and reductions beside an
-independent I/O instance. [Status](status.md) owns actual acceptance and measurement.
-This auxiliary bound does not establish a total root-plus-child CPU bound or fairness.
+Relate moving storage to handles, pinning, roots and native safepoints. Region views
+should admit different storage implementations while retaining independently checked
+access rights. Reclamation does not complete I/O or commit a transaction. Preserve a
+collector-free path where the selected execution profile permits it.
 
-Use the retained cold/warm, cancellation and start/stop evidence to select subsequent
-root scheduling, local queues, batching and locality work. Blocking-capable roots
-remain separately scheduled until their suspension and completion contracts can
-support a bounded CPU scheduler. Do not infer fairness or preemption from worker reuse.
+Measure copying, retained memory, pauses, throughput and preparation on matched
+workloads, including locality and large working sets. Allocation identity alone
+does not establish whole-program zero-copy behavior or a speedup.
 
-Extend the [in-process shared runtime](spec/shared-runtime.md) with explicit pooling,
-admission, readiness, stop/drain/unload and version coexistence. Share compatible
-immutable code and metadata; retain private state, captures, grants, cancellation
-and accounting. Isolates are authority/lifetime domains, not permanent OS threads.
-Dynamic supervision and component-level pooling require their own evidence.
+## Scale structured execution and the shared host
 
-Develop typed bounded channels when the task/ownership contract can express exact
-destination admission, capacity reservation, irrevocable acceptance, owner-returning
-refusal and joined receiver cleanup. The existing runtime mailbox is a mechanism,
-not a public channel certificate. Acceptance is not processing completion, and
-in-process transfer establishes no distributed exactly-once guarantee.
+Extend the [structured parallel contract](spec/structured-parallel.md) and
+[shared runtime](spec/shared-runtime.md) with explicit scheduling, pooling,
+readiness, drain and unload contracts. Share compatible immutable code and metadata;
+keep state, captures, grants, cancellation and accounting private to their owners.
+Isolates are authority/lifetime domains rather than permanent OS threads.
 
-## 3. Broaden ownership, generics, traits and effects together
+Use retained cold/warm, overlap, cancellation and stop evidence to select root
+scheduling, local queues, batching and locality work. Reused auxiliary workers do
+not establish a total CPU bound, fairness or preemption. Blocking roots need a
+suspension/completion contract before joining a bounded CPU scheduler.
 
-Extend the [Owned library contracts](spec/owned-generics.md), [products](spec/owned-products.md)
-and [choices](spec/owned-choices.md) through one ordinary cross-package composition
-at a time. Public 0.1.73 adds a same-invocation generic task consuming an Owned
-carrier, forwarding an exact implementation witness, invoking an effect-parametric
-callback and using a caller-supplied requirement. Its [contract](spec/owned-effects.md)
-preserves substitutions and grant checks through transport and both evaluators;
-methods remain closed. Distinct cell/buffer implementations and foreign or
-insufficient authority rejection precede any expansion of parallel child effects.
+Introduce typed bounded channels only with exact destination admission, capacity
+reservation, irrevocable acceptance, owner-returning refusal and joined receiver
+cleanup. Acceptance is distinct from processing completion. In-process custody
+does not establish distributed exactly-once delivery.
 
-Then prioritize useful owned containers, borrowing/lifetime relationships and
-typed trait methods over disconnected syntax. Explore associated type families,
-higher-ranked borrowing, effect polymorphism and bounded value/region parameters
-where they support a sound abstraction.
+## Reduce repeated preparation and semantic-development work
 
-Retain exact implementation identity and explicit coherence, ambiguity and termination
-rules. Local inference must leave independently checkable boundary contracts.
-Proof-search exhaustion is distinct from invalid meaning. Effect allowances,
-implementation witnesses and deployment grants remain separate. Typed failures and
-resource completion must compose with cancellation; retained affine continuations
-cannot be duplicated by an effect handler without a valid ownership contract.
+Share immutable admitted dependency interfaces across snapshots as a separate,
+measured follow-up. Preserve exact package/revision bindings, substitutions,
+visibility and effects; loaders must continue independent admission. Compare repeated
+cross-package checks before and after, including retained storage and unsuccessful
+cases. Existing copy-work admission bounds growth without removing duplication.
 
-## 4. Establish ownership and region memory policies
+Use [reviewed candidate refresh](spec/concurrent-changes.md) as the foundation for
+larger concurrent-agent experiments and finer dependency capture. Distinct edited
+owners alone do not prove independence. Branch/tag, difference, merge, deletion and
+compaction need explicit retained-root and interruption contracts; a short serialized
+publication point remains acceptable.
 
-Compare unique regions, scoped aliases, local tracing for cyclic data and transitively
-immutable shared segments. Universal Arc-style ownership and a mandatory global
-tracing heap are not the selected end state. Define region escape, cross-region roots,
-freezing, transfer and reclamation before selecting placement mechanisms.
+## Advance native execution, storage and self-hosting
 
-Relate moving collectors to borrows, handles/pinning, roots and native safepoints.
-GC reclaims storage; it does not commit transactions or complete I/O. Preserve a
-collector-free/no-allocation path where future freestanding effects permit it.
-Compare copying, retained memory, pauses, throughput and preparation on matched
-workloads, including cache/NUMA and large working-set behavior.
+Derive dedicated-runtime programs and native executables from the same accepted
+meaning. Hosted native code may embed services; freestanding profiles reject
+unsupported services explicitly. Add targets with execution/distribution evidence.
+Wasm and other-language interoperability remain optional later work.
 
-## 5. Support concurrent semantic development
-
-Source acceptance for [explicit candidate refresh](spec/concurrent-changes.md) is
-complete. It preserves the original request, allocation identities and authored
-after-values; guards complete intent reads including negative lookups and empty
-relation ranges; and renews semantic validation, impact and tests. Copied public
-executables prove disjoint publication, hidden conflicts, stale races and exact
-accepted retries. Finalized-byte acceptance remains a separate pending gate.
-
-After that acceptance, use the retained evidence to select larger concurrent-agent
-experiments and finer dependency capture on authorized resources. Different edited
-owners do not establish independence; a short serialized publication point remains
-acceptable. Branching and multi-parent merges require their own selected contract.
-
-Select conventional revision, branch/tag, difference, merge and retained-root semantics.
-Preserve useful stable identities without retaining every recomputable analysis.
-Deletion and compaction need reachability and interruption proofs. Concurrent shell
-commands are not evidence of safe concurrent program modification.
-
-## 6. Advance native execution, storage and self-hosting
-
-Derive dedicated-runtime programs and native executables from the same accepted meaning.
-Hosted native code may embed required runtime services; freestanding profiles reject
-unsupported services explicitly. Keep Linux x86-64 first and add other targets only
-with execution/distribution evidence. Wasm and other-language interoperability remain
-optional, lower-priority work.
-
-Own the persistence engine and typed data semantics. Separate durable transactions,
-revision history and heap collection. Investigate SSD layout, batching, recovery and
+Own persistence and typed data semantics. Separate durable transactions, revision
+history and heap reclamation. Investigate storage layout, batching, recovery and
 bounded caching on concrete workloads without requiring an external database engine.
 
-Move libraries, tools, compiler and runtime toward eventual complete self-hosting,
-including possible removal of Rust. Replace each host boundary when its native
-successor owns the relevant semantics and failure behavior; a rewrite percentage
-or premature deadline is not progress. Native authoring must remain usable without
-an external semantic generator throughout this transition.
+Move libraries, tools, compiler and runtime toward complete self-hosting, including
+possible removal of Rust. Replace a host boundary when its native successor owns
+the relevant semantics and failure behavior. Native development must remain usable
+without an external semantic generator.
 
 ## Evidence and development cost
 
-Use normal public operations and independently expected successes, failures and cleanup.
-Maintained applications remain regression witnesses, not an application-first backlog.
-Keep source acceptance, final distributable bytes and publication distinct. Reuse
-valid evidence and run the smallest dependency-complete checks for changed inputs;
-do not add overlapping receipts or repeatedly reconstruct completed history.
+Use independent expected results, rejected proposals with unchanged accepted state,
+and cleanup observations. Retain unfavorable performance results. Separate source
+acceptance, finalized distributed bytes and publication; reuse proof only while its
+bindings remain valid. Maintained applications are regression witnesses rather than
+an application-first backlog.
 
-Keep current direction, status and priorities at their existing owners, with exact
-logs at verification/release owners. Historical campaigns remain archives, not a
-required prompt-reading sequence. Reduce repeated context and verification work,
-while preserving evidence needed for actual claims. Measure API usage/cost only
-from observed usage; document size alone establishes neither tokens nor money saved.
-
-Turn retained audit hypotheses into small executed counterexamples before further
-changes. Retain imported Owned-generic coverage in the independent memory oracle;
-follow up immutable sharing of dependency interfaces and reuse of admitted expression types
-within one extraction. The new copy-work admission bounds growth but does not remove
-duplicate metadata. Preserve exact source, substitution and effect scopes when sharing.
-
-For runtime comparisons, separate cold/warm admission, latency tails, throughput,
-shared/private storage and RSS/PSS. Include a matched separate-process baseline and
-retain slower cases. Compatibility cuts for authorized experimental data remain
-available; they do not authorize unrelated destruction or rewriting failed evidence.
+Keep exact logs and receipts at verification/release owners. Reduce repeated context
+and overlapping verification while preserving required coverage. Claim API-cost
+improvements only from actual usage/billing measurements. Authorized experimental
+compatibility cuts do not authorize unrelated destruction or rewriting original
+publication and failed evidence.

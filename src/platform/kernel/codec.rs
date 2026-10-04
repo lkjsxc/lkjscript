@@ -205,7 +205,7 @@ mod implementation_application_encoding_tests {
     }
 
     #[test]
-    fn new_implementation_operands_round_trip_only_in_graph23() {
+    fn new_implementation_operands_round_trip_from_graph23() {
         let (id, function, requirement) = references();
         for (requirement_arguments, effect_arguments) in [
             (vec![requirement], Vec::new()),
@@ -232,10 +232,18 @@ mod implementation_application_encoding_tests {
             .unwrap();
             let current = OwnerRecord::Expression(expression.clone());
             let (digest, bytes) = encode_owner(&current).unwrap();
-            assert_eq!(&bytes[..8], b"LKJOWN23");
+            assert_eq!(&bytes[..8], b"LKJOWN24");
             assert_eq!(
                 decode_owner(&bytes, current.owner(), current.kind(), digest).unwrap(),
                 current
+            );
+            let mut previous = current.clone();
+            previous.set_encoding_for_edit(23);
+            let (digest, bytes) = encode_owner(&previous).unwrap();
+            assert_eq!(&bytes[..8], b"LKJOWN23");
+            assert_eq!(
+                decode_owner(&bytes, previous.owner(), previous.kind(), digest).unwrap(),
+                previous
             );
             assert_eq!(
                 super::super::wire22::ExpressionRecord22::try_from(expression.clone())
@@ -293,7 +301,7 @@ mod nominal_encoding_tests {
                 constraints: constraint,
             });
             let (digest, bytes) = encode_owner(&record).unwrap();
-            assert_eq!(&bytes[..8], b"LKJOWN23");
+            assert_eq!(&bytes[..8], b"LKJOWN24");
             assert_eq!(
                 decode_owner(&bytes, key, OwnerKind::TypeParameter, digest).unwrap(),
                 record
@@ -368,7 +376,7 @@ mod nominal_encoding_tests {
         .unwrap();
         let owner = OwnerRecord::Expression(expression.clone());
         let (digest, bytes) = encode_owner(&owner).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOWN23");
+        assert_eq!(&bytes[..8], b"LKJOWN24");
         assert_eq!(
             decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
             owner
@@ -661,6 +669,99 @@ pub fn encode_owner_binding(binding: &OwnerBinding) -> Vec<u8> {
     bytes
 }
 
+#[cfg(test)]
+mod borrow_encoding_tests {
+    use super::*;
+    use crate::platform::kernel::{
+        BindingKind, BindingRecord, ExpressionOperation, ExpressionRecord, Name, OwnedChoiceArm,
+        OwnerHeader, TypeForm,
+    };
+    use crate::platform::semantic_id::{BindingId, ExpressionId};
+
+    #[test]
+    fn lexical_borrow_tags_round_trip_and_rehashed_predecessors_reject() {
+        let binding = BindingId::migrate(b"scoped-child-read-codec", 0);
+        let expression = ExpressionId::migrate(b"scoped-child-read-codec", 0);
+        let source = ExpressionId::migrate(b"scoped-child-read-codec", 1);
+        let body = ExpressionId::migrate(b"scoped-child-read-codec", 2);
+        let ty = encode_type_object(&TypeObject::new(TypeForm::ByteBuffer).unwrap())
+            .unwrap()
+            .0;
+        let records = [
+            OwnerRecord::Expression(
+                ExpressionRecord::new(
+                    expression,
+                    ExpressionOperation::BorrowOwnedField {
+                        product_type: ty,
+                        source,
+                        field: Name::new("payload").unwrap(),
+                        binding,
+                        body,
+                    },
+                )
+                .unwrap(),
+            ),
+            OwnerRecord::Expression(
+                ExpressionRecord::new(
+                    expression,
+                    ExpressionOperation::MatchBorrowedOwned {
+                        choice_type: ty,
+                        source,
+                        arms: vec![OwnedChoiceArm {
+                            name: Name::new("accepted").unwrap(),
+                            binding,
+                            body,
+                        }],
+                    },
+                )
+                .unwrap(),
+            ),
+            OwnerRecord::Binding(BindingRecord {
+                header: OwnerHeader::new(OwnerKey::Binding(binding), OwnerKind::Binding),
+                name: Name::new("view").unwrap(),
+                kind: BindingKind::OwnedBorrow,
+                value: None,
+                declared_type: Some(ty),
+            }),
+        ];
+        for record in records {
+            let (digest, bytes) = encode_owner(&record).unwrap();
+            assert_eq!(&bytes[..8], b"LKJOWN24");
+            assert_eq!(
+                decode_owner(&bytes, record.owner(), record.kind(), digest).unwrap(),
+                record
+            );
+            let mut previous = record.clone();
+            previous.set_encoding_for_edit(23);
+            let code = if matches!(record, OwnerRecord::Binding(_)) {
+                "kernel_borrow_binding"
+            } else {
+                "kernel_borrow_generation"
+            };
+            assert_eq!(encode_owner(&previous).unwrap_err().code, code);
+            // Independent envelope rehash cannot confer predecessor authority.
+            let disguised = packed::encode(
+                crate::platform::kernel::contract::OWNED_EFFECT_OWNER_MAGIC,
+                crate::platform::kernel::contract::OWNED_EFFECT_OWNER_ENVELOPE_DOMAIN,
+                &previous,
+                MAXIMUM_OWNER_OBJECT_BYTES,
+            )
+            .unwrap();
+            assert_eq!(
+                decode_owner(
+                    &disguised,
+                    previous.owner(),
+                    previous.kind(),
+                    OwnerObjectDigest::of(&disguised)
+                )
+                .unwrap_err()
+                .code,
+                code
+            );
+        }
+    }
+}
+
 pub fn decode_owner_binding(
     bytes: &[u8],
     expected_owner: OwnerKey,
@@ -786,6 +887,13 @@ pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>)
             super::contract::TRANSFER_OWNER_MAGIC,
             super::contract::TRANSFER_OWNER_ENVELOPE_DOMAIN,
         )
+    } else if record.header().contract_version
+        == super::contract::OWNED_EFFECT_GRAPH_CONTRACT_VERSION
+    {
+        (
+            super::contract::OWNED_EFFECT_OWNER_MAGIC,
+            super::contract::OWNED_EFFECT_OWNER_ENVELOPE_DOMAIN,
+        )
     } else {
         (OWNER_MAGIC, OWNER_ENVELOPE_DOMAIN)
     };
@@ -796,7 +904,9 @@ pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>)
             &super::wire17::OwnerRecord17::try_from(record.clone())?,
             MAXIMUM_OWNER_OBJECT_BYTES,
         )?
-    } else if record.header().contract_version < super::contract::GRAPH_CONTRACT_VERSION {
+    } else if record.header().contract_version
+        < super::contract::OWNED_EFFECT_GRAPH_CONTRACT_VERSION
+    {
         packed::encode(
             magic,
             domain,
@@ -914,6 +1024,12 @@ pub fn decode_owner(
                 super::contract::TRANSFER_OWNER_ENVELOPE_DOMAIN,
                 super::contract::TRANSFER_GRAPH_CONTRACT_VERSION,
             )
+        } else if bytes.starts_with(&super::contract::OWNED_EFFECT_OWNER_MAGIC) {
+            (
+                super::contract::OWNED_EFFECT_OWNER_MAGIC,
+                super::contract::OWNED_EFFECT_OWNER_ENVELOPE_DOMAIN,
+                super::contract::OWNED_EFFECT_GRAPH_CONTRACT_VERSION,
+            )
         } else {
             (
                 OWNER_MAGIC,
@@ -921,13 +1037,14 @@ pub fn decode_owner(
                 super::contract::GRAPH_CONTRACT_VERSION,
             )
         };
-        let record: OwnerRecord = if generation < super::contract::GRAPH_CONTRACT_VERSION {
-            let wire: super::wire22::OwnerRecord22 =
-                packed::decode(bytes, magic, domain, MAXIMUM_OWNER_OBJECT_BYTES)?;
-            wire.into()
-        } else {
-            packed::decode(bytes, magic, domain, MAXIMUM_OWNER_OBJECT_BYTES)?
-        };
+        let record: OwnerRecord =
+            if generation < super::contract::OWNED_EFFECT_GRAPH_CONTRACT_VERSION {
+                let wire: super::wire22::OwnerRecord22 =
+                    packed::decode(bytes, magic, domain, MAXIMUM_OWNER_OBJECT_BYTES)?;
+                wire.into()
+            } else {
+                packed::decode(bytes, magic, domain, MAXIMUM_OWNER_OBJECT_BYTES)?
+            };
         if record.header().contract_version != generation {
             return Err(codec_error(
                 "kernel_owner_encoding_generation",

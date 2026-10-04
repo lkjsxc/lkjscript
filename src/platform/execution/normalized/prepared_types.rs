@@ -806,9 +806,26 @@ fn calls(
         | NormalizedInstruction::MatchOwned {
             choice_type: product_type,
             ..
+        }
+        | NormalizedInstruction::BorrowOwnedField { product_type, .. }
+        | NormalizedInstruction::MatchBorrowedOwned {
+            choice_type: product_type,
+            ..
         } = instruction
         {
             substitute(types, *product_type, bindings, 0, work)?;
+        }
+        match instruction {
+            NormalizedInstruction::BorrowOwnedField { binding_type, .. } => {
+                substitute(types, *binding_type, bindings, 0, work)?;
+            }
+            NormalizedInstruction::MatchBorrowedOwned { cases, .. } => {
+                for case in cases.iter() {
+                    step(work)?;
+                    substitute(types, case.binding_type, bindings, 0, work)?;
+                }
+            }
+            _ => {}
         }
         let nominal: Option<(_, _, &[TypeObjectDigest])> = match instruction {
             NormalizedInstruction::Record {
@@ -1142,6 +1159,56 @@ fn close_effect_applications(
                             0,
                             self.work,
                         )?;
+                    }
+                    NormalizedInstruction::BorrowOwnedField {
+                        product_type,
+                        binding_type,
+                        ..
+                    } => {
+                        *product_type = substitute_effect_type(
+                            self.types,
+                            *product_type,
+                            bindings,
+                            requirements,
+                            0,
+                            self.work,
+                        )?;
+                        *binding_type = substitute_effect_type(
+                            self.types,
+                            *binding_type,
+                            bindings,
+                            requirements,
+                            0,
+                            self.work,
+                        )?;
+                    }
+                    NormalizedInstruction::MatchBorrowedOwned {
+                        choice_type, cases, ..
+                    } => {
+                        *choice_type = substitute_effect_type(
+                            self.types,
+                            *choice_type,
+                            bindings,
+                            requirements,
+                            0,
+                            self.work,
+                        )?;
+                        if Arc::get_mut(cases).is_none() {
+                            self.work
+                                .reserve::<super::prepare::NormalizedBorrowedOwnedChoiceJump>(
+                                    cases.len(),
+                                )?;
+                        }
+                        for case in Arc::make_mut(cases) {
+                            case.binding_type = substitute_effect_type(
+                                self.types,
+                                case.binding_type,
+                                bindings,
+                                requirements,
+                                0,
+                                self.work,
+                            )?;
+                        }
                     }
                     NormalizedInstruction::Record { type_arguments, .. }
                     | NormalizedInstruction::Variant { type_arguments, .. } => {

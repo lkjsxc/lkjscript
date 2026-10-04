@@ -370,14 +370,13 @@ fn child(
         control.cancel();
     }
     machine.rollback_all();
-    machine.frames.clear();
-    machine.stack.clear();
+    machine.clear_execution_values();
     resources.release_all();
     machine.observation.value_work.lists = lists.since();
     machine.observation.value_work.maps = maps.since();
     ChildOutcome {
         result,
-        observation: machine.observation,
+        observation: std::mem::take(&mut machine.observation),
     }
 }
 

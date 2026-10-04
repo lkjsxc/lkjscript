@@ -1969,6 +1969,8 @@ fn candidate_owner_type_root_count(record: &crate::platform::kernel::OwnerRecord
         OwnerRecord::Expression(record) => match &record.operation {
             ExpressionOperation::ChooseOwned { .. }
             | ExpressionOperation::MatchOwned { .. }
+            | ExpressionOperation::MatchBorrowedOwned { .. }
+            | ExpressionOperation::BorrowOwnedField { .. }
             | ExpressionOperation::PackOwned { .. }
             | ExpressionOperation::UnpackOwned { .. }
             | ExpressionOperation::TransactionOutcome { .. }

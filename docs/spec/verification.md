@@ -1712,7 +1712,7 @@ only from runtime metadata must reject.
 Both evaluators must produce independently expected octets `0, 255, 128`, preserve both branches
 of an owner chooser, and complete a 16,384-step consuming builder and a borrowed reader with
 bounded activation depth. The reader's wrapper owner must survive its live loans; read-only
-reborrows may tail-transfer. Drop observation must cover lexical continuation, a discarded sequence temporary before its
+reborrows may tail-transfer outside active lexical child-read scopes. Drop observation must cover lexical continuation, a discarded sequence temporary before its
 successor executes, invalid octets
 and indices, quota refusal, cancellation during live loans and raw adapter-result rejection.
 Raw cloned, borrowed, stale and foreign tokens cannot enter execution. Internal Clone identity
@@ -1818,3 +1818,55 @@ owner generations 14–17; new layout generations and validator identity invalid
 old derived execution proof. Rebuild maintained artifacts through public owners
 without changing accepted meaning HEADs. The integrator owns dependency-complete
 acceptance after implementation source stabilizes.
+
+## Scoped owned-child read obligations
+
+The [lexical read contract](owned-borrows.md) extends existing ownership,
+source-reference, public CLI, package and finalized-executable acceptance owners.
+A copied public executable must author and check a symbolic product/choice reader
+before any concrete carrier or implementation exists. Retain literal producer,
+carrier and consumer requests, exact package/revision bindings, discovery,
+canonical draft re-entry and a supported identity-preserving edit. The maintained
+[example](../../examples/owned-borrows/README.md) exercises scalar cells, buffers,
+nested composites, siblings and ordinary/owned choice arms. Compare complete
+independently specified outputs, including both distinguishable implementations
+for one Self, signed scalar extremes, repeated reads and later consumption of the
+unchanged original. Remove source projects and transports before detached execution.
+
+Both evaluators must preserve child allocation identity and independently expected
+results. Cover nested parent/sibling reads without deadlock, exact borrowed methods,
+synchronous reborrows, ordinary choice results, unrelated owned scope results,
+authorized task effects and recursive calls from owning and borrowed sources.
+An active scope must retain its activation even when the source is a borrowed
+parameter and no frame-local owner has an outstanding loan. Existing eligible
+reborrow tail transfer outside child scopes remains separately tested.
+
+Rejected proposals must retain accepted HEAD. Negative cases include consumption
+through a protected source/ancestor alias, consuming a view, escaping or capturing
+a loan, storing it in a container, unrestricted argument passing, task transfer,
+wrong exact types or witnesses, non-local sources, missing/duplicate/extra arms,
+inconsistent results and invalid untaken bodies. Function extraction containing a
+scope must reject before publication. Complete type/method closure is checked even
+when a view or selected implementation method is never used.
+
+The independent ownership oracle maintains its own owner/loan/provenance model
+from canonical records; it cannot obtain child custody or borrowed roles from the
+production checker. Independently admitted, consistently rehashed artifacts must
+reject erased guards, substituted sources, counterfeit owning bindings and altered
+cleanup/tail-call instructions. Neutral reconstruction of the admitted artifact
+must still pass. Agreement of source and compiled hashes is insufficient proof.
+
+Cleanup evidence covers normal completion, traps, cancellation, allocation/quota
+refusal, argument/result failure and host unwind. Observe innermost scope and
+youngest frame cleanup, child loans ending before ancestor guards and custodians,
+zero surviving owned storage/loans, and healthy subsequent invocation. Verify the
+runtime releases internal storage locks before entering the body. Authorized
+live-effect cases execute once and retain completed effects through later cleanup;
+never replay them for differential verification.
+
+Keep new traversal, provenance and scope storage under existing finite proof and
+allocation admission. Test meaningful boundaries without enlarging limits. Renew
+source and derived-layout proof under explicit compatibility cuts, rebuild maintained
+assets through their supported owners, and retain original historical/publication
+evidence. Source acceptance, finalized-byte acceptance and public availability
+remain distinct facts.

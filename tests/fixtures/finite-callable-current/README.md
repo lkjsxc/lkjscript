@@ -3,8 +3,8 @@
 These two deliberately invalid artifacts preserve the canonical source and
 instructions of `../finite-callable-predecessor/expanding-{direct,named}.lkja`.
 Only derived compiler-unit, compilation-map/manifest, pack and artifact envelopes
-are re-encoded for graph 23 / compiler 23 / bytecode 18 / artifact 30 under
-semantic validator 28.
+are re-encoded for graph 24 / compiler 24 / bytecode 19 / artifact 31 under
+semantic validator 29.
 
 The test-only owner is
 `platform::compiler::tests::effect_tests::strict_artifact_rejects_fully_rehashed_expanding_canonical_applications`.
@@ -38,11 +38,11 @@ alignment edits. SHA-256: direct
 `5d7c2c5c2ccf341b8d10e7d2622f163a47adbd46b2fa9c806ddf4c081195d140`;
 named `012ab4b4a7221a60379f2bd3abf858e30c4503699ee88d9e09bd61c58cddcc76`.
 
-The current envelopes were regenerated on 2026-10-03 with the supported test owner
-for the owned-effect application successor. Both derived artifacts reached
+The current envelopes were regenerated on 2026-10-04 with the supported test owner
+for scoped owned reads. Both derived artifacts reached
 `semantic / kernel_callable_expansion` before the retained-byte comparison.
 
 | Current fixture | SHA-256 |
 | --- | --- |
-| `expanding-direct.lkja` | `6f287bab31fcd8b6a71cd8807a917903180bdf5ea1c4136c56546e989fff4469` |
-| `expanding-named.lkja` | `bd8ef88976a861d3258c18aba0da321d24bcfc6782dbdd46595eecceb2da6b81` |
+| `expanding-direct.lkja` | `0dd424008237abb7dc47524c9728d2528a7f38240eefb8bb87527b9482ba6d7e` |
+| `expanding-named.lkja` | `65da4b1228aa3fe444e7b2bf7b8f328d7afe09f8c2eae75f910e2d703c01c7eb` |

@@ -1,0 +1,11 @@
+declarations.begin
+(units
+  (module create stored-owned-view
+    (function create store (visibility public) (effect pure)
+      (type-parameter create T (constraint owned))
+      (parameter create packet (type (owned-product (field payload T))) (use consume))
+      (returns (owned-product (field payload T)))
+      (body (borrow-owned-field (type (owned-product (field payload T))) (local packet)
+        (field payload (binding view (type T)))
+        (in (pack-owned (type (owned-product (field payload T))) (field payload (local view)))))))))
+declarations.end

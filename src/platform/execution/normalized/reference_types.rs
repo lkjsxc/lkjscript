@@ -536,11 +536,16 @@ impl Closure<'_> {
                 }
                 ExpressionOperation::PackOwned { product_type, .. }
                 | ExpressionOperation::UnpackOwned { product_type, .. }
+                | ExpressionOperation::BorrowOwnedField { product_type, .. }
                 | ExpressionOperation::ChooseOwned {
                     choice_type: product_type,
                     ..
                 }
                 | ExpressionOperation::MatchOwned {
+                    choice_type: product_type,
+                    ..
+                }
+                | ExpressionOperation::MatchBorrowedOwned {
                     choice_type: product_type,
                     ..
                 } => {

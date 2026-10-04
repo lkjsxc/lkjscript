@@ -10,7 +10,77 @@ struct Rights {
     memory: BTreeSet<LocalValueReference>,
     owned: BTreeSet<LocalValueReference>,
     borrowed: BTreeSet<LocalValueReference>,
+    // A projected view retains the complete source custody chain. Function
+    // borrow parameters have read rights but no invented caller-local ancestor.
+    provenance: BTreeMap<LocalValueReference, LocalValueReference>,
+    loans: BTreeMap<LocalValueReference, usize>,
 }
+impl Rights {
+    fn readable(&self, local: LocalValueReference) -> bool {
+        self.memory.contains(&local)
+            && (self.owned.contains(&local) || self.borrowed.contains(&local))
+    }
+    fn loan(&mut self, source: LocalValueReference) -> Option<Vec<LocalValueReference>> {
+        let mut ancestry = Vec::new();
+        let mut seen = BTreeSet::new();
+        let mut next = source;
+        loop {
+            if !self.readable(next) || !seen.insert(next) {
+                return None;
+            }
+            ancestry.push(next);
+            match self.provenance.get(&next) {
+                Some(parent) if self.borrowed.contains(&next) => next = *parent,
+                Some(_) => return None,
+                None => break,
+            }
+        }
+        for local in &ancestry {
+            let count = self.loans.entry(*local).or_default();
+            *count = count.checked_add(1)?;
+        }
+        Some(ancestry)
+    }
+    fn release(&mut self, ancestry: Vec<LocalValueReference>) -> Option<()> {
+        for local in ancestry {
+            let count = self.loans.get_mut(&local)?;
+            *count = count.checked_sub(1)?;
+            if *count == 0 {
+                self.loans.remove(&local);
+            }
+        }
+        Some(())
+    }
+    fn consume(&mut self, local: LocalValueReference) -> Option<()> {
+        if self.loans.contains_key(&local) || !self.owned.remove(&local) {
+            return None;
+        }
+        Some(())
+    }
+    fn view(&mut self, local: LocalValueReference, source: LocalValueReference) -> Option<()> {
+        if !self.readable(source)
+            || !self.memory.insert(local)
+            || !self.borrowed.insert(local)
+            || self.provenance.insert(local, source).is_some()
+        {
+            return None;
+        }
+        Some(())
+    }
+    fn finish_view(&mut self, local: LocalValueReference) -> Option<()> {
+        if self.owned.contains(&local)
+            || self.loans.contains_key(&local)
+            || !self.memory.remove(&local)
+            || !self.borrowed.remove(&local)
+            || self.provenance.remove(&local).is_none()
+        {
+            return None;
+        }
+        Some(())
+    }
+}
+#[path = "borrowed_memory_oracle_tests.rs"]
+mod borrowed_tests;
 #[path = "implementation_effect_memory_oracle_tests.rs"]
 mod implementation_effect_tests;
 #[path = "imported_memory_oracle_tests.rs"]
@@ -419,6 +489,21 @@ impl Oracle<'_> {
         };
         Some(&e.operation)
     }
+    fn borrow_binding(
+        &self,
+        id: crate::platform::semantic_id::BindingId,
+        ty: TypeObjectDigest,
+    ) -> bool {
+        matches!(
+            self.0.owners.get(&OwnerKey::Binding(id)),
+            Some(OwnerRecord::Binding(binding))
+                if binding.header.owner == OwnerKey::Binding(id)
+                    && binding.header.contract_version >= 24
+                    && binding.kind == BindingKind::OwnedBorrow
+                    && binding.value.is_none()
+                    && binding.declared_type == Some(ty)
+        )
+    }
     fn parallel_shape(
         &self,
         ty: TypeObjectDigest,
@@ -542,6 +627,8 @@ impl Oracle<'_> {
         }
         let mut moved = BTreeSet::new();
         let mut borrowed = BTreeSet::new();
+        let initial_loans = rights.loans.clone();
+        let mut loans = Vec::new();
         for ((ty, use_mode), argument) in parameters.iter().zip(arguments) {
             if self.buffer(*ty) {
                 let ExpressionOperation::Local { value } = self.expression(*argument)? else {
@@ -549,15 +636,14 @@ impl Oracle<'_> {
                 };
                 match use_mode {
                     ParameterUse::Borrow => {
-                        if !rights.owned.contains(value) && !rights.borrowed.contains(value) {
-                            return None;
-                        }
                         borrowed.insert(*value);
+                        loans.push(rights.loan(*value)?);
                     }
                     ParameterUse::Consume => {
-                        if !moved.insert(*value) || !rights.owned.remove(value) {
+                        if !moved.insert(*value) {
                             return None;
                         }
+                        rights.consume(*value)?;
                     }
                     ParameterUse::Unrestricted => return None,
                 }
@@ -565,7 +651,10 @@ impl Oracle<'_> {
                 return None;
             }
         }
-        moved.is_disjoint(&borrowed).then_some(())
+        for loan in loans.into_iter().rev() {
+            rights.release(loan)?;
+        }
+        (moved.is_disjoint(&borrowed) && rights.loans == initial_loans).then_some(())
     }
     // A result is either ordinary data or a moved owner. Reads never produce owners.
     fn run(&self, id: ExpressionId, rights: &mut Rights, take: bool, depth: usize) -> Option<bool> {
@@ -578,6 +667,109 @@ impl Oracle<'_> {
                 .map(|_| ())
         };
         let output = match self.expression(id)? {
+            ExpressionOperation::BorrowOwnedField {
+                product_type,
+                source,
+                field,
+                binding,
+                body,
+            } => {
+                if !self.product_shape(*product_type) {
+                    return None;
+                }
+                let TypeForm::OwnedProduct { fields } = self.form(*product_type)? else {
+                    return None;
+                };
+                let selected = fields.iter().find(|item| &item.name == field)?;
+                if !self.buffer(selected.ty) || !self.owned_type_in_scope(selected.ty) {
+                    return None;
+                }
+                let ExpressionOperation::Local { value: source } = self.expression(*source)? else {
+                    return None;
+                };
+                if self.local_type(*source) != Some(*product_type)
+                    || !self.borrow_binding(*binding, selected.ty)
+                {
+                    return None;
+                }
+                let before = rights.clone();
+                let ancestry = rights.loan(*source)?;
+                let view = LocalValueReference::LexicalBinding(*binding);
+                rights.view(view, *source)?;
+                let result = self.run(*body, rights, take, depth + 1)?;
+                rights.finish_view(view)?;
+                rights.release(ancestry)?;
+                if rights.memory != before.memory
+                    || rights.borrowed != before.borrowed
+                    || rights.provenance != before.provenance
+                    || rights.loans != before.loans
+                {
+                    return None;
+                }
+                result
+            }
+            ExpressionOperation::MatchBorrowedOwned {
+                choice_type,
+                source,
+                arms,
+            } => {
+                if !self.product_shape(*choice_type) {
+                    return None;
+                }
+                let TypeForm::OwnedChoice { cases } = self.form(*choice_type)? else {
+                    return None;
+                };
+                let ExpressionOperation::Local { value: source } = self.expression(*source)? else {
+                    return None;
+                };
+                if self.local_type(*source) != Some(*choice_type)
+                    || arms.len() != cases.len()
+                    || arms.is_empty()
+                {
+                    return None;
+                }
+                let before = rights.clone();
+                let mut names = BTreeSet::new();
+                let mut bindings = BTreeSet::new();
+                let mut output = None;
+                for arm in arms {
+                    let case = cases.iter().find(|case| case.name == arm.name)?;
+                    if !names.insert(&arm.name)
+                        || !bindings.insert(arm.binding)
+                        || !self.borrow_binding(arm.binding, case.ty)
+                    {
+                        return None;
+                    }
+                    let mut branch = before.clone();
+                    let ancestry = branch.loan(*source)?;
+                    let view = LocalValueReference::LexicalBinding(arm.binding);
+                    let owned = self.buffer(case.ty);
+                    if owned {
+                        if !self.owned_type_in_scope(case.ty) {
+                            return None;
+                        }
+                        branch.view(view, *source)?;
+                    } else if !self.ordinary(case.ty) {
+                        return None;
+                    }
+                    let result = self.run(arm.body, &mut branch, take, depth + 1)?;
+                    if owned {
+                        branch.finish_view(view)?;
+                    }
+                    branch.release(ancestry)?;
+                    if branch.memory != before.memory
+                        || branch.borrowed != before.borrowed
+                        || branch.provenance != before.provenance
+                        || branch.loans != before.loans
+                        || output.is_some_and(|prior| prior != result)
+                    {
+                        return None;
+                    }
+                    output = Some(result);
+                    rights.owned.retain(|owner| branch.owned.contains(owner));
+                }
+                output?
+            }
             ExpressionOperation::ChooseOwned {
                 choice_type,
                 case,
@@ -659,6 +851,8 @@ impl Oracle<'_> {
                     branch.owned.remove(&local);
                     if branch.memory != before.memory
                         || branch.borrowed != before.borrowed
+                        || branch.provenance != before.provenance
+                        || branch.loans != before.loans
                         || outcome.is_some_and(|prior| prior != output)
                     {
                         return None;
@@ -758,9 +952,7 @@ impl Oracle<'_> {
                 if !take {
                     return None;
                 }
-                if !rights.owned.remove(value) {
-                    return None;
-                }
+                rights.consume(*value)?;
                 true
             }
             ExpressionOperation::Let { bindings, body } => {
@@ -770,6 +962,9 @@ impl Oracle<'_> {
                     else {
                         return None;
                     };
+                    if b.kind != BindingKind::Let {
+                        return None;
+                    }
                     let memory = b.declared_type.is_some_and(|t| self.buffer(t));
                     if memory && !self.owned_type_in_scope(b.declared_type?) {
                         return None;
@@ -813,7 +1008,11 @@ impl Oracle<'_> {
                     return None;
                 }
                 a.owned = a.owned.intersection(&b.owned).copied().collect();
-                if a.borrowed != b.borrowed || a.memory != b.memory {
+                if a.borrowed != b.borrowed
+                    || a.memory != b.memory
+                    || a.provenance != b.provenance
+                    || a.loans != b.loans
+                {
                     return None;
                 }
                 *rights = a;
@@ -1009,6 +1208,8 @@ impl Oracle<'_> {
                         if *pv != v
                             || prior.borrowed != path.borrowed
                             || prior.memory != path.memory
+                            || prior.provenance != path.provenance
+                            || prior.loans != path.loans
                         {
                             return None;
                         }
@@ -1027,8 +1228,13 @@ impl Oracle<'_> {
             | ExpressionOperation::F64 { .. }
             | ExpressionOperation::Text { .. }
             | ExpressionOperation::StaticText { .. }
-            | ExpressionOperation::Local { .. }
             | ExpressionOperation::Constant { .. } => false,
+            ExpressionOperation::Local { value } => {
+                if self.local_type(*value).is_some_and(|ty| self.buffer(ty)) {
+                    return None;
+                }
+                false
+            }
         };
         if output && !take { None } else { Some(output) }
     }
@@ -1095,6 +1301,7 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
         }
     }
     let mut product_bindings = BTreeSet::new();
+    let mut borrowed_bindings = BTreeSet::new();
     for owner in snapshot.owners.values() {
         if let OwnerRecord::Expression(e) = owner
             && let ExpressionOperation::UnpackOwned { fields, .. } = &e.operation
@@ -1110,10 +1317,36 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
         {
             return false;
         }
+        if let OwnerRecord::Expression(e) = owner {
+            match &e.operation {
+                ExpressionOperation::BorrowOwnedField { binding, .. } => {
+                    if !product_bindings.insert(*binding) || !borrowed_bindings.insert(*binding) {
+                        return false;
+                    }
+                }
+                ExpressionOperation::MatchBorrowedOwned { arms, .. } => {
+                    for arm in arms {
+                        if !product_bindings.insert(arm.binding)
+                            || !borrowed_bindings.insert(arm.binding)
+                        {
+                            return false;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
         let generation = snapshot
             .root
             .graph_contract_version
             .min(owner.header().contract_version);
+        if generation < 24
+            && (matches!(owner, OwnerRecord::Expression(e) if matches!(e.operation,
+                ExpressionOperation::BorrowOwnedField { .. } | ExpressionOperation::MatchBorrowedOwned { .. }))
+                || matches!(owner, OwnerRecord::Binding(b) if b.kind == BindingKind::OwnedBorrow))
+        {
+            return false;
+        }
         if generation < 21
             && matches!(owner, OwnerRecord::Expression(e) if matches!(e.operation, ExpressionOperation::Parallel { .. }))
         {
@@ -1147,6 +1380,12 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
             }
             pending.extend(object.child_types());
         }
+    }
+    if snapshot.owners.iter().any(|(key, owner)| {
+        matches!(owner, OwnerRecord::Binding(b) if b.kind == BindingKind::OwnedBorrow)
+            && !matches!(key, OwnerKey::Binding(id) if borrowed_bindings.contains(id))
+    }) {
+        return false;
     }
     if snapshot
         .types
@@ -1288,6 +1527,8 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                     }
                     if oracle.run(f.body, &mut rights, oracle.buffer(f.result), 0)
                         != Some(oracle.buffer(f.result))
+                        || !rights.provenance.is_empty()
+                        || !rights.loans.is_empty()
                     {
                         return false;
                     }

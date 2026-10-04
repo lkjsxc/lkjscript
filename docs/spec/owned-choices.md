@@ -65,9 +65,12 @@ Choice values compose with fixed owned products and rank-one Owned function
 parameters/results. Exact static implementation parameters and cross-package
 forwarding retain their existing contracts. A closed choice may serve as an exact
 implementation Self where its complete method signatures satisfy those contracts.
-Whole-choice synchronous borrowing/reborrowing is permitted; a loan cannot select,
-move, expose or return its payload. Borrowed case inspection, escaping or mutable
-references, partial moves and implicit witness search remain unsupported. Named
+Whole-choice synchronous borrowing/reborrowing is permitted. A loan cannot move or
+return an owned payload. [Borrowed case inspection](owned-borrows.md) uses an
+exhaustive `match-borrowed-owned` scope: owned payloads are read views, ordinary
+payloads follow their admitted copy rules, and the whole choice stays guarded
+throughout the selected arm. Escaping or mutable references, partial moves and
+implicit witness search remain unsupported. Named
 tasks may consume and return choices under [same-task transfer](owned-task-transfers.md),
 while preserving their independently checked effects and resource requirements.
 
@@ -133,12 +136,14 @@ retained source generations. Product-bearing source still needs Graph 19 and
 choice-bearing source needs Graph 20 across owner, interface and artifact closures.
 Package-interface layout 12 is unchanged.
 
-This development uses compiler unit 18, bytecode 14, artifact 25, authored request
+The choice increment selected compiler unit 18, bytecode 14, artifact 25, authored request
 23, compact discovery 27 and semantic validator 21. Requests without the new
 extension retain their previous canonical request bytes. Predecessor derived
 artifacts and compiler caches require rebuilding from retained accepted meaning;
 no operational application-data migration or running-service replacement is implied.
 Product version components remain opaque identifiers, not compatibility promises.
+The [child-borrow contract](owned-borrows.md#encodings-and-evidence) owns subsequent
+scope-operation, borrowed-binding and derived-layout cuts.
 
 The [native guide](../guides/native-owned-choices.md) describes ordinary use. The
 [continuation](../campaigns/20261002-owned-choices.md) separates focused tests,

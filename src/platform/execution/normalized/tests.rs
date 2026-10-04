@@ -41,6 +41,12 @@ pub(crate) mod byte_buffer_tests;
 mod bytes_reuse_tests;
 #[path = "bytes_tests.rs"]
 mod bytes_tests;
+#[path = "owned_borrow_effect_tests.rs"]
+mod owned_borrow_effect_tests;
+#[path = "owned_borrow_tests.rs"]
+mod owned_borrow_tests;
+#[path = "owned_borrow_token_tests.rs"]
+mod owned_borrow_token_tests;
 #[path = "owned_choice_boundary_tests.rs"]
 mod owned_choice_boundary_tests;
 #[path = "owned_choice_generic_tests.rs"]
@@ -112,7 +118,7 @@ fn graph14_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
     );
     assert_eq!(
         crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-        23
+        24
     );
     assert_eq!(
         crate::platform::kernel::contract::TYPE_OBJECT_CONTRACT_VERSION,

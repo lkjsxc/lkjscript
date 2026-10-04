@@ -449,7 +449,8 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 self.require_unrestricted(value, state, depth + 1, "owned choice payload")?;
                 Ok(EvaluatedValue::Unrestricted)
             }
-            ExpressionOperation::MatchOwned { source, arms, .. } => {
+            ExpressionOperation::MatchOwned { source, arms, .. }
+            | ExpressionOperation::MatchBorrowedOwned { source, arms, .. } => {
                 self.require_unrestricted(source, state, depth + 1, "owned choice source")?;
                 let before = self.fork_state(state)?;
                 let mut joined: Option<(FlowState, EvaluatedValue)> = None;
@@ -493,7 +494,8 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 }
                 Ok(EvaluatedValue::Unrestricted)
             }
-            ExpressionOperation::UnpackOwned { source, body, .. } => {
+            ExpressionOperation::UnpackOwned { source, body, .. }
+            | ExpressionOperation::BorrowOwnedField { source, body, .. } => {
                 self.evaluate(source, state, depth + 1)?;
                 self.evaluate(body, state, depth + 1)
             }
