@@ -26,40 +26,56 @@ source receipt remains `.artifacts/lkjscript-dev/check/1791141767519073420-24300
 reporting commits do not change the source proved by that receipt. Original
 failures and copied-executable inputs remain at their recorded owners.
 
-## Owned sequences awaiting source acceptance
+## Owned sequences accepted on main; publication pending
 
-The selected main worktree at `/home/coder/workspace/lkjscript`, based on
-`238dc5f5f85a5340e086493c52bb57d79949aca5`, implements
-[runtime-sized owned sequences](spec/owned-sequences.md) for development v0.1.76.
-It adds generic construction, append, LIFO removal, lexical indexed reads and
-structured transfer under the complete element contract. The
+Accepted product source `10c26f0b68d3e99b8bc1319ca83f7a8d3c90a71d` implements
+[runtime-sized owned sequences](spec/owned-sequences.md) for v0.1.76. It is
+integrated on remote main through a normal fast-forward, independently confirmed
+through Git and the GitHub branch API. Later status-only reporting commits do not
+change the tested product source.
+
+The capability adds generic construction, append, LIFO removal, lexical indexed
+reads and structured transfer under the complete element contract. The
 [three-package example](../examples/owned-sequences/README.md) owns literal native
 inputs and independent full results. [Release notes](releases/v0.1.76.md) describe
 the coordinated format cut and required derived-bundle rebuild.
 
-Source acceptance and v0.1.76 publication remain pending. The current development
-work has exercised independent kernel, compiler, reference, custody and transfer
-checks. Maintained standard, lkjournal, guide and policy checks pass 281 native
-tests collectively; their derived artifacts and discovery have been regenerated
-through the product. Standard adds sequence wrappers and seven graph tests. The
-guide changes one current phrase from a fixed structural-form count; application
-and policy semantic HEADs remain unchanged.
+Fresh full-source receipt
+`.artifacts/lkjscript-dev/check/1791154187470041424-2850821-0/receipt.json`
+passed all 26 gates, with zero reused gates and stable inputs at the exact source
+above. Its digest is
+`verification_4b0dad02aa0222653471ac547581c28a4a02c424f32eb6b0213b8e711b07e3c8`.
+The workspace includes 1,408 passing library tests, 216 public CLI tests and 253
+developer-tool tests, including all three new sequence public cases. Maintained
+standard, lkjournal, guide and policy checks pass 281 native tests collectively.
+Their derived artifacts and discovery were regenerated through the product.
+Standard adds sequence wrappers and seven graph tests; application and policy
+semantic HEADs remain unchanged.
 
 Development evidence is retained under `.artifacts/20261004-owned-sequences/`.
-Original failed builds and test logs remain intact. All three copied-product cases
-pass in `public-focus-03/tests.log`, with outside-checkout literal inputs retained
-under its recorded temporary root. They include the original 513-element reference
-stack failure, repaired by preserving tail position through consuming matches and
-unpacking. Indexed native cold reproduction passed in `cold-tracked-02/`: all four
-bundles and standard transport match byte for byte, with all 187 packs and four
-semantic HEADs unchanged. Initial full receipt
-`.artifacts/lkjscript-dev/check/1791152416842311486-2739346-0/receipt.json`
-passed 24 of 26 gates at `638b011f38d140831e587bcefe557db22569510c`, with stable
-inputs. Its workspace and service gates exposed stale discovery assertions,
-artifact magic and the reviewed service artifact digest. Those expectations are
-corrected; dependency-complete `check full --fresh` must pass again before normal
-mainline integration and selection of a v0.1.76 finalized-archive candidate. Neither
-the failed receipt nor the predecessor receipt above proves the corrected source.
+The copied-product cases pass in `public-focus-03/tests.log`, with literal inputs
+outside the checkout retained under its recorded temporary root. Original failures
+remain intact, including the 513-element reference stack failure repaired by
+preserving tail position through consuming matches and unpacking, and the initial
+24-of-26 full receipt
+`.artifacts/lkjscript-dev/check/1791152416842311486-2739346-0/receipt.json`.
+Indexed native cold reproduction passed in `cold-tracked-02/`: all four bundles
+and standard transport match byte for byte, with all 187 packs and four semantic
+HEADs unchanged.
+
+[Producer 37242435402/1](https://github.com/lkjsxc/lkjscript/actions/runs/37242435402)
+was dispatched once from main at the accepted product source at 23:04:52 UTC on
+2026-10-04. At 23:05 UTC it is building immutable host tools. Evidence is retained
+under
+`.artifacts/20261004-owned-sequences/release-0176/source-10c26f0b/`; source and
+mainline evidence is indexed by the parent directory's `source-handoff.json`.
+The remaining gate is final-archive candidate acceptance, including source gates,
+target owners, pinned userlands, installation recovery, the native public harness
+and original-reader admission. After `candidate_accepted`, authenticate the exact
+producer run/attempt and unchanged assets, create the ordinary annotated v0.1.76
+tag, update and read back the scoped release selection, then promote through
+`immutable_published_and_public_verified`. No v0.1.76 tag or release selection has
+been created; v0.1.75 remains public/latest.
 
 Preserve the other worktrees, unrelated stash, original fixtures and failures,
 and immutable publication history. No application deployment changes are part
