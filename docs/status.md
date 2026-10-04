@@ -25,37 +25,49 @@ receipt remains `.artifacts/lkjscript-dev/check/1791128757456244504-1878981-0/re
 reporting commits do not change the source proved by that receipt. Original
 failures and copied-executable inputs remain at their recorded owners.
 
-## Scoped owned reads in development
+## Scoped owned reads accepted on main
 
-The selected checkout is `/home/coder/workspace/lkjscript`, branch `main`, based on
-`25a38f9a6ac9bb00fded3bc32f9566b3bd90dfd6`. The selected implementation
-adds [lexical read access to owned children](spec/owned-borrows.md): generic
+Accepted product source `62537a7de98940b2174fe2be4bce61815181e74f` adds
+[lexical read access to owned children](spec/owned-borrows.md): generic
 product-field views and exhaustive borrowed choice inspection, with explicit
 ancestor custody and all-exit cleanup. The [maintained example](../examples/owned-borrows/README.md)
-owns the native cross-package witness. This successor is not yet source-accepted,
-integrated or publicly released.
+owns the native cross-package witness. The normal mainline push was independently
+verified through Git and the GitHub branch and comparison APIs. This status-only
+reporting descendant does not change the source selected for product acceptance.
 
-Development output is retained under `.artifacts/20261004-owned-borrows/`.
-The three copied-product feature tests passed with the development executable;
-`public-focus-02/tests.log` and its `external-tmpdir.txt` retain the results and
-outside-checkout literal inputs. Maintained bundles, standard transport and
-discovery were regenerated through the product; all four accepted program HEADs
-are unchanged. Workspace linting and all 14 corrected library regressions passed.
-Original failed runs remain retained.
+Fresh full acceptance passed all 26 gates, with zero reused gates, stable inputs
+and no unrun gates. The exact-source receipt is
+`.artifacts/lkjscript-dev/check/1791141767519073420-2430056-0/receipt.json`
+in `/home/coder/workspace/lkjscript`. It includes 1,347 library tests, 213 public
+CLI tests and 253 developer-tool tests passing, alongside the other suites and
+copied-release workflows; intentional ignored cases remain recorded in the logs.
+All three new public borrowing tests passed in that run.
 
-The latest completed full run on `5f4c6ff1e4fc6c72c84ae7b022c2d61aa62176ab`
-recorded 25 fresh passing gates, with stable inputs and no unrun gates. Its original
-receipt is `.artifacts/lkjscript-dev/check/1791140502347407909-2343140-0/receipt.json`.
-The remaining failure was the distributed HTTP verifier's numeric definition
-projection expectation. The selected successor corrects it; complete acceptance
-must be renewed. Focused distributed HTTP verification passed 46 commands and two
-runners against the unchanged release executable; its original receipt is
-`.artifacts/lkjscript-dev/distributed-http/1791141683632082818-2428024-0/receipt.json`.
-Earlier failed receipts remain intact.
+Development evidence remains under `.artifacts/20261004-owned-borrows/`.
+`public-focus-02/tests.log` and `public-focus-02/external-tmpdir.txt` retain the
+earlier copied-product results and outside-checkout literal inputs. Maintained
+bundles, standard transport and discovery were regenerated through the product;
+all four accepted program HEADs are unchanged. Original failed receipts remain
+intact. The [release notes](releases/v0.1.75.md) describe the intentional contract
+changes and required rebuilding of prior derived bundles.
 
-Next: run dependency-complete fresh source acceptance on the stabilized
-implementation. Integrate the accepted source normally and
-select a new release candidate through the [release procedure](release.md).
+## Pending final-archive acceptance
+
+[Candidate producer 37229047605/1](https://github.com/lkjsxc/lkjscript/actions/runs/37229047605)
+was dispatched on 2026-10-04 at 19:38 UTC from exactly
+`62537a7de98940b2174fe2be4bce61815181e74f`. Final-archive acceptance and
+unchanged-asset publication remain separate from completed source acceptance and
+mainline integration. The successor is not yet publicly released; no successor
+tag or publication-control change has been made. Public/latest remains v0.1.74.
+
+Dispatch observations, source acceptance summary and exact release notes are
+retained in `.artifacts/20261004-owned-borrows/release-0175/source-62537a7d/`.
+Next: inspect that producer's terminal result and essential uploads. After
+`candidate_accepted`, refresh release occupancy and mainline reachability, then
+select the ordinary annotated v0.1.75 tag at the accepted source and promote
+producer `37229047605`, attempt `1`, following the [release procedure](release.md).
+Require `immutable_published_and_public_verified` before claiming public closure.
+Reuse this healthy producer; do not dispatch a duplicate while it is pending.
 
 Preserve the other worktrees, unrelated stash, original failures and immutable
 publication history. No application deployment changes are part of this work.
