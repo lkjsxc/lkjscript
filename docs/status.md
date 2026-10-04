@@ -52,11 +52,14 @@ under its recorded temporary root. They include the original 513-element referen
 stack failure, repaired by preserving tail position through consuming matches and
 unpacking. Indexed native cold reproduction passed in `cold-tracked-02/`: all four
 bundles and standard transport match byte for byte, with all 187 packs and four
-semantic HEADs unchanged. The remaining gate is dependency-complete
-`check full --fresh` after all source inputs stabilize. Only a passing exact-source
-receipt permits normal mainline integration and selection of a v0.1.76
-finalized-archive candidate. The predecessor receipt above is not evidence for
-these changes.
+semantic HEADs unchanged. Initial full receipt
+`.artifacts/lkjscript-dev/check/1791152416842311486-2739346-0/receipt.json`
+passed 24 of 26 gates at `638b011f38d140831e587bcefe557db22569510c`, with stable
+inputs. Its workspace and service gates exposed stale discovery assertions,
+artifact magic and the reviewed service artifact digest. Those expectations are
+corrected; dependency-complete `check full --fresh` must pass again before normal
+mainline integration and selection of a v0.1.76 finalized-archive candidate. Neither
+the failed receipt nor the predecessor receipt above proves the corrected source.
 
 Preserve the other worktrees, unrelated stash, original fixtures and failures,
 and immutable publication history. No application deployment changes are part

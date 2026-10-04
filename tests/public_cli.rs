@@ -1109,6 +1109,11 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
 
     let expression_section = compact_success(&["capabilities", "--section", "expression"]);
     let expected_expression_forms = [
+        "sequence-empty",
+        "sequence-length",
+        "sequence-push",
+        "sequence-pop",
+        "borrow-owned-item",
         "choose-owned",
         "match-owned",
         "match-borrowed-owned",
@@ -1178,6 +1183,23 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         expected_expression_forms
     );
     for (name, syntax) in [
+        ("sequence-empty", "(sequence-empty (type SEQUENCE))"),
+        (
+            "sequence-length",
+            "(sequence-length (type SEQUENCE) (local SOURCE))",
+        ),
+        (
+            "sequence-push",
+            "(sequence-push (type SEQUENCE) (local VALUE) (local SOURCE))",
+        ),
+        (
+            "sequence-pop",
+            "(sequence-pop (type SEQUENCE) (local SOURCE))",
+        ),
+        (
+            "borrow-owned-item",
+            "(borrow-owned-item (type SEQUENCE) (local SOURCE) (index EXPRESSION) (binding VIEW (type TYPE)) (in BODY))",
+        ),
         (
             "choose-owned",
             "(choose-owned (type TYPE) (case NAME) EXPRESSION)",
@@ -1266,6 +1288,8 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "local",
             "let-scope",
             "owned-child-read-scope",
+            "owned-sequence",
+            "owned-item-read-scope",
             "borrowed-owned-choice-scope",
             "payload-scope",
             "transaction-scope",
