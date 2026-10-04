@@ -95,6 +95,9 @@ at the revision from current `status`, retaining the original input and plan:
 lkjscript --project hello change refresh --input-file proposal.lkjc --plan ORIGINAL_TOKEN --onto CURRENT_REVISION
 ```
 
+Check `lkjscript capabilities change` for refresh in your selected executable;
+[current status](docs/status.md) records public availability.
+
 Review the renewed token before applying the original input. Conflicting meaning
 rejects refresh; disjoint edits compose with preserved identities.
 

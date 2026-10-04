@@ -48,9 +48,18 @@ remain in `.artifacts/20261004-refresh/`.
 
 ## Remaining acceptance
 
-Fresh full source acceptance, mainline integration and finalized-byte publication
-are pending. Run the dependency-complete 26-gate profile after source inputs
-stabilize, then dispatch one source-bound candidate from integrated main. Final
+The first fresh full run at `9190e7474ee307e8acdd6656503949ef9eece059`
+passed 25 of 26 gates. Its offline-package predecessor fixture still expected an
+old transaction to replay under the current encoding; the original failure is
+retained in `.artifacts/lkjscript-dev/check/1791126369788118222-1725336-0/receipt.json`.
+The fixture now checks explicit rejection and immutable history separately from
+successful compiler-cache rebuilding. The focused validator-upgrade owner passed
+against the same retained product executable; its original receipt is
+`.artifacts/20261004-refresh/validator-upgrade-03/receipt.json`.
+Repeat the fresh 26-gate profile with the corrected verifier.
+
+Full source acceptance, mainline integration and finalized-byte publication remain
+pending. After acceptance, dispatch one source-bound candidate from integrated main. Final
 candidate contract 3 requires every `native_refresh` public case in addition to
 the established source, target, userland and installation owners. Source and
 development-host evidence do not substitute for final-byte acceptance.

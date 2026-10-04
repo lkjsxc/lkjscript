@@ -152,6 +152,7 @@ fn change(
     context: &mut Context,
     project: &Path,
     request: &str,
+    apply_success: bool,
     installed: bool,
     indexes: &mut Vec<usize>,
 ) -> Result<Vec<CompactRecord>, DevError> {
@@ -180,15 +181,42 @@ fn change(
             "--plan",
             &field(&plan, "plan", "token")?,
         ],
-        true,
+        apply_success,
         installed,
         indexes,
+    )
+}
+
+fn unchanged_accepted_status(
+    before: &[CompactRecord],
+    after: &[CompactRecord],
+) -> Result<(), DevError> {
+    for (operation, name) in [
+        ("revision", "id"),
+        ("revision", "record"),
+        ("state", "digest"),
+        ("root", "digest"),
+        ("evidence", "witness"),
+        ("evidence", "certificate"),
+        ("evidence", "validator"),
+        ("receipt", "digest"),
+    ] {
+        require(
+            field(before, operation, name)? == field(after, operation, name)?,
+            "historical rejection changed immutable accepted publication evidence",
+        )?;
+    }
+    require(
+        field(before, "current-validation", "status")? == "valid"
+            && field(after, "current-validation", "status")? == "valid",
+        "historical rejection changed current validity",
     )
 }
 
 pub(super) fn workflow(context: &mut Context) -> Result<(), DevError> {
     let mut installed_commands = Vec::new();
     let mut result_commands = Vec::new();
+    let mut legacy_retry_commands = Vec::new();
     for installed in [false, true] {
         for name in ["valid", "expanding"] {
             let project = context
@@ -210,6 +238,7 @@ pub(super) fn workflow(context: &mut Context) -> Result<(), DevError> {
             }
             let before = crate::authority::observe_graph_authority(&project)?;
             let catalog = digest_file(&project.join("catalog/current.lkjc"), 1024 * 1024)?;
+            let status_command = context.receipt.commands.len();
             let status = cli(
                 context,
                 &project,
@@ -260,16 +289,50 @@ pub(super) fn workflow(context: &mut Context) -> Result<(), DevError> {
                     installed,
                     &mut installed_commands,
                 )?;
-                let retry = change(context, &project, VALID, installed, &mut installed_commands)?;
-                require(
-                    field(&retry, "result", "status")? == "already-accepted"
-                        && field(&retry, "revision", "result")? == original_result
-                        && field(&retry, "receipt", "digest")?
-                            == field(&status, "receipt", "digest")?
-                        && field(&retry, "receipt", "revision-record")?
-                            == field(&status, "revision", "record")?,
-                    "historical valid retry changed result identity",
+                // Checking an old fixture may rebuild derived compiler storage. Isolate
+                // the rejected publication from that successful check's physical work.
+                let retry_authority = crate::authority::observe_graph_authority(&project)?;
+                let retry_catalog =
+                    digest_file(&project.join("catalog/current.lkjc"), 1024 * 1024)?;
+                // Current transactions retain the complete supplied type inventory. Replanning
+                // this predecessor request cannot reuse its occupied immutable idempotency key.
+                let retry = change(
+                    context,
+                    &project,
+                    VALID,
+                    false,
+                    installed,
+                    &mut installed_commands,
                 )?;
+                require(
+                    field(&retry, "result", "status")? == "failure"
+                        && field(&retry, "diagnostic", "class")? == "source"
+                        && field(&retry, "diagnostic", "code")?
+                            == "publication_repository_idempotency_conflict",
+                    "historical retry did not preserve its occupied idempotency key",
+                )?;
+                let rejection_command = context.receipt.commands.len() - 1;
+                let after_status_command = context.receipt.commands.len();
+                let after_status = cli(
+                    context,
+                    &project,
+                    &["status"],
+                    true,
+                    installed,
+                    &mut installed_commands,
+                )?;
+                unchanged_accepted_status(&status, &after_status)?;
+                require(
+                    crate::authority::observe_graph_authority(&project)? == retry_authority
+                        && digest_file(&project.join("catalog/current.lkjc"), 1024 * 1024)?
+                            == retry_catalog,
+                    "historical retry rejection changed authority/catalog",
+                )?;
+                legacy_retry_commands.push([
+                    status_command,
+                    rejection_command,
+                    after_status_command,
+                ]);
             } else {
                 let rejected = cli(
                     context,
@@ -290,6 +353,7 @@ pub(super) fn workflow(context: &mut Context) -> Result<(), DevError> {
                     context,
                     &project,
                     &request,
+                    true,
                     installed,
                     &mut installed_commands,
                 )?;
@@ -310,12 +374,20 @@ pub(super) fn workflow(context: &mut Context) -> Result<(), DevError> {
                     "request base={} idempotency=finite-later\nexpression.i64 as=$body value=8\nreplace.body function=probe/growing body=$body\n",
                     field(&repair, "revision", "result")?
                 );
-                change(context, &project, &next, installed, &mut installed_commands)?;
+                change(
+                    context,
+                    &project,
+                    &next,
+                    true,
+                    installed,
+                    &mut installed_commands,
+                )?;
                 let after = crate::authority::observe_graph_authority(&project)?;
                 let retry = change(
                     context,
                     &project,
                     &request,
+                    true,
                     installed,
                     &mut installed_commands,
                 )?;
@@ -369,6 +441,10 @@ pub(super) fn workflow(context: &mut Context) -> Result<(), DevError> {
         "finite_upgrade_repairs".into(),
         serde_json::to_string(&result_commands)?,
     );
+    context.receipt.observations.insert(
+        "finite_legacy_retry_commands".into(),
+        serde_json::to_string(&legacy_retry_commands)?,
+    );
     Ok(())
 }
 
@@ -385,8 +461,17 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
             .get("finite_upgrade_repairs")
             .ok_or_else(|| DevError::corrupt("current repair observations absent"))?,
     )?;
+    let legacy_retries: Vec<[usize; 3]> = serde_json::from_str(
+        receipt
+            .observations
+            .get("finite_legacy_retry_commands")
+            .ok_or_else(|| DevError::corrupt("historical retry observations absent"))?,
+    )?;
     require(
-        indexes.len() >= 15 && indexes.windows(2).all(|w| w[0] < w[1]) && repairs.len() == 2,
+        indexes.len() >= 15
+            && indexes.windows(2).all(|w| w[0] < w[1])
+            && repairs.len() == 2
+            && legacy_retries.len() == 2,
         "upgrade command inventory incomplete",
     )?;
     for index in &indexes {
@@ -437,33 +522,67 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
             parse_records("upgrade-history", &bytes)
                 .map_err(|e| DevError::corrupt(format!("upgrade history: {e:?}")))
         };
-        let valid_status = read(
-            index
-                .checked_sub(9)
-                .ok_or_else(|| DevError::corrupt("upgrade history index"))?,
+        let [before_status, rejection, after_status] = legacy_retries[installed];
+        require(
+            before_status < rejection && rejection < after_status && after_status < *index,
+            "historical retry observation order changed",
         )?;
-        let valid_retry = read(index - 5)?;
-        let repair_retry = read(index + 5)?;
-        for (retry, original, revision_field, record_operation, record_field) in [
-            (&valid_retry, &valid_status, "id", "revision", "record"),
-            (
-                &repair_retry,
-                &records,
-                "result",
-                "receipt",
-                "revision-record",
-            ),
+        let project = Path::new(&receipt.isolated_root)
+            .join(format!("finite-upgrade-{}-valid", installed == 1));
+        for (legacy_index, operation, success) in [
+            (before_status, &["status"][..], true),
+            (rejection, &["change", "apply"][..], false),
+            (after_status, &["status"][..], true),
         ] {
+            let legacy_command = receipt
+                .commands
+                .get(legacy_index)
+                .ok_or_else(|| DevError::corrupt("historical retry command absent"))?;
             require(
-                field(retry, "result", "status")? == "already-accepted"
-                    && field(retry, "revision", "result")?
-                        == field(original, "revision", revision_field)?
-                    && field(retry, "receipt", "digest")? == field(original, "receipt", "digest")?
-                    && field(retry, "receipt", "revision-record")?
-                        == field(original, record_operation, record_field)?,
-                "upgrade retry did not retain the original accepted publication evidence",
+                indexes.contains(&legacy_index) == (installed == 1)
+                    && legacy_command
+                        .command
+                        .get(1)
+                        .is_some_and(|arg| arg == "--project")
+                    && legacy_command
+                        .command
+                        .get(2)
+                        .is_some_and(|arg| Path::new(arg) == project.as_path())
+                    && legacy_command
+                        .command
+                        .get(3..3 + operation.len())
+                        .is_some_and(|arguments| {
+                            arguments
+                                .iter()
+                                .map(String::as_str)
+                                .eq(operation.iter().copied())
+                        })
+                    && legacy_command.expects_success == success,
+                "historical retry proof did not bind its original project and public command",
             )?;
         }
+        let valid_status = read(before_status)?;
+        let valid_retry = read(rejection)?;
+        let valid_after_status = read(after_status)?;
+        require(
+            field(&valid_retry, "result", "status")? == "failure"
+                && field(&valid_retry, "diagnostic", "class")? == "source"
+                && field(&valid_retry, "diagnostic", "code")?
+                    == "publication_repository_idempotency_conflict",
+            "historical retry did not retain the immutable occupied idempotency key",
+        )?;
+        unchanged_accepted_status(&valid_status, &valid_after_status)?;
+        let repair_retry = read(index + 5)?;
+        require(
+            field(&repair_retry, "result", "status")? == "already-accepted"
+                && field(&repair_retry, "revision", "result")?
+                    == field(&records, "revision", "result")?
+                && field(&repair_retry, "receipt", "digest")?
+                    == field(&records, "receipt", "digest")?
+                && field(&repair_retry, "receipt", "revision-record")?
+                    == field(&records, "receipt", "revision-record")?,
+            "current repair retry did not retain the original accepted publication evidence",
+        )?;
     }
     Ok(indexes)
 }
