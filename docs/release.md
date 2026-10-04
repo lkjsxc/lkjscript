@@ -116,7 +116,7 @@ shared-runtime observation 2 distinguish invocation dispatch/fallback from physi
 worker lifetime; semantic graph and artifact generations remain unchanged. Fresh
 source and finalized-byte acceptance remain required for this implementation.
 
-Development v0.1.73 adds explicit effect and requirement applications to Owned
+Public v0.1.73 adds explicit effect and requirement applications to Owned
 generic witness calls. The mandatory `native_owned_` family includes its maintained
 three-package example, exact authority/witness selection, canonical edits and
 source-deleted execution. Graph 23, validator 28, compiler 23, bytecode 18 and

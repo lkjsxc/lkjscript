@@ -1,6 +1,6 @@
 # Owned applications with explicit effects and requirements
 
-Development 0.1.73 composes same-invocation Owned generic functions and exact
+Public 0.1.73 composes same-invocation Owned generic functions and exact
 implementation witnesses with the existing effect and requirement schemes.
 Accepted graph meaning owns every operand; a witness, effect row or requirement
 argument grants no execution authority. Actual acceptance belongs to

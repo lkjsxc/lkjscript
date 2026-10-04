@@ -37,11 +37,12 @@ exact implementation forwarding and independent bounded proofs. [Status](status.
 owns the exact completed acceptance and publication. Channels, task handles and effectful
 children remain separate extensions.
 
-Public 0.1.72 supplies the shared worker/runtime work below. Development
+Public 0.1.72 supplies the shared worker/runtime work below. Public
 0.1.73 composes generic Owned implementation applications with caller-supplied
 effects and requirements through the same independently checked authority
-boundaries as ordinary calls. Complete its acceptance before starting reviewed
-concurrent candidate refresh; [status](status.md) owns the current gate.
+boundaries as ordinary calls. Its source, finalized-byte and public acceptance
+are complete. Reviewed concurrent candidate refresh is the next semantic
+milestone; [status](status.md) owns the exact current evidence.
 Keep region-local ownership possible: current owned carriers being transferable
 does not make every future owner transferable.
 
@@ -75,7 +76,7 @@ in-process transfer establishes no distributed exactly-once guarantee.
 
 Extend the [Owned library contracts](spec/owned-generics.md), [products](spec/owned-products.md)
 and [choices](spec/owned-choices.md) through one ordinary cross-package composition
-at a time. Development 0.1.73 adds a same-invocation generic task consuming an Owned
+at a time. Public 0.1.73 adds a same-invocation generic task consuming an Owned
 carrier, forwarding an exact implementation witness, invoking an effect-parametric
 callback and using a caller-supplied requirement. Its [contract](spec/owned-effects.md)
 preserves substitutions and grant checks through transport and both evaluators;
