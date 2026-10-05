@@ -148,9 +148,13 @@ fn witness_contract_domains_are_closed_and_unique() {
         digest,
         "validator_contract_86b6b88294a790c15006d5413aa8d8227d274e3998d24ad0f71b45b010b7eecb"
     );
-    assert_eq!(
+    assert_ne!(
         digest,
         "validator_contract_54e026b266f50320397eae65398d5a884a773095f380562f98b8cfa3f16be1cc"
+    );
+    assert_eq!(
+        digest,
+        "validator_contract_1fd533a37a52f3de4ff1e6836082a4fe4b8796b2c920eb182962f54ca6e521fc"
     );
 }
 
