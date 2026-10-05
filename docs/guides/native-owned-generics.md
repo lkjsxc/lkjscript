@@ -4,6 +4,8 @@ The public native declaration surface can author an owned generic library before
 choosing a concrete representation. Use `lkjscript capabilities --section change`
 for the current grammar and `change draft` for exact editable projections. The
 [normative contract](../spec/owned-generics.md) defines supported combinations.
+[Parameterized worklists](native-owned-worklists.md) extend this workflow with
+ordered Owned contract arguments and structural method results.
 
 The maintained literal [generic library](../../tests/fixtures/owned-witness-library.lkjc)
 declares `Storage` with create, update and read methods and implements generic
@@ -55,7 +57,9 @@ selects the implementation explicitly:
 A generic forwarding call supplies
 `parameter@CURRENT_FUNCTION@implparam_HEX` instead. That function and parameter
 must be the exact current lexical witness, with the same contract and substituted
-Self. Memory arguments remain final exact locals; ownership is never inferred
+Self and every ordered additional contract argument. The Storage example has no
+additional arguments. Memory arguments remain final exact locals; ownership is
+never inferred
 from a matching method name or an available implementation.
 
 The [public integration test](../../tests/public_cli/native_owned_witnesses.rs)
@@ -67,10 +71,11 @@ sequence 0, 255, 128 yields length 3 for ByteBuffer and scalar 128 for the cell.
 Both signed I64 extremes are retained by the cell. The alternate cell witness
 returns 99, proving selection survives transport and detached execution.
 
-`inspect owner owned_contract ID` exposes Self and every method signature;
-`inspect owner owned_implementation ID` exposes the exact contract, Self and
-method map. Function inspection includes static parameters, and function-definition
-detail includes witness contract/Self references alongside its body operands.
+`inspect owner owned_contract ID` exposes Self, additional parameters and every
+method signature; `inspect owner owned_implementation ID` exposes the exact
+contract, Self, ordered arguments and method map. Function inspection includes
+static parameters, and function-definition
+detail includes complete witness applications alongside its body operands.
 `change draft --module NAME --output ABSENT_PATH` reconstructs these canonical
 contracts; planning an untouched draft is unchanged.
 

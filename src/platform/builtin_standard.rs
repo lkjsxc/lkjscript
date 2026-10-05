@@ -34,9 +34,9 @@ const STANDARD_PACKAGE: &str = "pkg_10000000000000000000000000000001";
 const STANDARD_SEMANTIC_REVISION: &str =
     "rev_c3bcf5a07bdc9f8400fdf670fffcd5a0a85b54ff6f86ce7514c2c5f36cab41e4";
 const STANDARD_PACKAGE_REVISION: &str =
-    "package_revision_72b6918a9c6fe5891b299ffa19c9f2f3e42e84193d980ae61459b64d8e8a403f";
+    "package_revision_f23ac69d40d2001f90a0a79a680b2033c0b11a30f98d32ae37ecd9be58fd6be6";
 const STANDARD_PACKAGE_TRANSPORT: &str =
-    "package_transport_6c0ef13390158183a32bd96fd3578cf6de0aaeb9ff20b2e457ccc37100fd3fe8";
+    "package_transport_a7ad00bdcc0de1b0e551093cea015107f0169a51028ebdce14e5a5b6296f5ea6";
 const COMMAND_TEXT_FROM_STATIC: &str = "text-from-static";
 const COMMAND_TEXT_FROM_STATIC_IMPLEMENTATION: &str = "core.text.from-static";
 const HTTP_BYTES_FROM_TEXT: &str = "bytes-from-text";

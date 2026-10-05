@@ -1085,13 +1085,14 @@ fn compiler_unit_decoder_rejects_foreign_identity_predecessor_and_bad_dense_inde
         );
     }
 
-    for magic in [b"LKJCUN23", b"LKJCUN24"] {
+    for generation in 10..COMPILER_UNIT_CONTRACT_VERSION {
+        let magic = format!("LKJCUN{generation}");
         let mut previous = receipt.bytes.clone();
-        previous[..8].copy_from_slice(magic);
+        previous[..8].copy_from_slice(magic.as_bytes());
         let previous_key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &previous);
         assert_eq!(
             CompilationUnit::decode(&previous, previous_key)
-                .expect_err("the sequence compiler cut requires rebuilding prior units")
+                .expect_err("the current compiler cut requires rebuilding prior units")
                 .code,
             "compiler_unit_contract"
         );

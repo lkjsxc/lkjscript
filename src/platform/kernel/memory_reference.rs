@@ -85,6 +85,8 @@ mod borrowed_tests;
 mod implementation_effect_tests;
 #[path = "imported_memory_oracle_tests.rs"]
 mod imported_tests;
+#[path = "parameterized_contract_memory_oracle_tests.rs"]
+mod parameterized_contract_tests;
 #[path = "sequence_memory_oracle_tests.rs"]
 mod sequence_tests;
 #[path = "transfer_memory_oracle_tests.rs"]
@@ -1434,18 +1436,18 @@ impl Oracle<'_> {
                 method,
                 arguments,
             } => {
-                let m = self.method(*witness, *contract, *method)?;
+                let (m, bindings) = self.method(*witness, *contract, *method)?;
                 self.arguments(
                     &m.parameters
                         .iter()
-                        .map(|p| (p.ty, p.ty, p.use_mode))
+                        .map(|p| (p.ty, self.method_type(p.ty, &bindings), p.use_mode))
                         .collect::<Vec<_>>(),
                     arguments,
                     rights,
                     depth,
-                    &BTreeMap::new(),
+                    &bindings,
                 )?;
-                self.buffer(m.result)
+                self.buffer(self.method_type(m.result, &bindings))
             }
             ExpressionOperation::FunctionValue {
                 function,
@@ -1592,6 +1594,25 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                 .graph_contract_version
                 .min(dependency.graph_contract_version)
                 .min(owner.header().contract_version);
+            if let PackageInterfaceRecord::Declaration(declaration) = owner
+                && match &declaration.payload {
+                    PackageInterfaceDeclarationPayload::OwnedContract(c) => {
+                        !oracle.contract_generation(c, generation)
+                    }
+                    PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
+                        generation < 26 && !i.type_arguments.is_empty()
+                    }
+                    PackageInterfaceDeclarationPayload::Function(f) => {
+                        generation < 26
+                            && f.implementation_parameters
+                                .iter()
+                                .any(|p| !p.type_arguments.is_empty())
+                    }
+                    _ => false,
+                }
+            {
+                return false;
+            }
             let mut roots = owner.type_roots();
             if generation < 25
                 && let PackageInterfaceRecord::Declaration(declaration) = owner
@@ -1626,8 +1647,10 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                     };
                     match &d.payload {
                         PackageInterfaceDeclarationPayload::OwnedContract(c)
-                            if !p.constraints.requires_transfer()
-                                && *key == OwnerKey::TypeParameter(c.self_parameter) => {}
+                            if p.constraints == TypeParameterConstraints::Owned
+                                && matches!(key, OwnerKey::TypeParameter(id)
+                                    if *id == c.self_parameter || c.type_parameters.contains(id)) =>
+                            {}
                         PackageInterfaceDeclarationPayload::Function(f)
                             if matches!(key, OwnerKey::TypeParameter(id) if f.type_parameters.contains(id))
                                 && (!p.constraints.requires_transfer()
@@ -1639,6 +1662,20 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                     let OwnerKey::Declaration(id) = key else {
                         return false;
                     };
+                    if matches!(
+                        d.payload,
+                        PackageInterfaceDeclarationPayload::OwnedContract(_)
+                    ) && !oracle.valid_contract(DeclarationReference {
+                        package: *package,
+                        declaration: *id,
+                    }) {
+                        return false;
+                    }
+                    if let PackageInterfaceDeclarationPayload::OwnedImplementation(i) = &d.payload
+                        && !oracle.valid_implementation(i)
+                    {
+                        return false;
+                    }
                     if let PackageInterfaceDeclarationPayload::Function(f) = &d.payload {
                         let function = DeclarationReference {
                             package: *package,
@@ -1705,6 +1742,23 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
             .root
             .graph_contract_version
             .min(owner.header().contract_version);
+        if let OwnerRecord::Declaration(declaration) = owner
+            && match &declaration.payload {
+                DeclarationPayload::OwnedContract(c) => !oracle.contract_generation(c, generation),
+                DeclarationPayload::OwnedImplementation(i) => {
+                    generation < 26 && !i.type_arguments.is_empty()
+                }
+                DeclarationPayload::Function(f) => {
+                    generation < 26
+                        && f.implementation_parameters
+                            .iter()
+                            .any(|p| !p.type_arguments.is_empty())
+                }
+                _ => false,
+            }
+        {
+            return false;
+        }
         if generation < 25
             && matches!(owner, OwnerRecord::Expression(e) if matches!(e.operation,
                 ExpressionOperation::SequenceEmpty { .. }
@@ -1790,8 +1844,9 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                 };
                 match &d.payload {
                     DeclarationPayload::OwnedContract(c)
-                        if !p.constraints.requires_transfer()
-                            && *key == OwnerKey::TypeParameter(c.self_parameter) => {}
+                        if p.constraints == TypeParameterConstraints::Owned
+                            && matches!(key, OwnerKey::TypeParameter(id)
+                                if *id == c.self_parameter || c.type_parameters.contains(id)) => {}
                     DeclarationPayload::Function(f) if matches!(key, OwnerKey::TypeParameter(id) if f.type_parameters.contains(id)) =>
                         {}
                     _ => return false,

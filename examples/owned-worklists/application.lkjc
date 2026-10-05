@@ -1,0 +1,153 @@
+declarations.begin
+(units
+  (module create owned-worklists-app
+    (type-alias CellFlat (owned-sequence OwnedI64Cell))
+    (type-alias CellChunked (owned-product
+      (field chunks (owned-sequence (owned-sequence OwnedI64Cell))) (field size I64)))
+    (type-alias BufferFlat (owned-sequence ByteBuffer))
+    (type-alias BufferChunked (owned-product
+      (field chunks (owned-sequence (owned-sequence ByteBuffer))) (field size I64)))
+    (type-alias Scenario (record (length I64) (moved (list I64)) (empty-length I64) (reused (list I64))))
+    (type-alias Benchmark (record (length I64) (drained (list I64)) (empty-length I64) (reused (list I64))))
+    (type-alias Result (record
+      (cell-flat Scenario) (cell-chunked Scenario) (buffer-flat Scenario) (buffer-chunked Scenario)))
+    (function create scenario (visibility public) (effect pure)
+      (type-parameter create T (constraint owned)) (type-parameter create W (constraint owned))
+      (type-parameter create V (constraint owned))
+      (implementation-parameter implparam_88000000000000000000000000000021 element owned-worklists::Element T)
+      (implementation-parameter implparam_88000000000000000000000000000022 source owned-worklists::Worklist W (types T))
+      (implementation-parameter implparam_88000000000000000000000000000023 destination owned-worklists::Worklist V (types T))
+      (parameter create inputs (type (list I64))) (returns Scenario)
+      (body (let
+        (binding source (type W)
+          (implementation-call owned-worklists::build (types T W)
+            (implementations parameter@scenario@implparam_88000000000000000000000000000021
+              parameter@scenario@implparam_88000000000000000000000000000022) (local inputs)))
+        (binding length (type I64)
+          (method-call parameter@scenario@implparam_88000000000000000000000000000022
+            owned-worklists::Worklist method_88000000000000000000000000000012 (local source)))
+        (binding destination (type V)
+          (method-call parameter@scenario@implparam_88000000000000000000000000000023
+            owned-worklists::Worklist method_88000000000000000000000000000011))
+        (binding moved (type (owned-product (field source W) (field destination V)))
+          (implementation-call owned-worklists::move-all (types T W V)
+            (implementations parameter@scenario@implparam_88000000000000000000000000000022
+              parameter@scenario@implparam_88000000000000000000000000000023)
+            (local source) (local destination)))
+        (in (unpack-owned (type (owned-product (field source W) (field destination V))) (local moved)
+          (field source (binding empty-source (type W))) (field destination (binding destination (type V)))
+          (in (let (binding drained (type (owned-product (field rest V) (field values (list I64))))
+            (implementation-call owned-worklists::drain (types T V)
+              (implementations parameter@scenario@implparam_88000000000000000000000000000021
+                parameter@scenario@implparam_88000000000000000000000000000023) (local destination)))
+            (in (unpack-owned (type (owned-product (field rest V) (field values (list I64)))) (local drained)
+              (field rest (binding rest (type V))) (field values (binding moved-values (type (list I64))))
+              (in (let
+                (binding empty-length (type I64)
+                  (method-call parameter@scenario@implparam_88000000000000000000000000000023
+                    owned-worklists::Worklist method_88000000000000000000000000000012 (local rest)))
+                (binding value (type T)
+                  (method-call parameter@scenario@implparam_88000000000000000000000000000021
+                    owned-worklists::Element method_88000000000000000000000000000001 (i64 17)))
+                (binding next (type V)
+                  (method-call parameter@scenario@implparam_88000000000000000000000000000023
+                    owned-worklists::Worklist method_88000000000000000000000000000013 (local value) (local rest)))
+                (binding reused (type (owned-product (field rest V) (field values (list I64))))
+                  (implementation-call owned-worklists::drain (types T V)
+                    (implementations parameter@scenario@implparam_88000000000000000000000000000021
+                      parameter@scenario@implparam_88000000000000000000000000000023) (local next)))
+                (in (unpack-owned (type (owned-product (field rest V) (field values (list I64)))) (local reused)
+                  (field rest (binding final-rest (type V))) (field values (binding reused-values (type (list I64))))
+                  (in (record structural
+                    (field length (local length)) (field moved (local moved-values))
+                    (field empty-length (local empty-length)) (field reused (local reused-values)))))))))))))))))
+    (function create benchmark (visibility private) (effect pure)
+      (type-parameter create T (constraint owned)) (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_88000000000000000000000000000031 element owned-worklists::Element T)
+      (implementation-parameter implparam_88000000000000000000000000000032 work owned-worklists::Worklist W (types T))
+      (parameter create inputs (type (list I64))) (returns Benchmark)
+      (body (let
+        (binding values (type W)
+          (implementation-call owned-worklists::build (types T W)
+            (implementations parameter@benchmark@implparam_88000000000000000000000000000031
+              parameter@benchmark@implparam_88000000000000000000000000000032) (local inputs)))
+        (binding length (type I64)
+          (method-call parameter@benchmark@implparam_88000000000000000000000000000032
+            owned-worklists::Worklist method_88000000000000000000000000000012 (local values)))
+        (binding drained (type (owned-product (field rest W) (field values (list I64))))
+          (implementation-call owned-worklists::drain (types T W)
+            (implementations parameter@benchmark@implparam_88000000000000000000000000000031
+              parameter@benchmark@implparam_88000000000000000000000000000032) (local values)))
+        (in (unpack-owned (type (owned-product (field rest W) (field values (list I64)))) (local drained)
+          (field rest (binding rest (type W))) (field values (binding drained-values (type (list I64))))
+          (in (let
+            (binding empty-length (type I64)
+              (method-call parameter@benchmark@implparam_88000000000000000000000000000032
+                owned-worklists::Worklist method_88000000000000000000000000000012 (local rest)))
+            (binding value (type T)
+              (method-call parameter@benchmark@implparam_88000000000000000000000000000031
+                owned-worklists::Element method_88000000000000000000000000000001 (i64 17)))
+            (binding next (type W)
+              (method-call parameter@benchmark@implparam_88000000000000000000000000000032
+                owned-worklists::Worklist method_88000000000000000000000000000013 (local value) (local rest)))
+            (binding reused (type (owned-product (field rest W) (field values (list I64))))
+              (implementation-call owned-worklists::drain (types T W)
+                (implementations parameter@benchmark@implparam_88000000000000000000000000000031
+                  parameter@benchmark@implparam_88000000000000000000000000000032) (local next)))
+            (in (unpack-owned (type (owned-product (field rest W) (field values (list I64)))) (local reused)
+              (field rest (binding final-rest (type W))) (field values (binding reused-values (type (list I64))))
+              (in (record structural
+                (field length (local length)) (field drained (local drained-values))
+                (field empty-length (local empty-length)) (field reused (local reused-values)))))))))))))
+    (function create cell-flat (visibility public) (effect pure)
+      (parameter create inputs (type (list I64))) (returns Benchmark)
+      (body (implementation-call benchmark (types OwnedI64Cell CellFlat)
+        (implementations concrete@worklist-carriers::Scalar concrete@worklist-carriers::FlatCells)
+        (local inputs))))
+    (function create cell-chunked (visibility public) (effect pure)
+      (parameter create inputs (type (list I64))) (returns Benchmark)
+      (body (implementation-call benchmark (types OwnedI64Cell CellChunked)
+        (implementations concrete@worklist-carriers::Scalar concrete@worklist-carriers::ChunkedCells)
+        (local inputs))))
+    (function create buffer-flat (visibility public) (effect pure)
+      (parameter create inputs (type (list I64))) (returns Benchmark)
+      (body (implementation-call benchmark (types ByteBuffer BufferFlat)
+        (implementations concrete@worklist-carriers::Octets concrete@worklist-carriers::FlatBuffers)
+        (local inputs))))
+    (function create buffer-chunked (visibility public) (effect pure)
+      (parameter create inputs (type (list I64))) (returns Benchmark)
+      (body (implementation-call benchmark (types ByteBuffer BufferChunked)
+        (implementations concrete@worklist-carriers::Octets concrete@worklist-carriers::ChunkedBuffers)
+        (local inputs))))
+    (function create main (visibility public) (effect pure)
+      (parameter create inputs (type (list I64))) (returns Result)
+      (body (record structural
+        (field cell-flat (implementation-call scenario (types OwnedI64Cell CellFlat CellChunked)
+          (implementations concrete@worklist-carriers::Scalar concrete@worklist-carriers::FlatCells
+            concrete@worklist-carriers::ChunkedCells) (local inputs)))
+        (field cell-chunked (implementation-call scenario (types OwnedI64Cell CellChunked CellFlat)
+          (implementations concrete@worklist-carriers::Scalar concrete@worklist-carriers::ChunkedCells
+            concrete@worklist-carriers::FlatCells) (local inputs)))
+        (field buffer-flat (implementation-call scenario (types ByteBuffer BufferFlat BufferChunked)
+          (implementations concrete@worklist-carriers::Octets concrete@worklist-carriers::FlatBuffers
+            concrete@worklist-carriers::ChunkedBuffers) (local inputs)))
+        (field buffer-chunked (implementation-call scenario (types ByteBuffer BufferChunked BufferFlat)
+          (implementations concrete@worklist-carriers::Octets concrete@worklist-carriers::ChunkedBuffers
+            concrete@worklist-carriers::FlatBuffers) (local inputs))))))
+    (component create command (visibility private)
+      (port create main (type (function ((list I64)) Result)) (function main))
+      (port create cell-flat (type (function ((list I64)) Benchmark)) (function cell-flat))
+      (port create cell-chunked (type (function ((list I64)) Benchmark)) (function cell-chunked))
+      (port create buffer-flat (type (function ((list I64)) Benchmark)) (function buffer-flat))
+      (port create buffer-chunked (type (function ((list I64)) Benchmark)) (function buffer-chunked))))
+  (target create owned-worklists (component owned-worklists-app::command)
+    (runner command) (port owned-worklists-app::command::main))
+  (target create cell-flat (component owned-worklists-app::command)
+    (runner command) (port owned-worklists-app::command::cell-flat))
+  (target create cell-chunked (component owned-worklists-app::command)
+    (runner command) (port owned-worklists-app::command::cell-chunked))
+  (target create buffer-flat (component owned-worklists-app::command)
+    (runner command) (port owned-worklists-app::command::buffer-flat))
+  (target create buffer-chunked (component owned-worklists-app::command)
+    (runner command) (port owned-worklists-app::command::buffer-chunked)))
+declarations.end

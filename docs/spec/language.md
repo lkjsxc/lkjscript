@@ -8,6 +8,10 @@ Concrete owned byte storage and synchronous scoped read borrowing are specified 
 [owned byte buffers](owned-byte-buffers.md).
 The [first-order owned abstraction](owned-generics.md) adds explicit Owned parameters,
 sealed scalar cells and nominal contracts with explicitly selected implementation witnesses.
+[Parameterized owned contracts](owned-contract-parameters.md) add ordered Owned
+arguments and structural products, choices and sequences in method signatures.
+Exact witnesses bind the complete contract application; ordinary method types
+remain closed first-order data.
 The [structured parallel contract](structured-parallel.md) adds joined empty-effect
 child tasks with exact owned-input transfer and shared invocation quotas.
 

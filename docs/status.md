@@ -1,82 +1,73 @@
 # Status
 
-Current snapshot: 2026-10-04. This page owns availability and unfinished acceptance.
+Current snapshot: 2026-10-05. This page owns availability and unfinished acceptance.
 [Direction](direction.md) owns goals, [specifications](spec/) own semantics and
 [roadmap](roadmap.md) orders future language work.
 
 ## Public binary
 
-Immutable [v0.1.75](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.75) is
-public/latest. Accepted product source: `62537a7de98940b2174fe2be4bce61815181e74f`.
-[Producer 37229047605/1](https://github.com/lkjsxc/lkjscript/actions/runs/37229047605)
-completed `candidate_accepted`; [promotion 37235741568/1](https://github.com/lkjsxc/lkjscript/actions/runs/37235741568)
-completed `immutable_published_and_public_verified` at 21:30 UTC. Release
-`403216806` and annotated tag `57fff224c84abf13486b94f64df214ce277e8c73` retain
+Immutable [v0.1.76](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.76) is
+public/latest. Accepted product source: `10c26f0b68d3e99b8bc1319ca83f7a8d3c90a71d`.
+[Producer 37242435402/1](https://github.com/lkjsxc/lkjscript/actions/runs/37242435402)
+completed `candidate_accepted`; [promotion 37249338644/1](https://github.com/lkjsxc/lkjscript/actions/runs/37249338644)
+completed `immutable_published_and_public_verified` at 01:03:53 UTC. Release
+`403287008` and annotated tag `06e0c2b07ae0512a25d1eb8bb2a4f9adefbc274e` retain
 that exact source. Anonymous exact, release-ID and latest identity, all three
-public asset sizes and digests, and the archived executable digest were
-independently verified. Promotion reused the accepted assets without rebuilding
-the product.
+public asset sizes and digests, and the archived executable were independently
+verified at 01:06:14 UTC. Promotion reused accepted assets without rebuilding the
+product or replaying heavy application acceptance.
 
 Original publication evidence is indexed by
-`.artifacts/20261004-owned-borrows/release-0175/completed-publication.json` in
-`/home/coder/workspace/lkjscript`. The [release notes](releases/v0.1.75.md) describe
-scoped reads of owned children and the required derived-bundle rebuild. Its full
-source receipt remains `.artifacts/lkjscript-dev/check/1791141767519073420-2430056-0/receipt.json`:
-26 fresh passing gates, zero reused gates, at the exact source above. Later
-reporting commits do not change the source proved by that receipt. Original
-failures and copied-executable inputs remain at their recorded owners.
-
-## Owned sequences accepted on main; publication pending
-
-Accepted product source `10c26f0b68d3e99b8bc1319ca83f7a8d3c90a71d` implements
-[runtime-sized owned sequences](spec/owned-sequences.md) for v0.1.76. It is
-integrated on remote main through a normal fast-forward, independently confirmed
-through Git and the GitHub branch API. Later status-only reporting commits do not
-change the tested product source.
-
-The capability adds generic construction, append, LIFO removal, lexical indexed
-reads and structured transfer under the complete element contract. The
-[three-package example](../examples/owned-sequences/README.md) owns literal native
-inputs and independent full results. [Release notes](releases/v0.1.76.md) describe
-the coordinated format cut and required derived-bundle rebuild.
-
-Fresh full-source receipt
+`.artifacts/20261004-owned-sequences/release-0176/completed-publication.json` in
+`/home/coder/workspace/lkjscript`. The [release notes](releases/v0.1.76.md) describe
+runtime-sized owned sequences and their required derived-bundle rebuild. Full
+source receipt
 `.artifacts/lkjscript-dev/check/1791154187470041424-2850821-0/receipt.json`
-passed all 26 gates, with zero reused gates and stable inputs at the exact source
-above. Its digest is
-`verification_4b0dad02aa0222653471ac547581c28a4a02c424f32eb6b0213b8e711b07e3c8`.
-The workspace includes 1,408 passing library tests, 216 public CLI tests and 253
-developer-tool tests, including all three new sequence public cases. Maintained
-standard, lkjournal, guide and policy checks pass 281 native tests collectively.
-Their derived artifacts and discovery were regenerated through the product.
-Standard adds sequence wrappers and seven graph tests; application and policy
-semantic HEADs remain unchanged.
+retains 26 fresh passing gates, zero reused gates and stable inputs at the exact
+source above. Later reporting commits do not change that tested product source.
+No v0.1.76 publication gate remains.
 
-Development evidence is retained under `.artifacts/20261004-owned-sequences/`.
-The copied-product cases pass in `public-focus-03/tests.log`, with literal inputs
-outside the checkout retained under its recorded temporary root. Original failures
-remain intact, including the 513-element reference stack failure repaired by
-preserving tail position through consuming matches and unpacking, and the initial
-24-of-26 full receipt
-`.artifacts/lkjscript-dev/check/1791152416842311486-2739346-0/receipt.json`.
-Indexed native cold reproduction passed in `cold-tracked-02/`: all four bundles
-and standard transport match byte for byte, with all 187 packs and four semantic
-HEADs unchanged.
+## Parameterized owned contracts: acceptance in progress
 
-[Producer 37242435402/1](https://github.com/lkjsxc/lkjscript/actions/runs/37242435402)
-was dispatched once from main at the accepted product source at 23:04:52 UTC on
-2026-10-04. At 23:05 UTC it is building immutable host tools. Evidence is retained
-under
-`.artifacts/20261004-owned-sequences/release-0176/source-10c26f0b/`; source and
-mainline evidence is indexed by the parent directory's `source-handoff.json`.
-The remaining gate is final-archive candidate acceptance, including source gates,
-target owners, pinned userlands, installation recovery, the native public harness
-and original-reader admission. After `candidate_accepted`, authenticate the exact
-producer run/attempt and unchanged assets, create the ordinary annotated v0.1.76
-tag, update and read back the scoped release selection, then promote through
-`immutable_published_and_public_verified`. No v0.1.76 tag or release selection has
-been created; v0.1.75 remains public/latest.
+The main checkout contains the v0.1.77 implementation of
+[parameterized owned contracts](spec/owned-contract-parameters.md), based on
+`bd8321cff99316bd5a286791b196a38894b7651e`. Fresh complete source acceptance and
+mainline integration remain pending; this is not a public executable selection.
 
-Preserve the other worktrees, unrelated stash, original fixtures and failures,
-and immutable publication history. No application deployment changes are part
-of this work.
+Ordered Owned arguments and structural method signatures compose reusable flat
+and chunk32 worklists for independent cell and buffer carriers. The
+[native witness](../examples/owned-worklists/README.md) includes generic transfer,
+drain/reuse and complete provisional-graph validation/reachability. These are
+designed language witnesses, not compiler self-hosting or application adoption.
+The [release notes](releases/v0.1.77.md) describe the coordinated format cut and
+required derived-bundle rebuild.
+
+Development evidence is retained under `.artifacts/20261005-owned-contracts/`:
+23 codec/interface tests and 23 focused admission/runtime/authoring tests pass;
+strict workspace lint passes. Standard, lkjournal, native guide and policy checks
+pass 281 native tests with equal bytecode/reference results. Their derived assets
+and discovery were regenerated through the product. All maintained semantic HEADs
+remain unchanged. Indexed cold reproduction in `cold-tracked-01/` reproduces all
+four bundles and standard transport exactly, with all 191 packs unchanged. The
+61 recorded historical fixture files remain byte-identical.
+
+Fresh copied-product authoring in `public-authoring-smoke-01/` passes the
+three-package example, 106 graph tests, both reachability targets and complete
+513-item storage results. All 22 negative proposals reject semantically and
+preserve HEAD. All three corrected public-harness cases pass in `public-focus-04/`,
+including source-deleted execution, complete results and capacity boundaries;
+their literal inputs and copied executables remain at the recorded temporary
+roots. Initial failure logs remain in `public-focus-03/`; those earlier temporary
+roots were automatically removed.
+
+Matched seven-sample observations in `measure-storage-01/` and
+`measure-reachability-01/` retain complete results, stage timings, modeled
+allocation and coarse process RSS. Chunk32 executes more slowly and charges more
+allocation than flat storage in every measured workload; no retained-owned-byte
+or API-cost advantage is established. Full fresh 26-gate acceptance, normal
+mainline delivery and a new source-specific release producer remain outstanding.
+No v0.1.77 tag or release selection has been created.
+
+Preserve other worktrees, unrelated stashes, original fixtures and failures, and
+immutable publication history. No application deployment changes are part of
+this work.

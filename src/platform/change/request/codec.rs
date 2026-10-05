@@ -129,6 +129,7 @@ struct Writer {
     implementation_authority_extension: bool,
     owned_borrow_extension: bool,
     sequence_extension: bool,
+    parameterized_contract_extension: bool,
 }
 
 impl Writer {
@@ -151,11 +152,14 @@ impl Writer {
             implementation_authority_extension: false,
             owned_borrow_extension: false,
             sequence_extension: false,
+            parameterized_contract_extension: false,
         }
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.sequence_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+        if self.parameterized_contract_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR30");
+        } else if self.sequence_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR29");
         } else if self.owned_borrow_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR28");
@@ -500,19 +504,32 @@ impl Writer {
                 name,
                 visibility,
                 self_type,
+                type_parameters,
                 methods,
             } => {
                 self.owned_extension = true;
+                self.parameterized_contract_extension |= !type_parameters.is_empty();
                 let task_methods = methods
                     .iter()
                     .any(|m| !matches!(m.effect, AuthoredFunctionEffect::Pure {}));
                 self.task_method_extension |= task_methods;
-                self.tag(if task_methods { 86 } else { 80 })?;
+                self.tag(if !type_parameters.is_empty() {
+                    88
+                } else if task_methods {
+                    86
+                } else {
+                    80
+                })?;
                 self.symbol(symbol, definitions)?;
                 self.module_selector(module, definitions)?;
                 self.name(name)?;
                 self.visibility(*visibility)?;
                 self.authored_type(self_type, definitions, 1)?;
+                if !type_parameters.is_empty() {
+                    self.list(type_parameters, |w, p| {
+                        w.type_parameter_reference(p, definitions)
+                    })?;
+                }
                 self.list(methods, |w, m| {
                     w.raw(&m.id.bytes())?;
                     w.name(&m.name)?;
@@ -521,7 +538,7 @@ impl Writer {
                         w.parameter_use(*mode)
                     })?;
                     w.authored_type(&m.result, definitions, 1)?;
-                    if task_methods {
+                    if task_methods || !type_parameters.is_empty() {
                         w.function_effect(&m.effect, definitions)
                     } else {
                         Ok(())
@@ -535,16 +552,21 @@ impl Writer {
                 visibility,
                 contract,
                 self_type,
+                type_arguments,
                 methods,
             } => {
                 self.owned_extension = true;
-                self.tag(81)?;
+                self.parameterized_contract_extension |= !type_arguments.is_empty();
+                self.tag(if type_arguments.is_empty() { 81 } else { 89 })?;
                 self.symbol(symbol, definitions)?;
                 self.module_selector(module, definitions)?;
                 self.name(name)?;
                 self.visibility(*visibility)?;
                 self.declaration_reference(contract, definitions)?;
                 self.authored_type(self_type, definitions, 1)?;
+                if !type_arguments.is_empty() {
+                    self.list(type_arguments, |w, ty| w.authored_type(ty, definitions, 1))?;
+                }
                 self.list(methods, |w, (method, function)| {
                     w.raw(&method.bytes())?;
                     w.declaration_reference(function, definitions)
@@ -553,16 +575,29 @@ impl Writer {
             AuthoredChange::SetOwnedContract {
                 declaration,
                 self_type,
+                type_parameters,
                 methods,
             } => {
                 self.owned_extension = true;
+                self.parameterized_contract_extension |= !type_parameters.is_empty();
                 let task_methods = methods
                     .iter()
                     .any(|m| !matches!(m.effect, AuthoredFunctionEffect::Pure {}));
                 self.task_method_extension |= task_methods;
-                self.tag(if task_methods { 87 } else { 84 })?;
+                self.tag(if !type_parameters.is_empty() {
+                    90
+                } else if task_methods {
+                    87
+                } else {
+                    84
+                })?;
                 self.declaration_selector(declaration, definitions)?;
                 self.authored_type(self_type, definitions, 1)?;
+                if !type_parameters.is_empty() {
+                    self.list(type_parameters, |w, p| {
+                        w.type_parameter_reference(p, definitions)
+                    })?;
+                }
                 self.list(methods, |w, m| {
                     w.raw(&m.id.bytes())?;
                     w.name(&m.name)?;
@@ -571,7 +606,7 @@ impl Writer {
                         w.parameter_use(*mode)
                     })?;
                     w.authored_type(&m.result, definitions, 1)?;
-                    if task_methods {
+                    if task_methods || !type_parameters.is_empty() {
                         w.function_effect(&m.effect, definitions)
                     } else {
                         Ok(())
@@ -582,13 +617,18 @@ impl Writer {
                 declaration,
                 contract,
                 self_type,
+                type_arguments,
                 methods,
             } => {
                 self.owned_extension = true;
-                self.tag(85)?;
+                self.parameterized_contract_extension |= !type_arguments.is_empty();
+                self.tag(if type_arguments.is_empty() { 85 } else { 91 })?;
                 self.declaration_selector(declaration, definitions)?;
                 self.declaration_reference(contract, definitions)?;
                 self.authored_type(self_type, definitions, 1)?;
+                if !type_arguments.is_empty() {
+                    self.list(type_arguments, |w, ty| w.authored_type(ty, definitions, 1))?;
+                }
                 self.list(methods, |w, (method, function)| {
                     w.raw(&method.bytes())?;
                     w.declaration_reference(function, definitions)
@@ -599,13 +639,22 @@ impl Writer {
                 parameters,
             } => {
                 self.owned_extension = true;
-                self.tag(82)?;
+                let parameterized = parameters.iter().any(|p| !p.type_arguments.is_empty());
+                self.parameterized_contract_extension |= parameterized;
+                self.tag(if parameterized { 92 } else { 82 })?;
                 self.declaration_selector(declaration, definitions)?;
                 self.list(parameters, |w, p| {
                     w.raw(&p.id.bytes())?;
                     w.name(&p.name)?;
                     w.declaration_reference(&p.contract, definitions)?;
-                    w.authored_type(&p.self_type, definitions, 1)
+                    w.authored_type(&p.self_type, definitions, 1)?;
+                    if parameterized {
+                        w.list(&p.type_arguments, |w, ty| {
+                            w.authored_type(ty, definitions, 1)
+                        })
+                    } else {
+                        Ok(())
+                    }
                 })
             }
             AuthoredChange::ReferenceBindings { bindings } => {

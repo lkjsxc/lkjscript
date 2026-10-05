@@ -31,11 +31,11 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-13";
-pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 13;
-pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF13";
+pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-14";
+pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 14;
+pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF14";
 pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str =
-    "lkjscript.package-interface-owner-envelope.v13";
+    "lkjscript.package-interface-owner-envelope.v14";
 const PACKAGE_INTERFACE_IDENTITY_MAGIC: [u8; 8] = *b"LKJPIFI1";
 const PACKAGE_INTERFACE_IDENTITY_DOMAIN: &str = "lkjscript.package-interface-identity.v1";
 pub const MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES: usize = 1024 * 1024;
@@ -87,6 +87,13 @@ struct PackageInterfaceOwner11 {
     record: crate::platform::kernel::interface11::PackageInterfaceRecord11,
 }
 
+/// Generation 13 predates parameterized contract application fields.
+#[derive(Clone, Debug, Decode, Encode)]
+struct PackageInterfaceOwner13 {
+    contract_version: u16,
+    record: crate::platform::kernel::wire25::PackageInterfaceRecord25,
+}
+
 /// Frozen generation 12 admits only the original three constraint tags.
 #[derive(Clone, Debug, Decode, Encode)]
 struct PackageInterfaceOwner12 {
@@ -96,7 +103,7 @@ struct PackageInterfaceOwner12 {
 
 #[derive(Clone, Debug, Decode, Encode)]
 enum PackageInterfaceRecord12 {
-    Declaration(crate::platform::kernel::PackageInterfaceDeclaration),
+    Declaration(crate::platform::kernel::wire25::PackageInterfaceDeclaration25),
     TypeParameter(TypeParameterRecord12),
     EffectParameter(crate::platform::kernel::EffectParameterRecord),
     Field(crate::platform::kernel::FieldRecord),
@@ -127,7 +134,7 @@ impl From<PackageInterfaceRecord12> for PackageInterfaceRecord {
     fn from(record: PackageInterfaceRecord12) -> Self {
         use PackageInterfaceRecord12 as W;
         match record {
-            W::Declaration(v) => Self::Declaration(v),
+            W::Declaration(v) => Self::Declaration(v.into()),
             W::TypeParameter(v) => {
                 Self::TypeParameter(crate::platform::kernel::TypeParameterRecord {
                     header: v.header,
@@ -163,7 +170,7 @@ impl TryFrom<PackageInterfaceRecord> for PackageInterfaceRecord12 {
     fn try_from(record: PackageInterfaceRecord) -> Result<Self, Self::Error> {
         use PackageInterfaceRecord as C;
         Ok(match record {
-            C::Declaration(v) => Self::Declaration(v),
+            C::Declaration(v) => Self::Declaration(v.try_into()?),
             C::TypeParameter(v) => Self::TypeParameter(TypeParameterRecord12 {
                 header: v.header,
                 declaration: v.declaration,
@@ -231,6 +238,8 @@ impl PackageInterfaceOwner {
                 11
             } else if canonical.header().contract_version < 22 {
                 12
+            } else if canonical.header().contract_version < 26 {
+                13
             } else {
                 PACKAGE_INTERFACE_CONTRACT_VERSION
             },
@@ -293,6 +302,19 @@ impl PackageInterfaceOwner {
             )?;
             return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
         }
+        if self.contract_version == 13 {
+            let wire = PackageInterfaceOwner13 {
+                contract_version: 13,
+                record: self.record.clone().try_into()?,
+            };
+            let bytes = crate::platform::packed::encode(
+                *b"LKJPIF13",
+                "lkjscript.package-interface-owner-envelope.v13",
+                &wire,
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
+        }
         let bytes = crate::platform::packed::encode(
             PACKAGE_INTERFACE_MAGIC,
             PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
@@ -314,7 +336,23 @@ impl PackageInterfaceOwner {
                 "package-interface owner bytes disagree with their exact digest",
             ));
         }
-        let value: Self = if bytes.starts_with(b"LKJPIF12") {
+        let value: Self = if bytes.starts_with(b"LKJPIF13") {
+            let wire: PackageInterfaceOwner13 = crate::platform::packed::decode(
+                bytes,
+                *b"LKJPIF13",
+                "lkjscript.package-interface-owner-envelope.v13",
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            if wire.contract_version != 13 {
+                return Err(interface_corrupt(
+                    "predecessor interface envelope has a foreign generation",
+                ));
+            }
+            Self {
+                contract_version: 13,
+                record: wire.record.into(),
+            }
+        } else if bytes.starts_with(b"LKJPIF12") {
             let wire: PackageInterfaceOwner12 = crate::platform::packed::decode(
                 bytes,
                 *b"LKJPIF12",
@@ -394,6 +432,7 @@ impl PackageInterfaceOwner {
             && self.contract_version != 10
             && self.contract_version != 11
             && self.contract_version != 12
+            && self.contract_version != 13
         {
             return Err(interface_error(
                 DiagnosticClass::Source,
@@ -407,6 +446,18 @@ impl PackageInterfaceOwner {
         {
             return Err(interface_corrupt(
                 "transferable constraints require interface generation 13",
+            ));
+        }
+        if self.contract_version < 14
+            && matches!(&self.record, PackageInterfaceRecord::Declaration(d) if match &d.payload {
+                PackageInterfaceDeclarationPayload::OwnedContract(c) => !c.type_parameters.is_empty(),
+                PackageInterfaceDeclarationPayload::OwnedImplementation(i) => !i.type_arguments.is_empty(),
+                PackageInterfaceDeclarationPayload::Function(f) => f.implementation_parameters.iter().any(|p| !p.type_arguments.is_empty()),
+                _ => false,
+            })
+        {
+            return Err(interface_corrupt(
+                "owned contract parameters and arguments require interface generation 14",
             ));
         }
         self.record.validate_local()
@@ -544,7 +595,7 @@ impl PackageInterfaceSelection {
         let declaration = declaration_id(record.header.owner)?;
         self.declarations.insert(declaration);
         self.type_parameters
-            .extend(record.payload.type_parameters());
+            .extend(record.payload.type_parameters().iter().copied());
         match &record.payload {
             DeclarationPayload::OwnedContract(c) => {
                 self.type_parameters.insert(c.self_parameter);
@@ -910,9 +961,12 @@ pub(crate) fn interface_owner_validation_visits(owner: &PackageInterfaceOwner) -
                         m.parameters.len() + row.requirements.len() + row.parameters.len() + 1
                     })
                     .sum::<usize>()
+                    + c.type_parameters.len()
                     + 1
             }
-            PackageInterfaceDeclarationPayload::OwnedImplementation(i) => i.methods.len() + 1,
+            PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
+                i.methods.len() + i.type_arguments.len() + 1
+            }
             PackageInterfaceDeclarationPayload::Record {
                 fields,
                 type_parameters,
@@ -925,6 +979,11 @@ pub(crate) fn interface_owner_validation_visits(owner: &PackageInterfaceOwner) -
             PackageInterfaceDeclarationPayload::Function(function) => {
                 function.parameters.len()
                     + function.implementation_parameters.len()
+                    + function
+                        .implementation_parameters
+                        .iter()
+                        .map(|p| p.type_arguments.len())
+                        .sum::<usize>()
                     + function.type_parameters.len()
                     + function.requirement_parameters.len()
                     + function.effect_parameters.len()
@@ -977,14 +1036,67 @@ fn validate_owner_closure(
         };
         match &declaration.payload {
             PackageInterfaceDeclarationPayload::OwnedContract(c) => {
-                require_child(
-                    owners,
-                    &mut expected,
-                    OwnerKey::TypeParameter(c.self_parameter),
-                    OwnerKind::TypeParameter,
-                    Some(*declaration_id),
-                )?;
+                let mut parameter_names = BTreeSet::new();
+                for parameter in std::iter::once(&c.self_parameter).chain(c.type_parameters.iter())
+                {
+                    require_child(
+                        owners,
+                        &mut expected,
+                        OwnerKey::TypeParameter(*parameter),
+                        OwnerKind::TypeParameter,
+                        Some(*declaration_id),
+                    )?;
+                    let Some(PackageInterfaceOwner {
+                        record: PackageInterfaceRecord::TypeParameter(p),
+                        ..
+                    }) = owners.get(&OwnerKey::TypeParameter(*parameter))
+                    else {
+                        return Err(interface_corrupt("owned contract parameter is absent"));
+                    };
+                    if p.constraints != crate::platform::kernel::TypeParameterConstraints::Owned
+                        || !parameter_names.insert(&p.name)
+                    {
+                        return Err(interface_corrupt(
+                            "owned contract parameters require distinct names and the exact Owned constraint",
+                        ));
+                    }
+                    if *parameter != c.self_parameter && p.header.contract_version < 26 {
+                        return Err(interface_error(
+                            DiagnosticClass::Semantic,
+                            "kernel_parameterized_contract_generation",
+                            "additional owned contract parameter owners require Graph 26",
+                        ));
+                    }
+                }
                 for method in &c.methods {
+                    if declaration.header.contract_version < 26 {
+                        for ty in method
+                            .parameters
+                            .iter()
+                            .map(|p| p.ty)
+                            .chain([method.result])
+                        {
+                            let Some(object) = types.get(&ty) else {
+                                return Err(interface_corrupt(
+                                    "owned method signature type is absent",
+                                ));
+                            };
+                            if matches!(
+                                object.form,
+                                TypeForm::ByteBuffer
+                                    | TypeForm::OwnedI64Cell
+                                    | TypeForm::OwnedProduct { .. }
+                                    | TypeForm::OwnedChoice { .. }
+                                    | TypeForm::OwnedSequence { .. }
+                            ) {
+                                return Err(interface_error(
+                                    DiagnosticClass::Semantic,
+                                    "kernel_parameterized_contract_generation",
+                                    "structural owned method signatures require Graph 26",
+                                ));
+                            }
+                        }
+                    }
                     let row = method.effect.row();
                     row.validate()?;
                     if !row.is_closed() {
@@ -1792,6 +1904,200 @@ mod tests {
     use crate::platform::kernel::encode_type_object;
     use crate::platform::storage::memory::MemoryPackedStore;
     use crate::platform::witness::rebuild_full_witness;
+
+    #[test]
+    fn interface14_preserves_literal_interface13_contract_layout() {
+        use crate::platform::kernel::*;
+        use crate::platform::semantic_id::MethodId;
+        let seed = b"frozen-interface-contract";
+        let owner = OwnerKey::Declaration(DeclarationId::migrate(seed, 0));
+        let header = OwnerHeader {
+            contract_version: 25,
+            owner,
+            kind: OwnerKind::OwnedContract,
+        };
+        let name = Name::new("Collection").unwrap();
+        let self_parameter = TypeParameterId::migrate(seed, 0);
+        let result = encode_type_object(&TypeObject::new(TypeForm::I64).unwrap())
+            .unwrap()
+            .0;
+        let methods = vec![OwnedMethod {
+            id: MethodId::migrate(seed, 0),
+            name: Name::new("length").unwrap(),
+            parameters: Vec::new(),
+            result,
+            effect: FunctionEffect::Pure,
+        }];
+        // Original interface and payload ordinals, with the original two
+        // contract fields, bypass both current and frozen Rust wire records.
+        let original = crate::platform::packed::encode(
+            *b"LKJPIF13",
+            "lkjscript.package-interface-owner-envelope.v13",
+            &(
+                13_u16,
+                0_u32,
+                header,
+                &name,
+                5_u32,
+                self_parameter,
+                &methods,
+            ),
+            MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+        )
+        .unwrap();
+        let digest = PackageInterfaceOwnerDigest::of(&original);
+        let mut value = PackageInterfaceOwner::decode(&original, owner, digest).unwrap();
+        assert_eq!(value.encode().unwrap(), (digest, original));
+        let PackageInterfaceRecord::Declaration(d) = &mut value.record else {
+            panic!("declaration");
+        };
+        let PackageInterfaceDeclarationPayload::OwnedContract(c) = &mut d.payload else {
+            panic!("contract");
+        };
+        c.type_parameters.push(TypeParameterId::migrate(seed, 1));
+        d.header.contract_version = 26;
+        assert!(value.encode().is_err());
+        value.contract_version = 14;
+        let (digest, bytes) = value.encode().unwrap();
+        assert_eq!(&bytes[..8], b"LKJPIF14");
+        assert_eq!(
+            PackageInterfaceOwner::decode(&bytes, owner, digest).unwrap(),
+            value
+        );
+    }
+
+    #[test]
+    fn structural_self_only_contracts_cannot_acquire_predecessor_interface_authority() {
+        use crate::platform::kernel::*;
+        use crate::platform::semantic_id::MethodId;
+        let seed = b"structural-contract-interface-generation";
+        let package = "pkg_10000000000000000000000000000001".parse().unwrap();
+        let declaration = DeclarationId::migrate(seed, 0);
+        let owner = OwnerKey::Declaration(declaration);
+        let self_parameter = TypeParameterId::migrate(seed, 0);
+        let self_object = TypeObject::new(TypeForm::TypeParameter {
+            parameter: self_parameter,
+        })
+        .unwrap();
+        let self_type = encode_type_object(&self_object).unwrap().0;
+        let product_object = TypeObject::new(TypeForm::OwnedProduct {
+            fields: vec![StructuralTypeField {
+                name: Name::new("rest").unwrap(),
+                ty: self_type,
+            }],
+        })
+        .unwrap();
+        let product_type = encode_type_object(&product_object).unwrap().0;
+        let mut owners = BTreeMap::from([
+            (
+                owner,
+                PackageInterfaceOwner {
+                    contract_version: 13,
+                    record: PackageInterfaceRecord::Declaration(PackageInterfaceDeclaration {
+                        header: OwnerHeader {
+                            contract_version: 25,
+                            owner,
+                            kind: OwnerKind::OwnedContract,
+                        },
+                        name: Name::new("Worklist").unwrap(),
+                        payload: PackageInterfaceDeclarationPayload::OwnedContract(OwnedContract {
+                            self_parameter,
+                            type_parameters: Vec::new(),
+                            methods: vec![OwnedMethod {
+                                id: MethodId::migrate(seed, 0),
+                                name: Name::new("pop").unwrap(),
+                                parameters: vec![OwnedMethodParameter {
+                                    ty: self_type,
+                                    use_mode: ParameterUse::Consume,
+                                }],
+                                result: product_type,
+                                effect: FunctionEffect::Pure,
+                            }],
+                        }),
+                    }),
+                },
+            ),
+            (
+                OwnerKey::TypeParameter(self_parameter),
+                PackageInterfaceOwner {
+                    contract_version: 13,
+                    record: PackageInterfaceRecord::TypeParameter(TypeParameterRecord {
+                        header: OwnerHeader {
+                            contract_version: 25,
+                            owner: OwnerKey::TypeParameter(self_parameter),
+                            kind: OwnerKind::TypeParameter,
+                        },
+                        declaration,
+                        name: Name::new("Self").unwrap(),
+                        constraints: TypeParameterConstraints::Owned,
+                    }),
+                },
+            ),
+        ]);
+        let types = BTreeMap::from([(self_type, self_object), (product_type, product_object)]);
+        let (digest, bytes) = owners[&owner].encode().unwrap();
+        owners.insert(
+            owner,
+            PackageInterfaceOwner::decode(&bytes, owner, digest).unwrap(),
+        );
+        assert_eq!(
+            validate_owner_closure(package, &owners, &types)
+                .unwrap_err()
+                .code,
+            "kernel_parameterized_contract_generation"
+        );
+        let contract_owner = owners.get_mut(&owner).unwrap();
+        contract_owner.contract_version = 14;
+        let PackageInterfaceRecord::Declaration(d) = &mut contract_owner.record else {
+            panic!("declaration");
+        };
+        d.header.contract_version = 26;
+        assert!(validate_owner_closure(package, &owners, &types).is_ok());
+        let extra = TypeParameterId::migrate(seed, 1);
+        let PackageInterfaceRecord::Declaration(d) = &mut owners.get_mut(&owner).unwrap().record
+        else {
+            panic!("declaration");
+        };
+        let PackageInterfaceDeclarationPayload::OwnedContract(c) = &mut d.payload else {
+            panic!("contract");
+        };
+        c.type_parameters.push(extra);
+        assert_eq!(
+            validate_owner_closure(package, &owners, &types)
+                .unwrap_err()
+                .code,
+            "package_interface_child_missing"
+        );
+        owners.insert(
+            OwnerKey::TypeParameter(extra),
+            PackageInterfaceOwner {
+                contract_version: 13,
+                record: PackageInterfaceRecord::TypeParameter(TypeParameterRecord {
+                    header: OwnerHeader {
+                        contract_version: 25,
+                        owner: OwnerKey::TypeParameter(extra),
+                        kind: OwnerKind::TypeParameter,
+                    },
+                    declaration,
+                    name: Name::new("Item").unwrap(),
+                    constraints: TypeParameterConstraints::Owned,
+                }),
+            },
+        );
+        assert_eq!(
+            validate_owner_closure(package, &owners, &types)
+                .unwrap_err()
+                .code,
+            "kernel_parameterized_contract_generation"
+        );
+        let extra_owner = owners.get_mut(&OwnerKey::TypeParameter(extra)).unwrap();
+        extra_owner.contract_version = 14;
+        let PackageInterfaceRecord::TypeParameter(p) = &mut extra_owner.record else {
+            panic!("parameter");
+        };
+        p.header.contract_version = 26;
+        assert!(validate_owner_closure(package, &owners, &types).is_ok());
+    }
 
     #[test]
     fn transferable_interface13_preserves_frozen_interface12_and_rejects_new_tags() {

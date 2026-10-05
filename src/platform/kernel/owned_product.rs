@@ -59,8 +59,27 @@ pub(crate) fn validate(
     ty: TypeObjectDigest,
     scope: Option<DeclarationId>,
 ) -> Result<(), Diagnostic> {
+    validate_in_scope(
+        read,
+        ty,
+        scope.map(|declaration| DeclarationReference {
+            package: read.package_id(),
+            declaration,
+        }),
+    )
+}
+
+/// The exact defining package participates in symbolic contract-type admission.
+pub(crate) fn validate_in_scope(
+    read: &(impl ExpressionRead + ?Sized),
+    ty: TypeObjectDigest,
+    scope: Option<DeclarationReference>,
+) -> Result<(), Diagnostic> {
     read.validation_work()?;
-    let ordinary_assumptions = super::transfer::ordinary_assumptions(read, scope)?;
+    let local_scope = scope
+        .filter(|s| s.package == read.package_id())
+        .map(|s| s.declaration);
+    let ordinary_assumptions = super::transfer::ordinary_assumptions(read, local_scope)?;
     let code = match read.type_object(ty)?.map(|t| t.form) {
         Some(TypeForm::OwnedSequence { .. }) => "kernel_owned_sequence",
         Some(TypeForm::OwnedChoice { .. }) => "kernel_owned_choice",
@@ -138,35 +157,13 @@ pub(crate) fn validate(
                 }
                 TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => owned = true,
                 TypeForm::TypeParameter { parameter }
-                    if super::memory::direct(read, child_type)? =>
-                {
-                    let Some(OwnerRecord::TypeParameter(p)) =
-                        read.owner(OwnerKey::TypeParameter(parameter))?
-                    else {
-                        return Err(reject("missing owned product parameter"));
-                    };
-                    if !p.constraints.has_owned() || Some(p.declaration) != scope {
-                        return Err(reject(
-                            "product parameters require exact in-scope Owned constraints",
-                        ));
-                    }
-                    let Some(OwnerRecord::Declaration(d)) =
-                        read.owner(OwnerKey::Declaration(p.declaration))?
-                    else {
-                        return Err(reject("missing owned parameter declaration"));
-                    };
-                    let DeclarationPayload::Function(function) = d.payload else {
-                        return Err(reject("product parameter requires a graph-function owner"));
-                    };
-                    if !super::transfer::function_parameter_listed(
+                    if super::memory::direct_in(
                         read,
-                        &function.type_parameters,
-                        parameter,
-                    )? {
-                        return Err(reject(
-                            "product parameter is outside its function signature",
-                        ));
-                    }
+                        scope.map_or(read.package_id(), |s| s.package),
+                        child_type,
+                    )? =>
+                {
+                    super::owned_contract::validate_owned_parameter(read, parameter, scope)?;
                     owned = true;
                 }
                 _ if require_owned => {
@@ -175,7 +172,7 @@ pub(crate) fn validate(
                 _ if !super::owned_contract::ordinary_with_assumptions(
                     read,
                     child_type,
-                    scope,
+                    local_scope,
                     &ordinary_assumptions,
                 )? =>
                 {

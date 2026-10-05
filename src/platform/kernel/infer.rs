@@ -1444,7 +1444,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 method,
                 arguments,
             } => {
-                let signature = self.owned_read(|read| {
+                let (mut signature, substitutions) = self.owned_read(|read| {
                     super::owned_contract::method_signature(
                         read,
                         witness,
@@ -1453,6 +1453,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         context.declaration,
                     )
                 })?;
+                for parameter in &mut signature.parameters {
+                    parameter.ty = self.substitute(parameter.ty, &substitutions, 0)?;
+                }
+                signature.result = self.substitute(signature.result, &substitutions, 0)?;
                 let row = signature.effect.row();
                 self.validate_call_effect(
                     &FunctionSignature {

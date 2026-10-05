@@ -1,13 +1,13 @@
-//! Strict compiler unit 10 / bytecode 6 layouts from 4306ef64.
-//! Only the wire representation is historical; admission uses the current checker.
+//! Test-only compiler unit 10 / bytecode 6 decoder frozen from 4306ef64.
+//! Conversion preserves historical meaning for independent admission tests.
+//! Production requires rebuilding derived units from supported canonical owners.
 use super::unit::*;
-use crate::platform::diagnostic::Diagnostic;
 use crate::platform::kernel::*;
 use crate::platform::package::RunnerKind;
 use crate::platform::semantic_id::{ParameterId, TypeParameterId};
-use bincode::{Decode, Encode};
+use bincode::Decode;
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Decode, Eq, PartialEq)]
 pub struct CompilationUnit10 {
     pub contract_version: u16,
     pub graph_contract_version: u16,
@@ -19,7 +19,7 @@ pub struct CompilationUnit10 {
     pub payload: CompilationPayload10,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Decode, Eq, PartialEq)]
 pub enum CompilationPayload10 {
     Record {
         type_parameters: Vec<TypeParameterId>,
@@ -63,7 +63,7 @@ pub enum CompilationPayload10 {
     },
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Decode, Eq, PartialEq)]
 pub struct CompiledSignature10 {
     pub effect_parameters: Vec<crate::platform::semantic_id::EffectParameterId>,
     pub effect: crate::platform::kernel::wire14::FunctionEffect14,
@@ -74,14 +74,14 @@ pub struct CompiledSignature10 {
     pub task_requirements: Vec<u32>,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Decode, Eq, PartialEq)]
 pub struct CompiledCode10 {
     pub parameter_count: u32,
     pub local_count: u32,
     pub instructions: Vec<CompiledInstruction10>,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Decode, Eq, PartialEq)]
 pub enum CompiledInstruction10 {
     Unit,
     Bool(bool),
@@ -156,14 +156,14 @@ pub enum CompiledInstruction10 {
     },
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Decode, Eq, PartialEq)]
 pub struct CompiledPort10 {
     pub port: u32,
     pub function_type: u32,
     pub implementation: CompiledPortImplementation10,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Decode, Eq, PartialEq)]
 pub enum CompiledPortImplementation10 {
     Function(u32),
     Expression(CompiledCode10),
@@ -191,32 +191,6 @@ impl From<CompilationUnit10> for CompilationUnit {
             tables,
             payload: payload.into(),
         }
-    }
-}
-
-impl TryFrom<CompilationUnit> for CompilationUnit10 {
-    type Error = Diagnostic;
-    fn try_from(value: CompilationUnit) -> Result<Self, Diagnostic> {
-        let CompilationUnit {
-            contract_version,
-            graph_contract_version,
-            bytecode_contract_version,
-            key,
-            source,
-            optimization,
-            tables,
-            payload,
-        } = value;
-        Ok(Self {
-            contract_version,
-            graph_contract_version,
-            bytecode_contract_version,
-            key,
-            source,
-            optimization,
-            tables,
-            payload: payload.try_into()?,
-        })
     }
 }
 
@@ -288,81 +262,6 @@ impl From<CompilationPayload10> for CompilationPayload {
     }
 }
 
-impl TryFrom<CompilationPayload> for CompilationPayload10 {
-    type Error = Diagnostic;
-    fn try_from(value: CompilationPayload) -> Result<Self, Diagnostic> {
-        Ok(match value {
-            CompilationPayload::Record {
-                type_parameters,
-                type_parameter_constraints,
-                fields,
-            } => Self::Record {
-                type_parameters,
-                type_parameter_constraints,
-                fields,
-            },
-            CompilationPayload::Variant {
-                type_parameters,
-                type_parameter_constraints,
-                cases,
-            } => Self::Variant {
-                type_parameters,
-                type_parameter_constraints,
-                cases,
-            },
-            CompilationPayload::Interface { operations } => Self::Interface { operations },
-            CompilationPayload::External {
-                signature,
-                implementation,
-            } => Self::External {
-                signature: signature.try_into()?,
-                implementation,
-            },
-            CompilationPayload::OwnedContract(_) | CompilationPayload::OwnedImplementation(_) => {
-                return Err(extension());
-            }
-            CompilationPayload::Function { signature, code } => Self::Function {
-                signature: signature.try_into()?,
-                code: code.try_into()?,
-            },
-            CompilationPayload::Constant { ty, code } => Self::Constant {
-                ty,
-                code: code.try_into()?,
-            },
-            CompilationPayload::Component {
-                requirements,
-                ports,
-            } => Self::Component {
-                requirements,
-                ports: ports
-                    .into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<Result<_, _>>()?,
-            },
-            CompilationPayload::Test {
-                actual,
-                expected,
-                comparison,
-            } => Self::Test {
-                actual: actual.try_into()?,
-                expected: expected.try_into()?,
-                comparison,
-            },
-            CompilationPayload::Target {
-                component,
-                port,
-                routes,
-                runner,
-            } => Self::Target {
-                component,
-                port,
-                routes,
-                runner,
-            },
-        })
-    }
-}
-
 impl From<CompiledSignature10> for CompiledSignature {
     fn from(value: CompiledSignature10) -> Self {
         let CompiledSignature10 {
@@ -388,35 +287,6 @@ impl From<CompiledSignature10> for CompiledSignature {
     }
 }
 
-impl TryFrom<CompiledSignature> for CompiledSignature10 {
-    type Error = Diagnostic;
-    fn try_from(value: CompiledSignature) -> Result<Self, Diagnostic> {
-        let CompiledSignature {
-            implementation_parameters,
-            effect_parameters,
-            effect,
-            type_parameters,
-            type_parameter_constraints,
-            parameters,
-            result,
-            task_requirements,
-            requirement_parameters,
-        } = value;
-        if !requirement_parameters.is_empty() || !implementation_parameters.is_empty() {
-            return Err(extension());
-        }
-        Ok(Self {
-            effect_parameters,
-            effect: effect.try_into()?,
-            type_parameters,
-            type_parameter_constraints,
-            parameters,
-            result,
-            task_requirements,
-        })
-    }
-}
-
 impl From<CompiledCode10> for CompiledCode {
     fn from(value: CompiledCode10) -> Self {
         let CompiledCode10 {
@@ -429,25 +299,6 @@ impl From<CompiledCode10> for CompiledCode {
             local_count,
             instructions: instructions.into_iter().map(Into::into).collect(),
         }
-    }
-}
-
-impl TryFrom<CompiledCode> for CompiledCode10 {
-    type Error = Diagnostic;
-    fn try_from(value: CompiledCode) -> Result<Self, Diagnostic> {
-        let CompiledCode {
-            parameter_count,
-            local_count,
-            instructions,
-        } = value;
-        Ok(Self {
-            parameter_count,
-            local_count,
-            instructions: instructions
-                .into_iter()
-                .map(TryInto::try_into)
-                .collect::<Result<_, _>>()?,
-        })
     }
 }
 
@@ -550,143 +401,6 @@ impl From<CompiledInstruction10> for CompiledInstruction {
     }
 }
 
-impl TryFrom<CompiledInstruction> for CompiledInstruction10 {
-    type Error = Diagnostic;
-    fn try_from(value: CompiledInstruction) -> Result<Self, Diagnostic> {
-        Ok(match value {
-            CompiledInstruction::Unit => Self::Unit,
-            CompiledInstruction::Bool(value) => Self::Bool(value),
-            CompiledInstruction::I64(value) => Self::I64(value),
-            CompiledInstruction::Text(value) => Self::Text(value),
-            CompiledInstruction::StaticText(value) => Self::StaticText(value),
-            CompiledInstruction::LoadLocal { local, use_mode } => {
-                Self::LoadLocal { local, use_mode }
-            }
-            CompiledInstruction::StoreLocal(value) => Self::StoreLocal(value),
-            CompiledInstruction::Drop => Self::Drop,
-            CompiledInstruction::JumpIfFalse(value) => Self::JumpIfFalse(value),
-            CompiledInstruction::Jump(value) => Self::Jump(value),
-            CompiledInstruction::Call {
-                effect_arguments,
-                function,
-                type_arguments,
-                arguments,
-                requirement_arguments,
-            } => {
-                if !requirement_arguments.is_empty() {
-                    return Err(extension());
-                }
-                Self::Call {
-                    effect_arguments: effect_arguments
-                        .into_iter()
-                        .map(TryInto::try_into)
-                        .collect::<Result<_, _>>()?,
-                    function,
-                    type_arguments,
-                    arguments,
-                }
-            }
-            CompiledInstruction::FunctionValue {
-                effect_arguments,
-                function,
-                type_arguments,
-                requirement_arguments,
-            } => {
-                if !requirement_arguments.is_empty() {
-                    return Err(extension());
-                }
-                Self::FunctionValue {
-                    effect_arguments: effect_arguments
-                        .into_iter()
-                        .map(TryInto::try_into)
-                        .collect::<Result<_, _>>()?,
-                    function,
-                    type_arguments,
-                }
-            }
-            CompiledInstruction::Invoke { arguments } => Self::Invoke { arguments },
-            CompiledInstruction::Record {
-                nominal_type,
-                type_arguments,
-                fields,
-            } => Self::Record {
-                nominal_type,
-                type_arguments,
-                fields,
-            },
-            CompiledInstruction::Variant {
-                case,
-                type_arguments,
-                has_payload,
-            } => Self::Variant {
-                case,
-                type_arguments,
-                has_payload,
-            },
-            CompiledInstruction::Field(value) => Self::Field(value),
-            CompiledInstruction::List { item_type, items } => Self::List { item_type, items },
-            CompiledInstruction::Map {
-                key_type,
-                value_type,
-                entries,
-            } => Self::Map {
-                key_type,
-                value_type,
-                entries,
-            },
-            CompiledInstruction::SwitchVariant(value) => Self::SwitchVariant(value),
-            CompiledInstruction::Perform {
-                requirement,
-                operation,
-                arguments,
-            } => Self::Perform {
-                requirement,
-                operation,
-                arguments,
-            },
-            CompiledInstruction::BeginTransaction {
-                requirement,
-                binding,
-            } => Self::BeginTransaction {
-                requirement,
-                binding,
-            },
-            CompiledInstruction::CommitTransaction {
-                requirement,
-                binding,
-            } => Self::CommitTransaction {
-                requirement,
-                binding,
-            },
-            CompiledInstruction::Return => Self::Return,
-            CompiledInstruction::Bind { arguments } => Self::Bind { arguments },
-            CompiledInstruction::BeginBind { arguments } => Self::BeginBind { arguments },
-            CompiledInstruction::Capture { index } => Self::Capture { index },
-            CompiledInstruction::PerformParameter { .. } => return Err(extension()),
-            CompiledInstruction::BeginParameterTransaction { .. } => return Err(extension()),
-            CompiledInstruction::CommitParameterTransaction { .. } => return Err(extension()),
-            CompiledInstruction::BeginTransactionOutcome { .. }
-            | CompiledInstruction::CommitTransactionOutcome { .. }
-            | CompiledInstruction::ImplementationCall { .. }
-            | CompiledInstruction::MethodCall { .. }
-            | CompiledInstruction::F64(_)
-            | CompiledInstruction::PackOwned { .. }
-            | CompiledInstruction::UnpackOwned { .. }
-            | CompiledInstruction::ChooseOwned { .. }
-            | CompiledInstruction::Parallel { .. }
-            | CompiledInstruction::BorrowOwnedField { .. }
-            | CompiledInstruction::MatchBorrowedOwned { .. }
-            | CompiledInstruction::EndOwnedBorrow { .. }
-            | CompiledInstruction::SequenceEmpty { .. }
-            | CompiledInstruction::SequenceLength { .. }
-            | CompiledInstruction::SequencePush { .. }
-            | CompiledInstruction::SequencePop { .. }
-            | CompiledInstruction::BorrowOwnedItem { .. }
-            | CompiledInstruction::MatchOwned { .. } => return Err(extension()),
-        })
-    }
-}
-
 impl From<CompiledPort10> for CompiledPort {
     fn from(value: CompiledPort10) -> Self {
         let CompiledPort10 {
@@ -702,22 +416,6 @@ impl From<CompiledPort10> for CompiledPort {
     }
 }
 
-impl TryFrom<CompiledPort> for CompiledPort10 {
-    type Error = Diagnostic;
-    fn try_from(value: CompiledPort) -> Result<Self, Diagnostic> {
-        let CompiledPort {
-            port,
-            function_type,
-            implementation,
-        } = value;
-        Ok(Self {
-            port,
-            function_type,
-            implementation: implementation.try_into()?,
-        })
-    }
-}
-
 impl From<CompiledPortImplementation10> for CompiledPortImplementation {
     fn from(value: CompiledPortImplementation10) -> Self {
         match value {
@@ -725,22 +423,4 @@ impl From<CompiledPortImplementation10> for CompiledPortImplementation {
             CompiledPortImplementation10::Expression(value) => Self::Expression(value.into()),
         }
     }
-}
-
-impl TryFrom<CompiledPortImplementation> for CompiledPortImplementation10 {
-    type Error = Diagnostic;
-    fn try_from(value: CompiledPortImplementation) -> Result<Self, Diagnostic> {
-        Ok(match value {
-            CompiledPortImplementation::Function(value) => Self::Function(value),
-            CompiledPortImplementation::Expression(value) => Self::Expression(value.try_into()?),
-        })
-    }
-}
-
-fn extension() -> Diagnostic {
-    Diagnostic::new(
-        crate::platform::diagnostic::DiagnosticClass::Corrupt,
-        "compiler_predecessor_extension",
-        "requirement extension cannot be encoded in compiler unit 10",
-    )
 }

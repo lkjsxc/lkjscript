@@ -373,11 +373,13 @@ impl DeclarationRecord {
             DeclarationPayload::Function(function) => function
                 .implementation_parameters
                 .iter()
-                .map(|p| p.self_type)
+                .flat_map(|p| std::iter::once(p.self_type).chain(p.type_arguments.iter().copied()))
                 .chain([function.result])
                 .collect(),
             DeclarationPayload::OwnedContract(c) => c.type_roots(),
-            DeclarationPayload::OwnedImplementation(i) => vec![i.self_type],
+            DeclarationPayload::OwnedImplementation(i) => std::iter::once(i.self_type)
+                .chain(i.type_arguments.iter().copied())
+                .collect(),
             DeclarationPayload::Constant { ty, .. } => vec![*ty],
             DeclarationPayload::Record { .. }
             | DeclarationPayload::Variant { .. }
@@ -441,19 +443,53 @@ pub enum DeclarationPayload {
 }
 
 impl DeclarationPayload {
-    pub fn type_parameters(&self) -> &[TypeParameterId] {
-        match self {
+    pub fn type_parameters(&self) -> DeclarationTypeParameters<'_> {
+        let (first, second) = match self {
             Self::Record {
                 type_parameters, ..
             }
             | Self::Variant {
                 type_parameters, ..
-            } => type_parameters,
-            Self::OwnedContract(c) => std::slice::from_ref(&c.self_parameter),
-            Self::Function(function) => &function.type_parameters,
-            Self::External(function) => &function.type_parameters,
-            _ => &[],
-        }
+            } => (type_parameters.as_slice(), &[][..]),
+            Self::OwnedContract(c) => (
+                std::slice::from_ref(&c.self_parameter),
+                c.type_parameters.as_slice(),
+            ),
+            Self::Function(function) => (function.type_parameters.as_slice(), &[][..]),
+            Self::External(function) => (function.type_parameters.as_slice(), &[][..]),
+            _ => (&[][..], &[][..]),
+        };
+        DeclarationTypeParameters { first, second }
+    }
+}
+
+/// A declaration's authored parameter order, including an owned contract's
+/// distinguished Self, without allocating during membership or arity checks.
+#[derive(Clone, Copy, Debug)]
+pub struct DeclarationTypeParameters<'a> {
+    first: &'a [TypeParameterId],
+    second: &'a [TypeParameterId],
+}
+
+impl DeclarationTypeParameters<'_> {
+    pub fn iter(&self) -> impl Iterator<Item = &TypeParameterId> {
+        self.first.iter().chain(self.second.iter())
+    }
+
+    pub fn len(&self) -> usize {
+        self.first.len() + self.second.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.first.is_empty() && self.second.is_empty()
+    }
+
+    pub fn contains(&self, parameter: &TypeParameterId) -> bool {
+        self.first.contains(parameter) || self.second.contains(parameter)
+    }
+
+    pub fn to_vec(self) -> Vec<TypeParameterId> {
+        self.iter().copied().collect()
     }
 }
 

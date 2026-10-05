@@ -74,6 +74,7 @@ pub enum AuthoredChange {
         name: Name,
         visibility: crate::platform::kernel::DeclarationVisibility,
         self_type: AuthoredType,
+        type_parameters: Vec<AuthoredTypeParameterReference>,
         methods: Vec<AuthoredOwnedMethod>,
     },
     CreateOwnedImplementation {
@@ -83,6 +84,7 @@ pub enum AuthoredChange {
         visibility: crate::platform::kernel::DeclarationVisibility,
         contract: AuthoredDeclarationReference,
         self_type: AuthoredType,
+        type_arguments: Vec<AuthoredType>,
         methods: Vec<(
             crate::platform::semantic_id::MethodId,
             AuthoredDeclarationReference,
@@ -91,12 +93,14 @@ pub enum AuthoredChange {
     SetOwnedContract {
         declaration: DeclarationSelector,
         self_type: AuthoredType,
+        type_parameters: Vec<AuthoredTypeParameterReference>,
         methods: Vec<AuthoredOwnedMethod>,
     },
     SetOwnedImplementation {
         declaration: DeclarationSelector,
         contract: AuthoredDeclarationReference,
         self_type: AuthoredType,
+        type_arguments: Vec<AuthoredType>,
         methods: Vec<(
             crate::platform::semantic_id::MethodId,
             AuthoredDeclarationReference,

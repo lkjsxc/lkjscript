@@ -278,6 +278,31 @@ fn complete_budgeted(
         for parameter in function.parameters.iter() {
             substitute(&mut program.types, parameter.ty, &bindings, 0, work)?;
         }
+        if function.implementation_parameters.len() != function.implementation_arguments.len() {
+            return Err(missing());
+        }
+        for (parameter, application) in function
+            .implementation_parameters
+            .iter()
+            .zip(function.implementation_arguments.iter())
+        {
+            if substitute(&mut program.types, parameter.self_type, &bindings, 0, work)?
+                != application.self_type
+                || parameter.type_arguments.len() != application.type_arguments.len()
+            {
+                return Err(missing());
+            }
+            // Include every contract argument, even when no method mentions it.
+            for (expected, actual) in parameter
+                .type_arguments
+                .iter()
+                .zip(application.type_arguments.iter())
+            {
+                if substitute(&mut program.types, *expected, &bindings, 0, work)? != *actual {
+                    return Err(missing());
+                }
+            }
+        }
         if let NormalizedFunctionBody::Code(code) = &function.body {
             calls(
                 code,

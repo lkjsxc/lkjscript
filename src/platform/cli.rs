@@ -3856,9 +3856,24 @@ fn append_owned_inspection(
                 &[
                     ("owner", declaration.header.owner.to_string()),
                     ("self", contract.self_parameter.to_string()),
+                    (
+                        "type-parameters",
+                        contract.type_parameters.len().to_string(),
+                    ),
                     ("methods", contract.methods.len().to_string()),
                 ],
             )?;
+            for (index, parameter) in contract.type_parameters.iter().enumerate() {
+                append_compact_record(
+                    output,
+                    "owned.type-parameter",
+                    &[
+                        ("owner", declaration.header.owner.to_string()),
+                        ("index", index.to_string()),
+                        ("id", parameter.to_string()),
+                    ],
+                )?;
+            }
             for (index, method) in contract.methods.iter().enumerate() {
                 for (requirement_index, requirement) in
                     method.effect.row().requirements.iter().enumerate()
@@ -3937,9 +3952,24 @@ fn append_owned_inspection(
                         ),
                     ),
                     ("self", implementation.self_type.to_string()),
+                    (
+                        "type-arguments",
+                        implementation.type_arguments.len().to_string(),
+                    ),
                     ("methods", implementation.methods.len().to_string()),
                 ],
             )?;
+            for (index, ty) in implementation.type_arguments.iter().enumerate() {
+                append_compact_record(
+                    output,
+                    "owned.implementation-type-argument",
+                    &[
+                        ("owner", declaration.header.owner.to_string()),
+                        ("index", index.to_string()),
+                        ("type", ty.to_string()),
+                    ],
+                )?;
+            }
             for mapping in &implementation.methods {
                 append_compact_record(
                     output,
@@ -3971,8 +4001,20 @@ fn append_owned_inspection(
                             format!("{}/{}", p.contract.package, p.contract.declaration),
                         ),
                         ("self", p.self_type.to_string()),
+                        ("type-arguments", p.type_arguments.len().to_string()),
                     ],
                 )?;
+                for (index, ty) in p.type_arguments.iter().enumerate() {
+                    append_compact_record(
+                        output,
+                        "owned.witness-type-argument",
+                        &[
+                            ("witness", p.id.to_string()),
+                            ("index", index.to_string()),
+                            ("type", ty.to_string()),
+                        ],
+                    )?;
+                }
             }
         }
         _ => {}
@@ -6776,6 +6818,7 @@ fn materialize_function_definition(
         KernelOwnerKey::Expression(function.body),
     )?;
 
+    let mut implementation_type_argument_index = 0;
     for (index, witness) in function.implementation_parameters.iter().enumerate() {
         materializer.push_fields(
             DefinitionSection::Contract,
@@ -6793,6 +6836,7 @@ fn materialize_function_definition(
                     ),
                 ),
                 ("self", witness.self_type.to_string()),
+                ("type-arguments", witness.type_arguments.len().to_string()),
             ],
         )?;
         materializer.add_declaration_reference(
@@ -6807,6 +6851,25 @@ fn materialize_function_definition(
             index,
             witness.self_type,
         )?;
+        for (index, ty) in witness.type_arguments.iter().enumerate() {
+            materializer.push_fields(
+                DefinitionSection::Contract,
+                "definition.implementation-type-argument",
+                &[
+                    ("parent", function_owner.to_string()),
+                    ("witness", witness.id.to_string()),
+                    ("index", index.to_string()),
+                    ("type", ty.to_string()),
+                ],
+            )?;
+            materializer.add_type_reference(
+                "implementation_type_argument",
+                function_owner,
+                implementation_type_argument_index,
+                *ty,
+            )?;
+            implementation_type_argument_index += 1;
+        }
     }
     for (index, type_parameter) in function.type_parameters.iter().copied().enumerate() {
         let owner = KernelOwnerKey::TypeParameter(type_parameter);

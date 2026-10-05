@@ -785,10 +785,16 @@ pub(crate) fn aggregation_children(
     }
     match record {
         OwnerRecord::Declaration(record) => match &record.payload {
-            DeclarationPayload::OwnedContract(c) => children.push((
-                OwnershipRole::DeclarationTypeParameter,
-                OwnerKey::TypeParameter(c.self_parameter),
-            )),
+            DeclarationPayload::OwnedContract(c) => children.extend(
+                std::iter::once(&c.self_parameter)
+                    .chain(c.type_parameters.iter())
+                    .map(|parameter| {
+                        (
+                            OwnershipRole::DeclarationTypeParameter,
+                            OwnerKey::TypeParameter(*parameter),
+                        )
+                    }),
+            ),
             DeclarationPayload::OwnedImplementation(_) => {}
             DeclarationPayload::Record { fields, .. } => children.extend(
                 fields
@@ -1095,7 +1101,14 @@ fn local_summary(
                 }
                 DeclarationPayload::OwnedContract(c) => {
                     interface.raw_piece(2, &[9]);
-                    interface.piece(10, c)?;
+                    if record.header.contract_version < 26 {
+                        interface.piece(
+                            10,
+                            &crate::platform::kernel::wire25::OwnedContract25::try_from(c.clone())?,
+                        )?;
+                    } else {
+                        interface.piece(10, c)?;
+                    }
                     for method in &c.methods {
                         if let FunctionEffect::Task { requirements, .. } = &method.effect {
                             effect.piece(3, &(method.id, &method.effect))?;
@@ -1105,12 +1118,28 @@ fn local_summary(
                 }
                 DeclarationPayload::OwnedImplementation(i) => {
                     interface.raw_piece(2, &[10]);
-                    interface.piece(10, i)?;
+                    if record.header.contract_version < 26 {
+                        interface.piece(
+                            10,
+                            &crate::platform::kernel::wire25::OwnedImplementation25::try_from(
+                                i.clone(),
+                            )?,
+                        )?;
+                    } else {
+                        interface.piece(10, i)?;
+                    }
                     implementation.piece(5, &i.methods)?;
                 }
                 DeclarationPayload::Function(function) => {
                     if !function.implementation_parameters.is_empty() {
-                        interface.piece(10, &function.implementation_parameters)?;
+                        if record.header.contract_version < 26 {
+                            let frozen = function.implementation_parameters.iter().cloned()
+                                .map(crate::platform::kernel::wire25::ImplementationParameter25::try_from)
+                                .collect::<Result<Vec<_>, _>>()?;
+                            interface.piece(10, &frozen)?;
+                        } else {
+                            interface.piece(10, &function.implementation_parameters)?;
+                        }
                     }
                     interface.piece(7, &function.effect_parameters)?;
                     if !function.requirement_parameters.is_empty() {

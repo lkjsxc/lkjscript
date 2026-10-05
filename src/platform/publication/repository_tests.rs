@@ -40,6 +40,9 @@ use std::path::Path;
 #[path = "repository_durability_closure_tests.rs"]
 mod durability_closure_tests;
 
+#[path = "owned_contract_parameter_deletion_tests.rs"]
+mod owned_contract_parameter_deletion_tests;
+
 fn non_builtin_source_with_standard() -> (ExportedPackageTransport, ExportedPackageTransport) {
     let standard = GraphRepository::open(
         &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard"),
@@ -2809,6 +2812,7 @@ fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
     let implementation = DeclarationId::migrate(seed, 2);
     let method_function = DeclarationId::migrate(seed, 3);
     let self_parameter = crate::platform::semantic_id::TypeParameterId::migrate(seed, 0);
+    let item_parameter = crate::platform::semantic_id::TypeParameterId::migrate(seed, 1);
     let method = crate::platform::semantic_id::MethodId::migrate(seed, 0);
     let method_body = crate::platform::semantic_id::ExpressionId::migrate(seed, 1);
     let cell = TypeObject::new(TypeForm::OwnedI64Cell).unwrap();
@@ -2829,6 +2833,18 @@ fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
         }),
     );
     logical.owners.insert(
+        OwnerKey::TypeParameter(item_parameter),
+        OwnerRecord::TypeParameter(crate::platform::kernel::TypeParameterRecord {
+            header: OwnerHeader::new(
+                OwnerKey::TypeParameter(item_parameter),
+                OwnerKind::TypeParameter,
+            ),
+            declaration: owned_contract,
+            name: Name::new("Item").unwrap(),
+            constraints: crate::platform::kernel::TypeParameterConstraints::Owned,
+        }),
+    );
+    logical.owners.insert(
         OwnerKey::Expression(method_body),
         OwnerRecord::Expression(
             crate::platform::kernel::ExpressionRecord::new(
@@ -2845,6 +2861,7 @@ fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
             OwnerKind::OwnedContract,
             DeclarationPayload::OwnedContract(crate::platform::kernel::OwnedContract {
                 self_parameter,
+                type_parameters: vec![item_parameter],
                 methods: vec![crate::platform::kernel::OwnedMethod {
                     id: method,
                     name: Name::new("inspect").unwrap(),
@@ -2864,6 +2881,7 @@ fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
                     declaration: owned_contract,
                 },
                 self_type: cell_type,
+                type_arguments: vec![cell_type],
                 methods: vec![crate::platform::kernel::OwnedMethodImplementation {
                     method,
                     function: crate::platform::kernel::DeclarationReference {

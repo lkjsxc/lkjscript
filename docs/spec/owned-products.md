@@ -14,7 +14,10 @@ secrets, capabilities and unconstrained open parameters. Neither None nor Captur
 alone proves this property.
 Ordinary nominal and structural records and ordinary containers remain unrestricted
 and cannot contain products. Generic functions can abstract over one or more Owned
-payloads. Product parameters must occur in their exact function scope. Pure helpers may borrow; named tasks may only consume under [same-task transfer](owned-task-transfers.md).
+payloads. Product parameters must occur in their exact function scope or in the
+declaring scope of a [parameterized owned contract](owned-contract-parameters.md).
+Pure helpers may borrow; named tasks may only consume under
+[same-task transfer](owned-task-transfers.md).
 
 ## Meaning and scope
 
@@ -88,6 +91,9 @@ Whole products follow the existing direct-memory consume/borrow parameter suffix
 and synchronous borrow/reborrow contracts. Borrowed values cannot escape or unpack.
 Owned parameters may instantiate to products; exact monomorphic owned implementations
 may select a closed product as Self under the existing first-order witness rules.
+Parameterized owned contracts also admit products in method signatures and exact
+ordered contract arguments, including results containing both Self and an element
+parameter. Structural substitution preserves the complete field types and names.
 There is no implicit witness search or capability grant. Named tasks may consume
 and return products under [same-task transfer](owned-task-transfers.md). Indirect
 callable signatures, capture, nominal owned declarations
@@ -151,6 +157,8 @@ encoding paragraph above describes that increment's exact source, not current
 permission to execute its derived artifacts.
 The [child-borrow contract](owned-borrows.md#encodings-and-evidence) owns subsequent
 scope-operation, borrowed-binding and derived-layout cuts.
+The [parameterized contract](owned-contract-parameters.md#encodings-and-boundaries)
+owns the later method-signature and application-layout cut.
 
 See the [native guide](../guides/native-owned-products.md) and
 [campaign](../campaigns/20261001-owned-products.md) for literal programs, actual

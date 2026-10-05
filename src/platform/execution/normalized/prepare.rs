@@ -328,9 +328,16 @@ pub enum NormalizedFunctionBody {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedImplementationArgument {
+    pub implementation: DeclarationReference,
+    pub self_type: TypeObjectDigest,
+    pub type_arguments: Arc<[TypeObjectDigest]>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedFunction {
     pub implementation_parameters: Arc<[crate::platform::kernel::ImplementationParameter]>,
-    pub implementation_arguments: Arc<[(DeclarationReference, TypeObjectDigest)]>,
+    pub implementation_arguments: Arc<[NormalizedImplementationArgument]>,
     pub requirement_parameters: Arc<[crate::platform::semantic_id::RequirementParameterId]>,
     pub requirement_arguments: Arc<[crate::platform::kernel::RequirementOperand]>,
     pub effect_parameters: Arc<[crate::platform::semantic_id::EffectParameterId]>,
@@ -1402,7 +1409,8 @@ fn prepare_functions(
                         "function payload changed",
                     ));
                 };
-                if function.requirement_parameters != signature.requirement_parameters
+                if function.implementation_parameters != signature.implementation_parameters
+                    || function.requirement_parameters != signature.requirement_parameters
                     || function.effect_parameters != signature.effect_parameters
                     || function.effect != signature.effect
                     || function.type_parameters != type_parameters

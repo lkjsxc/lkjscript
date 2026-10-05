@@ -1,4 +1,4 @@
-//! Independent test oracle for nominal witness inventories and first-order method types.
+//! Independent test oracle for nominal witness inventories and structured method templates.
 //! Reads source records directly; does not call production resolution or validation.
 use super::*;
 use crate::platform::semantic_id::TypeParameterId;
@@ -32,11 +32,19 @@ impl Oracle<'_> {
     pub(super) fn scoped_parameter(&self, id: TypeParameterId) -> Option<&TypeParameterRecord> {
         let declaration = self.1?;
         let p = self.type_parameter(declaration.package, id)?;
-        let function = self.function(declaration)?;
-        (p.header.owner == OwnerKey::TypeParameter(id)
-            && p.declaration == declaration.declaration
-            && function.type_parameters.contains(&id))
-        .then_some(p)
+        if p.header.owner != OwnerKey::TypeParameter(id) || p.declaration != declaration.declaration
+        {
+            return None;
+        }
+        let listed = if let Some(function) = self.function(declaration) {
+            function.type_parameters.contains(&id)
+        } else if let Some(contract) = self.contract(declaration) {
+            (contract.self_parameter == id || contract.type_parameters.contains(&id))
+                && p.constraints == TypeParameterConstraints::Owned
+        } else {
+            false
+        };
+        listed.then_some(p)
     }
     pub(super) fn function(&self, d: DeclarationReference) -> Option<PackageFunctionSignature> {
         if d.package == self.0.root.package_id {
@@ -314,11 +322,20 @@ impl Oracle<'_> {
             return false;
         };
         let closed = Oracle(self.0, None);
-        if !self
-            .type_parameter(d.package, c.self_parameter)
-            .is_some_and(|p| {
-                p.declaration == d.declaration && p.constraints == TypeParameterConstraints::Owned
-            })
+        let scoped = Oracle(self.0, Some(d));
+        let mut parameters = BTreeSet::new();
+        let mut parameter_names = BTreeSet::new();
+        if c.type_parameters.len() >= contract::MAXIMUM_CHILDREN
+            || !std::iter::once(c.self_parameter)
+                .chain(c.type_parameters.iter().copied())
+                .all(|id| {
+                    parameters.insert(id)
+                        && scoped.scoped_parameter(id).is_some_and(|p| {
+                            p.constraints == TypeParameterConstraints::Owned
+                                && (id == c.self_parameter || p.header.contract_version >= 26)
+                                && parameter_names.insert(&p.name)
+                        })
+                })
             || c.methods.is_empty()
             || c.methods.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN
         {
@@ -337,11 +354,7 @@ impl Oracle<'_> {
             }
             let mut suffix = false;
             for p in &m.parameters {
-                if self.form(p.ty)
-                    == Some(&TypeForm::TypeParameter {
-                        parameter: c.self_parameter,
-                    })
-                {
+                if scoped.owned_type_in_scope(p.ty) {
                     suffix = true;
                     if p.use_mode == ParameterUse::Unrestricted
                         || (!matches!(m.effect, FunctionEffect::Pure)
@@ -356,59 +369,75 @@ impl Oracle<'_> {
                     return false;
                 }
             }
-            if self.form(m.result)
-                != Some(&TypeForm::TypeParameter {
-                    parameter: c.self_parameter,
-                })
-                && !closed.ordinary(m.result)
-            {
+            if !scoped.owned_type_in_scope(m.result) && !closed.ordinary(m.result) {
                 return false;
             }
         }
         true
     }
+    pub(super) fn contract_generation(&self, c: &OwnedContract, generation: u16) -> bool {
+        if generation >= 26 {
+            return true;
+        }
+        let closed = Oracle(self.0, None);
+        c.type_parameters.is_empty()
+            && c.methods.iter().all(|method| {
+                method
+                    .parameters
+                    .iter()
+                    .map(|parameter| parameter.ty)
+                    .chain([method.result])
+                    .all(|ty| {
+                        self.form(ty)
+                            == Some(&TypeForm::TypeParameter {
+                                parameter: c.self_parameter,
+                            })
+                            || closed.ordinary(ty)
+                    })
+            })
+    }
     pub(super) fn method_type(
         &self,
         ty: TypeObjectDigest,
-        parameter: TypeParameterId,
-        actual: TypeObjectDigest,
+        bindings: &BTreeMap<TypeParameterId, TypeObjectDigest>,
     ) -> TypeObjectDigest {
-        if self.form(ty) == Some(&TypeForm::TypeParameter { parameter }) {
-            actual
-        } else {
-            ty
+        // Ownership classification needs only the root binding. Structural
+        // equality is independently checked against the original template;
+        // this oracle never synthesizes a production-derived type object.
+        match self.form(ty) {
+            Some(TypeForm::TypeParameter { parameter }) => {
+                bindings.get(parameter).copied().unwrap_or(ty)
+            }
+            _ => ty,
         }
     }
     pub(super) fn valid_implementation(&self, i: &OwnedImplementation) -> bool {
+        let closed = Oracle(self.0, None);
         if !self.valid_contract(i.contract)
-            || !matches!(
-                self.form(i.self_type),
-                Some(
-                    TypeForm::ByteBuffer
-                        | TypeForm::OwnedI64Cell
-                        | TypeForm::OwnedProduct { .. }
-                        | TypeForm::OwnedChoice { .. }
-                        | TypeForm::OwnedSequence { .. }
-                )
-            )
+            || !closed.owned_type_in_scope(i.self_type)
+            || i.type_arguments.len() >= contract::MAXIMUM_CHILDREN
+            || i.type_arguments
+                .iter()
+                .any(|ty| !closed.owned_type_in_scope(*ty))
             || i.methods.windows(2).any(|w| w[0].method >= w[1].method)
-            || matches!(
-                self.form(i.self_type),
-                Some(
-                    TypeForm::OwnedProduct { .. }
-                        | TypeForm::OwnedChoice { .. }
-                        | TypeForm::OwnedSequence { .. },
-                )
-            ) && !Oracle(self.0, None).product_shape(i.self_type)
         {
             return false;
         }
         let Some(c) = self.contract(i.contract) else {
             return false;
         };
-        if c.methods.len() != i.methods.len() {
+        if c.methods.len() != i.methods.len() || c.type_parameters.len() != i.type_arguments.len() {
             return false;
         }
+        let bindings: BTreeMap<_, _> = std::iter::once((c.self_parameter, i.self_type))
+            .chain(
+                c.type_parameters
+                    .iter()
+                    .copied()
+                    .zip(i.type_arguments.iter().copied()),
+            )
+            .collect();
+        let mut remaining = contract::MAXIMUM_VALIDATION_WORK;
         for m in &c.methods {
             let Some(mapping) = i.methods.iter().find(|v| v.method == m.id) else {
                 return false;
@@ -432,12 +461,17 @@ impl Oracle<'_> {
                 if p.parent != ParameterParent::Function(mapping.function.declaration)
                     || p.resource_requirement.is_some()
                     || p.use_mode != expected.use_mode
-                    || p.ty != self.method_type(expected.ty, c.self_parameter, i.self_type)
+                    || self
+                        .exact_application_type(expected.ty, p.ty, &bindings, 0, &mut remaining)
+                        .is_none()
                 {
                     return false;
                 }
             }
-            if f.result != self.method_type(m.result, c.self_parameter, i.self_type) {
+            if self
+                .exact_application_type(m.result, f.result, &bindings, 0, &mut remaining)
+                .is_none()
+            {
                 return false;
             }
         }
@@ -462,6 +496,7 @@ impl Oracle<'_> {
         }
         let mut ids = BTreeSet::new();
         let mut names = BTreeSet::new();
+        let scoped = Oracle(self.0, Some(d));
         f.implementation_parameters.iter().all(|p| {
             let Some(TypeForm::TypeParameter { parameter }) = self.form(p.self_type) else {
                 return false;
@@ -473,17 +508,30 @@ impl Oracle<'_> {
                     .type_parameter(d.package, *parameter)
                     .is_some_and(|t| t.declaration == d.declaration && t.constraints.has_owned())
                 && self.valid_contract(p.contract)
+                && self
+                    .contract(p.contract)
+                    .is_some_and(|c| c.type_parameters.len() == p.type_arguments.len())
+                && p.type_arguments
+                    .iter()
+                    .all(|ty| scoped.owned_type_in_scope(*ty))
         })
     }
     pub(super) fn witness(
         &self,
         operand: ImplementationOperand,
-    ) -> Option<(DeclarationReference, TypeObjectDigest)> {
+    ) -> Option<(
+        DeclarationReference,
+        TypeObjectDigest,
+        Vec<TypeObjectDigest>,
+    )> {
         match operand {
             ImplementationOperand::Concrete { implementation } => {
                 let i = self.implementation(implementation)?;
-                self.valid_implementation(i)
-                    .then_some((i.contract, i.self_type))
+                self.valid_implementation(i).then_some((
+                    i.contract,
+                    i.self_type,
+                    i.type_arguments.clone(),
+                ))
             }
             ImplementationOperand::Parameter {
                 function,
@@ -493,12 +541,18 @@ impl Oracle<'_> {
                     return None;
                 }
                 let f = self.function(function)?;
+                if !self.valid_parameters(function, &f) {
+                    return None;
+                }
                 let p = f
                     .implementation_parameters
                     .iter()
                     .find(|p| p.id == parameter)?;
-                self.valid_contract(p.contract)
-                    .then_some((p.contract, p.self_type))
+                self.valid_contract(p.contract).then_some((
+                    p.contract,
+                    p.self_type,
+                    p.type_arguments.clone(),
+                ))
             }
         }
     }
@@ -513,24 +567,41 @@ impl Oracle<'_> {
         };
         if f.implementation_parameters.len() != operands.len()
             || f.type_parameters.len() != types.len()
+            || !self.valid_parameters(function, &f)
         {
             return false;
         }
+        let bindings: BTreeMap<_, _> = f
+            .type_parameters
+            .iter()
+            .copied()
+            .zip(types.iter().copied())
+            .collect();
+        let mut remaining = contract::MAXIMUM_VALIDATION_WORK;
         f.implementation_parameters
             .iter()
             .zip(operands)
             .all(|(p, operand)| {
-                let expected = match self.form(p.self_type) {
-                    Some(TypeForm::TypeParameter { parameter }) => f
-                        .type_parameters
-                        .iter()
-                        .position(|t| t == parameter)
-                        .and_then(|index| types.get(index))
-                        .copied(),
-                    _ => None,
-                };
-                self.witness(*operand)
-                    .is_some_and(|(c, ty)| c == p.contract && Some(ty) == expected)
+                self.witness(*operand).is_some_and(|(c, ty, arguments)| {
+                    c == p.contract
+                        && self
+                            .exact_application_type(p.self_type, ty, &bindings, 0, &mut remaining)
+                            .is_some()
+                        && p.type_arguments.len() == arguments.len()
+                        && p.type_arguments
+                            .iter()
+                            .zip(&arguments)
+                            .all(|(template, actual)| {
+                                self.exact_application_type(
+                                    *template,
+                                    *actual,
+                                    &bindings,
+                                    0,
+                                    &mut remaining,
+                                )
+                                .is_some()
+                            })
+                })
             })
     }
     pub(super) fn method(
@@ -538,17 +609,18 @@ impl Oracle<'_> {
         witness: ImplementationOperand,
         contract: DeclarationReference,
         method: crate::platform::semantic_id::MethodId,
-    ) -> Option<OwnedMethod> {
-        let (actual, ty) = self.witness(witness)?;
+    ) -> Option<(OwnedMethod, BTreeMap<TypeParameterId, TypeObjectDigest>)> {
+        let (actual, ty, arguments) = self.witness(witness)?;
         if actual != contract {
             return None;
         }
         let c = self.contract(contract)?;
-        let mut m = c.methods.iter().find(|m| m.id == method)?.clone();
-        for p in &mut m.parameters {
-            p.ty = self.method_type(p.ty, c.self_parameter, ty);
+        if c.type_parameters.len() != arguments.len() {
+            return None;
         }
-        m.result = self.method_type(m.result, c.self_parameter, ty);
-        Some(m)
+        let bindings = std::iter::once((c.self_parameter, ty))
+            .chain(c.type_parameters.iter().copied().zip(arguments))
+            .collect();
+        Some((c.methods.iter().find(|m| m.id == method)?.clone(), bindings))
     }
 }

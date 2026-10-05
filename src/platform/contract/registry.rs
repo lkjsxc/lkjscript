@@ -105,9 +105,9 @@ use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-21";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 21;
-pub const CLI_CONTRACT_VERSION: u16 = 39;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-22";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 22;
+pub const CLI_CONTRACT_VERSION: u16 = 40;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -214,8 +214,8 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
 ];
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-function-definition-projection-15";
-pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 15;
+    "lkjscript-function-definition-projection-16";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 16;
 pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
 pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
 pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -321,6 +321,11 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("definition.implementation-parameter", "name"),
     ("definition.implementation-parameter", "contract"),
     ("definition.implementation-parameter", "self"),
+    ("definition.implementation-parameter", "type-arguments"),
+    ("definition.implementation-type-argument", "parent"),
+    ("definition.implementation-type-argument", "witness"),
+    ("definition.implementation-type-argument", "index"),
+    ("definition.implementation-type-argument", "type"),
     ("definition.function", "effect-parameters"),
     ("definition.function", "requirement-parameters"),
     ("definition.function", "effect-row-parameters"),
@@ -985,7 +990,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             magic_values: &[
                 "LKJACR14", "LKJACR15", "LKJACR16", "LKJACR17", "LKJACR18", "LKJACR19", "LKJACR20",
                 "LKJACR21", "LKJACR22", "LKJACR23", "LKJACR24", "LKJACR25", "LKJACR26", "LKJACR27",
-                "LKJACR28", "LKJABG01",
+                "LKJACR28", "LKJACR29", "LKJACR30", "LKJABG01",
             ],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
@@ -1065,7 +1070,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
-            magic_values: &["LKJPIF13", "LKJPIF12", "LKJPIF11", "LKJPIF10"],
+            magic_values: &["LKJPIF14", "LKJPIF13", "LKJPIF12", "LKJPIF11", "LKJPIF10"],
             digest_domains: &[
                 PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::PACKAGE_INTERFACE_DIGEST_DOMAIN,
@@ -4635,7 +4640,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_owned_parameter_owner",
             DiagnosticClass::Semantic,
             "An Owned constraint belongs to an unsupported declaration or foreign scope.",
-            "Use Owned on an exact graph function or the exact owned-contract Self; task memory inputs must consume and implementation applications must supply exact effect and requirement operands.",
+            "Use Owned on an exact graph function or its owned-contract Self and ordered additional parameters; task memory inputs must consume and implementation applications must supply exact type, effect and requirement operands.",
         ),
         diagnostic(
             "normalized_cell_token",
@@ -8672,18 +8677,18 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         ),
         (
             "owned-contract",
-            "(owned-contract MODE BINDING (visibility public|private) (self SELF) (type-parameter MODE SELF (constraint owned)) (method method_HEX NAME (parameters (TYPE unrestricted|borrow|consume)...) (returns TYPE) [(effect pure|(task (requirement REQUIREMENT)...))])...)",
-            "Nominal first-order pure or closed-effect task methods with one owned Self type parameter; task Self arguments consume. Ordinary method types are closed and contain no callable or affine types.",
+            "(owned-contract MODE BINDING (visibility public|private) (self SELF) (type-parameter MODE SELF (constraint owned)) (type-parameter MODE ITEM (constraint owned))... (method method_HEX NAME (parameters (TYPE unrestricted|borrow|consume)...) (returns TYPE) [(effect pure|(task (requirement REQUIREMENT)...))])...)",
+            "Nominal pure or closed-effect task methods with distinguished owned Self and ordered additional owned parameters. Method types compose these parameters in owned products, choices and sequences; task memory arguments consume. Ordinary types remain closed and first order.",
         ),
         (
             "owned-implementation",
-            "(owned-implementation MODE BINDING (visibility public|private) (contract DECLARATION) (self TYPE) (method method_HEX FUNCTION)...)",
-            "Every method maps to an exact visible monomorphic graph function with identical callable kind and effect row; selection is explicit and never grants effects.",
+            "(owned-implementation MODE BINDING (visibility public|private) (contract DECLARATION) (self TYPE) [(types TYPE...)] (method method_HEX FUNCTION)...)",
+            "Ordered owned type arguments apply the exact contract. Every method maps to an exact visible monomorphic graph function with identical substituted structural signature, callable kind and effect row; selection is explicit and never grants effects.",
         ),
         (
             "implementation-parameter",
-            "(implementation-parameter implparam_HEX NAME CONTRACT SELF_TYPE)",
-            "A function-scoped static witness. Operand syntax is concrete@IMPLEMENTATION or parameter@FUNCTION@implparam_HEX. Forwarding must use the exact lexical scope; implementation calls supply ordered type, effect and requirement applications independently of witness selection.",
+            "(implementation-parameter implparam_HEX NAME CONTRACT SELF_TYPE [(types TYPE...)])",
+            "A function-scoped static witness with exact ordered owned type arguments. Operand syntax is concrete@IMPLEMENTATION or parameter@FUNCTION@implparam_HEX. Forwarding matches the complete contract application in the exact lexical scope; implementation calls supply ordered type, effect and requirement applications independently of witness selection.",
         ),
         (
             "type-parameter",
@@ -9499,9 +9504,9 @@ mod tests {
             .expect("definition projection contract");
         assert_eq!(
             contract.identity,
-            "lkjscript-function-definition-projection-15"
+            "lkjscript-function-definition-projection-16"
         );
-        assert_eq!(contract.version, 15);
+        assert_eq!(contract.version, 16);
         assert_eq!(
             contract_descriptors()
                 .iter()

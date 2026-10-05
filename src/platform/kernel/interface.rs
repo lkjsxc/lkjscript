@@ -205,11 +205,15 @@ impl PackageInterfaceDeclaration {
             PackageInterfaceDeclarationPayload::Function(signature) => signature
                 .implementation_parameters
                 .iter()
-                .map(|p| p.self_type)
+                .flat_map(|p| std::iter::once(p.self_type).chain(p.type_arguments.iter().copied()))
                 .chain([signature.result])
                 .collect(),
             PackageInterfaceDeclarationPayload::OwnedContract(c) => c.type_roots(),
-            PackageInterfaceDeclarationPayload::OwnedImplementation(i) => vec![i.self_type],
+            PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
+                std::iter::once(i.self_type)
+                    .chain(i.type_arguments.iter().copied())
+                    .collect()
+            }
             PackageInterfaceDeclarationPayload::Constant { ty } => vec![*ty],
             PackageInterfaceDeclarationPayload::Record { .. }
             | PackageInterfaceDeclarationPayload::Variant { .. }
@@ -220,6 +224,27 @@ impl PackageInterfaceDeclaration {
 
     fn validate_local(&self) -> Result<(), Diagnostic> {
         validate_header(self.header)?;
+        if self.header.contract_version < 26
+            && match &self.payload {
+                PackageInterfaceDeclarationPayload::OwnedContract(c) => {
+                    !c.type_parameters.is_empty()
+                }
+                PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
+                    !i.type_arguments.is_empty()
+                }
+                PackageInterfaceDeclarationPayload::Function(f) => f
+                    .implementation_parameters
+                    .iter()
+                    .any(|p| !p.type_arguments.is_empty()),
+                _ => false,
+            }
+        {
+            return Err(interface_error(
+                DiagnosticClass::Semantic,
+                "kernel_parameterized_contract_generation",
+                "owned contract parameters and arguments require Graph 26",
+            ));
+        }
         let expected = match &self.payload {
             PackageInterfaceDeclarationPayload::Record {
                 fields,

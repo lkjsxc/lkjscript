@@ -1,7 +1,8 @@
 //! Supported graph generations, current type-object codec, and hostile-decoder limits.
 
-pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph-25";
-pub const GRAPH_CONTRACT_VERSION: u16 = 25;
+pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph-26";
+pub const GRAPH_CONTRACT_VERSION: u16 = 26;
+pub const SEQUENCE_GRAPH_CONTRACT_VERSION: u16 = 25;
 pub const BORROW_GRAPH_CONTRACT_VERSION: u16 = 24;
 pub const OWNED_EFFECT_GRAPH_CONTRACT_VERSION: u16 = 23;
 pub const TRANSFER_GRAPH_CONTRACT_VERSION: u16 = 22;
@@ -15,6 +16,7 @@ pub const REQUIREMENT_GRAPH_CONTRACT_VERSION: u16 = 15;
 pub const PREDECESSOR_GRAPH_CONTRACT_VERSION: u16 = 14;
 pub const fn supported_graph_contract(version: u16) -> bool {
     version == GRAPH_CONTRACT_VERSION
+        || version == SEQUENCE_GRAPH_CONTRACT_VERSION
         || version == BORROW_GRAPH_CONTRACT_VERSION
         || version == OWNED_EFFECT_GRAPH_CONTRACT_VERSION
         || version == TRANSFER_GRAPH_CONTRACT_VERSION
@@ -63,7 +65,8 @@ pub const NOMINAL_APPLICATION_ENVELOPE_DOMAIN: &str =
     "lkjscript.kernel.nominal-application-envelope.v1";
 pub const SEMANTIC_STATE_CONTRACT_VERSION: u16 = 1;
 
-pub const OWNER_MAGIC: [u8; 8] = *b"LKJOWN25";
+pub const OWNER_MAGIC: [u8; 8] = *b"LKJOWN26";
+pub const SEQUENCE_OWNER_MAGIC: [u8; 8] = *b"LKJOWN25";
 pub const BORROW_OWNER_MAGIC: [u8; 8] = *b"LKJOWN24";
 pub const OWNED_EFFECT_OWNER_MAGIC: [u8; 8] = *b"LKJOWN23";
 pub const TRANSFER_OWNER_MAGIC: [u8; 8] = *b"LKJOWN22";
@@ -80,7 +83,8 @@ pub const ROOT_MAGIC: [u8; 8] = *b"LKJSMR01";
 pub const DEPENDENCY_MAGIC: [u8; 8] = *b"LKJDEP14";
 pub const RETIREMENT_MAGIC: [u8; 8] = *b"LKJRET14";
 
-pub const OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v25";
+pub const OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v26";
+pub const SEQUENCE_OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v25";
 pub const BORROW_OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v24";
 pub const OWNED_EFFECT_OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v23";
 pub const TRANSFER_OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v22";

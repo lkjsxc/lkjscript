@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-25";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 25;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-20";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 20;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN25";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v25";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v25";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-26";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 26;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-21";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 21;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN26";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v26";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v26";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -40,15 +40,27 @@ impl CompilationUnitKey {
         source: &CompilationSource,
         optimization: OptimizationPolicy,
     ) -> Result<Self, Diagnostic> {
-        Self::derive_generation(
-            source,
+        let core = CompilationKeyCore {
+            compiler_contract_version: COMPILER_UNIT_CONTRACT_VERSION,
+            bytecode_contract_version: BYTECODE_CONTRACT_VERSION,
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+            source: source.clone(),
             optimization,
-            COMPILER_UNIT_CONTRACT_VERSION,
-            BYTECODE_CONTRACT_VERSION,
-            crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-        )
+        };
+        let bytes = bincode::encode_to_vec(core, bincode::config::standard()).map_err(|error| {
+            unit_error(
+                DiagnosticClass::Infrastructure,
+                "compiler_unit_key_encode",
+                format!("failed to encode compiler-unit key: {error}"),
+            )
+        })?;
+        let mut hasher = blake3::Hasher::new_derive_key(COMPILER_UNIT_KEY_DOMAIN);
+        hasher.update(&(bytes.len() as u64).to_be_bytes());
+        hasher.update(&bytes);
+        Ok(Self(*hasher.finalize().as_bytes()))
     }
 
+    #[cfg(test)]
     pub(crate) fn derive_generation(
         source: &CompilationSource,
         optimization: OptimizationPolicy,
@@ -70,39 +82,8 @@ impl CompilationUnitKey {
                 format!("failed to encode compiler-unit key: {error}"),
             )
         })?;
-        let mut hasher = blake3::Hasher::new_derive_key(if compiler_contract_version == 10 {
-            "lkjscript.compiler-unit-key.v10"
-        } else if compiler_contract_version == 11 {
-            "lkjscript.compiler-unit-key.v11"
-        } else if compiler_contract_version == 12 {
-            "lkjscript.compiler-unit-key.v12"
-        } else if compiler_contract_version == 13 {
-            "lkjscript.compiler-unit-key.v13"
-        } else if compiler_contract_version == 14 {
-            "lkjscript.compiler-unit-key.v14"
-        } else if compiler_contract_version == 15 {
-            "lkjscript.compiler-unit-key.v15"
-        } else if compiler_contract_version == 16 {
-            "lkjscript.compiler-unit-key.v16"
-        } else if compiler_contract_version == 17 {
-            "lkjscript.compiler-unit-key.v17"
-        } else if compiler_contract_version == 18 {
-            "lkjscript.compiler-unit-key.v18"
-        } else if compiler_contract_version == 19 {
-            "lkjscript.compiler-unit-key.v19"
-        } else if compiler_contract_version == 20 {
-            "lkjscript.compiler-unit-key.v20"
-        } else if compiler_contract_version == 21 {
-            "lkjscript.compiler-unit-key.v21"
-        } else if compiler_contract_version == 22 {
-            "lkjscript.compiler-unit-key.v22"
-        } else if compiler_contract_version == 23 {
-            "lkjscript.compiler-unit-key.v23"
-        } else if compiler_contract_version == 24 {
-            "lkjscript.compiler-unit-key.v24"
-        } else {
-            COMPILER_UNIT_KEY_DOMAIN
-        });
+        let domain = format!("lkjscript.compiler-unit-key.v{compiler_contract_version}");
+        let mut hasher = blake3::Hasher::new_derive_key(&domain);
         hasher.update(&(bytes.len() as u64).to_be_bytes());
         hasher.update(&bytes);
         Ok(Self(*hasher.finalize().as_bytes()))
@@ -536,42 +517,12 @@ pub struct CompiledVariantJump {
 impl CompilationUnit {
     pub fn encode(&self) -> Result<(ObjectKey, Vec<u8>), Diagnostic> {
         self.validate()?;
-        let bytes = if self.contract_version == 10 {
-            crate::platform::packed::encode(
-                *b"LKJCUN10",
-                "lkjscript.compiler-unit-envelope.v10",
-                &super::wire10::CompilationUnit10::try_from(self.clone())?,
-                MAXIMUM_COMPILER_UNIT_BYTES,
-            )?
-        } else if self.contract_version == 11 {
-            crate::platform::packed::encode(
-                *b"LKJCUN11",
-                "lkjscript.compiler-unit-envelope.v11",
-                self,
-                MAXIMUM_COMPILER_UNIT_BYTES,
-            )?
-        } else if self.contract_version == 12 {
-            crate::platform::packed::encode(
-                *b"LKJCUN12",
-                "lkjscript.compiler-unit-envelope.v12",
-                self,
-                MAXIMUM_COMPILER_UNIT_BYTES,
-            )?
-        } else if self.contract_version == 13 {
-            crate::platform::packed::encode(
-                *b"LKJCUN13",
-                "lkjscript.compiler-unit-envelope.v13",
-                self,
-                MAXIMUM_COMPILER_UNIT_BYTES,
-            )?
-        } else {
-            crate::platform::packed::encode(
-                COMPILER_UNIT_MAGIC,
-                COMPILER_UNIT_ENVELOPE_DOMAIN,
-                self,
-                MAXIMUM_COMPILER_UNIT_BYTES,
-            )?
-        };
+        let bytes = crate::platform::packed::encode(
+            COMPILER_UNIT_MAGIC,
+            COMPILER_UNIT_ENVELOPE_DOMAIN,
+            self,
+            MAXIMUM_COMPILER_UNIT_BYTES,
+        )?;
         Ok((
             ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &bytes),
             bytes,
@@ -588,7 +539,7 @@ impl CompilationUnit {
                 "compiler-unit bytes disagree with their exact object-domain digest",
             ));
         }
-        // Derived generations 10–24 require a rebuild from supported canonical owners.
+        // Derived generations 10–25 require a rebuild from supported canonical owners.
         // Refuse before decoding; old bytes never acquire current instruction meaning.
         if [
             b"LKJCUN10",
@@ -606,6 +557,7 @@ impl CompilationUnit {
             b"LKJCUN22",
             b"LKJCUN23",
             b"LKJCUN24",
+            b"LKJCUN25",
         ]
         .iter()
         .any(|magic| bytes.starts_with(*magic))
@@ -641,38 +593,12 @@ impl CompilationUnit {
                 self.bytecode_contract_version,
                 self.graph_contract_version
             ),
-            (25, 20, 25)
+            (26, 21, 26)
         ) {
             return Err(unit_error(
                 DiagnosticClass::Source,
                 "compiler_unit_contract",
                 "compiler unit uses a predecessor or foreign contract",
-            ));
-        }
-        let buffer = crate::platform::kernel::encode_type_object(
-            &crate::platform::kernel::TypeObject::new(
-                crate::platform::kernel::TypeForm::ByteBuffer,
-            )?,
-        )?
-        .0;
-        if self.contract_version < 14 && self.tables.types.contains(&buffer) {
-            return Err(unit_corrupt(
-                "compiler_unit_buffer_generation",
-                "ByteBuffer requires compiler-unit 14 and bytecode 10",
-            ));
-        }
-        if self.contract_version < 12 && self.payload.uses_transaction_outcome() {
-            return Err(unit_error(
-                DiagnosticClass::Source,
-                "compiler_unit_transaction_outcome_generation",
-                "transaction outcomes require compiler-unit 12 and bytecode 8",
-            ));
-        }
-        if self.contract_version < 13 && self.payload.uses_f64() {
-            return Err(unit_error(
-                DiagnosticClass::Source,
-                "compiler_unit_f64_generation",
-                "F64 instructions require compiler-unit 13 and bytecode 9",
             ));
         }
         if self.source.package.bytes() == [0; 16] {
@@ -696,13 +622,7 @@ impl CompilationUnit {
                 "compiler-unit source test digest presence disagrees with its owner kind",
             ));
         }
-        let expected_key = CompilationUnitKey::derive_generation(
-            &self.source,
-            self.optimization,
-            self.contract_version,
-            self.bytecode_contract_version,
-            self.graph_contract_version,
-        )?;
+        let expected_key = CompilationUnitKey::derive(&self.source, self.optimization)?;
         if self.key != expected_key {
             return Err(unit_error(
                 DiagnosticClass::Corrupt,
@@ -768,42 +688,6 @@ impl CompilationTables {
 }
 
 impl CompilationPayload {
-    fn uses_f64(&self) -> bool {
-        let contains = |code: &CompiledCode| {
-            code.instructions
-                .iter()
-                .any(|instruction| matches!(instruction, CompiledInstruction::F64(_)))
-        };
-        match self {
-            Self::Function { code, .. } | Self::Constant { code, .. } => contains(code),
-            Self::Test { actual, expected, .. } => contains(actual) || contains(expected),
-            Self::Component { ports, .. } => ports.iter().any(|port| {
-                matches!(&port.implementation, CompiledPortImplementation::Expression(code) if contains(code))
-            }),
-            _ => false,
-        }
-    }
-
-    fn uses_transaction_outcome(&self) -> bool {
-        let contains = |code: &CompiledCode| {
-            code.instructions.iter().any(|instruction| {
-                matches!(
-                    instruction,
-                    CompiledInstruction::BeginTransactionOutcome { .. }
-                        | CompiledInstruction::CommitTransactionOutcome { .. }
-                )
-            })
-        };
-        match self {
-            Self::Function { code, .. } | Self::Constant { code, .. } => contains(code),
-            Self::Test { actual, expected, .. } => contains(actual) || contains(expected),
-            Self::Component { ports, .. } => ports.iter().any(|port| {
-                matches!(&port.implementation, CompiledPortImplementation::Expression(code) if contains(code))
-            }),
-            _ => false,
-        }
-    }
-
     fn validate(
         &self,
         source: &CompilationSource,
@@ -813,10 +697,39 @@ impl CompilationPayload {
             Self::OwnedContract(c) => {
                 require_kind(source, OwnerKind::OwnedContract)?;
                 c.validate_local()?;
+                let types = tables.types.iter().copied().collect::<BTreeSet<_>>();
+                for ty in c.type_roots() {
+                    if !types.contains(&ty) {
+                        return Err(unit_corrupt(
+                            "compiler_unit_owned_contract_type",
+                            "owned contract signature references a type absent from its exact table",
+                        ));
+                    }
+                }
             }
             Self::OwnedImplementation(i) => {
                 require_kind(source, OwnerKind::OwnedImplementation)?;
                 i.validate_local()?;
+                let declarations = tables.declarations.iter().copied().collect::<BTreeSet<_>>();
+                for declaration in std::iter::once(i.contract)
+                    .chain(i.methods.iter().map(|method| method.function))
+                {
+                    if !declarations.contains(&declaration) {
+                        return Err(unit_corrupt(
+                            "compiler_unit_owned_implementation_declaration",
+                            "owned implementation references a declaration absent from its exact table",
+                        ));
+                    }
+                }
+                let types = tables.types.iter().copied().collect::<BTreeSet<_>>();
+                for ty in std::iter::once(i.self_type).chain(i.type_arguments.iter().copied()) {
+                    if !types.contains(&ty) {
+                        return Err(unit_corrupt(
+                            "compiler_unit_owned_implementation_type",
+                            "owned implementation references a type absent from its exact table",
+                        ));
+                    }
+                }
             }
             Self::Record {
                 fields,
@@ -1123,6 +1036,46 @@ fn validate_compiled_http_routes(
 
 impl CompiledSignature {
     fn validate(&self, tables: &CompilationTables, kind: OwnerKind) -> Result<(), Diagnostic> {
+        require_item_count(
+            "compiled implementation parameters",
+            self.implementation_parameters.len(),
+            true,
+        )?;
+        if !self.implementation_parameters.is_empty() {
+            let declarations = tables.declarations.iter().copied().collect::<BTreeSet<_>>();
+            let types = tables.types.iter().copied().collect::<BTreeSet<_>>();
+            let mut ids = BTreeSet::new();
+            let mut names = BTreeSet::new();
+            for parameter in &self.implementation_parameters {
+                if !ids.insert(parameter.id) || !names.insert(&parameter.name) {
+                    return Err(unit_corrupt(
+                        "compiler_unit_implementation_parameter",
+                        "compiled implementation parameters require distinct identities and names",
+                    ));
+                }
+                if !declarations.contains(&parameter.contract) {
+                    return Err(unit_corrupt(
+                        "compiler_unit_implementation_parameter_declaration",
+                        "compiled implementation parameter references a contract absent from its exact table",
+                    ));
+                }
+                require_item_count(
+                    "compiled implementation type arguments",
+                    parameter.type_arguments.len(),
+                    true,
+                )?;
+                for ty in std::iter::once(parameter.self_type)
+                    .chain(parameter.type_arguments.iter().copied())
+                {
+                    if !types.contains(&ty) {
+                        return Err(unit_corrupt(
+                            "compiler_unit_implementation_parameter_type",
+                            "compiled implementation parameter references a type absent from its exact table",
+                        ));
+                    }
+                }
+            }
+        }
         require_item_count(
             "compiled requirement parameters",
             self.requirement_parameters.len(),

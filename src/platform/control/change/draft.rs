@@ -517,6 +517,12 @@ impl Renderer<'_> {
                 match d.payload {
                     D::OwnedContract(c) => {
                         children.push(OwnerKey::TypeParameter(c.self_parameter));
+                        children.extend(
+                            c.type_parameters
+                                .iter()
+                                .copied()
+                                .map(OwnerKey::TypeParameter),
+                        );
                         let self_type = self.ty(&AuthoredType::TypeParameter {
                             parameter: AuthoredTypeParameterReference::Id {
                                 parameter: c.self_parameter,
@@ -563,6 +569,14 @@ impl Renderer<'_> {
                             self.declaration(&canonical::declaration(i.contract))?
                         ));
                         clauses.push(format!("(self {})", self.type_digest(i.self_type)?));
+                        if !i.type_arguments.is_empty() {
+                            let arguments = i
+                                .type_arguments
+                                .iter()
+                                .map(|ty| self.type_digest(*ty))
+                                .collect::<Result<Vec<_>, _>>()?;
+                            clauses.push(format!("(types {})", arguments.join(" ")));
+                        }
                         for m in i.methods {
                             clauses.push(format!(
                                 "(method {} {})",
@@ -597,12 +611,23 @@ impl Renderer<'_> {
                     }
                     D::Function(f) => {
                         for p in &f.implementation_parameters {
+                            let arguments = if p.type_arguments.is_empty() {
+                                String::new()
+                            } else {
+                                let types = p
+                                    .type_arguments
+                                    .iter()
+                                    .map(|ty| self.type_digest(*ty))
+                                    .collect::<Result<Vec<_>, _>>()?;
+                                format!(" (types {})", types.join(" "))
+                            };
                             clauses.push(format!(
-                                "(implementation-parameter {} {} {} {})",
+                                "(implementation-parameter {} {} {} {}{})",
                                 p.id,
                                 p.name,
                                 self.declaration(&canonical::declaration(p.contract))?,
-                                self.type_digest(p.self_type)?
+                                self.type_digest(p.self_type)?,
+                                arguments
                             ));
                         }
                         children.extend(f.type_parameters.into_iter().map(OwnerKey::TypeParameter));

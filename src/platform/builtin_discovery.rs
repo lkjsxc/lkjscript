@@ -300,26 +300,47 @@ fn append_owner_detail(
     match record {
         PackageInterfaceRecord::Declaration(declaration) => match &declaration.payload {
             PackageInterfaceDeclarationPayload::OwnedContract(c) => {
-                append_child_owner(
-                    standard,
-                    OwnerKey::TypeParameter(c.self_parameter),
-                    0,
-                    records,
-                )?;
-                records.push(declaration_detail(
-                    declaration,
-                    "owned-contract",
-                    c.methods.len(),
-                    None,
-                ));
+                for (index, parameter) in std::iter::once(c.self_parameter)
+                    .chain(c.type_parameters.iter().copied())
+                    .enumerate()
+                {
+                    append_child_owner(
+                        standard,
+                        OwnerKey::TypeParameter(parameter),
+                        index,
+                        records,
+                    )?;
+                }
+                let mut detail =
+                    declaration_detail(declaration, "owned-contract", c.methods.len(), None);
+                detail.fields.extend([
+                    ("self".to_owned(), c.self_parameter.to_string()),
+                    (
+                        "type-parameters".to_owned(),
+                        c.type_parameters.len().to_string(),
+                    ),
+                ]);
+                records.push(detail);
             }
             PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
-                records.push(declaration_detail(
-                    declaration,
-                    "owned-implementation",
-                    i.methods.len(),
-                    None,
-                ));
+                let mut detail =
+                    declaration_detail(declaration, "owned-implementation", i.methods.len(), None);
+                detail.fields.extend([
+                    (
+                        "contract".to_owned(),
+                        format!("{}/{}", i.contract.package, i.contract.declaration),
+                    ),
+                    ("self".to_owned(), i.self_type.to_string()),
+                    (
+                        "type-arguments".to_owned(),
+                        i.type_arguments.len().to_string(),
+                    ),
+                ]);
+                records.push(detail);
+                append_type(standard, "self", i.self_type, records, 0)?;
+                for (index, ty) in i.type_arguments.iter().enumerate() {
+                    append_type(standard, &format!("type-argument.{index}"), *ty, records, 0)?;
+                }
             }
             PackageInterfaceDeclarationPayload::Record {
                 fields,
@@ -429,6 +450,41 @@ fn append_owner_detail(
                     }
                 }
                 append_type_parameters(standard, &signature.type_parameters, records)?;
+                for (index, witness) in signature.implementation_parameters.iter().enumerate() {
+                    records.push(DiscoveryRecord::new(
+                        "implementation-parameter",
+                        [
+                            ("id", witness.id.to_string()),
+                            ("index", index.to_string()),
+                            ("name", witness.name.to_string()),
+                            (
+                                "contract",
+                                format!(
+                                    "{}/{}",
+                                    witness.contract.package, witness.contract.declaration
+                                ),
+                            ),
+                            ("self", witness.self_type.to_string()),
+                            ("type-arguments", witness.type_arguments.len().to_string()),
+                        ],
+                    ));
+                    append_type(
+                        standard,
+                        &format!("implementation.{index}.self"),
+                        witness.self_type,
+                        records,
+                        0,
+                    )?;
+                    for (argument_index, ty) in witness.type_arguments.iter().enumerate() {
+                        append_type(
+                            standard,
+                            &format!("implementation.{index}.type-argument.{argument_index}"),
+                            *ty,
+                            records,
+                            0,
+                        )?;
+                    }
+                }
                 for (index, parameter) in signature.requirement_parameters.iter().enumerate() {
                     append_child_owner(
                         standard,

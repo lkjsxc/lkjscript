@@ -1,0 +1,257 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create owned-worklists
+    (owned-contract create Element (visibility public)
+      (self Self) (type-parameter create Self (constraint owned))
+      (method method_88000000000000000000000000000001 create
+        (parameters (I64 unrestricted)) (returns Self) (effect pure))
+      (method method_88000000000000000000000000000002 observe
+        (parameters (Self borrow)) (returns I64) (effect pure))
+      (method method_88000000000000000000000000000003 finish
+        (parameters (Self consume)) (returns I64) (effect pure)))
+    (owned-contract create Worklist (visibility public)
+      (self Self) (type-parameter create Self (constraint owned))
+      (type-parameter create Item (constraint owned))
+      (method method_88000000000000000000000000000011 empty
+        (parameters) (returns Self) (effect pure))
+      (method method_88000000000000000000000000000012 length
+        (parameters (Self borrow)) (returns I64) (effect pure))
+      (method method_88000000000000000000000000000013 push
+        (parameters (Item consume) (Self consume)) (returns Self) (effect pure))
+      (method method_88000000000000000000000000000014 pop
+        (parameters (Self consume))
+        (returns (owned-choice (case empty Self)
+          (case item (owned-product (field rest Self) (field value Item))))) (effect pure)))
+    (function create build-loop (visibility private) (effect pure)
+      (type-parameter create T (constraint owned)) (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_88000000000000000000000000000001 element Element T)
+      (implementation-parameter implparam_88000000000000000000000000000002 work Worklist W (types T))
+      (parameter create inputs (type (list I64))) (parameter create index (type I64))
+      (parameter create values (type W) (use consume)) (returns W)
+      (body (if (call std::less (local index) (call std::list-length (types I64) (local inputs)))
+        (let
+          (binding value (type T)
+            (method-call parameter@build-loop@implparam_88000000000000000000000000000001
+              Element method_88000000000000000000000000000001
+              (call std::list-get (types I64) (local inputs) (local index))))
+          (binding next (type W)
+            (method-call parameter@build-loop@implparam_88000000000000000000000000000002
+              Worklist method_88000000000000000000000000000013 (local value) (local values)))
+          (in (implementation-call build-loop (types T W)
+            (implementations parameter@build-loop@implparam_88000000000000000000000000000001
+              parameter@build-loop@implparam_88000000000000000000000000000002)
+            (local inputs) (call std::add (local index) (i64 1)) (local next))))
+        (local values))))
+    (function create build (visibility public) (effect pure)
+      (type-parameter create T (constraint owned)) (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_88000000000000000000000000000003 element Element T)
+      (implementation-parameter implparam_88000000000000000000000000000004 work Worklist W (types T))
+      (parameter create inputs (type (list I64))) (returns W)
+      (body (let (binding values (type W)
+        (method-call parameter@build@implparam_88000000000000000000000000000004
+          Worklist method_88000000000000000000000000000011))
+        (in (implementation-call build-loop (types T W)
+          (implementations parameter@build@implparam_88000000000000000000000000000003
+            parameter@build@implparam_88000000000000000000000000000004)
+          (local inputs) (i64 0) (local values))))))
+    (function create move-all (visibility public) (effect pure)
+      (type-parameter create T (constraint owned)) (type-parameter create W (constraint owned))
+      (type-parameter create V (constraint owned))
+      (implementation-parameter implparam_88000000000000000000000000000005 source Worklist W (types T))
+      (implementation-parameter implparam_88000000000000000000000000000006 destination Worklist V (types T))
+      (parameter create source (type W) (use consume))
+      (parameter create destination (type V) (use consume))
+      (returns (owned-product (field source W) (field destination V)))
+      (body (let (binding outcome
+        (type (owned-choice (case empty W) (case item (owned-product (field rest W) (field value T)))))
+        (method-call parameter@move-all@implparam_88000000000000000000000000000005
+          Worklist method_88000000000000000000000000000014 (local source)))
+        (in (match-owned
+          (type (owned-choice (case empty W) (case item (owned-product (field rest W) (field value T)))))
+          (local outcome)
+          (case empty (binding rest (type W))
+            (in (pack-owned (type (owned-product (field source W) (field destination V)))
+              (field source (local rest)) (field destination (local destination)))))
+          (case item (binding item (type (owned-product (field rest W) (field value T))))
+            (in (unpack-owned (type (owned-product (field rest W) (field value T))) (local item)
+              (field rest (binding rest (type W))) (field value (binding value (type T)))
+              (in (let (binding next (type V)
+                (method-call parameter@move-all@implparam_88000000000000000000000000000006
+                  Worklist method_88000000000000000000000000000013 (local value) (local destination)))
+                (in (implementation-call move-all (types T W V)
+                  (implementations parameter@move-all@implparam_88000000000000000000000000000005
+                    parameter@move-all@implparam_88000000000000000000000000000006)
+                  (local rest) (local next)))))))))))))
+    (function create drain-loop (visibility private) (effect pure)
+      (type-parameter create T (constraint owned)) (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_88000000000000000000000000000007 element Element T)
+      (implementation-parameter implparam_88000000000000000000000000000008 work Worklist W (types T))
+      (parameter create finished (type (list I64)))
+      (parameter create values (type W) (use consume))
+      (returns (owned-product (field rest W) (field values (list I64))))
+      (body (let (binding outcome
+        (type (owned-choice (case empty W) (case item (owned-product (field rest W) (field value T)))))
+        (method-call parameter@drain-loop@implparam_88000000000000000000000000000008
+          Worklist method_88000000000000000000000000000014 (local values)))
+        (in (match-owned
+          (type (owned-choice (case empty W) (case item (owned-product (field rest W) (field value T)))))
+          (local outcome)
+          (case empty (binding rest (type W))
+            (in (pack-owned (type (owned-product (field rest W) (field values (list I64))))
+              (field rest (local rest)) (field values (local finished)))))
+          (case item (binding item (type (owned-product (field rest W) (field value T))))
+            (in (unpack-owned (type (owned-product (field rest W) (field value T))) (local item)
+              (field rest (binding rest (type W))) (field value (binding value (type T)))
+              (in (let (binding n (type I64)
+                (method-call parameter@drain-loop@implparam_88000000000000000000000000000007
+                  Element method_88000000000000000000000000000003 (local value)))
+                (in (implementation-call drain-loop (types T W)
+                  (implementations parameter@drain-loop@implparam_88000000000000000000000000000007
+                    parameter@drain-loop@implparam_88000000000000000000000000000008)
+                  (call std::list-append (types I64) (local finished) (local n)) (local rest)))))))))))))
+    (function create drain (visibility public) (effect pure)
+      (type-parameter create T (constraint owned)) (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_88000000000000000000000000000009 element Element T)
+      (implementation-parameter implparam_8800000000000000000000000000000a work Worklist W (types T))
+      (parameter create values (type W) (use consume))
+      (returns (owned-product (field rest W) (field values (list I64))))
+      (body (implementation-call drain-loop (types T W)
+        (implementations parameter@drain@implparam_88000000000000000000000000000009
+          parameter@drain@implparam_8800000000000000000000000000000a)
+        (list I64) (local values))))
+    (function create chunk-empty (visibility public) (effect pure)
+      (type-parameter create T (constraint owned))
+      (returns (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64)))
+      (body (let (binding chunks (type (owned-sequence (owned-sequence T)))
+        (sequence-empty (type (owned-sequence (owned-sequence T)))))
+        (in (pack-owned
+          (type (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64)))
+          (field chunks (local chunks)) (field size (i64 0)))))))
+    (function create chunk-length (visibility public) (effect pure)
+      (type-parameter create T (constraint owned))
+      (parameter create values
+        (type (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64))) (use borrow))
+      (returns I64) (body (field (local values) (name size))))
+    (function create chunk-push (visibility public) (effect pure)
+      (type-parameter create T (constraint owned))
+      (parameter create value (type T) (use consume))
+      (parameter create values
+        (type (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64))) (use consume))
+      (returns (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64)))
+      (body (unpack-owned
+        (type (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64))) (local values)
+        (field chunks (binding chunks (type (owned-sequence (owned-sequence T)))))
+        (field size (binding size (type I64)))
+        (in (let
+          (binding outcome (type (owned-choice
+            (case empty (owned-sequence (owned-sequence T)))
+            (case item (owned-product (field rest (owned-sequence (owned-sequence T)))
+              (field value (owned-sequence T))))))
+            (sequence-pop (type (owned-sequence (owned-sequence T))) (local chunks)))
+          (binding next (type (owned-sequence (owned-sequence T)))
+            (match-owned (type (owned-choice
+              (case empty (owned-sequence (owned-sequence T)))
+              (case item (owned-product (field rest (owned-sequence (owned-sequence T)))
+                (field value (owned-sequence T)))))) (local outcome)
+              (case empty (binding rest (type (owned-sequence (owned-sequence T))))
+                (in (let
+                  (binding chunk (type (owned-sequence T)) (sequence-empty (type (owned-sequence T))))
+                  (binding chunk (type (owned-sequence T))
+                    (sequence-push (type (owned-sequence T)) (local value) (local chunk)))
+                  (in (sequence-push (type (owned-sequence (owned-sequence T))) (local chunk) (local rest))))))
+              (case item (binding item (type (owned-product
+                (field rest (owned-sequence (owned-sequence T))) (field value (owned-sequence T)))))
+                (in (unpack-owned (type (owned-product
+                  (field rest (owned-sequence (owned-sequence T))) (field value (owned-sequence T)))) (local item)
+                  (field rest (binding rest (type (owned-sequence (owned-sequence T)))))
+                  (field value (binding chunk (type (owned-sequence T))))
+                  (in (if (call std::less (sequence-length (type (owned-sequence T)) (local chunk)) (i64 32))
+                    (let (binding chunk (type (owned-sequence T))
+                      (sequence-push (type (owned-sequence T)) (local value) (local chunk)))
+                      (in (sequence-push (type (owned-sequence (owned-sequence T))) (local chunk) (local rest))))
+                    (let
+                      (binding rest (type (owned-sequence (owned-sequence T)))
+                        (sequence-push (type (owned-sequence (owned-sequence T))) (local chunk) (local rest)))
+                      (binding chunk (type (owned-sequence T)) (sequence-empty (type (owned-sequence T))))
+                      (binding chunk (type (owned-sequence T))
+                        (sequence-push (type (owned-sequence T)) (local value) (local chunk)))
+                      (in (sequence-push (type (owned-sequence (owned-sequence T))) (local chunk) (local rest)))))))))))
+          (in (pack-owned
+            (type (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64)))
+            (field chunks (local next)) (field size (call std::add (local size) (i64 1))))))))))
+    (function create chunk-pop (visibility public) (effect pure)
+      (type-parameter create T (constraint owned))
+      (parameter create values
+        (type (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64))) (use consume))
+      (returns (owned-choice
+        (case empty (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64)))
+        (case item (owned-product
+          (field rest (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64)))
+          (field value T)))))
+      (body (unpack-owned
+        (type (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64))) (local values)
+        (field chunks (binding chunks (type (owned-sequence (owned-sequence T)))))
+        (field size (binding size (type I64)))
+        (in (let (binding outer (type (owned-choice
+          (case empty (owned-sequence (owned-sequence T)))
+          (case item (owned-product (field rest (owned-sequence (owned-sequence T))) (field value (owned-sequence T))))))
+          (sequence-pop (type (owned-sequence (owned-sequence T))) (local chunks)))
+          (in (match-owned (type (owned-choice
+            (case empty (owned-sequence (owned-sequence T)))
+            (case item (owned-product (field rest (owned-sequence (owned-sequence T))) (field value (owned-sequence T))))))
+            (local outer)
+            (case empty (binding rest (type (owned-sequence (owned-sequence T))))
+              (in (let (binding empty
+                (type (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64)))
+                (pack-owned (type (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64)))
+                  (field chunks (local rest)) (field size (i64 0))))
+                (in (choose-owned (type (owned-choice
+                  (case empty (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64)))
+                  (case item (owned-product
+                    (field rest (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64)))
+                    (field value T))))) (case empty) (local empty))))))
+            (case item (binding item (type (owned-product
+              (field rest (owned-sequence (owned-sequence T))) (field value (owned-sequence T)))))
+              (in (unpack-owned (type (owned-product
+                (field rest (owned-sequence (owned-sequence T))) (field value (owned-sequence T)))) (local item)
+                (field rest (binding rest (type (owned-sequence (owned-sequence T)))))
+                (field value (binding chunk (type (owned-sequence T))))
+                (in (let (binding inner (type (owned-choice
+                  (case empty (owned-sequence T))
+                  (case item (owned-product (field rest (owned-sequence T)) (field value T)))))
+                  (sequence-pop (type (owned-sequence T)) (local chunk)))
+                  (in (match-owned (type (owned-choice
+                    (case empty (owned-sequence T))
+                    (case item (owned-product (field rest (owned-sequence T)) (field value T))))) (local inner)
+                    (case empty (binding unused (type (owned-sequence T)))
+                      (in (let (binding next
+                        (type (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64)))
+                        (pack-owned (type (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64)))
+                          (field chunks (local rest)) (field size (local size))))
+                        (in (call chunk-pop (types T) (local next))))))
+                    (case item (binding item (type (owned-product (field rest (owned-sequence T)) (field value T))))
+                      (in (unpack-owned (type (owned-product (field rest (owned-sequence T)) (field value T))) (local item)
+                        (field rest (binding chunk (type (owned-sequence T)))) (field value (binding value (type T)))
+                        (in (let
+                          (binding chunks (type (owned-sequence (owned-sequence T)))
+                            (if (call std::i64-equal (sequence-length (type (owned-sequence T)) (local chunk)) (i64 0))
+                              (local rest)
+                              (sequence-push (type (owned-sequence (owned-sequence T))) (local chunk) (local rest))))
+                          (binding next
+                            (type (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64)))
+                            (pack-owned (type (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64)))
+                              (field chunks (local chunks)) (field size (call std::subtract (local size) (i64 1)))))
+                          (binding result (type (owned-product
+                            (field rest (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64)))
+                            (field value T)))
+                            (pack-owned (type (owned-product
+                              (field rest (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64)))
+                              (field value T))) (field rest (local next)) (field value (local value))))
+                          (in (choose-owned (type (owned-choice
+                            (case empty (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64)))
+                            (case item (owned-product
+                              (field rest (owned-product (field chunks (owned-sequence (owned-sequence T))) (field size I64)))
+                              (field value T))))) (case item) (local result))))))))))))))))))))))
+  ))
+declarations.end

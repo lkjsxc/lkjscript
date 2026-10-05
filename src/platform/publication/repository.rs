@@ -1949,10 +1949,17 @@ fn candidate_owner_type_root_count(record: &crate::platform::kernel::OwnerRecord
     use crate::platform::kernel::{DeclarationPayload, ExpressionOperation, OwnerRecord};
     match record {
         OwnerRecord::Declaration(record) => match &record.payload {
-            DeclarationPayload::External(_)
-            | DeclarationPayload::OwnedImplementation(_)
-            | DeclarationPayload::Constant { .. } => 1,
-            DeclarationPayload::Function(function) => function.implementation_parameters.len() + 1,
+            DeclarationPayload::External(_) | DeclarationPayload::Constant { .. } => 1,
+            DeclarationPayload::OwnedImplementation(implementation) => {
+                implementation.type_arguments.len() + 1
+            }
+            DeclarationPayload::Function(function) => {
+                1 + function
+                    .implementation_parameters
+                    .iter()
+                    .map(|parameter| parameter.type_arguments.len() + 1)
+                    .sum::<usize>()
+            }
             DeclarationPayload::OwnedContract(contract) => contract
                 .methods
                 .iter()

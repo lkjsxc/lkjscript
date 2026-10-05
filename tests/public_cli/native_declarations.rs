@@ -1678,6 +1678,8 @@ mod native_owned_products;
 mod native_owned_sequences;
 #[path = "native_owned_witnesses.rs"]
 mod native_owned_witnesses;
+#[path = "native_owned_worklists.rs"]
+mod native_owned_worklists;
 
 #[path = "native_owned_mutation.rs"]
 mod native_owned_mutation;

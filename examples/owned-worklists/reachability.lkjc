@@ -1,0 +1,314 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create provisional-graph
+    (type-alias Node (record (id I64) (successors (list I64))))
+    (type-alias Proposal (record (roots (list I64)) (nodes (list Node))))
+    (type-alias Diagnostic (record (code Text) (owner I64) (target I64)))
+    (type-alias Partition (record (reachable (list I64)) (unreachable (list I64))))
+    (type-alias Lookup (map I64 Node))
+    (type-alias Membership (map I64 Bool))
+    (type-alias Index (record (lookup Lookup) (known Membership)))
+    (type-alias Flat (owned-sequence OwnedI64Cell))
+    (type-alias Chunked (owned-product
+      (field chunks (owned-sequence (owned-sequence OwnedI64Cell))) (field size I64)))
+    (variant create Outcome (visibility public)
+      (case create valid (payload Partition))
+      (case create invalid (payload Diagnostic))
+      (case create capacity (payload Text)))
+    (variant create Indexed (visibility private)
+      (case create valid (payload Index))
+      (case create invalid (payload Diagnostic)))
+    (variant create Checked (visibility private)
+      (case create valid (payload Unit))
+      (case create invalid (payload Diagnostic)))
+
+    ; Saturate before addition so even a large authored list cannot overflow.
+    (function create edge-count (visibility private) (effect pure)
+      (parameter create nodes (type (list Node)))
+      (parameter create index (type I64)) (parameter create count (type I64))
+      (returns I64)
+      (body (if (call std::less (local index) (call std::list-length (types Node) (local nodes)))
+        (let
+          (binding node (type Node) (call std::list-get (types Node) (local nodes) (local index)))
+          (binding count-here (type I64)
+            (call std::list-length (types I64) (field (local node) (name successors))))
+          (in (if (call std::less (call std::subtract (i64 16384) (local count)) (local count-here))
+            (i64 16385)
+            (call edge-count (local nodes) (call std::add (local index) (i64 1))
+              (call std::add (local count) (local count-here))))))
+        (local count))))
+
+    (function create index-nodes (visibility private) (effect pure)
+      (parameter create nodes (type (list Node))) (parameter create index (type I64))
+      (parameter create lookup (type Lookup)) (parameter create known (type Membership))
+      (returns Indexed)
+      (body (if (call std::less (local index) (call std::list-length (types Node) (local nodes)))
+        (let
+          (binding node (type Node) (call std::list-get (types Node) (local nodes) (local index)))
+          (binding id (type I64) (field (local node) (name id)))
+          (in (if (call std::map-get-or (types I64 Bool) (local known) (local id) (bool false))
+            (variant Indexed::invalid (record structural
+              (field code (text "duplicate-node")) (field owner (local id)) (field target (local id))))
+            (call index-nodes (local nodes) (call std::add (local index) (i64 1))
+              (call std::map-insert (types I64 Node) (local lookup) (local id) (local node))
+              (call std::map-insert (types I64 Bool) (local known) (local id) (bool true))))))
+        (variant Indexed::valid (record structural
+          (field lookup (local lookup)) (field known (local known)))))))
+
+    (function create check-references (visibility private) (effect pure)
+      (parameter create known (type Membership)) (parameter create ids (type (list I64)))
+      (parameter create index (type I64)) (parameter create code (type Text))
+      (parameter create owner (type I64)) (returns Checked)
+      (body (if (call std::less (local index) (call std::list-length (types I64) (local ids)))
+        (let (binding id (type I64) (call std::list-get (types I64) (local ids) (local index)))
+          (in (if (call std::map-get-or (types I64 Bool) (local known) (local id) (bool false))
+            (call check-references (local known) (local ids) (call std::add (local index) (i64 1))
+              (local code) (local owner))
+            (variant Checked::invalid (record structural
+              (field code (local code)) (field owner (local owner)) (field target (local id)))))))
+        (variant Checked::valid (unit)))))
+
+    (function create check-successors (visibility private) (effect pure)
+      (parameter create known (type Membership)) (parameter create nodes (type (list Node)))
+      (parameter create index (type I64)) (returns Checked)
+      (body (if (call std::less (local index) (call std::list-length (types Node) (local nodes)))
+        (let (binding node (type Node) (call std::list-get (types Node) (local nodes) (local index)))
+          (in (match
+            (call check-references (local known) (field (local node) (name successors))
+              (i64 0) (text "missing-successor") (field (local node) (name id)))
+            (arm Checked::invalid (payload diagnostic Diagnostic)
+              (variant Checked::invalid (local diagnostic)))
+            (arm Checked::valid (payload unused Unit)
+              (call check-successors (local known) (local nodes) (call std::add (local index) (i64 1)))))))
+        (variant Checked::valid (unit)))))
+
+    ; Mark at enqueue. Every discovered ID owns exactly one queued cell.
+    (function create enqueue (visibility private) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_89000000000000000000000000000001
+        work owned-worklists::Worklist W (types OwnedI64Cell))
+      (parameter create ids (type (list I64))) (parameter create index (type I64))
+      (parameter create visited (type Membership))
+      (parameter create values (type W) (use consume))
+      (returns (owned-product (field rest W) (field visited Membership)))
+      (body (if (call std::less (local index) (call std::list-length (types I64) (local ids)))
+        (let (binding id (type I64) (call std::list-get (types I64) (local ids) (local index)))
+          (in (if (call std::map-get-or (types I64 Bool) (local visited) (local id) (bool false))
+            (implementation-call enqueue (types W)
+              (implementations parameter@enqueue@implparam_89000000000000000000000000000001)
+              (local ids) (call std::add (local index) (i64 1)) (local visited) (local values))
+            (let
+              (binding cell (type OwnedI64Cell) (call worklist-carriers::cell-create (local id)))
+              (binding next (type W)
+                (method-call parameter@enqueue@implparam_89000000000000000000000000000001
+                  owned-worklists::Worklist method_88000000000000000000000000000013
+                  (local cell) (local values)))
+              (in (implementation-call enqueue (types W)
+                (implementations parameter@enqueue@implparam_89000000000000000000000000000001)
+                (local ids) (call std::add (local index) (i64 1))
+                (call std::map-insert (types I64 Bool) (local visited) (local id) (bool true))
+                (local next)))))))
+        (pack-owned (type (owned-product (field rest W) (field visited Membership)))
+          (field rest (local values)) (field visited (local visited))))))
+
+    (function create walk (visibility private) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_89000000000000000000000000000002
+        work owned-worklists::Worklist W (types OwnedI64Cell))
+      (parameter create lookup (type Lookup)) (parameter create visited (type Membership))
+      (parameter create values (type W) (use consume)) (returns Membership)
+      (body (let (binding outcome
+        (type (owned-choice (case empty W)
+          (case item (owned-product (field rest W) (field value OwnedI64Cell)))))
+        (method-call parameter@walk@implparam_89000000000000000000000000000002
+          owned-worklists::Worklist method_88000000000000000000000000000014 (local values)))
+        (in (match-owned (type (owned-choice (case empty W)
+          (case item (owned-product (field rest W) (field value OwnedI64Cell))))) (local outcome)
+          (case empty (binding rest (type W)) (in (local visited)))
+          (case item (binding item (type (owned-product (field rest W) (field value OwnedI64Cell))))
+            (in (unpack-owned (type (owned-product (field rest W) (field value OwnedI64Cell))) (local item)
+              (field rest (binding rest (type W)))
+              (field value (binding cell (type OwnedI64Cell)))
+              (in (let
+                (binding id (type I64) (call worklist-carriers::cell-finish (local cell)))
+                ; Validation guarantees lookup success for every queued identity.
+                (binding node (type Node)
+                  (call std::map-get-or (types I64 Node) (local lookup) (local id)
+                    (record structural (field id (i64 0)) (field successors (list I64)))))
+                (binding next (type (owned-product (field rest W) (field visited Membership)))
+                  (implementation-call enqueue (types W)
+                    (implementations parameter@walk@implparam_89000000000000000000000000000002)
+                    (field (local node) (name successors)) (i64 0) (local visited) (local rest)))
+                (in (unpack-owned (type (owned-product (field rest W) (field visited Membership))) (local next)
+                  (field rest (binding rest (type W)))
+                  (field visited (binding visited (type Membership)))
+                  (in (implementation-call walk (types W)
+                    (implementations parameter@walk@implparam_89000000000000000000000000000002)
+                    (local lookup) (local visited) (local rest)))))))))))))))
+
+    (function create partition (visibility private) (effect pure)
+      (parameter create nodes (type (list Node))) (parameter create index (type I64))
+      (parameter create visited (type Membership))
+      (parameter create reachable (type (list I64))) (parameter create unreachable (type (list I64)))
+      (returns Partition)
+      (body (if (call std::less (local index) (call std::list-length (types Node) (local nodes)))
+        (let (binding id (type I64)
+          (field (call std::list-get (types Node) (local nodes) (local index)) (name id)))
+          (in (if (call std::map-get-or (types I64 Bool) (local visited) (local id) (bool false))
+            (call partition (local nodes) (call std::add (local index) (i64 1)) (local visited)
+              (call std::list-append (types I64) (local reachable) (local id)) (local unreachable))
+            (call partition (local nodes) (call std::add (local index) (i64 1)) (local visited)
+              (local reachable) (call std::list-append (types I64) (local unreachable) (local id))))))
+        (record structural (field reachable (local reachable)) (field unreachable (local unreachable))))))
+
+    (function create reach (visibility private) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_89000000000000000000000000000003
+        work owned-worklists::Worklist W (types OwnedI64Cell))
+      (parameter create nodes (type (list Node))) (parameter create roots (type (list I64)))
+      (parameter create lookup (type Lookup)) (returns Partition)
+      (body (let
+        (binding empty (type W)
+          (method-call parameter@reach@implparam_89000000000000000000000000000003
+            owned-worklists::Worklist method_88000000000000000000000000000011))
+        (binding scheduled (type (owned-product (field rest W) (field visited Membership)))
+          (implementation-call enqueue (types W)
+            (implementations parameter@reach@implparam_89000000000000000000000000000003)
+            (local roots) (i64 0) (map I64 Bool) (local empty)))
+        (in (unpack-owned (type (owned-product (field rest W) (field visited Membership))) (local scheduled)
+          (field rest (binding rest (type W))) (field visited (binding visited (type Membership)))
+          (in (let (binding visited (type Membership)
+            (implementation-call walk (types W)
+              (implementations parameter@reach@implparam_89000000000000000000000000000003)
+              (local lookup) (local visited) (local rest)))
+            (in (call partition (local nodes) (i64 0) (local visited) (list I64) (list I64))))))))))
+
+    (function create analyze (visibility public) (effect pure)
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_89000000000000000000000000000004
+        work owned-worklists::Worklist W (types OwnedI64Cell))
+      (parameter create proposal (type Proposal)) (returns Outcome)
+      (body (let
+        (binding nodes (type (list Node)) (field (local proposal) (name nodes)))
+        (binding roots (type (list I64)) (field (local proposal) (name roots)))
+        (in (if (call std::less (i64 4096) (call std::list-length (types Node) (local nodes)))
+          (variant Outcome::capacity (text "nodes"))
+          (if (call std::less (i64 4096) (call std::list-length (types I64) (local roots)))
+            (variant Outcome::capacity (text "roots"))
+            (if (call std::less (i64 16384) (call edge-count (local nodes) (i64 0) (i64 0)))
+              (variant Outcome::capacity (text "edges"))
+              (match (call index-nodes (local nodes) (i64 0) (map I64 Node) (map I64 Bool))
+                (arm Indexed::invalid (payload diagnostic Diagnostic)
+                  (variant Outcome::invalid (local diagnostic)))
+                (arm Indexed::valid (payload indexed Index)
+                  (match (call check-references (field (local indexed) (name known)) (local roots)
+                    (i64 0) (text "missing-root") (i64 -1))
+                    (arm Checked::invalid (payload diagnostic Diagnostic)
+                      (variant Outcome::invalid (local diagnostic)))
+                    (arm Checked::valid (payload unused Unit)
+                      (match (call check-successors (field (local indexed) (name known)) (local nodes) (i64 0))
+                        (arm Checked::invalid (payload diagnostic Diagnostic)
+                          (variant Outcome::invalid (local diagnostic)))
+                        (arm Checked::valid (payload unused Unit)
+                          (variant Outcome::valid (implementation-call reach (types W)
+                            (implementations parameter@analyze@implparam_89000000000000000000000000000004)
+                            (local nodes) (local roots) (field (local indexed) (name lookup)))))))))))))))))
+
+    (function create flat (visibility public) (effect pure)
+      (parameter create proposal (type Proposal)) (returns Outcome)
+      (body (implementation-call analyze (types Flat)
+        (implementations concrete@worklist-carriers::FlatCells) (local proposal))))
+    (function create chunked (visibility public) (effect pure)
+      (parameter create proposal (type Proposal)) (returns Outcome)
+      (body (implementation-call analyze (types Chunked)
+        (implementations concrete@worklist-carriers::ChunkedCells) (local proposal))))
+
+    (function create example (visibility private) (effect pure) (returns Proposal)
+      (body (record structural
+        (field roots (list I64 (i64 10)))
+        (field nodes (list Node
+          (record structural (field id (i64 10)) (field successors (list I64 (i64 20) (i64 30))))
+          (record structural (field id (i64 20)) (field successors (list I64 (i64 40))))
+          (record structural (field id (i64 30)) (field successors (list I64 (i64 40))))
+          (record structural (field id (i64 40)) (field successors (list I64 (i64 20))))
+          (record structural (field id (i64 50)) (field successors (list I64 (i64 50))))
+          (record structural (field id (i64 60)) (field successors (list I64))))))))
+    (test create example-flat (visibility private)
+      (actual (call flat (call example)))
+      (expected (variant Outcome::valid (record structural
+        (field reachable (list I64 (i64 10) (i64 20) (i64 30) (i64 40)))
+        (field unreachable (list I64 (i64 50) (i64 60)))))))
+    (test create example-chunked (visibility private)
+      (actual (call chunked (call example)))
+      (expected (variant Outcome::valid (record structural
+        (field reachable (list I64 (i64 10) (i64 20) (i64 30) (i64 40)))
+        (field unreachable (list I64 (i64 50) (i64 60)))))))
+    (test create empty (visibility private)
+      (actual (call flat (record structural (field roots (list I64)) (field nodes (list Node)))))
+      (expected (variant Outcome::valid (record structural
+        (field reachable (list I64)) (field unreachable (list I64))))))
+    (test create empty-roots (visibility private)
+      (actual (call chunked (record structural
+        (field roots (list I64))
+        (field nodes (list Node
+          (record structural (field id (i64 2)) (field successors (list I64 (i64 2))))
+          (record structural (field id (i64 1)) (field successors (list I64))))))))
+      (expected (variant Outcome::valid (record structural
+        (field reachable (list I64)) (field unreachable (list I64 (i64 2) (i64 1)))))))
+    (test create repeated-discovery (visibility private)
+      (actual (call chunked (record structural
+        (field roots (list I64 (i64 10) (i64 10) (i64 20)))
+        (field nodes (list Node
+          (record structural (field id (i64 30)) (field successors (list I64)))
+          (record structural (field id (i64 20)) (field successors (list I64 (i64 10) (i64 20))))
+          (record structural (field id (i64 10)) (field successors (list I64 (i64 20) (i64 20)))))))))
+      (expected (variant Outcome::valid (record structural
+        (field reachable (list I64 (i64 20) (i64 10))) (field unreachable (list I64 (i64 30)))))))
+    (test create signed-identities (visibility private)
+      (actual (call flat (record structural
+        (field roots (list I64 (i64 -9223372036854775808)))
+        (field nodes (list Node
+          (record structural (field id (i64 9223372036854775807))
+            (field successors (list I64 (i64 -9223372036854775808))))
+          (record structural (field id (i64 -1)) (field successors (list I64)))
+          (record structural (field id (i64 -9223372036854775808))
+            (field successors (list I64 (i64 9223372036854775807)))))))))
+      (expected (variant Outcome::valid (record structural
+        (field reachable (list I64 (i64 9223372036854775807) (i64 -9223372036854775808)))
+        (field unreachable (list I64 (i64 -1)))))))
+    (test create duplicate-before-references (visibility private)
+      (actual (call flat (record structural
+        (field roots (list I64 (i64 90)))
+        (field nodes (list Node
+          (record structural (field id (i64 2)) (field successors (list I64 (i64 80))))
+          (record structural (field id (i64 1)) (field successors (list I64)))
+          (record structural (field id (i64 2)) (field successors (list I64)))
+          (record structural (field id (i64 1)) (field successors (list I64))))))))
+      (expected (variant Outcome::invalid (record structural
+        (field code (text "duplicate-node")) (field owner (i64 2)) (field target (i64 2))))))
+    (test create root-before-successors (visibility private)
+      (actual (call chunked (record structural
+        (field roots (list I64 (i64 70) (i64 60)))
+        (field nodes (list Node
+          (record structural (field id (i64 1)) (field successors (list I64 (i64 80)))))))))
+      (expected (variant Outcome::invalid (record structural
+        (field code (text "missing-root")) (field owner (i64 -1)) (field target (i64 70))))))
+    (test create unreachable-successor (visibility private)
+      (actual (call flat (record structural
+        (field roots (list I64 (i64 1)))
+        (field nodes (list Node
+          (record structural (field id (i64 1)) (field successors (list I64)))
+          (record structural (field id (i64 2)) (field successors (list I64 (i64 90) (i64 80))))
+          (record structural (field id (i64 3)) (field successors (list I64 (i64 70)))))))))
+      (expected (variant Outcome::invalid (record structural
+        (field code (text "missing-successor")) (field owner (i64 2)) (field target (i64 90))))))
+
+    (component create command (visibility private)
+      (port create flat (type (function (Proposal) Outcome)) (function flat))
+      (port create chunked (type (function (Proposal) Outcome)) (function chunked))))
+  (target create provisional-reachability-flat (component provisional-graph::command)
+    (runner command) (port provisional-graph::command::flat))
+  (target create provisional-reachability-chunked (component provisional-graph::command)
+    (runner command) (port provisional-graph::command::chunked)))
+declarations.end

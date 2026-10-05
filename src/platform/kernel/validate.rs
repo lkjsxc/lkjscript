@@ -1205,6 +1205,13 @@ impl FullValidator<'_> {
                     &[OwnerKind::TypeParameter],
                     "owned Self parameter",
                 );
+                for parameter in &c.type_parameters {
+                    self.require_local_kind(
+                        OwnerKey::TypeParameter(*parameter),
+                        &[OwnerKind::TypeParameter],
+                        "owned contract type parameter",
+                    );
+                }
                 for method in &c.methods {
                     if !self.consume_work() {
                         return;
@@ -2898,7 +2905,9 @@ impl FullValidator<'_> {
                     | DeclarationPayload::Variant {
                         type_parameters, ..
                     } => type_parameters.contains(&id),
-                    DeclarationPayload::OwnedContract(c) => c.self_parameter == id,
+                    DeclarationPayload::OwnedContract(c) => {
+                        c.self_parameter == id || c.type_parameters.contains(&id)
+                    }
                     DeclarationPayload::External(function) => {
                         function.type_parameters.contains(&id)
                     }

@@ -48,16 +48,16 @@ use std::fmt;
 #[path = "artifact_code.rs"]
 mod code_admission;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-32";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-32";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 32;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF32";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART32";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN32";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-33";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-33";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 33;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF33";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART33";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN33";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v32";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v32";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v32";
+    "lkjscript.artifact-manifest-envelope.v33";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v33";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v33";
 pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v18";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
@@ -80,7 +80,7 @@ struct ArtifactWire {
 }
 fn artifact_wire(version: u16) -> Result<ArtifactWire, Diagnostic> {
     match version {
-        30 | 31 => Err(artifact_error(
+        30..=32 => Err(artifact_error(
             DiagnosticClass::Source,
             "artifact_bundle_contract",
             "predecessor artifacts require rebuilding from canonical meaning",
@@ -420,6 +420,8 @@ impl ArtifactManifest {
             30
         } else if bytes.starts_with(b"LKJAMF31") {
             31
+        } else if bytes.starts_with(b"LKJAMF32") {
+            32
         } else {
             ARTIFACT_CONTRACT_VERSION
         })?;
@@ -509,6 +511,7 @@ impl ArtifactManifest {
                     | (23, 23, 18)
                     | (24, 24, 19)
                     | (25, 25, 20)
+                    | (26, 26, 21)
             )
             || self.compilation_manifest_contract_version != COMPILATION_MANIFEST_CONTRACT_VERSION
         {
@@ -1669,14 +1672,18 @@ pub(crate) fn runtime_owner_expectations(
                     (*package, *owner),
                     RuntimeOwnerExpectation::OwnedContract(c.clone()),
                 )?;
-                insert_runtime_expectation(
-                    &mut expected,
-                    (*package, OwnerKey::TypeParameter(c.self_parameter)),
-                    RuntimeOwnerExpectation::TypeParameter {
-                        declaration: declaration_owner(*owner, "owned contract")?,
-                        constraints: crate::platform::kernel::TypeParameterConstraints::Owned,
-                    },
-                )?;
+                for parameter in
+                    std::iter::once(c.self_parameter).chain(c.type_parameters.iter().copied())
+                {
+                    insert_runtime_expectation(
+                        &mut expected,
+                        (*package, OwnerKey::TypeParameter(parameter)),
+                        RuntimeOwnerExpectation::TypeParameter {
+                            declaration: declaration_owner(*owner, "owned contract")?,
+                            constraints: crate::platform::kernel::TypeParameterConstraints::Owned,
+                        },
+                    )?;
+                }
             }
             CompilationPayload::OwnedImplementation(i) => {
                 insert_runtime_expectation(
@@ -4630,7 +4637,8 @@ fn reference_payload_matches(unit: &CompilationUnit, canonical: &DeclarationPayl
         DeclarationPayload::Function(function),
     ) = (compiled, canonical)
     {
-        return signature.requirement_parameters == function.requirement_parameters
+        return signature.implementation_parameters == function.implementation_parameters
+            && signature.requirement_parameters == function.requirement_parameters
             && signature.type_parameters == function.type_parameters
             && signature.effect_parameters == function.effect_parameters
             && signature.effect == function.effect
@@ -4747,6 +4755,7 @@ fn validate_unit_relocations(
         match &unit.payload {
             CompilationPayload::OwnedContract(c) => {
                 type_parameters.insert(c.self_parameter);
+                type_parameters.extend(c.type_parameters.iter().copied());
             }
             CompilationPayload::OwnedImplementation(_) => {}
             CompilationPayload::Record {

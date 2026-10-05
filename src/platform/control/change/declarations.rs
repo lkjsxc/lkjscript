@@ -31,6 +31,9 @@ struct Lowering<'a> {
     imported: BTreeMap<(String, String), String>,
     resolving: BTreeSet<String>,
     records: Vec<CompactRecord>,
+    source_records: &'a [CompactRecord],
+    source_references: BTreeMap<&'a str, &'a CompactRecord>,
+    existing_namespaces: &'a BTreeMap<(Option<OwnerKey>, NamespaceClass, Name), OwnerKey>,
     bodies: BTreeMap<String, Block>,
     reserved: &'a mut BTreeSet<String>,
     private: &'a mut BTreeSet<String>,
@@ -131,6 +134,43 @@ pub(super) fn lower(
             }
         }
     }
+    // Selected aliases may address the same exact child through its typed namespace path.
+    // Retain canonical ancestors so alias comparison uses owner identity, including when a
+    // declaration edit is supplied outside its module unit.
+    let has_selected_parameter = input.records.iter().any(|record| {
+        record.operation == "reference.owner"
+            && optional(record, "package") == Some("local")
+            && optional(record, "class") == Some("type-parameter")
+    });
+    let mut ancestors = existing
+        .values()
+        .filter(|_| has_selected_parameter)
+        .filter_map(|record| {
+            crate::platform::kernel::owner_namespace(record).and_then(|entry| entry.parent)
+        })
+        .collect::<Vec<_>>();
+    while let Some(owner) = ancestors.pop() {
+        if existing.contains_key(&owner) {
+            continue;
+        }
+        let record = reader
+            .as_deref_mut()
+            .ok_or_else(|| canonical::error("edit ancestry requires its accepted base"))?
+            .owner(owner)?;
+        if let Some(parent) =
+            crate::platform::kernel::owner_namespace(&record).and_then(|entry| entry.parent)
+        {
+            ancestors.push(parent);
+        }
+        existing.insert(owner, record);
+    }
+    let existing_namespaces = existing
+        .iter()
+        .filter_map(|(owner, record)| {
+            crate::platform::kernel::owner_namespace(record)
+                .map(|entry| ((entry.parent, entry.class, entry.name.clone()), *owner))
+        })
+        .collect::<BTreeMap<_, _>>();
     let package = reader.as_ref().map(|r| r.view.package());
     // A single unit block supplies one collection/resolution scope. All declarations in that
     // block are collected before any body or type is resolved, including later declarations.
@@ -144,6 +184,14 @@ pub(super) fn lower(
             imported: BTreeMap::new(),
             resolving: BTreeSet::new(),
             records: Vec::new(),
+            source_records: &input.records,
+            source_references: input
+                .records
+                .iter()
+                .filter(|record| record.operation == "reference.owner")
+                .filter_map(|record| optional(record, "as").map(|alias| (alias, record)))
+                .collect(),
+            existing_namespaces: &existing_namespaces,
             bodies: BTreeMap::new(),
             reserved: &mut input.public_labels,
             private: &mut lowered.private,
@@ -208,8 +256,11 @@ pub(super) fn lower(
             }
             lowering.emit(unit)?;
         }
-        input.records.extend(lowering.records);
-        input.blocks.extend(lowering.bodies);
+        let Lowering {
+            records, bodies, ..
+        } = lowering;
+        input.records.extend(records);
+        input.blocks.extend(bodies);
         if input.records.len() > crate::platform::control::compact::MAXIMUM_COMPACT_RECORDS {
             return Err(block.error(
                 block.root,
@@ -222,6 +273,31 @@ pub(super) fn lower(
 }
 
 impl Lowering<'_> {
+    fn selected_owner(&self, alias: &str) -> Option<OwnerKey> {
+        let mut lineage = Vec::new();
+        let mut current = alias;
+        loop {
+            let record = self.source_references.get(current)?;
+            if optional(record, "package") != Some("local") || lineage.len() > 3 {
+                return None;
+            }
+            lineage.push(*record);
+            match optional(record, "parent") {
+                Some(parent) => current = parent,
+                None => break,
+            }
+        }
+        let mut parent = None;
+        for record in lineage.into_iter().rev() {
+            let class = COMPACT_NAMESPACE_CLASSES.iter().find_map(|(name, class)| {
+                (Some(*name) == optional(record, "class")).then_some(*class)
+            })?;
+            let name = Name::new(optional(record, "name")?).ok()?;
+            parent = Some(*self.existing_namespaces.get(&(parent, class, name))?);
+        }
+        parent
+    }
+
     fn parts(&self, id: usize) -> Result<(&str, &[usize]), Diagnostic> {
         let items = self.block.list(id)?;
         let first = *items
@@ -1117,11 +1193,67 @@ impl Lowering<'_> {
             "owned-contract" | "owned-implementation" => {
                 allowed.extend(["self", "method"]);
                 let self_type = self.one(self.required_clause(unit, "self")?)?;
-                fields.push(("self", self.ty(self_type, &scope, 1)?));
+                let self_type = self.ty(self_type, &scope, 1)?;
+                fields.push(("self", self_type.clone()));
                 if kind == "owned-implementation" {
                     let contract = self.one(self.required_clause(unit, "contract")?)?;
                     fields.push(("contract", self.reference(contract, &scope, "declaration")?));
-                    allowed.push("contract");
+                    allowed.extend(["contract", "types"]);
+                    if let Some(clause) = self.clause(&unit.clauses, "types")? {
+                        self.owned_type_arguments(clause, &scope, &unit.label)?;
+                    }
+                } else {
+                    let self_parameter = self
+                        .records
+                        .iter()
+                        .chain(self.source_records.iter())
+                        .find(|r| {
+                            r.operation == "type.parameter"
+                                && optional(r, "as") == Some(self_type.as_str())
+                        })
+                        .and_then(|r| optional(r, "parameter"))
+                        .map(str::to_owned);
+                    let parent = unit
+                        .existing
+                        .map(|id| id.to_string())
+                        .unwrap_or_else(|| unit.label.clone());
+                    let self_owner = self_parameter.as_deref().and_then(|reference| {
+                        reference
+                            .parse::<OwnerKey>()
+                            .ok()
+                            .or_else(|| self.selected_owner(reference))
+                    });
+                    let parameters = self
+                        .units
+                        .iter()
+                        .filter(|child| child.parent == parent && child.kind == "type-parameter")
+                        .map(|child| {
+                            (
+                                child.syntax,
+                                child
+                                    .existing
+                                    .map(|id| id.to_string())
+                                    .unwrap_or_else(|| child.label.clone()),
+                            )
+                        })
+                        .filter(|(_, reference)| {
+                            self_parameter.as_ref() != Some(reference)
+                                && self_owner.is_none_or(|owner| {
+                                    reference.parse::<OwnerKey>().ok() != Some(owner)
+                                })
+                        })
+                        .collect::<Vec<_>>();
+                    for (index, (syntax, parameter)) in parameters.into_iter().enumerate() {
+                        self.record(
+                            syntax,
+                            "owned.contract-parameter",
+                            vec![
+                                ("parent", unit.label.clone()),
+                                ("index", index.to_string()),
+                                ("parameter", parameter),
+                            ],
+                        )?;
+                    }
                 }
                 for (index, clause) in unit
                     .clauses
@@ -1259,23 +1391,31 @@ impl Lowering<'_> {
                     {
                         let (_, args) = self.parts(*clause)?;
                         let args = args.to_vec();
-                        if args.len() != 4 {
-                            return Err(self.error(*clause, "implementation parameter requires ID, name, contract and Self type"));
+                        if !(4..=5).contains(&args.len()) {
+                            return Err(self.error(*clause, "implementation parameter requires ID, name, contract, Self type and optional types clause"));
                         }
                         let contract = self.reference(args[2], &scope, "declaration")?;
                         let ty = self.ty(args[3], &scope, 1)?;
-                        self.record(
-                            *clause,
-                            "owned.witness",
-                            vec![
-                                ("parent", label.clone()),
-                                ("index", index.to_string()),
-                                ("id", self.block.atom(args[0])?.into()),
-                                ("name", self.block.atom(args[1])?.into()),
-                                ("contract", contract),
-                                ("self", ty),
-                            ],
-                        )?;
+                        let mut witness_fields = vec![
+                            ("parent", label.clone()),
+                            ("index", index.to_string()),
+                            ("id", self.block.atom(args[0])?.into()),
+                            ("name", self.block.atom(args[1])?.into()),
+                            ("contract", contract),
+                            ("self", ty),
+                        ];
+                        if let Some(clause) = args.get(4) {
+                            if self.block.head(*clause) != Some("types") {
+                                return Err(self.error(
+                                    *clause,
+                                    "implementation parameter requires a types clause",
+                                ));
+                            }
+                            let witness = self.allocate('%')?;
+                            self.owned_type_arguments(*clause, &scope, &witness)?;
+                            witness_fields.push(("as", witness));
+                        }
+                        self.record(*clause, "owned.witness", witness_fields)?;
                     }
                 }
                 let ty = self.one(self.required_clause(unit, "returns")?)?;
@@ -1554,6 +1694,27 @@ impl Lowering<'_> {
         Ok(())
     }
 
+    fn owned_type_arguments(
+        &mut self,
+        clause: usize,
+        scope: &str,
+        parent: &str,
+    ) -> Result<(), Diagnostic> {
+        for (index, id) in self.parts(clause)?.1.to_vec().into_iter().enumerate() {
+            let ty = self.ty(id, scope, 1)?;
+            self.record(
+                id,
+                "owned.type-argument",
+                vec![
+                    ("parent", parent.to_owned()),
+                    ("index", index.to_string()),
+                    ("type", ty),
+                ],
+            )?;
+        }
+        Ok(())
+    }
+
     fn check_contracts(&self, precise: &[CompactRecord]) -> Result<(), Diagnostic> {
         use crate::platform::kernel::OwnerRecord;
         for unit in &self.units {
@@ -1652,7 +1813,15 @@ pub(super) fn contract_children(record: &crate::platform::kernel::OwnerRecord) -
     let mut children = Vec::new();
     match record {
         O::Declaration(d) => match &d.payload {
-            D::OwnedContract(c) => children.push(OwnerKey::TypeParameter(c.self_parameter)),
+            D::OwnedContract(c) => {
+                children.push(OwnerKey::TypeParameter(c.self_parameter));
+                children.extend(
+                    c.type_parameters
+                        .iter()
+                        .copied()
+                        .map(OwnerKey::TypeParameter),
+                );
+            }
             D::Record {
                 type_parameters,
                 fields,
@@ -1796,6 +1965,7 @@ pub(super) fn finish(
             AuthoredChange::CreateOwnedContract {
                 visibility,
                 self_type,
+                type_parameters,
                 methods,
                 ..
             } => {
@@ -1808,6 +1978,7 @@ pub(super) fn finish(
                 changes.push(AuthoredChange::SetOwnedContract {
                     declaration,
                     self_type,
+                    type_parameters,
                     methods,
                 });
             }
@@ -1815,6 +1986,7 @@ pub(super) fn finish(
                 visibility,
                 contract,
                 self_type,
+                type_arguments,
                 methods,
                 ..
             } => {
@@ -1828,6 +2000,7 @@ pub(super) fn finish(
                     declaration,
                     contract,
                     self_type,
+                    type_arguments,
                     methods,
                 });
             }

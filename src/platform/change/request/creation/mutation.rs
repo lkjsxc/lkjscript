@@ -471,7 +471,11 @@ fn lower_add_type_parameter<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + 
         | DeclarationPayload::Variant {
             type_parameters, ..
         } => type_parameters.push(parameter_id),
-        DeclarationPayload::OwnedContract(c) if c.self_parameter == parameter_id => {}
+        DeclarationPayload::OwnedContract(c) => {
+            if c.self_parameter != parameter_id && !c.type_parameters.contains(&parameter_id) {
+                c.type_parameters.push(parameter_id);
+            }
+        }
         DeclarationPayload::Function(function) => function.type_parameters.push(parameter_id),
         DeclarationPayload::External(function) => function.type_parameters.push(parameter_id),
         _ => {

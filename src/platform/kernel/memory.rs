@@ -1027,7 +1027,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 method,
                 arguments,
             } => {
-                let signature = super::owned_contract::method_signature(
+                let (signature, _) = super::owned_contract::method_signature(
                     self.read, witness, contract, method, self.scope,
                 )?;
                 if signature.parameters.len() != arguments.len() {
@@ -1035,7 +1035,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 }
                 let mut uses = BTreeMap::new();
                 for (p, a) in signature.parameters.iter().zip(arguments) {
-                    if direct(self.read, p.ty)? {
+                    if direct_in(self.read, contract.package, p.ty)? {
                         let Some(OwnerRecord::Expression(e)) =
                             self.read.owner(OwnerKey::Expression(a))?
                         else {
@@ -1060,7 +1060,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                         plain(a, state)?;
                     }
                 }
-                direct(self.read, signature.result)?
+                direct_in(self.read, contract.package, signature.result)?
             }
             ExpressionOperation::FunctionValue {
                 function,
@@ -1218,6 +1218,43 @@ pub(crate) fn validate_owner(
     key: OwnerKey,
     record: &OwnerRecord,
 ) -> Result<(), Diagnostic> {
+    if record.header().contract_version < 26 {
+        let extended = match record {
+            OwnerRecord::Declaration(d) => match &d.payload {
+                DeclarationPayload::OwnedContract(c) => {
+                    super::owned_contract::requires_parameterized_generation(
+                        read,
+                        read.package_id(),
+                        c,
+                    )?
+                }
+                DeclarationPayload::OwnedImplementation(i) => !i.type_arguments.is_empty(),
+                DeclarationPayload::Function(f) => f
+                    .implementation_parameters
+                    .iter()
+                    .any(|p| !p.type_arguments.is_empty()),
+                _ => false,
+            },
+            OwnerRecord::TypeParameter(p) => {
+                let OwnerKey::TypeParameter(id) = key else {
+                    return Err(reject("invalid contract parameter identity"));
+                };
+                match read.owner(OwnerKey::Declaration(p.declaration))? {
+                    Some(OwnerRecord::Declaration(d)) => matches!(d.payload,
+                        DeclarationPayload::OwnedContract(c) if c.self_parameter != id && c.type_parameters.contains(&id)),
+                    _ => false,
+                }
+            }
+            _ => false,
+        };
+        if extended {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Semantic,
+                "kernel_parameterized_contract_generation",
+                "parameterized and structured owned contract meaning requires Graph 26",
+            ));
+        }
+    }
     let mut roots = record.type_roots();
     if record.header().contract_version < 25
         && let OwnerRecord::Declaration(declaration) = record
@@ -1245,11 +1282,8 @@ pub(crate) fn validate_owner(
             let allowed = match read.owner(OwnerKey::Declaration(p.declaration))? {
                 Some(OwnerRecord::Declaration(d)) => match d.payload {
                     DeclarationPayload::OwnedContract(c) => {
-                        c.self_parameter
-                            == match key {
-                                OwnerKey::TypeParameter(id) => id,
-                                _ => return Err(reject("invalid Owned parameter identity")),
-                            }
+                        matches!(key, OwnerKey::TypeParameter(id)
+                            if c.self_parameter == id || c.type_parameters.contains(&id))
                     }
                     DeclarationPayload::Function(f) => {
                         matches!(key, OwnerKey::TypeParameter(id) if f.type_parameters.contains(&id))
@@ -1262,7 +1296,7 @@ pub(crate) fn validate_owner(
                 return Err(Diagnostic::new(
                     DiagnosticClass::Semantic,
                     "kernel_owned_parameter_owner",
-                    "Owned requires an exact first-order graph-function parameter or owned contract Self",
+                    "Owned requires an exact graph-function or owned-contract parameter",
                 ));
             }
         }

@@ -1,5 +1,5 @@
 //! Finite static witness specialization. No witness is a runtime language value.
-use super::super::prepare::NormalizedFunction;
+use super::super::prepare::{NormalizedFunction, NormalizedImplementationArgument};
 use super::*;
 use crate::platform::compiler::{CompilationPayload, CompilationUnit};
 use crate::platform::kernel::{
@@ -68,7 +68,7 @@ impl Closing<'_, '_> {
             return Ok(*index);
         }
         self.work
-            .reserve::<(DeclarationReference, TypeObjectDigest)>(key.1.len())?;
+            .reserve::<NormalizedImplementationArgument>(key.1.len())?;
         let mut supplied = Vec::new();
         for (p, reference) in template.implementation_parameters.iter().zip(&key.1) {
             step(self.work)?;
@@ -76,7 +76,20 @@ impl Closing<'_, '_> {
             if implementation.contract != p.contract {
                 return Err(missing());
             }
-            supplied.push((*reference, implementation.self_type));
+            if implementation.type_arguments.len() != p.type_arguments.len() {
+                return Err(missing());
+            }
+            self.work
+                .reserve::<TypeObjectDigest>(implementation.type_arguments.len())?;
+            // Reserve the cloned vector and Arc array before either allocation.
+            self.work
+                .reserve::<TypeObjectDigest>(implementation.type_arguments.len())?;
+            self.work.reserve::<usize>(2)?;
+            supplied.push(NormalizedImplementationArgument {
+                implementation: *reference,
+                self_type: implementation.self_type,
+                type_arguments: implementation.type_arguments.clone().into(),
+            });
         }
         self.work.node::<(Application, FunctionIndex)>()?;
         self.work.node::<(Application, FunctionIndex)>()?;
@@ -473,7 +486,11 @@ mod tests {
             let mut program = base.clone();
             let f = &mut Arc::make_mut(&mut program.functions)[0];
             if selected {
-                f.implementation_arguments = Arc::from([(reference, f.result)]);
+                f.implementation_arguments = Arc::from([NormalizedImplementationArgument {
+                    implementation: reference,
+                    self_type: f.result,
+                    type_arguments: Arc::from([]),
+                }]);
             } else {
                 f.implementation_parameters =
                     Arc::from([crate::platform::kernel::ImplementationParameter {
@@ -481,6 +498,7 @@ mod tests {
                         name: crate::platform::kernel::Name::new("ops").unwrap(),
                         contract: reference,
                         self_type: f.result,
+                        type_arguments: Vec::new(),
                     }]);
             }
             assert!(requires_specialization(&program, &mut Budget::new(&control)).unwrap());

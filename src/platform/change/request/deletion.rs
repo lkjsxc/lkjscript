@@ -429,6 +429,19 @@ fn detach_root_from_live_parent<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRea
                 return Err(parent_kind_error(root, parent.header.owner));
             };
             match &mut parent.payload {
+                DeclarationPayload::OwnedContract(contract) => {
+                    if child == contract.self_parameter {
+                        return Err(delete_error(
+                            "change_delete_owned_contract_self",
+                            "an owned contract's distinguished Self requires deletion of the complete contract",
+                        ));
+                    }
+                    remove_exact(
+                        &mut contract.type_parameters,
+                        child,
+                        "owned contract type parameter",
+                    )
+                }
                 DeclarationPayload::Record {
                     type_parameters, ..
                 }

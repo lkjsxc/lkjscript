@@ -25,6 +25,268 @@ pub const DEPENDENCY_BINDING_BYTES: usize = 32;
 pub const RETIREMENT_BINDING_BYTES: usize = 32;
 
 #[cfg(test)]
+mod parameterized_contract_encoding_tests {
+    use super::*;
+    use crate::platform::kernel::*;
+    use crate::platform::semantic_id::*;
+
+    #[test]
+    fn original_contract_and_application_fields_round_trip_in_graph18_through25() {
+        let seed = b"frozen-contract-applications";
+        let declaration = DeclarationId::migrate(seed, 0);
+        let owner = OwnerKey::Declaration(declaration);
+        let module = ModuleId::migrate(seed, 0);
+        let name = Name::new("Contract").unwrap();
+        let self_parameter = TypeParameterId::migrate(seed, 0);
+        let method = MethodId::migrate(seed, 0);
+        let scalar = encode_type_object(&TypeObject::new(TypeForm::I64).unwrap())
+            .unwrap()
+            .0;
+        let reference = DeclarationReference {
+            package: "pkg_10000000000000000000000000000001".parse().unwrap(),
+            declaration,
+        };
+        let methods = vec![OwnedMethod {
+            id: method,
+            name: Name::new("length").unwrap(),
+            parameters: Vec::new(),
+            result: scalar,
+            effect: FunctionEffect::Pure,
+        }];
+        let mappings = vec![OwnedMethodImplementation {
+            method,
+            function: reference,
+        }];
+        let parameter_id = ImplementationParameterId::migrate(seed, 0);
+        let parameter_name = Name::new("Witness").unwrap();
+        for generation in 18..=25 {
+            let header = OwnerHeader {
+                contract_version: generation,
+                owner,
+                kind: OwnerKind::OwnedContract,
+            };
+            let magic: [u8; 8] = format!("LKJOWN{generation}").as_bytes().try_into().unwrap();
+            let domain = format!("lkjscript.kernel.owner-envelope.v{generation}");
+            // Literal original enum ordinals and nested fields are independent
+            // of both current records and predecessor conversion code.
+            let original_contract = packed::encode(
+                magic,
+                &domain,
+                &(
+                    1_u32,
+                    header,
+                    module,
+                    &name,
+                    DeclarationVisibility::Public,
+                    8_u32,
+                    self_parameter,
+                    &methods,
+                ),
+                MAXIMUM_OWNER_OBJECT_BYTES,
+            )
+            .unwrap();
+            let mut original_implementation_header = header;
+            original_implementation_header.kind = OwnerKind::OwnedImplementation;
+            let original_implementation = packed::encode(
+                magic,
+                &domain,
+                &(
+                    1_u32,
+                    original_implementation_header,
+                    module,
+                    &name,
+                    DeclarationVisibility::Public,
+                    9_u32,
+                    reference,
+                    scalar,
+                    &mappings,
+                ),
+                MAXIMUM_OWNER_OBJECT_BYTES,
+            )
+            .unwrap();
+            let mut function_header = header;
+            function_header.kind = OwnerKind::PureFunction;
+            let original_parameters = vec![(parameter_id, &parameter_name, reference, scalar)];
+            let original_function = packed::encode(
+                magic,
+                &domain,
+                &(
+                    1_u32,
+                    function_header,
+                    module,
+                    &name,
+                    DeclarationVisibility::Public,
+                    4_u32,
+                    original_parameters,
+                    Vec::<RequirementParameterId>::new(),
+                    Vec::<EffectParameterId>::new(),
+                    Vec::<TypeParameterId>::new(),
+                    Vec::<ParameterId>::new(),
+                    scalar,
+                    FunctionEffect::Pure,
+                    ExpressionId::migrate(seed, 0),
+                ),
+                MAXIMUM_OWNER_OBJECT_BYTES,
+            )
+            .unwrap();
+            for (kind, bytes) in [
+                (OwnerKind::OwnedContract, original_contract),
+                (OwnerKind::OwnedImplementation, original_implementation),
+                (OwnerKind::PureFunction, original_function),
+            ] {
+                let digest = OwnerObjectDigest::of(&bytes);
+                let record = decode_owner(&bytes, owner, kind, digest).unwrap();
+                let OwnerRecord::Declaration(declaration) = &record else {
+                    panic!("declaration");
+                };
+                match &declaration.payload {
+                    DeclarationPayload::OwnedContract(c) => assert!(c.type_parameters.is_empty()),
+                    DeclarationPayload::OwnedImplementation(i) => {
+                        assert!(i.type_arguments.is_empty())
+                    }
+                    DeclarationPayload::Function(f) => {
+                        assert!(f.implementation_parameters[0].type_arguments.is_empty())
+                    }
+                    _ => panic!("contract application"),
+                }
+                assert_eq!(encode_owner(&record).unwrap(), (digest, bytes));
+            }
+        }
+    }
+
+    #[test]
+    fn new_contract_parameter_fields_require_the_current_envelope() {
+        let seed = b"current-contract-applications";
+        let declaration = DeclarationId::migrate(seed, 0);
+        let owner = OwnerKey::Declaration(declaration);
+        let scalar = encode_type_object(&TypeObject::new(TypeForm::I64).unwrap())
+            .unwrap()
+            .0;
+        let mut record = OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(owner, OwnerKind::OwnedContract),
+            module: ModuleId::migrate(seed, 0),
+            name: Name::new("Worklist").unwrap(),
+            visibility: DeclarationVisibility::Public,
+            payload: DeclarationPayload::OwnedContract(OwnedContract {
+                self_parameter: TypeParameterId::migrate(seed, 0),
+                type_parameters: vec![TypeParameterId::migrate(seed, 1)],
+                methods: vec![OwnedMethod {
+                    id: MethodId::migrate(seed, 0),
+                    name: Name::new("length").unwrap(),
+                    parameters: Vec::new(),
+                    result: scalar,
+                    effect: FunctionEffect::Pure,
+                }],
+            }),
+        });
+        let (digest, bytes) = encode_owner(&record).unwrap();
+        assert_eq!(&bytes[..8], b"LKJOWN26");
+        assert_eq!(
+            decode_owner(&bytes, owner, record.kind(), digest).unwrap(),
+            record
+        );
+        for generation in 18..=25 {
+            record.set_encoding_for_edit(generation);
+            assert_eq!(
+                encode_owner(&record).unwrap_err().code,
+                "kernel_parameterized_contract_generation"
+            );
+            let magic: [u8; 8] = format!("LKJOWN{generation}").as_bytes().try_into().unwrap();
+            let bytes = packed::encode(
+                magic,
+                &format!("lkjscript.kernel.owner-envelope.v{generation}"),
+                &record,
+                MAXIMUM_OWNER_OBJECT_BYTES,
+            )
+            .unwrap();
+            assert!(
+                decode_owner(&bytes, owner, record.kind(), OwnerObjectDigest::of(&bytes)).is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn unused_implementation_arguments_are_ordered_canonical_and_interface_type_roots() {
+        let seed = b"unused-implementation-argument-roots";
+        let declaration = DeclarationId::migrate(seed, 0);
+        let reference = DeclarationReference {
+            package: "pkg_10000000000000000000000000000001".parse().unwrap(),
+            declaration,
+        };
+        let self_type = encode_type_object(&TypeObject::new(TypeForm::OwnedI64Cell).unwrap())
+            .unwrap()
+            .0;
+        let argument = encode_type_object(&TypeObject::new(TypeForm::ByteBuffer).unwrap())
+            .unwrap()
+            .0;
+        let result = encode_type_object(&TypeObject::new(TypeForm::Unit).unwrap())
+            .unwrap()
+            .0;
+        let implementation = OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(
+                OwnerKey::Declaration(declaration),
+                OwnerKind::OwnedImplementation,
+            ),
+            module: ModuleId::migrate(seed, 0),
+            name: Name::new("Concrete").unwrap(),
+            visibility: DeclarationVisibility::Public,
+            payload: DeclarationPayload::OwnedImplementation(OwnedImplementation {
+                contract: reference,
+                self_type,
+                type_arguments: vec![argument, self_type],
+                methods: vec![OwnedMethodImplementation {
+                    method: MethodId::migrate(seed, 0),
+                    function: reference,
+                }],
+            }),
+        });
+        let function = OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(OwnerKey::Declaration(declaration), OwnerKind::PureFunction),
+            module: ModuleId::migrate(seed, 0),
+            name: Name::new("generic").unwrap(),
+            visibility: DeclarationVisibility::Public,
+            payload: DeclarationPayload::Function(FunctionDeclaration {
+                implementation_parameters: vec![ImplementationParameter {
+                    id: ImplementationParameterId::migrate(seed, 0),
+                    name: Name::new("W").unwrap(),
+                    contract: reference,
+                    self_type,
+                    type_arguments: vec![argument, self_type],
+                }],
+                requirement_parameters: Vec::new(),
+                effect_parameters: Vec::new(),
+                type_parameters: Vec::new(),
+                parameters: Vec::new(),
+                result,
+                effect: FunctionEffect::Pure,
+                body: ExpressionId::migrate(seed, 0),
+            }),
+        });
+        for (record, expected) in [
+            (implementation, vec![self_type, argument, self_type]),
+            (function, vec![self_type, argument, self_type, result]),
+        ] {
+            assert_eq!(record.type_roots(), expected);
+            let projected = PackageInterfaceRecord::project_public(&record)
+                .unwrap()
+                .unwrap();
+            assert_eq!(projected.type_roots(), expected);
+            let (digest, bytes) = encode_owner(&record).unwrap();
+            assert_eq!(
+                decode_owner(&bytes, record.owner(), record.kind(), digest).unwrap(),
+                record
+            );
+            let mut previous = record;
+            previous.set_encoding_for_edit(25);
+            assert_eq!(
+                encode_owner(&previous).unwrap_err().code,
+                "kernel_parameterized_contract_generation"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
 mod implementation_application_encoding_tests {
     use super::*;
     use crate::platform::kernel::{
@@ -232,7 +494,7 @@ mod implementation_application_encoding_tests {
             .unwrap();
             let current = OwnerRecord::Expression(expression.clone());
             let (digest, bytes) = encode_owner(&current).unwrap();
-            assert_eq!(&bytes[..8], b"LKJOWN25");
+            assert_eq!(&bytes[..8], b"LKJOWN26");
             assert_eq!(
                 decode_owner(&bytes, current.owner(), current.kind(), digest).unwrap(),
                 current
@@ -301,7 +563,7 @@ mod nominal_encoding_tests {
                 constraints: constraint,
             });
             let (digest, bytes) = encode_owner(&record).unwrap();
-            assert_eq!(&bytes[..8], b"LKJOWN25");
+            assert_eq!(&bytes[..8], b"LKJOWN26");
             assert_eq!(
                 decode_owner(&bytes, key, OwnerKind::TypeParameter, digest).unwrap(),
                 record
@@ -376,7 +638,7 @@ mod nominal_encoding_tests {
         .unwrap();
         let owner = OwnerRecord::Expression(expression.clone());
         let (digest, bytes) = encode_owner(&owner).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOWN25");
+        assert_eq!(&bytes[..8], b"LKJOWN26");
         assert_eq!(
             decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
             owner
@@ -726,7 +988,7 @@ mod borrow_encoding_tests {
         ];
         for record in records {
             let (digest, bytes) = encode_owner(&record).unwrap();
-            assert_eq!(&bytes[..8], b"LKJOWN25");
+            assert_eq!(&bytes[..8], b"LKJOWN26");
             assert_eq!(
                 decode_owner(&bytes, record.owner(), record.kind(), digest).unwrap(),
                 record
@@ -899,6 +1161,11 @@ pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>)
             super::contract::BORROW_OWNER_MAGIC,
             super::contract::BORROW_OWNER_ENVELOPE_DOMAIN,
         )
+    } else if record.header().contract_version == super::contract::SEQUENCE_GRAPH_CONTRACT_VERSION {
+        (
+            super::contract::SEQUENCE_OWNER_MAGIC,
+            super::contract::SEQUENCE_OWNER_ENVELOPE_DOMAIN,
+        )
     } else {
         (OWNER_MAGIC, OWNER_ENVELOPE_DOMAIN)
     };
@@ -916,6 +1183,13 @@ pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>)
             magic,
             domain,
             &super::wire22::OwnerRecord22::try_from(record.clone())?,
+            MAXIMUM_OWNER_OBJECT_BYTES,
+        )?
+    } else if record.header().contract_version < super::contract::GRAPH_CONTRACT_VERSION {
+        packed::encode(
+            magic,
+            domain,
+            &super::wire25::OwnerRecord25::try_from(record.clone())?,
             MAXIMUM_OWNER_OBJECT_BYTES,
         )?
     } else {
@@ -1041,6 +1315,12 @@ pub fn decode_owner(
                 super::contract::BORROW_OWNER_ENVELOPE_DOMAIN,
                 super::contract::BORROW_GRAPH_CONTRACT_VERSION,
             )
+        } else if bytes.starts_with(&super::contract::SEQUENCE_OWNER_MAGIC) {
+            (
+                super::contract::SEQUENCE_OWNER_MAGIC,
+                super::contract::SEQUENCE_OWNER_ENVELOPE_DOMAIN,
+                super::contract::SEQUENCE_GRAPH_CONTRACT_VERSION,
+            )
         } else {
             (
                 OWNER_MAGIC,
@@ -1051,6 +1331,10 @@ pub fn decode_owner(
         let record: OwnerRecord =
             if generation < super::contract::OWNED_EFFECT_GRAPH_CONTRACT_VERSION {
                 let wire: super::wire22::OwnerRecord22 =
+                    packed::decode(bytes, magic, domain, MAXIMUM_OWNER_OBJECT_BYTES)?;
+                wire.into()
+            } else if generation < super::contract::GRAPH_CONTRACT_VERSION {
+                let wire: super::wire25::OwnerRecord25 =
                     packed::decode(bytes, magic, domain, MAXIMUM_OWNER_OBJECT_BYTES)?;
                 wire.into()
             } else {

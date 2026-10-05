@@ -10,7 +10,7 @@ const TRANSPORT: &str =
 const MATERIAL: &str = "requirement-predecessor";
 const CURRENT: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../tests/fixtures/owned-predecessor-compiler25/requirements.lkja"
+    "/../../tests/fixtures/owned-predecessor-compiler26/requirements.lkja"
 ));
 const CASES: [(&str, &str); 7] = [
     ("predecessor.lkja", "encode-integer"),
@@ -377,7 +377,7 @@ mod current_control_tests {
             material_path(root, "current.lkja"),
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
-                "/../../tests/fixtures/owned-predecessor-compiler25/transactions.lkja"
+                "/../../tests/fixtures/owned-predecessor-compiler26/transactions.lkja"
             )),
         )
         .unwrap();

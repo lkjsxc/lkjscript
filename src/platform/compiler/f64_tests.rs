@@ -110,9 +110,9 @@ fn f64_literals_lower_and_round_trip_all_scalar_classes() {
                 compiled.unit.bytecode_contract_version,
                 compiled.unit.graph_contract_version
             ),
-            (25, 20, 25)
+            (26, 21, 26)
         );
-        assert_eq!(&compiled.bytes[..8], b"LKJCUN25");
+        assert_eq!(&compiled.bytes[..8], b"LKJCUN26");
         let CompilationPayload::Constant { code, .. } = &compiled.unit.payload else {
             panic!("compiled constant");
         };
@@ -132,6 +132,13 @@ fn f64_predecessor_instructions_reject_even_when_unreachable_and_rehashed() {
     let (snapshot, owner) = literal_snapshot(Binary64::from_bits(0).unwrap());
     let original = compile_memory(&snapshot, owner).unit;
     for (compiler, bytecode, graph, magic, domain) in [
+        (
+            10,
+            6,
+            14,
+            *b"LKJCUN10",
+            "lkjscript.compiler-unit-envelope.v10",
+        ),
         (
             11,
             7,
@@ -186,10 +193,6 @@ fn f64_predecessor_instructions_reject_even_when_unreachable_and_rehashed() {
             );
         }
     }
-    assert!(
-        super::super::wire10::CompilationUnit10::try_from(original).is_err(),
-        "the authentic compiler-unit 10 wire adapter must reject F64"
-    );
 }
 
 #[test]
@@ -251,7 +254,7 @@ fn owned_generation_requires_rebuilding_authentic_predecessor_artifacts() {
 #[test]
 fn f64_artifact_admission_preserves_literal_observation_bits() {
     let (loaded, owner) = literal_artifact(Binary64::from_bits(0).unwrap());
-    assert_eq!(loaded.manifest.contract_version, 32);
+    assert_eq!(loaded.manifest.contract_version, 33);
     let (old, original) = loaded
         .objects
         .iter()

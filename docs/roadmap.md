@@ -20,12 +20,18 @@ The acceptance witness combines a symbolic reader with independent buffer/scalar
 implementations, nested composites, exact package transports and detached artifacts.
 Loan provenance, cleanup and inactive branches require independent checking.
 
-Use [dynamic owned sequences](spec/owned-sequences.md) to compose runtime-sized
-collections with scoped reads and exact element witnesses. Select associated
-scoped views and explicit lifetime relationships when a second useful storage
-representation exposes an abstraction that those native algorithms cannot express
-cleanly. Consider associated type families, higher-ranked borrowing and bounded
-value/region parameters where they make that abstraction sound and useful.
+Use [parameterized owned contracts](spec/owned-contract-parameters.md) to abstract
+over runtime-sized collections with structural owner-returning methods. The
+[worklist witness](guides/native-owned-worklists.md) composes flat and chunked
+storage, independent elements, cross-representation transfer and a native
+provisional graph validator. It builds on [owned sequences](spec/owned-sequences.md)
+without requiring a new nominal ownership system.
+
+The next abstraction trigger is a useful generic algorithm that must return a
+borrowed view tied to its storage owner. Select associated scoped views and
+explicit lifetime relationships against that workload. Consider associated type
+families, higher-ranked borrowing and bounded value/region parameters only where
+they make that demonstrated abstraction sound and useful.
 
 Keep implementation identity explicit and contracts independently checkable.
 Inference must retain boundary evidence; bounded proof-search exhaustion remains
@@ -61,6 +67,9 @@ Use retained cold/warm, overlap, cancellation and stop evidence to select root
 scheduling, local queues, batching and locality work. Reused auxiliary workers do
 not establish a total CPU bound, fairness or preemption. Blocking roots need a
 suspension/completion contract before joining a bounded CPU scheduler.
+Idle executors retaining process-wide worker capacity are a separate runtime
+milestone: specify capacity release, new admission, fairness, cancellation and
+joined cleanup before changing the pool's ownership.
 
 Introduce typed bounded channels only with exact destination admission, capacity
 reservation, irrevocable acceptance, owner-returning refusal and joined receiver
@@ -97,11 +106,12 @@ possible removal of Rust. Replace a host boundary when its native successor owns
 the relevant semantics and failure behavior. Native development must remain usable
 without an external semantic generator.
 
-Use a native compiler or tooling pass over provisional typed proposals as the next
-substantial ownership workload. Its working collection or future region owns only
-candidate data; the ordinary admission and publication boundary remains responsible
-for accepted meaning. This workload should justify further storage and view
-abstractions before selecting general region mechanisms.
+Use the native worklist-based dependency-graph validator as a tooling witness over
+provisional proposals. It validates all nodes and references before reachability;
+its owned working collection carries candidate identities. Integrating it into the
+production compiler requires an explicit host boundary that retains ordinary
+admission and publication authority. Larger typed passes should justify storage,
+view and region abstractions through working-set and reclamation measurements.
 
 ## Evidence and development cost
 

@@ -8,7 +8,7 @@ use bincode::{Decode, Encode};
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum OwnerRecord22 {
     Module(ModuleRecord),
-    Declaration(DeclarationRecord),
+    Declaration(super::wire25::DeclarationRecord25),
     TypeParameter(TypeParameterRecord),
     EffectParameter(EffectParameterRecord),
     Field(FieldRecord),
@@ -179,7 +179,7 @@ impl From<OwnerRecord22> for OwnerRecord {
     fn from(value: OwnerRecord22) -> Self {
         match value {
             OwnerRecord22::Module(record) => Self::Module(record),
-            OwnerRecord22::Declaration(record) => Self::Declaration(record),
+            OwnerRecord22::Declaration(record) => Self::Declaration(record.into()),
             OwnerRecord22::TypeParameter(record) => Self::TypeParameter(record),
             OwnerRecord22::EffectParameter(record) => Self::EffectParameter(record),
             OwnerRecord22::Field(record) => Self::Field(record),
@@ -205,7 +205,7 @@ impl TryFrom<OwnerRecord> for OwnerRecord22 {
     fn try_from(value: OwnerRecord) -> Result<Self, Self::Error> {
         Ok(match value {
             OwnerRecord::Module(record) => Self::Module(record),
-            OwnerRecord::Declaration(record) => Self::Declaration(record),
+            OwnerRecord::Declaration(record) => Self::Declaration(record.try_into()?),
             OwnerRecord::TypeParameter(record) => Self::TypeParameter(record),
             OwnerRecord::EffectParameter(record) => Self::EffectParameter(record),
             OwnerRecord::Field(record) => Self::Field(record),

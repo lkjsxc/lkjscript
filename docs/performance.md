@@ -2,6 +2,90 @@
 
 Measurements are observations, not promises.
 
+## Parameterized owned worklists (2026-10-05)
+
+The [native worklist example](../examples/owned-worklists/README.md) compares flat
+sequences and 32-element chunks through the same generic contract. Four separate
+targets build 513 elements with input `i % 17` for `i=0..512`, observe length,
+drain in LIFO order, observe the empty owner and reuse it for 17. Every complete
+result matches an independently constructed reversed-input oracle. The graph
+targets validate and partition the six-node example from the
+[guide](guides/native-owned-worklists.md), then a 513-node graph: identities 0–510
+form a reachable cycle with repeated root/edge entries, 511 is a disconnected
+self-cycle and 512 is a disconnected leaf. Complete partitions retain authored
+order under both storage witnesses.
+
+These measurements use the immutable Product05 host GNU release-profile copy,
+built with pinned Rust 1.98.0 and
+`CARGO_BUILD_JOBS=2 cargo build --release --locked -p lkjscript -p lkjscript-dev --bins`.
+The build contains the in-progress implementation based on `bd8321cf`; executable
+SHA-256 is `346b539334a4f64959131a23a7e1ddee440b3b3eac64faa639cf01f0800a4244`.
+[Status](status.md) owns subsequent accepted-source and public-release lineage.
+The exact measured bundle SHA-256 values are
+`d628766a6728098bd39a944da7bc08ed72574f2a47c2a56a5790beda37931f29`
+for worklists and
+`87289327fdf57659aa51e763ddc279a1a178e3bc4f5f196305fd330d07d30654`
+for reachability. Each pair selects different targets from the same bundle.
+
+One excluded warmup per target/workload precedes seven fresh-process samples,
+alternating flat/chunked order and carrier order. Execution uses copied products
+outside the checkout after authoring projects and transports are removed, with
+empty grants and identical literal inputs. Filesystem caches are not flushed.
+No compilation or behavioral test workload ran during measurement. Environment:
+AMD Ryzen 9 9955HX, Linux `7.2.3-arch1-2` x86-64, 32 available processing units,
+cgroup CPU `max 100000` and memory `max`. Exclusive host use is not established.
+
+| Workload / representation | Process wall median (min–max), ms | Preparation median, ms | Invocation median, ms | Result encoding median, ms |
+| --- | ---: | ---: | ---: | ---: |
+| 513 cells / flat | 106.333 (103.049–117.485) | 87.702 | 7.842 | 0.067 |
+| 513 cells / chunk32 | 200.463 (192.487–212.970) | 86.885 | 100.782 | 0.172 |
+| 513 buffers / flat | 112.610 (106.629–118.695) | 89.644 | 11.178 | 0.069 |
+| 513 buffers / chunk32 | 193.215 (183.757–221.374) | 88.785 | 90.870 | 0.184 |
+| 6-node graph / flat | 107.563 (103.182–112.440) | 94.481 | 0.550 | 0.023 |
+| 6-node graph / chunk32 | 104.097 (98.441–145.953) | 92.490 | 1.439 | 0.015 |
+| 513-node graph / flat | 175.944 (168.785–232.947) | 94.253 | 68.013 | 0.098 |
+| 513-node graph / chunk32 | 269.139 (252.483–314.419) | 91.625 | 154.372 | 0.211 |
+
+Preparation includes artifact loading and admission. Process wall includes startup,
+all stages, joined cleanup and result-file publication. Separately reported medians
+need not sum to the process median. Instruction and modeled allocation counters
+below are identical across the seven repetitions of each case.
+
+| Workload / representation | Instructions | Modeled cumulative allocated bytes | Allocation charges | Process RSS median (min–max), truncated MiB |
+| --- | ---: | ---: | ---: | ---: |
+| 513 cells / flat | 23,227 | 4,786,871 | 23,775 | 21 (19–21) |
+| 513 cells / chunk32 | 75,832 | 9,321,127 | 74,338 | 21 (20–21) |
+| 513 buffers / flat | 28,881 | 4,996,583 | 27,887 | 21 (20–22) |
+| 513 buffers / chunk32 | 81,486 | 9,530,839 | 78,450 | 21 (20–21) |
+| 6-node graph / flat | 1,347 | 2,203,474 | 1,401 | 23 (22–23) |
+| 6-node graph / chunk32 | 1,774 | 2,244,330 | 1,822 | 23 (22–23) |
+| 513-node graph / flat | 110,902 | 86,489,202 | 128,796 | 23 (20–23) |
+| 513-node graph / chunk32 | 159,989 | 91,247,826 | 176,358 | 23 (20–23) |
+
+Allocation counters are cumulative modeled work. Owned retained-byte and high-water
+heap measurements are unavailable from this public schema. RSS covers the whole
+process. The [zsh 5.9 implementation](https://github.com/zsh-users/zsh/blob/zsh-5.9/Src/jobs.c#L893)
+prints Linux `ru_maxrss / 1024` for `%M`, truncating to whole MiB; equal readings do
+not establish equal memory use. Every invocation ends with zero live handles,
+locals, operands, type bindings, call frames and transactions, zero remaining tasks
+and no cleanup failures.
+
+Chunk32 has higher invocation medians, instruction counts and modeled allocation
+in every measured case. Its lower six-node process-wall median occurs alongside
+lower preparation time and overlapping ranges. Flat storage is the practical
+baseline for these workloads; chunk32 remains a successful abstraction witness.
+Preparation dominates the flat collection and small-graph runs, providing a
+concrete workload for separately measured preparation reuse. These observations
+do not establish general storage performance, retained-memory savings or API cost.
+
+Original inputs, independent expected outputs, commands, stdout/stderr, all warmups
+and samples, environment and digests remain under
+`.artifacts/20261005-owned-contracts/measure-storage-01/` and
+`measure-reachability-01/`. Each owns `bindings.json`, `samples.json` and
+`summary.json`; the driver is retained alongside them as `measure-worklists.mjs`.
+The producing build log and executable identities remain at
+`release-tools-build-05.log` and `product05/executables.sha256` in that parent root.
+
 ## Reusable structured workers (2026-10-03)
 
 The maintained [three-package computation](../examples/parallel-work/README.md)

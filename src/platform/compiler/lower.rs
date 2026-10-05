@@ -630,7 +630,10 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
     ) -> Result<CompilationPayload, Diagnostic> {
         match record.payload {
             DeclarationPayload::OwnedContract(c) => {
-                self.compile_type_parameter_constraints(declaration, &[c.self_parameter])?;
+                let parameters = std::iter::once(c.self_parameter)
+                    .chain(c.type_parameters.iter().copied())
+                    .collect::<Vec<_>>();
+                self.compile_type_parameter_constraints(declaration, &parameters)?;
                 for ty in c.type_roots() {
                     self.tables.ty(ty)?;
                 }
@@ -639,6 +642,9 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
             DeclarationPayload::OwnedImplementation(i) => {
                 self.tables.declaration(i.contract)?;
                 self.tables.ty(i.self_type)?;
+                for ty in &i.type_arguments {
+                    self.tables.ty(*ty)?;
+                }
                 for m in &i.methods {
                     self.tables.declaration(m.function)?;
                 }
@@ -722,6 +728,9 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
             DeclarationPayload::Function(function) => {
                 for p in &function.implementation_parameters {
                     self.tables.ty(p.self_type)?;
+                    for ty in &p.type_arguments {
+                        self.tables.ty(*ty)?;
+                    }
                     self.tables.declaration(p.contract)?;
                 }
                 let mut signature = self.compile_signature(

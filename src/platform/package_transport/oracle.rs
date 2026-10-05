@@ -337,6 +337,8 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
                         11
                     } else if record.header().contract_version < 22 {
                         12
+                    } else if record.header().contract_version < 26 {
+                        13
                     } else {
                         crate::platform::package_interface::PACKAGE_INTERFACE_CONTRACT_VERSION
                     },
@@ -575,8 +577,14 @@ fn public_inventory(
         }
         let payload = match &declaration.payload {
             DeclarationPayload::OwnedContract(c) => {
-                reader.charge(1)?;
+                reader.charge(1 + c.type_parameters.len())?;
                 selected.insert(OwnerKey::TypeParameter(c.self_parameter));
+                selected.extend(
+                    c.type_parameters
+                        .iter()
+                        .copied()
+                        .map(OwnerKey::TypeParameter),
+                );
                 for method in &c.methods {
                     reader.charge(1)?;
                     if let FunctionEffect::Task {

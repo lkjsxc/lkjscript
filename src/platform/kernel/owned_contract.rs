@@ -27,6 +27,7 @@ fn admit_dependency(
 #[serde(deny_unknown_fields)]
 pub struct OwnedContract {
     pub self_parameter: TypeParameterId,
+    pub type_parameters: Vec<TypeParameterId>,
     pub methods: Vec<OwnedMethod>,
 }
 
@@ -52,6 +53,7 @@ pub struct OwnedMethodParameter {
 pub struct OwnedImplementation {
     pub contract: DeclarationReference,
     pub self_type: TypeObjectDigest,
+    pub type_arguments: Vec<TypeObjectDigest>,
     pub methods: Vec<OwnedMethodImplementation>,
 }
 
@@ -69,6 +71,7 @@ pub struct ImplementationParameter {
     pub name: Name,
     pub contract: DeclarationReference,
     pub self_type: TypeObjectDigest,
+    pub type_arguments: Vec<TypeObjectDigest>,
 }
 
 #[derive(
@@ -87,6 +90,20 @@ pub enum ImplementationOperand {
 
 impl OwnedContract {
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
+        if self.type_parameters.len() >= contract::MAXIMUM_CHILDREN
+            || self.type_parameters.contains(&self.self_parameter)
+            || self
+                .type_parameters
+                .iter()
+                .copied()
+                .collect::<BTreeSet<_>>()
+                .len()
+                != self.type_parameters.len()
+        {
+            return Err(reject(
+                "owned contract requires bounded distinct type parameters excluding Self",
+            ));
+        }
         if self.methods.is_empty() || self.methods.len() > contract::MAXIMUM_CHILDREN {
             return Err(reject(
                 "owned contract requires a bounded nonempty method inventory",
@@ -121,7 +138,8 @@ impl OwnedContract {
 
 impl OwnedImplementation {
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
-        if self.methods.is_empty()
+        if self.type_arguments.len() >= contract::MAXIMUM_CHILDREN
+            || self.methods.is_empty()
             || self.methods.len() > contract::MAXIMUM_CHILDREN
             || self.methods.windows(2).any(|p| p[0].method >= p[1].method)
         {
@@ -144,6 +162,11 @@ pub(crate) fn contract_record(
             read.owner(OwnerKey::Declaration(reference.declaration))?
             && let DeclarationPayload::OwnedContract(c) = d.payload
         {
+            if d.header.contract_version < 26
+                && requires_parameterized_generation(read, reference.package, &c)?
+            {
+                return Err(reject("structured owned contracts require Graph 26"));
+            }
             return Ok(c);
         }
     } else if let Some(PackageInterfaceRecord::Declaration(d)) = read.package_interface_owner(
@@ -151,6 +174,13 @@ pub(crate) fn contract_record(
         OwnerKey::Declaration(reference.declaration),
     )? && let PackageInterfaceDeclarationPayload::OwnedContract(c) = d.payload
     {
+        if d.header.contract_version < 26
+            && requires_parameterized_generation(read, reference.package, &c)?
+        {
+            return Err(reject(
+                "structured imported owned contracts require Graph 26",
+            ));
+        }
         return Ok(c);
     }
     Err(reject("missing exact owned contract"))
@@ -236,26 +266,169 @@ fn parameter(
     Err(reject("missing method function parameter"))
 }
 
-pub(crate) fn substitute_direct(
+pub(crate) fn validate_owned_parameter(
     read: &(impl ExpressionRead + ?Sized),
-    ty: TypeObjectDigest,
-    substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
-) -> Result<TypeObjectDigest, Diagnostic> {
+    id: TypeParameterId,
+    scope: Option<DeclarationReference>,
+) -> Result<(), Diagnostic> {
     read.validation_work()?;
-    Ok(
+    let scope =
+        scope.ok_or_else(|| reject("owned parameter requires an exact declaration scope"))?;
+    let p = if scope.package == read.package_id() {
+        match read.owner(OwnerKey::TypeParameter(id))? {
+            Some(OwnerRecord::TypeParameter(p)) => p,
+            _ => return Err(reject("missing exact owned parameter")),
+        }
+    } else {
+        match read.package_interface_owner(scope.package, OwnerKey::TypeParameter(id))? {
+            Some(PackageInterfaceRecord::TypeParameter(p)) => p,
+            _ => return Err(reject("missing exact imported owned parameter")),
+        }
+    };
+    if p.header.owner != OwnerKey::TypeParameter(id)
+        || p.declaration != scope.declaration
+        || !p.constraints.has_owned()
+    {
+        return Err(reject(
+            "owned parameter escapes its exact constrained declaration",
+        ));
+    }
+    let listed = if scope.package == read.package_id() {
+        match read.owner(OwnerKey::Declaration(scope.declaration))? {
+            Some(OwnerRecord::Declaration(d)) => match d.payload {
+                DeclarationPayload::Function(f) => {
+                    super::transfer::function_parameter_listed(read, &f.type_parameters, id)?
+                }
+                DeclarationPayload::OwnedContract(c) => {
+                    c.self_parameter == id
+                        || super::transfer::function_parameter_listed(read, &c.type_parameters, id)?
+                }
+                _ => false,
+            },
+            _ => false,
+        }
+    } else {
         match read
-            .type_object(ty)?
-            .ok_or_else(|| reject("missing contract type"))?
-            .form
+            .package_interface_owner(scope.package, OwnerKey::Declaration(scope.declaration))?
         {
-            TypeForm::TypeParameter { parameter } => {
-                substitutions.get(&parameter).copied().unwrap_or(ty)
-            }
-            _ => ty,
-        },
-    )
+            Some(PackageInterfaceRecord::Declaration(d)) => match d.payload {
+                PackageInterfaceDeclarationPayload::Function(f) => {
+                    super::transfer::function_parameter_listed(read, &f.type_parameters, id)?
+                }
+                PackageInterfaceDeclarationPayload::OwnedContract(c) => {
+                    c.self_parameter == id
+                        || super::transfer::function_parameter_listed(read, &c.type_parameters, id)?
+                }
+                _ => false,
+            },
+            _ => false,
+        }
+    };
+    if !listed {
+        return Err(reject(
+            "owned parameter is absent from its declaration's exact parameter inventory",
+        ));
+    }
+    Ok(())
 }
 
+fn validate_owned_type(
+    read: &(impl ExpressionRead + ?Sized),
+    ty: TypeObjectDigest,
+    scope: Option<DeclarationReference>,
+) -> Result<(), Diagnostic> {
+    read.validation_work()?;
+    match read
+        .type_object(ty)?
+        .ok_or_else(|| reject("missing owned contract argument type"))?
+        .form
+    {
+        TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Ok(()),
+        TypeForm::OwnedProduct { .. }
+        | TypeForm::OwnedChoice { .. }
+        | TypeForm::OwnedSequence { .. } => {
+            super::owned_product::validate_in_scope(read, ty, scope)
+        }
+        TypeForm::TypeParameter { parameter } => validate_owned_parameter(read, parameter, scope),
+        _ => Err(reject("owned contract arguments require exact Owned types")),
+    }
+}
+
+fn validate_contract_arguments(
+    read: &(impl ExpressionRead + ?Sized),
+    contract: &OwnedContract,
+    arguments: &[TypeObjectDigest],
+    scope: Option<DeclarationReference>,
+) -> Result<(), Diagnostic> {
+    if arguments.len() != contract.type_parameters.len() {
+        return Err(reject("owned contract type argument arity mismatch"));
+    }
+    // Every argument is an obligation, even when no method mentions its formal.
+    for argument in arguments {
+        validate_owned_type(read, *argument, scope)?;
+    }
+    Ok(())
+}
+
+fn contract_bindings(
+    contract: &OwnedContract,
+    self_type: TypeObjectDigest,
+    arguments: &[TypeObjectDigest],
+) -> BTreeMap<TypeParameterId, TypeObjectDigest> {
+    std::iter::once((contract.self_parameter, self_type))
+        .chain(
+            contract
+                .type_parameters
+                .iter()
+                .copied()
+                .zip(arguments.iter().copied()),
+        )
+        .collect()
+}
+
+fn substituted_equal(
+    derived: &mut super::parallel_types::AppliedTypes<'_, impl ExpressionRead + ?Sized>,
+    template: TypeObjectDigest,
+    actual: TypeObjectDigest,
+    substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+) -> Result<bool, Diagnostic> {
+    Ok(derived.substitute(template, substitutions, 0)? == actual)
+}
+
+pub(crate) fn type_parameter_ids(
+    contract: &OwnedContract,
+) -> impl Iterator<Item = TypeParameterId> + '_ {
+    std::iter::once(contract.self_parameter).chain(contract.type_parameters.iter().copied())
+}
+
+pub(crate) fn requires_parameterized_generation(
+    read: &(impl ExpressionRead + ?Sized),
+    package: PackageId,
+    contract: &OwnedContract,
+) -> Result<bool, Diagnostic> {
+    if !contract.type_parameters.is_empty() {
+        return Ok(true);
+    }
+    for method in &contract.methods {
+        for ty in method
+            .parameters
+            .iter()
+            .map(|p| p.ty)
+            .chain([method.result])
+        {
+            read.validation_work()?;
+            if super::memory::direct_in(read, package, ty)?
+                && read.type_object(ty)?.map(|t| t.form)
+                    != Some(TypeForm::TypeParameter {
+                        parameter: contract.self_parameter,
+                    })
+            {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
 /// Validate every mapping, including methods that no expression invokes.
 pub(crate) fn validate_implementation(
     read: &(impl ExpressionRead + ?Sized),
@@ -265,36 +438,19 @@ pub(crate) fn validate_implementation(
         read.validation_work()?;
     }
     implementation.validate_local()?;
-    if !matches!(
-        read.type_object(implementation.self_type)?.map(|t| t.form),
-        Some(
-            TypeForm::ByteBuffer
-                | TypeForm::OwnedI64Cell
-                | TypeForm::OwnedProduct { .. }
-                | TypeForm::OwnedChoice { .. }
-                | TypeForm::OwnedSequence { .. }
-        )
-    ) {
-        return Err(reject(
-            "implementation Self must be a closed concrete owned type",
-        ));
-    }
-    if matches!(
-        read.type_object(implementation.self_type)?.map(|t| t.form),
-        Some(
-            TypeForm::OwnedProduct { .. }
-                | TypeForm::OwnedChoice { .. }
-                | TypeForm::OwnedSequence { .. }
-        )
-    ) {
-        super::owned_product::validate(read, implementation.self_type, None)?;
-    }
+    validate_owned_type(read, implementation.self_type, None)?;
     let contract = contract_record(read, implementation.contract)?;
     validate_contract_at(read, implementation.contract, &contract)?;
+    validate_contract_arguments(read, &contract, &implementation.type_arguments, None)?;
     if implementation.methods.len() != contract.methods.len() {
         return Err(reject("missing implementation method"));
     }
-    let substitutions = BTreeMap::from([(contract.self_parameter, implementation.self_type)]);
+    let substitutions = contract_bindings(
+        &contract,
+        implementation.self_type,
+        &implementation.type_arguments,
+    );
+    let mut derived = super::parallel_types::AppliedTypes::new(read);
     for method in &contract.methods {
         read.validation_work()?;
         let mut target = None;
@@ -321,7 +477,7 @@ pub(crate) fn validate_implementation(
         for (id, expected) in f.parameters.iter().zip(&method.parameters) {
             let p = parameter(read, target.function.package, *id)?;
             if p.parent != ParameterParent::Function(target.function.declaration)
-                || p.ty != substitute_direct(read, expected.ty, &substitutions)?
+                || !substituted_equal(&mut derived, expected.ty, p.ty, &substitutions)?
                 || p.use_mode != expected.use_mode
                 || p.resource_requirement.is_some()
             {
@@ -330,7 +486,7 @@ pub(crate) fn validate_implementation(
                 ));
             }
         }
-        if f.result != substitute_direct(read, method.result, &substitutions)? {
+        if !substituted_equal(&mut derived, method.result, f.result, &substitutions)? {
             return Err(reject("implementation result mismatch"));
         }
     }
@@ -341,12 +497,19 @@ pub(crate) fn witness_contract(
     read: &(impl ExpressionRead + ?Sized),
     operand: ImplementationOperand,
     scope: Option<DeclarationId>,
-) -> Result<(DeclarationReference, TypeObjectDigest), Diagnostic> {
+) -> Result<
+    (
+        DeclarationReference,
+        TypeObjectDigest,
+        Vec<TypeObjectDigest>,
+    ),
+    Diagnostic,
+> {
     match operand {
         ImplementationOperand::Concrete { implementation } => {
             let i = implementation_record(read, implementation)?;
             validate_implementation(read, &i)?;
-            Ok((i.contract, i.self_type))
+            Ok((i.contract, i.self_type, i.type_arguments))
         }
         ImplementationOperand::Parameter {
             function,
@@ -367,7 +530,19 @@ pub(crate) fn witness_contract(
                 }
             }
             let p = found.ok_or_else(|| reject("missing implementation parameter"))?;
-            Ok((p.contract, p.self_type))
+            let contract = contract_record(read, p.contract)?;
+            validate_contract_at(read, p.contract, &contract)?;
+            if !matches!(
+                read.type_object(p.self_type)?.map(|t| t.form),
+                Some(TypeForm::TypeParameter { .. })
+            ) {
+                return Err(reject(
+                    "witness Self requires an in-scope owned type parameter",
+                ));
+            }
+            validate_owned_type(read, p.self_type, Some(function))?;
+            validate_contract_arguments(read, &contract, &p.type_arguments, Some(function))?;
+            Ok((p.contract, p.self_type, p.type_arguments.clone()))
         }
     }
 }
@@ -378,8 +553,8 @@ pub(crate) fn method_signature(
     reference: DeclarationReference,
     id: MethodId,
     scope: Option<DeclarationId>,
-) -> Result<OwnedMethod, Diagnostic> {
-    let (actual, self_type) = witness_contract(read, operand, scope)?;
+) -> Result<(OwnedMethod, BTreeMap<TypeParameterId, TypeObjectDigest>), Diagnostic> {
+    let (actual, self_type, arguments) = witness_contract(read, operand, scope)?;
     if actual != reference {
         return Err(reject("witness names a different nominal contract"));
     }
@@ -393,14 +568,9 @@ pub(crate) fn method_signature(
             break;
         }
     }
-    let mut method =
-        found.ok_or_else(|| reject("method is absent from the exact witness contract"))?;
-    let substitutions = BTreeMap::from([(c.self_parameter, self_type)]);
-    for p in &mut method.parameters {
-        p.ty = substitute_direct(read, p.ty, &substitutions)?;
-    }
-    method.result = substitute_direct(read, method.result, &substitutions)?;
-    Ok(method)
+    let method = found.ok_or_else(|| reject("method is absent from the exact witness contract"))?;
+    let substitutions = contract_bindings(&c, self_type, &arguments);
+    Ok((method, substitutions))
 }
 
 pub(crate) fn validate_application(
@@ -425,20 +595,29 @@ pub(crate) fn validate_application(
     for _ in types {
         read.validation_work()?;
     }
-    let substitutions = f
+    let substitutions: BTreeMap<_, _> = f
         .type_parameters
         .iter()
         .copied()
         .zip(types.iter().copied())
         .collect();
+    let mut derived = super::parallel_types::AppliedTypes::new(read);
     for (p, operand) in f.implementation_parameters.iter().zip(operands) {
-        let (contract, self_type) = witness_contract(read, *operand, scope)?;
+        let (contract, self_type, arguments) = witness_contract(read, *operand, scope)?;
         if contract != p.contract
-            || self_type != substitute_direct(read, p.self_type, &substitutions)?
+            || !substituted_equal(&mut derived, p.self_type, self_type, &substitutions)?
+            || arguments.len() != p.type_arguments.len()
         {
             return Err(reject(
-                "witness contract or exact Self substitution mismatch",
+                "witness contract, Self or type argument substitution mismatch",
             ));
+        }
+        for (template, actual) in p.type_arguments.iter().zip(arguments) {
+            if !substituted_equal(&mut derived, *template, actual, &substitutions)? {
+                return Err(reject(
+                    "witness exact contract argument substitution mismatch",
+                ));
+            }
         }
     }
     Ok(())
@@ -482,64 +661,62 @@ fn validate_contract_at(
         }
     }
     c.validate_local()?;
-    let p = if reference.package == read.package_id() {
-        match read.owner(OwnerKey::TypeParameter(c.self_parameter))? {
-            Some(OwnerRecord::TypeParameter(p)) => p,
-            _ => return Err(reject("missing owned Self parameter")),
-        }
-    } else {
-        match read
-            .package_interface_owner(reference.package, OwnerKey::TypeParameter(c.self_parameter))?
+    let mut names = BTreeSet::new();
+    for id in type_parameter_ids(c) {
+        read.validation_work()?;
+        let p = if reference.package == read.package_id() {
+            match read.owner(OwnerKey::TypeParameter(id))? {
+                Some(OwnerRecord::TypeParameter(p)) => p,
+                _ => return Err(reject("missing owned contract parameter")),
+            }
+        } else {
+            match read.package_interface_owner(reference.package, OwnerKey::TypeParameter(id))? {
+                Some(PackageInterfaceRecord::TypeParameter(p)) => p,
+                _ => return Err(reject("missing imported owned contract parameter")),
+            }
+        };
+        if p.header.owner != OwnerKey::TypeParameter(id)
+            || p.declaration != reference.declaration
+            || p.constraints != TypeParameterConstraints::Owned
+            || (id != c.self_parameter && p.header.contract_version < 26)
+            || !names.insert(p.name)
         {
-            Some(PackageInterfaceRecord::TypeParameter(p)) => p,
-            _ => return Err(reject("missing imported owned Self parameter")),
+            return Err(reject(
+                "contract requires distinct exact Owned parameter owners",
+            ));
         }
-    };
-    if p.declaration != reference.declaration || p.constraints != TypeParameterConstraints::Owned {
-        return Err(reject("contract requires one exact owned Self parameter"));
     }
     for method in &c.methods {
         let mut suffix = false;
         for parameter in &method.parameters {
             read.validation_work()?;
-            let form = read
-                .type_object(parameter.ty)?
-                .ok_or_else(|| reject("missing method parameter type"))?
-                .form;
-            if form
-                == (TypeForm::TypeParameter {
-                    parameter: c.self_parameter,
-                })
-            {
+            if super::memory::direct_in(read, reference.package, parameter.ty)? {
+                validate_owned_type(read, parameter.ty, Some(reference))?;
                 suffix = true;
                 if parameter.use_mode == ParameterUse::Unrestricted {
-                    return Err(reject("Self requires borrow or consume"));
+                    return Err(reject("owned method parameters require borrow or consume"));
                 }
                 if !matches!(method.effect, FunctionEffect::Pure)
                     && parameter.use_mode != ParameterUse::Consume
                 {
-                    return Err(reject("task method Self parameters must consume ownership"));
+                    return Err(reject(
+                        "task method owned parameters must consume ownership",
+                    ));
                 }
             } else if suffix
                 || parameter.use_mode != ParameterUse::Unrestricted
                 || !ordinary_closed(read, parameter.ty)?
             {
                 return Err(reject(
-                    "method parameters require ordinary closed values followed by direct owned Self",
+                    "method parameters require ordinary closed values followed by scoped owned types",
                 ));
             }
         }
-        if read
-            .type_object(method.result)?
-            .ok_or_else(|| reject("missing method result type"))?
-            .form
-            != (TypeForm::TypeParameter {
-                parameter: c.self_parameter,
-            })
-            && !ordinary_closed(read, method.result)?
-        {
+        if super::memory::direct_in(read, reference.package, method.result)? {
+            validate_owned_type(read, method.result, Some(reference))?;
+        } else if !ordinary_closed(read, method.result)? {
             return Err(reject(
-                "method result requires direct Self or closed ordinary type",
+                "method result requires scoped owned or closed ordinary type",
             ));
         }
     }
@@ -859,6 +1036,23 @@ pub(crate) fn validate_parameters(
                 "witness Self requires exact owned generic constraint",
             ));
         }
+        validate_owned_parameter(
+            read,
+            parameter,
+            Some(DeclarationReference {
+                package: read.package_id(),
+                declaration,
+            }),
+        )?;
+        validate_contract_arguments(
+            read,
+            &contract,
+            &p.type_arguments,
+            Some(DeclarationReference {
+                package: read.package_id(),
+                declaration,
+            }),
+        )?;
     }
     Ok(())
 }

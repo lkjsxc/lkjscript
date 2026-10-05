@@ -85,14 +85,29 @@ impl TaskApplication {
         if bindings.len() != types.len() {
             return Err(reject());
         }
-        for (parameter, (_, self_type)) in f
+        for (parameter, application) in f
             .implementation_parameters
             .iter()
             .zip(f.implementation_arguments.iter())
         {
             work.visit(0)?;
-            if resolve_type(program, parameter.self_type, &bindings, control)? != *self_type {
+            if resolve_type(program, parameter.self_type, &bindings, control)?
+                != application.self_type
+                || parameter.type_arguments.len() != application.type_arguments.len()
+            {
                 return Err(reject());
+            }
+            for (expected, actual) in parameter
+                .type_arguments
+                .iter()
+                .zip(application.type_arguments.iter())
+            {
+                work.visit(0)?;
+                if resolve_type(program, *expected, &bindings, control)? != *actual
+                    || !validate_type(program, *actual, 0, &mut work)?
+                {
+                    return Err(reject());
+                }
             }
         }
         reserve(super::super::super::value::collection_storage_bytes(

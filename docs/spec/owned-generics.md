@@ -13,8 +13,9 @@ whose exact element type satisfies Owned,
 or an in-scope Owned parameter while checking
 a generic body. Ordinary and CaptureSafe parameters cannot receive an owned type,
 even when the parameter is unused, its container is empty, or the call is in an
-untaken branch. Owned constraints belong to exact graph functions and to the one
-Self parameter of an owned contract. Graph functions may compose these parameters
+untaken branch. Owned constraints belong to exact graph functions and to Self and
+the ordered additional parameters of an
+[owned contract](owned-contract-parameters.md). Graph functions may compose them
 with explicit effect and requirement schemes under
 [owned effect applications](owned-effects.md). Named tasks may use them under
 [same-task transfer](owned-task-transfers.md).
@@ -84,8 +85,9 @@ cannot manufacture or retain these tokens.
 ## Nominal contracts and exact static operands
 
 An `OwnedContract` declaration embeds distinct method identities and names, one
-Self type-parameter identity with the Owned constraint, and each method's ordered
-parameter types/use modes, result, callable kind and exact effect row. A method is
+distinguished Self type-parameter identity, an ordered list of additional Owned
+parameters, and each method's ordered parameter types/use modes, result, callable
+kind and exact effect row. A method is
 pure or a named task with a closed row of concrete requirement identities. An empty
 task row remains a task. Methods have no own generic, effect or requirement scheme.
 Ordinary signature types must be closed and first order; this
@@ -95,15 +97,20 @@ Closed recursive, mutual and nested nominal data remain first order. The structu
 property is proved under each nominal declaration's ordinary parameter assumptions,
 with every actual argument independently checked in its enclosing scope. Even a
 phantom argument must be closed and ordinary; recursive binding reuse cannot erase it.
-Direct Self parameters form the final affine suffix. Pure methods may borrow or
-consume Self; every task Self parameter must consume, including unused parameters.
-A result is direct Self or an ordinary closed type. A method need not mention Self,
-but the exact Self owner and constraint remain mandatory.
+Owned parameters form the final affine suffix. Pure methods may borrow or consume
+them; every task owned parameter must consume, including unused parameters.
+[Parameterized contracts](owned-contract-parameters.md) permit finite owned
+products, choices and sequences containing exact contract parameters in method
+arguments and results. A result may also be ordinary closed data. A method need
+not mention Self or an additional parameter, but their exact owners, constraints
+and ordered application remain mandatory.
 
-An `OwnedImplementation` declaration names one exact contract and concrete owned
-Self, and supplies a complete, unique, canonically ordered method map. Every map
-entry selects an exact visible monomorphic graph function with matching ordered
-parameter types, modes, result, callable kind and effect row after Self substitution.
+An `OwnedImplementation` declaration names one exact contract, concrete owned
+Self and ordered additional owned arguments, and supplies a complete, unique,
+canonically ordered method map. Every entry selects an exact visible monomorphic
+graph function with matching ordered
+parameter types, modes, result, callable kind and effect row after simultaneous
+structural substitution of Self and every contract argument.
 The row is equal, not an inferred upper bound: a pure implementation cannot silently
 replace an empty-row task, and an implementation cannot add, omit or substitute an
 exact requirement. All methods are checked even when unused. Closed externals are
@@ -112,8 +119,9 @@ Imported contracts, types and methods must belong to the declared exact visible
 package closure.
 
 A function may embed named implementation parameters with distinct identities,
-an exact contract and an in-scope Owned type parameter as Self. An implementation
-call supplies one explicit operand per parameter. An operand either selects an
+an exact contract, an in-scope Owned type parameter as Self and ordered owned
+arguments in its exact function scope. An implementation call supplies one
+explicit operand per parameter. An operand either selects an
 exact implementation declaration or forwards an exact witness parameter from its
 own lexical function. A method call selects a method identity in the witness's
 exact nominal contract. There is no implicit implementation search, overload
@@ -128,7 +136,8 @@ distinguishable through package transport, preparation and detached artifacts.
 
 Preparation closes finite applications by exact function and ordered selected
 implementation references; existing type/effect closure machinery checks type
-applications separately. The resulting Self must equal the actual type binding.
+applications separately. The resulting Self and every ordered contract argument
+must equal the complete witness application after function substitution.
 An unbound template is not callable or capturable through ordinary entry. Witness
 edges participate in closure and recursion analysis. Tail forwarding is derived
 after witness calls have selected their exact graph targets. An active child-read
@@ -162,6 +171,10 @@ Public discovery advertises the actual generations.
 Regeneration of maintained artifacts preserves accepted meaning HEADs.
 The [child-borrow contract](owned-borrows.md#encodings-and-evidence) owns subsequent
 scope-operation, borrowed-binding and derived-layout cuts.
+The [parameterized contract](owned-contract-parameters.md#encodings-and-boundaries)
+owns the graph 26 and interface 14 application-layout cut and structural method
+substitution. The earlier generation paragraphs describe their historical
+increments, not current derived-artifact execution permission.
 
 Complete admission includes unused arguments, methods and unreachable expressions.
 Canonical source, code and runtime metadata must agree, and independent affine

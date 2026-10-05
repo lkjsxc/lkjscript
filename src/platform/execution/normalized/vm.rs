@@ -2387,7 +2387,7 @@ impl Machine<'_> {
         if function.implementation_parameters.len() != function.implementation_arguments.len() {
             return Err(type_error("unbound static implementation template"));
         }
-        for (parameter, (_, self_type)) in function
+        for (parameter, application) in function
             .implementation_parameters
             .iter()
             .zip(function.implementation_arguments.iter())
@@ -2405,10 +2405,33 @@ impl Machine<'_> {
                     "implementation Self has no exact generic binding",
                 ));
             };
-            if type_arguments_by_parameter.get(type_parameter) != Some(self_type) {
+            if type_arguments_by_parameter.get(type_parameter) != Some(&application.self_type) {
                 return Err(type_error(
                     "implementation Self disagrees with actual type application",
                 ));
+            }
+            if parameter.type_arguments.len() != application.type_arguments.len() {
+                return Err(type_error(
+                    "implementation contract type argument arity mismatch",
+                ));
+            }
+            for (expected, actual) in parameter
+                .type_arguments
+                .iter()
+                .zip(application.type_arguments.iter())
+            {
+                if resolve_runtime_type(
+                    self.program,
+                    *expected,
+                    &type_arguments_by_parameter,
+                    self.control,
+                    "implementation contract type argument is unresolved",
+                )? != *actual
+                {
+                    return Err(type_error(
+                        "implementation contract type argument disagrees with actual type application",
+                    ));
+                }
             }
         }
         self.validate_call_resources(function, &type_arguments_by_parameter, &arguments)?;

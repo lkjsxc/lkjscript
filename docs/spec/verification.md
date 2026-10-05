@@ -1807,7 +1807,8 @@ and empty-effect tasks. The independent source interpreter and symbolic memory
 oracle derive these checks from canonical records, not the production resolver or
 lowered witness specialization. Consistently rehashed source/code/metadata attacks
 must still fail affine admission. VM admission independently checks actual Self
-bindings, exact token origin/type, raw ingress and cleanup. Both carriers require
+and complete ordered contract bindings, exact token origin/type, raw ingress and
+cleanup. Both carriers require
 lexical, trap, cancellation, quota and adapter-boundary cleanup evidence; user methods
 cannot implement cleanup.
 
@@ -1818,6 +1819,53 @@ owner generations 14–17; new layout generations and validator identity invalid
 old derived execution proof. Rebuild maintained artifacts through public owners
 without changing accepted meaning HEADs. The integrator owns dependency-complete
 acceptance after implementation source stabilizes.
+
+## Parameterized owned-contract obligations
+
+The [parameterized contract](owned-contract-parameters.md) requires a symbolic
+Worklist library checked and exported before any concrete storage implementation
+exists. Fresh public authoring must preserve parameter identities and order,
+complete structural signatures, exact witness arguments, unchanged draft re-entry
+and reviewed identity-preserving edits. Use three independently admitted packages
+for the generic library, concrete carriers and consumers; remove source projects
+and transports before copied-executable artifact execution.
+
+Exercise flat sequences and 32-element chunked nested sequences for both
+OwnedI64Cell and ByteBuffer. Compare independently expected complete build, drain,
+reuse and transfer outputs, including transfer between different storage types.
+Cover empty/singleton inputs, 31/32/33, 64/65 and 513/1,025 elements, interleaved
+push/pop and empty-owner reuse. Record preparation and execution time separately
+from allocation and retained-storage observations; retain unfavorable results.
+
+The native provisional graph tool must validate the entire authored graph,
+including unreachable nodes. Accept cycles, self-edges and repeated roots/edges;
+reject duplicate identities before missing roots before missing successors, each
+in authored order. Return reachable and unreachable identities in original node
+order. The graph `10->[20,30],20->[40],30->[40],40->[20],50->[50],60->[]`, rooted at
+10, must yield `[10,20,30,40]` and `[50,60]` under both storage witnesses. Cover
+disconnected cycles, signed-ID extremes, repeated scheduling and invalid
+unreachable nodes. Prove exact-fit and one-over limits of 4,096 nodes, 4,096 roots
+and 16,384 edges, with capacity refusal distinct from invalid input.
+
+Reject wrong contract argument arity/order, foreign parameters, invalid ownership
+constraints, mismatched witnesses, double consumption, escaping loans and wrong
+callable kinds/effects. Validate arguments and methods even when unused and all
+untaken syntax; rejected proposals preserve accepted HEAD. Structural substitution
+must use original signatures simultaneously and retain all derived type objects.
+
+Production admission, source-reference validation and the independent ownership
+oracle must derive complete applications independently. Consistently rehashed
+transport and artifact attacks must reject changed argument vectors, structural
+types, method bindings and erased ownership obligations. A neutral reconstructed
+artifact remains admissible. Cleanup checks cover traps, cancellation and
+reservation refusal, zero remaining owned storage/loans and successful subsequent
+invocation.
+
+Regenerate maintained packages, discovery and bundles through supported product
+operations; prove cold reproduction before dependency-complete fresh acceptance.
+Source acceptance, exact finalized-byte acceptance and public verification remain
+separate. The native graph tool is a language witness; production compiler
+integration is not established by executing it successfully.
 
 ## Dynamic owned-sequence obligations
 

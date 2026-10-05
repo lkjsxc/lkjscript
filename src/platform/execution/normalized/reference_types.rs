@@ -60,7 +60,7 @@ fn index_node<T>(allocated: &mut usize) -> Result<(), ExecutionError> {
     allocate::<usize>(allocated, 3)
 }
 
-impl Closure<'_> {
+impl<'a> Closure<'a> {
     fn sequence(
         &mut self,
         ty: TypeObjectDigest,
@@ -162,6 +162,84 @@ impl Closure<'_> {
         }
     }
 
+    fn witness_application(
+        &mut self,
+        operand: crate::platform::kernel::ImplementationOperand,
+        scope: Option<DeclarationReference>,
+        bindings: &Bindings,
+    ) -> Result<
+        (
+            DeclarationReference,
+            TypeObjectDigest,
+            Vec<TypeObjectDigest>,
+        ),
+        ExecutionError,
+    > {
+        use crate::platform::kernel::ImplementationOperand;
+        let (contract, self_type, arguments) = match operand {
+            ImplementationOperand::Concrete { implementation } => {
+                let OwnerRecord::Declaration(owner) = self.owner(
+                    implementation.package,
+                    OwnerKey::Declaration(implementation.declaration),
+                )?
+                else {
+                    return Err(failure());
+                };
+                let DeclarationPayload::OwnedImplementation(selected) = &owner.payload else {
+                    return Err(failure());
+                };
+                allocate::<TypeObjectDigest>(&mut self.allocated, selected.type_arguments.len())?;
+                (
+                    selected.contract,
+                    selected.self_type,
+                    selected.type_arguments.clone(),
+                )
+            }
+            ImplementationOperand::Parameter {
+                function,
+                parameter,
+            } => {
+                if scope != Some(function) {
+                    return Err(failure());
+                }
+                let OwnerRecord::Declaration(owner) = self.owner(
+                    function.package,
+                    OwnerKey::Declaration(function.declaration),
+                )?
+                else {
+                    return Err(failure());
+                };
+                let DeclarationPayload::Function(parent) = &owner.payload else {
+                    return Err(failure());
+                };
+                let formal = parent
+                    .implementation_parameters
+                    .iter()
+                    .find(|formal| formal.id == parameter)
+                    .ok_or_else(failure)?;
+                allocate::<TypeObjectDigest>(&mut self.allocated, formal.type_arguments.len())?;
+                (
+                    formal.contract,
+                    formal.self_type,
+                    formal.type_arguments.clone(),
+                )
+            }
+        };
+        let empty = Bindings::new();
+        let bindings = if matches!(operand, ImplementationOperand::Concrete { .. }) {
+            &empty
+        } else {
+            bindings
+        };
+        let self_type = self.identity(self_type, bindings, 0)?;
+        allocate::<TypeObjectDigest>(&mut self.allocated, arguments.len())?;
+        let arguments = arguments
+            .into_iter()
+            .map(|ty| self.identity(ty, bindings, 0))
+            .collect::<Result<_, _>>()?;
+        Ok((contract, self_type, arguments))
+    }
+
     fn parallel_witnesses(
         &mut self,
         function: &crate::platform::kernel::FunctionDeclaration,
@@ -170,59 +248,74 @@ impl Closure<'_> {
         scope: Option<DeclarationReference>,
         caller_bindings: &Bindings,
     ) -> Result<(), ExecutionError> {
+        if function.implementation_parameters.len() != operands.len() {
+            return Err(failure());
+        }
         for (formal, operand) in function.implementation_parameters.iter().zip(operands) {
             self.tick()?;
             let expected = self.identity(formal.self_type, child_bindings, 0)?;
-            let (contract, actual) = match *operand {
-                crate::platform::kernel::ImplementationOperand::Concrete { implementation } => {
-                    let OwnerRecord::Declaration(owner) = self
-                        .owner(
-                            implementation.package,
-                            OwnerKey::Declaration(implementation.declaration),
-                        )?
-                        .clone()
-                    else {
-                        return Err(failure());
-                    };
-                    let DeclarationPayload::OwnedImplementation(selected) = owner.payload else {
-                        return Err(failure());
-                    };
-                    (selected.contract, selected.self_type)
+            let (contract, actual, arguments) =
+                self.witness_application(*operand, scope, caller_bindings)?;
+            if contract != formal.contract
+                || actual != expected
+                || formal.type_arguments.len() != arguments.len()
+            {
+                return Err(failure());
+            }
+            for (expected, actual) in formal.type_arguments.iter().zip(arguments) {
+                if self.identity(*expected, child_bindings, 0)? != actual {
+                    return Err(failure());
                 }
-                crate::platform::kernel::ImplementationOperand::Parameter {
-                    function,
-                    parameter,
-                } => {
-                    if scope != Some(function) {
-                        return Err(failure());
-                    }
-                    let OwnerRecord::Declaration(owner) = self
-                        .owner(
-                            function.package,
-                            OwnerKey::Declaration(function.declaration),
-                        )?
-                        .clone()
-                    else {
-                        return Err(failure());
-                    };
-                    let DeclarationPayload::Function(parent) = owner.payload else {
-                        return Err(failure());
-                    };
-                    let formal = parent
-                        .implementation_parameters
-                        .iter()
-                        .find(|formal| formal.id == parameter)
-                        .ok_or_else(failure)?;
-                    (
-                        formal.contract,
-                        self.identity(formal.self_type, caller_bindings, 0)?,
-                    )
-                }
-            };
-            if contract != formal.contract || actual != expected {
+            }
+        }
+        Ok(())
+    }
+
+    fn method_signature(
+        &mut self,
+        witness: crate::platform::kernel::ImplementationOperand,
+        contract: DeclarationReference,
+        method: crate::platform::semantic_id::MethodId,
+        scope: Option<DeclarationReference>,
+        bindings: &Bindings,
+    ) -> Result<(), ExecutionError> {
+        let (selected_contract, self_type, arguments) =
+            self.witness_application(witness, scope, bindings)?;
+        if selected_contract != contract {
+            return Err(failure());
+        }
+        let OwnerRecord::Declaration(owner) = self.owner(
+            contract.package,
+            OwnerKey::Declaration(contract.declaration),
+        )?
+        else {
+            return Err(failure());
+        };
+        let DeclarationPayload::OwnedContract(contract) = &owner.payload else {
+            return Err(failure());
+        };
+        if contract.type_parameters.len() != arguments.len() {
+            return Err(failure());
+        }
+        let mut substitutions = Bindings::new();
+        index_node::<(TypeParameterId, TypeObjectDigest)>(&mut self.allocated)?;
+        substitutions.insert(contract.self_parameter, self_type);
+        for (parameter, argument) in contract.type_parameters.iter().copied().zip(arguments) {
+            self.tick()?;
+            index_node::<(TypeParameterId, TypeObjectDigest)>(&mut self.allocated)?;
+            if substitutions.insert(parameter, argument).is_some() {
                 return Err(failure());
             }
         }
+        let method = contract
+            .methods
+            .iter()
+            .find(|candidate| candidate.id == method)
+            .ok_or_else(failure)?;
+        for parameter in &method.parameters {
+            self.identity(parameter.ty, &substitutions, 0)?;
+        }
+        self.identity(method.result, &substitutions, 0)?;
         Ok(())
     }
 
@@ -295,12 +388,16 @@ impl Closure<'_> {
         Ok(())
     }
 
-    fn owner(&mut self, package: PackageId, key: OwnerKey) -> Result<&OwnerRecord, ExecutionError> {
+    fn owner(
+        &mut self,
+        package: PackageId,
+        key: OwnerKey,
+    ) -> Result<&'a OwnerRecord, ExecutionError> {
         self.tick()?;
-        self.snapshots
-            .get(&package)
-            .and_then(|snapshot| snapshot.owners.get(&key))
-            .ok_or_else(failure)
+        // Snapshot owners outlive this derivation. Borrow their canonical metadata
+        // directly so temporary declaration clones cannot escape allocation accounting.
+        let snapshot = *self.snapshots.get(&package).ok_or_else(failure)?;
+        snapshot.owners.get(&key).ok_or_else(failure)
     }
 
     fn identity(
@@ -488,7 +585,56 @@ impl Closure<'_> {
                 }
                 self.types.entry(ty).or_insert(object);
             }
+            if let ExpressionOperation::ImplementationCall {
+                function,
+                type_arguments,
+                implementations,
+                ..
+            } = &record.operation
+            {
+                let OwnerRecord::Declaration(declaration) = self
+                    .owner(
+                        function.package,
+                        OwnerKey::Declaration(function.declaration),
+                    )?
+                    .clone()
+                else {
+                    return Err(failure());
+                };
+                let DeclarationPayload::Function(signature) = declaration.payload else {
+                    return Err(failure());
+                };
+                if signature.type_parameters.len() != type_arguments.len() {
+                    return Err(failure());
+                }
+                allocate::<(TypeParameterId, TypeObjectDigest)>(
+                    &mut self.allocated,
+                    type_arguments.len(),
+                )?;
+                let mut child_bindings = Bindings::new();
+                for (parameter, argument) in signature.type_parameters.iter().zip(type_arguments) {
+                    let actual = self.identity(*argument, bindings, 0)?;
+                    if child_bindings.insert(*parameter, actual).is_some() {
+                        return Err(failure());
+                    }
+                }
+                self.parallel_witnesses(
+                    &signature,
+                    &child_bindings,
+                    implementations,
+                    scope,
+                    bindings,
+                )?;
+            }
             match record.operation {
+                ExpressionOperation::MethodCall {
+                    witness,
+                    contract,
+                    method,
+                    ..
+                } => {
+                    self.method_signature(witness, contract, method, scope, bindings)?;
+                }
                 ExpressionOperation::Parallel { left, right } => {
                     if !task_context {
                         return Err(failure());
@@ -910,6 +1056,12 @@ pub(super) fn complete(
                             }
                             closure.symbolic = true;
                             closure.identity(function.result, &bindings, 0)?;
+                            for parameter in &function.implementation_parameters {
+                                closure.identity(parameter.self_type, &bindings, 0)?;
+                                for argument in &parameter.type_arguments {
+                                    closure.identity(*argument, &bindings, 0)?;
+                                }
+                            }
                             for parameter in &function.parameters {
                                 let OwnerRecord::Parameter(parameter) = closure
                                     .owner(package, OwnerKey::Parameter(*parameter))?
@@ -993,26 +1145,35 @@ pub(super) fn complete(
             return Err(failure());
         };
         let task_context = matches!(&declaration.payload, DeclarationPayload::Function(function) if matches!(function.effect, crate::platform::kernel::FunctionEffect::Task { .. }));
-        let (parameters, types, effect_parameters, requirement_parameters, result, body) =
-            match declaration.payload {
-                DeclarationPayload::Function(function) => (
-                    function.parameters,
-                    function.type_parameters,
-                    function.effect_parameters,
-                    function.requirement_parameters,
-                    function.result,
-                    Some(function.body),
-                ),
-                DeclarationPayload::External(function) => (
-                    function.parameters,
-                    function.type_parameters,
-                    Vec::new(),
-                    Vec::new(),
-                    function.result,
-                    None,
-                ),
-                _ => return Err(failure()),
-            };
+        let (
+            parameters,
+            types,
+            effect_parameters,
+            requirement_parameters,
+            implementations,
+            result,
+            body,
+        ) = match declaration.payload {
+            DeclarationPayload::Function(function) => (
+                function.parameters,
+                function.type_parameters,
+                function.effect_parameters,
+                function.requirement_parameters,
+                function.implementation_parameters,
+                function.result,
+                Some(function.body),
+            ),
+            DeclarationPayload::External(function) => (
+                function.parameters,
+                function.type_parameters,
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                function.result,
+                None,
+            ),
+            _ => return Err(failure()),
+        };
         if types.len() != arguments.len()
             || effect_parameters.len() != effects.len()
             || requirement_parameters.len() != requirements.len()
@@ -1059,6 +1220,12 @@ pub(super) fn complete(
             })
             .collect();
         closure.identity(result, &bindings, 0)?;
+        for parameter in implementations {
+            closure.identity(parameter.self_type, &bindings, 0)?;
+            for argument in parameter.type_arguments {
+                closure.identity(argument, &bindings, 0)?;
+            }
+        }
         for parameter in parameters {
             let OwnerRecord::Parameter(parameter) = closure
                 .owner(function.package, OwnerKey::Parameter(parameter))?

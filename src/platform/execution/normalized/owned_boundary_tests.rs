@@ -182,13 +182,17 @@ fn owned_vm_rechecks_closed_witness_self_and_binding_arity() {
             if function
                 .implementation_arguments
                 .iter()
-                .any(|(i, _)| *i == scalar)
+                .any(|application| application.implementation == scalar)
             {
                 changed += 1;
                 function.implementation_arguments = if missing {
                     Arc::from([])
                 } else {
-                    Arc::from([(scalar, i64_type)])
+                    Arc::from([super::super::prepare::NormalizedImplementationArgument {
+                        implementation: scalar,
+                        self_type: i64_type,
+                        type_arguments: Arc::from([]),
+                    }])
                 };
             }
         }

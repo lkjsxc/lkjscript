@@ -44,24 +44,17 @@ fn strict_artifact_rejects_fully_rehashed_expanding_canonical_applications() {
                 .write_all(&current)
                 .unwrap();
         }
-        let retained = match name {
-            "direct" => include_bytes!(
-                "../../../tests/fixtures/finite-callable-compiler25/expanding-direct.lkja"
-            )
-            .as_slice(),
-            "named" => include_bytes!(
-                "../../../tests/fixtures/finite-callable-compiler25/expanding-named.lkja"
-            )
-            .as_slice(),
-            _ => unreachable!(),
-        };
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/finite-callable-compiler26")
+            .join(format!("expanding-{name}.lkja"));
         let error = load_artifact(&current).unwrap_err();
         assert_eq!(error.code, "kernel_callable_expansion", "{name}: {error:?}");
         assert_eq!(error.class, crate::platform::DiagnosticClass::Semantic);
         println!("strict-expanding-artifact {name}: {}", error.code);
-        expected_files.push((name, current, retained));
+        expected_files.push((name, path, current));
     }
-    for (name, current, retained) in expected_files {
+    for (name, path, current) in expected_files {
+        let retained = std::fs::read(path).expect("retained current-envelope rejection fixture");
         assert!(
             current == retained,
             "current {name} fixture must preserve exact source and instructions"
@@ -264,6 +257,7 @@ fn replace_unit_checked(
         23 => (*b"LKJCUN23", "lkjscript.compiler-unit-envelope.v23"),
         24 => (*b"LKJCUN24", "lkjscript.compiler-unit-envelope.v24"),
         25 => (*b"LKJCUN25", "lkjscript.compiler-unit-envelope.v25"),
+        26 => (*b"LKJCUN26", "lkjscript.compiler-unit-envelope.v26"),
         other => panic!("unexpected forged-unit generation {other}"),
     };
     let bytes = crate::platform::packed::encode(

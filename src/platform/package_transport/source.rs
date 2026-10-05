@@ -324,6 +324,8 @@ impl PackageContainer {
                     != Some(crate::platform::kernel::contract::OWNED_EFFECT_OWNER_MAGIC.as_slice())
                 && object.get(..8)
                     != Some(crate::platform::kernel::contract::BORROW_OWNER_MAGIC.as_slice())
+                && object.get(..8)
+                    != Some(crate::platform::kernel::contract::SEQUENCE_OWNER_MAGIC.as_slice())
             {
                 return Err(package_error(
                     DiagnosticClass::Source,

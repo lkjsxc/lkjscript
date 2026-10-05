@@ -56,10 +56,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-33";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 33;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-29";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 29;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-34";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 34;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-30";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 30;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -2848,6 +2848,56 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
         ],
     },
     CompactEdgeDescriptor {
+        name: "owned.contract-parameter",
+        parent: "owned-contract",
+        child: "additional-type-parameter",
+        fields: &[
+            CompactFormField {
+                form: "owned.contract-parameter",
+                name: "parent",
+                required: true,
+                syntax: "$NAME|%NAME",
+            },
+            CompactFormField {
+                form: "owned.contract-parameter",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "owned.contract-parameter",
+                name: "parameter",
+                required: true,
+                syntax: "$NAME|typeparam_ID",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
+        name: "owned.type-argument",
+        parent: "owned-implementation-or-witness",
+        child: "type",
+        fields: &[
+            CompactFormField {
+                form: "owned.type-argument",
+                name: "parent",
+                required: true,
+                syntax: "$NAME|%NAME",
+            },
+            CompactFormField {
+                form: "owned.type-argument",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "owned.type-argument",
+                name: "type",
+                required: true,
+                syntax: "type-reference",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
         name: "owned.method",
         parent: "owned-contract",
         child: "method",
@@ -2963,6 +3013,12 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
         parent: "set.implementations",
         child: "implementation-parameter",
         fields: &[
+            CompactFormField {
+                form: "owned.witness",
+                name: "as",
+                required: false,
+                syntax: "%NAME",
+            },
             CompactFormField {
                 form: "owned.witness",
                 name: "parent",
@@ -3800,14 +3856,37 @@ impl Decoder {
                 "owned.parameter" => {
                     self.insert_indexed_record_edge(record, &["parent", "index", "type", "use"])?
                 }
+                "owned.contract-parameter" => {
+                    self.insert_indexed_record_edge(record, &["parent", "index", "parameter"])?
+                }
+                "owned.type-argument" => {
+                    self.insert_indexed_record_edge(record, &["parent", "index", "type"])?
+                }
                 "owned.mapping" => self.insert_indexed_record_edge(
                     record,
                     &["parent", "index", "method", "function"],
                 )?,
-                "owned.witness" => self.insert_indexed_record_edge(
-                    record,
-                    &["parent", "index", "id", "name", "contract", "self"],
-                )?,
+                "owned.witness" => {
+                    if let Some(label) = optional(&record, "as") {
+                        validate_local_label(&record, "as", label, '%')?;
+                        if self
+                            .fragments
+                            .insert(label.to_owned(), record.location.clone())
+                            .is_some()
+                        {
+                            return Err(field_error(
+                                &record,
+                                "as",
+                                "change_fragment_duplicate",
+                                format!("fragment label '{label}' is defined more than once"),
+                            ));
+                        }
+                    }
+                    self.insert_indexed_record_edge(
+                        record,
+                        &["parent", "index", "as", "id", "name", "contract", "self"],
+                    )?;
+                }
                 "implementation.argument" => {
                     self.insert_indexed_record_edge(record, &["parent", "index", "implementation"])?
                 }
@@ -4245,6 +4324,11 @@ impl Decoder {
             }),
             CompactChangeOperation::CreateOwnedContract => {
                 let parent = symbol(record, "as")?;
+                let type_parameters = self
+                    .ordered_record_edges("owned.contract-parameter", &parent)?
+                    .iter()
+                    .map(|edge| self.parse_type_parameter_reference(&edge.record, "parameter"))
+                    .collect::<Result<Vec<_>, _>>()?;
                 let mut methods = Vec::new();
                 for edge in self.ordered_record_edges("owned.method", &parent)? {
                     let method = &edge.record;
@@ -4274,11 +4358,13 @@ impl Decoder {
                     name: parse_name(record, "name")?,
                     visibility: parse_visibility(record, "visibility")?,
                     self_type: self.decode_type(required(record, "self")?)?,
+                    type_parameters,
                     methods,
                 })
             }
             CompactChangeOperation::CreateOwnedImplementation => {
                 let parent = symbol(record, "as")?;
+                let type_arguments = self.decode_owned_type_arguments(&parent)?;
                 let mut methods = Vec::new();
                 for edge in self.ordered_record_edges("owned.mapping", &parent)? {
                     methods.push((
@@ -4293,6 +4379,7 @@ impl Decoder {
                     visibility: parse_visibility(record, "visibility")?,
                     contract: self.parse_declaration_reference(record, "contract")?,
                     self_type: self.decode_type(required(record, "self")?)?,
+                    type_arguments,
                     methods,
                 })
             }
@@ -4306,6 +4393,10 @@ impl Decoder {
                         name: parse_name(p, "name")?,
                         contract: self.parse_declaration_reference(p, "contract")?,
                         self_type: self.decode_type(required(p, "self")?)?,
+                        type_arguments: match optional(p, "as") {
+                            Some(label) => self.decode_owned_type_arguments(label)?,
+                            None => Vec::new(),
+                        },
                     });
                 }
                 Ok(AuthoredChange::SetImplementationParameters {
@@ -5663,6 +5754,16 @@ impl Decoder {
             .insert((operation.to_owned(), parent.to_owned()));
         Ok(edges)
     }
+
+    fn decode_owned_type_arguments(
+        &mut self,
+        parent: &str,
+    ) -> Result<Vec<AuthoredType>, Diagnostic> {
+        self.ordered_record_edges("owned.type-argument", parent)?
+            .iter()
+            .map(|edge| self.decode_type(required(&edge.record, "type")?))
+            .collect()
+    }
 }
 
 fn is_change_precondition(operation: &str) -> bool {
@@ -5787,6 +5888,10 @@ fn commitment_codec_identity(intent: &[u8]) -> &'static str {
         "lkjscript-authored-change-codec-26"
     } else if intent.starts_with(b"LKJACR27") {
         "lkjscript-authored-change-codec-27"
+    } else if intent.starts_with(b"LKJACR28") {
+        "lkjscript-authored-change-codec-28"
+    } else if intent.starts_with(b"LKJACR29") {
+        "lkjscript-authored-change-codec-29"
     } else {
         // Retain the existing fallback; do not infer identities from unknown/future magics.
         AUTHORED_CHANGE_CODEC_IDENTITY

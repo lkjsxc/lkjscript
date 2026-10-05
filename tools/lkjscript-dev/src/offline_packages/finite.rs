@@ -124,7 +124,7 @@ const HOSTILE: &[RejectionFixture] = &[
         "direct",
         include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../tests/fixtures/finite-callable-compiler25/expanding-direct.lkja"
+            "/../../tests/fixtures/finite-callable-compiler26/expanding-direct.lkja"
         )),
         "semantic",
         "kernel_callable_expansion",
@@ -133,7 +133,7 @@ const HOSTILE: &[RejectionFixture] = &[
         "named",
         include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../tests/fixtures/finite-callable-compiler25/expanding-named.lkja"
+            "/../../tests/fixtures/finite-callable-compiler26/expanding-named.lkja"
         )),
         "semantic",
         "kernel_callable_expansion",

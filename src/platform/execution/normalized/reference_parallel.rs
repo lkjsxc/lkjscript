@@ -280,7 +280,7 @@ impl ReferenceState<'_> {
                     && f.implementation_arguments.len() == task.implementations.len()
                     && f.implementation_arguments
                         .iter()
-                        .map(|(reference, _)| reference)
+                        .map(|argument| &argument.implementation)
                         .eq(task.implementations.iter())
             })
             .ok_or_else(|| {
@@ -318,6 +318,12 @@ impl ReferenceState<'_> {
             matches &= substitute(prepared.ty)? == canonical.ty
                 && prepared.use_mode == canonical.use_mode
                 && prepared.resource_requirement.is_none();
+        }
+        let implementation_arguments = Arc::clone(&selected.implementation_arguments);
+        for (prepared, reference) in implementation_arguments.iter().zip(&task.implementations) {
+            let canonical = self.checked_implementation(*reference)?;
+            matches &= prepared.self_type == canonical.self_type
+                && prepared.type_arguments.as_ref() == canonical.type_arguments.as_slice();
         }
         if !matches {
             return Err(reference_type_error(

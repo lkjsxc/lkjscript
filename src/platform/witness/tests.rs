@@ -73,6 +73,7 @@ fn witness_contract_domains_are_closed_and_unique() {
         "validator_contract_a4865032b8c53d9472988c166a7bce1d72eba3158026cb4a803482a08c2fc576"
     );
     for (name, version) in [
+        ("parameterized_owned_contracts", 1),
         ("structural_owned_sequences", 1),
         ("lexical_owned_child_borrows", 1),
         ("explicit_transferable_type_parameters", 1),

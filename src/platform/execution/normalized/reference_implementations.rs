@@ -46,19 +46,7 @@ impl ReferenceState<'_> {
                 "witness does not select an implementation owner",
             ));
         };
-        if !matches!(
-            self.schema
-                .types
-                .get(&implementation.self_type)
-                .map(|t| &t.form),
-            Some(
-                TypeForm::ByteBuffer
-                    | TypeForm::OwnedI64Cell
-                    | TypeForm::OwnedProduct { .. }
-                    | TypeForm::OwnedChoice { .. }
-                    | TypeForm::OwnedSequence { .. }
-            )
-        ) {
+        if !self.owned_method_type(implementation.self_type, &BTreeSet::new())? {
             return Err(reference_type_error("implementation has a non-owned Self"));
         }
         let DeclarationPayload::OwnedContract(contract) =
@@ -68,16 +56,10 @@ impl ReferenceState<'_> {
                 "implementation names a foreign contract kind",
             ));
         };
-        let Some(OwnerRecord::TypeParameter(parameter)) = self.owner_in_package(
-            implementation.contract.package,
-            OwnerKey::TypeParameter(contract.self_parameter),
-        )?
-        else {
-            return Err(reference_type_error("missing contract Self owner"));
-        };
-        if parameter.declaration != implementation.contract.declaration
-            || parameter.constraints != TypeParameterConstraints::Owned
+        if contract.type_parameters.len() >= crate::platform::kernel::contract::MAXIMUM_CHILDREN
+            || contract.type_parameters.len() != implementation.type_arguments.len()
             || contract.methods.len() != implementation.methods.len()
+            || contract.methods.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN
         {
             return Err(reference_type_error(
                 "implementation does not satisfy the exact owned contract",
@@ -85,6 +67,49 @@ impl ReferenceState<'_> {
         }
         if contract.methods.is_empty() {
             return Err(reference_type_error("empty implementation methods"));
+        }
+        self.charge_allocation(
+            ((contract.type_parameters.len() + 1)
+                * (2 * std::mem::size_of::<TypeParameterId>()
+                    + std::mem::size_of::<TypeObjectDigest>()
+                    + std::mem::size_of::<crate::platform::kernel::Name>()
+                    + 9 * std::mem::size_of::<usize>())) as u64,
+        )?;
+        let mut declared = BTreeSet::new();
+        let mut parameter_names = BTreeSet::new();
+        let mut substitutions = BTreeMap::new();
+        for (parameter, actual) in
+            std::iter::once((contract.self_parameter, implementation.self_type)).chain(
+                contract
+                    .type_parameters
+                    .iter()
+                    .copied()
+                    .zip(implementation.type_arguments.iter().copied()),
+            )
+        {
+            self.witness_metadata_step()?;
+            let Some(OwnerRecord::TypeParameter(owner)) = self.owner_in_package(
+                implementation.contract.package,
+                OwnerKey::TypeParameter(parameter),
+            )?
+            else {
+                return Err(reference_type_error(
+                    "missing owned contract parameter owner",
+                ));
+            };
+            if owner.header.owner != OwnerKey::TypeParameter(parameter)
+                || owner.declaration != implementation.contract.declaration
+                || owner.constraints != TypeParameterConstraints::Owned
+                || (parameter != contract.self_parameter && owner.header.contract_version < 26)
+                || !declared.insert(parameter)
+                || !parameter_names.insert(owner.name)
+                || !self.owned_method_type(actual, &BTreeSet::new())?
+            {
+                return Err(reference_type_error(
+                    "contract application requires distinct exact Owned parameters and closed owned arguments",
+                ));
+            }
+            substitutions.insert(parameter, actual);
         }
         for pair in implementation.methods.windows(2) {
             self.witness_metadata_step()?;
@@ -102,7 +127,10 @@ impl ReferenceState<'_> {
         let mut names = BTreeSet::new();
         for method in &contract.methods {
             self.witness_metadata_step()?;
-            if !ids.insert(method.id) || !names.insert(&method.name) {
+            if !ids.insert(method.id)
+                || !names.insert(&method.name)
+                || method.parameters.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN
+            {
                 return Err(reference_type_error(
                     "invalid method identity or callable kind",
                 ));
@@ -128,35 +156,21 @@ impl ReferenceState<'_> {
             let mut suffix = false;
             for p in &method.parameters {
                 self.witness_metadata_step()?;
-                if self.schema.types.get(&p.ty).map(|t| &t.form)
-                    == Some(&TypeForm::TypeParameter {
-                        parameter: contract.self_parameter,
-                    })
-                {
+                if self.owned_method_type(p.ty, &declared)? {
                     suffix = true;
                     if p.use_mode == ParameterUse::Unrestricted
                         || (!matches!(method.effect, FunctionEffect::Pure)
                             && p.use_mode != ParameterUse::Consume)
                     {
                         return Err(reference_type_error(
-                            "Self requires scoped pure borrowing or owned consumption",
+                            "owned method parameters require scoped pure borrowing or consumption",
                         ));
                     }
-                } else if suffix
-                    || p.use_mode != ParameterUse::Unrestricted
-                    || !self.ordinary_method_type(p.ty)?
-                {
+                } else if suffix || p.use_mode != ParameterUse::Unrestricted {
                     return Err(reference_type_error("method is not first order"));
                 }
             }
-            if self.schema.types.get(&method.result).map(|t| &t.form)
-                != Some(&TypeForm::TypeParameter {
-                    parameter: contract.self_parameter,
-                })
-                && !self.ordinary_method_type(method.result)?
-            {
-                return Err(reference_type_error("method result is not first order"));
-            }
+            self.owned_method_type(method.result, &declared)?;
             let mut mapping = None;
             for candidate in &implementation.methods {
                 self.witness_metadata_step()?;
@@ -192,25 +206,14 @@ impl ReferenceState<'_> {
             for (actual, expected) in parameters.iter().zip(&method.parameters) {
                 if actual.parent
                     != crate::platform::kernel::ParameterParent::Function(target.declaration)
-                    || actual.ty
-                        != self.method_type(
-                            expected.ty,
-                            contract.self_parameter,
-                            implementation.self_type,
-                        )?
+                    || actual.ty != self.method_type(expected.ty, &substitutions)?
                     || actual.use_mode != expected.use_mode
                     || actual.resource_requirement.is_some()
                 {
                     return Err(reference_type_error("method parameter contract mismatch"));
                 }
             }
-            if function.result
-                != self.method_type(
-                    method.result,
-                    contract.self_parameter,
-                    implementation.self_type,
-                )?
-            {
+            if function.result != self.method_type(method.result, &substitutions)? {
                 return Err(reference_type_error("method result contract mismatch"));
             }
         }
@@ -220,20 +223,10 @@ impl ReferenceState<'_> {
     pub(super) fn method_type(
         &self,
         ty: TypeObjectDigest,
-        parameter: TypeParameterId,
-        self_type: TypeObjectDigest,
+        substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
     ) -> Result<TypeObjectDigest, ExecutionError> {
-        let form = &self
-            .schema
-            .types
-            .get(&ty)
-            .ok_or_else(|| reference_type_error("missing method type metadata"))?
-            .form;
-        Ok(if *form == (TypeForm::TypeParameter { parameter }) {
-            self_type
-        } else {
-            ty
-        })
+        self.schema
+            .transfer_type_identity(ty, substitutions, self.control)
     }
 
     pub(super) fn implementation_bindings(
@@ -266,11 +259,24 @@ impl ReferenceState<'_> {
             };
             if implementation.contract != parameter.contract
                 || types.get(type_parameter) != Some(&implementation.self_type)
+                || parameter.type_arguments.len() != implementation.type_arguments.len()
                 || bindings.insert(parameter.id, *selected).is_some()
             {
                 return Err(reference_type_error(
                     "static witness contract or instantiated Self mismatch",
                 ));
+            }
+            for (expected, actual) in parameter
+                .type_arguments
+                .iter()
+                .zip(&implementation.type_arguments)
+            {
+                self.witness_metadata_step()?;
+                if self.method_type(*expected, types)? != *actual {
+                    return Err(reference_type_error(
+                        "static witness instantiated contract argument mismatch",
+                    ));
+                }
             }
         }
         Ok(bindings)
@@ -364,6 +370,93 @@ impl ReferenceState<'_> {
 }
 
 impl ReferenceState<'_> {
+    // Classify the permitted first-order contract grammar from canonical type objects.
+    // Every composite member is checked, including ordinary and phantom members.
+    fn owned_method_type(
+        &mut self,
+        ty: TypeObjectDigest,
+        declared: &BTreeSet<TypeParameterId>,
+    ) -> Result<bool, ExecutionError> {
+        self.method_shape(ty, declared, 0, &mut 0)
+    }
+
+    fn method_shape(
+        &mut self,
+        ty: TypeObjectDigest,
+        declared: &BTreeSet<TypeParameterId>,
+        depth: usize,
+        visits: &mut usize,
+    ) -> Result<bool, ExecutionError> {
+        self.witness_metadata_step()?;
+        *visits = visits
+            .checked_add(1)
+            .filter(|work| *work <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
+            .ok_or_else(|| {
+                reference_resource(
+                    "normalized_reference_witness_work",
+                    "owned method shape traversal exhausted proof admission",
+                )
+            })?;
+        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+            return Err(reference_type_error(
+                "owned method type exceeds structural depth",
+            ));
+        }
+        let form = &self
+            .schema
+            .types
+            .get(&ty)
+            .ok_or_else(|| reference_type_error("missing owned method type metadata"))?
+            .form;
+        let (sequence, count) = match form {
+            TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => return Ok(true),
+            TypeForm::TypeParameter { parameter } => {
+                return if declared.contains(parameter) {
+                    Ok(true)
+                } else {
+                    Err(reference_type_error(
+                        "method type parameter has a foreign scope",
+                    ))
+                };
+            }
+            TypeForm::OwnedSequence { .. } => (true, 1),
+            TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
+                (false, fields.len())
+            }
+            _ => {
+                return if self.ordinary_method_type(ty)? {
+                    Ok(false)
+                } else {
+                    Err(reference_type_error(
+                        "method type is not closed first-order data",
+                    ))
+                };
+            }
+        };
+        self.charge_allocation((count * std::mem::size_of::<TypeObjectDigest>()) as u64)?;
+        let children: Vec<_> = match &self.schema.types[&ty].form {
+            TypeForm::OwnedSequence { item } => vec![*item],
+            TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
+                fields.iter().map(|field| field.ty).collect()
+            }
+            _ => unreachable!(),
+        };
+        let mut owned = false;
+        for child in children {
+            let child_owned = self.method_shape(child, declared, depth + 1, visits)?;
+            if sequence && !child_owned {
+                return Err(reference_type_error(
+                    "owned sequence requires an owned item",
+                ));
+            }
+            owned |= child_owned;
+        }
+        if !owned {
+            return Err(reference_type_error("owned composite has no owned member"));
+        }
+        Ok(true)
+    }
+
     fn witness_metadata_step(&mut self) -> Result<(), ExecutionError> {
         self.control.check()?;
         self.observation.type_derivation_steps = self

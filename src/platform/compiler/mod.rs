@@ -17,6 +17,7 @@ mod link;
 mod lower;
 pub(crate) mod manifest;
 pub(crate) mod unit;
+#[cfg(test)]
 mod wire10;
 
 pub(crate) use artifact::{

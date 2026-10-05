@@ -227,6 +227,7 @@ fn historical_generations_18_through_24_keep_original_commitment_goldens() {
     assert_golden(
         AuthoredChange::SetOwnedContract {
             declaration: declaration(),
+            type_parameters: Vec::new(),
             self_type: AuthoredType::TypeParameter {
                 parameter: AuthoredTypeParameterReference::Id {
                     parameter: TypeParameterId::from_bytes([3; 16]).unwrap(),
@@ -315,7 +316,7 @@ fn unsupported_and_future_magics_keep_the_existing_current_identity_fallback() {
     for intent in [
         b"".as_slice(),
         b"LKJACR13",
-        b"LKJACR29",
+        b"LKJACR31",
         b"LKJACR99",
         b"unknown",
     ] {
@@ -327,6 +328,14 @@ fn unsupported_and_future_magics_keep_the_existing_current_identity_fallback() {
     assert_eq!(
         commitment_codec_identity(b"LKJACR16"),
         "lkjscript-authored-change-codec-16"
+    );
+    assert_eq!(
+        commitment_codec_identity(b"LKJACR28"),
+        "lkjscript-authored-change-codec-28"
+    );
+    assert_eq!(
+        commitment_codec_identity(b"LKJACR29"),
+        "lkjscript-authored-change-codec-29"
     );
     assert_eq!(
         commitment_codec_identity(b"LKJACR17"),
