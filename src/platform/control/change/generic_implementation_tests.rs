@@ -3,6 +3,205 @@ use super::*;
 use crate::platform::change::canonical_authored_intent_bytes;
 
 #[test]
+fn generic_implementation_prerequisites_match_independent_native_and_compact_intent() {
+    let base = format!("rev_{}", "83".repeat(32));
+    let contract = format!("pkg_{}/decl_{}", "31".repeat(16), "32".repeat(16));
+    let target = format!("pkg_{}/decl_{}", "31".repeat(16), "33".repeat(16));
+    let prerequisite = "implparam_85000000000000000000000000000011";
+    let method = "method_85000000000000000000000000000004";
+    let flat = format!(
+        r#"request base={base}
+create.module as=$module name=schemes
+type.parameter as=@item parameter=$item
+type.owned-sequence as=@sequence item=@item
+create.owned-implementation as=$scheme module=$module name=Storage visibility=public contract={contract} self=@sequence
+owned.implementation-parameter parent=$scheme index=0 parameter=$item
+owned.type-argument parent=$scheme index=0 type=@item
+owned.witness parent=$scheme index=0 as=%prerequisite id={prerequisite} name=reader contract={contract} self=@sequence
+owned.type-argument parent=%prerequisite index=0 type=@item
+owned.mapping parent=$scheme index=0 as=%mapping method={method} function={target}
+owned.type-argument parent=%mapping index=0 type=@item
+implementation.argument parent=%mapping index=0 implementation=parameter@$scheme@{prerequisite}
+add.type-parameter as=$item declaration=$scheme name=Item constraint=owned
+"#
+    );
+    let native = format!(
+        r#"request base={base}
+declarations.begin
+(units (module create schemes (as $module)
+  (owned-implementation create Storage (as $scheme) (visibility public)
+    (type-parameter create Item (as $item) (constraint owned))
+    (implementation-parameter {prerequisite} reader {contract} (owned-sequence Item) (types Item))
+    (contract {contract}) (self (owned-sequence Item)) (types Item)
+    (method {method} {target} (types Item) (implementations parameter@Storage@{prerequisite})))))
+declarations.end
+"#
+    );
+    let compact = decode_compact_change("prerequisite-flat.lkjc", flat.as_bytes()).unwrap();
+    let native = decode_compact_change("prerequisite-native.lkjc", native.as_bytes()).unwrap();
+    let bytes = canonical_authored_intent_bytes(&native.semantic).unwrap();
+    assert_eq!(&bytes[..8], b"LKJACR33");
+    assert_eq!(
+        bytes,
+        canonical_authored_intent_bytes(&compact.semantic).unwrap()
+    );
+    assert_eq!(native.request_commitment, compact.request_commitment);
+    let AuthoredChange::CreateOwnedImplementation {
+        implementation_parameters,
+        methods,
+        ..
+    } = &native.semantic.changes[1]
+    else {
+        panic!("expected implementation scheme");
+    };
+    assert_eq!(implementation_parameters.len(), 1);
+    assert_eq!(implementation_parameters[0].name.as_str(), "reader");
+    assert_eq!(implementation_parameters[0].type_arguments.len(), 1);
+    assert_eq!(methods[0].implementations.len(), 1);
+    let AuthoredImplementationOperand::Parameter { scope, parameter } =
+        &methods[0].implementations[0]
+    else {
+        panic!("expected direct prerequisite forwarding");
+    };
+    assert_eq!(
+        scope,
+        &AuthoredDeclarationReference::Local {
+            declaration: DeclarationSelector::Symbol {
+                symbol: "$scheme".to_owned()
+            }
+        }
+    );
+    assert_eq!(parameter.to_string(), prerequisite);
+    let changed = flat.replace(
+        &format!("implementation=parameter@$scheme@{prerequisite}"),
+        "implementation=parameter@$scheme@implparam_85000000000000000000000000000012",
+    );
+    let changed =
+        decode_compact_change("changed-map-prerequisite.lkjc", changed.as_bytes()).unwrap();
+    assert_ne!(changed.request_commitment, compact.request_commitment);
+    let renamed = flat.replace("name=reader", "name=alternate");
+    let renamed = decode_compact_change("renamed-prerequisite.lkjc", renamed.as_bytes()).unwrap();
+    assert_ne!(renamed.request_commitment, compact.request_commitment);
+}
+
+#[test]
+fn generic_implementation_nested_witnesses_match_flat_edges_and_retain_every_identity() {
+    let base = format!("rev_{}", "83".repeat(32));
+    let declaration = format!("decl_{}", "44".repeat(16));
+    let inner = format!("decl_{}", "45".repeat(16));
+    let scope = format!("decl_{}", "46".repeat(16));
+    let prerequisite = "implparam_85000000000000000000000000000011";
+    let method = "method_85000000000000000000000000000004";
+    let flat = format!(
+        r#"request base={base}
+replace.body function={declaration} body=$body
+expression.method-call as=$body witness=concrete@{declaration}@%outer contract={declaration} method={method}
+owned.type-argument parent=%outer index=0 type=byte-buffer
+implementation.argument parent=%outer index=0 implementation=concrete@{inner}@%inner
+owned.type-argument parent=%inner index=0 type=owned-i64-cell
+implementation.argument parent=%inner index=0 implementation=parameter@{scope}@{prerequisite}
+"#
+    );
+    let structural = format!(
+        r#"request base={base}
+replace.body function={declaration} body=$body
+expression.block as=$body
+(method-call (implementation {declaration} (types byte-buffer)
+  (implementations (implementation {inner} (types owned-i64-cell)
+    (implementations parameter@{scope}@{prerequisite})))) {declaration} {method})
+expression.end
+"#
+    );
+    let compact = decode_compact_change("nested-flat.lkjc", flat.as_bytes()).unwrap();
+    let structural_request =
+        decode_compact_change("nested-structural.lkjc", structural.as_bytes()).unwrap();
+    assert_eq!(
+        canonical_authored_intent_bytes(&compact.semantic).unwrap(),
+        canonical_authored_intent_bytes(&structural_request.semantic).unwrap()
+    );
+    assert_eq!(
+        compact.request_commitment,
+        structural_request.request_commitment
+    );
+    let AuthoredChange::ReplaceFunctionBody { body, .. } = &compact.semantic.changes[0] else {
+        panic!("expected replacement");
+    };
+    let AuthoredExpressionOperation::MethodCall { witness, .. } = &body.operation else {
+        panic!("expected method call");
+    };
+    let AuthoredImplementationOperand::Concrete {
+        implementations, ..
+    } = witness
+    else {
+        panic!("expected outer concrete application");
+    };
+    let AuthoredImplementationOperand::Concrete {
+        type_arguments,
+        implementations,
+        ..
+    } = &implementations[0]
+    else {
+        panic!("expected inner concrete application");
+    };
+    assert_eq!(type_arguments, &[AuthoredType::OwnedI64Cell {}]);
+    assert!(
+        matches!(&implementations[0], AuthoredImplementationOperand::Parameter { parameter, .. } if parameter.to_string() == prerequisite)
+    );
+    let changed = flat.replace(&inner, &format!("decl_{}", "47".repeat(16)));
+    let changed = decode_compact_change("nested-changed-id.lkjc", changed.as_bytes()).unwrap();
+    assert_ne!(changed.request_commitment, compact.request_commitment);
+    for invalid in [
+        flat.replace(
+            &format!("concrete@{inner}@%inner"),
+            &format!("concrete@{inner}@%outer"),
+        ),
+        structural.replace(
+            "(types byte-buffer)",
+            "(types byte-buffer) (types byte-buffer)",
+        ),
+        structural.replace(
+            "(types byte-buffer)",
+            "(implementations) (types byte-buffer)",
+        ),
+    ] {
+        assert!(
+            decode_compact_change("nested-invalid.lkjc", invalid.as_bytes()).is_err(),
+            "{invalid}"
+        );
+    }
+}
+
+#[test]
+fn generic_implementation_compact_witness_depth_is_admitted_before_recursive_construction() {
+    use std::fmt::Write;
+    let declaration = format!("decl_{}", "44".repeat(16));
+    let method = "method_85000000000000000000000000000004";
+    let maximum = crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH;
+    for depth in [maximum, maximum + 1, 4096] {
+        let mut input = format!(
+            "request base=rev_{}\nreplace.body function={declaration} body=$body\nexpression.method-call as=$body witness=concrete@{declaration}@%operand0 contract={declaration} method={method}\n",
+            "83".repeat(32),
+        );
+        for index in 0..depth - 1 {
+            let application = if index + 2 == depth {
+                format!("concrete@{declaration}")
+            } else {
+                format!("concrete@{declaration}@%operand{}", index + 1)
+            };
+            writeln!(input, "implementation.argument parent=%operand{index} index=0 implementation={application}").unwrap();
+        }
+        let decoded = decode_compact_change("bounded-witness.lkjc", input.as_bytes());
+        if depth == maximum {
+            assert!(decoded.is_ok());
+        } else {
+            let errors = decoded.unwrap_err();
+            assert_eq!(errors[0].code, "change_owned_operand_depth");
+            assert_eq!(errors[0].class, DiagnosticClass::Resource);
+        }
+    }
+}
+
+#[test]
 fn generic_implementation_native_matches_complete_independent_compact_application() {
     let base = format!("rev_{}", "82".repeat(32));
     let contract = format!("pkg_{}/decl_{}", "31".repeat(16), "32".repeat(16));

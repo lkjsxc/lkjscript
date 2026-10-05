@@ -1,0 +1,81 @@
+declarations.begin
+(units
+  (module create composable-adapters
+    (owned-contract create Selection (visibility public)
+      (self Self) (type-parameter create Self (constraint owned))
+      (type-parameter create Item (constraint owned))
+      (method method_8e000000000000000000000000000001 best
+        (parameters (Self borrow)) (returns Item (borrow-from 0)) (effect pure)))
+    (owned-implementation create Maximum (visibility public)
+      (type-parameter create T (constraint owned))
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_8e000000000000000000000000000001
+        element owned-worklists::Element T)
+      (implementation-parameter implparam_8e000000000000000000000000000002
+        reader owned-read-results::IndexRead W (types T))
+      (contract Selection) (self W) (types T)
+      (method method_8e000000000000000000000000000001 owned-read-results::select-max (types T W)
+        (implementations parameter@Maximum@implparam_8e000000000000000000000000000001
+          parameter@Maximum@implparam_8e000000000000000000000000000002)))
+    (function create forward-length (visibility public) (effect pure)
+      (type-parameter create T (constraint owned))
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_8e000000000000000000000000000003
+        reader owned-read-results::IndexRead W (types T))
+      (parameter create storage (type W) (use borrow)) (returns I64)
+      (body (method-call parameter@forward-length@implparam_8e000000000000000000000000000003
+        owned-read-results::IndexRead method_8a000000000000000000000000000001 (local storage))))
+    (function create forward-at (visibility public) (effect pure)
+      (type-parameter create T (constraint owned))
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_8e000000000000000000000000000004
+        reader owned-read-results::IndexRead W (types T))
+      (parameter create index (type I64))
+      (parameter create storage (type W) (use borrow)) (returns T (borrow-from storage))
+      (body (borrow-call
+        (method-call parameter@forward-at@implparam_8e000000000000000000000000000004
+          owned-read-results::IndexRead method_8a000000000000000000000000000002
+          (local index) (local storage))
+        (binding view (type T)) (in (local view)))))
+    (owned-implementation create DelegatingReader (visibility public)
+      (type-parameter create T (constraint owned))
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_8e000000000000000000000000000005
+        reader owned-read-results::IndexRead W (types T))
+      (contract owned-read-results::IndexRead) (self W) (types T)
+      (method method_8a000000000000000000000000000001 forward-length (types T W)
+        (implementations parameter@DelegatingReader@implparam_8e000000000000000000000000000005))
+      (method method_8a000000000000000000000000000002 forward-at (types T W)
+        (implementations parameter@DelegatingReader@implparam_8e000000000000000000000000000005)))
+    (owned-contract create DrainTask (visibility public)
+      (self Self) (type-parameter create Self (constraint owned))
+      (method method_8e000000000000000000000000000002 finish
+        (parameters (Self consume)) (returns (list I64)) (effect (task))))
+    (function create drain-values (visibility public) (effect (task))
+      (type-parameter create T (constraint owned))
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_8e000000000000000000000000000006
+        element owned-worklists::Element T)
+      (implementation-parameter implparam_8e000000000000000000000000000007
+        work owned-worklists::Worklist W (types T))
+      (parameter create storage (type W) (use consume)) (returns (list I64))
+      (body (let
+        (binding drained (type (owned-product (field rest W) (field values (list I64))))
+          (implementation-call owned-worklists::drain (types T W)
+            (implementations parameter@drain-values@implparam_8e000000000000000000000000000006
+              parameter@drain-values@implparam_8e000000000000000000000000000007) (local storage)))
+        (in (unpack-owned (type (owned-product (field rest W) (field values (list I64)))) (local drained)
+          (field rest (binding rest (type W))) (field values (binding values (type (list I64))))
+          (in (local values)))))))
+    (owned-implementation create Drain (visibility public)
+      (type-parameter create T (constraint owned))
+      (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_8e000000000000000000000000000008
+        element owned-worklists::Element T)
+      (implementation-parameter implparam_8e000000000000000000000000000009
+        work owned-worklists::Worklist W (types T))
+      (contract DrainTask) (self W)
+      (method method_8e000000000000000000000000000002 drain-values (types T W)
+        (implementations parameter@Drain@implparam_8e000000000000000000000000000008
+          parameter@Drain@implparam_8e000000000000000000000000000009)))))
+declarations.end

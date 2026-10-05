@@ -3977,6 +3977,10 @@ fn append_owned_inspection(
                         implementation.type_arguments.len().to_string(),
                     ),
                     ("methods", implementation.methods.len().to_string()),
+                    (
+                        "implementation-parameters",
+                        implementation.implementation_parameters.len().to_string(),
+                    ),
                 ],
             )?;
             for (index, parameter) in implementation.type_parameters.iter().enumerate() {
@@ -4001,6 +4005,14 @@ fn append_owned_inspection(
                     ],
                 )?;
             }
+            for (index, parameter) in implementation.implementation_parameters.iter().enumerate() {
+                append_owned_implementation_parameter(
+                    output,
+                    declaration.header.owner,
+                    index,
+                    parameter,
+                )?;
+            }
             for mapping in &implementation.methods {
                 append_compact_record(
                     output,
@@ -4008,6 +4020,7 @@ fn append_owned_inspection(
                     &[
                         ("method", mapping.method.to_string()),
                         ("type-arguments", mapping.type_arguments.len().to_string()),
+                        ("implementations", mapping.implementations.len().to_string()),
                         (
                             "function",
                             format!(
@@ -4027,6 +4040,15 @@ fn append_owned_inspection(
                             ("index", index.to_string()),
                             ("type", ty.to_string()),
                         ],
+                    )?;
+                }
+                for (index, operand) in mapping.implementations.iter().enumerate() {
+                    append_owned_implementation_operand(
+                        output,
+                        declaration.header.owner,
+                        mapping.method,
+                        index,
+                        operand,
                     )?;
                 }
             }
@@ -4072,6 +4094,118 @@ fn append_owned_inspection(
             }
         }
         _ => {}
+    }
+    Ok(())
+}
+
+fn append_owned_implementation_parameter(
+    output: &mut CompactResponseWriter,
+    owner: KernelOwnerKey,
+    index: usize,
+    parameter: &crate::platform::kernel::ImplementationParameter,
+) -> Result<(), Diagnostic> {
+    append_compact_record(
+        output,
+        "owned.prerequisite",
+        &[
+            ("owner", owner.to_string()),
+            ("id", parameter.id.to_string()),
+            ("index", index.to_string()),
+            ("name", parameter.name.to_string()),
+            (
+                "contract",
+                format!(
+                    "{}/{}",
+                    parameter.contract.package, parameter.contract.declaration
+                ),
+            ),
+            ("self", parameter.self_type.to_string()),
+            ("type-arguments", parameter.type_arguments.len().to_string()),
+        ],
+    )?;
+    for (index, ty) in parameter.type_arguments.iter().enumerate() {
+        append_compact_record(
+            output,
+            "owned.prerequisite-type-argument",
+            &[
+                ("owner", owner.to_string()),
+                ("witness", parameter.id.to_string()),
+                ("index", index.to_string()),
+                ("type", ty.to_string()),
+            ],
+        )?;
+    }
+    Ok(())
+}
+
+fn append_owned_implementation_operand(
+    output: &mut CompactResponseWriter,
+    owner: KernelOwnerKey,
+    method: crate::platform::semantic_id::MethodId,
+    index: usize,
+    operand: &crate::platform::kernel::ImplementationOperand,
+) -> Result<(), Diagnostic> {
+    use crate::platform::kernel::ImplementationOperand;
+    let mut pending = vec![(operand, String::from("-"))];
+    while let Some((operand, path)) = pending.pop() {
+        let (kind, reference, parameter, types, operands) = match operand {
+            ImplementationOperand::Concrete {
+                implementation,
+                type_arguments,
+                implementations,
+            } => (
+                "concrete",
+                implementation,
+                String::from("-"),
+                type_arguments.as_slice(),
+                implementations.as_slice(),
+            ),
+            ImplementationOperand::Parameter { scope, parameter } => {
+                ("parameter", scope, parameter.to_string(), &[][..], &[][..])
+            }
+        };
+        append_compact_record(
+            output,
+            "owned.method-implementation-operand",
+            &[
+                ("owner", owner.to_string()),
+                ("method", method.to_string()),
+                ("index", index.to_string()),
+                ("path", path.clone()),
+                ("kind", kind.to_owned()),
+                (
+                    "reference",
+                    format!("{}/{}", reference.package, reference.declaration),
+                ),
+                ("parameter", parameter),
+                ("type-arguments", types.len().to_string()),
+                ("implementations", operands.len().to_string()),
+            ],
+        )?;
+        for (ordinal, ty) in types.iter().enumerate() {
+            append_compact_record(
+                output,
+                "owned.method-implementation-operand-type-argument",
+                &[
+                    ("owner", owner.to_string()),
+                    ("method", method.to_string()),
+                    ("implementation", index.to_string()),
+                    ("path", path.clone()),
+                    ("index", ordinal.to_string()),
+                    ("type", ty.to_string()),
+                ],
+            )?;
+        }
+        for (child, operand) in operands.iter().enumerate().rev() {
+            pending.push((
+                operand,
+                if path == "-" {
+                    child.to_string()
+                } else {
+                    format!("{path}/{child}")
+                },
+            ));
+        }
     }
     Ok(())
 }
@@ -5130,6 +5264,7 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
         owner: KernelOwnerKey,
         implementation: usize,
         type_arguments: &[TypeObjectDigest],
+        path: &str,
     ) -> Result<(), Diagnostic> {
         for (index, ty) in type_arguments.iter().enumerate() {
             self.push_fields(
@@ -5138,16 +5273,103 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                 &[
                     ("parent", owner.to_string()),
                     ("implementation", implementation.to_string()),
+                    ("path", path.to_owned()),
                     ("index", index.to_string()),
                     ("type", ty.to_string()),
                 ],
             )?;
             self.add_type_reference(
-                format!("implementation_operand_{implementation}_type_argument"),
+                format!("implementation_operand_{implementation}_{path}_type_argument"),
                 owner,
                 index,
                 *ty,
             )?;
+        }
+        Ok(())
+    }
+
+    fn add_implementation_operand(
+        &mut self,
+        owner: KernelOwnerKey,
+        index: usize,
+        operand: &crate::platform::kernel::ImplementationOperand,
+    ) -> Result<(), Diagnostic> {
+        use crate::platform::kernel::ImplementationOperand;
+        let mut pending = vec![(operand, String::from("-"))];
+        while let Some((operand, path)) = pending.pop() {
+            self.check()?;
+            let (kind, reference, parameter, types, operands) = match operand {
+                ImplementationOperand::Concrete {
+                    implementation,
+                    type_arguments,
+                    implementations,
+                } => (
+                    "concrete",
+                    *implementation,
+                    None,
+                    type_arguments.as_slice(),
+                    implementations.as_slice(),
+                ),
+                ImplementationOperand::Parameter { scope, parameter } => {
+                    ("parameter", *scope, Some(*parameter), &[][..], &[][..])
+                }
+            };
+            self.push_fields(
+                DefinitionSection::Body,
+                "definition.implementation-operand",
+                &[
+                    ("parent", owner.to_string()),
+                    ("implementation", index.to_string()),
+                    ("path", path.clone()),
+                    ("kind", kind.to_owned()),
+                    (
+                        "reference",
+                        format!("{}/{}", reference.package, reference.declaration),
+                    ),
+                    (
+                        "parameter",
+                        parameter
+                            .map(|id| id.to_string())
+                            .unwrap_or_else(|| "-".to_owned()),
+                    ),
+                    ("type-arguments", types.len().to_string()),
+                    ("implementations", operands.len().to_string()),
+                ],
+            )?;
+            self.add_implementation_type_arguments(owner, index, types, &path)?;
+            self.add_declaration_reference(
+                if path == "-" {
+                    "implementation_operand".to_owned()
+                } else {
+                    format!("implementation_operand_{path}")
+                },
+                owner,
+                index,
+                reference,
+            )?;
+            if let Some(parameter) = parameter {
+                self.add_reference(
+                    if path == "-" {
+                        "implementation_parameter".to_owned()
+                    } else {
+                        format!("implementation_parameter_{path}")
+                    },
+                    owner,
+                    index,
+                    "implementation_parameter",
+                    parameter.to_string(),
+                )?;
+            }
+            for (child, operand) in operands.iter().enumerate().rev() {
+                pending.push((
+                    operand,
+                    if path == "-" {
+                        child.to_string()
+                    } else {
+                        format!("{path}/{child}")
+                    },
+                ));
+            }
         }
         Ok(())
     }
@@ -5659,34 +5881,7 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                     self.add_requirement_reference("requirement_argument", owner, index, argument)?;
                 }
                 for (index, operand) in implementations.iter().enumerate() {
-                    let (reference, parameter) = match operand {
-                        crate::platform::kernel::ImplementationOperand::Concrete {
-                            implementation,
-                            type_arguments,
-                        } => {
-                            self.add_implementation_type_arguments(owner, index, type_arguments)?;
-                            (*implementation, None)
-                        }
-                        crate::platform::kernel::ImplementationOperand::Parameter {
-                            function,
-                            parameter,
-                        } => (*function, Some(*parameter)),
-                    };
-                    self.add_declaration_reference(
-                        "implementation_operand",
-                        owner,
-                        index,
-                        reference,
-                    )?;
-                    if let Some(parameter) = parameter {
-                        self.add_reference(
-                            "implementation_parameter",
-                            owner,
-                            index,
-                            "implementation_parameter",
-                            parameter.to_string(),
-                        )?;
-                    }
+                    self.add_implementation_operand(owner, index, operand)?;
                 }
             }
             ExpressionOperation::MethodCall {
@@ -5699,27 +5894,28 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                 fields.push(("method", method.to_string()));
                 fields.push(("arguments", arguments.len().to_string()));
                 self.add_declaration_reference("owned_contract", owner, 0, *contract)?;
-                let reference = match witness {
+                match witness {
                     crate::platform::kernel::ImplementationOperand::Concrete {
-                        implementation,
                         type_arguments,
+                        implementations,
+                        ..
                     } => {
                         fields.push((
                             "implementation-type-arguments",
                             type_arguments.len().to_string(),
                         ));
-                        self.add_implementation_type_arguments(owner, 0, type_arguments)?;
-                        *implementation
+                        fields.push((
+                            "implementation-prerequisites",
+                            implementations.len().to_string(),
+                        ));
                     }
                     crate::platform::kernel::ImplementationOperand::Parameter {
-                        function,
-                        parameter,
+                        parameter, ..
                     } => {
                         fields.push(("implementation-parameter", parameter.to_string()));
-                        *function
                     }
-                };
-                self.add_declaration_reference("implementation_operand", owner, 0, reference)?;
+                }
+                self.add_implementation_operand(owner, 0, witness)?;
             }
             ExpressionOperation::Call {
                 requirement_arguments,

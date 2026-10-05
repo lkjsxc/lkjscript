@@ -109,6 +109,7 @@ fn generic_implementation_admits_symbolic_borrowing_and_materializes_nested_appl
     let operand = ImplementationOperand::Concrete {
         implementation: declaration(&source, "Flat"),
         type_arguments: vec![nested, buffer],
+        implementations: vec![],
     };
     let applied = owned_contract::method_signature(
         &source,
@@ -138,6 +139,7 @@ fn generic_implementation_admits_symbolic_borrowing_and_materializes_nested_appl
     let monomorphic = ImplementationOperand::Concrete {
         implementation: declaration(&source, "FlatBuffer"),
         type_arguments: vec![],
+        implementations: vec![],
     };
     let selected = owned_contract::method_signature(
         &source,
@@ -163,16 +165,19 @@ fn generic_implementation_checks_phantom_constraints_and_exact_ordered_witness_a
         let operand = ImplementationOperand::Concrete {
             implementation: selected,
             type_arguments: arguments,
+            implementations: vec![],
         };
         assert!(owned_contract::witness_contract(&source, &operand, None).is_err());
     }
     let correct = ImplementationOperand::Concrete {
         implementation: selected,
         type_arguments: vec![cell, buffer],
+        implementations: vec![],
     };
     let reversed = ImplementationOperand::Concrete {
         implementation: selected,
         type_arguments: vec![buffer, cell],
+        implementations: vec![],
     };
     let forward = declaration(&source, "forward");
     owned_contract::validate_application(
@@ -190,6 +195,7 @@ fn generic_implementation_checks_phantom_constraints_and_exact_ordered_witness_a
     let other_phantom = ImplementationOperand::Concrete {
         implementation: selected,
         type_arguments: vec![cell, cell],
+        implementations: vec![],
     };
     assert_ne!(
         correct, other_phantom,
@@ -283,6 +289,7 @@ fn generic_implementation_application_roots_retain_unused_arguments() {
     let operand = ImplementationOperand::Concrete {
         implementation: declaration(&source, "Flat"),
         type_arguments: vec![cell, buffer],
+        implementations: vec![],
     };
     let expression = ExpressionRecord {
         id: crate::platform::semantic_id::ExpressionId::migrate(b"scheme-root-test", 1),

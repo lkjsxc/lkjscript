@@ -570,9 +570,9 @@ fn borrowed_memory_oracle_rejects_weakened_imported_bounds_and_foreign_witnesses
     else {
         unreachable!()
     };
-    let ImplementationOperand::Parameter { function, .. } = &mut implementations[0] else {
+    let ImplementationOperand::Parameter { scope, .. } = &mut implementations[0] else {
         unreachable!()
     };
-    function.declaration = declaration(&local, "generic-method");
+    scope.declaration = declaration(&local, "generic-method");
     assert!(!accepts(&changed), "a loan grants no foreign witness scope");
 }

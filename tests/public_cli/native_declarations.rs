@@ -1668,6 +1668,8 @@ mod native_byte_buffer;
 #[path = "native_owned_parameters.rs"]
 mod native_owned_parameters;
 
+#[path = "native_composable_owned_implementations.rs"]
+mod native_composable_owned_implementations;
 #[path = "native_owned_borrows.rs"]
 mod native_owned_borrows;
 #[path = "native_owned_effects.rs"]

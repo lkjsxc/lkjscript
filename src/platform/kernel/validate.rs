@@ -1227,6 +1227,31 @@ impl FullValidator<'_> {
                         "owned implementation type parameter",
                     );
                 }
+                self.require_exact_kind(
+                    i.contract.package,
+                    OwnerKey::Declaration(i.contract.declaration),
+                    &[OwnerKind::OwnedContract],
+                    "owned implementation contract",
+                );
+                for prerequisite in &i.implementation_parameters {
+                    self.require_exact_kind(
+                        prerequisite.contract.package,
+                        OwnerKey::Declaration(prerequisite.contract.declaration),
+                        &[OwnerKind::OwnedContract],
+                        "owned implementation prerequisite contract",
+                    );
+                }
+                for mapping in &i.methods {
+                    self.require_exact_kind(
+                        mapping.function.package,
+                        OwnerKey::Declaration(mapping.function.declaration),
+                        &[OwnerKind::PureFunction, OwnerKind::TaskFunction],
+                        "owned implementation mapped target",
+                    );
+                    for operand in &mapping.implementations {
+                        self.validate_implementation_operand(operand);
+                    }
+                }
             }
             DeclarationPayload::Record {
                 fields,
@@ -2536,22 +2561,35 @@ impl FullValidator<'_> {
         }
     }
 
-    fn validate_implementation_operand(&mut self, operand: super::ImplementationOperand) {
-        let (reference, kinds): (_, &[OwnerKind]) = match operand {
-            super::ImplementationOperand::Concrete { implementation, .. } => {
-                (implementation, &[OwnerKind::OwnedImplementation])
+    fn validate_implementation_operand(&mut self, operand: &super::ImplementationOperand) {
+        if let Err(error) = operand.validate_local() {
+            self.error(&error.code, error.message);
+            return;
+        }
+        for operand in operand.walk() {
+            if !self.consume_work() {
+                return;
             }
-            super::ImplementationOperand::Parameter { function, .. } => (
-                function,
-                &[OwnerKind::PureFunction, OwnerKind::TaskFunction],
-            ),
-        };
-        self.require_exact_kind(
-            reference.package,
-            OwnerKey::Declaration(reference.declaration),
-            kinds,
-            "static implementation operand",
-        );
+            let (reference, kinds): (_, &[OwnerKind]) = match operand {
+                super::ImplementationOperand::Concrete { implementation, .. } => {
+                    (implementation, &[OwnerKind::OwnedImplementation])
+                }
+                super::ImplementationOperand::Parameter { scope, .. } => (
+                    scope,
+                    &[
+                        OwnerKind::PureFunction,
+                        OwnerKind::TaskFunction,
+                        OwnerKind::OwnedImplementation,
+                    ],
+                ),
+            };
+            self.require_exact_kind(
+                reference.package,
+                OwnerKey::Declaration(reference.declaration),
+                kinds,
+                "static implementation operand",
+            );
+        }
     }
 
     fn validate_expression_references(
@@ -2590,13 +2628,13 @@ impl FullValidator<'_> {
                     "implementation callee",
                 );
                 for operand in implementations {
-                    self.validate_implementation_operand(operand.clone());
+                    self.validate_implementation_operand(operand);
                 }
             }
             ExpressionOperation::MethodCall {
                 witness, contract, ..
             } => {
-                self.validate_implementation_operand(witness.clone());
+                self.validate_implementation_operand(witness);
                 self.require_exact_kind(
                     contract.package,
                     OwnerKey::Declaration(contract.declaration),

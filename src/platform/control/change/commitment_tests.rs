@@ -374,6 +374,7 @@ fn implementation_authority_uses_codec27_and_empty_application_keeps_frozen_code
                 implementations: vec![AuthoredImplementationOperand::Concrete {
                     implementation: local(3),
                     type_arguments: Vec::new(),
+                    implementations: Vec::new(),
                 }],
                 arguments: vec![expression(AuthoredExpressionOperation::I64 { value: 42 })],
             }),

@@ -604,6 +604,7 @@ impl From<OwnedImplementation27> for OwnedImplementation {
     fn from(v: OwnedImplementation27) -> Self {
         Self {
             type_parameters: Vec::new(),
+            implementation_parameters: Vec::new(),
             contract: v.contract,
             self_type: v.self_type,
             type_arguments: v.type_arguments,
@@ -614,6 +615,9 @@ impl From<OwnedImplementation27> for OwnedImplementation {
 impl TryFrom<OwnedImplementation> for OwnedImplementation27 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: OwnedImplementation) -> Result<Self, Self::Error> {
+        if !v.implementation_parameters.is_empty() {
+            return Err(super::wire28::implementation_scheme_extension());
+        }
         if !v.type_parameters.is_empty() {
             return Err(implementation_scheme_extension());
         }
@@ -635,12 +639,16 @@ impl From<OwnedMethodImplementation27> for OwnedMethodImplementation {
             method: v.method,
             function: v.function,
             type_arguments: Vec::new(),
+            implementations: Vec::new(),
         }
     }
 }
 impl TryFrom<OwnedMethodImplementation> for OwnedMethodImplementation27 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: OwnedMethodImplementation) -> Result<Self, Self::Error> {
+        if !v.implementations.is_empty() {
+            return Err(super::wire28::implementation_scheme_extension());
+        }
         if !v.type_arguments.is_empty() {
             return Err(implementation_scheme_extension());
         }
@@ -656,12 +664,13 @@ impl From<ImplementationOperand27> for ImplementationOperand {
             ImplementationOperand27::Concrete { implementation } => Self::Concrete {
                 implementation,
                 type_arguments: Vec::new(),
+                implementations: Vec::new(),
             },
             ImplementationOperand27::Parameter {
                 function,
                 parameter,
             } => Self::Parameter {
-                function,
+                scope: function,
                 parameter,
             },
         }
@@ -674,14 +683,18 @@ impl TryFrom<ImplementationOperand> for ImplementationOperand27 {
             ImplementationOperand::Concrete {
                 implementation,
                 type_arguments,
+                implementations,
             } => {
+                if !implementations.is_empty() {
+                    return Err(super::wire28::implementation_scheme_extension());
+                }
                 if !type_arguments.is_empty() {
                     return Err(implementation_scheme_extension());
                 }
                 Self::Concrete { implementation }
             }
             ImplementationOperand::Parameter {
-                function,
+                scope: function,
                 parameter,
             } => Self::Parameter {
                 function,

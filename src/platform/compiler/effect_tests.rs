@@ -8,7 +8,7 @@ fn strict_artifact_rejects_fully_rehashed_expanding_canonical_applications() {
     // These complete containers have coherent canonical and compiled applications and all
     // outer hashes. A recorded, temporary rejected-rule producer made them without execution.
     // The independent loader must reject their bodies even when every producer assertion agrees.
-    let mut expected_files = Vec::new();
+    let mut expected_artifacts = Vec::new();
     for (name, bytes) in [
         (
             "direct",
@@ -44,19 +44,43 @@ fn strict_artifact_rejects_fully_rehashed_expanding_canonical_applications() {
                 .write_all(&current)
                 .unwrap();
         }
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/finite-callable-compiler28")
-            .join(format!("expanding-{name}.lkja"));
+        let (previous, retained) = match name {
+            "direct" => (
+                include_bytes!(
+                    "../../../tests/fixtures/finite-callable-compiler28/expanding-direct.lkja"
+                )
+                .as_slice(),
+                include_bytes!(
+                    "../../../tests/fixtures/finite-callable-compiler29/expanding-direct.lkja"
+                )
+                .as_slice(),
+            ),
+            "named" => (
+                include_bytes!(
+                    "../../../tests/fixtures/finite-callable-compiler28/expanding-named.lkja"
+                )
+                .as_slice(),
+                include_bytes!(
+                    "../../../tests/fixtures/finite-callable-compiler29/expanding-named.lkja"
+                )
+                .as_slice(),
+            ),
+            _ => unreachable!(),
+        };
+        // The retained Graph 28 derived fixture remains frozen at its own rebuild cut.
+        assert_eq!(
+            load_artifact(previous).unwrap_err().code,
+            "artifact_bundle_contract"
+        );
         let error = load_artifact(&current).unwrap_err();
         assert_eq!(error.code, "kernel_callable_expansion", "{name}: {error:?}");
         assert_eq!(error.class, crate::platform::DiagnosticClass::Semantic);
         println!("strict-expanding-artifact {name}: {}", error.code);
-        expected_files.push((name, path, current));
+        expected_artifacts.push((name, retained, current));
     }
-    for (name, path, current) in expected_files {
-        let retained = std::fs::read(path).expect("retained current-envelope rejection fixture");
+    for (name, retained, current) in expected_artifacts {
         assert!(
-            current == retained,
+            current.as_slice() == retained,
             "current {name} fixture must preserve exact source and instructions"
         );
     }
@@ -260,6 +284,7 @@ fn replace_unit_checked(
         26 => (*b"LKJCUN26", "lkjscript.compiler-unit-envelope.v26"),
         27 => (*b"LKJCUN27", "lkjscript.compiler-unit-envelope.v27"),
         28 => (*b"LKJCUN28", "lkjscript.compiler-unit-envelope.v28"),
+        29 => (*b"LKJCUN29", "lkjscript.compiler-unit-envelope.v29"),
         other => panic!("unexpected forged-unit generation {other}"),
     };
     let bytes = crate::platform::packed::encode(

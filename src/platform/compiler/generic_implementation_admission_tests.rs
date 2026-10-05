@@ -204,6 +204,7 @@ fn generic_implementation_artifact_rejects_rebound_unused_witness_arguments_in_u
             let ImplementationOperand::Concrete {
                 implementation,
                 type_arguments,
+                ..
             } = operand
             else {
                 unreachable!()

@@ -4,11 +4,42 @@ use super::*;
 use crate::platform::semantic_id::TypeParameterId;
 use std::collections::BTreeMap;
 
+// The oracle follows source declarations and complete authored applications.
+// An active declaration is distinct from a repeated, already admitted one; its
+// original frame still admits every field before the declaration enters the cache.
+struct WitnessAdmission {
+    remaining: usize,
+    active: BTreeSet<DeclarationReference>,
+    admitted: BTreeSet<DeclarationReference>,
+}
+
+impl WitnessAdmission {
+    fn new() -> Self {
+        Self {
+            remaining: contract::MAXIMUM_VALIDATION_WORK,
+            active: BTreeSet::new(),
+            admitted: BTreeSet::new(),
+        }
+    }
+
+    fn checkpoint(&mut self, depth: usize) -> bool {
+        if depth > contract::MAXIMUM_TYPE_DEPTH {
+            return false;
+        }
+        let Some(remaining) = self.remaining.checked_sub(1) else {
+            return false;
+        };
+        self.remaining = remaining;
+        true
+    }
+}
+
 // Test-oracle substitution owns the resulting type objects. It uses only source
 // forms and canonical encoding, independently of production resolution.
 struct WitnessTypes<'a> {
     source: &'a KernelSnapshot,
     derived: BTreeMap<TypeObjectDigest, TypeObject>,
+    implementations: BTreeSet<(DeclarationReference, Vec<TypeObjectDigest>)>,
     remaining: usize,
 }
 
@@ -17,6 +48,7 @@ impl<'a> WitnessTypes<'a> {
         Self {
             source,
             derived: BTreeMap::new(),
+            implementations: BTreeSet::new(),
             remaining: contract::MAXIMUM_VALIDATION_WORK,
         }
     }
@@ -88,10 +120,13 @@ impl<'a> WitnessTypes<'a> {
 
     fn implementation(
         &mut self,
+        reference: DeclarationReference,
         i: &OwnedImplementation,
         arguments: &[TypeObjectDigest],
+        depth: usize,
     ) -> Option<(TypeObjectDigest, Vec<TypeObjectDigest>)> {
-        if i.type_parameters.len() != arguments.len() {
+        self.remaining = self.remaining.checked_sub(1)?;
+        if depth > contract::MAXIMUM_TYPE_DEPTH || i.type_parameters.len() != arguments.len() {
             return None;
         }
         let bindings = i
@@ -100,6 +135,7 @@ impl<'a> WitnessTypes<'a> {
             .copied()
             .zip(arguments.iter().copied())
             .collect();
+        let application = (reference, arguments.to_vec());
         let self_type = self.apply(i.self_type, &bindings, 0)?;
         let arguments = i
             .type_arguments
@@ -108,6 +144,18 @@ impl<'a> WitnessTypes<'a> {
             .collect::<Option<Vec<_>>>()?;
         let oracle = Oracle(self.source, None);
         self.contract(i.contract, self_type, &arguments)?;
+        if !self.implementations.insert(application) {
+            return Some((self_type, arguments));
+        }
+        for p in &i.implementation_parameters {
+            let self_type = self.apply(p.self_type, &bindings, 0)?;
+            let arguments = p
+                .type_arguments
+                .iter()
+                .map(|ty| self.apply(*ty, &bindings, 0))
+                .collect::<Option<Vec<_>>>()?;
+            self.contract(p.contract, self_type, &arguments)?;
+        }
         for m in &i.methods {
             let f = oracle.function(m.function)?;
             if f.type_parameters.len() != m.type_arguments.len() {
@@ -125,8 +173,54 @@ impl<'a> WitnessTypes<'a> {
                 )?;
             }
             self.apply(f.result, &target_bindings, 0)?;
+            for p in &f.implementation_parameters {
+                let self_type = self.apply(p.self_type, &target_bindings, 0)?;
+                let arguments = p
+                    .type_arguments
+                    .iter()
+                    .map(|ty| self.apply(*ty, &target_bindings, 0))
+                    .collect::<Option<Vec<_>>>()?;
+                self.contract(p.contract, self_type, &arguments)?;
+            }
+            for operand in &m.implementations {
+                self.operand(operand, &bindings, depth + 1)?;
+            }
         }
         Some((self_type, arguments))
+    }
+
+    fn operand(
+        &mut self,
+        operand: &ImplementationOperand,
+        bindings: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+        depth: usize,
+    ) -> Option<()> {
+        self.remaining = self.remaining.checked_sub(1)?;
+        if depth > contract::MAXIMUM_TYPE_DEPTH {
+            return None;
+        }
+        if let ImplementationOperand::Concrete {
+            implementation,
+            type_arguments,
+            implementations,
+        } = operand
+        {
+            let arguments = type_arguments
+                .iter()
+                .map(|ty| self.apply(*ty, bindings, 0))
+                .collect::<Option<Vec<_>>>()?;
+            let oracle = Oracle(self.source, None);
+            self.implementation(
+                *implementation,
+                oracle.implementation(*implementation)?,
+                &arguments,
+                depth + 1,
+            )?;
+            for operand in implementations {
+                self.operand(operand, bindings, depth + 1)?;
+            }
+        }
+        Some(())
     }
 
     fn contract(
@@ -162,7 +256,6 @@ pub(super) fn materialized_witness_types(
     source: &KernelSnapshot,
 ) -> Option<BTreeMap<TypeObjectDigest, TypeObject>> {
     let mut types = WitnessTypes::new(source);
-    let oracle = Oracle(source, None);
     let mut declarations = Vec::new();
     for (key, owner) in &source.owners {
         if let (OwnerKey::Declaration(id), OwnerRecord::Declaration(owner)) = (key, owner)
@@ -218,7 +311,7 @@ pub(super) fn materialized_witness_types(
             }
         }
     }
-    for (_, i) in declarations {
+    for (reference, i) in declarations {
         let mut arguments = Vec::new();
         for parameter in &i.type_parameters {
             let object = TypeObject::new(TypeForm::TypeParameter {
@@ -229,7 +322,7 @@ pub(super) fn materialized_witness_types(
             types.derived.entry(ty).or_insert(object);
             arguments.push(ty);
         }
-        types.implementation(i, &arguments)?;
+        types.implementation(reference, i, &arguments, 0)?;
     }
     for owner in source.owners.values() {
         if let OwnerRecord::Expression(expression) = owner {
@@ -241,14 +334,7 @@ pub(super) fn materialized_witness_types(
                 _ => &[],
             };
             for operand in operands {
-                if let ImplementationOperand::Concrete {
-                    implementation,
-                    type_arguments,
-                } = operand
-                {
-                    types
-                        .implementation(oracle.implementation(*implementation)?, type_arguments)?;
-                }
+                types.operand(operand, &BTreeMap::new(), 0)?;
             }
         }
     }
@@ -674,23 +760,80 @@ impl Oracle<'_> {
             .apply(ty, bindings, 0)
             .unwrap_or(ty)
     }
-    pub(super) fn valid_implementation(&self, i: &OwnedImplementation) -> bool {
-        let reference = self.0.owners.iter().find_map(|(key, owner)| match (key, owner) {
-            (OwnerKey::Declaration(id), OwnerRecord::Declaration(owner))
-                if matches!(&owner.payload, DeclarationPayload::OwnedImplementation(candidate) if candidate == i) =>
-                    Some(DeclarationReference { package: self.0.root.package_id, declaration: *id }),
-            _ => None,
-        }).or_else(|| self.0.dependencies.iter().find_map(|(package, dependency)| {
-            self.0.dependency_interfaces.get(&dependency.package_revision)?.iter().find_map(|(key, owner)| match (key, owner) {
-                (OwnerKey::Declaration(id), PackageInterfaceRecord::Declaration(owner))
-                    if matches!(&owner.payload, PackageInterfaceDeclarationPayload::OwnedImplementation(candidate) if candidate == i) =>
-                        Some(DeclarationReference { package: *package, declaration: *id }),
-                _ => None,
-            })
-        }));
-        let Some(reference) = reference else {
+    pub(super) fn valid_implementation_at(&self, reference: DeclarationReference) -> bool {
+        self.admit_implementation(reference, &mut WitnessAdmission::new(), 0)
+    }
+
+    pub(super) fn operand_generation(
+        &self,
+        operand: &ImplementationOperand,
+        generation: u16,
+    ) -> bool {
+        let mut pending = vec![(operand, 0)];
+        let mut remaining = contract::MAXIMUM_VALIDATION_WORK;
+        while let Some((operand, depth)) = pending.pop() {
+            if depth > contract::MAXIMUM_TYPE_DEPTH || remaining == 0 {
+                return false;
+            }
+            remaining -= 1;
+            match operand {
+                ImplementationOperand::Concrete {
+                    type_arguments,
+                    implementations,
+                    ..
+                } => {
+                    if (generation < 28 && !type_arguments.is_empty())
+                        || (generation < 29 && !implementations.is_empty())
+                    {
+                        return false;
+                    }
+                    pending.extend(implementations.iter().map(|operand| (operand, depth + 1)));
+                }
+                ImplementationOperand::Parameter { scope, .. } => {
+                    if generation < 29 && self.function(*scope).is_none() {
+                        return false;
+                    }
+                }
+            }
+        }
+        true
+    }
+
+    fn admit_implementation(
+        &self,
+        reference: DeclarationReference,
+        admission: &mut WitnessAdmission,
+        depth: usize,
+    ) -> bool {
+        if !admission.checkpoint(depth) {
             return false;
-        };
+        }
+        if admission.admitted.contains(&reference) {
+            return true;
+        }
+        if !admission.active.insert(reference) {
+            return true;
+        }
+        let accepted = self
+            .implementation(reference)
+            .is_some_and(|i| self.implementation_template(reference, i, admission, depth + 1));
+        admission.active.remove(&reference);
+        if accepted {
+            admission.admitted.insert(reference);
+        }
+        accepted
+    }
+
+    fn implementation_template(
+        &self,
+        reference: DeclarationReference,
+        i: &OwnedImplementation,
+        admission: &mut WitnessAdmission,
+        depth: usize,
+    ) -> bool {
+        if !admission.checkpoint(depth) {
+            return false;
+        }
         let scoped = Oracle(self.0, Some(reference));
         let mut parameter_ids = BTreeSet::new();
         let mut parameter_names = BTreeSet::new();
@@ -708,6 +851,12 @@ impl Oracle<'_> {
             || i.type_arguments
                 .iter()
                 .any(|ty| !scoped.owned_type_in_scope(*ty))
+            || !scoped.valid_prerequisites(
+                reference,
+                &i.type_parameters,
+                &i.implementation_parameters,
+                true,
+            )
             || i.methods.windows(2).any(|w| w[0].method >= w[1].method)
         {
             return false;
@@ -738,7 +887,8 @@ impl Oracle<'_> {
                 || f.type_parameters.len() != mapping.type_arguments.len()
                 || !f.effect_parameters.is_empty()
                 || !f.requirement_parameters.is_empty()
-                || !f.implementation_parameters.is_empty()
+                || f.implementation_parameters.len() != mapping.implementations.len()
+                || !self.valid_parameters(mapping.function, &f)
                 || f.parameters.len() != m.parameters.len()
                 || f.result_borrow
                     != m.result_borrow
@@ -761,6 +911,20 @@ impl Oracle<'_> {
                 {
                     return false;
                 }
+            }
+            if mapping
+                .implementations
+                .iter()
+                .any(|operand| !scoped.mapping_operand(operand, reference, admission, depth + 1))
+                || !scoped.matching_witnesses(
+                    &f.implementation_parameters,
+                    &target_bindings,
+                    &mapping.implementations,
+                    admission,
+                    depth + 1,
+                )
+            {
+                return false;
             }
             for (id, expected) in f.parameters.iter().zip(&m.parameters) {
                 let Some(p) = self.parameter(mapping.function.package, *id) else {
@@ -822,22 +986,36 @@ impl Oracle<'_> {
         }) {
             return false;
         }
-        if f.implementation_parameters.is_empty() {
-            return true;
+        self.valid_prerequisites(d, &f.type_parameters, &f.implementation_parameters, false)
+    }
+
+    fn valid_prerequisites(
+        &self,
+        d: DeclarationReference,
+        type_parameters: &[TypeParameterId],
+        parameters: &[ImplementationParameter],
+        exact_owned: bool,
+    ) -> bool {
+        if parameters.len() > contract::MAXIMUM_CHILDREN {
+            return false;
         }
         let mut ids = BTreeSet::new();
         let mut names = BTreeSet::new();
         let scoped = Oracle(self.0, Some(d));
-        f.implementation_parameters.iter().all(|p| {
+        parameters.iter().all(|p| {
             let Some(TypeForm::TypeParameter { parameter }) = self.form(p.self_type) else {
                 return false;
             };
             ids.insert(p.id)
                 && names.insert(&p.name)
-                && f.type_parameters.contains(parameter)
-                && self
-                    .type_parameter(d.package, *parameter)
-                    .is_some_and(|t| t.declaration == d.declaration && t.constraints.has_owned())
+                && type_parameters.contains(parameter)
+                && scoped.scoped_parameter(*parameter).is_some_and(|t| {
+                    if exact_owned {
+                        t.constraints == TypeParameterConstraints::Owned
+                    } else {
+                        t.constraints.has_owned()
+                    }
+                })
                 && self.valid_contract(p.contract)
                 && self
                     .contract(p.contract)
@@ -847,6 +1025,40 @@ impl Oracle<'_> {
                     .all(|ty| scoped.owned_type_in_scope(*ty))
         })
     }
+
+    fn mapping_operand(
+        &self,
+        operand: &ImplementationOperand,
+        declaration: DeclarationReference,
+        admission: &mut WitnessAdmission,
+        depth: usize,
+    ) -> bool {
+        match operand {
+            ImplementationOperand::Parameter { scope, .. } => *scope == declaration,
+            ImplementationOperand::Concrete { .. } => {
+                Self::closed_operand(operand, admission, depth)
+            }
+        }
+    }
+
+    fn closed_operand(
+        operand: &ImplementationOperand,
+        admission: &mut WitnessAdmission,
+        depth: usize,
+    ) -> bool {
+        if !admission.checkpoint(depth) {
+            return false;
+        }
+        match operand {
+            ImplementationOperand::Parameter { .. } => false,
+            ImplementationOperand::Concrete {
+                implementations, ..
+            } => implementations
+                .iter()
+                .all(|operand| Self::closed_operand(operand, admission, depth + 1)),
+        }
+    }
+
     pub(super) fn witness(
         &self,
         operand: ImplementationOperand,
@@ -855,39 +1067,86 @@ impl Oracle<'_> {
         TypeObjectDigest,
         Vec<TypeObjectDigest>,
     )> {
+        self.admit_witness(&operand, &mut WitnessAdmission::new(), 0)
+    }
+
+    fn admit_witness(
+        &self,
+        operand: &ImplementationOperand,
+        admission: &mut WitnessAdmission,
+        depth: usize,
+    ) -> Option<(
+        DeclarationReference,
+        TypeObjectDigest,
+        Vec<TypeObjectDigest>,
+    )> {
+        if !admission.checkpoint(depth) {
+            return None;
+        }
         match operand {
             ImplementationOperand::Concrete {
                 implementation,
                 type_arguments,
+                implementations,
             } => {
-                let i = self.implementation(implementation)?;
-                if !self.valid_implementation(i)
+                let i = self.implementation(*implementation)?;
+                if !self.admit_implementation(*implementation, admission, depth + 1)
                     || i.type_parameters.len() != type_arguments.len()
+                    || i.implementation_parameters.len() != implementations.len()
                     || type_arguments
                         .iter()
                         .any(|ty| !self.owned_type_in_scope(*ty))
                 {
                     return None;
                 }
+                let bindings = i
+                    .type_parameters
+                    .iter()
+                    .copied()
+                    .zip(type_arguments.iter().copied())
+                    .collect();
+                if !self.matching_witnesses(
+                    &i.implementation_parameters,
+                    &bindings,
+                    implementations,
+                    admission,
+                    depth + 1,
+                ) {
+                    return None;
+                }
                 let mut derived = WitnessTypes::new(self.0);
-                let (self_type, arguments) = derived.implementation(i, &type_arguments)?;
+                derived.remaining = admission.remaining;
+                let self_type = derived.apply(i.self_type, &bindings, 0)?;
+                let arguments = i
+                    .type_arguments
+                    .iter()
+                    .map(|ty| derived.apply(*ty, &bindings, 0))
+                    .collect::<Option<Vec<_>>>()?;
+                admission.remaining = derived.remaining;
                 Some((i.contract, self_type, arguments))
             }
-            ImplementationOperand::Parameter {
-                function,
-                parameter,
-            } => {
-                if function.package != self.0.root.package_id || Some(function) != self.1 {
+            ImplementationOperand::Parameter { scope, parameter } => {
+                if Some(*scope) != self.1 {
                     return None;
                 }
-                let f = self.function(function)?;
-                if !self.valid_parameters(function, &f) {
-                    return None;
-                }
-                let p = f
-                    .implementation_parameters
-                    .iter()
-                    .find(|p| p.id == parameter)?;
+                let parameters = if let Some(f) = self.function(*scope) {
+                    if !self.valid_parameters(*scope, &f) {
+                        return None;
+                    }
+                    f.implementation_parameters
+                } else {
+                    let i = self.implementation(*scope)?;
+                    if !self.valid_prerequisites(
+                        *scope,
+                        &i.type_parameters,
+                        &i.implementation_parameters,
+                        true,
+                    ) {
+                        return None;
+                    }
+                    i.implementation_parameters.clone()
+                };
+                let p = parameters.iter().find(|p| p.id == *parameter)?;
                 self.valid_contract(p.contract).then_some((
                     p.contract,
                     p.self_type,
@@ -917,21 +1176,35 @@ impl Oracle<'_> {
             .copied()
             .zip(types.iter().copied())
             .collect();
-        let mut remaining = contract::MAXIMUM_VALIDATION_WORK;
-        f.implementation_parameters
-            .iter()
-            .zip(operands)
-            .all(|(p, operand)| {
-                self.witness(operand.clone())
+        self.matching_witnesses(
+            &f.implementation_parameters,
+            &bindings,
+            operands,
+            &mut WitnessAdmission::new(),
+            0,
+        )
+    }
+
+    fn matching_witnesses(
+        &self,
+        parameters: &[ImplementationParameter],
+        bindings: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+        operands: &[ImplementationOperand],
+        admission: &mut WitnessAdmission,
+        depth: usize,
+    ) -> bool {
+        parameters.len() == operands.len()
+            && parameters.iter().zip(operands).all(|(p, operand)| {
+                self.admit_witness(operand, admission, depth)
                     .is_some_and(|(c, ty, arguments)| {
                         c == p.contract
                             && self
                                 .exact_application_type(
                                     p.self_type,
                                     ty,
-                                    &bindings,
+                                    bindings,
                                     0,
-                                    &mut remaining,
+                                    &mut admission.remaining,
                                 )
                                 .is_some()
                             && p.type_arguments.len() == arguments.len()
@@ -942,9 +1215,9 @@ impl Oracle<'_> {
                                     self.exact_application_type(
                                         *template,
                                         *actual,
-                                        &bindings,
+                                        bindings,
                                         0,
-                                        &mut remaining,
+                                        &mut admission.remaining,
                                     )
                                     .is_some()
                                 })
@@ -969,5 +1242,208 @@ impl Oracle<'_> {
             .chain(c.type_parameters.iter().copied().zip(arguments))
             .collect();
         Some((c.methods.iter().find(|m| m.id == method)?.clone(), bindings))
+    }
+}
+
+#[cfg(test)]
+mod prerequisite_tests {
+    use super::*;
+
+    const SOURCE: &str = r#"declarations.begin
+(units (module create prerequisites
+  (external create make (visibility private) (implementation core.cell.create)
+    (parameter create value (type I64)) (returns OwnedI64Cell))
+  (external create read (visibility private) (implementation core.cell.read)
+    (parameter create value (type OwnedI64Cell) (use borrow)) (returns I64))
+  (owned-contract create Reader (visibility public)
+    (self Self) (type-parameter create Self (constraint owned))
+    (method method_b9000000000000000000000000000001 read
+      (parameters (Self borrow)) (returns I64)))
+  (owned-contract create Transfer (visibility public)
+    (self Self) (type-parameter create Self (constraint owned))
+    (method method_b9000000000000000000000000000002 move
+      (parameters (Self consume)) (returns Self)))
+  (function create identity (visibility public) (effect pure)
+    (type-parameter create T (constraint owned))
+    (parameter create value (type T) (use consume)) (returns T)
+    (body (local value)))
+  (owned-implementation create Identity (visibility public)
+    (type-parameter create T (constraint owned)) (contract Transfer) (self T)
+    (method method_b9000000000000000000000000000002 identity (types T)))
+  (function create cell-read (visibility public) (effect pure)
+    (parameter create value (type OwnedI64Cell) (use borrow)) (returns I64)
+    (body (call read (local value))))
+  (owned-implementation create CellReader (visibility public)
+    (contract Reader) (self OwnedI64Cell)
+    (method method_b9000000000000000000000000000001 cell-read))
+  (function create scalar-read (visibility public) (effect pure)
+    (type-parameter create T (constraint owned))
+    (implementation-parameter implparam_b9000000000000000000000000000001 reader Reader T)
+    (implementation-parameter implparam_b9000000000000000000000000000002 transfer Transfer T)
+    (parameter create value (type T) (use borrow)) (returns I64)
+    (body (method-call parameter@scalar-read@implparam_b9000000000000000000000000000001
+      Reader method_b9000000000000000000000000000001 (local value))))
+  (owned-implementation create DelegatingReader (visibility public)
+    (type-parameter create T (constraint owned))
+    (implementation-parameter implparam_b9000000000000000000000000000003 reader Reader T)
+    (implementation-parameter implparam_b9000000000000000000000000000004 transfer Transfer T)
+    (contract Reader) (self T)
+    (method method_b9000000000000000000000000000001 scalar-read (types T)
+      (implementations
+        parameter@DelegatingReader@implparam_b9000000000000000000000000000003
+        parameter@DelegatingReader@implparam_b9000000000000000000000000000004)))
+  (function create main (visibility public) (effect pure) (returns I64)
+    (body (let (binding value (type OwnedI64Cell) (call make (i64 17)))
+      (in (method-call
+        (implementation DelegatingReader (types OwnedI64Cell)
+          (implementations
+            (implementation DelegatingReader (types OwnedI64Cell)
+              (implementations concrete@CellReader (implementation Identity (types OwnedI64Cell))))
+            (implementation Identity (types OwnedI64Cell))))
+        Reader method_b9000000000000000000000000000001 (local value))))))))
+declarations.end
+"#;
+
+    fn source() -> KernelSnapshot {
+        crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(SOURCE)
+            .unwrap()
+    }
+
+    fn declaration(snapshot: &KernelSnapshot, name: &str) -> DeclarationReference {
+        snapshot
+            .owners
+            .iter()
+            .find_map(|(key, owner)| match (key, owner) {
+                (OwnerKey::Declaration(id), OwnerRecord::Declaration(owner))
+                    if owner.name.as_str() == name =>
+                {
+                    Some(DeclarationReference {
+                        package: snapshot.root.package_id,
+                        declaration: *id,
+                    })
+                }
+                _ => None,
+            })
+            .unwrap()
+    }
+
+    fn implementation(snapshot: &mut KernelSnapshot) -> &mut OwnedImplementation {
+        let declaration = declaration(snapshot, "DelegatingReader");
+        let OwnerRecord::Declaration(owner) = snapshot
+            .owners
+            .get_mut(&OwnerKey::Declaration(declaration.declaration))
+            .unwrap()
+        else {
+            unreachable!()
+        };
+        let DeclarationPayload::OwnedImplementation(implementation) = &mut owner.payload else {
+            unreachable!()
+        };
+        implementation
+    }
+
+    fn application(snapshot: &mut KernelSnapshot) -> &mut ImplementationOperand {
+        snapshot
+            .owners
+            .values_mut()
+            .find_map(|owner| match owner {
+                OwnerRecord::Expression(expression) => match &mut expression.operation {
+                    ExpressionOperation::MethodCall { witness, .. }
+                        if matches!(witness, ImplementationOperand::Concrete { .. }) =>
+                    {
+                        Some(witness)
+                    }
+                    _ => None,
+                },
+                _ => None,
+            })
+            .unwrap()
+    }
+
+    #[test]
+    fn oracle_admits_nested_prerequisites_and_unused_ordered_mapping() {
+        assert!(accepts(&source()));
+    }
+
+    #[test]
+    fn oracle_rejects_forged_prerequisite_scopes_types_order_and_nested_maps() {
+        let baseline = source();
+        assert!(accepts(&baseline));
+
+        let mut changed = baseline.clone();
+        let foreign = declaration(&changed, "scalar-read");
+        let ImplementationOperand::Parameter { scope, .. } =
+            &mut implementation(&mut changed).methods[0].implementations[0]
+        else {
+            unreachable!()
+        };
+        *scope = foreign;
+        assert!(
+            !accepts(&changed),
+            "a matching type grants no foreign lexical witness"
+        );
+
+        let mut changed = baseline.clone();
+        let item = implementation(&mut changed).implementation_parameters[1].self_type;
+        let object = TypeObject::new(TypeForm::OwnedSequence { item }).unwrap();
+        let ty = encode_type_object(&object).unwrap().0;
+        changed.types.insert(ty, object);
+        implementation(&mut changed).implementation_parameters[1].self_type = ty;
+        assert!(
+            !accepts(&changed),
+            "unused prerequisite Self must be an exact scheme parameter"
+        );
+
+        let mut changed = baseline.clone();
+        let ImplementationOperand::Concrete {
+            implementations, ..
+        } = application(&mut changed)
+        else {
+            unreachable!()
+        };
+        implementations.swap(0, 1);
+        assert!(
+            !accepts(&changed),
+            "ordered prerequisite contracts must match exactly"
+        );
+
+        let mut changed = baseline.clone();
+        let ImplementationOperand::Concrete {
+            implementations, ..
+        } = application(&mut changed)
+        else {
+            unreachable!()
+        };
+        let ImplementationOperand::Concrete {
+            implementations, ..
+        } = &mut implementations[0]
+        else {
+            unreachable!()
+        };
+        implementations.pop();
+        assert!(
+            !accepts(&changed),
+            "unused nested prerequisites remain required"
+        );
+
+        let mut changed = baseline.clone();
+        let reference = declaration(&changed, "DelegatingReader");
+        let scheme = implementation(&mut changed);
+        scheme.methods[0].implementations[0] = ImplementationOperand::Concrete {
+            implementation: reference,
+            type_arguments: vec![scheme.implementation_parameters[0].self_type],
+            implementations: scheme.methods[0].implementations.clone(),
+        };
+        assert!(
+            !accepts(&changed),
+            "method-map constructors cannot hide lexical prerequisites"
+        );
+
+        let mut changed = baseline;
+        changed.root.graph_contract_version = 28;
+        assert!(
+            !accepts(&changed),
+            "graph generation must admit prerequisite source fields"
+        );
     }
 }

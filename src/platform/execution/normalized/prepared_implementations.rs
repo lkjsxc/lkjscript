@@ -1,6 +1,8 @@
 //! Finite closure of callable types and exact applied static witnesses.
 //! A caller's type scope is resolved before any witness crosses a call boundary.
-use super::super::prepare::{NormalizedFunction, NormalizedImplementationArgument};
+use super::super::prepare::{
+    NormalizedFunction, NormalizedImplementationArgument, NormalizedImplementationConstraint,
+};
 use super::*;
 use crate::platform::compiler::{CompilationPayload, CompilationUnit};
 use crate::platform::kernel::{
@@ -9,11 +11,33 @@ use crate::platform::kernel::{
 use crate::platform::semantic_id::ImplementationParameterId;
 use std::sync::Arc;
 
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug)]
 struct AppliedWitness {
+    identity: u32,
+    depth: usize,
     implementation: DeclarationReference,
     type_arguments: Vec<TypeObjectDigest>,
+    implementations: Arc<[AppliedWitness]>,
 }
+
+impl PartialEq for AppliedWitness {
+    fn eq(&self, other: &Self) -> bool {
+        self.identity == other.identity
+    }
+}
+impl Eq for AppliedWitness {}
+impl PartialOrd for AppliedWitness {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for AppliedWitness {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.identity.cmp(&other.identity)
+    }
+}
+
+type WitnessIdentity = (DeclarationReference, Vec<TypeObjectDigest>, Vec<u32>);
 
 type Application = (FunctionIndex, Vec<TypeObjectDigest>, Vec<AppliedWitness>);
 type Bindings = BTreeMap<ImplementationParameterId, AppliedWitness>;
@@ -24,6 +48,8 @@ struct Closing<'a, 'b> {
     implementations: BTreeMap<DeclarationReference, &'a OwnedImplementation>,
     targets: BTreeMap<DeclarationReference, FunctionIndex>,
     instances: BTreeMap<Application, FunctionIndex>,
+    normalized: BTreeMap<AppliedWitness, NormalizedImplementationArgument>,
+    witnesses: BTreeMap<WitnessIdentity, u32>,
     pending: Vec<(Application, FunctionIndex)>,
     types: &'a mut BTreeMap<TypeObjectDigest, TypeObject>,
     work: &'a mut Budget<'b>,
@@ -47,6 +73,32 @@ impl Closing<'_, '_> {
             .reserve::<TypeObjectDigest>(witness.type_arguments.len())
     }
 
+    fn reserve_operand(
+        &mut self,
+        operand: &ImplementationOperand,
+        depth: usize,
+    ) -> Result<(), Diagnostic> {
+        step(self.work)?;
+        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+            return Err(missing());
+        }
+        if let ImplementationOperand::Concrete {
+            type_arguments,
+            implementations,
+            ..
+        } = operand
+        {
+            self.work
+                .reserve::<TypeObjectDigest>(type_arguments.len())?;
+            self.work
+                .reserve::<ImplementationOperand>(implementations.len())?;
+            for child in implementations {
+                self.reserve_operand(child, depth + 1)?;
+            }
+        }
+        Ok(())
+    }
+
     fn operand(
         &mut self,
         operand: &ImplementationOperand,
@@ -54,17 +106,34 @@ impl Closing<'_, '_> {
         bindings: &Bindings,
         types: &BTreeMap<TypeParameterId, TypeObjectDigest>,
     ) -> Result<AppliedWitness, Diagnostic> {
+        self.operand_at(operand, scope, bindings, types, 0)
+    }
+
+    fn operand_at(
+        &mut self,
+        operand: &ImplementationOperand,
+        scope: Option<DeclarationReference>,
+        bindings: &Bindings,
+        types: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+        depth: usize,
+    ) -> Result<AppliedWitness, Diagnostic> {
         step(self.work)?;
+        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+            return Err(missing());
+        }
         match operand {
             ImplementationOperand::Concrete {
                 implementation,
                 type_arguments,
+                implementations,
             } => {
                 let scheme = self
                     .implementations
                     .get(implementation)
                     .ok_or_else(missing)?;
-                if scheme.type_parameters.len() != type_arguments.len() {
+                if scheme.type_parameters.len() != type_arguments.len()
+                    || scheme.implementation_parameters.len() != implementations.len()
+                {
                     return Err(missing());
                 }
                 let arguments = self.arguments(type_arguments, types)?;
@@ -84,23 +153,169 @@ impl Closing<'_, '_> {
                         return Err(missing());
                     }
                 }
-                Ok(AppliedWitness {
+                self.work.reserve::<AppliedWitness>(implementations.len())?;
+                self.work.reserve::<usize>(2)?;
+                let prerequisites = implementations
+                    .iter()
+                    .map(|operand| self.operand_at(operand, scope, bindings, types, depth + 1))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let subtree_depth = prerequisites
+                    .iter()
+                    .map(|witness| witness.depth.saturating_add(1))
+                    .max()
+                    .unwrap_or(0);
+                if depth.saturating_add(subtree_depth)
+                    > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
+                {
+                    return Err(missing());
+                }
+                self.work.reserve::<TypeObjectDigest>(arguments.len())?;
+                self.work.reserve::<u32>(prerequisites.len())?;
+                let key = (
+                    *implementation,
+                    arguments.clone(),
+                    prerequisites.iter().map(|w| w.identity).collect(),
+                );
+                let identity = match self.witnesses.get(&key) {
+                    Some(identity) => *identity,
+                    None => {
+                        self.work.node::<(WitnessIdentity, u32)>()?;
+                        let identity =
+                            u32::try_from(self.witnesses.len()).map_err(|_| missing())?;
+                        self.witnesses.insert(key, identity);
+                        identity
+                    }
+                };
+                let selected = AppliedWitness {
+                    identity,
+                    depth: subtree_depth,
                     implementation: *implementation,
                     type_arguments: arguments,
-                })
+                    implementations: prerequisites.into(),
+                };
+                self.normalize_witness(&selected, depth)?;
+                Ok(selected)
             }
             ImplementationOperand::Parameter {
-                function,
+                scope: parameter_scope,
                 parameter,
             } => {
-                if Some(*function) != scope {
+                if Some(*parameter_scope) != scope {
                     return Err(missing());
                 }
                 let witness = bindings.get(parameter).ok_or_else(missing)?;
+                if depth.saturating_add(witness.depth)
+                    > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
+                {
+                    return Err(missing());
+                }
                 self.reserve_witness(witness)?;
                 Ok(witness.clone())
             }
         }
+    }
+
+    fn normalize_witness(
+        &mut self,
+        witness: &AppliedWitness,
+        depth: usize,
+    ) -> Result<NormalizedImplementationArgument, Diagnostic> {
+        step(self.work)?;
+        if depth.saturating_add(witness.depth)
+            > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
+        {
+            return Err(missing());
+        }
+        if let Some(application) = self.normalized.get(witness) {
+            return Ok(application.clone());
+        }
+        let implementation = *self
+            .implementations
+            .get(&witness.implementation)
+            .ok_or_else(missing)?;
+        if implementation.type_parameters.len() != witness.type_arguments.len()
+            || implementation.implementation_parameters.len() != witness.implementations.len()
+        {
+            return Err(missing());
+        }
+        self.work
+            .reserve::<(TypeParameterId, TypeObjectDigest)>(witness.type_arguments.len())?;
+        let types = implementation
+            .type_parameters
+            .iter()
+            .copied()
+            .zip(witness.type_arguments.iter().copied())
+            .collect();
+        let self_type = substitute(self.types, implementation.self_type, &types, 0, self.work)?;
+        let type_arguments = self.arguments(&implementation.type_arguments, &types)?;
+        self.work
+            .reserve::<NormalizedImplementationArgument>(witness.implementations.len())?;
+        self.work
+            .reserve::<NormalizedImplementationConstraint>(witness.implementations.len())?;
+        self.work.reserve::<usize>(8)?;
+        let mut prerequisites = Vec::new();
+        let mut obligations = Vec::new();
+        for (parameter, child) in implementation
+            .implementation_parameters
+            .iter()
+            .zip(witness.implementations.iter())
+        {
+            let application = self.normalize_witness(child, depth + 1)?;
+            self.match_parameter(parameter, &application, &types)?;
+            let self_type = substitute(self.types, parameter.self_type, &types, 0, self.work)?;
+            let type_arguments = self.arguments(&parameter.type_arguments, &types)?;
+            self.work.reserve::<usize>(2)?;
+            obligations.push(NormalizedImplementationConstraint {
+                contract: parameter.contract,
+                self_type,
+                type_arguments: type_arguments.into(),
+            });
+            prerequisites.push(application);
+        }
+        self.work
+            .reserve::<TypeObjectDigest>(witness.type_arguments.len())?;
+        let application = NormalizedImplementationArgument {
+            identity: witness.identity,
+            depth: witness.depth,
+            implementation: witness.implementation,
+            contract: implementation.contract,
+            implementation_type_arguments: witness.type_arguments.clone().into(),
+            self_type,
+            type_arguments: type_arguments.into(),
+            implementations: prerequisites.into(),
+            prerequisites: obligations.into(),
+        };
+        self.work
+            .node::<(AppliedWitness, NormalizedImplementationArgument)>()?;
+        self.reserve_witness(witness)?;
+        self.normalized.insert(witness.clone(), application.clone());
+        Ok(application)
+    }
+
+    fn match_parameter(
+        &mut self,
+        parameter: &crate::platform::kernel::ImplementationParameter,
+        application: &NormalizedImplementationArgument,
+        types: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+    ) -> Result<(), Diagnostic> {
+        step(self.work)?;
+        if parameter.contract != application.contract
+            || substitute(self.types, parameter.self_type, types, 0, self.work)?
+                != application.self_type
+            || parameter.type_arguments.len() != application.type_arguments.len()
+        {
+            return Err(missing());
+        }
+        for (expected, actual) in parameter
+            .type_arguments
+            .iter()
+            .zip(application.type_arguments.iter())
+        {
+            if substitute(self.types, *expected, types, 0, self.work)? != *actual {
+                return Err(missing());
+            }
+        }
+        Ok(())
     }
 
     fn application(
@@ -110,10 +325,8 @@ impl Closing<'_, '_> {
         implementations: Vec<AppliedWitness>,
     ) -> Result<FunctionIndex, Diagnostic> {
         step(self.work)?;
-        let template = self
-            .templates
-            .get(function.0 as usize)
-            .ok_or_else(missing)?;
+        let templates = Arc::clone(&self.templates);
+        let template = templates.get(function.0 as usize).ok_or_else(missing)?;
         if template.implementation_parameters.len() != implementations.len()
             || template.type_parameters.len() != types.len()
         {
@@ -141,61 +354,9 @@ impl Closing<'_, '_> {
             .collect();
         let mut supplied = Vec::new();
         for (p, witness) in template.implementation_parameters.iter().zip(&key.2) {
-            step(self.work)?;
-            let implementation = self
-                .implementations
-                .get(&witness.implementation)
-                .ok_or_else(missing)?;
-            if implementation.contract != p.contract
-                || implementation.type_parameters.len() != witness.type_arguments.len()
-            {
-                return Err(missing());
-            }
-            if implementation.type_arguments.len() != p.type_arguments.len() {
-                return Err(missing());
-            }
-            self.work
-                .reserve::<TypeObjectDigest>(implementation.type_arguments.len())?;
-            self.work
-                .reserve::<TypeObjectDigest>(implementation.type_arguments.len())?;
-            self.work
-                .reserve::<TypeObjectDigest>(witness.type_arguments.len())?;
-            self.work
-                .reserve::<TypeObjectDigest>(witness.type_arguments.len())?;
-            self.work
-                .reserve::<(TypeParameterId, TypeObjectDigest)>(witness.type_arguments.len())?;
-            let implementation_bindings = implementation
-                .type_parameters
-                .iter()
-                .copied()
-                .zip(witness.type_arguments.iter().copied())
-                .collect();
-            let self_type = substitute(
-                self.types,
-                implementation.self_type,
-                &implementation_bindings,
-                0,
-                self.work,
-            )?;
-            if self_type != substitute(self.types, p.self_type, &function_bindings, 0, self.work)? {
-                return Err(missing());
-            }
-            let mut type_arguments = Vec::new();
-            for (actual, expected) in implementation.type_arguments.iter().zip(&p.type_arguments) {
-                let actual =
-                    substitute(self.types, *actual, &implementation_bindings, 0, self.work)?;
-                if actual != substitute(self.types, *expected, &function_bindings, 0, self.work)? {
-                    return Err(missing());
-                }
-                type_arguments.push(actual);
-            }
-            self.work.reserve::<usize>(4)?;
-            supplied.push(NormalizedImplementationArgument {
-                implementation: witness.implementation,
-                implementation_type_arguments: witness.type_arguments.clone().into(),
-                self_type,
-                type_arguments: type_arguments.into(),
-            });
+            let application = self.normalize_witness(witness, 0)?;
+            self.match_parameter(p, &application, &function_bindings)?;
+            supplied.push(application);
         }
         self.work.node::<(Application, FunctionIndex)>()?;
         self.work.node::<(Application, FunctionIndex)>()?;
@@ -213,6 +374,10 @@ impl Closing<'_, '_> {
                 u32::try_from(self.functions.len()).map_err(|_| missing())?,
                 function.1,
             );
+            self.work.cloned_effect(&template.effect)?;
+            if let NormalizedFunctionBody::External(name) = &template.body {
+                self.work.reserve::<u8>(name.as_str().len())?;
+            }
             let mut instance = template.clone();
             self.work.reserve::<TypeObjectDigest>(key.1.len())?;
             self.work.reserve::<usize>(2)?;
@@ -239,13 +404,8 @@ impl Closing<'_, '_> {
         // Reserve their copies before Arc::make_mut can clone an instruction array.
         for instruction in code.instructions.iter() {
             step(self.work)?;
-            if let NormalizedInstruction::MethodCall {
-                witness: ImplementationOperand::Concrete { type_arguments, .. },
-                ..
-            } = instruction
-            {
-                self.work
-                    .reserve::<TypeObjectDigest>(type_arguments.len())?;
+            if let NormalizedInstruction::MethodCall { witness, .. } = instruction {
+                self.reserve_operand(witness, 0)?;
             }
         }
         for instruction in Arc::make_mut(&mut code.instructions) {
@@ -309,7 +469,7 @@ impl Closing<'_, '_> {
                     arguments,
                 } => {
                     let selected = self.operand(witness, scope, bindings, types)?;
-                    let implementation = self
+                    let implementation = *self
                         .implementations
                         .get(&selected.implementation)
                         .ok_or_else(missing)?;
@@ -329,6 +489,12 @@ impl Closing<'_, '_> {
                     self.work
                         .reserve::<TypeObjectDigest>(mapping.type_arguments.len())?;
                     let mapped_types = mapping.type_arguments.clone();
+                    self.work
+                        .reserve::<ImplementationOperand>(mapping.implementations.len())?;
+                    for operand in &mapping.implementations {
+                        self.reserve_operand(operand, 0)?;
+                    }
+                    let mapped_implementations = mapping.implementations.clone();
                     self.work.reserve::<(TypeParameterId, TypeObjectDigest)>(
                         selected.type_arguments.len(),
                     )?;
@@ -336,12 +502,38 @@ impl Closing<'_, '_> {
                         .type_parameters
                         .iter()
                         .copied()
-                        .zip(selected.type_arguments)
+                        .zip(selected.type_arguments.iter().copied())
+                        .collect();
+                    self.work
+                        .reserve::<(ImplementationParameterId, AppliedWitness)>(
+                            selected.implementations.len(),
+                        )?;
+                    for child in selected.implementations.iter() {
+                        step(self.work)?;
+                        self.work.reserve::<usize>(3)?;
+                        self.reserve_witness(child)?;
+                    }
+                    let implementation_witnesses: Bindings = implementation
+                        .implementation_parameters
+                        .iter()
+                        .map(|p| p.id)
+                        .zip(selected.implementations.iter().cloned())
                         .collect();
                     let applied = self.arguments(&mapped_types, &implementation_bindings)?;
+                    self.work
+                        .reserve::<AppliedWitness>(mapped_implementations.len())?;
+                    let mut prerequisites = Vec::new();
+                    for operand in &mapped_implementations {
+                        prerequisites.push(self.operand(
+                            operand,
+                            Some(selected.implementation),
+                            &implementation_witnesses,
+                            &implementation_bindings,
+                        )?);
+                    }
                     self.work.reserve::<TypeObjectDigest>(applied.len())?;
                     self.work.reserve::<usize>(2)?;
-                    let function = self.application(target, applied.clone(), Vec::new())?;
+                    let function = self.application(target, applied.clone(), prerequisites)?;
                     *instruction = NormalizedInstruction::Call {
                         function,
                         type_arguments: Arc::from(applied),
@@ -477,6 +669,13 @@ pub(super) fn close(
         }
     }
     work.reserve::<NormalizedFunction>(program.functions.len())?;
+    for function in program.functions.iter() {
+        step(work)?;
+        work.cloned_effect(&function.effect)?;
+        if let NormalizedFunctionBody::External(name) = &function.body {
+            work.reserve::<u8>(name.as_str().len())?;
+        }
+    }
     let mut targets = BTreeMap::new();
     for (i, f) in program.functions.iter().enumerate() {
         step(work)?;
@@ -495,6 +694,8 @@ pub(super) fn close(
         implementations,
         targets,
         instances: BTreeMap::new(),
+        normalized: BTreeMap::new(),
+        witnesses: BTreeMap::new(),
         pending: Vec::new(),
         types: &mut program.types,
         work,
@@ -556,6 +757,19 @@ pub(super) fn close(
             closing.functions[index.0 as usize].body = NormalizedFunctionBody::Code(code);
         }
     }
+    closing
+        .work
+        .reserve::<NormalizedImplementationArgument>(closing.normalized.len())?;
+    closing.work.reserve::<usize>(2)?;
+    let mut applications = Vec::with_capacity(closing.normalized.len());
+    for (witness, application) in &closing.normalized {
+        step(closing.work)?;
+        if witness.identity as usize != applications.len() {
+            return Err(missing());
+        }
+        applications.push(application.clone());
+    }
+    program.implementation_applications = applications.into();
     program.functions = closing.functions.into();
     Ok(())
 }
@@ -563,6 +777,7 @@ pub(super) fn close(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::platform::execution::normalized::tests::owned_implementation_scheme_tests::duplicate_dag_fixture;
 
     fn standard() -> NormalizedProgram {
         let artifact = crate::platform::compiler::load_artifact(include_bytes!(
@@ -623,6 +838,7 @@ mod tests {
                 witness: ImplementationOperand::Concrete {
                     implementation: reference,
                     type_arguments: Vec::new(),
+                    implementations: Vec::new(),
                 },
                 contract: reference,
                 method: MethodId::migrate(b"witness-absence-probe", 0),
@@ -678,10 +894,15 @@ mod tests {
             let f = &mut Arc::make_mut(&mut program.functions)[0];
             if selected {
                 f.implementation_arguments = Arc::from([NormalizedImplementationArgument {
+                    identity: 0,
+                    depth: 0,
                     implementation: reference,
+                    contract: reference,
                     implementation_type_arguments: Arc::from([]),
                     self_type: f.result,
                     type_arguments: Arc::from([]),
+                    implementations: Arc::from([]),
+                    prerequisites: Arc::from([]),
                 }]);
             } else {
                 f.implementation_parameters =
@@ -732,5 +953,165 @@ mod tests {
                 &new.expected.instructions
             ));
         }
+    }
+
+    #[test]
+    fn preparation_interns_depth_24_duplicate_edges_by_exact_child_identity() {
+        use crate::platform::kernel::{DeclarationPayload, OwnerRecord};
+        let (source, mut program) = duplicate_dag_fixture(1);
+        let named = |name: &str| {
+            source
+                .owners
+                .iter()
+                .find_map(|(owner, record)| match (owner, record) {
+                    (OwnerKey::Declaration(declaration), OwnerRecord::Declaration(record))
+                        if record.name.as_str() == name =>
+                    {
+                        Some(DeclarationReference {
+                            package: source.root.package_id,
+                            declaration: *declaration,
+                        })
+                    }
+                    _ => None,
+                })
+                .unwrap()
+        };
+        let both = named("Both");
+        let plain = named("Plain");
+        let scope = named("dag-0");
+        let parameter = program
+            .functions
+            .iter()
+            .find(|function| function.declaration == scope)
+            .unwrap()
+            .implementation_parameters[0]
+            .id;
+        let cell = program
+            .implementation_applications
+            .iter()
+            .find(|node| node.implementation == both)
+            .unwrap()
+            .self_type;
+        let implementations = source
+            .owners
+            .iter()
+            .filter_map(|(owner, record)| {
+                let (OwnerKey::Declaration(declaration), OwnerRecord::Declaration(record)) =
+                    (owner, record)
+                else {
+                    return None;
+                };
+                let DeclarationPayload::OwnedImplementation(implementation) = &record.payload
+                else {
+                    return None;
+                };
+                Some((
+                    DeclarationReference {
+                        package: source.root.package_id,
+                        declaration: *declaration,
+                    },
+                    implementation,
+                ))
+            })
+            .collect();
+        let control = crate::platform::execution::ExecutionControl::uncancelled();
+        let mut work = Budget::new(&control);
+        let mut closing = Closing {
+            templates: Arc::from([]),
+            functions: Vec::new(),
+            implementations,
+            targets: BTreeMap::new(),
+            instances: BTreeMap::new(),
+            normalized: BTreeMap::new(),
+            witnesses: BTreeMap::new(),
+            pending: Vec::new(),
+            types: &mut program.types,
+            work: &mut work,
+        };
+        let mut selected = closing
+            .operand(
+                &ImplementationOperand::Concrete {
+                    implementation: plain,
+                    type_arguments: vec![cell],
+                    implementations: Vec::new(),
+                },
+                None,
+                &Bindings::new(),
+                &BTreeMap::new(),
+            )
+            .unwrap();
+        let operand = ImplementationOperand::Concrete {
+            implementation: both,
+            type_arguments: vec![cell],
+            implementations: vec![ImplementationOperand::Parameter { scope, parameter }; 2],
+        };
+        for _ in 0..24 {
+            let bindings = Bindings::from([(parameter, selected)]);
+            selected = closing
+                .operand(&operand, Some(scope), &bindings, &BTreeMap::new())
+                .unwrap();
+            let repeated = closing
+                .operand(&operand, Some(scope), &bindings, &BTreeMap::new())
+                .unwrap();
+            assert_eq!(selected.identity, repeated.identity);
+            assert_eq!(
+                selected.implementations[0].identity,
+                selected.implementations[1].identity
+            );
+        }
+        assert_eq!(closing.witnesses.len(), 25);
+        assert_eq!(closing.normalized.len(), 25);
+        assert!(closing.work.steps < 4096);
+        assert!(closing.work.bytes < 128 * 1024);
+
+        let changed = ImplementationOperand::Concrete {
+            implementation: both,
+            type_arguments: vec![cell],
+            implementations: vec![
+                ImplementationOperand::Parameter { scope, parameter },
+                ImplementationOperand::Concrete {
+                    implementation: named("CellPlus"),
+                    type_arguments: Vec::new(),
+                    implementations: Vec::new(),
+                },
+            ],
+        };
+        let different = closing
+            .operand(
+                &changed,
+                Some(scope),
+                &Bindings::from([(parameter, selected.clone())]),
+                &BTreeMap::new(),
+            )
+            .unwrap();
+        assert_ne!(different.identity, selected.identity);
+        assert_ne!(
+            different.implementations[0].identity,
+            different.implementations[1].identity
+        );
+        let maximum = crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH;
+        for _ in 24..maximum {
+            let bindings = Bindings::from([(parameter, selected)]);
+            selected = closing
+                .operand(&operand, Some(scope), &bindings, &BTreeMap::new())
+                .unwrap();
+        }
+        assert_eq!(selected.depth, maximum);
+        let before = (closing.witnesses.len(), closing.normalized.len());
+        assert!(
+            closing
+                .operand(
+                    &operand,
+                    Some(scope),
+                    &Bindings::from([(parameter, selected)]),
+                    &BTreeMap::new()
+                )
+                .is_err()
+        );
+        assert_eq!(
+            before,
+            (closing.witnesses.len(), closing.normalized.len()),
+            "one-over-depth rejection precedes interned metadata publication"
+        );
     }
 }

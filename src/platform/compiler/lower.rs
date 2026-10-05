@@ -646,10 +646,20 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                 for ty in &i.type_arguments {
                     self.tables.ty(*ty)?;
                 }
+                for parameter in &i.implementation_parameters {
+                    self.tables.declaration(parameter.contract)?;
+                    self.tables.ty(parameter.self_type)?;
+                    for ty in &parameter.type_arguments {
+                        self.tables.ty(*ty)?;
+                    }
+                }
                 for m in &i.methods {
                     self.tables.declaration(m.function)?;
                     for ty in &m.type_arguments {
                         self.tables.ty(*ty)?;
+                    }
+                    for operand in &m.implementations {
+                        self.implementation_operand(operand)?;
                     }
                 }
                 Ok(CompilationPayload::OwnedImplementation(i))
@@ -1003,19 +1013,23 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
         &mut self,
         operand: &crate::platform::kernel::ImplementationOperand,
     ) -> Result<(), Diagnostic> {
-        let reference = match operand {
-            crate::platform::kernel::ImplementationOperand::Concrete {
-                implementation,
-                type_arguments,
-            } => {
-                for ty in type_arguments {
-                    self.tables.ty(*ty)?;
+        operand.validate_local()?;
+        for operand in operand.walk() {
+            let reference = match operand {
+                crate::platform::kernel::ImplementationOperand::Concrete {
+                    implementation,
+                    type_arguments,
+                    ..
+                } => {
+                    for ty in type_arguments {
+                        self.tables.ty(*ty)?;
+                    }
+                    *implementation
                 }
-                *implementation
-            }
-            crate::platform::kernel::ImplementationOperand::Parameter { function, .. } => *function,
-        };
-        self.tables.declaration(reference)?;
+                crate::platform::kernel::ImplementationOperand::Parameter { scope, .. } => *scope,
+            };
+            self.tables.declaration(reference)?;
+        }
         Ok(())
     }
 

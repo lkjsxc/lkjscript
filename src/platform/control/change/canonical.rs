@@ -754,7 +754,7 @@ impl<'a> Reader<'a> {
     fn types(&mut self, values: Vec<TypeObjectDigest>) -> Result<Vec<AuthoredType>, Diagnostic> {
         values.into_iter().map(|t| self.ty(t)).collect()
     }
-    fn implementation_operand(
+    pub(super) fn implementation_operand(
         &mut self,
         operand: k::ImplementationOperand,
     ) -> Result<AuthoredImplementationOperand, Diagnostic> {
@@ -762,17 +762,21 @@ impl<'a> Reader<'a> {
             k::ImplementationOperand::Concrete {
                 implementation,
                 type_arguments,
+                implementations,
             } => AuthoredImplementationOperand::Concrete {
                 implementation: declaration(implementation),
                 type_arguments: self.types(type_arguments)?,
+                implementations: implementations
+                    .into_iter()
+                    .map(|operand| self.implementation_operand(operand))
+                    .collect::<Result<Vec<_>, _>>()?,
             },
-            k::ImplementationOperand::Parameter {
-                function,
-                parameter,
-            } => AuthoredImplementationOperand::Parameter {
-                function: declaration(function),
-                parameter,
-            },
+            k::ImplementationOperand::Parameter { scope, parameter } => {
+                AuthoredImplementationOperand::Parameter {
+                    scope: declaration(scope),
+                    parameter,
+                }
+            }
         })
     }
     fn binding_definition(

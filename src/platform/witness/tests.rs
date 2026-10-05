@@ -82,9 +82,9 @@ fn witness_contract_domains_are_closed_and_unique() {
         ("structural_owned_choices", 2),
         ("structural_owned_products", 3),
         ("symbolic_owned_parameters", 5),
-        ("explicit_owned_implementation_witnesses", 6),
-        ("finite_generic_callable_instantiation", 2),
-        ("single_relation_extractor", 5),
+        ("explicit_owned_implementation_witnesses", 7),
+        ("finite_generic_callable_instantiation", 3),
+        ("single_relation_extractor", 6),
         ("owner_summary_dimensions", 4),
         ("same_task_owned_transfer", 1),
         ("sealed_owned_i64_cells", 1),
@@ -164,9 +164,14 @@ fn witness_contract_domains_are_closed_and_unique() {
         digest,
         "validator_contract_0bc1eb13d89dbdaf164c85d1b14c0e1d63318c42467d23ce425560a7ca10a043"
     );
-    assert_eq!(
+    // Prerequisite composition and complete nested relations invalidate scheme-only proof.
+    assert_ne!(
         digest,
         "validator_contract_42bb6265ce61f4c67aeff0f1e49a607539c7eae48c34bf85244f0177a17e1344"
+    );
+    assert_eq!(
+        digest,
+        "validator_contract_c3b83a1024698983f525fcc4206fc263a9668c1beab1e81b688888f8a0269b62"
     );
 }
 

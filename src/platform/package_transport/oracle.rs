@@ -341,6 +341,10 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
                         13
                     } else if record.header().contract_version < 27 {
                         14
+                    } else if record.header().contract_version < 28 {
+                        15
+                    } else if record.header().contract_version < 29 {
+                        16
                     } else {
                         crate::platform::package_interface::PACKAGE_INTERFACE_CONTRACT_VERSION
                     },
@@ -399,6 +403,10 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
                     d.payload,
                     PackageInterfaceDeclarationPayload::OwnedContract(_)
                 ),
+                (OwnerKind::OwnedImplementation, PackageInterfaceRecord::Declaration(d)) => matches!(
+                    d.payload,
+                    PackageInterfaceDeclarationPayload::OwnedImplementation(_)
+                ),
                 (OwnerKind::PureFunction, PackageInterfaceRecord::Declaration(d)) => {
                     matches!(&d.payload, PackageInterfaceDeclarationPayload::Function(f) if matches!(f.effect, FunctionEffect::Pure))
                 }
@@ -439,12 +447,34 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
                         OwnerKey::Declaration(i.contract.declaration),
                         &[OwnerKind::OwnedContract],
                     )?;
+                    for p in &i.implementation_parameters {
+                        require(
+                            p.contract.package,
+                            OwnerKey::Declaration(p.contract.declaration),
+                            &[OwnerKind::OwnedContract],
+                        )?;
+                    }
                     for m in &i.methods {
                         require(
                             m.function.package,
                             OwnerKey::Declaration(m.function.declaration),
                             &[OwnerKind::PureFunction, OwnerKind::TaskFunction],
                         )?;
+                        for operand in &m.implementations {
+                            operand.validate_local()?;
+                            for operand in operand.walk() {
+                                reader.charge(1)?;
+                                if let ImplementationOperand::Concrete { implementation, .. } =
+                                    operand
+                                {
+                                    require(
+                                        implementation.package,
+                                        OwnerKey::Declaration(implementation.declaration),
+                                        &[OwnerKind::OwnedImplementation],
+                                    )?;
+                                }
+                            }
+                        }
                     }
                 }
                 PackageInterfaceDeclarationPayload::Function(f) => {
@@ -619,7 +649,24 @@ fn public_inventory(
                 PackageInterfaceDeclarationPayload::OwnedContract(c.clone())
             }
             DeclarationPayload::OwnedImplementation(i) => {
-                reader.charge(i.type_parameters.len())?;
+                reader.charge(
+                    i.type_parameters.len()
+                        + i.type_arguments.len()
+                        + i.implementation_parameters.len()
+                        + i.methods.len(),
+                )?;
+                for parameter in &i.implementation_parameters {
+                    reader.charge(1 + parameter.type_arguments.len())?;
+                }
+                for method in &i.methods {
+                    reader.charge(method.type_arguments.len())?;
+                    for operand in &method.implementations {
+                        operand.validate_local()?;
+                        for operand in operand.walk() {
+                            reader.charge(1 + operand.type_arguments().len())?;
+                        }
+                    }
+                }
                 selected.extend(
                     i.type_parameters
                         .iter()
@@ -662,6 +709,10 @@ fn public_inventory(
                 }
             }
             DeclarationPayload::Function(function) => {
+                reader.charge(function.implementation_parameters.len())?;
+                for parameter in &function.implementation_parameters {
+                    reader.charge(1 + parameter.type_arguments.len())?;
+                }
                 reader.charge(function.requirement_parameters.len())?;
                 selected.extend(
                     function

@@ -149,6 +149,15 @@ impl ExpressionRecord {
                 "implementation effect and requirement arguments require Graph 23",
             ));
         }
+        if self.contract_version < 29
+            && match &self.operation {
+                ExpressionOperation::ImplementationCall { implementations, .. } => implementations.iter().any(|operand| matches!(operand, super::ImplementationOperand::Concrete { implementations, .. } if !implementations.is_empty())),
+                ExpressionOperation::MethodCall { witness, .. } => matches!(witness, super::ImplementationOperand::Concrete { implementations, .. } if !implementations.is_empty()),
+                _ => false,
+            }
+        {
+            return Err(super::wire28::implementation_scheme_extension());
+        }
         if self.contract_version < 28
             && match &self.operation {
                 ExpressionOperation::ImplementationCall {
@@ -203,10 +212,14 @@ impl ExpressionRecord {
                 .chain(
                     implementations
                         .iter()
+                        .flat_map(|p| p.walk())
                         .flat_map(|p| p.type_arguments().iter().copied()),
                 )
                 .collect(),
-            ExpressionOperation::MethodCall { witness, .. } => witness.type_arguments().to_vec(),
+            ExpressionOperation::MethodCall { witness, .. } => witness
+                .walk()
+                .flat_map(|p| p.type_arguments().iter().copied())
+                .collect(),
             ExpressionOperation::Call { type_arguments, .. }
             | ExpressionOperation::FunctionValue { type_arguments, .. }
             | ExpressionOperation::Record { type_arguments, .. }
@@ -705,6 +718,7 @@ fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic>
             }
             require_count("implementation call witnesses", implementations.len(), true)?;
             for operand in implementations {
+                operand.validate_local()?;
                 require_count(
                     "implementation scheme arguments",
                     operand.type_arguments().len(),
@@ -716,6 +730,7 @@ fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic>
         ExpressionOperation::MethodCall {
             arguments, witness, ..
         } => {
+            witness.validate_local()?;
             require_count(
                 "implementation scheme arguments",
                 witness.type_arguments().len(),

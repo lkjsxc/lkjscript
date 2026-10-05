@@ -28,15 +28,17 @@ pub struct AuthoredOwnedMethodImplementation {
     pub method: MethodId,
     pub function: AuthoredDeclarationReference,
     pub type_arguments: Vec<AuthoredType>,
+    pub implementations: Vec<AuthoredImplementationOperand>,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredImplementationOperand {
     Concrete {
         implementation: AuthoredDeclarationReference,
         type_arguments: Vec<AuthoredType>,
+        implementations: Vec<AuthoredImplementationOperand>,
     },
     Parameter {
-        function: AuthoredDeclarationReference,
+        scope: AuthoredDeclarationReference,
         parameter: ImplementationParameterId,
     },
 }
@@ -88,6 +90,7 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
         &mut self,
         contract: &AuthoredDeclarationReference,
         type_parameters: &[AuthoredTypeParameterReference],
+        implementation_parameters: &[AuthoredImplementationParameter],
         self_type: &AuthoredType,
         type_arguments: &[AuthoredType],
         methods: &[AuthoredOwnedMethodImplementation],
@@ -98,6 +101,8 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
             .map(|parameter| self.lower_type_parameter_reference(parameter))
             .collect::<Result<Vec<_>, _>>()?;
         let self_type = self.lower_type(self_type)?;
+        let implementation_parameters =
+            self.implementation_parameters(implementation_parameters)?;
         let type_arguments = type_arguments
             .iter()
             .map(|ty| self.lower_type(ty))
@@ -112,12 +117,18 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
                     .iter()
                     .map(|ty| self.lower_type(ty))
                     .collect::<Result<Vec<_>, _>>()?,
+                implementations: mapping
+                    .implementations
+                    .iter()
+                    .map(|operand| self.lower_implementation_operand(operand))
+                    .collect::<Result<Vec<_>, _>>()?,
             });
         }
         lowered.sort_by_key(|m| m.method);
         Ok(OwnedImplementation {
             contract,
             type_parameters,
+            implementation_parameters,
             self_type,
             type_arguments,
             methods: lowered,
@@ -131,21 +142,47 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
             AuthoredImplementationOperand::Concrete {
                 implementation,
                 type_arguments,
+                implementations,
             } => ImplementationOperand::Concrete {
                 implementation: self.lower_declaration_reference(implementation)?,
                 type_arguments: type_arguments
                     .iter()
                     .map(|ty| self.lower_type(ty))
                     .collect::<Result<Vec<_>, _>>()?,
+                implementations: implementations
+                    .iter()
+                    .map(|operand| self.lower_implementation_operand(operand))
+                    .collect::<Result<Vec<_>, _>>()?,
             },
-            AuthoredImplementationOperand::Parameter {
-                function,
-                parameter,
-            } => ImplementationOperand::Parameter {
-                function: self.lower_declaration_reference(function)?,
-                parameter: *parameter,
-            },
+            AuthoredImplementationOperand::Parameter { scope, parameter } => {
+                ImplementationOperand::Parameter {
+                    scope: self.lower_declaration_reference(scope)?,
+                    parameter: *parameter,
+                }
+            }
         })
+    }
+
+    fn implementation_parameters(
+        &mut self,
+        parameters: &[AuthoredImplementationParameter],
+    ) -> Result<Vec<ImplementationParameter>, Diagnostic> {
+        parameters
+            .iter()
+            .map(|p| {
+                Ok(ImplementationParameter {
+                    id: p.id,
+                    name: p.name.clone(),
+                    contract: self.lower_declaration_reference(&p.contract)?,
+                    self_type: self.lower_type(&p.self_type)?,
+                    type_arguments: p
+                        .type_arguments
+                        .iter()
+                        .map(|ty| self.lower_type(ty))
+                        .collect::<Result<Vec<_>, _>>()?,
+                })
+            })
+            .collect()
     }
 }
 
@@ -208,6 +245,7 @@ pub(in crate::platform::change::request) fn lower<
             visibility,
             contract,
             type_parameters,
+            implementation_parameters,
             self_type,
             type_arguments,
             methods,
@@ -217,6 +255,7 @@ pub(in crate::platform::change::request) fn lower<
             let value = lowerer.owned_implementation_value(
                 contract,
                 type_parameters,
+                implementation_parameters,
                 self_type,
                 type_arguments,
                 methods,
@@ -263,6 +302,7 @@ pub(in crate::platform::change::request) fn lower<
             declaration,
             contract,
             type_parameters,
+            implementation_parameters,
             self_type,
             type_arguments,
             methods,
@@ -271,6 +311,7 @@ pub(in crate::platform::change::request) fn lower<
             let value = lowerer.owned_implementation_value(
                 contract,
                 type_parameters,
+                implementation_parameters,
                 self_type,
                 type_arguments,
                 methods,
@@ -291,6 +332,10 @@ pub(in crate::platform::change::request) fn lower<
                     "implementation mutation cannot change declaration kind",
                 ));
             }
+            if value.requires_prerequisite_generation() {
+                d.header.contract_version =
+                    crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+            }
             d.payload = DeclarationPayload::OwnedImplementation(value);
             Ok(())
         }
@@ -299,38 +344,29 @@ pub(in crate::platform::change::request) fn lower<
             parameters,
         } => {
             let declaration = lowerer.resolve_declaration(declaration)?;
-            let mut lowered = Vec::new();
-            for p in parameters {
-                lowered.push(ImplementationParameter {
-                    id: p.id,
-                    name: p.name.clone(),
-                    contract: lowerer.lower_declaration_reference(&p.contract)?,
-                    self_type: lowerer.lower_type(&p.self_type)?,
-                    type_arguments: p
-                        .type_arguments
-                        .iter()
-                        .map(|ty| lowerer.lower_type(ty))
-                        .collect::<Result<Vec<_>, _>>()?,
-                });
-            }
+            let lowered = lowerer.implementation_parameters(parameters)?;
             let OwnerRecord::Declaration(d) =
                 lowerer.candidate_mut(OwnerKey::Declaration(declaration))?
             else {
                 return Err(request_error(
                     DiagnosticClass::Semantic,
                     "change_owned_function",
-                    "implementation parameters require a graph function",
+                    "implementation parameters require a graph function or owned implementation",
                 ));
             };
-            let DeclarationPayload::Function(f) = &mut d.payload else {
-                return Err(request_error(
-                    DiagnosticClass::Semantic,
-                    "change_owned_function",
-                    "implementation parameters require a graph function",
-                ));
+            let target = match &mut d.payload {
+                DeclarationPayload::Function(f) => &mut f.implementation_parameters,
+                DeclarationPayload::OwnedImplementation(i) => &mut i.implementation_parameters,
+                _ => {
+                    return Err(request_error(
+                        DiagnosticClass::Semantic,
+                        "change_owned_function",
+                        "implementation parameters require a graph function or owned implementation",
+                    ));
+                }
             };
-            f.implementation_parameters = lowered;
-            if !f.implementation_parameters.is_empty() {
+            *target = lowered;
+            if !target.is_empty() {
                 d.header.contract_version =
                     crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
             }

@@ -1,16 +1,42 @@
 //! Static witness dispatch derived from canonical source, independently of prepared instances.
 use super::*;
 use crate::platform::kernel::{
-    ImplementationOperand, OwnedImplementation, TypeParameterConstraints,
+    ImplementationOperand, ImplementationParameter, OwnedImplementation, TypeParameterConstraints,
 };
 use crate::platform::semantic_id::ImplementationParameterId;
 
 use std::collections::BTreeSet;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub(super) struct AppliedReferenceImplementation {
+    pub(super) identity: u64,
+    pub(super) depth: usize,
     pub(super) implementation: DeclarationReference,
-    pub(super) type_arguments: Vec<TypeObjectDigest>,
+    pub(super) type_arguments: Arc<[TypeObjectDigest]>,
+    pub(super) implementations: Arc<[AppliedReferenceImplementation]>,
+}
+
+impl PartialEq for AppliedReferenceImplementation {
+    fn eq(&self, other: &Self) -> bool {
+        self.identity == other.identity
+    }
+}
+impl Eq for AppliedReferenceImplementation {}
+impl PartialOrd for AppliedReferenceImplementation {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for AppliedReferenceImplementation {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.identity.cmp(&other.identity)
+    }
+}
+
+type WitnessKey = (DeclarationReference, Arc<[TypeObjectDigest]>, Arc<[u64]>);
+#[derive(Default)]
+pub(super) struct ReferenceWitnessInterner {
+    values: BTreeMap<WitnessKey, AppliedReferenceImplementation>,
 }
 
 type Implementations = BTreeMap<ImplementationParameterId, AppliedReferenceImplementation>;
@@ -20,39 +46,65 @@ impl ReferenceState<'_> {
         &mut self,
         operand: ImplementationOperand,
     ) -> Result<AppliedReferenceImplementation, ExecutionError> {
+        self.resolve_implementation_in(&operand, None, None, 0, &mut 0)
+    }
+
+    fn resolve_implementation_in(
+        &mut self,
+        operand: &ImplementationOperand,
+        witnesses: Option<(DeclarationReference, &Implementations)>,
+        types: Option<&BTreeMap<TypeParameterId, TypeObjectDigest>>,
+        depth: usize,
+        visits: &mut usize,
+    ) -> Result<AppliedReferenceImplementation, ExecutionError> {
         self.control.check()?;
+        Self::witness_tree_step(depth, visits)?;
         match operand {
             ImplementationOperand::Concrete {
                 implementation,
                 type_arguments,
+                implementations,
             } => {
                 self.charge_allocation(
-                    (type_arguments.len() * std::mem::size_of::<TypeObjectDigest>()) as u64,
-                )?;
-                Ok(AppliedReferenceImplementation {
-                    implementation,
-                    type_arguments: self.resolve_type_arguments(&type_arguments)?,
-                })
-            }
-            ImplementationOperand::Parameter {
-                function,
-                parameter,
-            } => {
-                let Some((scope, values)) = self.implementation_scopes.last() else {
-                    return Err(reference_type_error("witness has no lexical scope"));
-                };
-                if *scope != function {
-                    return Err(reference_type_error("witness belongs to another function"));
-                }
-                let selected = values
-                    .get(&parameter)
-                    .cloned()
-                    .ok_or_else(|| reference_type_error("unbound implementation witness"))?;
-                self.charge_allocation(
-                    (selected.type_arguments.len() * std::mem::size_of::<TypeObjectDigest>())
+                    (type_arguments.len() * std::mem::size_of::<TypeObjectDigest>()
+                        + implementations.len()
+                            * std::mem::size_of::<AppliedReferenceImplementation>())
                         as u64,
                 )?;
-                Ok(selected)
+                let type_arguments = if let Some(types) = types {
+                    type_arguments
+                        .iter()
+                        .map(|ty| self.method_type(*ty, types))
+                        .collect::<Result<_, _>>()?
+                } else {
+                    self.resolve_type_arguments(type_arguments)?
+                };
+                let implementations = implementations
+                    .iter()
+                    .map(|operand| {
+                        self.resolve_implementation_in(operand, witnesses, types, depth + 1, visits)
+                    })
+                    .collect::<Result<_, _>>()?;
+                self.intern_implementation(*implementation, type_arguments, implementations)
+            }
+            ImplementationOperand::Parameter { scope, parameter } => {
+                let lexical = self
+                    .implementation_scopes
+                    .last()
+                    .map(|(scope, values)| (*scope, values));
+                let Some((declaration, values)) = witnesses.or(lexical) else {
+                    return Err(reference_type_error("witness has no lexical scope"));
+                };
+                if declaration != *scope {
+                    return Err(reference_type_error(
+                        "witness belongs to another declaration",
+                    ));
+                }
+                let selected = values
+                    .get(parameter)
+                    .ok_or_else(|| reference_type_error("unbound implementation witness"))?;
+                Self::witness_tree_step(depth.saturating_add(selected.depth), visits)?;
+                Ok(selected.clone())
             }
         }
     }
@@ -60,6 +112,107 @@ impl ReferenceState<'_> {
     pub(super) fn checked_implementation(
         &mut self,
         selected: &AppliedReferenceImplementation,
+    ) -> Result<OwnedImplementation, ExecutionError> {
+        self.checked_implementation_in(selected, 0, &mut 0, &mut BTreeSet::new())
+    }
+
+    fn intern_implementation(
+        &mut self,
+        implementation: DeclarationReference,
+        types: Vec<TypeObjectDigest>,
+        children: Vec<AppliedReferenceImplementation>,
+    ) -> Result<AppliedReferenceImplementation, ExecutionError> {
+        let depth = children
+            .iter()
+            .map(|child| child.depth.saturating_add(1))
+            .max()
+            .unwrap_or(0);
+        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+            return Err(reference_type_error(
+                "implementation DAG exceeds canonical depth",
+            ));
+        }
+        self.charge_allocation((children.len() * std::mem::size_of::<u64>()) as u64)?;
+        let children_ids = children
+            .iter()
+            .map(|child| child.identity)
+            .collect::<Vec<_>>();
+        let key = (
+            implementation,
+            Arc::<[TypeObjectDigest]>::from(types),
+            Arc::<[u64]>::from(children_ids),
+        );
+        let interner = Arc::clone(&self.reference_witnesses);
+        let mut interner = interner
+            .lock()
+            .map_err(|_| reference_type_error("reference witness interner is poisoned"))?;
+        if let Some(selected) = interner.values.get(&key) {
+            return Ok(selected.clone());
+        }
+        self.charge_allocation(
+            (std::mem::size_of::<(WitnessKey, AppliedReferenceImplementation)>()
+                + 3 * std::mem::size_of::<usize>()) as u64,
+        )?;
+        let identity = u64::try_from(interner.values.len())
+            .ok()
+            .and_then(|id| id.checked_add(1))
+            .ok_or_else(|| reference_type_error("reference witness identity overflow"))?;
+        let selected = AppliedReferenceImplementation {
+            identity,
+            depth,
+            implementation,
+            type_arguments: Arc::clone(&key.1),
+            implementations: children.into(),
+        };
+        interner.values.insert(key, selected.clone());
+        Ok(selected)
+    }
+
+    fn checked_implementation_in(
+        &mut self,
+        selected: &AppliedReferenceImplementation,
+        depth: usize,
+        visits: &mut usize,
+        active: &mut BTreeSet<AppliedReferenceImplementation>,
+    ) -> Result<OwnedImplementation, ExecutionError> {
+        Self::witness_tree_step(depth, visits)?;
+        self.charge_witness(selected, depth, &mut 0)?;
+        if !active.insert(selected.clone()) {
+            // Exact repeated applications close an ordinary mapped callable
+            // cycle. The first visit still validates every mapping and formal.
+            let DeclarationPayload::OwnedImplementation(mut implementation) =
+                self.declaration(selected.implementation)?.payload
+            else {
+                return Err(reference_type_error(
+                    "witness does not select an implementation owner",
+                ));
+            };
+            let bindings = implementation
+                .type_parameters
+                .iter()
+                .copied()
+                .zip(selected.type_arguments.iter().copied())
+                .collect::<BTreeMap<_, _>>();
+            implementation.self_type = self.method_type(implementation.self_type, &bindings)?;
+            for argument in &mut implementation.type_arguments {
+                *argument = self.method_type(*argument, &bindings)?;
+            }
+            for mapping in &mut implementation.methods {
+                for argument in &mut mapping.type_arguments {
+                    *argument = self.method_type(*argument, &bindings)?;
+                }
+            }
+            return Ok(implementation);
+        }
+        self.checked_implementation_body(selected, depth, visits, active)
+    }
+
+    fn checked_implementation_body(
+        &mut self,
+        selected: &AppliedReferenceImplementation,
+        depth: usize,
+        visits: &mut usize,
+        active: &mut BTreeSet<AppliedReferenceImplementation>,
     ) -> Result<OwnedImplementation, ExecutionError> {
         let reference = selected.implementation;
         let DeclarationPayload::OwnedImplementation(implementation) =
@@ -88,7 +241,7 @@ impl ReferenceState<'_> {
         for (parameter, actual) in implementation
             .type_parameters
             .iter()
-            .zip(&selected.type_arguments)
+            .zip(selected.type_arguments.iter())
         {
             self.witness_metadata_step()?;
             let Some(OwnerRecord::TypeParameter(owner)) =
@@ -125,6 +278,15 @@ impl ReferenceState<'_> {
                 ));
             }
         }
+        let prerequisite_bindings = self.implementation_bindings_in(
+            reference,
+            &implementation.implementation_parameters,
+            &scheme_bindings,
+            &selected.implementations,
+            depth + 1,
+            visits,
+            active,
+        )?;
         let mut implementation = implementation;
         implementation.self_type = self.method_type(implementation.self_type, &scheme_bindings)?;
         for actual in &mut implementation.type_arguments {
@@ -304,7 +466,7 @@ impl ReferenceState<'_> {
                 || function.type_parameters.len() != mapping.type_arguments.len()
                 || !function.effect_parameters.is_empty()
                 || !function.requirement_parameters.is_empty()
-                || !function.implementation_parameters.is_empty()
+                || function.implementation_parameters.len() != mapping.implementations.len()
                 || function.parameters.len() != method.parameters.len()
                 || function.result_borrow
                     != method
@@ -346,6 +508,30 @@ impl ReferenceState<'_> {
                 }
                 target_bindings.insert(*parameter, *actual);
             }
+            self.charge_allocation(
+                (mapping.implementations.len()
+                    * std::mem::size_of::<AppliedReferenceImplementation>()) as u64,
+            )?;
+            let mut mapped_witnesses = Vec::with_capacity(mapping.implementations.len());
+            for operand in &mapping.implementations {
+                self.validate_mapping_operand(operand, &scheme_parameters, true, 0, &mut 0)?;
+                mapped_witnesses.push(self.resolve_implementation_in(
+                    operand,
+                    Some((reference, &prerequisite_bindings)),
+                    Some(&scheme_bindings),
+                    depth + 1,
+                    visits,
+                )?);
+            }
+            self.implementation_bindings_in(
+                target,
+                &function.implementation_parameters,
+                &target_bindings,
+                &mapped_witnesses,
+                depth + 1,
+                visits,
+                active,
+            )?;
             let parameters = self.parameters(target.package, &function.parameters)?;
             for (actual, expected) in parameters.iter().zip(&method.parameters) {
                 self.owned_method_type(actual.ty, &target_parameters)?;
@@ -380,11 +566,38 @@ impl ReferenceState<'_> {
 
     pub(super) fn implementation_bindings(
         &mut self,
-        function: &FunctionDeclaration,
+        scope: DeclarationReference,
+        parameters: &[ImplementationParameter],
         types: &BTreeMap<TypeParameterId, TypeObjectDigest>,
         supplied: &[AppliedReferenceImplementation],
     ) -> Result<Implementations, ExecutionError> {
-        if function.implementation_parameters.len() != supplied.len() {
+        self.implementation_bindings_in(
+            scope,
+            parameters,
+            types,
+            supplied,
+            0,
+            &mut 0,
+            &mut BTreeSet::new(),
+        )
+    }
+
+    // Keep the four semantic binding inputs explicit; depth, visits and active
+    // carry one shared traversal ledger through recursive prerequisite admission.
+    #[allow(clippy::too_many_arguments)]
+    fn implementation_bindings_in(
+        &mut self,
+        scope: DeclarationReference,
+        parameters: &[ImplementationParameter],
+        types: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+        supplied: &[AppliedReferenceImplementation],
+        depth: usize,
+        visits: &mut usize,
+        active: &mut BTreeSet<AppliedReferenceImplementation>,
+    ) -> Result<Implementations, ExecutionError> {
+        if parameters.len() != supplied.len()
+            || parameters.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN
+        {
             return Err(reference_type_error(
                 "missing or extra static implementation operands",
             ));
@@ -395,12 +608,11 @@ impl ReferenceState<'_> {
                 )) as u64,
         )?;
         let mut bindings = BTreeMap::new();
-        for (parameter, selected) in function.implementation_parameters.iter().zip(supplied) {
+        let mut names = BTreeSet::new();
+        let declared = types.keys().copied().collect::<BTreeSet<_>>();
+        for (parameter, selected) in parameters.iter().zip(supplied) {
             self.witness_metadata_step()?;
-            let implementation = self.checked_implementation(selected)?;
-            self.charge_allocation(
-                (selected.type_arguments.len() * std::mem::size_of::<TypeObjectDigest>()) as u64,
-            )?;
+            let implementation = self.checked_implementation_in(selected, depth, visits, active)?;
             let Some(TypeForm::TypeParameter {
                 parameter: type_parameter,
             }) = self.schema.types.get(&parameter.self_type).map(|t| &t.form)
@@ -409,8 +621,32 @@ impl ReferenceState<'_> {
                     "witness Self is not an exact type parameter",
                 ));
             };
+            let type_parameter = *type_parameter;
+            let Some(OwnerRecord::TypeParameter(owner)) =
+                self.owner_in_package(scope.package, OwnerKey::TypeParameter(type_parameter))?
+            else {
+                return Err(reference_type_error("missing witness Self parameter owner"));
+            };
+            if owner.header.owner != OwnerKey::TypeParameter(type_parameter)
+                || owner.declaration != scope.declaration
+                || !owner.constraints.has_owned()
+                || !declared.contains(&type_parameter)
+                || !names.insert(&parameter.name)
+            {
+                return Err(reference_type_error(
+                    "witness formal has a foreign Owned scope",
+                ));
+            }
+            for expected in &parameter.type_arguments {
+                if !self.owned_method_type(*expected, &declared)? {
+                    return Err(reference_type_error(
+                        "witness argument has a foreign Owned scope",
+                    ));
+                }
+            }
+            self.charge_witness(selected, depth, &mut 0)?;
             if implementation.contract != parameter.contract
-                || types.get(type_parameter) != Some(&implementation.self_type)
+                || types.get(&type_parameter) != Some(&implementation.self_type)
                 || parameter.type_arguments.len() != implementation.type_arguments.len()
                 || bindings.insert(parameter.id, selected.clone()).is_some()
             {
@@ -439,19 +675,56 @@ impl ReferenceState<'_> {
         witness: ImplementationOperand,
         contract: DeclarationReference,
         method: crate::platform::semantic_id::MethodId,
-    ) -> Result<(DeclarationReference, Vec<TypeObjectDigest>), ExecutionError> {
+    ) -> Result<
+        (
+            DeclarationReference,
+            Vec<TypeObjectDigest>,
+            Vec<AppliedReferenceImplementation>,
+        ),
+        ExecutionError,
+    > {
         let selected = self.resolve_implementation(witness)?;
         let implementation = self.checked_implementation(&selected)?;
         if implementation.contract != contract {
             return Err(reference_type_error("method uses another nominal contract"));
         }
+        let scheme_bindings = implementation
+            .type_parameters
+            .iter()
+            .copied()
+            .zip(selected.type_arguments.iter().copied())
+            .collect::<BTreeMap<_, _>>();
+        let prerequisites = self.implementation_bindings(
+            selected.implementation,
+            &implementation.implementation_parameters,
+            &scheme_bindings,
+            &selected.implementations,
+        )?;
         for m in &implementation.methods {
             self.witness_metadata_step()?;
             if m.method == method {
                 self.charge_allocation(
                     (m.type_arguments.len() * std::mem::size_of::<TypeObjectDigest>()) as u64,
                 )?;
-                return Ok((m.function, m.type_arguments.clone()));
+                self.charge_allocation(
+                    (m.implementations.len()
+                        * std::mem::size_of::<AppliedReferenceImplementation>())
+                        as u64,
+                )?;
+                let implementations = m
+                    .implementations
+                    .iter()
+                    .map(|operand| {
+                        self.resolve_implementation_in(
+                            operand,
+                            Some((selected.implementation, &prerequisites)),
+                            Some(&scheme_bindings),
+                            0,
+                            &mut 0,
+                        )
+                    })
+                    .collect::<Result<_, _>>()?;
+                return Ok((m.function, m.type_arguments.clone(), implementations));
             }
         }
         Err(reference_type_error("method absent from implementation"))
@@ -476,6 +749,25 @@ impl ReferenceState<'_> {
         let types = self.resolve_type_arguments(types)?;
         let effects = self.resolve_effect_arguments(effects)?;
         let requirements = self.resolve_requirement_arguments(requirements)?;
+        self.admit_resolved_witness_call(
+            function,
+            &types,
+            &effects,
+            &requirements,
+            &selected,
+            arguments,
+        )
+    }
+
+    pub(super) fn admit_resolved_witness_call(
+        &mut self,
+        function: DeclarationReference,
+        types: &[TypeObjectDigest],
+        effects: &[EffectRow],
+        requirements: &[RequirementOperand],
+        implementations: &[AppliedReferenceImplementation],
+        arguments: Vec<CheckedValue>,
+    ) -> Result<AdmittedGraphCall, ExecutionError> {
         let DeclarationPayload::Function(declaration) = self.declaration(function)?.payload else {
             return Err(reference_type_error(
                 "witness call requires a graph function",
@@ -486,10 +778,10 @@ impl ReferenceState<'_> {
             declaration,
             arguments,
             ReferenceApplication {
-                types: &types,
-                effects: &effects,
-                requirements: &requirements,
-                implementations: &selected,
+                types,
+                effects,
+                requirements,
+                implementations,
             },
         )
     }
@@ -525,6 +817,71 @@ impl ReferenceState<'_> {
 }
 
 impl ReferenceState<'_> {
+    fn witness_tree_step(depth: usize, visits: &mut usize) -> Result<(), ExecutionError> {
+        *visits = visits
+            .checked_add(1)
+            .ok_or_else(|| reference_type_error("implementation tree size overflow"))?;
+        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
+            || *visits > crate::platform::kernel::contract::MAXIMUM_CHILDREN
+        {
+            return Err(reference_type_error(
+                "implementation tree exceeds canonical bounds",
+            ));
+        }
+        Ok(())
+    }
+
+    fn charge_witness(
+        &mut self,
+        selected: &AppliedReferenceImplementation,
+        depth: usize,
+        visits: &mut usize,
+    ) -> Result<(), ExecutionError> {
+        self.witness_metadata_step()?;
+        Self::witness_tree_step(depth.saturating_add(selected.depth), visits)?;
+        self.charge_allocation(
+            (std::mem::size_of::<AppliedReferenceImplementation>()
+                + 3 * std::mem::size_of::<usize>()) as u64,
+        )
+    }
+
+    fn validate_mapping_operand(
+        &mut self,
+        operand: &ImplementationOperand,
+        declared: &BTreeSet<TypeParameterId>,
+        parameter_allowed: bool,
+        depth: usize,
+        visits: &mut usize,
+    ) -> Result<(), ExecutionError> {
+        self.witness_metadata_step()?;
+        Self::witness_tree_step(depth, visits)?;
+        match operand {
+            ImplementationOperand::Concrete {
+                type_arguments,
+                implementations,
+                ..
+            } => {
+                for ty in type_arguments {
+                    if !self.owned_method_type(*ty, declared)? {
+                        return Err(reference_type_error(
+                            "mapping witness has a foreign Owned argument",
+                        ));
+                    }
+                }
+                for child in implementations {
+                    self.validate_mapping_operand(child, declared, false, depth + 1, visits)?;
+                }
+            }
+            ImplementationOperand::Parameter { .. } if !parameter_allowed => {
+                return Err(reference_type_error(
+                    "concrete mapping witness captures a scoped prerequisite",
+                ));
+            }
+            ImplementationOperand::Parameter { .. } => {}
+        }
+        Ok(())
+    }
+
     // Classify the permitted first-order contract grammar from canonical type objects.
     // Every composite member is checked, including ordinary and phantom members.
     fn owned_method_type(

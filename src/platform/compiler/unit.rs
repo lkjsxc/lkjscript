@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-28";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 28;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-23";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 23;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN28";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v28";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v28";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-29";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 29;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-24";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 24;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN29";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v29";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v29";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -552,7 +552,7 @@ impl CompilationUnit {
                 "compiler-unit bytes disagree with their exact object-domain digest",
             ));
         }
-        // Derived generations 10–27 require a rebuild from supported canonical owners.
+        // Derived generations 10–28 require a rebuild from supported canonical owners.
         // Refuse before decoding; old bytes never acquire current instruction meaning.
         if [
             b"LKJCUN10",
@@ -573,6 +573,7 @@ impl CompilationUnit {
             b"LKJCUN25",
             b"LKJCUN26",
             b"LKJCUN27",
+            b"LKJCUN28",
         ]
         .iter()
         .any(|magic| bytes.starts_with(*magic))
@@ -728,6 +729,7 @@ impl CompilationPayload {
                 i.validate_local()?;
                 let declarations = tables.declarations.iter().copied().collect::<BTreeSet<_>>();
                 for declaration in std::iter::once(i.contract)
+                    .chain(i.implementation_parameters.iter().map(|p| p.contract))
                     .chain(i.methods.iter().map(|method| method.function))
                 {
                     if !declarations.contains(&declaration) {
@@ -738,19 +740,33 @@ impl CompilationPayload {
                     }
                 }
                 let types = tables.types.iter().copied().collect::<BTreeSet<_>>();
-                for ty in std::iter::once(i.self_type)
-                    .chain(i.type_arguments.iter().copied())
-                    .chain(
-                        i.methods
-                            .iter()
-                            .flat_map(|method| method.type_arguments.iter().copied()),
-                    )
-                {
+                for ty in i.type_roots() {
                     if !types.contains(&ty) {
                         return Err(unit_corrupt(
                             "compiler_unit_owned_implementation_type",
                             "owned implementation references a type absent from its exact table",
                         ));
+                    }
+                }
+                let witness_tables = WitnessTables {
+                    declarations,
+                    types,
+                };
+                let OwnerKey::Declaration(declaration) = source.owner else {
+                    return Err(unit_corrupt(
+                        "compiler_unit_witness_scope",
+                        "implementation has no declaration scope",
+                    ));
+                };
+                let scope = DeclarationReference {
+                    package: source.package,
+                    declaration,
+                };
+                let parameters = i.implementation_parameters.iter().map(|p| p.id).collect();
+                for method in &i.methods {
+                    for operand in &method.implementations {
+                        validate_implementation_operand(operand, &witness_tables)?;
+                        validate_witness_scope(operand, scope, &parameters)?;
                     }
                 }
             }
@@ -817,6 +833,46 @@ impl CompilationPayload {
                 }
                 signature.validate(tables, source.kind)?;
                 code.validate(tables)?;
+                let OwnerKey::Declaration(declaration) = source.owner else {
+                    return Err(unit_corrupt(
+                        "compiler_unit_witness_scope",
+                        "function has no declaration scope",
+                    ));
+                };
+                let scope = DeclarationReference {
+                    package: source.package,
+                    declaration,
+                };
+                let parameters = signature
+                    .implementation_parameters
+                    .iter()
+                    .map(|p| p.id)
+                    .collect();
+                for instruction in &code.instructions {
+                    match instruction {
+                        CompiledInstruction::ImplementationCall {
+                            implementations, ..
+                        } => {
+                            for operand in implementations {
+                                validate_witness_scope(operand, scope, &parameters)?;
+                            }
+                        }
+                        CompiledInstruction::MethodCall { witness, .. } => {
+                            validate_witness_scope(witness, scope, &parameters)?
+                        }
+                        CompiledInstruction::Parallel {
+                            left_implementations,
+                            right_implementations,
+                            ..
+                        } => {
+                            for operand in left_implementations.iter().chain(right_implementations)
+                            {
+                                validate_witness_scope(operand, scope, &parameters)?;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
                 if signature.result_borrow.is_some()
                     != matches!(
                         code.instructions.last(),
@@ -1986,29 +2042,54 @@ fn validate_implementation_operand(
     operand: &crate::platform::kernel::ImplementationOperand,
     tables: &WitnessTables,
 ) -> Result<(), Diagnostic> {
-    let declaration = match operand {
-        crate::platform::kernel::ImplementationOperand::Concrete {
-            implementation,
-            type_arguments,
-        } => {
-            require_item_count("witness type arguments", type_arguments.len(), true)?;
-            for ty in type_arguments {
-                if !tables.types.contains(ty) {
-                    return Err(unit_corrupt(
-                        "compiler_unit_witness_type",
-                        "applied witness references a type absent from its exact table",
-                    ));
+    operand.validate_local()?;
+    for operand in operand.walk() {
+        let declaration = match operand {
+            crate::platform::kernel::ImplementationOperand::Concrete {
+                implementation,
+                type_arguments,
+                ..
+            } => {
+                require_item_count("witness type arguments", type_arguments.len(), true)?;
+                for ty in type_arguments {
+                    if !tables.types.contains(ty) {
+                        return Err(unit_corrupt(
+                            "compiler_unit_witness_type",
+                            "applied witness references a type absent from its exact table",
+                        ));
+                    }
                 }
+                implementation
             }
-            implementation
+            crate::platform::kernel::ImplementationOperand::Parameter { scope, .. } => scope,
+        };
+        if !tables.declarations.contains(declaration) {
+            return Err(unit_corrupt(
+                "compiler_unit_witness_declaration",
+                "implementation witness references a declaration absent from its exact table",
+            ));
         }
-        crate::platform::kernel::ImplementationOperand::Parameter { function, .. } => function,
-    };
-    if !tables.declarations.contains(declaration) {
-        return Err(unit_corrupt(
-            "compiler_unit_witness_declaration",
-            "implementation witness references a declaration absent from its exact table",
-        ));
+    }
+    Ok(())
+}
+
+fn validate_witness_scope(
+    operand: &crate::platform::kernel::ImplementationOperand,
+    scope: DeclarationReference,
+    parameters: &BTreeSet<crate::platform::semantic_id::ImplementationParameterId>,
+) -> Result<(), Diagnostic> {
+    for operand in operand.walk() {
+        if let crate::platform::kernel::ImplementationOperand::Parameter {
+            scope: actual,
+            parameter,
+        } = operand
+            && (*actual != scope || !parameters.contains(parameter))
+        {
+            return Err(unit_corrupt(
+                "compiler_unit_witness_scope",
+                "implementation parameter is outside the exact compiled declaration scope",
+            ));
+        }
     }
     Ok(())
 }

@@ -64,7 +64,7 @@ mod borrowed_result_encoding_tests {
     fn canonical_result_relation_preserves_exact_source_identity() {
         let original = function();
         let (digest, bytes) = encode_owner(&original).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOWN28");
+        assert_eq!(&bytes[..8], b"LKJOWN29");
         assert_eq!(
             decode_owner(&bytes, original.owner(), original.kind(), digest).unwrap(),
             original
@@ -461,7 +461,7 @@ mod parameterized_contract_encoding_tests {
             }),
         });
         let (digest, bytes) = encode_owner(&record).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOWN28");
+        assert_eq!(&bytes[..8], b"LKJOWN29");
         assert_eq!(
             decode_owner(&bytes, owner, record.kind(), digest).unwrap(),
             record
@@ -512,11 +512,13 @@ mod parameterized_contract_encoding_tests {
             name: Name::new("Concrete").unwrap(),
             visibility: DeclarationVisibility::Public,
             payload: DeclarationPayload::OwnedImplementation(OwnedImplementation {
+                implementation_parameters: Vec::new(),
                 type_parameters: Vec::new(),
                 contract: reference,
                 self_type,
                 type_arguments: vec![argument, self_type],
                 methods: vec![OwnedMethodImplementation {
+                    implementations: Vec::new(),
                     type_arguments: Vec::new(),
                     method: MethodId::migrate(seed, 0),
                     function: reference,
@@ -612,6 +614,7 @@ mod implementation_application_encoding_tests {
                 .0,
         ];
         let implementations = vec![ImplementationOperand::Concrete {
+            implementations: Vec::new(),
             type_arguments: Vec::new(),
             implementation: function,
         }];
@@ -779,7 +782,7 @@ mod implementation_application_encoding_tests {
             .unwrap();
             let current = OwnerRecord::Expression(expression.clone());
             let (digest, bytes) = encode_owner(&current).unwrap();
-            assert_eq!(&bytes[..8], b"LKJOWN28");
+            assert_eq!(&bytes[..8], b"LKJOWN29");
             assert_eq!(
                 decode_owner(&bytes, current.owner(), current.kind(), digest).unwrap(),
                 current
@@ -848,7 +851,7 @@ mod nominal_encoding_tests {
                 constraints: constraint,
             });
             let (digest, bytes) = encode_owner(&record).unwrap();
-            assert_eq!(&bytes[..8], b"LKJOWN28");
+            assert_eq!(&bytes[..8], b"LKJOWN29");
             assert_eq!(
                 decode_owner(&bytes, key, OwnerKind::TypeParameter, digest).unwrap(),
                 record
@@ -923,7 +926,7 @@ mod nominal_encoding_tests {
         .unwrap();
         let owner = OwnerRecord::Expression(expression.clone());
         let (digest, bytes) = encode_owner(&owner).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOWN28");
+        assert_eq!(&bytes[..8], b"LKJOWN29");
         assert_eq!(
             decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
             owner
@@ -1273,7 +1276,7 @@ mod borrow_encoding_tests {
         ];
         for record in records {
             let (digest, bytes) = encode_owner(&record).unwrap();
-            assert_eq!(&bytes[..8], b"LKJOWN28");
+            assert_eq!(&bytes[..8], b"LKJOWN29");
             assert_eq!(
                 decode_owner(&bytes, record.owner(), record.kind(), digest).unwrap(),
                 record
@@ -1465,6 +1468,13 @@ pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>)
             super::contract::BORROW_RESULT_OWNER_MAGIC,
             super::contract::BORROW_RESULT_OWNER_ENVELOPE_DOMAIN,
         )
+    } else if record.header().contract_version
+        == super::contract::IMPLEMENTATION_SCHEME_GRAPH_CONTRACT_VERSION
+    {
+        (
+            super::contract::IMPLEMENTATION_SCHEME_OWNER_MAGIC,
+            super::contract::IMPLEMENTATION_SCHEME_OWNER_ENVELOPE_DOMAIN,
+        )
     } else {
         (OWNER_MAGIC, OWNER_ENVELOPE_DOMAIN)
     };
@@ -1502,11 +1512,20 @@ pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>)
             &super::wire26::OwnerRecord26::try_from(record.clone())?,
             MAXIMUM_OWNER_OBJECT_BYTES,
         )?
-    } else if record.header().contract_version < super::contract::GRAPH_CONTRACT_VERSION {
+    } else if record.header().contract_version
+        < super::contract::IMPLEMENTATION_SCHEME_GRAPH_CONTRACT_VERSION
+    {
         packed::encode(
             magic,
             domain,
             &super::wire27::OwnerRecord27::try_from(record.clone())?,
+            MAXIMUM_OWNER_OBJECT_BYTES,
+        )?
+    } else if record.header().contract_version < super::contract::GRAPH_CONTRACT_VERSION {
+        packed::encode(
+            magic,
+            domain,
+            &super::wire28::OwnerRecord28::try_from(record.clone())?,
             MAXIMUM_OWNER_OBJECT_BYTES,
         )?
     } else {
@@ -1650,6 +1669,12 @@ pub fn decode_owner(
                 super::contract::BORROW_RESULT_OWNER_ENVELOPE_DOMAIN,
                 super::contract::BORROW_RESULT_GRAPH_CONTRACT_VERSION,
             )
+        } else if bytes.starts_with(&super::contract::IMPLEMENTATION_SCHEME_OWNER_MAGIC) {
+            (
+                super::contract::IMPLEMENTATION_SCHEME_OWNER_MAGIC,
+                super::contract::IMPLEMENTATION_SCHEME_OWNER_ENVELOPE_DOMAIN,
+                super::contract::IMPLEMENTATION_SCHEME_GRAPH_CONTRACT_VERSION,
+            )
         } else {
             (
                 OWNER_MAGIC,
@@ -1670,8 +1695,12 @@ pub fn decode_owner(
                 let wire: super::wire26::OwnerRecord26 =
                     packed::decode(bytes, magic, domain, MAXIMUM_OWNER_OBJECT_BYTES)?;
                 wire.into()
-            } else if generation < super::contract::GRAPH_CONTRACT_VERSION {
+            } else if generation < super::contract::IMPLEMENTATION_SCHEME_GRAPH_CONTRACT_VERSION {
                 let wire: super::wire27::OwnerRecord27 =
+                    packed::decode(bytes, magic, domain, MAXIMUM_OWNER_OBJECT_BYTES)?;
+                wire.into()
+            } else if generation < super::contract::GRAPH_CONTRACT_VERSION {
+                let wire: super::wire28::OwnerRecord28 =
                     packed::decode(bytes, magic, domain, MAXIMUM_OWNER_OBJECT_BYTES)?;
                 wire.into()
             } else {

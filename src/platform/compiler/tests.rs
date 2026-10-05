@@ -31,6 +31,8 @@ mod parallel_admission_tests;
 pub(crate) mod predecessor_attack_tests;
 #[path = "predecessor_units.rs"]
 mod predecessor_units;
+#[path = "prerequisite_implementation_admission_tests.rs"]
+pub(crate) mod prerequisite_implementation_admission_tests;
 
 #[path = "f64_tests.rs"]
 mod f64_tests;

@@ -107,7 +107,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-23";
 pub const REGISTRY_CONTRACT_VERSION: u16 = 23;
-pub const CLI_CONTRACT_VERSION: u16 = 41;
+pub const CLI_CONTRACT_VERSION: u16 = 42;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -218,8 +218,8 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
 ];
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-function-definition-projection-18";
-pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 18;
+    "lkjscript-function-definition-projection-19";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 19;
 pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
 pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
 pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -418,6 +418,15 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("definition.expression", "function"),
     ("definition.expression", "implementations"),
     ("definition.expression", "implementation-parameter"),
+    ("definition.expression", "implementation-prerequisites"),
+    ("definition.implementation-operand", "parent"),
+    ("definition.implementation-operand", "implementation"),
+    ("definition.implementation-operand", "path"),
+    ("definition.implementation-operand", "kind"),
+    ("definition.implementation-operand", "reference"),
+    ("definition.implementation-operand", "parameter"),
+    ("definition.implementation-operand", "type-arguments"),
+    ("definition.implementation-operand", "implementations"),
     ("definition.expression", "implementation-type-arguments"),
     ("definition.implementation-operand-type-argument", "parent"),
     (
@@ -425,6 +434,7 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
         "implementation",
     ),
     ("definition.implementation-operand-type-argument", "index"),
+    ("definition.implementation-operand-type-argument", "path"),
     ("definition.implementation-operand-type-argument", "type"),
     ("definition.expression", "method"),
     ("definition.expression", "requirement"),
@@ -778,8 +788,9 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             version: GRAPH_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::CanonicalMeaning,
-            predecessor_policy: REJECT,
+            predecessor_policy: PredecessorPolicy::ReadHistorical,
             magic_values: &[
+                "LKJOWN29", "LKJOWN28", "LKJOWN27", "LKJOWN26", "LKJOWN25", "LKJOWN24", "LKJOWN23",
                 "LKJOWN22", "LKJOWN21", "LKJOWN20", "LKJOWN19", "LKJOWN18", "LKJOWN17", "LKJOWN16",
                 "LKJOWN15", "LKJOWN14", "LKJSMR01", "LKJDEP14", "LKJRET14",
             ],
@@ -941,7 +952,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
-            magic_values: &["LKJSUM15"],
+            magic_values: &["LKJSUM16"],
             digest_domains: &[
                 witness_contract::OWNER_SUMMARY_ENVELOPE_DOMAIN,
                 witness_contract::OWNER_SUMMARY_DIGEST_DOMAIN,
@@ -1004,7 +1015,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             magic_values: &[
                 "LKJACR14", "LKJACR15", "LKJACR16", "LKJACR17", "LKJACR18", "LKJACR19", "LKJACR20",
                 "LKJACR21", "LKJACR22", "LKJACR23", "LKJACR24", "LKJACR25", "LKJACR26", "LKJACR27",
-                "LKJACR28", "LKJACR29", "LKJACR30", "LKJACR31", "LKJACR32", "LKJABG01",
+                "LKJACR28", "LKJACR29", "LKJACR30", "LKJACR31", "LKJACR32", "LKJACR33", "LKJABG01",
             ],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
@@ -1083,8 +1094,11 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             version: PACKAGE_INTERFACE_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
-            predecessor_policy: REJECT,
-            magic_values: &["LKJPIF14", "LKJPIF13", "LKJPIF12", "LKJPIF11", "LKJPIF10"],
+            predecessor_policy: PredecessorPolicy::ReadHistorical,
+            magic_values: &[
+                "LKJPIF17", "LKJPIF16", "LKJPIF15", "LKJPIF14", "LKJPIF13", "LKJPIF12", "LKJPIF11",
+                "LKJPIF10",
+            ],
             digest_domains: &[
                 PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
                 super::super::kernel::contract::PACKAGE_INTERFACE_DIGEST_DOMAIN,
@@ -1149,7 +1163,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
-            magic_values: &["LKJCUN17"],
+            magic_values: &["LKJCUN29"],
             digest_domains: &[
                 COMPILER_UNIT_ENVELOPE_DOMAIN,
                 COMPILER_UNIT_KEY_DOMAIN,
@@ -1171,7 +1185,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJAMF24"],
+            magic_values: &["LKJAMF36"],
             digest_domains: &[
                 ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
                 storage_contract::ARTIFACT_MANIFEST_DIGEST_DOMAIN,
@@ -1185,7 +1199,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &["LKJART24", "LKJAEN24"],
+            magic_values: &["LKJART36", "LKJAEN36"],
             digest_domains: &[
                 ARTIFACT_BUNDLE_DIGEST_DOMAIN,
                 ARTIFACT_BUNDLE_CHECKSUM_DOMAIN,
@@ -3070,7 +3084,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "change_block_application",
             DiagnosticClass::Source,
             "Explicit structural application clauses are duplicated, out of order or unsupported at this position.",
-            "Use at most one types, effects and requirements clause in that order before values; nominal construction accepts only types.",
+            "Use at most one types, effects, requirements and implementations clause in that order before values; nominal construction accepts only types.",
         ),
         diagnostic(
             "change_block_private",
@@ -3113,6 +3127,24 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Source,
             "A compact owned field read scope does not select exactly one matching typed child binding.",
             "Supply one owned-binding edge at index zero whose field-name agrees with the selected field.",
+        ),
+        diagnostic(
+            "change_owned_operand_depth",
+            DiagnosticClass::Resource,
+            "A nested implementation application exceeds witness-depth admission.",
+            "Reduce nested prerequisite application depth within the advertised type-depth bound.",
+        ),
+        diagnostic(
+            "change_owned_operand_capacity",
+            DiagnosticClass::Resource,
+            "Expanded implementation applications exceed complete change-input admission.",
+            "Reduce repeated or nested witness construction within the complete authored node bound.",
+        ),
+        diagnostic(
+            "change_owned_operand_cycle",
+            DiagnosticClass::Source,
+            "Compact implementation application fragments form a cycle.",
+            "Supply a finite witness tree; a fragment cannot refer to itself through prerequisites.",
         ),
         diagnostic(
             "change_request_missing",
@@ -8720,13 +8752,13 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         ),
         (
             "owned-implementation",
-            "(owned-implementation MODE BINDING (visibility public|private) (type-parameter MODE PARAMETER (constraint owned))... (contract DECLARATION) (self TYPE) [(types TYPE...)] (method method_HEX FUNCTION [(types TYPE...)])...)",
-            "Ordered owned scheme parameters apply explicitly. Self and contract arguments may contain those parameters in finite owned structures. Every method maps to an exact visible graph function application with identical substituted signature, use modes, borrowed provenance, callable kind and closed effect row. Selection is explicit and never grants effects.",
+            "(owned-implementation MODE BINDING (visibility public|private) (type-parameter MODE PARAMETER (constraint owned))... (implementation-parameter implparam_HEX NAME CONTRACT SELF_TYPE [(types TYPE...)])... (contract DECLARATION) (self TYPE) [(types TYPE...)] (method method_HEX FUNCTION [(types TYPE...)] [(implementations OPERAND...)])...)",
+            "Ordered owned type and prerequisite parameters apply explicitly. Every method maps to an exact visible graph function with identical substituted signature, use modes, borrowed provenance, callable kind and closed effect row. Mappings forward direct same-scheme prerequisites or select parameter-free concrete witness trees. Complete applications retain every nested witness identity and grant no effects.",
         ),
         (
             "implementation-parameter",
             "(implementation-parameter implparam_HEX NAME CONTRACT SELF_TYPE [(types TYPE...)])",
-            "A function-scoped static witness with exact ordered owned type arguments. Concrete operand syntax is IMPLEMENTATION or (implementation IMPLEMENTATION (types TYPE...)); lexical forwarding uses parameter@FUNCTION@implparam_HEX. Every scheme argument, including unused arguments, participates in identity and admission. Forwarding matches the complete contract application in the exact lexical scope; implementation calls supply ordered type, effect and requirement applications independently of witness selection.",
+            "A function- or implementation-scoped static witness with exact ordered owned type arguments. Concrete operand syntax is IMPLEMENTATION or (implementation IMPLEMENTATION [(types TYPE...)] [(implementations OPERAND...)]); lexical forwarding uses parameter@SCOPE@implparam_HEX. Clauses occur once in types/implementations order. Every type and prerequisite argument, including unused arguments and nested selections, participates in identity and admission. Forwarding matches the complete contract application in the exact lexical scope; selection confers no effects or grants.",
         ),
         (
             "type-parameter",
@@ -9546,9 +9578,9 @@ mod tests {
             .expect("definition projection contract");
         assert_eq!(
             contract.identity,
-            "lkjscript-function-definition-projection-18"
+            "lkjscript-function-definition-projection-19"
         );
-        assert_eq!(contract.version, 18);
+        assert_eq!(contract.version, 19);
         assert_eq!(
             contract_descriptors()
                 .iter()

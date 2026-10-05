@@ -145,6 +145,22 @@ pub(super) fn inventory(closure: &mut Closure<'_>) -> Result<(), ExecutionError>
                             return Err(reject());
                         }
                     }
+                    allocate::<super::Witness>(
+                        &mut closure.allocated,
+                        implementation.implementation_parameters.len(),
+                    )?;
+                    let mut supplied =
+                        Vec::with_capacity(implementation.implementation_parameters.len());
+                    for formal in &implementation.implementation_parameters {
+                        supplied.push(closure.symbolic_witness(reference, formal.id, &scheme)?);
+                    }
+                    let prerequisites = closure.witness_bindings(
+                        reference,
+                        &implementation.implementation_parameters,
+                        &scheme,
+                        &supplied,
+                        0,
+                    )?;
                     let OwnerRecord::Declaration(owner) = closure.owner(
                         implementation.contract.package,
                         OwnerKey::Declaration(implementation.contract.declaration),
@@ -227,7 +243,8 @@ pub(super) fn inventory(closure: &mut Closure<'_>) -> Result<(), ExecutionError>
                         if function.effect != method.effect
                             || !function.effect_parameters.is_empty()
                             || !function.requirement_parameters.is_empty()
-                            || !function.implementation_parameters.is_empty()
+                            || function.implementation_parameters.len()
+                                != mapping.implementations.len()
                             || function.parameters.len() != method.parameters.len()
                             || function.result_borrow
                                 != method.result_borrow.and_then(|position| {
@@ -238,6 +255,39 @@ pub(super) fn inventory(closure: &mut Closure<'_>) -> Result<(), ExecutionError>
                         {
                             return Err(reject());
                         }
+                        allocate::<super::Witness>(
+                            &mut closure.allocated,
+                            mapping.implementations.len(),
+                        )?;
+                        let mut mapped = Vec::with_capacity(mapping.implementations.len());
+                        for operand in &mapping.implementations {
+                            if matches!(
+                                operand,
+                                crate::platform::kernel::ImplementationOperand::Concrete { .. }
+                            ) && operand.walk().any(|child| {
+                                matches!(
+                                    child,
+                                    crate::platform::kernel::ImplementationOperand::Parameter { .. }
+                                )
+                            }) {
+                                return Err(reject());
+                            }
+                            mapped.push(closure.witness_selection_in(
+                                operand,
+                                Some(reference),
+                                &scheme,
+                                Some(&prerequisites),
+                                0,
+                                &mut 0,
+                            )?);
+                        }
+                        closure.witness_bindings(
+                            target,
+                            &function.implementation_parameters,
+                            &target_types,
+                            &mapped,
+                            0,
+                        )?;
                         for (actual, expected) in function.parameters.iter().zip(&method.parameters)
                         {
                             let OwnerRecord::Parameter(actual) =

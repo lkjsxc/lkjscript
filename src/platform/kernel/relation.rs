@@ -466,6 +466,15 @@ where
                         i.contract.package,
                         OwnerKey::Declaration(i.contract.declaration),
                     )?;
+                    for prerequisite in &i.implementation_parameters {
+                        exact_edge(
+                            edges,
+                            source,
+                            RelationKind::OwnedContractUse,
+                            prerequisite.contract.package,
+                            OwnerKey::Declaration(prerequisite.contract.declaration),
+                        )?;
+                    }
                     for m in &i.methods {
                         exact_edge(
                             edges,
@@ -474,6 +483,9 @@ where
                             m.function.package,
                             OwnerKey::Declaration(m.function.declaration),
                         )?;
+                        for operand in &m.implementations {
+                            implementation_edge(edges, source, operand)?;
+                        }
                     }
                 }
                 DeclarationPayload::Function(function) => {
@@ -1219,15 +1231,18 @@ fn implementation_edge(
     source: ExactOwnerKey,
     operand: &super::ImplementationOperand,
 ) -> Result<(), Diagnostic> {
-    let r = match operand {
-        super::ImplementationOperand::Concrete { implementation, .. } => implementation,
-        super::ImplementationOperand::Parameter { function, .. } => function,
-    };
-    exact_edge(
-        edges,
-        source,
-        RelationKind::ImplementationSelection,
-        r.package,
-        OwnerKey::Declaration(r.declaration),
-    )
+    for operand in operand.walk() {
+        let r = match operand {
+            super::ImplementationOperand::Concrete { implementation, .. } => implementation,
+            super::ImplementationOperand::Parameter { scope, .. } => scope,
+        };
+        exact_edge(
+            edges,
+            source,
+            RelationKind::ImplementationSelection,
+            r.package,
+            OwnerKey::Declaration(r.declaration),
+        )?;
+    }
+    Ok(())
 }

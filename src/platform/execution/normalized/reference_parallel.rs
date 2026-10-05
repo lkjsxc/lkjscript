@@ -22,7 +22,99 @@ struct CanonicalParallelCall {
     signature: ReferenceSignature,
 }
 
+fn physical_catalog_binding(
+    catalog: &[super::super::prepare::NormalizedImplementationArgument],
+    prepared: &super::super::prepare::NormalizedImplementationArgument,
+) -> bool {
+    let Some(stored) = catalog.get(prepared.identity as usize) else {
+        return false;
+    };
+    stored.identity == prepared.identity
+        && stored.depth == prepared.depth
+        && stored.implementation == prepared.implementation
+        && stored.implementation_type_arguments == prepared.implementation_type_arguments
+        && stored.contract == prepared.contract
+        && stored.self_type == prepared.self_type
+        && stored.type_arguments == prepared.type_arguments
+        && stored.prerequisites == prepared.prerequisites
+        && stored.implementations.len() == prepared.implementations.len()
+        && stored
+            .implementations
+            .iter()
+            .zip(prepared.implementations.iter())
+            .all(|(stored, supplied)| stored.identity == supplied.identity)
+}
+
+fn exact_witness_identity(
+    catalog: &[super::super::prepare::NormalizedImplementationArgument],
+    prepared: &super::super::prepare::NormalizedImplementationArgument,
+    canonical: &AppliedReferenceImplementation,
+    depth: usize,
+    seen: &mut std::collections::BTreeSet<(u32, u64)>,
+) -> bool {
+    if depth.saturating_add(canonical.depth) > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
+        || seen.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN
+        || !physical_catalog_binding(catalog, prepared)
+        || prepared.implementation != canonical.implementation
+        || prepared.depth != canonical.depth
+        || prepared.implementation_type_arguments.as_ref() != canonical.type_arguments.as_ref()
+        || prepared.implementations.len() != canonical.implementations.len()
+    {
+        return false;
+    }
+    if !seen.insert((prepared.identity, canonical.identity)) {
+        return true;
+    }
+    prepared
+        .implementations
+        .iter()
+        .zip(canonical.implementations.iter())
+        .all(|(prepared, canonical)| {
+            exact_witness_identity(catalog, prepared, canonical, depth + 1, seen)
+        })
+}
+
 impl ReferenceState<'_> {
+    fn checked_physical_witness(
+        &mut self,
+        prepared: &super::super::prepare::NormalizedImplementationArgument,
+        reference: &AppliedReferenceImplementation,
+        depth: usize,
+        seen: &mut std::collections::BTreeSet<(u32, u64)>,
+    ) -> Result<bool, ExecutionError> {
+        self.control.check()?;
+        if depth.saturating_add(reference.depth)
+            > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
+            || seen.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN
+        {
+            return Err(reference_type_error(
+                "physical witness exceeds canonical bounds",
+            ));
+        }
+        if !physical_catalog_binding(&self.program.implementation_applications, prepared) {
+            return Ok(false);
+        }
+        // Check each occurrence's flat catalog binding before reusing a pair.
+        if !seen.insert((prepared.identity, reference.identity)) {
+            return Ok(true);
+        }
+        let canonical = self.checked_implementation(reference)?;
+        let mut matches = prepared.implementation == reference.implementation
+            && prepared.depth == reference.depth
+            && prepared.implementation_type_arguments.as_ref() == reference.type_arguments.as_ref()
+            && prepared.contract == canonical.contract
+            && prepared.self_type == canonical.self_type
+            && prepared.type_arguments.as_ref() == canonical.type_arguments.as_slice()
+            && prepared.implementations.len() == reference.implementations.len();
+        for (prepared, reference) in prepared
+            .implementations
+            .iter()
+            .zip(reference.implementations.iter())
+        {
+            matches &= self.checked_physical_witness(prepared, reference, depth + 1, seen)?;
+        }
+        Ok(matches)
+    }
     fn resolve_parallel_types(
         &self,
         types: &[TypeObjectDigest],
@@ -198,7 +290,12 @@ impl ReferenceState<'_> {
         for operand in implementations {
             selected.push(self.resolve_implementation(operand)?);
         }
-        self.implementation_bindings(&declaration, &bindings, &selected)?;
+        self.implementation_bindings(
+            function,
+            &declaration.implementation_parameters,
+            &bindings,
+            &selected,
+        )?;
         if !bindings.is_empty() {
             signature.result =
                 self.schema
@@ -283,9 +380,13 @@ impl ReferenceState<'_> {
                         .iter()
                         .zip(&task.implementations)
                         .all(|(argument, canonical)| {
-                            argument.implementation == canonical.implementation
-                                && argument.implementation_type_arguments.as_ref()
-                                    == canonical.type_arguments.as_slice()
+                            exact_witness_identity(
+                                &self.program.implementation_applications,
+                                argument,
+                                canonical,
+                                0,
+                                &mut std::collections::BTreeSet::new(),
+                            )
                         })
             })
             .ok_or_else(|| {
@@ -326,9 +427,12 @@ impl ReferenceState<'_> {
         }
         let implementation_arguments = Arc::clone(&selected.implementation_arguments);
         for (prepared, reference) in implementation_arguments.iter().zip(&task.implementations) {
-            let canonical = self.checked_implementation(reference)?;
-            matches &= prepared.self_type == canonical.self_type
-                && prepared.type_arguments.as_ref() == canonical.type_arguments.as_slice();
+            matches &= self.checked_physical_witness(
+                prepared,
+                reference,
+                0,
+                &mut std::collections::BTreeSet::new(),
+            )?;
         }
         if !matches {
             return Err(reference_type_error(
@@ -554,6 +658,7 @@ impl ReferenceState<'_> {
             }
         };
         let mut state = ReferenceState {
+            reference_witnesses: Arc::clone(&self.reference_witnesses),
             shared_budget: Some(budget),
             structured_depth: self.structured_depth + 1,
             ancestor_depth: self.ancestor_depth.saturating_add(self.call_depth),

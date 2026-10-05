@@ -60,10 +60,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-36";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 36;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-32";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 32;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-37";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 37;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-33";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 33;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -2274,7 +2274,7 @@ pub(crate) const COMPACT_EXPRESSION_FORM_FIELDS: &[CompactFormField] = &[
         form: "method-call",
         name: "witness",
         required: true,
-        syntax: "DECLARATION|concrete@DECLARATION[@%APPLICATION]|parameter@FUNCTION@implparam_HEX",
+        syntax: "DECLARATION|concrete@DECLARATION[@%APPLICATION]|parameter@SCOPE@implparam_HEX",
     },
     CompactFormField {
         form: "method-call",
@@ -2771,14 +2771,14 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
     },
     CompactEdgeDescriptor {
         name: "implementation.argument",
-        parent: "expression.implementation-call",
+        parent: "expression.implementation-call-or-method-mapping-or-witness-application",
         child: "implementation-operand",
         fields: &[
             CompactFormField {
                 form: "implementation.argument",
                 name: "parent",
                 required: true,
-                syntax: "$NAME",
+                syntax: "$NAME|%NAME",
             },
             CompactFormField {
                 form: "implementation.argument",
@@ -2790,7 +2790,7 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
                 form: "implementation.argument",
                 name: "implementation",
                 required: true,
-                syntax: "DECLARATION|concrete@DECLARATION[@%APPLICATION]|parameter@FUNCTION@implparam_HEX",
+                syntax: "DECLARATION|concrete@DECLARATION[@%APPLICATION]|parameter@SCOPE@implparam_HEX",
             },
         ],
     },
@@ -3117,7 +3117,7 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
     },
     CompactEdgeDescriptor {
         name: "owned.witness",
-        parent: "set.implementations",
+        parent: "set.implementations-or-owned-implementation",
         child: "implementation-parameter",
         fields: &[
             CompactFormField {
@@ -3892,6 +3892,8 @@ struct Decoder {
     type_sizes: BTreeMap<String, usize>,
     expanded_type_work: usize,
     expression_uses: BTreeMap<String, usize>,
+    implementation_stack: BTreeSet<String>,
+    expanded_implementation_work: usize,
 }
 
 impl Decoder {
@@ -3917,6 +3919,8 @@ impl Decoder {
             type_sizes: BTreeMap::new(),
             expanded_type_work: 0,
             expression_uses: BTreeMap::new(),
+            implementation_stack: BTreeSet::new(),
+            expanded_implementation_work: 0,
         }
     }
 
@@ -4390,6 +4394,37 @@ impl Decoder {
         record: &CompactRecord,
         text: &str,
     ) -> Result<AuthoredImplementationOperand, Diagnostic> {
+        self.parse_implementation_operand_at(record, text, 1)
+    }
+
+    fn parse_implementation_operand_at(
+        &mut self,
+        record: &CompactRecord,
+        text: &str,
+        depth: usize,
+    ) -> Result<AuthoredImplementationOperand, Diagnostic> {
+        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+            let mut diagnostic = Diagnostic::new(
+                DiagnosticClass::Resource,
+                "change_owned_operand_depth",
+                "implementation application exceeds the witness-depth admission",
+            );
+            diagnostic.location = Some(record.location.clone());
+            return Err(diagnostic);
+        }
+        self.expanded_implementation_work = self
+            .expanded_implementation_work
+            .checked_add(1)
+            .filter(|nodes| *nodes <= input::MAXIMUM_STRUCTURAL_SYNTAX_NODES)
+            .ok_or_else(|| {
+                let mut diagnostic = Diagnostic::new(
+                    DiagnosticClass::Resource,
+                    "change_owned_operand_capacity",
+                    "expanded implementation applications exceed complete input admission",
+                );
+                diagnostic.location = Some(record.location.clone());
+                diagnostic
+            })?;
         let parts = text.split('@').collect::<Vec<_>>();
         let (reference, parameter, application) = match parts.as_slice() {
             [reference] => (*reference, None, None),
@@ -4400,7 +4435,7 @@ impl Decoder {
                 return Err(record_error(
                     record,
                     "change_owned_operand",
-                    "witness must be concrete@IMPLEMENTATION[@%APPLICATION] or parameter@FUNCTION@IMPLEMENTATION_PARAMETER_ID",
+                    "witness must be concrete@IMPLEMENTATION[@%APPLICATION] or parameter@SCOPE@IMPLEMENTATION_PARAMETER_ID",
                 ));
             }
         };
@@ -4416,19 +4451,33 @@ impl Decoder {
         let reference = self.parse_declaration_reference(&r, "reference")?;
         Ok(match parameter {
             Some(parameter) => AuthoredImplementationOperand::Parameter {
-                function: reference,
+                scope: reference,
                 parameter,
             },
-            None => AuthoredImplementationOperand::Concrete {
-                implementation: reference,
-                type_arguments: match application {
+            None => {
+                let (type_arguments, implementations) = match application {
                     Some(parent) => {
                         validate_fragment_parent(record, "witness", parent)?;
-                        self.decode_owned_type_arguments(parent)?
+                        if !self.implementation_stack.insert(parent.to_owned()) {
+                            return Err(record_error(
+                                record,
+                                "change_owned_operand_cycle",
+                                "implementation application fragments contain a cycle",
+                            ));
+                        }
+                        let arguments = self.decode_owned_type_arguments(parent)?;
+                        let operands = self.decode_implementation_arguments(parent, depth + 1)?;
+                        self.implementation_stack.remove(parent);
+                        (arguments, operands)
                     }
-                    None => Vec::new(),
-                },
-            },
+                    None => (Vec::new(), Vec::new()),
+                };
+                AuthoredImplementationOperand::Concrete {
+                    implementation: reference,
+                    type_arguments,
+                    implementations,
+                }
+            }
         })
     }
     fn decode_change(
@@ -4516,6 +4565,7 @@ impl Decoder {
                     .map(|edge| self.parse_type_parameter_reference(&edge.record, "parameter"))
                     .collect::<Result<Vec<_>, _>>()?;
                 let type_arguments = self.decode_owned_type_arguments(&parent)?;
+                let implementation_parameters = self.decode_implementation_parameters(&parent)?;
                 let mut methods = Vec::new();
                 for edge in self.ordered_record_edges("owned.mapping", &parent)? {
                     methods.push(AuthoredOwnedMethodImplementation {
@@ -4528,6 +4578,10 @@ impl Decoder {
                             }
                             None => Vec::new(),
                         },
+                        implementations: match optional(&edge.record, "as") {
+                            Some(parent) => self.decode_implementation_arguments(parent, 1)?,
+                            None => Vec::new(),
+                        },
                     });
                 }
                 Ok(AuthoredChange::CreateOwnedImplementation {
@@ -4537,6 +4591,7 @@ impl Decoder {
                     visibility: parse_visibility(record, "visibility")?,
                     contract: self.parse_declaration_reference(record, "contract")?,
                     type_parameters,
+                    implementation_parameters,
                     self_type: self.decode_type(required(record, "self")?)?,
                     type_arguments,
                     methods,
@@ -4544,20 +4599,7 @@ impl Decoder {
             }
             CompactChangeOperation::SetImplementations => {
                 let parent = fragment(record, "as")?;
-                let mut parameters = Vec::new();
-                for edge in self.ordered_record_edges("owned.witness", &parent)? {
-                    let p = &edge.record;
-                    parameters.push(AuthoredImplementationParameter {
-                        id: required(p, "id")?.parse()?,
-                        name: parse_name(p, "name")?,
-                        contract: self.parse_declaration_reference(p, "contract")?,
-                        self_type: self.decode_type(required(p, "self")?)?,
-                        type_arguments: match optional(p, "as") {
-                            Some(label) => self.decode_owned_type_arguments(label)?,
-                            None => Vec::new(),
-                        },
-                    });
-                }
+                let parameters = self.decode_implementation_parameters(&parent)?;
                 Ok(AuthoredChange::SetImplementationParameters {
                     declaration: self.parse_declaration_selector(record, "declaration")?,
                     parameters,
@@ -5961,6 +6003,45 @@ impl Decoder {
         self.ordered_record_edges("owned.type-argument", parent)?
             .iter()
             .map(|edge| self.decode_type(required(&edge.record, "type")?))
+            .collect()
+    }
+
+    fn decode_implementation_arguments(
+        &mut self,
+        parent: &str,
+        depth: usize,
+    ) -> Result<Vec<AuthoredImplementationOperand>, Diagnostic> {
+        self.ordered_record_edges("implementation.argument", parent)?
+            .iter()
+            .map(|edge| {
+                self.parse_implementation_operand_at(
+                    &edge.record,
+                    required(&edge.record, "implementation")?,
+                    depth,
+                )
+            })
+            .collect()
+    }
+
+    fn decode_implementation_parameters(
+        &mut self,
+        parent: &str,
+    ) -> Result<Vec<AuthoredImplementationParameter>, Diagnostic> {
+        self.ordered_record_edges("owned.witness", parent)?
+            .iter()
+            .map(|edge| {
+                let p = &edge.record;
+                Ok(AuthoredImplementationParameter {
+                    id: required(p, "id")?.parse()?,
+                    name: parse_name(p, "name")?,
+                    contract: self.parse_declaration_reference(p, "contract")?,
+                    self_type: self.decode_type(required(p, "self")?)?,
+                    type_arguments: match optional(p, "as") {
+                        Some(label) => self.decode_owned_type_arguments(label)?,
+                        None => Vec::new(),
+                    },
+                })
+            })
             .collect()
     }
 }

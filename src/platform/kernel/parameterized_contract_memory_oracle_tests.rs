@@ -196,8 +196,12 @@ fn parameterized_contract_oracle_rejects_phantom_argument_arity_scope_and_exact_
         unreachable!()
     };
     i.type_arguments[1] = different;
-    let implementation = i.clone();
-    assert!(Oracle(&changed, None).valid_implementation(&implementation));
+    assert!(
+        Oracle(&changed, None).valid_implementation_at(DeclarationReference {
+            package: changed.root.package_id,
+            declaration: concrete,
+        })
+    );
     assert!(
         !accepts(&changed),
         "phantom witnesses retain exact structured bindings"

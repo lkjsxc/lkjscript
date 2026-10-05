@@ -210,16 +210,7 @@ impl PackageInterfaceDeclaration {
                 .chain([signature.result])
                 .collect(),
             PackageInterfaceDeclarationPayload::OwnedContract(c) => c.type_roots(),
-            PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
-                std::iter::once(i.self_type)
-                    .chain(i.type_arguments.iter().copied())
-                    .chain(
-                        i.methods
-                            .iter()
-                            .flat_map(|m| m.type_arguments.iter().copied()),
-                    )
-                    .collect()
-            }
+            PackageInterfaceDeclarationPayload::OwnedImplementation(i) => i.type_roots(),
             PackageInterfaceDeclarationPayload::Constant { ty } => vec![*ty],
             PackageInterfaceDeclarationPayload::Record { .. }
             | PackageInterfaceDeclarationPayload::Variant { .. }
@@ -230,6 +221,12 @@ impl PackageInterfaceDeclaration {
 
     fn validate_local(&self) -> Result<(), Diagnostic> {
         validate_header(self.header)?;
+        if self.header.contract_version < 29
+            && matches!(&self.payload, PackageInterfaceDeclarationPayload::OwnedImplementation(i)
+                if !i.implementation_parameters.is_empty() || i.methods.iter().any(|m| !m.implementations.is_empty()))
+        {
+            return Err(super::wire28::implementation_scheme_extension());
+        }
         if self.header.contract_version < 28
             && matches!(&self.payload, PackageInterfaceDeclarationPayload::OwnedImplementation(i)
                 if !i.type_parameters.is_empty()

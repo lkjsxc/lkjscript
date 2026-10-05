@@ -102,7 +102,7 @@ fn every_sequence_operation_requires_graph_25_and_retains_all_type_roots() {
         }
         let owner = OwnerRecord::Expression(expression.clone());
         let (digest, bytes) = encode_owner(&owner).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOWN28");
+        assert_eq!(&bytes[..8], contract::OWNER_MAGIC);
         assert_eq!(
             decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
             owner

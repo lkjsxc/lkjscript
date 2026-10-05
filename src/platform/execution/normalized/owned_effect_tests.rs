@@ -214,6 +214,46 @@ fn owned_effects_both_engines_preserve_exact_witnesses_and_distinct_bindings() {
     let source = byte_buffer_tests::author_only(&input()).unwrap();
     assert!(crate::platform::kernel::memory_reference::accepts(&source));
     let program = prepare_snapshot(&source);
+    let transform = declaration_named(&source, "transform");
+    let selected = program
+        .functions
+        .iter()
+        .filter(|function| {
+            function.declaration == transform && !function.implementation_arguments.is_empty()
+        })
+        .collect::<Vec<_>>();
+    let mut compared_distinct_authority = 0;
+    let mut compared_shared_authority = 0;
+    for (index, left) in selected.iter().enumerate() {
+        for right in &selected[index + 1..] {
+            if left.type_arguments != right.type_arguments {
+                continue;
+            }
+            let (NormalizedFunctionBody::Code(left_code), NormalizedFunctionBody::Code(right_code)) =
+                (&left.body, &right.body)
+            else {
+                panic!("closed transform applications contain graph code")
+            };
+            if left.effect_arguments != right.effect_arguments
+                || left.requirement_arguments != right.requirement_arguments
+            {
+                assert!(!Arc::ptr_eq(
+                    &left_code.instructions,
+                    &right_code.instructions
+                ));
+                compared_distinct_authority += 1;
+            } else {
+                assert!(Arc::ptr_eq(
+                    &left_code.instructions,
+                    &right_code.instructions
+                ));
+                assert_ne!(left.callsites, right.callsites);
+                compared_shared_authority += 1;
+            }
+        }
+    }
+    assert!(compared_distinct_authority > 0);
+    assert!(compared_shared_authority > 0);
     for reference in [false, true] {
         let cells = super::super::owned_i64_cell::StorageObservation::start();
         let buffers = super::super::byte_buffer::StorageObservation::start();

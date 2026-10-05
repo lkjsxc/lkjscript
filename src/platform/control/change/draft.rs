@@ -488,22 +488,73 @@ impl Renderer<'_> {
             AuthoredImplementationOperand::Concrete {
                 implementation,
                 type_arguments,
+                implementations,
             } => {
-                if type_arguments.is_empty() {
+                if type_arguments.is_empty() && implementations.is_empty() {
                     self.declaration(implementation)?
                 } else {
-                    format!(
-                        "(implementation {} {})",
-                        self.declaration(implementation)?,
-                        self.typed_list("types", type_arguments)?
-                    )
+                    let mut application =
+                        format!("(implementation {}", self.declaration(implementation)?);
+                    if !type_arguments.is_empty() {
+                        append(
+                            &mut application,
+                            &format!(" {}", self.typed_list("types", type_arguments)?),
+                            self.maximum,
+                        )?;
+                    }
+                    append(
+                        &mut application,
+                        &self.implementation_arguments(implementations)?,
+                        self.maximum,
+                    )?;
+                    append(&mut application, ")", self.maximum)?;
+                    application
                 }
             }
-            AuthoredImplementationOperand::Parameter {
-                function,
-                parameter,
-            } => format!("parameter@{}@{parameter}", self.declaration(function)?),
+            AuthoredImplementationOperand::Parameter { scope, parameter } => {
+                format!("parameter@{}@{parameter}", self.declaration(scope)?)
+            }
         })
+    }
+
+    fn implementation_arguments(
+        &mut self,
+        operands: &[AuthoredImplementationOperand],
+    ) -> Result<String, Diagnostic> {
+        if operands.is_empty() {
+            return Ok(String::new());
+        }
+        let mut text = String::from(" (implementations");
+        for operand in operands {
+            let operand = self.implementation_operand(operand)?;
+            append(&mut text, &format!(" {operand}"), self.maximum)?;
+        }
+        append(&mut text, ")", self.maximum)?;
+        Ok(text)
+    }
+
+    fn implementation_parameter(
+        &mut self,
+        parameter: &k::ImplementationParameter,
+    ) -> Result<String, Diagnostic> {
+        let arguments = if parameter.type_arguments.is_empty() {
+            String::new()
+        } else {
+            let types = parameter
+                .type_arguments
+                .iter()
+                .map(|ty| self.type_digest(*ty))
+                .collect::<Result<Vec<_>, _>>()?;
+            format!(" (types {})", types.join(" "))
+        };
+        Ok(format!(
+            "(implementation-parameter {} {} {} {}{})",
+            parameter.id,
+            parameter.name,
+            self.declaration(&canonical::declaration(parameter.contract))?,
+            self.type_digest(parameter.self_type)?,
+            arguments,
+        ))
     }
     fn type_digest(&mut self, ty: k::TypeObjectDigest) -> Result<String, Diagnostic> {
         let ty = self.reader.ty(ty)?;
@@ -593,6 +644,9 @@ impl Renderer<'_> {
                                 .collect::<Result<Vec<_>, _>>()?;
                             clauses.push(format!("(types {})", arguments.join(" ")));
                         }
+                        for parameter in &i.implementation_parameters {
+                            clauses.push(self.implementation_parameter(parameter)?);
+                        }
                         for m in i.methods {
                             let arguments = if m.type_arguments.is_empty() {
                                 String::new()
@@ -604,11 +658,19 @@ impl Renderer<'_> {
                                     .collect::<Result<Vec<_>, _>>()?;
                                 format!(" (types {})", types.join(" "))
                             };
+                            let implementations = m
+                                .implementations
+                                .into_iter()
+                                .map(|operand| self.reader.implementation_operand(operand))
+                                .collect::<Result<Vec<_>, _>>()?;
+                            let implementations =
+                                self.implementation_arguments(&implementations)?;
                             clauses.push(format!(
-                                "(method {} {}{})",
+                                "(method {} {}{}{})",
                                 m.method,
                                 self.declaration(&canonical::declaration(m.function))?,
                                 arguments,
+                                implementations,
                             ));
                         }
                     }
@@ -638,24 +700,7 @@ impl Renderer<'_> {
                     }
                     D::Function(f) => {
                         for p in &f.implementation_parameters {
-                            let arguments = if p.type_arguments.is_empty() {
-                                String::new()
-                            } else {
-                                let types = p
-                                    .type_arguments
-                                    .iter()
-                                    .map(|ty| self.type_digest(*ty))
-                                    .collect::<Result<Vec<_>, _>>()?;
-                                format!(" (types {})", types.join(" "))
-                            };
-                            clauses.push(format!(
-                                "(implementation-parameter {} {} {} {}{})",
-                                p.id,
-                                p.name,
-                                self.declaration(&canonical::declaration(p.contract))?,
-                                self.type_digest(p.self_type)?,
-                                arguments
-                            ));
+                            clauses.push(self.implementation_parameter(p)?);
                         }
                         children.extend(f.type_parameters.into_iter().map(OwnerKey::TypeParameter));
                         children.extend(

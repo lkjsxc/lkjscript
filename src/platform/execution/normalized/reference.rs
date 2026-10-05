@@ -42,6 +42,9 @@ mod borrowed_result_tests;
 mod borrowed_results;
 #[path = "reference_intrinsics.rs"]
 mod checked_intrinsics;
+#[cfg(test)]
+#[path = "reference_implementation_prerequisite_tests.rs"]
+mod prerequisite_tests;
 #[path = "reference_parallel.rs"]
 mod structured;
 
@@ -552,6 +555,9 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         let list_work = super::list::Work::current();
         let map_work = super::map::Work::current();
         let mut state = ReferenceState {
+            reference_witnesses: Arc::new(std::sync::Mutex::new(
+                ReferenceWitnessInterner::default(),
+            )),
             shared_budget: None,
             structured_depth: 0,
             ancestor_depth: 0,
@@ -687,7 +693,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
 
 #[path = "reference_implementations.rs"]
 mod implementations;
-use implementations::AppliedReferenceImplementation;
+use implementations::{AppliedReferenceImplementation, ReferenceWitnessInterner};
 
 struct ReferenceTransaction {
     binding: BindingId,
@@ -704,6 +710,7 @@ struct ReferenceApplication<'a> {
 }
 
 struct ReferenceState<'a> {
+    reference_witnesses: Arc<std::sync::Mutex<ReferenceWitnessInterner>>,
     shared_budget: Option<Arc<super::shared_budget::SharedBudget>>,
     structured_depth: usize,
     ancestor_depth: usize,
@@ -1901,7 +1908,12 @@ impl ReferenceState<'_> {
                 "function type parameters are not unique",
             ));
         }
-        let implementations = self.implementation_bindings(&function, &types, supplied)?;
+        let implementations = self.implementation_bindings(
+            declaration,
+            &function.implementation_parameters,
+            &types,
+            supplied,
+        )?;
         Ok(AdmittedGraphCall {
             implementations,
             declaration,
@@ -2288,11 +2300,20 @@ impl ReferenceState<'_> {
                     method,
                     arguments,
                 } => {
-                    let (function, types) = self.method_target(witness, contract, method)?;
+                    let (function, types, implementations) =
+                        self.method_target(witness, contract, method)?;
                     self.require_owning_result(function)?;
                     let uses = self.function_parameter_uses(function)?;
                     let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
-                    return self.tail_step(function, &types, &[], &[], arguments, locals);
+                    let target = self.admit_resolved_witness_call(
+                        function,
+                        &types,
+                        &[],
+                        &[],
+                        &implementations,
+                        arguments,
+                    )?;
+                    return self.transfer_graph_call(target, locals);
                 }
                 ExpressionOperation::Call {
                     requirement_arguments,
@@ -2894,11 +2915,20 @@ impl ReferenceState<'_> {
                 method,
                 arguments,
             } => {
-                let (function, types) = self.method_target(witness, contract, method)?;
+                let (function, types, implementations) =
+                    self.method_target(witness, contract, method)?;
                 self.require_owning_result(function)?;
                 let uses = self.function_parameter_uses(function)?;
                 let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
-                self.call_declaration(function, &types, &[], &[], arguments)
+                let target = self.admit_resolved_witness_call(
+                    function,
+                    &types,
+                    &[],
+                    &[],
+                    &implementations,
+                    arguments,
+                )?;
+                self.execute_witness_call(target)
             }
             ExpressionOperation::Unit {} => {
                 CheckedValue::primitive(&self.schema, NormalizedValue::Unit)

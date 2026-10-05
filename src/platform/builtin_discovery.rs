@@ -130,8 +130,10 @@ pub(crate) fn parse_interface_owner_kind(value: &str) -> Result<OwnerKind, Diagn
     }
 }
 
-pub(crate) const fn interface_owner_kinds() -> [OwnerKind; 14] {
+pub(crate) const fn interface_owner_kinds() -> [OwnerKind; 16] {
     [
+        OwnerKind::OwnedContract,
+        OwnerKind::OwnedImplementation,
         OwnerKind::Record,
         OwnerKind::Variant,
         OwnerKind::Interface,
@@ -347,13 +349,73 @@ fn append_owner_detail(
                         "type-arguments".to_owned(),
                         i.type_arguments.len().to_string(),
                     ),
+                    (
+                        "implementation-parameters".to_owned(),
+                        i.implementation_parameters.len().to_string(),
+                    ),
                 ]);
                 records.push(detail);
                 append_type(standard, "self", i.self_type, records, 0)?;
                 for (index, ty) in i.type_arguments.iter().enumerate() {
                     append_type(standard, &format!("type-argument.{index}"), *ty, records, 0)?;
                 }
+                for (index, prerequisite) in i.implementation_parameters.iter().enumerate() {
+                    records.push(DiscoveryRecord::new(
+                        "owned.prerequisite",
+                        [
+                            ("owner", declaration.header.owner.to_string()),
+                            ("id", prerequisite.id.to_string()),
+                            ("index", index.to_string()),
+                            ("name", prerequisite.name.to_string()),
+                            (
+                                "contract",
+                                format!(
+                                    "{}/{}",
+                                    prerequisite.contract.package,
+                                    prerequisite.contract.declaration
+                                ),
+                            ),
+                            ("self", prerequisite.self_type.to_string()),
+                            (
+                                "type-arguments",
+                                prerequisite.type_arguments.len().to_string(),
+                            ),
+                        ],
+                    ));
+                    append_type(
+                        standard,
+                        &format!("prerequisite.{}.self", prerequisite.id),
+                        prerequisite.self_type,
+                        records,
+                        0,
+                    )?;
+                    for (index, ty) in prerequisite.type_arguments.iter().enumerate() {
+                        append_type(
+                            standard,
+                            &format!("prerequisite.{}.type-argument.{index}", prerequisite.id),
+                            *ty,
+                            records,
+                            0,
+                        )?;
+                    }
+                }
                 for mapping in &i.methods {
+                    records.push(DiscoveryRecord::new(
+                        "owned.method-implementation",
+                        [
+                            ("owner", declaration.header.owner.to_string()),
+                            ("method", mapping.method.to_string()),
+                            (
+                                "function",
+                                format!(
+                                    "{}/{}",
+                                    mapping.function.package, mapping.function.declaration
+                                ),
+                            ),
+                            ("type-arguments", mapping.type_arguments.len().to_string()),
+                            ("implementations", mapping.implementations.len().to_string()),
+                        ],
+                    ));
                     for (index, ty) in mapping.type_arguments.iter().enumerate() {
                         append_type(
                             standard,
@@ -361,6 +423,16 @@ fn append_owner_detail(
                             *ty,
                             records,
                             0,
+                        )?;
+                    }
+                    for (index, operand) in mapping.implementations.iter().enumerate() {
+                        append_implementation_operand(
+                            standard,
+                            declaration.header.owner,
+                            mapping.method,
+                            index,
+                            operand,
+                            records,
                         )?;
                     }
                 }
@@ -565,6 +637,81 @@ fn append_owner_detail(
         | PackageInterfaceRecord::Parameter(_)
         | PackageInterfaceRecord::Requirement(_)
         | PackageInterfaceRecord::Port(_) => append_child_detail(standard, record, None, records)?,
+    }
+    Ok(())
+}
+
+fn append_implementation_operand(
+    standard: &PackageInterfaceView<'_>,
+    owner: OwnerKey,
+    method: super::semantic_id::MethodId,
+    index: usize,
+    operand: &super::kernel::ImplementationOperand,
+    records: &mut Vec<DiscoveryRecord>,
+) -> Result<(), Diagnostic> {
+    use super::kernel::ImplementationOperand;
+    let mut pending = vec![(operand, String::from("-"), 0_usize)];
+    while let Some((operand, path, depth)) = pending.pop() {
+        if depth > 128 || records.len() >= BUILTIN_QUERY_MAXIMUM_ITEMS {
+            return Err(discovery_error(
+                DiagnosticClass::Resource,
+                "builtin_type_projection_limit",
+                "package witness projection exceeded its depth or record bound",
+            ));
+        }
+        let (kind, reference, parameter, types, operands) = match operand {
+            ImplementationOperand::Concrete {
+                implementation,
+                type_arguments,
+                implementations,
+            } => (
+                "concrete",
+                implementation,
+                String::from("-"),
+                type_arguments.as_slice(),
+                implementations.as_slice(),
+            ),
+            ImplementationOperand::Parameter { scope, parameter } => {
+                ("parameter", scope, parameter.to_string(), &[][..], &[][..])
+            }
+        };
+        records.push(DiscoveryRecord::new(
+            "owned.method-implementation-operand",
+            [
+                ("owner", owner.to_string()),
+                ("method", method.to_string()),
+                ("index", index.to_string()),
+                ("path", path.clone()),
+                ("kind", kind.to_owned()),
+                (
+                    "reference",
+                    format!("{}/{}", reference.package, reference.declaration),
+                ),
+                ("parameter", parameter),
+                ("type-arguments", types.len().to_string()),
+                ("implementations", operands.len().to_string()),
+            ],
+        ));
+        for (ordinal, ty) in types.iter().enumerate() {
+            append_type(
+                standard,
+                &format!("method.{method}.implementation.{index}.{path}.type-argument.{ordinal}"),
+                *ty,
+                records,
+                0,
+            )?;
+        }
+        for (child, operand) in operands.iter().enumerate().rev() {
+            pending.push((
+                operand,
+                if path == "-" {
+                    child.to_string()
+                } else {
+                    format!("{path}/{child}")
+                },
+                depth + 1,
+            ));
+        }
     }
     Ok(())
 }

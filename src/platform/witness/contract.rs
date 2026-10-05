@@ -7,8 +7,8 @@ pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-9";
 pub const WITNESS_CONTRACT_VERSION: u16 = 9;
 pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-11";
 pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 11;
-pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-33";
-pub const VALIDATOR_CONTRACT_VERSION: u16 = 33;
+pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-34";
+pub const VALIDATOR_CONTRACT_VERSION: u16 = 34;
 
 pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT09";
 pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM16";
@@ -85,7 +85,7 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 40] = [
     ValidatorFeatureDescriptor {
         name: "explicit_owned_implementation_witnesses",
         // Explicit application schemes preserve consumption, allowances and grants independently.
-        version: 6,
+        version: 7,
     },
     ValidatorFeatureDescriptor {
         name: "sealed_owned_i64_cells",
@@ -109,7 +109,7 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 40] = [
     },
     ValidatorFeatureDescriptor {
         name: "finite_generic_callable_instantiation",
-        version: 2,
+        version: 3,
     },
     ValidatorFeatureDescriptor {
         name: "parametric_nominal_data",
@@ -137,7 +137,7 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 40] = [
     },
     ValidatorFeatureDescriptor {
         name: "single_relation_extractor",
-        version: 5,
+        version: 6,
     },
     ValidatorFeatureDescriptor {
         name: "owner_summary_dimensions",

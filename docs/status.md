@@ -6,45 +6,35 @@ Current snapshot: 2026-10-05. This page owns availability and unfinished accepta
 
 ## Public binary
 
-Immutable [v0.1.78](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.78) is
-public/latest at accepted source `2eedbd77f1cd622607fcae03ea81c9df7edeac8a`.
-[Producer 37274342312/1](https://github.com/lkjsxc/lkjscript/actions/runs/37274342312)
-completed `candidate_accepted`; [promotion 37286980270/1](https://github.com/lkjsxc/lkjscript/actions/runs/37286980270)
-completed `immutable_published_and_public_verified` at 09:06:39 UTC.
-Release `403537321` and annotation `9afc8a7d420184a4923cf37360b064a13627098f`
+Immutable [v0.1.79](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.79) is
+public/latest at accepted source `d87c8f4eb511e7f76cb83d3a2ae002e8e0c2b3f3`.
+[Producer 37290757320/1](https://github.com/lkjsxc/lkjscript/actions/runs/37290757320)
+completed `candidate_accepted`; [promotion 37302814563/1](https://github.com/lkjsxc/lkjscript/actions/runs/37302814563)
+completed `immutable_published_and_public_verified` at 11:33:45 UTC.
+Release `403643687` and annotation `b32ef1b8d62acdc19af739f560af00f78355b78e`
 retain that exact source. Independent anonymous exact, release-ID and latest
-metadata, all three assets and executable readback passed at 09:12:37 UTC.
-No v0.1.78 publication gate remains.
+metadata, all three accepted assets and executable readback passed at 11:39:02 UTC.
+No v0.1.79 publication gate remains.
 
 Original evidence is indexed by
-`.artifacts/20261005-owned-read-results/release-0178/completed-publication.json` in
-`/home/coder/workspace/lkjscript`. Its original source receipt is
-`.artifacts/lkjscript-dev/check/1791181801609973101-3752112-0/receipt.json`.
-The earlier immutable v0.1.77 release and its original evidence remain preserved.
+`.artifacts/20261005-generic-implementations/release-0179/completed-publication.json`
+in `/home/coder/workspace/lkjscript`. It retains authenticated original candidate
+and publication receipts, ZIP identities and anonymous readbacks. Earlier immutable
+releases and their original evidence remain preserved.
 
 ## Generic implementations accepted and delivered to main
 
-[Explicit generic owned implementations](spec/generic-owned-implementations.md)
-for v0.1.79 are accepted at
+Explicit generic owned implementations for v0.1.79 are accepted at
 [`d87c8f4eb511e7f76cb83d3a2ae002e8e0c2b3f3`](https://github.com/lkjsxc/lkjscript/commit/d87c8f4eb511e7f76cb83d3a2ae002e8e0c2b3f3).
 The accepted tree is `785278d87c8b374db320ed29d285f182b28d87c4`.
 Normal fast-forward delivery and exact remote main were independently verified
 through Git and the GitHub branch API. Later reporting commits do not alter this
 tested source or its candidate selection.
 
-Schemes retain every ordered type argument, map generic named functions, preserve
-borrowed-result provenance and close exact callable/witness applications together.
-Complete source analysis rejects expanding callback cycles across package
-boundaries before publication, transport admission or artifact use. Witness-free
-generic parallel children also receive exact prepared applications.
-
 The [three-package witness](../examples/generic-owned-implementations/README.md)
-exports flat/chunk32 storage schemes before independent cells, buffers and a nested
-owned product exist. It exercises reads, transfer, drain/reuse and joined tasks.
-This is a language witness; production application adoption and compiler
-self-hosting remain future work. [Release notes](releases/v0.1.79.md) describe the
-selected graph/interface and derived-format cut. Experimental bundles require
-rebuilding; maintained semantic HEADs and original historical fixtures are preserved.
+exercises exact generic storage/read implementations, borrowed-result provenance,
+transfer, drain/reuse and joined tasks. [Release notes](releases/v0.1.79.md) describe
+the accepted capability and selected graph/interface and derived-format cut.
 
 The original complete source receipt is
 `.artifacts/lkjscript-dev/check/1791191334326999367-4105781-0/receipt.json`:
@@ -55,34 +45,49 @@ selected public CLI cases. The source/commit mapping is retained in
 The earlier failed full receipt and all 14 corrected regression results remain
 under that same evidence root; they are not relabelled as passing proof.
 
-Focused evidence includes 1,296 independently modeled flow cases, real forged
-cross-package transport/artifact rejection, exact phantom arguments and joined
-cleanup. All seven individual 513-item public scenarios pass. The original
-combined 513-item reference allocation refusal remains recorded; invocation
-limits were not raised. The four maintained native projects pass 281 differential
-tests. A tracked-only copy reproduces all four bundles and the standard transport
-exactly, preserving its 199-pack inventory and semantic HEADs
-(`cold-tracked-05.log`). Generated references, historical fixture checksums,
-strict lint and maintained artifact comparisons pass.
+## v0.1.80 local implementation awaiting acceptance
 
-## v0.1.79 candidate acceptance in progress
+The current `main` worktree at `/home/coder/workspace/lkjscript` has local v0.1.80
+changes above reporting HEAD `d313494d060ca58b45b4cf55a21a5705072006ec`.
+Integration, fresh complete acceptance and publication remain pending.
 
-[Producer 37290757320/1](https://github.com/lkjsxc/lkjscript/actions/runs/37290757320)
-was dispatched once at 09:32:53 UTC from exact accepted product/controller source
-`d87c8f4eb511e7f76cb83d3a2ae002e8e0c2b3f3`. Repository, workflow, main ref, head
-repository, source and attempt were independently authenticated. Its required
-candidate job is active at locked dependency retrieval and immutable host-tool
-construction. Candidate assets and terminal acceptance remain pending.
+[Implementation prerequisites](spec/generic-owned-implementations.md#explicit-prerequisites-and-method-maps)
+compose exact nested witnesses and map generic functions with explicit witness
+arguments. Compatible prepared applications share immutable instruction bodies
+while retaining independently admitted witness identities and resolved call bindings.
+The [three-package example](../examples/composable-owned-implementations/README.md)
+uses existing generic selectors and readers across cells, buffers and a nested
+product, including borrowed selections, owner reuse and joined consuming tasks.
+[Release notes](releases/v0.1.80.md) describe the local capability and format cut.
 
-The retained handoff is
-`.artifacts/20261005-generic-implementations/release-0179/candidate-handoff.json`.
-Reuse this exact producer. Next require source-specific acceptance, finalized
-asset construction, exact archived-executable admission and authenticated
-`candidate_accepted`. Only then select the v0.1.79 annotation and promote its
-unchanged assets through the maintained procedure, requiring
-`immutable_published_and_public_verified` and independent anonymous readback.
-No v0.1.79 tag, scoped publication selection or promotion has been made.
-Source/mainline acceptance does not establish finalized-archive acceptance.
+[Current limits](spec/generic-owned-implementations.md#finite-preparation-and-independent-admission)
+remain explicit: potential recursion admission is conservative, so an unused
+same-contract alternative can make a selected acyclic application unsupported.
+Source analysis retains separate typed prerequisite paths, so a compact witness
+DAG can still exceed source proof capacity. Code sharing follows individual
+application materialization and retains its construction charges. Cheaper
+preparation and runtime speedups have not been established.
+
+All four maintained native projects pass their 281 differential checks from a
+copy containing only tracked inputs. Their four bundles and the standard transport
+reproduce exactly, with unchanged semantic heads and pack inventory. Native-owner
+inspection identifies the four new packs as derived compiler/package data; they
+introduce no canonical owners, types or semantic roots. Product-generated references
+verify. Original evidence is retained under
+`.artifacts/20261005-composable-implementations/`, including `cold-source-01/` and
+`native-pack-inspection-01.json`.
+
+The first complete source run retained stable inputs and passed 24 of 26 gates:
+`.artifacts/lkjscript-dev/check/1791204479217801310-293581-0/receipt.json`.
+Both failures identified the same stale development-verifier SHA-256 pin for the
+rebuilt maintained service artifact. The pin is corrected and its focused regression
+passes; the failed receipt remains preserved. All 1,574 library tests and 228 public
+CLI cases passed in that run (eight and one ignored, respectively).
+
+Focused development checks and fixture corrections remain preliminary. Next require
+fresh complete acceptance, integrate the reviewed source and select its exact
+release candidate.
+Production application adoption and compiler self-hosting remain future work.
 
 Preserve unrelated worktrees, stashes, original fixtures/failures and immutable
 publication history. No application deployment changes are part of this work.

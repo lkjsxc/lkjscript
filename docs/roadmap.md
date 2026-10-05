@@ -45,8 +45,20 @@ to reuse storage and reader methods across independently authored owned items.
 The [native witness](../examples/generic-owned-implementations/README.md) exports
 flat/chunked schemes before cells, buffers and a nested product exist, preserving
 exact applications through source-tied reads, transfer and joined tasks. Require
-complete admission of mapped targets and finite cross-package callable flow before
-adding implementation prerequisites, method-local schemes or inferred selection.
+complete admission of mapped targets and finite cross-package callable flow.
+
+The selected composition milestone adds ordered implementation prerequisites and
+explicit mapped-function witnesses. The [adapter witness](../examples/composable-owned-implementations/README.md)
+maps the existing generic selector directly, nests independently selected readers,
+and forwards a consuming task's exact prerequisites. Every nested selection retains
+its identity, ownership modes, closed effects and borrowed-result provenance.
+Mapped operands are direct same-scheme prerequisites or finite concrete application
+trees containing no lexical witness parameter; eligible symbolic type arguments
+remain allowed. A conservative graph of potential method targets rejects lexical
+witness wrapping inside recursive components, including recursion made possible
+by unused same-contract alternatives. Unsupported construction and resource
+exhaustion remain distinct. Method-local schemes and inferred selection require
+separate designs.
 
 Keep implementation identity explicit and contracts independently checkable.
 Inference must retain boundary evidence; bounded proof-search exhaustion remains
@@ -54,6 +66,11 @@ distinct from invalid meaning. Effect allowances, witnesses and deployment grant
 stay separate. Typed failures must compose with cancellation and resource completion.
 
 ## Establish region custody and memory policies
+
+Select scoped reads spanning joined parallel children as the next ownership
+design. Specify loan provenance, child-capture admission, owner reuse after join
+and cleanup on trap or cancellation before implementing it. Use the same generic
+storage contracts to expose representation and lifetime requirements.
 
 Extend scoped access into explicit region custody. Define escape, cross-region
 roots, freezing, transfer and reclamation before selecting placement mechanisms.
@@ -92,6 +109,13 @@ cleanup. Acceptance is distinct from processing completion. In-process custody
 does not establish distributed exactly-once delivery.
 
 ## Reduce repeated preparation and semantic-development work
+
+Share identical prepared instruction bodies for the same exact function, type
+arguments and closed effect/requirement context. Keep complete witness identities
+and resolved call-site bindings on separately admitted applications, including
+tail calls, function values and parallel children. Measure retained instructions,
+application metadata, preparation and invocation costs on matched selections;
+sharing storage alone does not establish faster preparation or execution.
 
 Share immutable admitted dependency interfaces across snapshots as a separate,
 measured follow-up. Preserve exact package/revision bindings, substitutions,

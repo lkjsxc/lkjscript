@@ -352,10 +352,10 @@ declarations.end
             } = &mut e.operation
         {
             for operand in implementations {
-                if let ImplementationOperand::Parameter { function, .. } = operand
-                    && function.declaration == joined
+                if let ImplementationOperand::Parameter { scope, .. } = operand
+                    && scope.declaration == joined
                 {
-                    function.declaration = foreign;
+                    scope.declaration = foreign;
                 }
             }
         }

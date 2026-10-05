@@ -79,11 +79,17 @@ struct Node {
     types: Vec<CompactField>,
     effects: Vec<CompactField>,
     requirements: Vec<CompactField>,
-    implementations: Vec<(CompactField, Vec<CompactField>)>,
-    witness_types: Vec<CompactField>,
+    implementations: Vec<ImplementationSyntax>,
+    witness: Option<ImplementationSyntax>,
     members: Vec<CompactRecord>,
     // Only lexical resolution constructs this value. User text always uses the public decoder.
     lexical: Option<AuthoredLocalReference>,
+}
+
+struct ImplementationSyntax {
+    reference: CompactField,
+    types: Vec<CompactField>,
+    implementations: Vec<ImplementationSyntax>,
 }
 
 enum Work {
@@ -157,7 +163,7 @@ pub(super) fn layout(
             effects: Vec::new(),
             requirements: Vec::new(),
             implementations: Vec::new(),
-            witness_types: Vec::new(),
+            witness: None,
             members: Vec::new(),
             lexical: None,
         };
@@ -250,9 +256,9 @@ pub(super) fn layout(
             }
             "method-call" => {
                 minimum(&block, id, args, 3)?;
-                let (witness, types) = implementation_syntax(&block, args[0], "witness")?;
-                node.record.fields.push(witness);
-                node.witness_types = types;
+                let witness = implementation_syntax(&block, args[0], "witness")?;
+                node.record.fields.push(witness.reference.clone());
+                node.witness = Some(witness);
                 node.record.fields.push(block.field(args[1], "contract")?);
                 node.record.fields.push(block.field(args[2], "method")?);
                 node.children.extend_from_slice(&args[3..]);
@@ -946,51 +952,110 @@ fn implementation_syntax(
     block: &Block,
     id: usize,
     field: &str,
-) -> Result<(CompactField, Vec<CompactField>), Diagnostic> {
+) -> Result<ImplementationSyntax, Diagnostic> {
+    implementation_syntax_at(block, id, field, 1)
+}
+
+fn implementation_syntax_at(
+    block: &Block,
+    id: usize,
+    field: &str,
+    depth: usize,
+) -> Result<ImplementationSyntax, Diagnostic> {
+    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+        return Err(capacity(
+            &block.syntax[id].location,
+            "change_owned_operand_depth",
+            "implementation application exceeds witness-depth admission",
+        ));
+    }
     if matches!(block.syntax[id].kind, SyntaxKind::Atom { .. }) {
-        return Ok((block.field(id, field)?, Vec::new()));
+        return Ok(ImplementationSyntax {
+            reference: block.field(id, field)?,
+            types: Vec::new(),
+            implementations: Vec::new(),
+        });
     }
     let args = clause(block, id, "implementation")?;
-    if !(1..=2).contains(&args.len()) {
+    if !(1..=3).contains(&args.len()) {
         return Err(block.error(
             id,
             "change_owned_operand",
-            "applied witness requires a declaration and optional types clause",
+            "applied witness requires a declaration and optional types/implementations clauses",
         ));
     }
     let mut reference = block.field(args[0], field)?;
     reference.value = format!("concrete@{}", reference.value);
-    let types = args
-        .get(1)
-        .map(|types| {
-            clause(block, *types, "types")?
+    let mut types = Vec::new();
+    let mut implementations = Vec::new();
+    let mut rank = 0;
+    for application in &args[1..] {
+        let next = match block.head(*application) {
+            Some("types") => 1,
+            Some("implementations") => 2,
+            _ => {
+                return Err(block.error(
+                    *application,
+                    "change_owned_operand",
+                    "witness accepts only types and implementations clauses",
+                ));
+            }
+        };
+        if next <= rank {
+            return Err(block.error(
+                *application,
+                "change_owned_operand",
+                "witness clauses must occur once in types/implementations order",
+            ));
+        }
+        rank = next;
+        if next == 1 {
+            types = clause(block, *application, "types")?
                 .iter()
                 .map(|ty| block.field(*ty, "type"))
-                .collect::<Result<Vec<_>, _>>()
-        })
-        .transpose()?
-        .unwrap_or_default();
-    Ok((reference, types))
+                .collect::<Result<Vec<_>, _>>()?;
+        } else {
+            implementations = clause(block, *application, "implementations")?
+                .iter()
+                .map(|operand| implementation_syntax_at(block, *operand, field, depth + 1))
+                .collect::<Result<Vec<_>, _>>()?;
+        }
+    }
+    Ok(ImplementationSyntax {
+        reference,
+        types,
+        implementations,
+    })
 }
 
 fn lower_implementation_syntax(
     decoder: &mut Decoder,
     record: &CompactRecord,
-    field: &str,
-    types: &[CompactField],
+    syntax: &ImplementationSyntax,
 ) -> Result<AuthoredImplementationOperand, Diagnostic> {
-    let mut operand = decoder.parse_implementation_operand(record, field)?;
-    if !types.is_empty() {
-        let AuthoredImplementationOperand::Concrete { type_arguments, .. } = &mut operand else {
+    let mut operand = decoder.parse_implementation_operand(record, &syntax.reference.value)?;
+    if !syntax.types.is_empty() || !syntax.implementations.is_empty() {
+        let AuthoredImplementationOperand::Concrete {
+            type_arguments,
+            implementations,
+            ..
+        } = &mut operand
+        else {
             return Err(record_error(
                 record,
                 "change_owned_operand",
-                "only concrete witnesses accept type applications",
+                "only concrete witnesses accept type and prerequisite applications",
             ));
         };
-        *type_arguments = types
+        *type_arguments = syntax
+            .types
             .iter()
             .map(|ty| decoder.decode_type_field(ty))
+            .collect::<Result<Vec<_>, _>>()?;
+        *implementations = syntax
+            .implementations
+            .iter()
+            .map(|operand| lower_implementation_syntax(decoder, record, operand))
             .collect::<Result<Vec<_>, _>>()?;
     }
     Ok(operand)
@@ -1076,7 +1141,7 @@ fn lower_node(
             implementations: node
                 .implementations
                 .iter()
-                .map(|(f, types)| lower_implementation_syntax(decoder, record, &f.value, types))
+                .map(|operand| lower_implementation_syntax(decoder, record, operand))
                 .collect::<Result<_, _>>()?,
             arguments: (0..node.children.len())
                 .map(|_| child())
@@ -1086,8 +1151,9 @@ fn lower_node(
             witness: lower_implementation_syntax(
                 decoder,
                 record,
-                required(record, "witness")?,
-                &node.witness_types,
+                node.witness
+                    .as_ref()
+                    .ok_or_else(|| inventory_error(record, "method witness syntax was lost"))?,
             )?,
             contract: decoder.parse_declaration_reference(record, "contract")?,
             method: required(record, "method")?.parse()?,

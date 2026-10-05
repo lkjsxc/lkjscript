@@ -322,6 +322,7 @@ impl From<OwnedImplementation25> for OwnedImplementation {
             self_type: v.self_type,
             methods: v.methods.into_iter().map(Into::into).collect(),
             type_parameters: Vec::new(),
+            implementation_parameters: Vec::new(),
             type_arguments: Vec::new(),
         }
     }
@@ -330,6 +331,11 @@ impl From<OwnedImplementation25> for OwnedImplementation {
 impl TryFrom<OwnedImplementation> for OwnedImplementation25 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: OwnedImplementation) -> Result<Self, Self::Error> {
+        if !v.implementation_parameters.is_empty()
+            || v.methods.iter().any(|m| !m.implementations.is_empty())
+        {
+            return Err(super::wire28::implementation_scheme_extension());
+        }
         if !v.type_parameters.is_empty() || v.methods.iter().any(|m| !m.type_arguments.is_empty()) {
             return Err(super::wire27::implementation_scheme_extension());
         }

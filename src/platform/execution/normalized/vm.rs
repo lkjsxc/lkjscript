@@ -23,7 +23,7 @@ use crate::platform::kernel::{
 };
 use crate::platform::runtime::structured::StructuredExecutorHandle;
 use crate::platform::semantic_id::TypeParameterId;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 #[path = "vm_checked.rs"]
@@ -40,6 +40,9 @@ pub(super) use structured::ChildProbe;
 #[cfg(test)]
 #[path = "vm_borrow_result_tests.rs"]
 pub(super) mod borrow_result_tests;
+#[cfg(test)]
+#[path = "vm_witness_dag_tests.rs"]
+mod witness_dag_tests;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NormalizedRunPolicy {
@@ -811,8 +814,9 @@ impl Machine<'_> {
                 budget.step("normalized_instruction_steps")?;
             }
             self.observation.instructions = self.observation.instructions.saturating_add(1);
-            let instruction = {
+            let (mut instruction, application, position) = {
                 let frame = self.current_frame_mut()?;
+                let position = frame.instruction;
                 let instruction = frame
                     .code
                     .instructions
@@ -825,7 +829,13 @@ impl Machine<'_> {
                         )
                     })?;
                 frame.instruction = frame.instruction.saturating_add(1);
-                instruction
+                (instruction, frame.function, position)
+            };
+            let closed_callsite = match application {
+                Some(application) => {
+                    self.resolve_callsite(application, position, &mut instruction)?
+                }
+                None => false,
             };
             match instruction {
                 NormalizedInstruction::Parallel {
@@ -842,8 +852,16 @@ impl Machine<'_> {
                     if !left_implementations.is_empty() || !right_implementations.is_empty() {
                         return Err(type_error("unclosed parallel implementation application"));
                     }
-                    let left_types = self.resolve_parallel_types(left_types)?;
-                    let right_types = self.resolve_parallel_types(right_types)?;
+                    let left_types = if closed_callsite {
+                        left_types
+                    } else {
+                        self.resolve_parallel_types(left_types)?
+                    };
+                    let right_types = if closed_callsite {
+                        right_types
+                    } else {
+                        self.resolve_parallel_types(right_types)?
+                    };
                     let result_type = transfer::resolve_type(
                         self.program,
                         result_type,
@@ -1259,7 +1277,11 @@ impl Machine<'_> {
                     if !effect_arguments.is_empty() || !requirement_arguments.is_empty() {
                         return Err(type_error("effect application requires prepared closure"));
                     }
-                    let type_arguments = self.resolve_type_arguments(&type_arguments)?;
+                    let type_arguments = if closed_callsite {
+                        type_arguments
+                    } else {
+                        self.resolve_type_arguments(&type_arguments)?
+                    };
                     self.call(function, type_arguments, arguments)?;
                 }
                 NormalizedInstruction::TailCall {
@@ -1273,7 +1295,11 @@ impl Machine<'_> {
                         return Err(type_error("effect application requires prepared closure"));
                     }
                     let arguments = self.pop_many(arguments as usize)?;
-                    let type_arguments = self.resolve_type_arguments(&type_arguments)?;
+                    let type_arguments = if closed_callsite {
+                        type_arguments
+                    } else {
+                        self.resolve_type_arguments(&type_arguments)?
+                    };
                     self.dispatch_call(function, type_arguments, arguments, true)?;
                 }
                 NormalizedInstruction::FunctionValue {
@@ -1285,7 +1311,11 @@ impl Machine<'_> {
                     if !effect_arguments.is_empty() || !requirement_arguments.is_empty() {
                         return Err(type_error("effect application requires prepared closure"));
                     }
-                    let type_arguments = self.resolve_type_arguments(&type_arguments)?;
+                    let type_arguments = if closed_callsite {
+                        type_arguments
+                    } else {
+                        self.resolve_type_arguments(&type_arguments)?
+                    };
                     self.push(CheckedValue::function(
                         self.program,
                         function,
@@ -1761,6 +1791,94 @@ impl Machine<'_> {
                     self.push(result)?;
                 }
             }
+        }
+    }
+
+    fn resolve_callsite(
+        &self,
+        function: FunctionIndex,
+        position: usize,
+        instruction: &mut NormalizedInstruction,
+    ) -> Result<bool, ExecutionError> {
+        let application = self
+            .program
+            .functions
+            .get(function.0 as usize)
+            .filter(|_| function.1 == self.program.value_origin)
+            .ok_or_else(|| type_error("callsite application is foreign"))?;
+        if application.callsites.is_empty() {
+            return Ok(false);
+        }
+        if !matches!(
+            instruction,
+            NormalizedInstruction::Call { .. }
+                | NormalizedInstruction::TailCall { .. }
+                | NormalizedInstruction::FunctionValue { .. }
+                | NormalizedInstruction::Parallel { .. }
+        ) {
+            return Ok(false);
+        }
+        let position =
+            u32::try_from(position).map_err(|_| type_error("callsite position overflow"))?;
+        let index = application
+            .callsites
+            .binary_search_by_key(&position, |(position, _)| *position)
+            .map_err(|_| type_error("shared code has no exact application callsite"))?;
+        let placeholder = FunctionIndex(u32::MAX, self.program.value_origin);
+        match (instruction, &application.callsites[index].1) {
+            (
+                NormalizedInstruction::Call {
+                    function,
+                    type_arguments,
+                    ..
+                }
+                | NormalizedInstruction::TailCall {
+                    function,
+                    type_arguments,
+                    ..
+                }
+                | NormalizedInstruction::FunctionValue {
+                    function,
+                    type_arguments,
+                    ..
+                },
+                super::prepare::NormalizedCallSite::Call {
+                    function: selected,
+                    type_arguments: types,
+                },
+            ) if *function == placeholder && type_arguments.is_empty() => {
+                *function = *selected;
+                *type_arguments = Arc::clone(types);
+                Ok(true)
+            }
+            (
+                NormalizedInstruction::Parallel {
+                    left,
+                    left_types,
+                    right,
+                    right_types,
+                    ..
+                },
+                super::prepare::NormalizedCallSite::Parallel {
+                    left: selected_left,
+                    left_types: types_left,
+                    right: selected_right,
+                    right_types: types_right,
+                },
+            ) if *left == placeholder
+                && *right == placeholder
+                && left_types.is_empty()
+                && right_types.is_empty() =>
+            {
+                *left = *selected_left;
+                *right = *selected_right;
+                *left_types = Arc::clone(types_left);
+                *right_types = Arc::clone(types_right);
+                Ok(true)
+            }
+            _ => Err(type_error(
+                "shared code and exact callsite application disagree",
+            )),
         }
     }
 
@@ -2671,6 +2789,14 @@ impl Machine<'_> {
                 transfer::admit_type(self.program, *ty, self.control)?;
             }
         }
+        if !type_arguments.is_empty() {
+            self.charge_allocation(super::value::collection_storage_bytes(
+                type_arguments.len() as u64,
+                (std::mem::size_of::<(TypeParameterId, TypeObjectDigest)>()
+                    + 3 * std::mem::size_of::<usize>()) as u64,
+                "normalized_call_type_bindings",
+            )?)?;
+        }
         let type_arguments_by_parameter = function
             .type_parameters
             .iter()
@@ -2700,46 +2826,36 @@ impl Machine<'_> {
         if function.implementation_parameters.len() != function.implementation_arguments.len() {
             return Err(type_error("unbound static implementation template"));
         }
+        let mut witness_nodes = 0;
+        let mut witness_visited = BTreeSet::new();
+        let program = self.program;
+        let control = self.control;
         for (parameter, application) in function
             .implementation_parameters
             .iter()
             .zip(function.implementation_arguments.iter())
         {
             self.control.check()?;
-            for ty in application.implementation_type_arguments.iter() {
-                resolve_runtime_type(
-                    self.program,
-                    *ty,
-                    &BTreeMap::new(),
-                    self.control,
-                    "implementation scheme argument is unresolved",
-                )?;
-                if !matches!(
-                    self.program.types.get(ty).map(|t| &t.form),
-                    Some(
-                        TypeForm::ByteBuffer
-                            | TypeForm::OwnedI64Cell
-                            | TypeForm::OwnedProduct { .. }
-                            | TypeForm::OwnedChoice { .. }
-                            | TypeForm::OwnedSequence { .. }
-                    )
-                ) {
-                    return Err(type_error("implementation scheme argument is not owned"));
-                }
+            if parameter.contract != application.contract {
+                return Err(type_error("implementation contract identity is foreign"));
             }
-            let Some(TypeForm::TypeParameter {
-                parameter: type_parameter,
-            }) = self
-                .program
-                .types
-                .get(&parameter.self_type)
-                .map(|t| &t.form)
-            else {
-                return Err(type_error(
-                    "implementation Self has no exact generic binding",
-                ));
-            };
-            if type_arguments_by_parameter.get(type_parameter) != Some(&application.self_type) {
+            validate_runtime_implementation(
+                program,
+                application,
+                control,
+                0,
+                &mut witness_nodes,
+                &mut witness_visited,
+                &mut |bytes| self.charge_allocation(bytes),
+            )?;
+            if resolve_runtime_type(
+                self.program,
+                parameter.self_type,
+                &type_arguments_by_parameter,
+                self.control,
+                "implementation Self is unresolved",
+            )? != application.self_type
+            {
                 return Err(type_error(
                     "implementation Self disagrees with actual type application",
                 ));
@@ -4900,6 +5016,113 @@ fn trap_error(code: &'static str, message: &'static str) -> ExecutionError {
 
 fn resource_error(code: &'static str, message: &'static str) -> ExecutionError {
     ExecutionError::resource(code, message)
+}
+
+fn validate_runtime_implementation(
+    program: &NormalizedProgram,
+    application: &super::prepare::NormalizedImplementationArgument,
+    control: &ExecutionControl,
+    depth: usize,
+    nodes: &mut usize,
+    visited: &mut BTreeSet<u32>,
+    reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+) -> Result<(), ExecutionError> {
+    control.check()?;
+    *nodes = nodes
+        .checked_add(1)
+        .ok_or_else(|| type_error("implementation witness inventory overflow"))?;
+    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
+        || *nodes > crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK
+    {
+        return Err(type_error(
+            "implementation witness exceeds finite admission",
+        ));
+    }
+    let canonical = program
+        .implementation_applications
+        .get(application.identity as usize)
+        .ok_or_else(|| type_error("implementation witness identity is foreign"))?;
+    if canonical.identity != application.identity
+        || canonical.depth != application.depth
+        || canonical.implementation != application.implementation
+        || canonical.contract != application.contract
+        || canonical.self_type != application.self_type
+        || canonical.implementation_type_arguments != application.implementation_type_arguments
+        || canonical.type_arguments != application.type_arguments
+        || canonical.prerequisites != application.prerequisites
+        || !Arc::ptr_eq(&canonical.implementations, &application.implementations)
+        || !Arc::ptr_eq(&canonical.prerequisites, &application.prerequisites)
+        || canonical.implementations.len() != application.implementations.len()
+        || canonical
+            .implementations
+            .iter()
+            .zip(application.implementations.iter())
+            .any(|(expected, actual)| expected.identity != actual.identity)
+    {
+        return Err(type_error(
+            "implementation witness differs from its admitted identity",
+        ));
+    }
+    if depth.saturating_add(canonical.depth) > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
+    {
+        return Err(type_error("implementation DAG exceeds finite depth"));
+    }
+    if visited.contains(&application.identity) {
+        return Ok(());
+    }
+    reserve((std::mem::size_of::<u32>() + 3 * std::mem::size_of::<usize>()) as u64)?;
+    visited.insert(application.identity);
+    for ty in std::iter::once(&application.self_type)
+        .chain(application.implementation_type_arguments.iter())
+        .chain(application.type_arguments.iter())
+    {
+        resolve_runtime_type(
+            program,
+            *ty,
+            &BTreeMap::new(),
+            control,
+            "implementation witness type is unresolved",
+        )?;
+        if !matches!(
+            program.types.get(ty).map(|t| &t.form),
+            Some(
+                TypeForm::ByteBuffer
+                    | TypeForm::OwnedI64Cell
+                    | TypeForm::OwnedProduct { .. }
+                    | TypeForm::OwnedChoice { .. }
+                    | TypeForm::OwnedSequence { .. }
+            )
+        ) {
+            return Err(type_error("implementation witness type is not owned"));
+        }
+    }
+    if application.implementations.len() != application.prerequisites.len() {
+        return Err(type_error("implementation prerequisite arity is foreign"));
+    }
+    for (child, obligation) in application
+        .implementations
+        .iter()
+        .zip(application.prerequisites.iter())
+    {
+        if child.contract != obligation.contract
+            || child.self_type != obligation.self_type
+            || child.type_arguments != obligation.type_arguments
+        {
+            return Err(type_error(
+                "implementation prerequisite differs from its exact obligation",
+            ));
+        }
+        validate_runtime_implementation(
+            program,
+            child,
+            control,
+            depth + 1,
+            nodes,
+            visited,
+            reserve,
+        )?;
+    }
+    Ok(())
 }
 
 fn runtime_error(code: &'static str, message: &'static str) -> ExecutionError {

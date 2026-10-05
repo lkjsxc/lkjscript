@@ -132,6 +132,7 @@ struct Writer {
     parameterized_contract_extension: bool,
     borrowed_result_extension: bool,
     generic_implementation_extension: bool,
+    implementation_prerequisite_extension: bool,
 }
 
 impl Writer {
@@ -157,11 +158,14 @@ impl Writer {
             parameterized_contract_extension: false,
             borrowed_result_extension: false,
             generic_implementation_extension: false,
+            implementation_prerequisite_extension: false,
         }
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.generic_implementation_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+        if self.implementation_prerequisite_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR33");
+        } else if self.generic_implementation_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR32");
         } else if self.borrowed_result_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR31");
@@ -334,11 +338,36 @@ impl Writer {
         operand: &AuthoredImplementationOperand,
         definitions: &BTreeMap<String, SymbolDefinition>,
     ) -> Result<(), Diagnostic> {
+        self.implementation_operand_at(operand, definitions, 0)
+    }
+
+    fn implementation_operand_at(
+        &mut self,
+        operand: &AuthoredImplementationOperand,
+        definitions: &BTreeMap<String, SymbolDefinition>,
+        depth: usize,
+    ) -> Result<(), Diagnostic> {
+        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+            return Err(codec_error(
+                "change_authored_implementation_depth",
+                "implementation application nesting exceeds the authored encoding bound",
+            ));
+        }
         match operand {
             AuthoredImplementationOperand::Concrete {
                 implementation,
                 type_arguments,
+                implementations,
             } => {
+                if !implementations.is_empty() {
+                    self.implementation_prerequisite_extension = true;
+                    self.tag(4)?;
+                    self.declaration_reference(implementation, definitions)?;
+                    self.list(type_arguments, |w, ty| w.authored_type(ty, definitions, 1))?;
+                    return self.list(implementations, |w, operand| {
+                        w.implementation_operand_at(operand, definitions, depth + 1)
+                    });
+                }
                 self.generic_implementation_extension |= !type_arguments.is_empty();
                 self.tag(if type_arguments.is_empty() { 1 } else { 3 })?;
                 self.declaration_reference(implementation, definitions)?;
@@ -348,15 +377,28 @@ impl Writer {
                     Ok(())
                 }
             }
-            AuthoredImplementationOperand::Parameter {
-                function,
-                parameter,
-            } => {
+            AuthoredImplementationOperand::Parameter { scope, parameter } => {
                 self.tag(2)?;
-                self.declaration_reference(function, definitions)?;
+                self.declaration_reference(scope, definitions)?;
                 self.raw(&parameter.bytes())
             }
         }
+    }
+
+    fn implementation_parameters(
+        &mut self,
+        parameters: &[AuthoredImplementationParameter],
+        definitions: &BTreeMap<String, SymbolDefinition>,
+    ) -> Result<(), Diagnostic> {
+        self.list(parameters, |w, p| {
+            w.raw(&p.id.bytes())?;
+            w.name(&p.name)?;
+            w.declaration_reference(&p.contract, definitions)?;
+            w.authored_type(&p.self_type, definitions, 1)?;
+            w.list(&p.type_arguments, |w, ty| {
+                w.authored_type(ty, definitions, 1)
+            })
+        })
     }
     fn symbol(
         &mut self,
@@ -576,16 +618,23 @@ impl Writer {
                 visibility,
                 contract,
                 type_parameters,
+                implementation_parameters,
                 self_type,
                 type_arguments,
                 methods,
             } => {
                 self.owned_extension = true;
                 self.parameterized_contract_extension |= !type_arguments.is_empty();
-                let generic = !type_parameters.is_empty()
+                let prerequisites = !implementation_parameters.is_empty()
+                    || methods.iter().any(|m| !m.implementations.is_empty());
+                self.implementation_prerequisite_extension |= prerequisites;
+                let generic = prerequisites
+                    || !type_parameters.is_empty()
                     || methods.iter().any(|m| !m.type_arguments.is_empty());
                 self.generic_implementation_extension |= generic;
-                self.tag(if generic {
+                self.tag(if prerequisites {
+                    97
+                } else if generic {
                     95
                 } else if type_arguments.is_empty() {
                     81
@@ -602,6 +651,9 @@ impl Writer {
                         w.type_parameter_reference(p, definitions)
                     })?;
                 }
+                if prerequisites {
+                    self.implementation_parameters(implementation_parameters, definitions)?;
+                }
                 self.authored_type(self_type, definitions, 1)?;
                 if generic || !type_arguments.is_empty() {
                     self.list(type_arguments, |w, ty| w.authored_type(ty, definitions, 1))?;
@@ -612,10 +664,14 @@ impl Writer {
                     if generic {
                         w.list(&mapping.type_arguments, |w, ty| {
                             w.authored_type(ty, definitions, 1)
-                        })
-                    } else {
-                        Ok(())
+                        })?;
                     }
+                    if prerequisites {
+                        w.list(&mapping.implementations, |w, operand| {
+                            w.implementation_operand(operand, definitions)
+                        })?;
+                    }
+                    Ok(())
                 })
             }
             AuthoredChange::SetOwnedContract {
@@ -670,16 +726,23 @@ impl Writer {
                 declaration,
                 contract,
                 type_parameters,
+                implementation_parameters,
                 self_type,
                 type_arguments,
                 methods,
             } => {
                 self.owned_extension = true;
                 self.parameterized_contract_extension |= !type_arguments.is_empty();
-                let generic = !type_parameters.is_empty()
+                let prerequisites = !implementation_parameters.is_empty()
+                    || methods.iter().any(|m| !m.implementations.is_empty());
+                self.implementation_prerequisite_extension |= prerequisites;
+                let generic = prerequisites
+                    || !type_parameters.is_empty()
                     || methods.iter().any(|m| !m.type_arguments.is_empty());
                 self.generic_implementation_extension |= generic;
-                self.tag(if generic {
+                self.tag(if prerequisites {
+                    98
+                } else if generic {
                     96
                 } else if type_arguments.is_empty() {
                     85
@@ -693,6 +756,9 @@ impl Writer {
                         w.type_parameter_reference(p, definitions)
                     })?;
                 }
+                if prerequisites {
+                    self.implementation_parameters(implementation_parameters, definitions)?;
+                }
                 self.authored_type(self_type, definitions, 1)?;
                 if generic || !type_arguments.is_empty() {
                     self.list(type_arguments, |w, ty| w.authored_type(ty, definitions, 1))?;
@@ -703,10 +769,14 @@ impl Writer {
                     if generic {
                         w.list(&mapping.type_arguments, |w, ty| {
                             w.authored_type(ty, definitions, 1)
-                        })
-                    } else {
-                        Ok(())
+                        })?;
                     }
+                    if prerequisites {
+                        w.list(&mapping.implementations, |w, operand| {
+                            w.implementation_operand(operand, definitions)
+                        })?;
+                    }
+                    Ok(())
                 })
             }
             AuthoredChange::SetImplementationParameters {

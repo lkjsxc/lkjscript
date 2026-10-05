@@ -1145,12 +1145,24 @@ fn local_summary(
                                 i.clone(),
                             )?,
                         )?;
+                    } else if record.header.contract_version < 29 {
+                        interface.piece(
+                            10,
+                            &crate::platform::kernel::wire28::OwnedImplementation28::try_from(
+                                i.clone(),
+                            )?,
+                        )?;
                     } else {
                         interface.piece(10, i)?;
                     }
                     if record.header.contract_version < 28 {
                         let frozen = i.methods.iter().cloned()
                             .map(crate::platform::kernel::wire27::OwnedMethodImplementation27::try_from)
+                            .collect::<Result<Vec<_>, _>>()?;
+                        implementation.piece(5, &frozen)?;
+                    } else if record.header.contract_version < 29 {
+                        let frozen = i.methods.iter().cloned()
+                            .map(crate::platform::kernel::wire28::OwnedMethodImplementation28::try_from)
                             .collect::<Result<Vec<_>, _>>()?;
                         implementation.piece(5, &frozen)?;
                     } else {
@@ -1267,6 +1279,13 @@ fn local_summary(
                 implementation.piece(
                     2,
                     &crate::platform::kernel::wire27::ExpressionOperation27::try_from(
+                        record.operation.clone(),
+                    )?,
+                )?;
+            } else if record.contract_version < 29 {
+                implementation.piece(
+                    2,
+                    &crate::platform::kernel::wire28::ExpressionOperation28::try_from(
                         record.operation.clone(),
                     )?,
                 )?;

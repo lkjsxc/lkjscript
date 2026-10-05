@@ -25,11 +25,13 @@ fn original_graph27_implementation_and_operand_summary_material_remains_exact() 
         name: Name::new("Flat").unwrap(),
         visibility: DeclarationVisibility::Public,
         payload: DeclarationPayload::OwnedImplementation(OwnedImplementation {
+            implementation_parameters: Vec::new(),
             type_parameters: Vec::new(),
             contract: reference,
             self_type: ty,
             type_arguments: vec![ty],
             methods: vec![OwnedMethodImplementation {
+                implementations: Vec::new(),
                 method,
                 function: reference,
                 type_arguments: Vec::new(),
@@ -61,6 +63,7 @@ fn original_graph27_implementation_and_operand_summary_material_remains_exact() 
         id,
         operation: ExpressionOperation::MethodCall {
             witness: ImplementationOperand::Concrete {
+                implementations: Vec::new(),
                 implementation: reference,
                 type_arguments: Vec::new(),
             },
@@ -116,11 +119,13 @@ fn scheme_children_and_mapping_applications_contribute_to_summaries() {
         name: Name::new("Flat").unwrap(),
         visibility: DeclarationVisibility::Public,
         payload: DeclarationPayload::OwnedImplementation(OwnedImplementation {
+            implementation_parameters: Vec::new(),
             type_parameters: parameters.clone(),
             contract: reference,
             self_type: types[0],
             type_arguments: Vec::new(),
             methods: vec![OwnedMethodImplementation {
+                implementations: Vec::new(),
                 method: MethodId::migrate(seed, 0),
                 function: reference,
                 type_arguments: types,
@@ -160,4 +165,55 @@ fn scheme_children_and_mapping_applications_contribute_to_summaries() {
     let third = local_summary(owner, &record, None).unwrap();
     assert_ne!(second.semantic_interface, third.semantic_interface);
     assert_eq!(second.implementation, third.implementation);
+
+    let OwnerRecord::Declaration(d) = &mut record else {
+        unreachable!()
+    };
+    let DeclarationPayload::OwnedImplementation(i) = &mut d.payload else {
+        unreachable!()
+    };
+    let prerequisite = ImplementationParameterId::migrate(seed, 0);
+    i.implementation_parameters.push(ImplementationParameter {
+        id: prerequisite,
+        name: Name::new("reader").unwrap(),
+        contract: reference,
+        self_type: i.self_type,
+        type_arguments: Vec::new(),
+    });
+    let fourth = local_summary(owner, &record, None).unwrap();
+    assert_ne!(third.semantic_interface, fourth.semantic_interface);
+    assert_eq!(third.implementation, fourth.implementation);
+
+    let OwnerRecord::Declaration(d) = &mut record else {
+        unreachable!()
+    };
+    let DeclarationPayload::OwnedImplementation(i) = &mut d.payload else {
+        unreachable!()
+    };
+    i.methods[0]
+        .implementations
+        .push(ImplementationOperand::Parameter {
+            scope: reference,
+            parameter: prerequisite,
+        });
+    let fifth = local_summary(owner, &record, None).unwrap();
+    assert_ne!(fourth.semantic_interface, fifth.semantic_interface);
+    assert_ne!(fourth.implementation, fifth.implementation);
+    assert_eq!(fourth.presentation, fifth.presentation);
+
+    let OwnerRecord::Declaration(d) = &mut record else {
+        unreachable!()
+    };
+    let DeclarationPayload::OwnedImplementation(i) = &mut d.payload else {
+        unreachable!()
+    };
+    let ImplementationOperand::Parameter { scope, .. } = &mut i.methods[0].implementations[0]
+    else {
+        unreachable!()
+    };
+    scope.declaration = DeclarationId::migrate(seed, 1);
+    let sixth = local_summary(owner, &record, None).unwrap();
+    assert_ne!(fifth.semantic_interface, sixth.semantic_interface);
+    assert_ne!(fifth.implementation, sixth.implementation);
+    assert_eq!(fifth.presentation, sixth.presentation);
 }

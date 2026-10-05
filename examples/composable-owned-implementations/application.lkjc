@@ -1,0 +1,190 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create composable-owned-app
+    (type-alias CellFlat (owned-sequence OwnedI64Cell))
+    (type-alias BufferFlat (owned-sequence ByteBuffer))
+    (type-alias BufferChunked (owned-product
+      (field chunks (owned-sequence (owned-sequence ByteBuffer))) (field size I64)))
+    (type-alias Product (owned-product
+      (field payload (owned-product (field cell OwnedI64Cell) (field tag I64))) (field stamp I64)))
+    (type-alias ProductFlat (owned-sequence Product))
+    (type-alias ProductChunked (owned-product
+      (field chunks (owned-sequence (owned-sequence Product))) (field size I64)))
+    (type-alias Scenario (record (length I64) (selected (list I64))
+      (tied-selected (list I64)) (drained (list I64)) (empty-length I64) (reused (list I64))))
+    (type-alias Result (record (cell-flat Scenario) (buffer-chunked Scenario)
+      (product-flat Scenario) (product-chunked Scenario) (cell-reverse Scenario)
+      (cell-nested Scenario) (cell-nested-reverse Scenario)))
+    (function create scenario (visibility private) (effect pure)
+      (type-parameter create T (constraint owned)) (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_8e000000000000000000000000000011
+        element owned-worklists::Element T)
+      (implementation-parameter implparam_8e000000000000000000000000000012
+        keys owned-worklists::Element T)
+      (implementation-parameter implparam_8e000000000000000000000000000013
+        work owned-worklists::Worklist W (types T))
+      (implementation-parameter implparam_8e000000000000000000000000000014
+        reader owned-read-results::IndexRead W (types T))
+      (parameter create inputs (type (list I64))) (returns Scenario)
+      (body (let
+        (binding storage (type W)
+          (implementation-call owned-worklists::build (types T W)
+            (implementations parameter@scenario@implparam_8e000000000000000000000000000011
+              parameter@scenario@implparam_8e000000000000000000000000000013) (local inputs)))
+        (binding length (type I64)
+          (method-call parameter@scenario@implparam_8e000000000000000000000000000014
+            owned-read-results::IndexRead method_8a000000000000000000000000000001 (local storage)))
+        (binding selected (type (list I64))
+          (if (call std::i64-equal (local length) (i64 0)) (list I64)
+            (borrow-call
+              (method-call (implementation composable-adapters::Maximum (types T W)
+                (implementations parameter@scenario@implparam_8e000000000000000000000000000011
+                  parameter@scenario@implparam_8e000000000000000000000000000014))
+                composable-adapters::Selection method_8e000000000000000000000000000001 (local storage))
+              (binding view (type T))
+              (in (list I64
+                (method-call parameter@scenario@implparam_8e000000000000000000000000000011
+                  owned-worklists::Element method_88000000000000000000000000000002 (local view)))))))
+        (binding tied-selected (type (list I64))
+          (if (call std::i64-equal (local length) (i64 0)) (list I64)
+            (borrow-call
+              (method-call (implementation composable-adapters::Maximum (types T W)
+                (implementations parameter@scenario@implparam_8e000000000000000000000000000012
+                  parameter@scenario@implparam_8e000000000000000000000000000014))
+                composable-adapters::Selection method_8e000000000000000000000000000001 (local storage))
+              (binding view (type T))
+              (in (list I64
+                (method-call parameter@scenario@implparam_8e000000000000000000000000000011
+                  owned-worklists::Element method_88000000000000000000000000000002 (local view)))))))
+        (binding drained (type (owned-product (field rest W) (field values (list I64))))
+          (implementation-call owned-worklists::drain (types T W)
+            (implementations parameter@scenario@implparam_8e000000000000000000000000000011
+              parameter@scenario@implparam_8e000000000000000000000000000013) (local storage)))
+        (in (unpack-owned (type (owned-product (field rest W) (field values (list I64)))) (local drained)
+          (field rest (binding rest (type W))) (field values (binding drained-values (type (list I64))))
+          (in (let
+            (binding empty-length (type I64)
+              (method-call parameter@scenario@implparam_8e000000000000000000000000000014
+                owned-read-results::IndexRead method_8a000000000000000000000000000001 (local rest)))
+            (binding value (type T)
+              (method-call parameter@scenario@implparam_8e000000000000000000000000000011
+                owned-worklists::Element method_88000000000000000000000000000001 (i64 17)))
+            (binding next (type W)
+              (method-call parameter@scenario@implparam_8e000000000000000000000000000013
+                owned-worklists::Worklist method_88000000000000000000000000000013 (local value) (local rest)))
+            (binding reused (type (owned-product (field rest W) (field values (list I64))))
+              (implementation-call owned-worklists::drain (types T W)
+                (implementations parameter@scenario@implparam_8e000000000000000000000000000011
+                  parameter@scenario@implparam_8e000000000000000000000000000013) (local next)))
+            (in (unpack-owned (type (owned-product (field rest W) (field values (list I64)))) (local reused)
+              (field rest (binding final-rest (type W))) (field values (binding reused-values (type (list I64))))
+              (in (record structural
+                (field length (local length)) (field selected (local selected))
+                (field tied-selected (local tied-selected)) (field drained (local drained-values))
+                (field empty-length (local empty-length)) (field reused (local reused-values)))))))))))))
+    (function create cell-flat (visibility public) (effect pure)
+      (parameter create inputs (type (list I64))) (returns Scenario)
+      (body (implementation-call scenario (types OwnedI64Cell CellFlat)
+        (implementations generic-elements::Cells generic-elements::CellKeys
+          (implementation generic-storage::Flat (types OwnedI64Cell))
+          (implementation generic-storage::FlatReader (types OwnedI64Cell))) (local inputs))))
+    (function create buffer-chunked (visibility public) (effect pure)
+      (parameter create inputs (type (list I64))) (returns Scenario)
+      (body (implementation-call scenario (types ByteBuffer BufferChunked)
+        (implementations generic-elements::Buffers generic-elements::BufferKeys
+          (implementation generic-storage::Chunked (types ByteBuffer))
+          (implementation generic-storage::ChunkedReader (types ByteBuffer))) (local inputs))))
+    (function create product-flat (visibility public) (effect pure)
+      (parameter create inputs (type (list I64))) (returns Scenario)
+      (body (implementation-call scenario (types Product ProductFlat)
+        (implementations generic-elements::Products generic-elements::ProductKeys
+          (implementation generic-storage::Flat (types Product))
+          (implementation generic-storage::FlatReader (types Product))) (local inputs))))
+    (function create product-chunked (visibility public) (effect pure)
+      (parameter create inputs (type (list I64))) (returns Scenario)
+      (body (implementation-call scenario (types Product ProductChunked)
+        (implementations generic-elements::Products generic-elements::ProductKeys
+          (implementation generic-storage::Chunked (types Product))
+          (implementation generic-storage::ChunkedReader (types Product))) (local inputs))))
+    (function create cell-reverse (visibility public) (effect pure)
+      (parameter create inputs (type (list I64))) (returns Scenario)
+      (body (implementation-call scenario (types OwnedI64Cell CellFlat)
+        (implementations generic-elements::Cells generic-elements::CellKeys
+          (implementation generic-storage::Flat (types OwnedI64Cell))
+          (implementation generic-storage::ReverseReader (types OwnedI64Cell))) (local inputs))))
+    (function create cell-nested (visibility public) (effect pure)
+      (parameter create inputs (type (list I64))) (returns Scenario)
+      (body (implementation-call scenario (types OwnedI64Cell CellFlat)
+        (implementations generic-elements::Cells generic-elements::CellKeys
+          (implementation generic-storage::Flat (types OwnedI64Cell))
+          (implementation composable-adapters::DelegatingReader (types OwnedI64Cell CellFlat)
+            (implementations
+              (implementation composable-adapters::DelegatingReader (types OwnedI64Cell CellFlat)
+                (implementations (implementation generic-storage::FlatReader (types OwnedI64Cell)))))))
+        (local inputs))))
+    (function create cell-nested-reverse (visibility public) (effect pure)
+      (parameter create inputs (type (list I64))) (returns Scenario)
+      (body (implementation-call scenario (types OwnedI64Cell CellFlat)
+        (implementations generic-elements::Cells generic-elements::CellKeys
+          (implementation generic-storage::Flat (types OwnedI64Cell))
+          (implementation composable-adapters::DelegatingReader (types OwnedI64Cell CellFlat)
+            (implementations
+              (implementation composable-adapters::DelegatingReader (types OwnedI64Cell CellFlat)
+                (implementations (implementation generic-storage::ReverseReader (types OwnedI64Cell)))))))
+        (local inputs))))
+    (function create finish (visibility private) (effect (task))
+      (type-parameter create T (constraint owned transferable))
+      (implementation-parameter implparam_8e000000000000000000000000000015
+        drain composable-adapters::DrainTask T)
+      (parameter create storage (type T) (use consume)) (returns (list I64))
+      (body (method-call parameter@finish@implparam_8e000000000000000000000000000015
+        composable-adapters::DrainTask method_8e000000000000000000000000000002 (local storage))))
+    (function create parallel-drain (visibility public) (effect (task))
+      (parameter create inputs (type (list I64)))
+      (returns (record (left (list I64)) (right (list I64))))
+      (body (let
+        (binding cells (type CellFlat)
+          (implementation-call generic-storage::flat-build (types OwnedI64Cell)
+            (implementations generic-elements::Cells) (local inputs)))
+        (binding buffers (type BufferFlat)
+          (implementation-call generic-storage::flat-build (types ByteBuffer)
+            (implementations generic-elements::Buffers) (local inputs)))
+        (in (parallel
+          (implementation-call finish (types CellFlat)
+            (implementations (implementation composable-adapters::Drain (types OwnedI64Cell CellFlat)
+              (implementations generic-elements::Cells
+                (implementation generic-storage::Flat (types OwnedI64Cell))))) (local cells))
+          (implementation-call finish (types BufferFlat)
+            (implementations (implementation composable-adapters::Drain (types ByteBuffer BufferFlat)
+              (implementations generic-elements::Buffers
+                (implementation generic-storage::Flat (types ByteBuffer))))) (local buffers)))))))
+    (function create main (visibility public) (effect pure)
+      (parameter create inputs (type (list I64))) (returns Result)
+      (body (record structural
+        (field cell-flat (call cell-flat (local inputs)))
+        (field buffer-chunked (call buffer-chunked (local inputs)))
+        (field product-flat (call product-flat (local inputs)))
+        (field product-chunked (call product-chunked (local inputs)))
+        (field cell-reverse (call cell-reverse (local inputs)))
+        (field cell-nested (call cell-nested (local inputs)))
+        (field cell-nested-reverse (call cell-nested-reverse (local inputs))))))
+    (component create command (visibility private)
+      (port create main (type (function ((list I64)) Result)) (function main))
+      (port create cell-nested (type (function ((list I64)) Scenario)) (function cell-nested))
+      (port create cell-nested-reverse (type (function ((list I64)) Scenario)) (function cell-nested-reverse))
+      (port create product-chunked (type (function ((list I64)) Scenario)) (function product-chunked))
+      (port create parallel-drain
+        (type (task-function ((list I64)) (record (left (list I64)) (right (list I64))) (row)))
+        (function parallel-drain))))
+  (target create composable-owned-implementations (component composable-owned-app::command)
+    (runner command) (port composable-owned-app::command::main))
+  (target create composable-cell-nested (component composable-owned-app::command)
+    (runner command) (port composable-owned-app::command::cell-nested))
+  (target create composable-cell-nested-reverse (component composable-owned-app::command)
+    (runner command) (port composable-owned-app::command::cell-nested-reverse))
+  (target create composable-product-chunked (component composable-owned-app::command)
+    (runner command) (port composable-owned-app::command::product-chunked))
+  (target create composable-parallel-drain (component composable-owned-app::command)
+    (runner command) (port composable-owned-app::command::parallel-drain)))
+declarations.end

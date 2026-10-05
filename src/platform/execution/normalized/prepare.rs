@@ -337,20 +337,53 @@ pub enum NormalizedFunctionBody {
     External(ImplementationName),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct NormalizedImplementationArgument {
+    /// Interned identity within this exact prepared program.
+    pub identity: u32,
+    /// Maximum number of prerequisite edges below this canonical node.
+    pub depth: usize,
     pub implementation: DeclarationReference,
+    pub contract: DeclarationReference,
     /// Exact ordered arguments of the selected implementation scheme.
     pub implementation_type_arguments: Arc<[TypeObjectDigest]>,
     pub self_type: TypeObjectDigest,
     /// Instantiated arguments of the nominal owned contract.
     pub type_arguments: Arc<[TypeObjectDigest]>,
+    /// Exact ordered prerequisite applications. Immutable edges may share storage;
+    /// application identity is admitted through this program's canonical catalogue.
+    pub implementations: Arc<[NormalizedImplementationArgument]>,
+    pub prerequisites: Arc<[NormalizedImplementationConstraint]>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedImplementationConstraint {
+    pub contract: DeclarationReference,
+    pub self_type: TypeObjectDigest,
+    pub type_arguments: Arc<[TypeObjectDigest]>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum NormalizedCallSite {
+    Call {
+        function: FunctionIndex,
+        type_arguments: Arc<[TypeObjectDigest]>,
+    },
+    Parallel {
+        left: FunctionIndex,
+        left_types: Arc<[TypeObjectDigest]>,
+        right: FunctionIndex,
+        right_types: Arc<[TypeObjectDigest]>,
+    },
+}
+
+#[derive(Clone, Debug)]
 pub struct NormalizedFunction {
     pub implementation_parameters: Arc<[crate::platform::kernel::ImplementationParameter]>,
     pub implementation_arguments: Arc<[NormalizedImplementationArgument]>,
+    /// Sparse, instruction-position ordered targets private to this application.
+    /// Shared code contains no executable witness-selected target.
+    pub callsites: Arc<[(u32, NormalizedCallSite)]>,
     pub requirement_parameters: Arc<[crate::platform::semantic_id::RequirementParameterId]>,
     pub requirement_arguments: Arc<[crate::platform::kernel::RequirementOperand]>,
     pub effect_parameters: Arc<[crate::platform::semantic_id::EffectParameterId]>,
@@ -488,6 +521,7 @@ pub struct NormalizedTest {
 
 #[derive(Clone, Debug)]
 pub struct NormalizedProgram {
+    pub(super) implementation_applications: Arc<[NormalizedImplementationArgument]>,
     pub(super) value_origin: super::value::ValueOrigin,
     pub(super) affine_variants: Arc<[bool]>,
     pub(super) capture_safe_types: BTreeSet<TypeObjectDigest>,
@@ -631,6 +665,7 @@ impl NormalizedProgram {
             .sum();
         work.tests = tests.len() as u64;
         let mut program = Self {
+            implementation_applications: Arc::from([]),
             value_origin,
             affine_variants,
             capture_safe_types: BTreeSet::new(),
@@ -664,6 +699,7 @@ impl NormalizedProgram {
         super::prepared_types::complete_with_implementations(&mut program, &units, control)?;
         validate_borrowed_result_calls(&program)?;
         super::session::validate_program_interactive_targets(&program)?;
+        super::prepared_types::share_code(&mut program, control)?;
         Ok(program)
     }
 
@@ -1492,6 +1528,7 @@ fn prepare_functions(
         functions[index.0 as usize] = Some(NormalizedFunction {
             implementation_parameters: implementation_parameters.into(),
             implementation_arguments: Arc::from([]),
+            callsites: Arc::from([]),
             requirement_parameters: requirement_parameters.into(),
             requirement_arguments: Arc::from([]),
             effect_parameters: effect_parameters.into(),

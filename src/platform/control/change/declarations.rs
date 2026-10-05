@@ -991,34 +991,139 @@ impl Lowering<'_> {
             ["concrete", reference] => Ok(format!("concrete@{}", self.resolve(reference, scope, "declaration", at)?)),
             ["parameter", reference, id] => Ok(format!("parameter@{}@{id}", self.resolve(reference, scope, "declaration", at)?)),
             [reference] => Ok(format!("concrete@{}", self.resolve(reference, scope, "declaration", at)?)),
-            _ => Err(self.error(at, "expected IMPLEMENTATION, concrete@IMPLEMENTATION or parameter@FUNCTION@IMPLEMENTATION_PARAMETER_ID")),
+            _ => Err(self.error(at, "expected IMPLEMENTATION, concrete@IMPLEMENTATION or parameter@SCOPE@IMPLEMENTATION_PARAMETER_ID")),
         }
     }
 
     fn implementation_operand(&mut self, id: usize, scope: &str) -> Result<String, Diagnostic> {
+        self.implementation_operand_at(id, scope, 1)
+    }
+
+    fn implementation_operand_at(
+        &mut self,
+        id: usize,
+        scope: &str,
+        depth: usize,
+    ) -> Result<String, Diagnostic> {
+        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+            let mut diagnostic = Diagnostic::new(
+                DiagnosticClass::Resource,
+                "change_owned_operand_depth",
+                "implementation application exceeds witness-depth admission",
+            );
+            diagnostic.location = Some(self.block.syntax[id].location.clone());
+            return Err(diagnostic);
+        }
         if let SyntaxKind::Atom { value, .. } = &self.block.syntax[id].kind {
             let value = value.clone();
             return self.implementation_atom(&value, scope, id);
         }
         let (form, args) = self.parts(id)?;
         let args = args.to_vec();
-        if form != "implementation" || !(1..=2).contains(&args.len()) {
+        if form != "implementation" || !(1..=3).contains(&args.len()) {
             return Err(self.error(
                 id,
-                "applied witness requires (implementation DECLARATION [(types TYPE...)])",
+                "applied witness requires (implementation DECLARATION [(types TYPE...)] [(implementations OPERAND...)])",
             ));
         }
         let implementation = self.reference(args[0], scope, "declaration")?;
-        if let Some(clause) = args.get(1) {
-            if self.block.head(*clause) != Some("types") {
-                return Err(self.error(*clause, "applied witness requires a types clause"));
-            }
-            let label = self.allocate('%')?;
-            self.owned_type_arguments(*clause, scope, &label)?;
-            Ok(format!("concrete@{implementation}@{label}"))
-        } else {
-            Ok(format!("concrete@{implementation}"))
+        if args.len() == 1 {
+            return Ok(format!("concrete@{implementation}"));
         }
+        let label = self.allocate('%')?;
+        let mut rank = 0;
+        for clause in &args[1..] {
+            let next = match self.block.head(*clause) {
+                Some("types") => 1,
+                Some("implementations") => 2,
+                _ => {
+                    return Err(self.error(
+                        *clause,
+                        "applied witness accepts only types and implementations clauses",
+                    ));
+                }
+            };
+            if next <= rank {
+                return Err(self.error(
+                    *clause,
+                    "witness clauses must occur once in types/implementations order",
+                ));
+            }
+            rank = next;
+            if next == 1 {
+                self.owned_type_arguments(*clause, scope, &label)?;
+            } else {
+                self.implementation_arguments(*clause, scope, &label, depth + 1)?;
+            }
+        }
+        Ok(format!("concrete@{implementation}@{label}"))
+    }
+
+    fn implementation_arguments(
+        &mut self,
+        clause: usize,
+        scope: &str,
+        parent: &str,
+        depth: usize,
+    ) -> Result<(), Diagnostic> {
+        let (_, args) = self.parts(clause)?;
+        let args = args.to_vec();
+        for (index, operand) in args.into_iter().enumerate() {
+            let implementation = self.implementation_operand_at(operand, scope, depth)?;
+            self.record(
+                operand,
+                "implementation.argument",
+                vec![
+                    ("parent", parent.to_owned()),
+                    ("index", index.to_string()),
+                    ("implementation", implementation),
+                ],
+            )?;
+        }
+        Ok(())
+    }
+
+    fn implementation_parameters(
+        &mut self,
+        unit: &Unit,
+        scope: &str,
+        parent: &str,
+    ) -> Result<(), Diagnostic> {
+        let clauses = unit
+            .clauses
+            .iter()
+            .copied()
+            .filter(|id| self.block.head(*id) == Some("implementation-parameter"))
+            .collect::<Vec<_>>();
+        for (index, clause) in clauses.into_iter().enumerate() {
+            let (_, args) = self.parts(clause)?;
+            let args = args.to_vec();
+            if !(4..=5).contains(&args.len()) {
+                return Err(self.error(clause, "implementation parameter requires ID, name, contract, Self type and optional types clause"));
+            }
+            let contract = self.reference(args[2], scope, "declaration")?;
+            let ty = self.ty(args[3], scope, 1)?;
+            let mut fields = vec![
+                ("parent", parent.to_owned()),
+                ("index", index.to_string()),
+                ("id", self.block.atom(args[0])?.into()),
+                ("name", self.block.atom(args[1])?.into()),
+                ("contract", contract),
+                ("self", ty),
+            ];
+            if let Some(types) = args.get(4) {
+                if self.block.head(*types) != Some("types") {
+                    return Err(
+                        self.error(*types, "implementation parameter requires a types clause")
+                    );
+                }
+                let label = self.allocate('%')?;
+                self.owned_type_arguments(*types, scope, &label)?;
+                fields.push(("as", label));
+            }
+            self.record(clause, "owned.witness", fields)?;
+        }
+        Ok(())
     }
     fn body(&mut self, id: usize, scope: &str) -> Result<String, Diagnostic> {
         let label = self.allocate('$')?;
@@ -1227,7 +1332,8 @@ impl Lowering<'_> {
                 if kind == "owned-implementation" {
                     let contract = self.one(self.required_clause(unit, "contract")?)?;
                     fields.push(("contract", self.reference(contract, &scope, "declaration")?));
-                    allowed.extend(["contract", "types"]);
+                    allowed.extend(["contract", "types", "implementation-parameter"]);
+                    self.implementation_parameters(unit, &scope, &unit.label)?;
                     if let Some(clause) = self.clause(&unit.clauses, "types")? {
                         self.owned_type_arguments(clause, &scope, &unit.label)?;
                     }
@@ -1325,10 +1431,10 @@ impl Lowering<'_> {
                     let (_, args) = self.parts(*clause)?;
                     let args = args.to_vec();
                     if kind == "owned-implementation" {
-                        if !(2..=3).contains(&args.len()) {
+                        if !(2..=4).contains(&args.len()) {
                             return Err(self.error(
                                 *clause,
-                                "method mapping requires exact method ID, function and optional types clause",
+                                "method mapping requires exact method ID, function and optional types/implementations clauses",
                             ));
                         }
                         let function = self.reference(args[1], &scope, "declaration")?;
@@ -1338,14 +1444,25 @@ impl Lowering<'_> {
                             ("method", self.block.atom(args[0])?.into()),
                             ("function", function),
                         ];
-                        if let Some(types) = args.get(2) {
-                            if self.block.head(*types) != Some("types") {
-                                return Err(
-                                    self.error(*types, "method mapping requires a types clause")
-                                );
-                            }
+                        if args.len() > 2 {
                             let label = self.allocate('%')?;
-                            self.owned_type_arguments(*types, &scope, &label)?;
+                            let mut rank = 0;
+                            for clause in &args[2..] {
+                                let next = match self.block.head(*clause) {
+                                    Some("types") => 1,
+                                    Some("implementations") => 2,
+                                    _ => return Err(self.error(*clause, "method mapping accepts only types and implementations clauses")),
+                                };
+                                if next <= rank {
+                                    return Err(self.error(*clause, "method mapping clauses must occur once in types/implementations order"));
+                                }
+                                rank = next;
+                                if next == 1 {
+                                    self.owned_type_arguments(*clause, &scope, &label)?;
+                                } else {
+                                    self.implementation_arguments(*clause, &scope, &label, 1)?;
+                                }
+                            }
                             fields.push(("as", label));
                         }
                         self.record(*clause, "owned.mapping", fields)?;
@@ -1464,43 +1581,7 @@ impl Lowering<'_> {
                             ),
                         ],
                     )?;
-                    for (index, clause) in unit
-                        .clauses
-                        .iter()
-                        .copied()
-                        .filter(|id| self.block.head(*id) == Some("implementation-parameter"))
-                        .collect::<Vec<_>>()
-                        .iter()
-                        .enumerate()
-                    {
-                        let (_, args) = self.parts(*clause)?;
-                        let args = args.to_vec();
-                        if !(4..=5).contains(&args.len()) {
-                            return Err(self.error(*clause, "implementation parameter requires ID, name, contract, Self type and optional types clause"));
-                        }
-                        let contract = self.reference(args[2], &scope, "declaration")?;
-                        let ty = self.ty(args[3], &scope, 1)?;
-                        let mut witness_fields = vec![
-                            ("parent", label.clone()),
-                            ("index", index.to_string()),
-                            ("id", self.block.atom(args[0])?.into()),
-                            ("name", self.block.atom(args[1])?.into()),
-                            ("contract", contract),
-                            ("self", ty),
-                        ];
-                        if let Some(clause) = args.get(4) {
-                            if self.block.head(*clause) != Some("types") {
-                                return Err(self.error(
-                                    *clause,
-                                    "implementation parameter requires a types clause",
-                                ));
-                            }
-                            let witness = self.allocate('%')?;
-                            self.owned_type_arguments(*clause, &scope, &witness)?;
-                            witness_fields.push(("as", witness));
-                        }
-                        self.record(*clause, "owned.witness", witness_fields)?;
-                    }
+                    self.implementation_parameters(unit, &scope, &label)?;
                 }
                 let returns = self.required_clause(unit, "returns")?;
                 let (_, values) = self.parts(returns)?;
@@ -2095,6 +2176,7 @@ pub(super) fn finish(
                 visibility,
                 contract,
                 type_parameters,
+                implementation_parameters,
                 self_type,
                 type_arguments,
                 methods,
@@ -2110,6 +2192,7 @@ pub(super) fn finish(
                     declaration,
                     contract,
                     type_parameters,
+                    implementation_parameters,
                     self_type,
                     type_arguments,
                     methods,

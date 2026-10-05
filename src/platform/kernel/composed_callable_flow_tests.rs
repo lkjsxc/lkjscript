@@ -155,6 +155,7 @@ impl Read {
             n,
             DeclarationPayload::OwnedImplementation(OwnedImplementation {
                 type_parameters: (0..arity).map(|i| parameter(n, i as u64)).collect(),
+                implementation_parameters: Vec::new(),
                 contract: reference(900),
                 self_type: leaf,
                 type_arguments: Vec::new(),
@@ -164,6 +165,7 @@ impl Read {
                         method: method(m),
                         function: reference(f),
                         type_arguments,
+                        implementations: Vec::new(),
                     })
                     .collect(),
             }),
@@ -172,6 +174,422 @@ impl Read {
     fn admit(&self) -> Result<CallableFlowWork, Diagnostic> {
         validate_callable_closure(self, &mut 0, 1_000_000)
     }
+    fn prerequisites(&mut self, n: u64, count: usize) {
+        let leaf = self.ty(TypeForm::OwnedI64Cell);
+        let OwnerRecord::Declaration(record) = self
+            .owners
+            .get_mut(&(
+                reference(n).package,
+                OwnerKey::Declaration(reference(n).declaration),
+            ))
+            .unwrap()
+        else {
+            panic!("scheme")
+        };
+        let DeclarationPayload::OwnedImplementation(scheme) = &mut record.payload else {
+            panic!("scheme")
+        };
+        scheme.implementation_parameters = (0..count)
+            .map(|ordinal| ImplementationParameter {
+                id: witness(ordinal as u64),
+                name: Name::new(format!("p{ordinal}")).unwrap(),
+                contract: reference(900),
+                self_type: leaf,
+                type_arguments: Vec::new(),
+            })
+            .collect();
+    }
+    fn mapping_prerequisites(&mut self, n: u64, operands: Vec<ImplementationOperand>) {
+        let OwnerRecord::Declaration(record) = self
+            .owners
+            .get_mut(&(
+                reference(n).package,
+                OwnerKey::Declaration(reference(n).declaration),
+            ))
+            .unwrap()
+        else {
+            panic!("scheme")
+        };
+        let DeclarationPayload::OwnedImplementation(scheme) = &mut record.payload else {
+            panic!("scheme")
+        };
+        scheme.methods[0].implementations = operands;
+    }
+}
+
+fn selected(
+    n: u64,
+    type_arguments: Vec<TypeObjectDigest>,
+    implementations: Vec<ImplementationOperand>,
+) -> ImplementationOperand {
+    ImplementationOperand::Concrete {
+        implementation: reference(n),
+        type_arguments,
+        implementations,
+    }
+}
+fn lexical(n: u64, ordinal: u64) -> ImplementationOperand {
+    ImplementationOperand::Parameter {
+        scope: reference(n),
+        parameter: witness(ordinal),
+    }
+}
+fn implementation_call(
+    read: &mut Read,
+    owner: u64,
+    target: u64,
+    operands: Vec<ImplementationOperand>,
+) -> ExpressionId {
+    read.expression(
+        reference(owner).package,
+        ExpressionOperation::ImplementationCall {
+            function: reference(target),
+            type_arguments: Vec::new(),
+            implementations: operands,
+            effect_arguments: Vec::new(),
+            requirement_arguments: Vec::new(),
+            arguments: Vec::new(),
+        },
+    )
+}
+fn method_call(read: &mut Read, owner: u64, operand: ImplementationOperand) -> ExpressionId {
+    read.expression(
+        reference(owner).package,
+        ExpressionOperation::MethodCall {
+            witness: operand,
+            contract: reference(900),
+            method: method(0),
+            arguments: Vec::new(),
+        },
+    )
+}
+
+#[test]
+fn recursive_prerequisite_wrapping_rejects_before_exact_context_exploration() {
+    let mut read = Read::default();
+    let body = implementation_call(
+        &mut read,
+        0,
+        0,
+        vec![selected(1, vec![], vec![lexical(0, 0)])],
+    );
+    read.function(0, 0, 1, body);
+    read.implementation(1, 0, vec![(0, 0, vec![])]);
+    read.prerequisites(1, 1);
+    read.mapping_prerequisites(1, vec![lexical(1, 0)]);
+    let mut work = 0;
+    let error = validate_callable_closure(&read, &mut work, 1_000).unwrap_err();
+    assert_eq!(error.class, DiagnosticClass::Semantic);
+    assert_eq!(error.code, "kernel_callable_recursive_witness_construction");
+    assert!(error.message.contains("unsupported potential recursive"));
+    assert!(!error.message.contains("expanding"));
+    assert!(work < 1_000);
+}
+
+#[test]
+fn unused_untaken_cross_package_prerequisite_construction_still_rejects() {
+    let mut read = Read::default();
+    let rejected = implementation_call(
+        &mut read,
+        0,
+        2,
+        vec![selected(1, vec![], vec![lexical(0, 0)])],
+    );
+    let condition = read.expression(package(0), ExpressionOperation::Bool { value: true });
+    let terminal = read.expression(package(0), ExpressionOperation::I64 { value: 0 });
+    let body = read.expression(
+        package(0),
+        ExpressionOperation::If {
+            condition,
+            when_true: terminal,
+            when_false: rejected,
+        },
+    );
+    read.function(0, 0, 1, body);
+    let body = implementation_call(&mut read, 2, 0, vec![lexical(2, 0)]);
+    read.function(2, 0, 1, body);
+    let terminal = read.expression(package(1), ExpressionOperation::I64 { value: 4 });
+    read.function(4, 0, 0, terminal);
+    read.implementation(1, 0, vec![(0, 4, vec![])]);
+    read.prerequisites(1, 1);
+    assert_eq!(
+        read.admit().unwrap_err().code,
+        "kernel_callable_recursive_witness_construction"
+    );
+}
+
+#[test]
+fn balanced_method_projection_cycle_has_unsupported_construction_diagnostic() {
+    let mut read = Read::default();
+    // f0<W> -> Wrapped<W>.method0 -> f0<W> preserves witness depth. The deliberately
+    // conservative admission rule still excludes construction inside this recursive SCC.
+    let body = method_call(&mut read, 0, selected(1, vec![], vec![lexical(0, 0)]));
+    read.function(0, 0, 1, body);
+    read.implementation(1, 0, vec![(0, 0, vec![])]);
+    read.prerequisites(1, 1);
+    read.mapping_prerequisites(1, vec![lexical(1, 0)]);
+    assert_eq!(
+        read.admit().unwrap_err().code,
+        "kernel_callable_recursive_witness_construction"
+    );
+}
+
+#[test]
+fn prerequisite_forwarding_permutation_and_closed_reset_cycles_are_finite() {
+    let mut read = Read::default();
+    let body = implementation_call(&mut read, 0, 2, vec![lexical(0, 1), lexical(0, 0)]);
+    read.function(0, 0, 2, body);
+    let body = implementation_call(&mut read, 2, 0, vec![lexical(2, 1), lexical(2, 0)]);
+    read.function(2, 0, 2, body);
+    let terminal = read.expression(package(1), ExpressionOperation::I64 { value: 3 });
+    read.function(4, 0, 0, terminal);
+    read.implementation(3, 0, vec![(0, 4, vec![])]);
+    read.implementation(6, 0, vec![(0, 4, vec![])]);
+    let body = implementation_call(
+        &mut read,
+        5,
+        0,
+        vec![selected(3, vec![], vec![]), selected(6, vec![], vec![])],
+    );
+    read.function(5, 0, 0, body);
+    read.admit().unwrap();
+
+    let mut read = Read::default();
+    let body = implementation_call(
+        &mut read,
+        0,
+        0,
+        vec![selected(1, vec![], vec![selected(3, vec![], vec![])])],
+    );
+    read.function(0, 0, 1, body);
+    read.implementation(1, 0, vec![(0, 0, vec![])]);
+    read.prerequisites(1, 1);
+    read.mapping_prerequisites(1, vec![lexical(1, 0)]);
+    let terminal = read.expression(package(1), ExpressionOperation::I64 { value: 3 });
+    read.function(4, 0, 0, terminal);
+    read.implementation(3, 0, vec![(0, 4, vec![])]);
+    read.admit().unwrap();
+}
+
+fn nonrecursive_delegation() -> Read {
+    let mut read = Read::default();
+    let nested = selected(1, vec![], vec![selected(1, vec![], vec![lexical(0, 0)])]);
+    let body = implementation_call(&mut read, 0, 2, vec![nested]);
+    read.function(0, 0, 1, body);
+    let body = method_call(&mut read, 2, lexical(2, 0));
+    read.function(2, 0, 1, body);
+    read.implementation(1, 0, vec![(0, 4, vec![])]);
+    read.prerequisites(1, 1);
+    read.mapping_prerequisites(1, vec![lexical(1, 0)]);
+    let body = method_call(&mut read, 4, lexical(4, 0));
+    read.function(4, 0, 1, body);
+    let terminal = read.expression(package(1), ExpressionOperation::I64 { value: 9 });
+    read.function(6, 0, 0, terminal);
+    read.implementation(3, 0, vec![(0, 6, vec![])]);
+    let body = implementation_call(&mut read, 5, 0, vec![selected(3, vec![], vec![])]);
+    read.function(5, 0, 0, body);
+    read
+}
+
+#[test]
+fn symbolic_nested_delegation_outside_potential_recursive_component_is_admitted() {
+    // Root f0 constructs nested wrappers before calling the reusable reader. Reader
+    // method dispatch may recurse through delegation, but no recursive edge constructs.
+    nonrecursive_delegation().admit().unwrap();
+}
+
+#[test]
+fn unused_same_contract_alternative_can_conservatively_reject_selected_finite_chain() {
+    let mut read = nonrecursive_delegation();
+    // Every actual call selects wrapper1 -> forwarding reader4 -> leaf3 -> terminal6.
+    // Unused alternative7 could return to f0, making f0 -> f2 a potential recursive edge.
+    read.implementation(7, 0, vec![(0, 0, vec![])]);
+    read.mapping_prerequisites(7, vec![selected(3, vec![], vec![])]);
+    let error = read.admit().unwrap_err();
+    assert_eq!(error.code, "kernel_callable_recursive_witness_construction");
+    assert!(error.message.contains("contract-matched alternatives"));
+}
+
+fn nested_type_callback(grow: bool) -> Read {
+    let mut read = Read::default();
+    let body = method_call(&mut read, 0, lexical(0, 0));
+    read.function(0, 1, 1, body);
+    let ty = read.p(1, 0);
+    read.implementation(1, 1, vec![(0, 2, vec![ty])]);
+    read.prerequisites(1, 1);
+    read.mapping_prerequisites(1, vec![lexical(1, 0)]);
+    let body = method_call(&mut read, 2, lexical(2, 0));
+    read.function(2, 1, 1, body);
+    let ty = read.p(3, 0);
+    read.implementation(3, 1, vec![(0, 4, vec![ty])]);
+    let ty = read.p(4, 0);
+    let ty = if grow {
+        read.ty(TypeForm::OwnedSequence { item: ty })
+    } else {
+        ty
+    };
+    let body = read.expression(
+        package(1),
+        ExpressionOperation::ImplementationCall {
+            function: reference(0),
+            type_arguments: vec![ty],
+            implementations: vec![selected(1, vec![ty], vec![selected(3, vec![ty], vec![])])],
+            effect_arguments: vec![],
+            requirement_arguments: vec![],
+            arguments: vec![],
+        },
+    );
+    read.function(4, 1, 0, body);
+    read
+}
+
+#[test]
+fn nested_prerequisite_argument_provenance_preserves_independent_type_growth_proof() {
+    nested_type_callback(false).admit().unwrap();
+    let error = nested_type_callback(true).admit().unwrap_err();
+    assert_eq!(error.code, "kernel_callable_expansion");
+    assert!(error.message.contains("constructor path"));
+}
+
+#[test]
+fn closed_prerequisite_method_reference_cycle_has_finite_contexts() {
+    let mut read = Read::default();
+    let body = method_call(&mut read, 0, lexical(0, 0));
+    read.function(0, 0, 1, body);
+    let body = method_call(&mut read, 2, lexical(2, 0));
+    read.function(2, 0, 1, body);
+    let terminal = read.expression(package(1), ExpressionOperation::I64 { value: 8 });
+    read.function(8, 0, 0, terminal);
+    read.implementation(6, 0, vec![(0, 8, vec![])]);
+    read.implementation(1, 0, vec![(0, 0, vec![])]);
+    read.prerequisites(1, 1);
+    read.mapping_prerequisites(
+        1,
+        vec![selected(3, vec![], vec![selected(6, vec![], vec![])])],
+    );
+    read.implementation(3, 0, vec![(0, 2, vec![])]);
+    read.prerequisites(3, 1);
+    read.mapping_prerequisites(
+        3,
+        vec![selected(1, vec![], vec![selected(6, vec![], vec![])])],
+    );
+    read.admit().unwrap();
+}
+
+#[test]
+fn acyclic_duplicate_prerequisites_share_selection_nodes_without_tree_expansion() {
+    let mut read = Read::default();
+    let terminal = read.expression(package(0), ExpressionOperation::I64 { value: 0 });
+    read.function(0, 0, 1, terminal);
+    // Synthetic flow-reader stress, not a fully admitted language declaration:
+    // prerequisite schemes in public source require an Owned type parameter.
+    // Forty tiny edges describe over a trillion logical leaf occurrences here.
+    // With no type arguments, this observer has no distinct type-slot paths.
+    for n in 1..=40 {
+        let pair = selected(1000, vec![], vec![lexical(n, 0), lexical(n, 0)]);
+        let body = implementation_call(&mut read, n, n - 1, vec![pair]);
+        read.function(n, 0, 1, body);
+    }
+    let terminal = read.expression(package(1), ExpressionOperation::I64 { value: 1 });
+    read.function(1002, 0, 2, terminal);
+    read.implementation(1000, 0, vec![(0, 1002, vec![])]);
+    read.prerequisites(1000, 2);
+    read.mapping_prerequisites(1000, vec![lexical(1000, 0), lexical(1000, 1)]);
+    let terminal = read.expression(package(1), ExpressionOperation::I64 { value: 2 });
+    read.function(1003, 0, 0, terminal);
+    read.implementation(1001, 0, vec![(0, 1003, vec![])]);
+    let body = implementation_call(&mut read, 1004, 40, vec![selected(1001, vec![], vec![])]);
+    read.function(1004, 0, 0, body);
+    let mut work = 0;
+    let observation = validate_callable_closure(&read, &mut work, 5_000_000).unwrap();
+    assert_eq!(observation.slots, 0);
+    assert!(observation.functions < 2_000);
+    assert!(observation.metadata_bytes < 16 * 1024 * 1024);
+    assert!(work < 5_000_000);
+}
+
+fn duplicate_shape_provenance(select_growing: bool) -> Read {
+    let mut read = Read::default();
+    let body = method_call(&mut read, 0, lexical(0, 0));
+    read.function(0, 1, 1, body);
+    let ty = read.p(1, 0);
+    read.implementation(1, 1, vec![(0, 2, vec![ty])]);
+    read.prerequisites(1, 2);
+    read.mapping_prerequisites(1, vec![lexical(1, 0), lexical(1, 1)]);
+    let body = method_call(&mut read, 2, lexical(2, u64::from(select_growing)));
+    read.function(2, 1, 2, body);
+    let ty = read.p(3, 0);
+    read.implementation(3, 1, vec![(0, 4, vec![ty])]);
+    let ty = read.p(4, 0);
+    let nested = read.ty(TypeForm::OwnedSequence { item: ty });
+    let closed = read.ty(TypeForm::OwnedI64Cell);
+    let body = read.expression(
+        package(1),
+        ExpressionOperation::ImplementationCall {
+            function: reference(0),
+            type_arguments: vec![ty],
+            implementations: vec![selected(
+                1,
+                vec![ty],
+                vec![
+                    selected(3, vec![closed], vec![]),
+                    selected(3, vec![nested], vec![]),
+                ],
+            )],
+            effect_arguments: vec![],
+            requirement_arguments: vec![],
+            arguments: vec![],
+        },
+    );
+    read.function(4, 1, 0, body);
+    read
+}
+
+#[test]
+fn equal_interned_selection_shapes_keep_distinct_type_argument_paths() {
+    // Both prerequisites intern to the same leaf scheme shape. Their applications
+    // have different arguments; merging path slots would invent a growing cycle.
+    duplicate_shape_provenance(false).admit().unwrap();
+    assert_eq!(
+        duplicate_shape_provenance(true).admit().unwrap_err().code,
+        "kernel_callable_expansion"
+    );
+}
+
+#[test]
+fn exponential_distinct_type_provenance_paths_exhaust_proof_capacity_as_resource() {
+    let mut read = Read::default();
+    let terminal = read.expression(package(0), ExpressionOperation::I64 { value: 0 });
+    read.function(0, 1, 1, terminal);
+    for n in 1..=24 {
+        let ty = read.p(n, 0);
+        let body = read.expression(
+            reference(n).package,
+            ExpressionOperation::ImplementationCall {
+                function: reference(n - 1),
+                type_arguments: vec![ty],
+                implementations: vec![selected(1000, vec![ty], vec![lexical(n, 0), lexical(n, 0)])],
+                effect_arguments: vec![],
+                requirement_arguments: vec![],
+                arguments: vec![],
+            },
+        );
+        read.function(n, 1, 1, body);
+    }
+    let terminal = read.expression(package(1), ExpressionOperation::I64 { value: 2 });
+    read.function(1002, 1, 2, terminal);
+    let ty = read.p(1000, 0);
+    read.implementation(1000, 1, vec![(0, 1002, vec![ty])]);
+    read.prerequisites(1000, 2);
+    read.mapping_prerequisites(1000, vec![lexical(1000, 0), lexical(1000, 1)]);
+    let mut work = 0;
+    let error = validate_callable_closure(&read, &mut work, 1_000_000).unwrap_err();
+    assert_eq!(error.class, DiagnosticClass::Resource);
+    assert!(matches!(
+        error.code.as_str(),
+        "kernel_callable_flow_work" | "kernel_callable_flow_storage"
+    ));
+    assert!(work <= 1_000_000);
 }
 
 // Supplier f0<T,W> calls W.method0. Consumer scheme f1<T> maps method0 to consumer
@@ -183,7 +601,7 @@ fn callback(grow: bool, reset: bool) -> Read {
         package(0),
         ExpressionOperation::MethodCall {
             witness: ImplementationOperand::Parameter {
-                function: reference(0),
+                scope: reference(0),
                 parameter: witness(0),
             },
             contract: reference(900),
@@ -210,6 +628,7 @@ fn callback(grow: bool, reset: bool) -> Read {
             implementations: vec![ImplementationOperand::Concrete {
                 implementation: reference(1),
                 type_arguments: vec![ty],
+                implementations: Vec::new(),
             }],
             effect_arguments: Vec::new(),
             requirement_arguments: Vec::new(),
@@ -288,7 +707,7 @@ fn parameter_permutation_across_scheme_and_function_slots_is_finite() {
         package(0),
         ExpressionOperation::MethodCall {
             witness: ImplementationOperand::Parameter {
-                function: reference(0),
+                scope: reference(0),
                 parameter: witness(0),
             },
             contract: reference(900),
@@ -310,6 +729,7 @@ fn parameter_permutation_across_scheme_and_function_slots_is_finite() {
             implementations: vec![ImplementationOperand::Concrete {
                 implementation: reference(1),
                 type_arguments: vec![b, a],
+                implementations: Vec::new(),
             }],
             effect_arguments: Vec::new(),
             requirement_arguments: Vec::new(),
@@ -332,7 +752,7 @@ fn explicit_forwarding_of_scheme_arguments_preserves_growth_cycle() {
             function: reference(3),
             type_arguments: vec![ty],
             implementations: vec![ImplementationOperand::Parameter {
-                function: reference(0),
+                scope: reference(0),
                 parameter: witness(0),
             }],
             effect_arguments: Vec::new(),
@@ -345,7 +765,7 @@ fn explicit_forwarding_of_scheme_arguments_preserves_growth_cycle() {
         package(1),
         ExpressionOperation::MethodCall {
             witness: ImplementationOperand::Parameter {
-                function: reference(3),
+                scope: reference(3),
                 parameter: witness(0),
             },
             contract: reference(900),
@@ -483,7 +903,7 @@ fn schema_callback(method_arguments: &[Term], next_arguments: &[Term]) -> Read {
         package(0),
         ExpressionOperation::MethodCall {
             witness: ImplementationOperand::Parameter {
-                function: reference(0),
+                scope: reference(0),
                 parameter: witness(0),
             },
             contract: reference(900),
@@ -510,6 +930,7 @@ fn schema_callback(method_arguments: &[Term], next_arguments: &[Term]) -> Read {
             implementations: vec![ImplementationOperand::Concrete {
                 implementation: reference(1),
                 type_arguments: arguments,
+                implementations: Vec::new(),
             }],
             effect_arguments: Vec::new(),
             requirement_arguments: Vec::new(),
@@ -572,7 +993,7 @@ fn selected_chain(close_cycle: bool) -> Read {
         package(0),
         ExpressionOperation::MethodCall {
             witness: ImplementationOperand::Parameter {
-                function: reference(0),
+                scope: reference(0),
                 parameter: witness(0),
             },
             contract: reference(900),
@@ -595,6 +1016,7 @@ fn selected_chain(close_cycle: bool) -> Read {
             implementations: vec![ImplementationOperand::Concrete {
                 implementation: reference(4),
                 type_arguments: vec![nested],
+                implementations: Vec::new(),
             }],
             effect_arguments: Vec::new(),
             requirement_arguments: Vec::new(),
@@ -612,6 +1034,7 @@ fn selected_chain(close_cycle: bool) -> Read {
                 implementations: vec![ImplementationOperand::Concrete {
                     implementation: reference(1),
                     type_arguments: vec![p],
+                    implementations: Vec::new(),
                 }],
                 effect_arguments: Vec::new(),
                 requirement_arguments: Vec::new(),
@@ -631,6 +1054,7 @@ fn selected_chain(close_cycle: bool) -> Read {
             implementations: vec![ImplementationOperand::Concrete {
                 implementation: reference(1),
                 type_arguments: vec![ground],
+                implementations: Vec::new(),
             }],
             effect_arguments: Vec::new(),
             requirement_arguments: Vec::new(),

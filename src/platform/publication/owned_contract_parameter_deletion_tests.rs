@@ -139,11 +139,13 @@ fn phantom_fixture() -> (KernelSnapshot, Ids) {
             "CellMarker",
             OwnerKind::OwnedImplementation,
             DeclarationPayload::OwnedImplementation(OwnedImplementation {
+                implementation_parameters: Vec::new(),
                 type_parameters: vec![],
                 contract: reference(ids.contract),
                 self_type: cell,
                 type_arguments: vec![cell],
                 methods: vec![OwnedMethodImplementation {
+                    implementations: Vec::new(),
                     type_arguments: vec![],
                     method: ids.method,
                     function: reference(ids.method_function),
@@ -196,6 +198,7 @@ fn phantom_owned_parameter_deletion_requires_complete_application_repair_and_ret
         changes,
     };
     let implementation_repair = AuthoredChange::SetOwnedImplementation {
+        implementation_parameters: Vec::new(),
         declaration: DeclarationSelector::Id {
             declaration: ids.implementation,
         },
@@ -208,6 +211,7 @@ fn phantom_owned_parameter_deletion_requires_complete_application_repair_and_ret
         self_type: AuthoredType::OwnedI64Cell {},
         type_arguments: vec![],
         methods: vec![crate::platform::change::AuthoredOwnedMethodImplementation {
+            implementations: Vec::new(),
             method: ids.method,
             function: AuthoredDeclarationReference::Local {
                 declaration: DeclarationSelector::Id {

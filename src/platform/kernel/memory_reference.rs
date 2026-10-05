@@ -1850,6 +1850,9 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                             || (generation < 28
                                 && (!i.type_parameters.is_empty()
                                     || i.methods.iter().any(|m| !m.type_arguments.is_empty())))
+                            || (generation < 29
+                                && (!i.implementation_parameters.is_empty()
+                                    || i.methods.iter().any(|m| !m.implementations.is_empty())))
                     }
                     PackageInterfaceDeclarationPayload::Function(f) => {
                         (generation < 27 && f.result_borrow.is_some())
@@ -1925,9 +1928,13 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                     }) {
                         return false;
                     }
-                    if let PackageInterfaceDeclarationPayload::OwnedImplementation(i) = &d.payload
-                        && !oracle.valid_implementation(i)
-                    {
+                    if matches!(
+                        d.payload,
+                        PackageInterfaceDeclarationPayload::OwnedImplementation(_)
+                    ) && !oracle.valid_implementation_at(DeclarationReference {
+                        package: *package,
+                        declaration: *id,
+                    }) {
                         return false;
                     }
                     if let PackageInterfaceDeclarationPayload::Function(f) = &d.payload {
@@ -2005,6 +2012,9 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                         || (generation < 28
                             && (!i.type_parameters.is_empty()
                                 || i.methods.iter().any(|m| !m.type_arguments.is_empty())))
+                        || (generation < 29
+                            && (!i.implementation_parameters.is_empty()
+                                || i.methods.iter().any(|m| !m.implementations.is_empty())))
                 }
                 DeclarationPayload::Function(f) => {
                     (generation < 27 && f.result_borrow.is_some())
@@ -2018,18 +2028,22 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
         {
             return false;
         }
-        if generation < 28
+        if generation < 29
             && let OwnerRecord::Expression(expression) = owner
             && match &expression.operation {
-                ExpressionOperation::ImplementationCall { implementations, .. } => implementations.iter().any(|operand| {
-                    matches!(operand, ImplementationOperand::Concrete { type_arguments, .. } if !type_arguments.is_empty())
-                }),
+                ExpressionOperation::ImplementationCall {
+                    implementations, ..
+                } => implementations
+                    .iter()
+                    .any(|operand| !oracle.operand_generation(operand, generation)),
                 ExpressionOperation::MethodCall { witness, .. } => {
-                    matches!(witness, ImplementationOperand::Concrete { type_arguments, .. } if !type_arguments.is_empty())
-                },
+                    !oracle.operand_generation(witness, generation)
+                }
                 _ => false,
             }
-        { return false; }
+        {
+            return false;
+        }
         if generation < 27
             && matches!(owner, OwnerRecord::Expression(e) if matches!(e.operation, ExpressionOperation::BorrowCall { .. }))
         {
@@ -2162,8 +2176,14 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                         return false;
                     }
                 }
-                DeclarationPayload::OwnedImplementation(i) => {
-                    if !oracle.valid_implementation(i) {
+                DeclarationPayload::OwnedImplementation(_) => {
+                    let OwnerKey::Declaration(id) = key else {
+                        return false;
+                    };
+                    if !oracle.valid_implementation_at(DeclarationReference {
+                        package: snapshot.root.package_id,
+                        declaration: *id,
+                    }) {
                         return false;
                     }
                 }

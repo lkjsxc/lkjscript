@@ -28,6 +28,7 @@ fn scheme() -> OwnerRecord {
         name: Name::new("Flat").unwrap(),
         visibility: DeclarationVisibility::Public,
         payload: DeclarationPayload::OwnedImplementation(OwnedImplementation {
+            implementation_parameters: Vec::new(),
             type_parameters: vec![parameter],
             contract: reference(),
             self_type: owned_type(TypeForm::OwnedSequence {
@@ -35,6 +36,7 @@ fn scheme() -> OwnerRecord {
             }),
             type_arguments: vec![parameter_type],
             methods: vec![OwnedMethodImplementation {
+                implementations: Vec::new(),
                 method: MethodId::migrate(seed, 0),
                 function: reference(),
                 type_arguments: vec![parameter_type, owned_type(TypeForm::ByteBuffer)],
@@ -47,7 +49,7 @@ fn scheme() -> OwnerRecord {
 fn current_scheme_binds_ordered_parameters_and_every_mapping_argument() {
     let original = scheme();
     let (digest, bytes) = encode_owner(&original).unwrap();
-    assert_eq!(&bytes[..8], b"LKJOWN28");
+    assert_eq!(&bytes[..8], b"LKJOWN29");
     assert_eq!(
         decode_owner(&bytes, original.owner(), original.kind(), digest).unwrap(),
         original
@@ -110,6 +112,7 @@ fn applied_witness_identity_retains_unused_ordered_arguments() {
     ];
     for method_call in [false, true] {
         let witness = ImplementationOperand::Concrete {
+            implementations: Vec::new(),
             implementation: reference(),
             type_arguments: arguments.clone(),
         };
@@ -250,4 +253,176 @@ fn schemes_cannot_downcast_or_exceed_structural_mapping_limits() {
     };
     i.methods[0].type_arguments = vec![i.self_type; contract::MAXIMUM_CHILDREN + 1];
     assert!(encode_owner(&owner).is_err());
+}
+
+#[test]
+fn graph28_scheme_literal_remains_exact_after_prerequisite_extension() {
+    let mut original = scheme();
+    original.set_encoding_for_edit(28);
+    let OwnerRecord::Declaration(d) = &original else {
+        unreachable!()
+    };
+    let DeclarationPayload::OwnedImplementation(i) = &d.payload else {
+        unreachable!()
+    };
+    let mappings = i
+        .methods
+        .iter()
+        .map(|m| (m.method, m.function, &m.type_arguments))
+        .collect::<Vec<_>>();
+    let literal = packed::encode(
+        *b"LKJOWN28",
+        "lkjscript.kernel.owner-envelope.v28",
+        &(
+            1_u32,
+            d.header,
+            d.module,
+            &d.name,
+            d.visibility,
+            9_u32,
+            &i.type_parameters,
+            i.contract,
+            i.self_type,
+            &i.type_arguments,
+            mappings,
+        ),
+        MAXIMUM_OWNER_OBJECT_BYTES,
+    )
+    .unwrap();
+    let digest = OwnerObjectDigest::of(&literal);
+    assert_eq!(encode_owner(&original).unwrap(), (digest, literal.clone()));
+    assert_eq!(
+        decode_owner(&literal, original.owner(), original.kind(), digest).unwrap(),
+        original
+    );
+}
+
+#[test]
+fn prerequisite_declarations_maps_and_nested_arguments_bind_canonical_identity() {
+    let mut original = scheme();
+    let OwnerRecord::Declaration(d) = &mut original else {
+        unreachable!()
+    };
+    let DeclarationPayload::OwnedImplementation(i) = &mut d.payload else {
+        unreachable!()
+    };
+    let parameter = ImplementationParameterId::migrate(b"prerequisite-wire", 0);
+    i.implementation_parameters.push(ImplementationParameter {
+        id: parameter,
+        name: Name::new("reader").unwrap(),
+        contract: reference(),
+        self_type: i.type_arguments[0],
+        type_arguments: Vec::new(),
+    });
+    i.methods[0]
+        .implementations
+        .push(ImplementationOperand::Parameter {
+            scope: reference(),
+            parameter,
+        });
+    let (digest, bytes) = encode_owner(&original).unwrap();
+    assert_eq!(&bytes[..8], b"LKJOWN29");
+    assert_eq!(
+        decode_owner(&bytes, original.owner(), original.kind(), digest).unwrap(),
+        original
+    );
+    for generation in [27, 28] {
+        let mut old = original.clone();
+        old.set_encoding_for_edit(generation);
+        assert_eq!(
+            encode_owner(&old).unwrap_err().code,
+            "kernel_implementation_prerequisite_generation"
+        );
+    }
+    let OwnerRecord::Declaration(d) = &mut original else {
+        unreachable!()
+    };
+    let DeclarationPayload::OwnedImplementation(i) = &mut d.payload else {
+        unreachable!()
+    };
+    i.methods[0].implementations[0] = ImplementationOperand::Parameter {
+        scope: DeclarationReference {
+            declaration: DeclarationId::migrate(b"different-prerequisite-scope", 0),
+            ..reference()
+        },
+        parameter,
+    };
+    assert_ne!(encode_owner(&original).unwrap().0, digest);
+
+    let cell = owned_type(TypeForm::OwnedI64Cell);
+    let buffer = owned_type(TypeForm::ByteBuffer);
+    let inner = |ty| ImplementationOperand::Concrete {
+        implementation: reference(),
+        type_arguments: vec![ty],
+        implementations: Vec::new(),
+    };
+    let mut expression = ExpressionRecord::new(
+        ExpressionId::migrate(b"prerequisite-wire", 1),
+        ExpressionOperation::MethodCall {
+            witness: ImplementationOperand::Concrete {
+                implementation: reference(),
+                type_arguments: Vec::new(),
+                implementations: vec![inner(cell), inner(buffer)],
+            },
+            contract: reference(),
+            method: MethodId::migrate(b"prerequisite-wire", 0),
+            arguments: Vec::new(),
+        },
+    )
+    .unwrap();
+    assert_eq!(expression.type_roots(), vec![cell, buffer]);
+    let before = encode_owner(&OwnerRecord::Expression(expression.clone()))
+        .unwrap()
+        .0;
+    let ExpressionOperation::MethodCall {
+        witness: ImplementationOperand::Concrete {
+            implementations, ..
+        },
+        ..
+    } = &mut expression.operation
+    else {
+        unreachable!()
+    };
+    implementations.reverse();
+    assert_ne!(
+        encode_owner(&OwnerRecord::Expression(expression.clone()))
+            .unwrap()
+            .0,
+        before
+    );
+    expression.contract_version = 28;
+    assert_eq!(
+        expression.validate_local().unwrap_err().code,
+        "kernel_implementation_prerequisite_generation"
+    );
+}
+
+#[test]
+fn prerequisite_decoder_bounds_nested_input_before_native_stack_exhaustion() {
+    // Independent wire construction exercises the decoder without using the recursive encoder.
+    let configuration = bincode::config::standard();
+    let prefix = bincode::encode_to_vec(
+        (0_u32, reference(), Vec::<TypeObjectDigest>::new(), 1_u64),
+        configuration,
+    )
+    .unwrap();
+    let leaf = bincode::encode_to_vec(
+        (
+            1_u32,
+            reference(),
+            ImplementationParameterId::migrate(b"prerequisite-wire", 0),
+        ),
+        configuration,
+    )
+    .unwrap();
+    for (depth, accepted) in [(256, true), (257, false), (4096, false)] {
+        let mut bytes = prefix.repeat(depth);
+        bytes.extend_from_slice(&leaf);
+        let decoded = bincode::decode_from_slice::<ImplementationOperand, _>(&bytes, configuration);
+        assert_eq!(decoded.is_ok(), accepted, "depth {depth}");
+        if let Ok((operand, consumed)) = decoded {
+            assert_eq!(consumed, bytes.len());
+            assert_eq!(operand.walk().count(), depth + 1);
+        }
+    }
 }

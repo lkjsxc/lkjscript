@@ -1,7 +1,7 @@
 [package]
 name = "lkjscript"
 # Opaque product identifier: no component is a compatibility or stability signal.
-version = "0.1.79"
+version = "0.1.80"
 edition = "2024"
 license = "Apache-2.0"
 publish = false

@@ -376,10 +376,12 @@ fn owned_contract_application_vm_and_transfer_reject_wrong_or_missing_item() {
             &control,
         )
         .unwrap_err();
+        assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
+        assert_eq!(error.code, "normalized_runtime_type");
         assert!(
             error
                 .message
-                .contains("implementation contract type argument"),
+                .contains("implementation witness differs from its admitted identity"),
             "{error:?}"
         );
         assert_eq!(
@@ -389,15 +391,16 @@ fn owned_contract_application_vm_and_transfer_reject_wrong_or_missing_item() {
         );
         assert_eq!(cells.live(), (0, 0));
         assert_eq!(composites.live(), (0, 0));
-        assert!(
-            super::super::vm::transfer::TaskApplication::bind(
-                &forged,
-                index,
-                Arc::clone(&types),
-                &control,
-                &mut |_| Ok(()),
-            )
-            .is_err()
-        );
+        let transfer_error = super::super::vm::transfer::TaskApplication::bind(
+            &forged,
+            index,
+            Arc::clone(&types),
+            &control,
+            &mut |_| Ok(()),
+        )
+        .err()
+        .expect("forged contract arguments must fail exact custody admission");
+        assert_eq!(transfer_error.class, ExecutionFailureClass::Trap);
+        assert_eq!(transfer_error.code, "normalized_parallel_transfer");
     }
 }

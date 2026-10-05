@@ -79,10 +79,10 @@ Current identity:
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
 - semantic revision: `rev_c3bcf5a07bdc9f8400fdf670fffcd5a0a85b54ff6f86ce7514c2c5f36cab41e4`;
-- package revision: `package_revision_4f367660906ad834e7b43a86c1168c97abd99fac5b07e519ddc8eb389f7258b5`;
-- package transport: `package_transport_cd715d864efbcd2fee7afb1f63d5f4274b0ad800d5a9600d073b12d08c0552fc`;
-- artifact manifest: `artifact_manifest_af6988227aa0fcf10015c20056f7ac6ecf9f4a1fc492dff80589cedb4cc19cba`;
-- artifact bundle: `artifact_bundle_4af73528efbff8592c18af9ba2d8e4596bb521b11760b9ebdacc87de8151476b`;
+- package revision: `package_revision_45d0463d620aa51888557c5a02adc2517912fc50580f4f42c79882ba51c15b39`;
+- package transport: `package_transport_73674818b65da559a4c71578e5f5e429590755f1424bcf7c99d70bab51e4ff52`;
+- artifact manifest: `artifact_manifest_a78b9df9fb19f28a6b13b711f66a477b714ad663bb40096919ca9ddbd0f60c4f`;
+- artifact bundle: `artifact_bundle_2de5c43733d900c13045ed12b95d7541e3acf3e46f187f992cb3896ba5d4a970`;
 - 1,900 live semantic owners, 247 compiler units, and 96 graph tests.
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose
@@ -277,8 +277,8 @@ derived the Graph 21 transport and compiler 19 / bytecode 15 / artifact 26
 bundle through public export/build. All 89 graph tests agree between production and
 reference execution; accepted HEAD and standard operations retain their meaning.
 
-The current generic-implementation refresh derives the interface 16 transport
-through public export and the compiler 28 / bytecode 23 / artifact 35 bundle
+The current prerequisite-composition refresh derives the interface 17 transport
+through public export and the compiler 29 / bytecode 24 / artifact 36 bundle
 through public check/build. All 96 tests agree between production and reference
 execution. The package revision and transport pins above select those current
 wrappers; accepted HEAD and standard operations retain their existing meaning.

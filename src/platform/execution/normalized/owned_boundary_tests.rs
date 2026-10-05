@@ -189,10 +189,15 @@ fn owned_vm_rechecks_closed_witness_self_and_binding_arity() {
                     Arc::from([])
                 } else {
                     Arc::from([super::super::prepare::NormalizedImplementationArgument {
+                        identity: 0,
+                        depth: 0,
                         implementation: scalar,
+                        contract: function.implementation_parameters[0].contract,
                         implementation_type_arguments: Arc::from([]),
                         self_type: i64_type,
                         type_arguments: Arc::from([]),
+                        implementations: Arc::from([]),
+                        prerequisites: Arc::from([]),
                     }])
                 };
             }
@@ -207,11 +212,13 @@ fn owned_vm_rechecks_closed_witness_self_and_binding_arity() {
                 &ExecutionControl::uncancelled(),
             )
             .unwrap_err();
+        assert_eq!(failure.class, ExecutionFailureClass::Infrastructure);
+        assert_eq!(failure.code, "normalized_runtime_type");
         assert!(
             failure.message.contains(if missing {
                 "unbound static implementation"
             } else {
-                "implementation Self disagrees"
+                "implementation witness differs from its admitted identity"
             }),
             "{failure:?}"
         );

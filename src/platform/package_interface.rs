@@ -31,11 +31,11 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-16";
-pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 16;
-pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF16";
+pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-17";
+pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 17;
+pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF17";
 pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str =
-    "lkjscript.package-interface-owner-envelope.v16";
+    "lkjscript.package-interface-owner-envelope.v17";
 const PACKAGE_INTERFACE_IDENTITY_MAGIC: [u8; 8] = *b"LKJPIFI1";
 const PACKAGE_INTERFACE_IDENTITY_DOMAIN: &str = "lkjscript.package-interface-identity.v1";
 pub const MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES: usize = 1024 * 1024;
@@ -97,6 +97,13 @@ struct PackageInterfaceOwner14 {
 struct PackageInterfaceOwner15 {
     contract_version: u16,
     record: crate::platform::kernel::wire27::PackageInterfaceRecord27,
+}
+
+/// Frozen generation 16 predates implementation prerequisites and recursive witness applications.
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+struct PackageInterfaceOwner16 {
+    contract_version: u16,
+    record: crate::platform::kernel::wire28::PackageInterfaceRecord28,
 }
 
 #[derive(Clone, Debug, Decode, Encode)]
@@ -262,6 +269,8 @@ impl PackageInterfaceOwner {
                 14
             } else if canonical.header().contract_version < 28 {
                 15
+            } else if canonical.header().contract_version < 29 {
+                16
             } else {
                 PACKAGE_INTERFACE_CONTRACT_VERSION
             },
@@ -363,6 +372,19 @@ impl PackageInterfaceOwner {
             )?;
             return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
         }
+        if self.contract_version == 16 {
+            let wire = PackageInterfaceOwner16 {
+                contract_version: 16,
+                record: self.record.clone().try_into()?,
+            };
+            let bytes = crate::platform::packed::encode(
+                *b"LKJPIF16",
+                "lkjscript.package-interface-owner-envelope.v16",
+                &wire,
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
+        }
         let bytes = crate::platform::packed::encode(
             PACKAGE_INTERFACE_MAGIC,
             PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
@@ -384,7 +406,23 @@ impl PackageInterfaceOwner {
                 "package-interface owner bytes disagree with their exact digest",
             ));
         }
-        let value: Self = if bytes.starts_with(b"LKJPIF15") {
+        let value: Self = if bytes.starts_with(b"LKJPIF16") {
+            let wire: PackageInterfaceOwner16 = crate::platform::packed::decode(
+                bytes,
+                *b"LKJPIF16",
+                "lkjscript.package-interface-owner-envelope.v16",
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            if wire.contract_version != 16 {
+                return Err(interface_corrupt(
+                    "predecessor interface envelope has a foreign generation",
+                ));
+            }
+            Self {
+                contract_version: 16,
+                record: wire.record.into(),
+            }
+        } else if bytes.starts_with(b"LKJPIF15") {
             let wire: PackageInterfaceOwner15 = crate::platform::packed::decode(
                 bytes,
                 *b"LKJPIF15",
@@ -515,11 +553,22 @@ impl PackageInterfaceOwner {
             && self.contract_version != 13
             && self.contract_version != 14
             && self.contract_version != 15
+            && self.contract_version != 16
         {
             return Err(interface_error(
                 DiagnosticClass::Source,
                 "package_interface_contract",
                 "package-interface owner uses a predecessor or foreign contract",
+            ));
+        }
+        if self.contract_version < 17
+            && matches!(&self.record, PackageInterfaceRecord::Declaration(d)
+                if matches!(&d.payload, PackageInterfaceDeclarationPayload::OwnedImplementation(i)
+                    if !i.implementation_parameters.is_empty()
+                        || i.methods.iter().any(|m| !m.implementations.is_empty())))
+        {
+            return Err(interface_corrupt(
+                "implementation prerequisites require interface generation 17",
             ));
         }
         if self.contract_version < 16
@@ -1074,9 +1123,31 @@ pub(crate) fn interface_owner_validation_visits(owner: &PackageInterfaceOwner) -
                 i.methods.len()
                     + i.type_arguments.len()
                     + i.type_parameters.len()
+                    + i.implementation_parameters.len()
+                    + i.implementation_parameters
+                        .iter()
+                        .map(|p| 1 + p.type_arguments.len())
+                        .sum::<usize>()
                     + i.methods
                         .iter()
-                        .map(|m| m.type_arguments.len())
+                        .map(|m| {
+                            m.type_arguments.len()
+                                + m.implementations
+                                    .iter()
+                                    .flat_map(|operand| operand.walk())
+                                    .map(|operand| {
+                                        match operand {
+                                    crate::platform::kernel::ImplementationOperand::Concrete {
+                                        type_arguments,
+                                        ..
+                                    } => 1 + type_arguments.len(),
+                                    crate::platform::kernel::ImplementationOperand::Parameter {
+                                        ..
+                                    } => 1,
+                                }
+                                    })
+                                    .sum::<usize>()
+                        })
                         .sum::<usize>()
                     + 1
             }
@@ -1261,6 +1332,39 @@ fn validate_owner_closure(
                         ));
                     }
                 }
+                validate_interface_implementation_parameters(
+                    *declaration_id,
+                    &i.type_parameters,
+                    &i.implementation_parameters,
+                    types,
+                    owners,
+                )?;
+                let scope = crate::platform::kernel::DeclarationReference {
+                    package,
+                    declaration: *declaration_id,
+                };
+                let parameters = i
+                    .implementation_parameters
+                    .iter()
+                    .map(|p| p.id)
+                    .collect::<BTreeSet<_>>();
+                for method in &i.methods {
+                    for operand in &method.implementations {
+                        operand.validate_local()?;
+                        for operand in operand.walk() {
+                            if let crate::platform::kernel::ImplementationOperand::Parameter {
+                                scope: actual,
+                                parameter,
+                            } = operand
+                                && (*actual != scope || !parameters.contains(parameter))
+                            {
+                                return Err(interface_corrupt(
+                                    "mapped witness parameter is outside its exact implementing declaration",
+                                ));
+                            }
+                        }
+                    }
+                }
             }
             PackageInterfaceDeclarationPayload::Record {
                 fields,
@@ -1347,6 +1451,13 @@ fn validate_owner_closure(
                 )?;
             }
             PackageInterfaceDeclarationPayload::Function(signature) => {
+                validate_interface_implementation_parameters(
+                    *declaration_id,
+                    &signature.type_parameters,
+                    &signature.implementation_parameters,
+                    types,
+                    owners,
+                )?;
                 if let Some(source) = signature.result_borrow {
                     let Some(PackageInterfaceOwner {
                         record: PackageInterfaceRecord::Parameter(parameter),
@@ -1492,6 +1603,39 @@ fn validate_owner_closure(
             "package_interface_unreachable_owner",
             "package-interface map contains an owner outside its public declaration closure",
         ));
+    }
+    Ok(())
+}
+
+fn validate_interface_implementation_parameters(
+    declaration: DeclarationId,
+    type_parameters: &[TypeParameterId],
+    parameters: &[crate::platform::kernel::ImplementationParameter],
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
+) -> Result<(), Diagnostic> {
+    let type_parameters = type_parameters.iter().copied().collect::<BTreeSet<_>>();
+    for parameter in parameters {
+        let Some(TypeObject {
+            form: TypeForm::TypeParameter {
+                parameter: self_parameter,
+            },
+            ..
+        }) = types.get(&parameter.self_type)
+        else {
+            return Err(interface_corrupt(
+                "implementation prerequisite Self must be an exact Owned type parameter",
+            ));
+        };
+        if !type_parameters.contains(self_parameter)
+            || !matches!(owners.get(&OwnerKey::TypeParameter(*self_parameter)),
+                Some(PackageInterfaceOwner { record: PackageInterfaceRecord::TypeParameter(p), .. })
+                    if p.declaration == declaration && p.constraints.has_owned())
+        {
+            return Err(interface_corrupt(
+                "implementation prerequisite Self is outside its exact Owned declaration scope",
+            ));
+        }
     }
     Ok(())
 }
@@ -2120,7 +2264,7 @@ mod tests {
             }),
         };
         let (digest, bytes) = original.encode().unwrap();
-        assert_eq!(&bytes[..8], b"LKJPIF16");
+        assert_eq!(&bytes[..8], b"LKJPIF17");
         assert_eq!(
             PackageInterfaceOwner::decode(&bytes, owner, digest).unwrap(),
             original

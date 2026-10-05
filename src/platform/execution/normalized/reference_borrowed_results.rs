@@ -37,7 +37,10 @@ impl ReferenceState<'_> {
                     type_arguments,
                     effect_arguments,
                     requirement_arguments,
-                    implementations,
+                    implementations
+                        .into_iter()
+                        .map(|operand| self.resolve_implementation(operand))
+                        .collect::<Result<Vec<_>, _>>()?,
                     arguments,
                 ),
                 ExpressionOperation::MethodCall {
@@ -46,8 +49,9 @@ impl ReferenceState<'_> {
                     method,
                     arguments,
                 } => {
-                    let (function, types) = self.method_target(witness, contract, method)?;
-                    (function, types, vec![], vec![], vec![], arguments)
+                    let (function, types, implementations) =
+                        self.method_target(witness, contract, method)?;
+                    (function, types, vec![], vec![], implementations, arguments)
                 }
                 _ => {
                     return Err(reference_type_error(
@@ -90,7 +94,10 @@ impl ReferenceState<'_> {
         // Their sealed loans protect earlier arguments while later ones execute.
         let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
         let parent = self.borrow_parent(source_expression, locals)?;
-        let target = self.witness_call(
+        let types = self.resolve_type_arguments(&types)?;
+        let effects = self.resolve_effect_arguments(&effects)?;
+        let requirements = self.resolve_requirement_arguments(&requirements)?;
+        let target = self.admit_resolved_witness_call(
             function,
             &types,
             &effects,

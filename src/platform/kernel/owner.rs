@@ -302,6 +302,12 @@ impl DeclarationRecord {
     fn validate_local(&self) -> Result<(), Diagnostic> {
         validate_header_domain(self.header, self.expected_kind())?;
         validate_names([&self.name])?;
+        if self.header.contract_version < 29
+            && matches!(&self.payload, DeclarationPayload::OwnedImplementation(i)
+                if !i.implementation_parameters.is_empty() || i.methods.iter().any(|m| !m.implementations.is_empty()))
+        {
+            return Err(super::wire28::implementation_scheme_extension());
+        }
         if self.header.contract_version < 28
             && matches!(&self.payload, DeclarationPayload::OwnedImplementation(i)
                 if !i.type_parameters.is_empty() || i.methods.iter().any(|m| !m.type_arguments.is_empty()))
@@ -400,14 +406,7 @@ impl DeclarationRecord {
                 .chain([function.result])
                 .collect(),
             DeclarationPayload::OwnedContract(c) => c.type_roots(),
-            DeclarationPayload::OwnedImplementation(i) => std::iter::once(i.self_type)
-                .chain(i.type_arguments.iter().copied())
-                .chain(
-                    i.methods
-                        .iter()
-                        .flat_map(|m| m.type_arguments.iter().copied()),
-                )
-                .collect(),
+            DeclarationPayload::OwnedImplementation(i) => i.type_roots(),
             DeclarationPayload::Constant { ty, .. } => vec![*ty],
             DeclarationPayload::Record { .. }
             | DeclarationPayload::Variant { .. }

@@ -131,11 +131,10 @@ fn memory_oracle_admits_effect_and_requirement_witness_forwarding_and_retains_mo
     else {
         unreachable!()
     };
-    let ImplementationOperand::Parameter { function, .. } = &mut implementations[0] else {
+    let ImplementationOperand::Parameter { scope, .. } = &mut implementations[0] else {
         unreachable!()
     };
-    function.declaration =
-        crate::platform::semantic_id::DeclarationId::migrate(b"foreign-scope", 0);
+    scope.declaration = crate::platform::semantic_id::DeclarationId::migrate(b"foreign-scope", 0);
     assert!(
         !accepts(&foreign),
         "matching Self does not authorize a foreign witness formal"

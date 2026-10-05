@@ -8,6 +8,10 @@ use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
+#[cfg(test)]
+#[path = "owned_prerequisite_tests.rs"]
+mod prerequisite_tests;
+
 fn reject(message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Semantic, "kernel_owned_contract", message)
 }
@@ -54,6 +58,7 @@ pub struct OwnedMethodParameter {
 #[serde(deny_unknown_fields)]
 pub struct OwnedImplementation {
     pub type_parameters: Vec<TypeParameterId>,
+    pub implementation_parameters: Vec<ImplementationParameter>,
     pub contract: DeclarationReference,
     pub self_type: TypeObjectDigest,
     pub type_arguments: Vec<TypeObjectDigest>,
@@ -66,6 +71,7 @@ pub struct OwnedMethodImplementation {
     pub method: MethodId,
     pub function: DeclarationReference,
     pub type_arguments: Vec<TypeObjectDigest>,
+    pub implementations: Vec<ImplementationOperand>,
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
@@ -78,15 +84,16 @@ pub struct ImplementationParameter {
     pub type_arguments: Vec<TypeObjectDigest>,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Debug, Deserialize, Encode, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ImplementationOperand {
     Concrete {
         implementation: DeclarationReference,
         type_arguments: Vec<TypeObjectDigest>,
+        implementations: Vec<ImplementationOperand>,
     },
     Parameter {
-        function: DeclarationReference,
+        scope: DeclarationReference,
         parameter: ImplementationParameterId,
     },
 }
@@ -152,6 +159,14 @@ impl OwnedContract {
 }
 
 impl OwnedImplementation {
+    pub(crate) fn requires_prerequisite_generation(&self) -> bool {
+        !self.implementation_parameters.is_empty()
+            || self
+                .methods
+                .iter()
+                .any(|method| !method.implementations.is_empty())
+    }
+
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
         if self.type_parameters.len() >= contract::MAXIMUM_CHILDREN
             || self
@@ -162,6 +177,7 @@ impl OwnedImplementation {
                 .len()
                 != self.type_parameters.len()
             || self.type_arguments.len() >= contract::MAXIMUM_CHILDREN
+            || self.implementation_parameters.len() > contract::MAXIMUM_CHILDREN
             || self.methods.is_empty()
             || self.methods.len() > contract::MAXIMUM_CHILDREN
             || self.methods.windows(2).any(|p| p[0].method >= p[1].method)
@@ -174,7 +190,48 @@ impl OwnedImplementation {
                 "implementation method mapping must be complete, unique and canonically ordered",
             ));
         }
+        let mut ids = BTreeSet::new();
+        let mut names = BTreeSet::new();
+        for parameter in &self.implementation_parameters {
+            if !ids.insert(parameter.id)
+                || !names.insert(&parameter.name)
+                || parameter.type_arguments.len() > contract::MAXIMUM_CHILDREN
+            {
+                return Err(reject(
+                    "implementation prerequisites require distinct identities/names and bounded applications",
+                ));
+            }
+        }
+        for method in &self.methods {
+            if method.implementations.len() > contract::MAXIMUM_CHILDREN {
+                return Err(reject("mapped prerequisite inventory exceeds its bound"));
+            }
+            for operand in &method.implementations {
+                operand.validate_local()?;
+            }
+        }
         Ok(())
+    }
+
+    pub(crate) fn type_roots(&self) -> Vec<TypeObjectDigest> {
+        std::iter::once(self.self_type)
+            .chain(self.type_arguments.iter().copied())
+            .chain(
+                self.implementation_parameters.iter().flat_map(|p| {
+                    std::iter::once(p.self_type).chain(p.type_arguments.iter().copied())
+                }),
+            )
+            .chain(self.methods.iter().flat_map(|m| {
+                m.type_arguments
+                    .iter()
+                    .copied()
+                    .chain(m.implementations.iter().flat_map(|operand| {
+                        operand
+                            .walk()
+                            .flat_map(|operand| operand.type_arguments().iter().copied())
+                    }))
+            }))
+            .collect()
     }
 }
 
@@ -185,7 +242,149 @@ impl ImplementationOperand {
             Self::Parameter { .. } => &[],
         }
     }
+
+    /// Borrowed preorder traversal never recurses through a producer's witness tree.
+    pub(crate) fn walk(&self) -> impl Iterator<Item = &Self> {
+        // Keep one iterator per ancestor instead of retaining every sibling.
+        // Callers admit the complete shape before semantic use.
+        let mut pending = Vec::with_capacity(contract::MAXIMUM_TYPE_DEPTH + 1);
+        let mut next = Some(self);
+        std::iter::from_fn(move || {
+            let operand = loop {
+                if let Some(operand) = next.take() {
+                    break operand;
+                }
+                let iter: &mut std::slice::Iter<'_, Self> = pending.last_mut()?;
+                if let Some(operand) = iter.next() {
+                    break operand;
+                }
+                pending.pop();
+            };
+            if let Self::Concrete {
+                implementations, ..
+            } = operand
+                && !implementations.is_empty()
+            {
+                pending.push(implementations.iter());
+            }
+            Some(operand)
+        })
+    }
+
+    pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
+        let mut pending = vec![(self, 0usize)];
+        let mut nodes = 0usize;
+        while let Some((operand, depth)) = pending.pop() {
+            nodes += 1;
+            if depth > contract::MAXIMUM_TYPE_DEPTH || nodes > contract::MAXIMUM_CHILDREN {
+                return Err(reject(
+                    "implementation application exceeds its depth or node bound",
+                ));
+            }
+            if let Self::Concrete {
+                type_arguments,
+                implementations,
+                ..
+            } = operand
+            {
+                if type_arguments.len() > contract::MAXIMUM_CHILDREN
+                    || implementations.len() > contract::MAXIMUM_CHILDREN
+                    || nodes + pending.len() + implementations.len() > contract::MAXIMUM_CHILDREN
+                {
+                    return Err(reject(
+                        "implementation application exceeds its ordered argument bounds",
+                    ));
+                }
+                pending.try_reserve(implementations.len()).map_err(|_| {
+                    Diagnostic::new(
+                        DiagnosticClass::Resource,
+                        "kernel_witness_application_storage",
+                        "implementation shape admission could not reserve traversal storage",
+                    )
+                })?;
+                pending.extend(
+                    implementations
+                        .iter()
+                        .rev()
+                        .map(|operand| (operand, depth + 1)),
+                );
+            }
+        }
+        Ok(())
+    }
 }
+
+// Derived Decode would recurse without a bound before semantic admission. Retain the
+// ordinary enum/Vec framing, but reject excessive depth, breadth and total nodes first.
+impl<Context> Decode<Context> for ImplementationOperand {
+    fn decode<D: bincode::de::Decoder<Context = Context>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        fn vector<Context, D: bincode::de::Decoder<Context = Context>, T: Decode<Context>>(
+            decoder: &mut D,
+        ) -> Result<Vec<T>, bincode::error::DecodeError> {
+            let length = usize::decode(decoder)?;
+            if length > contract::MAXIMUM_CHILDREN {
+                return Err(bincode::error::DecodeError::Other(
+                    "implementation argument count exceeds its bound",
+                ));
+            }
+            decoder.claim_container_read::<T>(length)?;
+            let mut values = Vec::with_capacity(length);
+            for _ in 0..length {
+                decoder.unclaim_bytes_read(std::mem::size_of::<T>());
+                values.push(T::decode(decoder)?);
+            }
+            Ok(values)
+        }
+        fn operand<Context, D: bincode::de::Decoder<Context = Context>>(
+            decoder: &mut D,
+            depth: usize,
+            remaining: &mut usize,
+        ) -> Result<ImplementationOperand, bincode::error::DecodeError> {
+            if depth > contract::MAXIMUM_TYPE_DEPTH {
+                return Err(bincode::error::DecodeError::Other(
+                    "implementation application exceeds its depth or node bound",
+                ));
+            }
+            match u32::decode(decoder)? {
+                0 => {
+                    let implementation = DeclarationReference::decode(decoder)?;
+                    let type_arguments = vector(decoder)?;
+                    let length = usize::decode(decoder)?;
+                    if length > contract::MAXIMUM_CHILDREN || length > *remaining {
+                        return Err(bincode::error::DecodeError::Other(
+                            "implementation prerequisite count exceeds its bound",
+                        ));
+                    }
+                    *remaining -= length;
+                    decoder.claim_container_read::<ImplementationOperand>(length)?;
+                    let mut implementations = Vec::with_capacity(length);
+                    for _ in 0..length {
+                        decoder.unclaim_bytes_read(std::mem::size_of::<ImplementationOperand>());
+                        implementations.push(operand(decoder, depth + 1, remaining)?);
+                    }
+                    Ok(ImplementationOperand::Concrete {
+                        implementation,
+                        type_arguments,
+                        implementations,
+                    })
+                }
+                1 => Ok(ImplementationOperand::Parameter {
+                    scope: DeclarationReference::decode(decoder)?,
+                    parameter: ImplementationParameterId::decode(decoder)?,
+                }),
+                _ => Err(bincode::error::DecodeError::Other(
+                    "unknown implementation operand tag",
+                )),
+            }
+        }
+        let mut remaining = contract::MAXIMUM_CHILDREN - 1;
+        operand(decoder, 0, &mut remaining)
+    }
+}
+
+bincode::impl_borrow_decode!(ImplementationOperand);
 
 /// Disposable application types remain available throughout subsequent validation.
 pub(crate) struct AppliedTypeRead<'a, R: ?Sized> {
@@ -282,6 +481,9 @@ pub(crate) fn implementation_record(
             read.owner(OwnerKey::Declaration(reference.declaration))?
             && let DeclarationPayload::OwnedImplementation(i) = d.payload
         {
+            if d.header.contract_version < 29 && i.requires_prerequisite_generation() {
+                return Err(reject("implementation prerequisites require Graph 29"));
+            }
             return Ok(i);
         }
     } else if let Some(PackageInterfaceRecord::Declaration(d)) = read.package_interface_owner(
@@ -289,6 +491,11 @@ pub(crate) fn implementation_record(
         OwnerKey::Declaration(reference.declaration),
     )? && let PackageInterfaceDeclarationPayload::OwnedImplementation(i) = d.payload
     {
+        if d.header.contract_version < 29 && i.requires_prerequisite_generation() {
+            return Err(reject(
+                "imported implementation prerequisites require Graph 29",
+            ));
+        }
         return Ok(i);
     }
     Err(reject("missing exact owned implementation"))
@@ -539,7 +746,17 @@ pub(crate) fn validate_implementation(
             _ => Err(reject("missing implementation type parameter")),
         })
         .transpose()?;
-    validate_implementation_scoped(read, scope, implementation)
+    let types = BTreeMap::new();
+    let read = AppliedTypeRead {
+        read,
+        types: &types,
+    };
+    validate_implementation_scoped(
+        &read,
+        scope,
+        implementation,
+        &mut WitnessAdmission::default(),
+    )
 }
 
 pub(crate) fn validate_implementation_at(
@@ -547,16 +764,73 @@ pub(crate) fn validate_implementation_at(
     reference: DeclarationReference,
     implementation: &OwnedImplementation,
 ) -> Result<(), Diagnostic> {
-    validate_implementation_scoped(read, Some(reference), implementation)
+    let types = BTreeMap::new();
+    let read = AppliedTypeRead {
+        read,
+        types: &types,
+    };
+    validate_implementation_scoped(
+        &read,
+        Some(reference),
+        implementation,
+        &mut WitnessAdmission::default(),
+    )
+}
+
+#[derive(Default)]
+struct WitnessAdmission {
+    active: BTreeSet<DeclarationReference>,
+    completed: BTreeSet<DeclarationReference>,
+    operand_depth: usize,
 }
 
 fn validate_implementation_scoped(
-    read: &(impl ExpressionRead + ?Sized),
+    read: &dyn ExpressionRead,
     scope: Option<DeclarationReference>,
     implementation: &OwnedImplementation,
+    admission: &mut WitnessAdmission,
+) -> Result<(), Diagnostic> {
+    read.validation_work()?;
+    if let Some(scope) = scope {
+        // Definition cycles with closed witness resets can have finite applications.
+        // Each active frame still admits all its own maps before it completes.
+        if admission.active.contains(&scope) || admission.completed.contains(&scope) {
+            return Ok(());
+        }
+        if admission.active.len() > contract::MAXIMUM_TYPE_DEPTH {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Resource,
+                "kernel_witness_definition_capacity",
+                "implementation definition admission exhausted its finite depth capacity",
+            ));
+        }
+        admission.active.insert(scope);
+    }
+    let result = validate_implementation_definition(read, scope, implementation, admission);
+    if let Some(scope) = scope {
+        admission.active.remove(&scope);
+        if result.is_ok() {
+            admission.completed.insert(scope);
+        }
+    }
+    result
+}
+
+fn validate_implementation_definition(
+    read: &dyn ExpressionRead,
+    scope: Option<DeclarationReference>,
+    implementation: &OwnedImplementation,
+    admission: &mut WitnessAdmission,
 ) -> Result<(), Diagnostic> {
     for _ in &implementation.methods {
         read.validation_work()?;
+    }
+    if !implementation.implementation_parameters.is_empty() {
+        let scope =
+            scope.ok_or_else(|| reject("implementation prerequisites require an exact scope"))?;
+        for prerequisite in &implementation.implementation_parameters {
+            validate_witness_parameter(read, prerequisite, scope)?;
+        }
     }
     implementation.validate_local()?;
     let mut names = BTreeSet::new();
@@ -611,7 +885,7 @@ fn validate_implementation_scoped(
         if f.type_parameters.len() != target.type_arguments.len()
             || !f.effect_parameters.is_empty()
             || !f.requirement_parameters.is_empty()
-            || !f.implementation_parameters.is_empty()
+            || f.implementation_parameters.len() != target.implementations.len()
             || f.effect != method.effect
             || f.parameters.len() != method.parameters.len()
         {
@@ -647,6 +921,26 @@ fn validate_implementation_scoped(
             }
             validate_owned_type(read, *ty, scope)?;
         }
+        for operand in &target.implementations {
+            if matches!(operand, ImplementationOperand::Concrete { .. })
+                && operand
+                    .walk()
+                    .any(|operand| matches!(operand, ImplementationOperand::Parameter { .. }))
+            {
+                return Err(reject(
+                    "mapped concrete applications must contain no lexical witness operands",
+                ));
+            }
+        }
+        validate_witness_parameters(read, &f.implementation_parameters, target.function)?;
+        validate_witness_arguments(
+            read,
+            &f.implementation_parameters,
+            &target_bindings,
+            &target.implementations,
+            scope,
+            admission,
+        )?;
         // Separate substitution caches bind each complete environment. A mapped target
         // application and the contract application never reuse a digest under another map.
         let mut expected_types = super::parallel_types::AppliedTypes::new(read);
@@ -690,22 +984,184 @@ pub(crate) fn witness_contract(
     operand: &ImplementationOperand,
     scope: Option<DeclarationId>,
 ) -> Result<AppliedWitnessContract, Diagnostic> {
+    let scope = scope.map(|declaration| DeclarationReference {
+        package: read.package_id(),
+        declaration,
+    });
+    let types = BTreeMap::new();
+    let read = AppliedTypeRead {
+        read,
+        types: &types,
+    };
+    witness_contract_scoped(&read, operand, scope, &mut WitnessAdmission::default())
+}
+
+pub(crate) fn implementation_parameters_at(
+    read: &(impl ExpressionRead + ?Sized),
+    scope: DeclarationReference,
+) -> Result<Vec<ImplementationParameter>, Diagnostic> {
+    read.validation_work()?;
+    admit_dependency(read, scope.package)?;
+    if scope.package == read.package_id() {
+        if let Some(OwnerRecord::Declaration(declaration)) =
+            read.owner(OwnerKey::Declaration(scope.declaration))?
+        {
+            return match declaration.payload {
+                DeclarationPayload::Function(function) => Ok(function.implementation_parameters),
+                DeclarationPayload::OwnedImplementation(implementation) => {
+                    Ok(implementation.implementation_parameters)
+                }
+                _ => Err(reject(
+                    "witness parameters require an exact function or implementation scope",
+                )),
+            };
+        }
+    } else if let Some(PackageInterfaceRecord::Declaration(declaration)) =
+        read.package_interface_owner(scope.package, OwnerKey::Declaration(scope.declaration))?
+    {
+        return match declaration.payload {
+            PackageInterfaceDeclarationPayload::Function(function) => {
+                Ok(function.implementation_parameters)
+            }
+            PackageInterfaceDeclarationPayload::OwnedImplementation(implementation) => {
+                Ok(implementation.implementation_parameters)
+            }
+            _ => Err(reject(
+                "imported witness parameters require an exact function or implementation scope",
+            )),
+        };
+    }
+    Err(reject("missing exact witness declaration scope"))
+}
+
+fn validate_witness_parameter(
+    read: &(impl ExpressionRead + ?Sized),
+    parameter: &ImplementationParameter,
+    scope: DeclarationReference,
+) -> Result<(), Diagnostic> {
+    read.validation_work()?;
+    let contract = contract_record(read, parameter.contract)?;
+    validate_contract_at(read, parameter.contract, &contract)?;
+    if !matches!(
+        read.type_object(parameter.self_type)?.map(|ty| ty.form),
+        Some(TypeForm::TypeParameter { .. })
+    ) {
+        return Err(reject(
+            "witness Self requires an exact in-scope owned type parameter",
+        ));
+    }
+    validate_owned_type(read, parameter.self_type, Some(scope))?;
+    validate_contract_arguments(read, &contract, &parameter.type_arguments, Some(scope))
+}
+
+fn validate_witness_parameters(
+    read: &(impl ExpressionRead + ?Sized),
+    parameters: &[ImplementationParameter],
+    scope: DeclarationReference,
+) -> Result<(), Diagnostic> {
+    if parameters.len() > contract::MAXIMUM_CHILDREN {
+        return Err(reject("witness parameter inventory exceeds its bound"));
+    }
+    let mut ids = BTreeSet::new();
+    let mut names = BTreeSet::new();
+    for parameter in parameters {
+        if !ids.insert(parameter.id) || !names.insert(&parameter.name) {
+            return Err(reject(
+                "witness parameters require distinct identities and names",
+            ));
+        }
+        validate_witness_parameter(read, parameter, scope)?;
+    }
+    Ok(())
+}
+
+fn validate_witness_arguments(
+    read: &dyn ExpressionRead,
+    parameters: &[ImplementationParameter],
+    substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
+    operands: &[ImplementationOperand],
+    scope: Option<DeclarationReference>,
+    admission: &mut WitnessAdmission,
+) -> Result<BTreeMap<TypeObjectDigest, TypeObject>, Diagnostic> {
+    if parameters.len() != operands.len() {
+        return Err(reject(
+            "implementation prerequisite argument arity mismatch",
+        ));
+    }
+    let mut derived = super::parallel_types::AppliedTypes::new(read);
+    let mut types = BTreeMap::new();
+    for (parameter, operand) in parameters.iter().zip(operands) {
+        let application = witness_contract_scoped(read, operand, scope, admission)?;
+        if application.contract != parameter.contract
+            || !substituted_equal(
+                &mut derived,
+                parameter.self_type,
+                application.self_type,
+                substitutions,
+            )?
+            || application.type_arguments.len() != parameter.type_arguments.len()
+        {
+            return Err(reject(
+                "prerequisite contract, Self or ordered type arguments do not match",
+            ));
+        }
+        for (template, actual) in parameter
+            .type_arguments
+            .iter()
+            .zip(&application.type_arguments)
+        {
+            if !substituted_equal(&mut derived, *template, *actual, substitutions)? {
+                return Err(reject(
+                    "prerequisite ordered type argument substitution mismatch",
+                ));
+            }
+        }
+        types.extend(application.types);
+    }
+    types.extend(derived.into_types());
+    Ok(types)
+}
+
+fn witness_contract_scoped(
+    read: &dyn ExpressionRead,
+    operand: &ImplementationOperand,
+    scope: Option<DeclarationReference>,
+    admission: &mut WitnessAdmission,
+) -> Result<AppliedWitnessContract, Diagnostic> {
+    read.validation_work()?;
+    if admission.operand_depth > contract::MAXIMUM_TYPE_DEPTH {
+        return Err(reject(
+            "implementation prerequisite application exceeds its depth bound",
+        ));
+    }
+    if admission.operand_depth == 0 {
+        operand.validate_local()?;
+    }
+    admission.operand_depth += 1;
+    let result = witness_contract_inner(read, operand, scope, admission);
+    admission.operand_depth -= 1;
+    result
+}
+
+fn witness_contract_inner(
+    read: &dyn ExpressionRead,
+    operand: &ImplementationOperand,
+    scope: Option<DeclarationReference>,
+    admission: &mut WitnessAdmission,
+) -> Result<AppliedWitnessContract, Diagnostic> {
     match operand {
         ImplementationOperand::Concrete {
             implementation,
             type_arguments,
+            implementations,
         } => {
             let i = implementation_record(read, *implementation)?;
-            validate_implementation_at(read, *implementation, &i)?;
+            validate_implementation_scoped(read, Some(*implementation), &i, admission)?;
             if i.type_parameters.len() != type_arguments.len() {
                 return Err(reject("implementation scheme type argument arity mismatch"));
             }
-            let caller = scope.map(|declaration| DeclarationReference {
-                package: read.package_id(),
-                declaration,
-            });
             for ty in type_arguments {
-                validate_owned_type(read, *ty, caller)?;
+                validate_owned_type(read, *ty, scope)?;
             }
             let bindings = i
                 .type_parameters
@@ -716,31 +1172,40 @@ pub(crate) fn witness_contract(
             let mut derived = super::parallel_types::AppliedTypes::new(read);
             let self_type = derived.substitute(i.self_type, &bindings, 0)?;
             let mut arguments = Vec::with_capacity(i.type_arguments.len());
-            for ty in i.type_arguments {
-                arguments.push(derived.substitute(ty, &bindings, 0)?);
+            for ty in &i.type_arguments {
+                arguments.push(derived.substitute(*ty, &bindings, 0)?);
             }
-            validate_owned_type(&derived, self_type, caller)?;
+            validate_owned_type(&derived, self_type, scope)?;
             let contract = contract_record(read, i.contract)?;
-            validate_contract_arguments(&derived, &contract, &arguments, caller)?;
+            validate_contract_arguments(&derived, &contract, &arguments, scope)?;
+            let mut types = validate_witness_arguments(
+                &derived,
+                &i.implementation_parameters,
+                &bindings,
+                implementations,
+                scope,
+                admission,
+            )?;
+            types.extend(derived.into_types());
             Ok(AppliedWitnessContract {
                 contract: i.contract,
                 self_type,
                 type_arguments: arguments,
-                types: derived.into_types(),
+                types,
             })
         }
         ImplementationOperand::Parameter {
-            function,
+            scope: declaring_scope,
             parameter,
         } => {
-            if function.package != read.package_id() || Some(function.declaration) != scope {
+            if Some(*declaring_scope) != scope {
                 return Err(reject(
-                    "implementation parameter escaped its exact function scope",
+                    "implementation parameter escaped its exact declaration scope",
                 ));
             }
-            let f = function_contract(read, *function)?;
+            let parameters = implementation_parameters_at(read, *declaring_scope)?;
             let mut found = None;
-            for p in &f.implementation_parameters {
+            for p in &parameters {
                 read.validation_work()?;
                 if p.id == *parameter {
                     found = Some(p);
@@ -748,18 +1213,7 @@ pub(crate) fn witness_contract(
                 }
             }
             let p = found.ok_or_else(|| reject("missing implementation parameter"))?;
-            let contract = contract_record(read, p.contract)?;
-            validate_contract_at(read, p.contract, &contract)?;
-            if !matches!(
-                read.type_object(p.self_type)?.map(|t| t.form),
-                Some(TypeForm::TypeParameter { .. })
-            ) {
-                return Err(reject(
-                    "witness Self requires an in-scope owned type parameter",
-                ));
-            }
-            validate_owned_type(read, p.self_type, Some(*function))?;
-            validate_contract_arguments(read, &contract, &p.type_arguments, Some(*function))?;
+            validate_witness_parameter(read, p, *declaring_scope)?;
             Ok(AppliedWitnessContract {
                 contract: p.contract,
                 self_type: p.self_type,

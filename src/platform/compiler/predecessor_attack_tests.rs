@@ -303,7 +303,7 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
     use std::io::Write;
     // Do not overwrite the official/historical fixtures or confuse their old
     // admission with current permission. Only derived envelopes are replaced.
-    let mut expected_files = Vec::new();
+    let mut expected_artifacts = Vec::new();
     for (name, original, transport, transport_id, rejection) in [
         (
             "requirements",
@@ -373,15 +373,49 @@ fn current_predecessor_controls_retain_exact_source_and_instructions() {
                 .write_all(&current)
                 .unwrap();
         }
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/owned-predecessor-compiler28")
-            .join(format!("{name}.lkja"));
-        expected_files.push((name, path, current));
+        let (previous, retained) = match name {
+            "requirements" => (
+                include_bytes!(
+                    "../../../tests/fixtures/owned-predecessor-compiler28/requirements.lkja"
+                )
+                .as_slice(),
+                include_bytes!(
+                    "../../../tests/fixtures/owned-predecessor-compiler29/requirements.lkja"
+                )
+                .as_slice(),
+            ),
+            "transactions" => (
+                include_bytes!(
+                    "../../../tests/fixtures/owned-predecessor-compiler28/transactions.lkja"
+                )
+                .as_slice(),
+                include_bytes!(
+                    "../../../tests/fixtures/owned-predecessor-compiler29/transactions.lkja"
+                )
+                .as_slice(),
+            ),
+            "participation" => (
+                include_bytes!(
+                    "../../../tests/fixtures/owned-predecessor-compiler28/participation.lkja"
+                )
+                .as_slice(),
+                include_bytes!(
+                    "../../../tests/fixtures/owned-predecessor-compiler29/participation.lkja"
+                )
+                .as_slice(),
+            ),
+            _ => unreachable!(),
+        };
+        assert_eq!(
+            load_artifact(previous).unwrap_err().code,
+            "artifact_bundle_contract",
+            "{name}: original compiler28 derived fixture remains frozen"
+        );
+        expected_artifacts.push((name, retained, current));
     }
-    for (name, path, current) in expected_files {
-        let retained = std::fs::read(path).expect("retained current-envelope fixture");
+    for (name, retained, current) in expected_artifacts {
         assert!(
-            current == retained,
+            current.as_slice() == retained,
             "{name}: canonical source and instructions changed"
         );
     }

@@ -17,6 +17,8 @@ use std::collections::{BTreeMap, BTreeSet};
 mod implementations;
 #[path = "prepared_product_depth.rs"]
 mod product_depth;
+#[path = "prepared_shared_code.rs"]
+mod shared_code;
 
 type Context = (FunctionIndex, Vec<TypeObjectDigest>);
 type EffectBindings =
@@ -181,6 +183,22 @@ pub(super) fn complete_with_implementations(
     complete_budgeted(program, &mut work)
 }
 
+pub(super) fn share_code(
+    program: &mut NormalizedProgram,
+    control: &crate::platform::execution::ExecutionControl,
+) -> Result<(), Diagnostic> {
+    let mut work = Budget {
+        steps: usize::try_from(program.work.type_derivation_steps).map_err(|_| missing())?,
+        bytes: usize::try_from(program.work.type_metadata_bytes).map_err(|_| missing())?,
+        control,
+    };
+    shared_code::share(program, &mut work)?;
+    program.capture_proof_bytes = work.bytes;
+    program.work.type_derivation_steps = work.steps as u64;
+    program.work.type_metadata_bytes = work.bytes as u64;
+    Ok(())
+}
+
 #[cfg(test)]
 pub(super) fn complete_controlled(
     program: &mut NormalizedProgram,
@@ -290,8 +308,9 @@ fn complete_budgeted(
             .iter()
             .zip(function.implementation_arguments.iter())
         {
-            if substitute(&mut program.types, parameter.self_type, &bindings, 0, work)?
-                != application.self_type
+            if parameter.contract != application.contract
+                || substitute(&mut program.types, parameter.self_type, &bindings, 0, work)?
+                    != application.self_type
                 || parameter.type_arguments.len() != application.type_arguments.len()
             {
                 return Err(missing());
@@ -1127,16 +1146,8 @@ fn close_effect_applications(
                     self.work
                         .reserve::<RequirementOperand>(requirement_arguments.len())?;
                 }
-                if let NormalizedInstruction::MethodCall {
-                    witness:
-                        crate::platform::kernel::ImplementationOperand::Concrete {
-                            type_arguments, ..
-                        },
-                    ..
-                } = instruction
-                {
-                    self.work
-                        .reserve::<TypeObjectDigest>(type_arguments.len())?;
+                if let NormalizedInstruction::MethodCall { witness, .. } = instruction {
+                    reserve_implementation_operand(witness, 0, self.work)?;
                 }
             }
             for instruction in Arc::make_mut(&mut code.instructions) {
@@ -1150,52 +1161,28 @@ fn close_effect_applications(
                             implementations.len(),
                         )?;
                     for operand in implementations.iter() {
-                        if let crate::platform::kernel::ImplementationOperand::Concrete {
-                            type_arguments,
-                            ..
-                        } = operand
-                        {
-                            self.work
-                                .reserve::<TypeObjectDigest>(type_arguments.len())?;
-                        }
+                        reserve_implementation_operand(operand, 0, self.work)?;
                     }
                     for operand in Arc::make_mut(implementations) {
-                        if let crate::platform::kernel::ImplementationOperand::Concrete {
-                            type_arguments,
-                            ..
-                        } = operand
-                        {
-                            for ty in type_arguments {
-                                *ty = substitute_effect_type(
-                                    self.types,
-                                    *ty,
-                                    bindings,
-                                    requirements,
-                                    0,
-                                    self.work,
-                                )?;
-                            }
-                        }
-                    }
-                }
-                if let NormalizedInstruction::MethodCall {
-                    witness:
-                        crate::platform::kernel::ImplementationOperand::Concrete {
-                            type_arguments, ..
-                        },
-                    ..
-                } = instruction
-                {
-                    for ty in type_arguments {
-                        *ty = substitute_effect_type(
+                        substitute_implementation_effects(
+                            operand,
                             self.types,
-                            *ty,
                             bindings,
                             requirements,
                             0,
                             self.work,
                         )?;
                     }
+                }
+                if let NormalizedInstruction::MethodCall { witness, .. } = instruction {
+                    substitute_implementation_effects(
+                        witness,
+                        self.types,
+                        bindings,
+                        requirements,
+                        0,
+                        self.work,
+                    )?;
                 }
                 match instruction {
                     NormalizedInstruction::ImplementationCall {
@@ -1740,6 +1727,65 @@ fn substitute_effect_type(
     }
     types.entry(digest).or_insert(object);
     Ok(digest)
+}
+
+fn reserve_implementation_operand(
+    operand: &crate::platform::kernel::ImplementationOperand,
+    depth: usize,
+    work: &mut Budget<'_>,
+) -> Result<(), Diagnostic> {
+    step(work)?;
+    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+        return Err(missing());
+    }
+    if let crate::platform::kernel::ImplementationOperand::Concrete {
+        type_arguments,
+        implementations,
+        ..
+    } = operand
+    {
+        work.reserve::<TypeObjectDigest>(type_arguments.len())?;
+        work.reserve::<crate::platform::kernel::ImplementationOperand>(implementations.len())?;
+        for child in implementations {
+            reserve_implementation_operand(child, depth + 1, work)?;
+        }
+    }
+    Ok(())
+}
+
+fn substitute_implementation_effects(
+    operand: &mut crate::platform::kernel::ImplementationOperand,
+    types: &mut BTreeMap<TypeObjectDigest, TypeObject>,
+    bindings: &EffectBindings,
+    requirements: &crate::platform::kernel::RequirementSubstitution,
+    depth: usize,
+    work: &mut Budget<'_>,
+) -> Result<(), Diagnostic> {
+    step(work)?;
+    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+        return Err(missing());
+    }
+    if let crate::platform::kernel::ImplementationOperand::Concrete {
+        type_arguments,
+        implementations,
+        ..
+    } = operand
+    {
+        for ty in type_arguments {
+            *ty = substitute_effect_type(types, *ty, bindings, requirements, 0, work)?;
+        }
+        for child in implementations {
+            substitute_implementation_effects(
+                child,
+                types,
+                bindings,
+                requirements,
+                depth + 1,
+                work,
+            )?;
+        }
+    }
+    Ok(())
 }
 
 fn substitute(

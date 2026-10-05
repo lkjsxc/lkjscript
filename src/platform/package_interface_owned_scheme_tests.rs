@@ -46,7 +46,9 @@ fn interface15_implementation_is_literal_and_cannot_carry_new_scheme_fields() {
         unreachable!()
     };
     assert!(i.type_parameters.is_empty());
+    assert!(i.implementation_parameters.is_empty());
     assert!(i.methods[0].type_arguments.is_empty());
+    assert!(i.methods[0].implementations.is_empty());
     i.type_parameters.push(TypeParameterId::migrate(seed, 0));
     assert!(value.encode().is_err());
     value.contract_version = 16;
@@ -82,6 +84,83 @@ fn interface15_implementation_is_literal_and_cannot_carry_new_scheme_fields() {
 }
 
 #[test]
+fn frozen_interface16_rejects_prerequisites_and_retains_original_bytes() {
+    let seed = b"prerequisite-interface-cut";
+    let declaration = DeclarationId::migrate(seed, 0);
+    let reference = DeclarationReference {
+        package: PackageId::migrate(seed, 0),
+        declaration,
+    };
+    let ty = encode_type_object(&TypeObject::new(TypeForm::ByteBuffer).unwrap())
+        .unwrap()
+        .0;
+    let mut value = PackageInterfaceOwner {
+        contract_version: 16,
+        record: PackageInterfaceRecord::Declaration(PackageInterfaceDeclaration {
+            header: OwnerHeader {
+                contract_version: 28,
+                owner: OwnerKey::Declaration(declaration),
+                kind: OwnerKind::OwnedImplementation,
+            },
+            name: Name::new("Delegating").unwrap(),
+            payload: PackageInterfaceDeclarationPayload::OwnedImplementation(OwnedImplementation {
+                type_parameters: vec![],
+                implementation_parameters: vec![],
+                contract: reference,
+                self_type: ty,
+                type_arguments: vec![],
+                methods: vec![OwnedMethodImplementation {
+                    method: MethodId::migrate(seed, 0),
+                    function: reference,
+                    type_arguments: vec![],
+                    implementations: vec![],
+                }],
+            }),
+        }),
+    };
+    let original = value.encode().unwrap();
+    assert_eq!(&original.1[..8], b"LKJPIF16");
+    assert_eq!(
+        PackageInterfaceOwner::decode(&original.1, value.owner(), original.0)
+            .unwrap()
+            .encode()
+            .unwrap(),
+        original
+    );
+    let PackageInterfaceRecord::Declaration(d) = &mut value.record else {
+        unreachable!()
+    };
+    let PackageInterfaceDeclarationPayload::OwnedImplementation(i) = &mut d.payload else {
+        unreachable!()
+    };
+    i.implementation_parameters.push(ImplementationParameter {
+        id: ImplementationParameterId::migrate(seed, 0),
+        name: Name::new("reader").unwrap(),
+        contract: reference,
+        self_type: ty,
+        type_arguments: vec![],
+    });
+    i.methods[0]
+        .implementations
+        .push(ImplementationOperand::Parameter {
+            scope: reference,
+            parameter: i.implementation_parameters[0].id,
+        });
+    assert!(value.encode().is_err());
+    value.contract_version = PACKAGE_INTERFACE_CONTRACT_VERSION;
+    let PackageInterfaceRecord::Declaration(d) = &mut value.record else {
+        unreachable!()
+    };
+    d.header.contract_version = crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
+    let (digest, bytes) = value.encode().unwrap();
+    assert_eq!(&bytes[..8], b"LKJPIF17");
+    assert_eq!(
+        PackageInterfaceOwner::decode(&bytes, value.owner(), digest).unwrap(),
+        value
+    );
+}
+
+#[test]
 fn generic_interface_selects_and_admits_exact_owned_parameter_children_and_mapping_roots() {
     let seed = b"generic-implementation-interface-closure";
     let package = PackageId::migrate(seed, 0);
@@ -110,6 +189,7 @@ fn generic_interface_selects_and_admits_exact_owned_parameter_children_and_mappi
         visibility: DeclarationVisibility::Public,
         payload: DeclarationPayload::OwnedImplementation(OwnedImplementation {
             type_parameters: vec![parameter],
+            implementation_parameters: vec![],
             contract: reference,
             self_type,
             type_arguments: vec![parameter_type],
@@ -117,6 +197,7 @@ fn generic_interface_selects_and_admits_exact_owned_parameter_children_and_mappi
                 method: MethodId::migrate(seed, 0),
                 function: reference,
                 type_arguments: vec![mapped_type],
+                implementations: vec![],
             }],
         }),
     });

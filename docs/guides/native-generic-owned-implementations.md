@@ -67,3 +67,54 @@ contract agrees. The example's SequenceTask consumes a sequence and reports its
 length; joined generic children exercise distinct cell/buffer applications.
 Borrowed results remain pure synchronous scopes, and transferability must still
 be justified independently.
+
+## Compose adapters with explicit prerequisites
+
+The [composition example](../../examples/composable-owned-implementations/README.md)
+exports reusable adapters before concrete element implementations exist.
+`Maximum<T,W>` requires `Element<T>` and `IndexRead<W,T>`, then maps its borrowed
+`best` method directly to the existing generic `select-max`. Each prerequisite
+uses the same `implementation-parameter` form as a function, with the implementation
+declaration as its exact scope. A method map supplies an ordered `implementations`
+clause after its optional `types` clause.
+
+```lisp
+(method method_8e000000000000000000000000000001
+  owned-read-results::select-max (types T W)
+  (implementations parameter@Maximum@implparam_8e000000000000000000000000000001
+    parameter@Maximum@implparam_8e000000000000000000000000000002))
+```
+
+`DelegatingReader<T,W>` takes an `IndexRead<W,T>` prerequisite and forwards both
+length and source-tied reads. Applications nest their complete selected witnesses:
+
+```lisp
+(implementation composable-adapters::Maximum
+  (types OwnedI64Cell (owned-sequence OwnedI64Cell))
+  (implementations generic-elements::CellKeys
+    (implementation composable-adapters::DelegatingReader
+      (types OwnedI64Cell (owned-sequence OwnedI64Cell))
+      (implementations
+        (implementation generic-storage::ReverseReader (types OwnedI64Cell))))))
+```
+
+Changing the leaf from `ReverseReader` to `FlatReader` changes first-tie selection
+while preserving the outer types and declarations. Borrowed results stay tied to
+the original storage across every mapping; after their scopes end, that same owner
+can be drained and reused. The example also maps a consuming empty-row task with
+explicit element/storage prerequisites and executes it in joined children.
+
+Method mappings forward a direct same-scheme prerequisite or use a parameter-free
+concrete application tree. Constructing a nested witness from function prerequisites
+is admitted only outside conservative potential recursive components. The
+[specification](../spec/generic-owned-implementations.md#finite-preparation-and-independent-admission)
+describes that restriction and distinguishes it from actual type expansion and
+resource exhaustion. There is no inferred witness selection or added execution
+authority.
+
+Use `inspect owner owned-implementation ID` on accepted local meaning, or
+`package dependency inspect owner owned-implementation ID --package-revision REVISION`
+on an exact imported interface. Ordered prerequisite contracts, mapped operands
+and nested operand paths are public observations. Drafting and unchanged re-entry
+retain every exact scope, prerequisite identity and application. The example README
+owns authoring order, independent expected outputs and detached execution.

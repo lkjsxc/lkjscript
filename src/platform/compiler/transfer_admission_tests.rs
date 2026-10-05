@@ -304,22 +304,34 @@ declarations.end
             0 => *left_implementations = right_implementations.clone(),
             1 => left_implementations.clear(),
             _ => {
-                let ImplementationOperand::Parameter { function, .. } =
-                    &mut left_implementations[0]
+                let ImplementationOperand::Parameter { scope, .. } = &mut left_implementations[0]
                 else {
                     panic!("lexical witness");
                 };
-                *function = changed
+                *scope = changed
                     .tables
                     .declarations
                     .iter()
                     .copied()
-                    .find(|r| *r != *function)
+                    .find(|r| *r != *scope)
                     .unwrap();
             }
         }
-        let error = load_artifact(&effect_tests::replace_unit(&loaded, key, &changed, vec![]))
+        let bytes = if attack == 2 {
+            effect_tests::replace_rejected_unit(
+                &loaded,
+                key,
+                &changed,
+                "compiler_unit_witness_scope",
+            )
+        } else {
+            effect_tests::replace_unit(&loaded, key, &changed, vec![])
+        };
+        let error = load_artifact(&bytes)
             .expect_err("lexical witness identity survives every enclosing rehash");
+        if attack == 2 {
+            assert_eq!(error.code, "compiler_unit_witness_scope");
+        }
         assert!(
             matches!(
                 error.class,

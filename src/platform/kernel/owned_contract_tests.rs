@@ -28,7 +28,7 @@ fn owned_contract_owner_domains_are_canonical_and_exact() {
         }
         seen += 1;
         let (digest, bytes) = encode_owner(record).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOWN28");
+        assert_eq!(&bytes[..8], contract::OWNER_MAGIC);
         assert_eq!(
             decode_owner(&bytes, record.owner(), record.kind(), digest).unwrap(),
             *record
@@ -236,6 +236,7 @@ fn owned_witness_inference_and_affine_metadata_stop_before_unadmitted_reads() {
                         method: *id,
                         function,
                         type_arguments: vec![],
+                        implementations: vec![],
                     }));
                 i.methods.sort_by_key(|m| m.method);
             }

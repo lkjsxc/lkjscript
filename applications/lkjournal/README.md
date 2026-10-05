@@ -22,9 +22,9 @@ Current normalized identity:
 - package: `pkg_20000000000000000000000000000001`;
 - semantic revision: `rev_a1d97c5d7deda1ece8e2e3383bd7a58ae1e267838368ec5b42678e40c9eb1640`;
 - semantic state: `semantic_state_3832cd12c3fee672d0bdfb975cb363cbc457f6ef45f15cb44a62d40ab47f2dee`;
-- package revision: `package_revision_2b3f0cdcc4c300dc8cae9273a86f2870c6ea21cc01bf397aba66f4122de66187`;
-- artifact manifest: `artifact_manifest_6218224cd09b828977686d0476d1117dbe54de1e1dadfbbbf8fd66b069923457`;
-- artifact bundle: `artifact_bundle_b8f1687a75968f6cbf26e30f2d8d536593fb70d8b54fee09eb27bff9e794a37f`;
+- package revision: `package_revision_395f9fef204408956b3cd59f22eba3a806572fae88bc2aa75a669106aaa3c6d5`;
+- artifact manifest: `artifact_manifest_d51c87a3a094cc2243ab0e6d4724b0f5a60221046dbbb82bf6a9f9061a4c5574`;
+- artifact bundle: `artifact_bundle_12021070fcdce928555aee62ce7044060978523595036874cb28b14107688245`;
 - 2,044 live root semantic owners and one exact built-in standard dependency.
 
 The original Graph 13 materialization preserved all existing application owner identities and behavior.
@@ -95,7 +95,7 @@ empty 404 and invokes none of them.
 
 All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,375,561-byte
 artifact bundle above (SHA-256
-`68413f5096edc2f10c9ca1d1c3cd5939bad01f963fff6494c2eaaac17bb4e5d9`). The service descriptor
+`7baba652eb808dc47e9a59426aed72f0af73920edbe20f84bb8f881d94ebe44d`). The service descriptor
 resolves `serve`, the worker descriptor resolves `work`, and `live.deployment.json` resolves
 `lkjournal-live-1`. Preparation strictly loads the standalone bundle,
 validates the runner, route-indexed handler and component requirement closure, grants, secrets, and adapters, and emits
@@ -217,7 +217,7 @@ The structured parallel compiler refresh rebuilds the current bundle for compile
 exact-supplier tests agree between production and reference execution. Accepted
 HEAD, dependency selection, application behavior and operational data are unchanged.
 
-The generic-implementation compiler refresh rebuilds the current bundle for
-compiler 28, bytecode 23 and artifact 35 through public check/build. All 44 tests
+The prerequisite-composition compiler refresh rebuilds the current bundle for
+compiler 29, bytecode 24 and artifact 36 through public check/build. All 44 tests
 agree between production and reference execution. Accepted HEAD, exact historical
 standard supplier, application behavior and operational data remain unchanged.
