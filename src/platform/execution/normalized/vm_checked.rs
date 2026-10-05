@@ -27,9 +27,42 @@ pub(super) enum Class {
 
 #[derive(Debug)]
 pub(super) struct Value {
+    // Field order is custody order: the selected leaf is released before any
+    // ancestor retained by a sealed borrowed-result packet.
     raw: NormalizedValue,
     origin: ValueOrigin,
     class: Class,
+    borrow: BorrowMetadata,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct BorrowSource {
+    pub(super) frame: u64,
+    pub(super) local: u32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct BorrowResultTarget {
+    pub(super) source: BorrowSource,
+    pub(super) position: u32,
+}
+
+#[derive(Debug, Default)]
+struct BorrowMetadata {
+    source: Option<BorrowSource>,
+    placement: Option<BorrowSource>,
+    packet: Option<BorrowResultTarget>,
+    guards: Vec<Value>,
+}
+
+impl Drop for BorrowMetadata {
+    fn drop(&mut self) {
+        // Explicit iteration fixes custody order independently of Vec's
+        // destructor implementation and allocates no cleanup storage.
+        for guard in self.guards.drain(..) {
+            drop(guard);
+        }
+    }
 }
 
 pub(super) type Invocation = (FunctionIndex, Arc<[TypeObjectDigest]>, Vec<Value>);
@@ -55,6 +88,7 @@ impl Value {
             raw,
             origin: program.value_origin,
             class: Class::Memory,
+            borrow: BorrowMetadata::default(),
         })
     }
 
@@ -62,7 +96,49 @@ impl Value {
         &self.raw
     }
     pub(super) fn into_raw(self) -> NormalizedValue {
+        debug_assert!(
+            self.borrow.guards.is_empty(),
+            "borrowed result crossed a raw boundary"
+        );
         self.raw
+    }
+
+    pub(super) fn borrow_source(&self) -> Option<BorrowSource> {
+        self.borrow.source
+    }
+
+    pub(super) fn set_borrow_source(&mut self, source: Option<BorrowSource>) {
+        self.borrow.source = source;
+    }
+
+    pub(super) fn borrow_placement(&self) -> Option<BorrowSource> {
+        self.borrow.placement
+    }
+
+    pub(super) fn set_borrow_placement(&mut self, source: BorrowSource) {
+        self.borrow.placement = Some(source);
+    }
+
+    pub(super) fn set_borrow_packet(&mut self, target: BorrowResultTarget) {
+        self.borrow.packet = Some(target);
+    }
+
+    pub(super) fn take_borrow_packet(&mut self) -> Option<BorrowResultTarget> {
+        self.borrow.packet.take()
+    }
+
+    pub(super) fn reserve_borrow_guards(&mut self, count: usize) -> Result<(), ExecutionError> {
+        self.borrow.guards.try_reserve_exact(count).map_err(|_| {
+            resource_error(
+                "normalized_borrow_result_storage",
+                "borrowed-result guard reservation failed",
+            )
+        })
+    }
+
+    pub(super) fn retain_borrow_guard(&mut self, guard: Value) {
+        debug_assert!(self.borrow.guards.len() < self.borrow.guards.capacity());
+        self.borrow.guards.push(guard);
     }
 
     pub(super) fn class(
@@ -87,6 +163,12 @@ impl Value {
                 raw: self.raw.memory_borrow()?,
                 origin: self.origin,
                 class: Class::Memory,
+                borrow: BorrowMetadata {
+                    source: self.borrow.source,
+                    placement: self.borrow.placement,
+                    packet: None,
+                    guards: Vec::new(),
+                },
             });
         }
 
@@ -108,6 +190,7 @@ impl Value {
             },
             origin: self.origin,
             class: self.class,
+            borrow: BorrowMetadata::default(),
         })
     }
 
@@ -133,6 +216,7 @@ impl Value {
             raw,
             origin: program.value_origin,
             class: Class::Free,
+            borrow: BorrowMetadata::default(),
         })
     }
 
@@ -144,9 +228,10 @@ impl Value {
         let target = program.functions.get(function.0 as usize)
             .filter(|_| function.1 == program.value_origin)
             .ok_or_else(|| admission_error("function constructor has a foreign prepared identity; select the exact callable"))?;
-        if type_arguments
-            .iter()
-            .any(|ty| !program.buffer_free_types.contains(ty))
+        if target.result_borrow.is_some()
+            || type_arguments
+                .iter()
+                .any(|ty| !program.buffer_free_types.contains(ty))
             || !program.buffer_free_types.contains(&target.result)
             || target
                 .parameters
@@ -203,6 +288,7 @@ impl Value {
             },
             origin: program.value_origin,
             class: Class::Free,
+            borrow: BorrowMetadata::default(),
         })
     }
 
@@ -233,6 +319,7 @@ impl Value {
                 raw: raw.clone(),
                 origin: self.origin,
                 class: Class::Free,
+                borrow: BorrowMetadata::default(),
             })
             .collect();
         Ok((*function, Arc::clone(type_arguments), arguments))
@@ -282,6 +369,7 @@ impl Value {
             )?),
             origin: program.value_origin,
             class: Class::Free,
+            borrow: BorrowMetadata::default(),
         })
     }
 
@@ -328,6 +416,7 @@ impl Value {
             raw: NormalizedValue::Record(record),
             origin: program.value_origin,
             class: Class::Free,
+            borrow: BorrowMetadata::default(),
         })
     }
 
@@ -380,6 +469,7 @@ impl Value {
             },
             origin: program.value_origin,
             class,
+            borrow: BorrowMetadata::default(),
         })
     }
 
@@ -395,6 +485,7 @@ impl Value {
             raw: NormalizedValue::Option(child.map(|child| Box::new(child.raw))),
             origin: program.value_origin,
             class: Class::Free,
+            borrow: BorrowMetadata::default(),
         })
     }
 
@@ -403,6 +494,7 @@ impl Value {
             raw: NormalizedValue::Map(super::super::map::Map::default()),
             origin: program.value_origin,
             class: Class::Free,
+            borrow: BorrowMetadata::default(),
         }
     }
 
@@ -440,6 +532,7 @@ impl Value {
             raw,
             origin: program.value_origin,
             class: Class::Free,
+            borrow: BorrowMetadata::default(),
         })
     }
 
@@ -455,6 +548,7 @@ impl Value {
             raw,
             origin: self.origin,
             class: Class::Free,
+            borrow: BorrowMetadata::default(),
         })
     }
 
@@ -494,6 +588,7 @@ impl Value {
                 raw: *payload,
                 origin: self.origin,
                 class: if direct { Class::Direct } else { Class::Free },
+                borrow: BorrowMetadata::default(),
             }),
         ))
     }
@@ -555,6 +650,7 @@ impl Value {
             raw,
             origin: self.origin,
             class: Class::Free,
+            borrow: BorrowMetadata::default(),
         })
     }
 
@@ -566,6 +662,7 @@ impl Value {
             raw: value.clone(),
             origin: self.origin,
             class: Class::Free,
+            borrow: BorrowMetadata::default(),
         }))
     }
 
@@ -590,6 +687,7 @@ impl Value {
             raw,
             origin: self.origin,
             class: Class::Free,
+            borrow: BorrowMetadata::default(),
         }))
     }
 }
@@ -791,6 +889,7 @@ impl Admission<'_> {
             },
             origin: self.program.value_origin,
             class: Class::Free,
+            borrow: BorrowMetadata::default(),
         })
     }
 
@@ -921,6 +1020,7 @@ impl Admission<'_> {
                 raw,
                 origin: self.program.value_origin,
                 class,
+                borrow: BorrowMetadata::default(),
             }),
             Err(mut error) => {
                 super::super::value::release_raw_value(raw);
@@ -1205,7 +1305,8 @@ impl Admission<'_> {
                         }
                         _ => false,
                     };
-                    if !effect_matches
+                    if callable.result_borrow.is_some()
+                        || !effect_matches
                         || !callable.implementation_parameters.is_empty()
                         || !callable.requirement_parameters.is_empty()
                         || !callable.effect_parameters.is_empty()

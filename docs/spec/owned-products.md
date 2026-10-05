@@ -77,7 +77,8 @@ boundary are recorded in the [metadata continuation](../campaigns/20261001-owned
 borrowed local. Its borrowed binding is visible only in the body. A whole-source
 guard and every ancestor custodian remain live until that body exits. Nested
 inspection, synchronous reborrowing and exact pure borrowed implementation methods
-are supported; consumption and escape reject. The body may return an unrelated
+are supported; consumption rejects. A view can leave the scope only through a
+matching [source-tied pure result](owned-read-results.md). The body may return an unrelated
 owner and perform normally authorized effects. See [owned child borrowing](owned-borrows.md)
 for exact syntax, active-scope tail-call barriers and ordered cleanup.
 
@@ -88,7 +89,8 @@ that complete equality proof permits preserving expression and binding identitie
 other edits follow the existing complete-body replacement and validation contract.
 
 Whole products follow the existing direct-memory consume/borrow parameter suffix
-and synchronous borrow/reborrow contracts. Borrowed values cannot escape or unpack.
+and synchronous borrow/reborrow contracts. Borrowed values cannot unpack and may
+return only through their matching source-tied pure result.
 Owned parameters may instantiate to products; exact monomorphic owned implementations
 may select a closed product as Self under the existing first-order witness rules.
 Parameterized owned contracts also admit products in method signatures and exact

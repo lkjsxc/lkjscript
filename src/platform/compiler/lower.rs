@@ -745,6 +745,7 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                     &function.effect,
                 )?;
                 signature.implementation_parameters = function.implementation_parameters;
+                signature.result_borrow = function.result_borrow;
                 let code = self.compile_code(function.body, &function.parameters)?;
                 Ok(CompilationPayload::Function { signature, code })
             }
@@ -859,6 +860,7 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
             type_parameter_constraints,
             parameters: compiled_parameters,
             result: self.tables.ty(result)?,
+            result_borrow: None,
             task_requirements,
         })
     }
@@ -1075,8 +1077,28 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
         parameters: &[ParameterId],
     ) -> Result<CompiledCode, Diagnostic> {
         let mut compiler = CodeCompiler::new(self, parameters)?;
-        compiler.expression(root, 0)?;
-        compiler.push(CompiledInstruction::Return)?;
+        let borrowed = match compiler.unit.scope {
+            Some(declaration) => matches!(
+                compiler.unit.required_owner(OwnerKey::Declaration(declaration), "compiled return owner")?,
+                OwnerRecord::Declaration(record) if matches!(&record.payload,
+                    DeclarationPayload::Function(function) if function.result_borrow.is_some())
+            ),
+            None => false,
+        };
+        compiler.expression_with_use(
+            root,
+            0,
+            if borrowed {
+                ParameterUse::Borrow
+            } else {
+                ParameterUse::Unrestricted
+            },
+        )?;
+        compiler.push(if borrowed {
+            CompiledInstruction::ReturnBorrowed
+        } else {
+            CompiledInstruction::Return
+        })?;
         Ok(CompiledCode {
             parameter_count: u32_count("compiled parameters", parameters.len())?,
             local_count: compiler.next_local,
@@ -1347,6 +1369,68 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
                     .map(|record| record.use_mode)
             })
             .collect()
+    }
+
+    fn function_borrow_position(
+        &mut self,
+        function: DeclarationReference,
+    ) -> Result<u32, Diagnostic> {
+        let (parameters, source) = if function.package == self.package {
+            match self.required_owner(
+                OwnerKey::Declaration(function.declaration),
+                "borrowed call function",
+            )? {
+                OwnerRecord::Declaration(record) => match record.payload {
+                    DeclarationPayload::Function(signature) => {
+                        (signature.parameters, signature.result_borrow)
+                    }
+                    _ => {
+                        return Err(compiler_corrupt(
+                            "compiler_borrow_call",
+                            "borrowed calls require graph functions",
+                        ));
+                    }
+                },
+                _ => {
+                    return Err(compiler_corrupt(
+                        "compiler_borrow_call",
+                        "missing borrowed call declaration",
+                    ));
+                }
+            }
+        } else {
+            match self.exact_package_interface_owner(
+                function.package,
+                OwnerKey::Declaration(function.declaration),
+            )? {
+                PackageInterfaceRecord::Declaration(record) => match record.payload {
+                    crate::platform::kernel::PackageInterfaceDeclarationPayload::Function(
+                        signature,
+                    ) => (signature.parameters, signature.result_borrow),
+                    _ => {
+                        return Err(compiler_corrupt(
+                            "compiler_borrow_call",
+                            "borrowed calls require graph functions",
+                        ));
+                    }
+                },
+                _ => {
+                    return Err(compiler_corrupt(
+                        "compiler_borrow_call",
+                        "missing borrowed call declaration",
+                    ));
+                }
+            }
+        };
+        let position = source
+            .and_then(|source| parameters.iter().position(|p| *p == source))
+            .ok_or_else(|| {
+                compiler_corrupt(
+                    "compiler_borrow_call",
+                    "borrowed call has no exact selected parameter",
+                )
+            })?;
+        u32_count("borrowed result source position", position)
     }
 
     fn http_function_parameters(
@@ -1806,6 +1890,125 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     source_local,
                 })?;
             }
+            ExpressionOperation::BorrowCall {
+                call,
+                binding,
+                body,
+            } => {
+                let operation = match self
+                    .unit
+                    .required_owner(OwnerKey::Expression(call), "borrowed invocation")?
+                {
+                    OwnerRecord::Expression(record) => record.operation,
+                    _ => {
+                        return Err(compiler_corrupt(
+                            "compiler_borrow_call",
+                            "borrowed invocation is missing",
+                        ));
+                    }
+                };
+                let (source_position, arguments) = match operation {
+                    ExpressionOperation::Call {
+                        function,
+                        arguments,
+                        ..
+                    }
+                    | ExpressionOperation::ImplementationCall {
+                        function,
+                        arguments,
+                        ..
+                    } => (self.unit.function_borrow_position(function)?, arguments),
+                    ExpressionOperation::MethodCall {
+                        contract,
+                        method,
+                        arguments,
+                        ..
+                    } => {
+                        let signature = self.unit.owned_method(contract, method)?;
+                        (
+                            signature.result_borrow.ok_or_else(|| {
+                                compiler_corrupt(
+                                    "compiler_borrow_call",
+                                    "method has no borrowed result",
+                                )
+                            })?,
+                            arguments,
+                        )
+                    }
+                    _ => {
+                        return Err(compiler_corrupt(
+                            "compiler_borrow_call",
+                            "borrowed invocation requires an exact call",
+                        ));
+                    }
+                };
+                let source = *arguments.get(source_position as usize).ok_or_else(|| {
+                    compiler_corrupt("compiler_borrow_call", "selected source argument is absent")
+                })?;
+                let value = match self
+                    .unit
+                    .required_owner(OwnerKey::Expression(source), "borrowed source argument")?
+                {
+                    OwnerRecord::Expression(record) => match record.operation {
+                        ExpressionOperation::Local { value } => value,
+                        _ => {
+                            return Err(compiler_corrupt(
+                                "compiler_borrow_source",
+                                "borrowed result source must be a local",
+                            ));
+                        }
+                    },
+                    _ => {
+                        return Err(compiler_corrupt(
+                            "compiler_borrow_source",
+                            "borrowed result source is missing",
+                        ));
+                    }
+                };
+                let source_local = self.locals.get(&value).copied().ok_or_else(|| {
+                    compiler_corrupt(
+                        "compiler_borrow_source",
+                        "borrowed result source is outside scope",
+                    )
+                })?;
+                let record = self.binding(binding, BindingKind::OwnedBorrow)?;
+                let ty = record.declared_type.ok_or_else(|| {
+                    compiler_corrupt(
+                        "compiler_borrow_binding",
+                        "borrowed call binding requires an exact type",
+                    )
+                })?;
+                // Preserve complete authored argument evaluation before entering the handoff.
+                self.expression(call, depth)?;
+                let invocation = self.instructions.pop().ok_or_else(|| {
+                    compiler_corrupt("compiler_borrow_call", "missing call instruction")
+                })?;
+                if !matches!(
+                    invocation,
+                    CompiledInstruction::Call { .. }
+                        | CompiledInstruction::ImplementationCall { .. }
+                        | CompiledInstruction::MethodCall { .. }
+                ) {
+                    return Err(compiler_corrupt(
+                        "compiler_borrow_call",
+                        "borrowed invocation has no exact call terminal",
+                    ));
+                }
+                let (reference, binding_local, binding_type) = self.borrow_binding(binding, ty)?;
+                self.push(CompiledInstruction::BeginBorrowCall {
+                    source_local,
+                    source_position,
+                })?;
+                self.push(invocation)?;
+                self.push(CompiledInstruction::AdoptBorrowResult {
+                    source_local,
+                    binding_local,
+                    binding_type,
+                })?;
+                self.expression_with_use(body, depth, use_mode)?;
+                self.push(CompiledInstruction::EndOwnedBorrow { binding_local })?;
+                self.locals.remove(&reference);
+            }
             ExpressionOperation::BorrowOwnedItem {
                 sequence_type,
                 source,
@@ -1825,7 +2028,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     binding_local,
                     binding_type,
                 })?;
-                self.expression(body, depth)?;
+                self.expression_with_use(body, depth, use_mode)?;
                 self.push(CompiledInstruction::EndOwnedBorrow { binding_local })?;
                 self.locals.remove(&reference);
             }
@@ -1868,7 +2071,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     binding_local,
                     binding_type,
                 })?;
-                self.expression(body, depth)?;
+                self.expression_with_use(body, depth, use_mode)?;
                 self.push(CompiledInstruction::EndOwnedBorrow { binding_local })?;
                 self.locals.remove(&reference);
             }
@@ -1914,7 +2117,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     let target = self.next_instruction()?;
                     let (reference, binding_local, binding_type) =
                         self.borrow_binding(arm.binding, expected.ty)?;
-                    self.expression(arm.body, depth)?;
+                    self.expression_with_use(arm.body, depth, use_mode)?;
                     self.push(CompiledInstruction::EndOwnedBorrow { binding_local })?;
                     self.locals.remove(&reference);
                     cases.push(super::unit::CompiledBorrowedOwnedChoiceJump {
@@ -1997,7 +2200,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     self.binding(arm.binding, BindingKind::OwnedChoicePayload)?;
                     let reference = LocalValueReference::LexicalBinding(arm.binding);
                     let binding_local = self.bind(reference)?;
-                    self.expression(arm.body, depth)?;
+                    self.expression_with_use(arm.body, depth, use_mode)?;
                     self.push(CompiledInstruction::Unit)?;
                     self.push(CompiledInstruction::StoreLocal(binding_local))?;
                     self.locals.remove(&reference);
@@ -2066,7 +2269,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     product_type,
                     locals: locals.clone(),
                 })?;
-                self.expression(body, depth)?;
+                self.expression_with_use(body, depth, use_mode)?;
                 for local in locals {
                     self.push(CompiledInstruction::Unit)?;
                     self.push(CompiledInstruction::StoreLocal(local))?;
@@ -2125,10 +2328,10 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
             } => {
                 self.expression(condition, depth)?;
                 let conditional = self.push(CompiledInstruction::JumpIfFalse(u32::MAX))?;
-                self.expression(when_true, depth)?;
+                self.expression_with_use(when_true, depth, use_mode)?;
                 let jump = self.push(CompiledInstruction::Jump(u32::MAX))?;
                 let false_target = self.next_instruction()?;
-                self.expression(when_false, depth)?;
+                self.expression_with_use(when_false, depth, use_mode)?;
                 let end = self.next_instruction()?;
                 self.instructions[conditional as usize] =
                     CompiledInstruction::JumpIfFalse(false_target);
@@ -2153,7 +2356,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     scoped.push(reference);
                     self.push(CompiledInstruction::StoreLocal(local))?;
                 }
-                self.expression(body, depth)?;
+                self.expression_with_use(body, depth, use_mode)?;
                 for reference in &scoped {
                     let LocalValueReference::LexicalBinding(binding) = reference else {
                         continue;
@@ -2172,7 +2375,15 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
             ExpressionOperation::Sequence { items } => {
                 let count = items.len();
                 for (index, item) in items.into_iter().enumerate() {
-                    self.expression(item, depth)?;
+                    self.expression_with_use(
+                        item,
+                        depth,
+                        if index + 1 == count {
+                            use_mode
+                        } else {
+                            ParameterUse::Unrestricted
+                        },
+                    )?;
                     if index + 1 != count {
                         self.push(CompiledInstruction::Drop)?;
                     }
@@ -2443,7 +2654,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     } else {
                         (None, None)
                     };
-                    self.expression(arm.body, depth)?;
+                    self.expression_with_use(arm.body, depth, use_mode)?;
                     if let Some(scoped) = scoped {
                         self.locals.remove(&scoped);
                     }
@@ -2519,7 +2730,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     }
                 };
                 self.push(instruction)?;
-                self.expression(body, depth)?;
+                self.expression_with_use(body, depth, use_mode)?;
                 let instruction = match requirement {
                     crate::platform::kernel::RequirementOperand::Concrete(reference) => {
                         CompiledInstruction::CommitTransaction {
@@ -2571,7 +2782,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     binding: local,
                     outcome,
                 })?;
-                self.expression(body, depth)?;
+                self.expression_with_use(body, depth, use_mode)?;
                 self.push(CompiledInstruction::CommitTransactionOutcome {
                     requirement,
                     binding: local,

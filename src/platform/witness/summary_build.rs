@@ -927,7 +927,8 @@ pub(crate) fn aggregation_children(
             }));
             match &record.operation {
                 ExpressionOperation::BorrowOwnedField { binding, .. }
-                | ExpressionOperation::BorrowOwnedItem { binding, .. } => children.push((
+                | ExpressionOperation::BorrowOwnedItem { binding, .. }
+                | ExpressionOperation::BorrowCall { binding, .. } => children.push((
                     OwnershipRole::ExpressionBinding {
                         role: BindingContainerRole::OwnedBorrow,
                         ordinal: 0,
@@ -1106,6 +1107,11 @@ fn local_summary(
                             10,
                             &crate::platform::kernel::wire25::OwnedContract25::try_from(c.clone())?,
                         )?;
+                    } else if record.header.contract_version == 26 {
+                        interface.piece(
+                            10,
+                            &crate::platform::kernel::wire26::OwnedContract26::try_from(c.clone())?,
+                        )?;
                     } else {
                         interface.piece(10, c)?;
                     }
@@ -1150,6 +1156,9 @@ fn local_summary(
                     interface.piece(5, &function.parameters)?;
                     interface.piece(6, &function.result)?;
                     implementation.piece(2, &function.body)?;
+                    if let Some(source) = function.result_borrow {
+                        interface.piece(11, &source)?;
+                    }
                     effect.piece(1, &function.effect)?;
                     if let FunctionEffect::Task {
                         effect_parameters: _,
@@ -1344,6 +1353,10 @@ fn combine_digests<const N: usize>(
 struct Material {
     bytes: Vec<u8>,
 }
+
+#[cfg(test)]
+#[path = "borrow_result_summary_tests.rs"]
+mod borrow_result_tests;
 
 impl Material {
     fn new(kind: OwnerKind) -> Self {

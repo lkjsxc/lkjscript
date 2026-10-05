@@ -608,7 +608,8 @@ impl TryFrom<ExpressionOperation> for ExpressionOperation22 {
             | ExpressionOperation::SequenceLength { .. }
             | ExpressionOperation::SequencePush { .. }
             | ExpressionOperation::SequencePop { .. }
-            | ExpressionOperation::BorrowOwnedItem { .. } => {
+            | ExpressionOperation::BorrowOwnedItem { .. }
+            | ExpressionOperation::BorrowCall { .. } => {
                 return Err(crate::platform::diagnostic::Diagnostic::new(
                     crate::platform::diagnostic::DiagnosticClass::Source,
                     "kernel_sequence_generation",

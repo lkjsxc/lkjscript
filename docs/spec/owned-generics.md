@@ -38,8 +38,9 @@ affine rules as its concrete carrier:
   any alias involving a consume rejects, in either argument order.
 - Consumption transfers the one owner. A moved local cannot be used again.
   Conditional paths join ownership conservatively, including untaken syntax.
-- A result may transfer an owner, never a loan. A borrowed parameter cannot be
-  consumed, stored, captured, returned or transferred asynchronously.
+- An owning result transfers its owner. A pure [source-tied result](owned-read-results.md)
+  may return a read view from its declared borrowed input. A borrowed parameter
+  cannot be consumed, stored, captured or transferred asynchronously.
 - Scope exit disposes of remaining local owners. Traps, cancellation and exhausted
   quotas dispose of all remaining owners and loans. This cleanup invokes no
   user-defined method and confers no capability authority.
@@ -49,7 +50,8 @@ symbolic `Owned` types. A generic product or choice reader is checked before any
 concrete implementation exists. Substitution preserves child/ancestor loan
 provenance and exact borrowed method selection. Scope bodies may return unrelated
 owners and use authorized effects; protected sources and views cannot be consumed
-or escape. Borrowed task parameters remain unsupported.
+or escape except through a matching source-tied pure result. Borrowed task
+parameters remain unsupported.
 
 Owned sequences provide dynamic homogeneous collections under their separate
 contract. General nominal owned containers, mutable borrows, escaping captures, memory-bearing indirect

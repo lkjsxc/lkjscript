@@ -5,15 +5,15 @@ use crate::platform::kernel::{NamespaceClass, OwnerKind, RelationKind};
 
 pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-9";
 pub const WITNESS_CONTRACT_VERSION: u16 = 9;
-pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-10";
-pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 10;
-pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-31";
-pub const VALIDATOR_CONTRACT_VERSION: u16 = 31;
+pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-11";
+pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 11;
+pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-32";
+pub const VALIDATOR_CONTRACT_VERSION: u16 = 32;
 
 pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT09";
-pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM15";
+pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM16";
 pub const WITNESS_ENVELOPE_DOMAIN: &str = "lkjscript.witness.envelope.v9";
-pub const OWNER_SUMMARY_ENVELOPE_DOMAIN: &str = "lkjscript.owner-summary.envelope.v10";
+pub const OWNER_SUMMARY_ENVELOPE_DOMAIN: &str = "lkjscript.owner-summary.envelope.v11";
 
 pub const VALIDATION_WITNESS_DIGEST_DOMAIN: &str = "lkjscript.validation-witness.v8";
 pub const OWNER_SUMMARY_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.v8";
@@ -45,7 +45,11 @@ pub struct ValidatorFeatureDescriptor {
 
 /// This list is the executable owner for rules that affect acceptance or safe witness reuse.
 /// Changing one rule requires changing its feature version, which changes the validator digest.
-pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 39] = [
+pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 40] = [
+    ValidatorFeatureDescriptor {
+        name: "source_tied_owned_read_results",
+        version: 1,
+    },
     ValidatorFeatureDescriptor {
         name: "parameterized_owned_contracts",
         version: 1,
@@ -133,11 +137,11 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 39] = [
     },
     ValidatorFeatureDescriptor {
         name: "single_relation_extractor",
-        version: 4,
+        version: 5,
     },
     ValidatorFeatureDescriptor {
         name: "owner_summary_dimensions",
-        version: 3,
+        version: 4,
     },
     ValidatorFeatureDescriptor {
         name: "declaration_local_aggregation",

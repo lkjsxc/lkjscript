@@ -6,8 +6,9 @@ carries the operation, exact source type, child binding role and loan provenance
 A type annotation alone cannot confer read or ownership rights.
 
 These expressions compose [products](owned-products.md), [choices](owned-choices.md)
-and [first-order Owned parameters](owned-generics.md). They introduce no reference
-type, mutable borrow, partial move or escaping lifetime. Existing pure borrow
+and [first-order Owned parameters](owned-generics.md). Their lexical forms introduce no reference type, mutable borrow or partial move.
+[Source-tied borrowed results](owned-read-results.md) permit controlled pure-function
+forwarding while retaining the exact source relationship. Existing pure borrow
 helpers and exact borrowed implementation methods remain the read interface.
 
 ## Product field scope
@@ -68,7 +69,8 @@ reads are legal while a nested view is active.
 
 Neither a view nor a protected source/ancestor may be consumed through any alias.
 A view cannot become an owner, an unrestricted argument, an ordinary container
-member, a capture, a stored or returned reference, or a task-transfer operand.
+member, a capture, a stored reference, or a task-transfer operand. A pure function can return a view
+only through its matching [source-tied result](owned-read-results.md).
 `unpack-owned`, `match-owned`, consuming methods and owner-returning local reads
 cannot transfer a loan. Branches and untaken syntax obey the same restrictions.
 Borrowed task parameters and borrowed task Self remain unsupported.

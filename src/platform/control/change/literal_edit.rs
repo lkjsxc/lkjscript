@@ -192,6 +192,16 @@ fn substitute(
         ) => {
             pairs.extend([(a.as_mut(), x.as_ref()), (b.as_mut(), y.as_ref())]);
         }
+        (
+            A::BorrowCall {
+                call: a, body: b, ..
+            },
+            A::BorrowCall {
+                call: x, body: y, ..
+            },
+        ) => {
+            pairs.extend([(a.as_mut(), x.as_ref()), (b.as_mut(), y.as_ref())]);
+        }
         (A::ChooseOwned { value: a, .. }, A::ChooseOwned { value: x, .. }) => pairs.push((a, x)),
         (A::SequenceLength { source: a, .. }, A::SequenceLength { source: x, .. })
         | (A::SequencePop { source: a, .. }, A::SequencePop { source: x, .. }) => {

@@ -11,7 +11,7 @@ const TRANSPORT: &str =
 const MATERIAL: &str = "requirement-transaction-predecessor";
 const CURRENT: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../tests/fixtures/owned-predecessor-compiler26/transactions.lkja"
+    "/../../tests/fixtures/owned-predecessor-compiler27/transactions.lkja"
 ));
 const ARTIFACTS: [&str; 4] = [
     "predecessor.lkja",
@@ -479,7 +479,7 @@ mod current_control_tests {
             material_path(root, "current.lkja"),
             include_bytes!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
-                "/../../tests/fixtures/owned-predecessor-compiler26/requirements.lkja"
+                "/../../tests/fixtures/owned-predecessor-compiler27/requirements.lkja"
             )),
         )
         .unwrap();

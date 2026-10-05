@@ -188,6 +188,7 @@ impl From<PackageFunctionSignature11> for PackageFunctionSignature {
             type_parameters: v.type_parameters,
             parameters: v.parameters,
             result: v.result,
+            result_borrow: None,
             effect: v.effect,
         }
     }
@@ -195,6 +196,9 @@ impl From<PackageFunctionSignature11> for PackageFunctionSignature {
 impl TryFrom<PackageFunctionSignature> for PackageFunctionSignature11 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: PackageFunctionSignature) -> Result<Self, Self::Error> {
+        if v.result_borrow.is_some() {
+            return Err(extension());
+        }
         if !v.implementation_parameters.is_empty() {
             return Err(extension());
         }

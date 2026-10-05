@@ -2063,7 +2063,8 @@ impl FullValidator<'_> {
     ) {
         match operation {
             ExpressionOperation::BorrowOwnedField { binding, body, .. }
-            | ExpressionOperation::BorrowOwnedItem { binding, body, .. } => {
+            | ExpressionOperation::BorrowOwnedItem { binding, body, .. }
+            | ExpressionOperation::BorrowCall { binding, body, .. } => {
                 self.binding_containers
                     .entry(*binding)
                     .or_default()

@@ -9,6 +9,8 @@ mod literal_edit;
 pub(crate) use draft::render as render_native_draft;
 pub(crate) use draft_selection::NativeDraftSelection;
 #[cfg(test)]
+mod borrowed_result_tests;
+#[cfg(test)]
 mod commitment_tests;
 #[cfg(test)]
 mod declaration_tests;
@@ -56,10 +58,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-34";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 34;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-30";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 30;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-35";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 35;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-31";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 31;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -699,6 +701,11 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
         operation: CompactChangeOperation::CreateFunction,
         name: "create.function",
         fields: &[
+            CompactChangeOperationField {
+                name: "borrow-from",
+                required: false,
+                form: FieldForm::ExistingOwnerReference,
+            },
             CompactChangeOperationField {
                 name: "as",
                 required: true,
@@ -1353,6 +1360,11 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
         name: "set.function-contract",
         fields: &[
             CompactChangeOperationField {
+                name: "borrow-from",
+                required: false,
+                form: FieldForm::ExistingOwnerReference,
+            },
+            CompactChangeOperationField {
                 name: "as",
                 required: true,
                 form: FieldForm::RequestFragment,
@@ -1685,6 +1697,7 @@ pub const COMPACT_EXPRESSION_FORMS: &[&str] = &[
     "sequence-length",
     "sequence-push",
     "sequence-pop",
+    "borrow-call",
     "borrow-owned-item",
     "choose-owned",
     "match-owned",
@@ -1973,6 +1986,24 @@ pub(crate) const COMPACT_TYPE_FORM_FIELDS: &[CompactFormField] = &[
 ];
 
 pub(crate) const COMPACT_EXPRESSION_FORM_FIELDS: &[CompactFormField] = &[
+    CompactFormField {
+        form: "borrow-call",
+        name: "as",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "borrow-call",
+        name: "call",
+        required: true,
+        syntax: "$NAME",
+    },
+    CompactFormField {
+        form: "borrow-call",
+        name: "body",
+        required: true,
+        syntax: "$NAME",
+    },
     CompactFormField {
         form: "sequence-empty",
         name: "as",
@@ -2663,6 +2694,43 @@ pub(crate) struct CompactEdgeDescriptor {
 
 pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
     CompactEdgeDescriptor {
+        name: "expression.call-binding",
+        parent: "expression.borrow-call",
+        child: "binding",
+        fields: &[
+            CompactFormField {
+                form: "expression.call-binding",
+                name: "parent",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "expression.call-binding",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "expression.call-binding",
+                name: "as",
+                required: true,
+                syntax: "$NAME",
+            },
+            CompactFormField {
+                form: "expression.call-binding",
+                name: "name",
+                required: true,
+                syntax: "name",
+            },
+            CompactFormField {
+                form: "expression.call-binding",
+                name: "type",
+                required: true,
+                syntax: "type-reference",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
         name: "expression.item-binding",
         parent: "expression.borrow-owned-item",
         child: "binding",
@@ -2902,6 +2970,12 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
         parent: "owned-contract",
         child: "method",
         fields: &[
+            CompactFormField {
+                form: "owned.method",
+                name: "borrow-from",
+                required: false,
+                syntax: "zero-based-parameter-position",
+            },
             CompactFormField {
                 form: "owned.method",
                 name: "parent",
@@ -3851,7 +3925,16 @@ impl Decoder {
                 }
                 "owned.method" => self.insert_indexed_record_edge(
                     record,
-                    &["parent", "index", "as", "id", "name", "result", "effect"],
+                    &[
+                        "parent",
+                        "index",
+                        "as",
+                        "id",
+                        "name",
+                        "result",
+                        "effect",
+                        "borrow-from",
+                    ],
                 )?,
                 "owned.parameter" => {
                     self.insert_indexed_record_edge(record, &["parent", "index", "type", "use"])?
@@ -3923,10 +4006,11 @@ impl Decoder {
                     record,
                     &["parent", "index", "field-name", "as", "name", "type"],
                 )?,
-                "expression.item-binding" => self.insert_indexed_record_edge(
-                    record,
-                    &["parent", "index", "as", "name", "type"],
-                )?,
+                "expression.call-binding" | "expression.item-binding" => self
+                    .insert_indexed_record_edge(
+                        record,
+                        &["parent", "index", "as", "name", "type"],
+                    )?,
                 "expression.record-field" => self.insert_indexed_record_edge(
                     record,
                     &["parent", "index", "name", "field", "value"],
@@ -4345,6 +4429,9 @@ impl Decoder {
                         name: parse_name(method, "name")?,
                         parameters,
                         result: self.decode_type(required(method, "result")?)?,
+                        result_borrow: optional(method, "borrow-from")
+                            .map(|_| parse_field(method, "borrow-from"))
+                            .transpose()?,
                         effect: self.decode_function_effect(
                             method,
                             label,
@@ -4432,6 +4519,9 @@ impl Decoder {
                     type_parameters: Vec::new(),
                     parameters: Vec::new(),
                     result: self.decode_type(required(record, "result")?)?,
+                    result_borrow: optional(record, "borrow-from")
+                        .map(|_| self.parse_local_reference(record, "borrow-from"))
+                        .transpose()?,
                     effect: self.decode_function_effect(
                         record,
                         &function_symbol,
@@ -4704,6 +4794,9 @@ impl Decoder {
                 Ok(AuthoredChange::SetFunctionContract {
                     function: self.parse_declaration_selector(record, "function")?,
                     result: self.decode_type(required(record, "result")?)?,
+                    result_borrow: optional(record, "borrow-from")
+                        .map(|_| self.parse_local_reference(record, "borrow-from"))
+                        .transpose()?,
                     effect: self.decode_function_effect(
                         record,
                         &fragment,
@@ -5364,6 +5457,40 @@ impl Decoder {
                     source: Box::new(self.decode_expression(required(&record, "source")?)?),
                 }
             }
+            "expression.borrow-call" => {
+                check_fields(&record, &["as", "call", "body"])?;
+                let call = Box::new(self.decode_expression(required(&record, "call")?)?);
+                if !matches!(
+                    call.operation,
+                    AuthoredExpressionOperation::Call { .. }
+                        | AuthoredExpressionOperation::ImplementationCall { .. }
+                        | AuthoredExpressionOperation::MethodCall { .. }
+                ) {
+                    return Err(record_error(
+                        &record,
+                        "change_borrow_call_invocation",
+                        "borrow-call requires call, implementation-call or method-call",
+                    ));
+                }
+                let mut edges = self.ordered_record_edges("expression.call-binding", symbol)?;
+                if edges.len() != 1 {
+                    return Err(record_error(
+                        &record,
+                        "change_borrow_call_binding",
+                        "borrow-call requires exactly one child binding",
+                    ));
+                }
+                let edge = edges.remove(0);
+                AuthoredExpressionOperation::BorrowCall {
+                    call,
+                    binding: Box::new(AuthoredBindingDefinition {
+                        symbol: symbol_field(&edge.record, "as")?,
+                        name: parse_name(&edge.record, "name")?,
+                        declared_type: Some(self.decode_type(required(&edge.record, "type")?)?),
+                    }),
+                    body: Box::new(self.decode_expression(required(&record, "body")?)?),
+                }
+            }
             "expression.borrow-owned-item" => {
                 check_fields(&record, &["as", "type", "source", "index", "body"])?;
                 let sequence_type = self.decode_type(required(&record, "type")?)?;
@@ -5892,6 +6019,8 @@ fn commitment_codec_identity(intent: &[u8]) -> &'static str {
         "lkjscript-authored-change-codec-28"
     } else if intent.starts_with(b"LKJACR29") {
         "lkjscript-authored-change-codec-29"
+    } else if intent.starts_with(b"LKJACR30") {
+        "lkjscript-authored-change-codec-30"
     } else {
         // Retain the existing fallback; do not infer identities from unknown/future magics.
         AUTHORED_CHANGE_CODEC_IDENTITY

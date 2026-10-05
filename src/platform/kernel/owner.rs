@@ -302,6 +302,20 @@ impl DeclarationRecord {
     fn validate_local(&self) -> Result<(), Diagnostic> {
         validate_header_domain(self.header, self.expected_kind())?;
         validate_names([&self.name])?;
+        if self.header.contract_version < 27
+            && match &self.payload {
+                DeclarationPayload::Function(f) => f.result_borrow.is_some(),
+                DeclarationPayload::OwnedContract(c) => {
+                    c.methods.iter().any(|m| m.result_borrow.is_some())
+                }
+                _ => false,
+            }
+        {
+            return Err(owner_error(
+                "kernel_borrow_result_generation",
+                "source-tied borrowed results require Graph 27",
+            ));
+        }
         if self.header.contract_version < 18
             && (matches!(
                 self.payload,
@@ -519,6 +533,9 @@ pub struct FunctionDeclaration {
     pub type_parameters: Vec<TypeParameterId>,
     pub parameters: Vec<ParameterId>,
     pub result: TypeObjectDigest,
+    /// Exact borrowed input whose custody protects the read-only result.
+    #[serde(default)]
+    pub result_borrow: Option<ParameterId>,
     pub effect: FunctionEffect,
     pub body: ExpressionId,
 }
@@ -532,6 +549,14 @@ impl FunctionDeclaration {
         )?;
         validate_ordered_unique("function type parameters", &self.type_parameters, true)?;
         validate_ordered_unique("function parameters", &self.parameters, true)?;
+        if let Some(source) = self.result_borrow
+            && (!self.parameters.contains(&source) || self.effect != FunctionEffect::Pure)
+        {
+            return Err(owner_error(
+                "kernel_borrow_result",
+                "a borrowed result requires an exact parameter of a pure function",
+            ));
+        }
         validate_ordered_unique("function effect parameters", &self.effect_parameters, true)?;
         self.effect.row().validate()?;
         Ok(())

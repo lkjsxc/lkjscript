@@ -96,6 +96,7 @@ fn contract(result: AuthoredType) -> AuthoredChange {
     AuthoredChange::SetFunctionContract {
         function: declaration(),
         result,
+        result_borrow: None,
         effect: AuthoredFunctionEffect::Pure {},
     }
 }
@@ -238,6 +239,7 @@ fn historical_generations_18_through_24_keep_original_commitment_goldens() {
                 name: Name::new("run").unwrap(),
                 parameters: Vec::new(),
                 result: AuthoredType::I64 {},
+                result_borrow: None,
                 effect: AuthoredFunctionEffect::Task {
                     requirements: Vec::new(),
                     effect_parameters: Vec::new(),
@@ -262,6 +264,7 @@ fn earlier_generations_keep_historical_commitment_goldens() {
         AuthoredChange::SetFunctionContract {
             function: declaration(),
             result: AuthoredType::I64 {},
+            result_borrow: None,
             effect: AuthoredFunctionEffect::Task {
                 effect_parameters: Vec::new(),
                 requirements: vec![AuthoredRequirementReference::ParameterExact {

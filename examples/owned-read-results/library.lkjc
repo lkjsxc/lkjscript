@@ -1,0 +1,63 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create owned-read-results
+    (owned-contract create IndexRead (visibility public)
+      (self Self) (type-parameter create Self (constraint owned))
+      (type-parameter create Item (constraint owned))
+      (method method_8a000000000000000000000000000001 length
+        (parameters (Self borrow)) (returns I64) (effect pure))
+      (method method_8a000000000000000000000000000002 at
+        (parameters (I64 unrestricted) (Self borrow))
+        (returns Item (borrow-from 1)) (effect pure)))
+    (function create best-index (visibility private) (effect pure)
+      (type-parameter create T (constraint owned)) (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_8a000000000000000000000000000001 element owned-worklists::Element T)
+      (implementation-parameter implparam_8a000000000000000000000000000002 reader IndexRead W (types T))
+      (parameter create index (type I64)) (parameter create best (type I64))
+      (parameter create key (type I64))
+      (parameter create storage (type W) (use borrow)) (returns I64)
+      (body (if (call std::less (local index)
+        (method-call parameter@best-index@implparam_8a000000000000000000000000000002
+          IndexRead method_8a000000000000000000000000000001 (local storage)))
+        (let
+          (binding observed (type I64)
+            (borrow-call
+              (method-call parameter@best-index@implparam_8a000000000000000000000000000002
+                IndexRead method_8a000000000000000000000000000002 (local index) (local storage))
+              (binding view (type T))
+              (in (method-call parameter@best-index@implparam_8a000000000000000000000000000001
+                owned-worklists::Element method_88000000000000000000000000000002 (local view)))))
+          (in (if (call std::less (local key) (local observed))
+            (implementation-call best-index (types T W)
+              (implementations parameter@best-index@implparam_8a000000000000000000000000000001
+                parameter@best-index@implparam_8a000000000000000000000000000002)
+              (call std::add (local index) (i64 1)) (local index) (local observed) (local storage))
+            (implementation-call best-index (types T W)
+              (implementations parameter@best-index@implparam_8a000000000000000000000000000001
+                parameter@best-index@implparam_8a000000000000000000000000000002)
+              (call std::add (local index) (i64 1)) (local best) (local key) (local storage)))))
+        (local best))))
+    (function create select-max (visibility public) (effect pure)
+      (type-parameter create T (constraint owned)) (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_8a000000000000000000000000000003 element owned-worklists::Element T)
+      (implementation-parameter implparam_8a000000000000000000000000000004 reader IndexRead W (types T))
+      (parameter create storage (type W) (use borrow)) (returns T (borrow-from storage))
+      (body (let
+        (binding first-key (type I64)
+          (borrow-call
+            (method-call parameter@select-max@implparam_8a000000000000000000000000000004
+              IndexRead method_8a000000000000000000000000000002 (i64 0) (local storage))
+            (binding view (type T))
+            (in (method-call parameter@select-max@implparam_8a000000000000000000000000000003
+              owned-worklists::Element method_88000000000000000000000000000002 (local view)))))
+        (binding selected (type I64)
+          (implementation-call best-index (types T W)
+            (implementations parameter@select-max@implparam_8a000000000000000000000000000003
+              parameter@select-max@implparam_8a000000000000000000000000000004)
+            (i64 1) (i64 0) (local first-key) (local storage)))
+        (in (borrow-call
+          (method-call parameter@select-max@implparam_8a000000000000000000000000000004
+            IndexRead method_8a000000000000000000000000000002 (local selected) (local storage))
+          (binding view (type T)) (in (local view)))))))))
+declarations.end

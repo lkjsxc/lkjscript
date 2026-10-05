@@ -63,6 +63,7 @@ impl Oracle<'_> {
                 requirement_parameters: f.requirement_parameters.clone(),
                 parameters: f.parameters.clone(),
                 result: f.result,
+                result_borrow: f.result_borrow,
                 effect: f.effect.clone(),
             })
         } else {
@@ -372,10 +373,22 @@ impl Oracle<'_> {
             if !scoped.owned_type_in_scope(m.result) && !closed.ordinary(m.result) {
                 return false;
             }
+            if let Some(source) = m.result_borrow
+                && (!matches!(m.effect, FunctionEffect::Pure)
+                    || !scoped.owned_type_in_scope(m.result)
+                    || m.parameters.get(source as usize).is_none_or(|p| {
+                        p.use_mode != ParameterUse::Borrow || !scoped.owned_type_in_scope(p.ty)
+                    }))
+            {
+                return false;
+            }
         }
         true
     }
     pub(super) fn contract_generation(&self, c: &OwnedContract, generation: u16) -> bool {
+        if generation < 27 && c.methods.iter().any(|m| m.result_borrow.is_some()) {
+            return false;
+        }
         if generation >= 26 {
             return true;
         }
@@ -451,6 +464,9 @@ impl Oracle<'_> {
                 || !f.requirement_parameters.is_empty()
                 || !f.implementation_parameters.is_empty()
                 || f.parameters.len() != m.parameters.len()
+                || f.result_borrow
+                    != m.result_borrow
+                        .and_then(|index| f.parameters.get(index as usize).copied())
             {
                 return false;
             }
@@ -482,6 +498,21 @@ impl Oracle<'_> {
         d: DeclarationReference,
         f: &PackageFunctionSignature,
     ) -> bool {
+        if let Some(source) = f.result_borrow {
+            let scoped = Oracle(self.0, Some(d));
+            if !matches!(f.effect, FunctionEffect::Pure)
+                || !scoped.owned_type_in_scope(f.result)
+                || !f.parameters.contains(&source)
+                || self.parameter(d.package, source).is_none_or(|p| {
+                    p.header.owner != OwnerKey::Parameter(source)
+                        || p.parent != ParameterParent::Function(d.declaration)
+                        || p.use_mode != ParameterUse::Borrow
+                        || !scoped.owned_type_in_scope(p.ty)
+                })
+            {
+                return false;
+            }
+        }
         if f.type_parameters.iter().any(|id| {
             self.type_parameter(d.package, *id).is_none_or(|p| {
                 p.declaration != d.declaration

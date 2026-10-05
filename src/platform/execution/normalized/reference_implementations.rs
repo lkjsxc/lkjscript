@@ -170,7 +170,21 @@ impl ReferenceState<'_> {
                     return Err(reference_type_error("method is not first order"));
                 }
             }
-            self.owned_method_type(method.result, &declared)?;
+            let result_owned = self.owned_method_type(method.result, &declared)?;
+            if let Some(position) = method.result_borrow {
+                let source = method.parameters.get(position as usize).ok_or_else(|| {
+                    reference_type_error("method result borrows from a foreign parameter position")
+                })?;
+                if !matches!(method.effect, FunctionEffect::Pure)
+                    || !result_owned
+                    || source.use_mode != ParameterUse::Borrow
+                    || !self.owned_method_type(source.ty, &declared)?
+                {
+                    return Err(reference_type_error(
+                        "method borrowed result lacks an exact pure memory source",
+                    ));
+                }
+            }
             let mut mapping = None;
             for candidate in &implementation.methods {
                 self.witness_metadata_step()?;
@@ -197,6 +211,10 @@ impl ReferenceState<'_> {
                 || !function.requirement_parameters.is_empty()
                 || !function.implementation_parameters.is_empty()
                 || function.parameters.len() != method.parameters.len()
+                || function.result_borrow
+                    != method
+                        .result_borrow
+                        .and_then(|position| function.parameters.get(position as usize).copied())
             {
                 return Err(reference_type_error(
                     "method implementation must have exact monomorphic type, callable kind and effects",

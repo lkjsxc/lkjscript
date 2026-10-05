@@ -3912,6 +3912,22 @@ fn append_owned_inspection(
                         ),
                         ("parameters", method.parameters.len().to_string()),
                         ("result", method.result.to_string()),
+                        (
+                            "result-mode",
+                            if method.result_borrow.is_some() {
+                                "read-from"
+                            } else {
+                                "value"
+                            }
+                            .to_owned(),
+                        ),
+                        (
+                            "borrow-from",
+                            method
+                                .result_borrow
+                                .map(|id| id.to_string())
+                                .unwrap_or_else(|| "-".to_owned()),
+                        ),
                     ],
                 )?;
                 for (index, p) in method.parameters.iter().enumerate() {
@@ -3988,6 +4004,16 @@ fn append_owned_inspection(
             }
         }
         DeclarationPayload::Function(function) => {
+            if let Some(source) = function.result_borrow {
+                append_compact_record(
+                    output,
+                    "function.result-borrow",
+                    &[
+                        ("owner", declaration.header.owner.to_string()),
+                        ("source", source.to_string()),
+                    ],
+                )?;
+            }
             for (index, p) in function.implementation_parameters.iter().enumerate() {
                 append_compact_record(
                     output,
@@ -5402,6 +5428,7 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
         let mut literal_fragments = None;
         match &record.operation {
             ExpressionOperation::Parallel { .. } => fields.push(("form", "parallel".into())),
+            ExpressionOperation::BorrowCall { .. } => fields.push(("form", "borrow_call".into())),
             ExpressionOperation::ChooseOwned {
                 choice_type, case, ..
             } => {
@@ -5908,6 +5935,46 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
             ExpressionOperation::MatchBorrowedOwned { .. }
         );
         match record.operation {
+            ExpressionOperation::BorrowCall {
+                call,
+                binding,
+                body,
+            } => {
+                self.visit_expression_child(
+                    owner,
+                    call,
+                    (
+                        ExpressionChildRole::BorrowCallInvocation,
+                        "borrow_call_invocation",
+                    ),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+                self.visit_binding(
+                    binding,
+                    DefinitionPosition {
+                        parent: owner,
+                        ownership_role: OwnershipRole::ExpressionBinding {
+                            role: BindingContainerRole::OwnedBorrow,
+                            ordinal: 0,
+                        },
+                        slot: "borrow_call_binding",
+                        index: 0,
+                        label: None,
+                        depth: child_depth,
+                    },
+                    BindingKind::OwnedBorrow,
+                )?;
+                self.visit_expression_child(
+                    owner,
+                    body,
+                    (ExpressionChildRole::BorrowCallBody, "borrow_call_body"),
+                    0,
+                    None,
+                    child_depth,
+                )?;
+            }
             ExpressionOperation::SequenceEmpty { .. } => {}
             ExpressionOperation::SequenceLength { source, .. }
             | ExpressionOperation::SequencePop { source, .. } => {
@@ -6799,6 +6866,22 @@ fn materialize_function_definition(
             ),
             ("parameters", function.parameters.len().to_string()),
             ("result", function.result.to_string()),
+            (
+                "result-mode",
+                if function.result_borrow.is_some() {
+                    "read-from"
+                } else {
+                    "value"
+                }
+                .to_owned(),
+            ),
+            (
+                "borrow-from",
+                function
+                    .result_borrow
+                    .map(|id| id.to_string())
+                    .unwrap_or_else(|| "-".to_owned()),
+            ),
             ("effect", effect_name.to_owned()),
             ("requirements", requirements.len().to_string()),
             ("body", function.body.to_string()),
@@ -6811,6 +6894,14 @@ fn materialize_function_definition(
         KernelOwnerKey::Module(declaration.module),
     )?;
     materializer.add_type_reference("function_result", function_owner, 0, function.result)?;
+    if let Some(source) = function.result_borrow {
+        materializer.add_local_reference(
+            "borrow_result_source",
+            function_owner,
+            0,
+            KernelOwnerKey::Parameter(source),
+        )?;
+    }
     materializer.add_local_reference(
         "function_body",
         function_owner,

@@ -140,7 +140,7 @@ pub struct PackageFunctionSignature25 {
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct OwnedContract25 {
     pub self_parameter: TypeParameterId,
-    pub methods: Vec<OwnedMethod>,
+    pub methods: Vec<super::wire26::OwnedMethod26>,
 }
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
@@ -196,6 +196,7 @@ impl From<FunctionDeclaration25> for FunctionDeclaration {
             type_parameters: v.type_parameters,
             parameters: v.parameters,
             result: v.result,
+            result_borrow: None,
             effect: v.effect,
             body: v.body,
         }
@@ -205,6 +206,9 @@ impl From<FunctionDeclaration25> for FunctionDeclaration {
 impl TryFrom<FunctionDeclaration> for FunctionDeclaration25 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: FunctionDeclaration) -> Result<Self, Self::Error> {
+        if v.result_borrow.is_some() {
+            return Err(super::wire26::borrow_result_extension());
+        }
         Ok(Self {
             implementation_parameters: v
                 .implementation_parameters
@@ -256,6 +260,7 @@ impl From<PackageFunctionSignature25> for PackageFunctionSignature {
             type_parameters: v.type_parameters,
             parameters: v.parameters,
             result: v.result,
+            result_borrow: None,
             effect: v.effect,
         }
     }
@@ -264,6 +269,9 @@ impl From<PackageFunctionSignature25> for PackageFunctionSignature {
 impl TryFrom<PackageFunctionSignature> for PackageFunctionSignature25 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: PackageFunctionSignature) -> Result<Self, Self::Error> {
+        if v.result_borrow.is_some() {
+            return Err(super::wire26::borrow_result_extension());
+        }
         Ok(Self {
             implementation_parameters: v
                 .implementation_parameters
@@ -284,7 +292,7 @@ impl From<OwnedContract25> for OwnedContract {
     fn from(v: OwnedContract25) -> Self {
         Self {
             self_parameter: v.self_parameter,
-            methods: v.methods,
+            methods: v.methods.into_iter().map(Into::into).collect(),
             type_parameters: Vec::new(),
         }
     }
@@ -298,7 +306,11 @@ impl TryFrom<OwnedContract> for OwnedContract25 {
         }
         Ok(Self {
             self_parameter: v.self_parameter,
-            methods: v.methods,
+            methods: v
+                .methods
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<_, _>>()?,
         })
     }
 }

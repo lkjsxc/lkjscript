@@ -82,7 +82,9 @@ legal; no internal storage lock remains held across user code.
 
 Neither a view nor a protected source or ancestor may be consumed through an
 alias. A view cannot become an owner, an unrestricted argument, an ordinary
-container member, a capture, a stored or returned reference, or a task operand.
+container member, a capture, a stored reference, or a task operand. A matching
+[source-tied pure result](owned-read-results.md) can return the selected view with
+its complete source and ancestor custody.
 Borrowed task parameters remain unsupported. The body may consume unrelated owners,
 return an unrelated new owner and perform effects authorized by its task. A scope
 confers no additional effect or task authority.

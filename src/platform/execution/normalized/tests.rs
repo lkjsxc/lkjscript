@@ -122,7 +122,7 @@ fn graph14_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
     );
     assert_eq!(
         crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-        26
+        27
     );
     assert_eq!(
         crate::platform::kernel::contract::TYPE_OBJECT_CONTRACT_VERSION,
@@ -662,6 +662,7 @@ fn nominal_phantom_identity_origin_properties_codecs_and_alias_fault_are_indepen
                 name: Name::new(format!("consume-{index}")).unwrap(),
                 visibility: DeclarationVisibility::Private,
                 payload: DeclarationPayload::Function(FunctionDeclaration {
+                    result_borrow: None,
                     implementation_parameters: Vec::new(),
                     requirement_parameters: Vec::new(),
                     effect_parameters: Vec::new(),
@@ -1082,6 +1083,7 @@ fn linked_pure_program() -> (
                 name: Name::new("library").unwrap(),
             },
             AuthoredChange::CreateFunction {
+                result_borrow: None,
                 symbol: "$source_function".to_owned(),
                 module: ModuleSelector::Symbol {
                     symbol: "$source_module".to_owned(),
@@ -1161,6 +1163,7 @@ fn linked_pure_program() -> (
                 name: Name::new("application").unwrap(),
             },
             AuthoredChange::CreateFunction {
+                result_borrow: None,
                 symbol: "$caller".to_owned(),
                 module: ModuleSelector::Symbol {
                     symbol: "$target_module".to_owned(),
@@ -1395,6 +1398,7 @@ fn normalized_worker_snapshot(
                     name: Name::new("worker_iteration").unwrap(),
                     visibility: DeclarationVisibility::Package,
                     payload: DeclarationPayload::Function(FunctionDeclaration {
+                        result_borrow: None,
                         implementation_parameters: Vec::new(),
                         requirement_parameters: Vec::new(),
                         effect_parameters: Vec::new(),
@@ -3393,6 +3397,7 @@ fn nominal_and_structural_json_fields_obey_representation_limits() {
             name: Name::new("consume-framing").unwrap(),
             visibility: DeclarationVisibility::Private,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                result_borrow: None,
                 implementation_parameters: Vec::new(),
                 requirement_parameters: vec![],
                 effect_parameters: vec![],
@@ -4451,8 +4456,8 @@ async fn normalized_reference_runner_uses_revision_pinned_owner_reads() {
     assert_eq!(receipt.result_json, b"null");
     assert_eq!(
         receipt.reference.canonical_owner_reads,
-        snapshot.owners.len() as u64 + 8,
-        "one independent layout inventory, one invocation admission read, and seven execution owner reads"
+        snapshot.owners.len() as u64 + 9,
+        "one independent layout inventory, one invocation admission read, one borrowed-result entry-mode admission read, and seven execution owner reads"
     );
     assert!(receipt.reference.canonical_map_pages_read > 0);
     assert!(
@@ -4891,7 +4896,7 @@ fn canonical_reference_and_dense_vm_agree_on_fixture_execution() {
     assert_eq!(vm_pure.0, reference_pure.0);
     assert_eq!(
         reference_pure.1.production_tier,
-        "graph14_reference_records_9"
+        "graph14_reference_records_10"
     );
 
     let test = declaration_named(&snapshot, "caller_test");

@@ -28,7 +28,7 @@ use std::sync::Arc;
 
 #[path = "vm_checked.rs"]
 mod checked;
-use checked::{Class, Value as CheckedValue};
+use checked::{BorrowResultTarget, BorrowSource, Class, Value as CheckedValue};
 #[path = "vm_intrinsics.rs"]
 mod checked_intrinsics;
 #[path = "vm_parallel.rs"]
@@ -37,6 +37,9 @@ mod structured;
 pub(super) mod transfer;
 #[cfg(test)]
 pub(super) use structured::ChildProbe;
+#[cfg(test)]
+#[path = "vm_borrow_result_tests.rs"]
+pub(super) mod borrow_result_tests;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NormalizedRunPolicy {
@@ -559,8 +562,15 @@ struct Frame {
     instruction: usize,
     locals: Vec<Option<CheckedValue>>,
     owned_loans: Vec<OwnedLoanScope>,
+    pending_borrow_call: Option<PendingBorrowCall>,
+    borrow_result_target: Option<BorrowResultTarget>,
     type_arguments: BTreeMap<TypeParameterId, TypeObjectDigest>,
     stack_base: usize,
+}
+
+struct PendingBorrowCall {
+    target: BorrowResultTarget,
+    dispatched: bool,
 }
 
 struct OwnedLoanScope {
@@ -885,6 +895,44 @@ impl Machine<'_> {
                 NormalizedInstruction::StoreLocal(local) => {
                     let value = self.pop()?;
                     self.set_local(local, Some(value))?;
+                }
+                NormalizedInstruction::BeginBorrowCall {
+                    source_local,
+                    source_position,
+                } => {
+                    let frame = self.current_frame()?;
+                    if frame.pending_borrow_call.is_some() {
+                        return Err(type_error("borrowed call overlaps an unfinished result"));
+                    }
+                    let source = frame
+                        .locals
+                        .get(source_local as usize)
+                        .and_then(Option::as_ref)
+                        .ok_or_else(|| type_error("borrowed call source is not live"))?;
+                    source.raw().memory_validate(self.memory_domain, false)?;
+                    if source.raw().memory_form().is_none() {
+                        return Err(type_error(
+                            "borrowed call requires an owning or borrowed source",
+                        ));
+                    }
+                    let target = BorrowResultTarget {
+                        source: BorrowSource {
+                            frame: frame.id,
+                            local: source_local,
+                        },
+                        position: source_position,
+                    };
+                    self.current_frame_mut()?.pending_borrow_call = Some(PendingBorrowCall {
+                        target,
+                        dispatched: false,
+                    });
+                }
+                NormalizedInstruction::AdoptBorrowResult {
+                    source_local,
+                    binding_local,
+                    binding_type,
+                } => {
+                    self.adopt_borrow_result(source_local, binding_local, binding_type)?;
                 }
                 NormalizedInstruction::SequenceEmpty { sequence_type } => {
                     let ty = self.resolve_type_arguments(&[sequence_type])?[0];
@@ -1635,7 +1683,15 @@ impl Machine<'_> {
                     };
                     self.commit_outcome_transaction(requirement, binding, outcome)?;
                 }
+                NormalizedInstruction::ReturnBorrowed => {
+                    self.return_borrowed()?;
+                }
                 NormalizedInstruction::Return => {
+                    if self.current_frame()?.pending_borrow_call.is_some() {
+                        return Err(type_error(
+                            "function returned before borrowed-result adoption",
+                        ));
+                    }
                     let result = self.pop()?;
                     let stack_base = self.current_frame()?.stack_base;
                     if self.stack.len() != stack_base {
@@ -1646,6 +1702,11 @@ impl Machine<'_> {
                     }
                     if let Some(function) = self.current_frame()?.function {
                         let f = &self.program.functions[function.0 as usize];
+                        if f.result_borrow.is_some() {
+                            return Err(type_error(
+                                "borrowed result requires its sealed return path",
+                            ));
+                        }
                         let memory_form = direct_memory_type(
                             self.program,
                             f.result,
@@ -1910,8 +1971,9 @@ impl Machine<'_> {
         &mut self,
         binding_local: u32,
         parent: CheckedValue,
-        child: CheckedValue,
+        mut child: CheckedValue,
     ) -> Result<(), ExecutionError> {
+        child.set_borrow_source(parent.borrow_source());
         let stack_base = self.stack.len();
         let frame = self.current_frame_mut()?;
         let destination = frame
@@ -1921,6 +1983,12 @@ impl Machine<'_> {
         if destination.is_some() {
             return Err(type_error("owned borrow binding local is occupied"));
         }
+        frame.owned_loans.try_reserve(1).map_err(|_| {
+            resource_error(
+                "normalized_borrow_result_storage",
+                "lexical loan scope reservation failed",
+            )
+        })?;
         frame.owned_loans.push(OwnedLoanScope {
             binding_local,
             stack_base,
@@ -1928,6 +1996,170 @@ impl Machine<'_> {
         });
         *destination = Some(child);
         Ok(())
+    }
+
+    fn validate_borrowed_return_source(&self, value: &CheckedValue) -> Result<u32, ExecutionError> {
+        let frame = self.current_frame()?;
+        let function = frame
+            .function
+            .and_then(|index| self.program.functions.get(index.0 as usize))
+            .ok_or_else(|| type_error("borrowed result requires an exact graph function"))?;
+        let position = function
+            .result_borrow
+            .ok_or_else(|| type_error("owned read view cannot escape its lexical body"))?;
+        if !function.graph_function
+            || !matches!(
+                function.effect,
+                crate::platform::kernel::FunctionEffect::Pure
+            )
+            || !value.raw().memory_is_borrowed()
+            || value.borrow_source()
+                != Some(BorrowSource {
+                    frame: frame.id,
+                    local: position,
+                })
+        {
+            return Err(type_error(
+                "borrowed result does not descend from its exact source parameter",
+            ));
+        }
+        Ok(position)
+    }
+
+    fn return_borrowed(&mut self) -> Result<(), ExecutionError> {
+        // All fallible validation/reservation precedes extraction. The operand
+        // and activation retain custody until there is space for the root guard.
+        let frame = self.current_frame()?;
+        if self.stack.len() != frame.stack_base.saturating_add(1)
+            || !frame.owned_loans.is_empty()
+            || frame.pending_borrow_call.is_some()
+        {
+            return Err(type_error(
+                "borrowed return has an unfinished operand or lexical scope",
+            ));
+        }
+        let value = self
+            .stack
+            .last()
+            .ok_or_else(|| type_error("missing borrowed result"))?;
+        let position = self.validate_borrowed_return_source(value)?;
+        let target = frame
+            .borrow_result_target
+            .ok_or_else(|| type_error("borrowed result has no lexical caller"))?;
+        if target.position != position {
+            return Err(type_error(
+                "borrowed result source disagrees with its invocation",
+            ));
+        }
+        let function_index = frame
+            .function
+            .ok_or_else(|| type_error("borrowed return requires a graph activation"))?;
+        let function = &self.program.functions[function_index.0 as usize];
+        let expected = direct_memory_type(
+            self.program,
+            function.result,
+            &frame.type_arguments,
+            self.control,
+        )?;
+        if expected.is_none() || value.raw().memory_form() != expected {
+            return Err(type_error("borrowed result representation mismatch"));
+        }
+        value.raw().memory_validate(self.memory_domain, false)?;
+        if self
+            .transactions
+            .values()
+            .any(|transaction| transaction.owner_frame == frame.id)
+        {
+            return Err(type_error(
+                "borrowed result activation retains a transaction",
+            ));
+        }
+        if frame
+            .locals
+            .get(position as usize)
+            .and_then(Option::as_ref)
+            .is_none_or(|source| !source.raw().memory_is_borrowed())
+        {
+            return Err(type_error(
+                "borrowed return source parameter is not a live read token",
+            ));
+        }
+        self.charge_allocation(std::mem::size_of::<CheckedValue>() as u64)?;
+        #[cfg(test)]
+        borrow_result_tests::handoff_fault(
+            borrow_result_tests::HandoffFault::LeafGuardReservation,
+        )?;
+        self.stack
+            .last_mut()
+            .ok_or_else(|| type_error("missing borrowed result during reservation"))?
+            .reserve_borrow_guards(1)?;
+        self.control.check()?;
+        let mut result = self.pop()?;
+        let source = self.current_frame_mut()?.locals[position as usize]
+            .take()
+            .ok_or_else(|| type_error("borrowed return lost source custody"))?;
+        result.retain_borrow_guard(source);
+        result.set_borrow_packet(target);
+        // The sealed packet now owns the selected root and every intermediate
+        // guard. It survives destruction of all unrelated callee temporaries.
+        drop(self.frames.pop());
+        #[cfg(test)]
+        borrow_result_tests::handoff_fault(borrow_result_tests::HandoffFault::AfterExtraction)?;
+        self.control.check()?;
+        self.push(result)
+    }
+
+    fn adopt_borrow_result(
+        &mut self,
+        source_local: u32,
+        binding_local: u32,
+        binding_type: TypeObjectDigest,
+    ) -> Result<(), ExecutionError> {
+        self.validate_owned_borrow_binding(source_local, binding_local)?;
+        let binding_type = self.resolve_type_arguments(&[binding_type])?[0];
+        let expected =
+            direct_memory_type(self.program, binding_type, &BTreeMap::new(), self.control)?;
+        let frame = self.current_frame()?;
+        let pending = frame
+            .pending_borrow_call
+            .as_ref()
+            .filter(|pending| {
+                pending.dispatched
+                    && pending.target.source
+                        == BorrowSource {
+                            frame: frame.id,
+                            local: source_local,
+                        }
+            })
+            .ok_or_else(|| type_error("borrowed adoption has no matching invocation"))?;
+        let target = pending.target;
+        self.charge_allocation(std::mem::size_of::<OwnedLoanScope>() as u64)?;
+        #[cfg(test)]
+        borrow_result_tests::handoff_fault(borrow_result_tests::HandoffFault::AdoptionReservation)?;
+        self.current_frame_mut()?
+            .owned_loans
+            .try_reserve(1)
+            .map_err(|_| {
+                resource_error(
+                    "normalized_borrow_result_storage",
+                    "borrowed-result adoption reservation failed",
+                )
+            })?;
+        let parent = self.borrow_owned_source(source_local)?;
+        let mut child = self.pop()?;
+        if child.take_borrow_packet() != Some(target)
+            || expected.is_none()
+            || child.raw().memory_form() != expected
+            || !child.raw().memory_is_borrowed()
+        {
+            return Err(type_error(
+                "borrowed-result packet is counterfeit or has an inexact type",
+            ));
+        }
+        child.raw().memory_validate(self.memory_domain, false)?;
+        self.control.check()?;
+        self.current_frame_mut()?.pending_borrow_call = None;
+        self.start_owned_borrow(binding_local, parent, child)
     }
 
     fn end_owned_borrow(&mut self, binding_local: u32) -> Result<(), ExecutionError> {
@@ -1942,26 +2174,59 @@ impl Machine<'_> {
         if self.stack.len() != scope.stack_base.saturating_add(1) {
             return Err(type_error("owned loan body has an inexact operand result"));
         }
-        if self
+        let escaping = self
             .stack
             .last()
-            .is_some_and(|value| value.raw().memory_is_borrowed())
-        {
-            return Err(type_error("owned read view cannot escape its lexical body"));
+            .is_some_and(|value| value.raw().memory_is_borrowed());
+        let transfer_scope = escaping
+            && self
+                .stack
+                .last()
+                .is_some_and(|value| scope.parent.borrow_source() == value.borrow_source());
+        if escaping {
+            let result = self
+                .stack
+                .last()
+                .ok_or_else(|| type_error("missing escaping owned read view"))?;
+            self.validate_borrowed_return_source(result)?;
+        }
+        if transfer_scope {
+            // Reserve both modeled and actual packet storage while the whole
+            // lexical scope still owns its tokens. Cleanup never grows storage.
+            self.charge_allocation(2 * std::mem::size_of::<CheckedValue>() as u64)?;
+            #[cfg(test)]
+            borrow_result_tests::handoff_fault(
+                borrow_result_tests::HandoffFault::LexicalGuardReservation,
+            )?;
+            self.stack
+                .last_mut()
+                .ok_or_else(|| type_error("missing escaping owned read view during reservation"))?
+                .reserve_borrow_guards(2)?;
+            self.control.check()?;
         }
         let frame = self.current_frame_mut()?;
         let scope = frame
             .owned_loans
             .pop()
             .ok_or_else(|| type_error("missing owned loan scope"))?;
-        drop(
-            frame
-                .locals
-                .get_mut(binding_local as usize)
-                .ok_or_else(|| type_error("foreign owned loan local"))?
-                .take(),
-        );
-        drop(scope.parent);
+        let binding = frame
+            .locals
+            .get_mut(binding_local as usize)
+            .ok_or_else(|| type_error("foreign owned loan local"))?
+            .take();
+        if transfer_scope {
+            let value = self
+                .stack
+                .last_mut()
+                .ok_or_else(|| type_error("missing escaping owned read view during transfer"))?;
+            if let Some(binding) = binding {
+                value.retain_borrow_guard(binding);
+            }
+            value.retain_borrow_guard(scope.parent);
+        } else {
+            drop(binding);
+            drop(scope.parent);
+        }
         Ok(())
     }
 
@@ -2435,11 +2700,40 @@ impl Machine<'_> {
             }
         }
         self.validate_call_resources(function, &type_arguments_by_parameter, &arguments)?;
+        let pending = self
+            .frames
+            .last()
+            .and_then(|frame| frame.pending_borrow_call.as_ref());
+        match (function.result_borrow, pending) {
+            (Some(position), Some(pending))
+                if !pending.dispatched
+                    && pending.target.position == position
+                    && arguments.get(position as usize).is_some_and(|argument| {
+                        argument.borrow_placement() == Some(pending.target.source)
+                            && argument.raw().memory_is_borrowed()
+                    })
+                    && function.graph_function
+                    && matches!(
+                        function.effect,
+                        crate::platform::kernel::FunctionEffect::Pure
+                    ) => {}
+            (None, None) => {}
+            _ => {
+                return Err(type_error(
+                    "borrowed-result invocation requires its exact lexical source and call mode",
+                ));
+            }
+        }
         // A lexical projection retains parent custody even when its source is
         // itself a borrowed parameter. Its cleanup continuation cannot transfer.
         let tail = tail
+            && function.result_borrow.is_none()
             && !self.frames.last().is_some_and(|frame| {
-                !frame.owned_loans.is_empty()
+                frame.function.is_some_and(|index| {
+                    self.program.functions[index.0 as usize]
+                        .result_borrow
+                        .is_some()
+                }) || !frame.owned_loans.is_empty()
                     || frame
                         .locals
                         .iter()
@@ -2644,10 +2938,6 @@ impl Machine<'_> {
                 )
             })?;
         self.charge_allocation(locals_bytes)?;
-        let mut locals = (0..code.local_count).map(|_| None).collect::<Vec<_>>();
-        for (index, argument) in arguments.into_iter().enumerate() {
-            locals[index] = Some(argument);
-        }
         let id = self.next_frame;
         self.next_frame = self.next_frame.checked_add(1).ok_or_else(|| {
             resource_error(
@@ -2655,6 +2945,32 @@ impl Machine<'_> {
                 "normalized frame generation counter overflowed",
             )
         })?;
+        let mut locals = (0..code.local_count).map(|_| None).collect::<Vec<_>>();
+        for (index, mut argument) in arguments.into_iter().enumerate() {
+            if argument.raw().memory_form().is_some() {
+                argument.set_borrow_source(Some(BorrowSource {
+                    frame: id,
+                    local: index as u32,
+                }));
+            }
+            locals[index] = Some(argument);
+        }
+        let borrow_result_target = if function.is_some_and(|index| {
+            self.program.functions[index.0 as usize]
+                .result_borrow
+                .is_some()
+        }) {
+            let pending = self
+                .current_frame_mut()?
+                .pending_borrow_call
+                .as_mut()
+                .filter(|pending| !pending.dispatched)
+                .ok_or_else(|| type_error("borrowed activation has no waiting lexical caller"))?;
+            pending.dispatched = true;
+            Some(pending.target)
+        } else {
+            None
+        };
         // Admission and allocation are complete while the outgoing context still exists.
         // The surviving caller already owns the original return continuation and stack base.
         self.control.check()?;
@@ -2668,6 +2984,8 @@ impl Machine<'_> {
             instruction: 0,
             locals,
             owned_loans: Vec::new(),
+            pending_borrow_call: None,
+            borrow_result_target,
             type_arguments,
             stack_base: self.stack.len(),
         });
@@ -3043,7 +3361,7 @@ impl Machine<'_> {
             }
             self.resources.validate_admission(*handle, None, None)?;
         }
-        let value = if move_ordinary || use_mode == ParameterUse::Consume {
+        let mut value = if move_ordinary || use_mode == ParameterUse::Consume {
             self.frames
                 .last_mut()
                 .and_then(|frame| frame.locals.get_mut(local as usize))
@@ -3052,6 +3370,12 @@ impl Machine<'_> {
         } else {
             source.duplicate(use_mode)?
         };
+        if value.raw().memory_form().is_some() {
+            value.set_borrow_placement(BorrowSource {
+                frame: self.current_frame()?.id,
+                local,
+            });
+        }
         if use_mode == ParameterUse::Unrestricted {
             let count = if move_ordinary {
                 &mut self.observation.value_work.local_value_moves

@@ -1171,6 +1171,7 @@ mod tests {
     include!("f64_admission_tests.rs");
     include!("owned_product_admission_tests.rs");
     include!("owned_sequence_admission_tests.rs");
+    include!("borrowed_result_admission_tests.rs");
     include!("dependency_copy_admission_tests.rs");
 
     #[test]

@@ -363,6 +363,7 @@ fn test_relation_rebind_updates_only_the_affected_test_dependency_entries() {
         name: Name::new("other_function").expect("valid name"),
         visibility: crate::platform::kernel::DeclarationVisibility::Private,
         payload: DeclarationPayload::Function(crate::platform::kernel::FunctionDeclaration {
+            result_borrow: None,
             implementation_parameters: Vec::new(),
             requirement_parameters: Vec::new(),
             effect_parameters: Vec::new(),

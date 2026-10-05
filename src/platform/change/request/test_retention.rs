@@ -164,6 +164,15 @@ fn remap(operation: &mut E, identities: &BTreeMap<OwnerKey, OwnerKey>) {
     let expression = |value: &mut ExpressionId| map_expression(value, identities);
     let binding = |value: &mut BindingId| map_binding(value, identities);
     match operation {
+        E::BorrowCall {
+            call,
+            binding: id,
+            body,
+        } => {
+            expression(call);
+            binding(id);
+            expression(body);
+        }
         E::Local { value } => match value {
             L::LexicalBinding(id) | L::MatchPayload(id) | L::TransactionBinding(id) => binding(id),
             L::FunctionParameter(_) | L::OperationParameter(_) => {}

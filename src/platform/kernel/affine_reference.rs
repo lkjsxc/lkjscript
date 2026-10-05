@@ -296,6 +296,10 @@ impl Reference<'_> {
                 self.plain(*source, live)?;
                 self.eval(*body, live)
             }
+            ExpressionOperation::BorrowCall { call, body, .. } => {
+                self.plain(*call, live)?;
+                self.eval(*body, live)
+            }
             ExpressionOperation::Parallel { left, right } => {
                 self.plain(*left, live)?;
                 self.plain(*right, live)?;

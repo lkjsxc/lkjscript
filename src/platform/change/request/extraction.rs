@@ -108,6 +108,12 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
             "extract.function selector does not name a local function declaration",
         ));
     };
+    if function.result_borrow.is_some() {
+        return Err(extract_error(
+            "change_extract_borrowed_result",
+            "function extraction of borrowed-result functions is unsupported",
+        ));
+    }
     if !function.type_parameters.is_empty()
         || !function.effect_parameters.is_empty()
         || !function.requirement_parameters.is_empty()
@@ -405,6 +411,7 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
                 .map(|capture| capture.parameter)
                 .collect(),
             result,
+            result_borrow: None,
             effect: effect.clone(),
             body: selected,
         }),
@@ -566,7 +573,8 @@ fn walk_expression<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
 
     let next = depth.saturating_add(1);
     match record.operation {
-        ExpressionOperation::BorrowOwnedField { .. }
+        ExpressionOperation::BorrowCall { .. }
+        | ExpressionOperation::BorrowOwnedField { .. }
         | ExpressionOperation::BorrowOwnedItem { .. }
         | ExpressionOperation::MatchBorrowedOwned { .. } => {
             return Err(extract_error(
@@ -1502,7 +1510,8 @@ fn replace_expression_reference(
         }
     };
     match operation {
-        ExpressionOperation::BorrowOwnedField { .. }
+        ExpressionOperation::BorrowCall { .. }
+        | ExpressionOperation::BorrowOwnedField { .. }
         | ExpressionOperation::BorrowOwnedItem { .. }
         | ExpressionOperation::MatchBorrowedOwned { .. } => {
             return Err(extract_error(

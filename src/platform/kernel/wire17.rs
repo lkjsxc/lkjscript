@@ -237,6 +237,7 @@ impl From<FunctionDeclaration17> for FunctionDeclaration {
             type_parameters: v.type_parameters,
             parameters: v.parameters,
             result: v.result,
+            result_borrow: None,
             effect: v.effect,
             body: v.body,
         }
@@ -245,6 +246,9 @@ impl From<FunctionDeclaration17> for FunctionDeclaration {
 impl TryFrom<FunctionDeclaration> for FunctionDeclaration17 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: FunctionDeclaration) -> Result<Self, Self::Error> {
+        if v.result_borrow.is_some() {
+            return Err(unsupported());
+        }
         if !v.implementation_parameters.is_empty() {
             return Err(unsupported());
         }

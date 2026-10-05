@@ -63,6 +63,7 @@ pub enum RelationKind {
     OwnedContractUse,
     ImplementationSelection,
     ImplementationMethod,
+    BorrowResultSource,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -79,7 +80,7 @@ pub enum PropagationClass {
 }
 
 impl RelationKind {
-    pub const ALL: [Self; 36] = [
+    pub const ALL: [Self; 37] = [
         Self::DeclarationModule,
         Self::MemberDeclaration,
         Self::ParameterOperation,
@@ -116,6 +117,7 @@ impl RelationKind {
         Self::OwnedContractUse,
         Self::ImplementationSelection,
         Self::ImplementationMethod,
+        Self::BorrowResultSource,
     ];
 
     pub const fn tag(self) -> u8 {
@@ -132,6 +134,7 @@ impl RelationKind {
             Self::OwnedContractUse => 34,
             Self::ImplementationSelection => 35,
             Self::ImplementationMethod => 36,
+            Self::BorrowResultSource => 37,
             Self::NamedTypeUse => 7,
             Self::LocalValueReference => 8,
             Self::ConstantReference => 9,
@@ -177,6 +180,7 @@ impl RelationKind {
             Self::OwnedContractUse => "owned_contract_use",
             Self::ImplementationSelection => "implementation_selection",
             Self::ImplementationMethod => "implementation_method",
+            Self::BorrowResultSource => "borrow_result_source",
             Self::NamedTypeUse => "named_type_use",
             Self::LocalValueReference => "local_value_reference",
             Self::ConstantReference => "constant_reference",
@@ -225,6 +229,7 @@ impl RelationKind {
             | Self::ExpressionParent
             | Self::ExpressionRoot => PropagationClass::Ownership,
             Self::OwnedContractUse
+            | Self::BorrowResultSource
             | Self::RequirementParameterUse
             | Self::EffectParameterUse
             | Self::TypeParameterUse
@@ -472,6 +477,15 @@ where
                     }
                 }
                 DeclarationPayload::Function(function) => {
+                    if let Some(parameter) = function.result_borrow {
+                        owner_edge(
+                            edges,
+                            source,
+                            RelationKind::BorrowResultSource,
+                            package,
+                            OwnerKey::Parameter(parameter),
+                        )?;
+                    }
                     for p in &function.implementation_parameters {
                         exact_edge(
                             edges,
@@ -1010,7 +1024,8 @@ where
         | ExpressionOperation::SequenceLength { .. }
         | ExpressionOperation::SequencePush { .. }
         | ExpressionOperation::SequencePop { .. }
-        | ExpressionOperation::BorrowOwnedItem { .. } => {}
+        | ExpressionOperation::BorrowOwnedItem { .. }
+        | ExpressionOperation::BorrowCall { .. } => {}
     }
     Ok(())
 }

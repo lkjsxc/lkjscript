@@ -126,8 +126,10 @@ The derived format cut requires rebuilding maintained bundles through their
 supported product owners. Historical acceptance and immutable published bytes
 retain their original meaning and evidence.
 
-Associated projections, generic implementation schemes, escaping references,
-mutable borrows and method-local generics remain future work. Explicit contract
+Associated projections, generic implementation schemes, general escaping references,
+mutable borrows and method-local generics remain future work.
+[Source-tied borrowed results](owned-read-results.md) add an explicit pure-method
+read relationship by exact parameter position. Explicit contract
 parameters express the worklist capability without selecting a lifetime or region
 mechanism. The [native guide](../guides/native-owned-worklists.md) uses independent
 storage representations and provisional graph analysis to exercise composition.

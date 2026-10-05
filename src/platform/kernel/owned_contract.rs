@@ -38,6 +38,8 @@ pub struct OwnedMethod {
     pub name: Name,
     pub parameters: Vec<OwnedMethodParameter>,
     pub result: TypeObjectDigest,
+    #[serde(default)]
+    pub result_borrow: Option<u32>,
     pub effect: FunctionEffect,
 }
 
@@ -124,6 +126,18 @@ impl OwnedContract {
             row.validate()?;
             if !row.is_closed() {
                 return Err(reject("owned methods require closed exact effect rows"));
+            }
+            if let Some(position) = method.result_borrow {
+                let source = method.parameters.get(position as usize).ok_or_else(|| {
+                    reject("borrowed method result source is outside its parameter inventory")
+                })?;
+                if !matches!(method.effect, FunctionEffect::Pure)
+                    || source.use_mode != ParameterUse::Borrow
+                {
+                    return Err(reject(
+                        "borrowed method results require a pure method and borrowed source",
+                    ));
+                }
             }
         }
         Ok(())
@@ -235,6 +249,7 @@ pub(crate) fn optional_function_contract(
                 type_parameters: f.type_parameters,
                 parameters: f.parameters,
                 result: f.result,
+                result_borrow: f.result_borrow,
                 effect: f.effect,
             }));
         }
@@ -489,6 +504,18 @@ pub(crate) fn validate_implementation(
         if !substituted_equal(&mut derived, method.result, f.result, &substitutions)? {
             return Err(reject("implementation result mismatch"));
         }
+        let expected_source = method
+            .result_borrow
+            .map(|position| {
+                f.parameters
+                    .get(position as usize)
+                    .copied()
+                    .ok_or_else(|| reject("implementation borrowed result source is out of range"))
+            })
+            .transpose()?;
+        if f.result_borrow != expected_source {
+            return Err(reject("implementation borrowed result source mismatch"));
+        }
     }
     Ok(())
 }
@@ -718,6 +745,20 @@ fn validate_contract_at(
             return Err(reject(
                 "method result requires scoped owned or closed ordinary type",
             ));
+        }
+        if let Some(position) = method.result_borrow {
+            let source = method.parameters.get(position as usize).ok_or_else(|| {
+                reject("borrowed method result source is outside its parameter inventory")
+            })?;
+            if !matches!(method.effect, FunctionEffect::Pure)
+                || !super::memory::direct_in(read, reference.package, method.result)?
+                || !super::memory::direct_in(read, reference.package, source.ty)?
+                || source.use_mode != ParameterUse::Borrow
+            {
+                return Err(reject(
+                    "borrowed method result requires a pure method, direct owned result and exact borrowed source",
+                ));
+            }
         }
     }
     Ok(())

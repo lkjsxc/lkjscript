@@ -105,9 +105,9 @@ use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-22";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 22;
-pub const CLI_CONTRACT_VERSION: u16 = 40;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-23";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 23;
+pub const CLI_CONTRACT_VERSION: u16 = 41;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -125,6 +125,10 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
     (
         "sequence-pop",
         "(sequence-pop (type SEQUENCE) (local SOURCE))",
+    ),
+    (
+        "borrow-call",
+        "(borrow-call INVOCATION (binding NAME (type TYPE)) (in BODY))",
     ),
     (
         "borrow-owned-item",
@@ -214,8 +218,8 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
 ];
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-function-definition-projection-16";
-pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 16;
+    "lkjscript-function-definition-projection-17";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 17;
 pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
 pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
 pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -331,6 +335,8 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("definition.function", "effect-row-parameters"),
     ("definition.function", "parameters"),
     ("definition.function", "result"),
+    ("definition.function", "result-mode"),
+    ("definition.function", "borrow-from"),
     ("definition.function", "effect"),
     ("definition.function", "requirements"),
     ("definition.function", "body"),
@@ -990,7 +996,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             magic_values: &[
                 "LKJACR14", "LKJACR15", "LKJACR16", "LKJACR17", "LKJACR18", "LKJACR19", "LKJACR20",
                 "LKJACR21", "LKJACR22", "LKJACR23", "LKJACR24", "LKJACR25", "LKJACR26", "LKJACR27",
-                "LKJACR28", "LKJACR29", "LKJACR30", "LKJABG01",
+                "LKJACR28", "LKJACR29", "LKJACR30", "LKJACR31", "LKJABG01",
             ],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
@@ -2823,6 +2829,30 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Source,
             "One decoded compact value exceeds its byte bound.",
             "Use an advertised external value input or reduce the value.",
+        ),
+        diagnostic(
+            "change_borrow_call_invocation",
+            DiagnosticClass::Source,
+            "A borrowed call scope does not wrap a supported named invocation.",
+            "Wrap call, implementation-call or method-call in borrow-call.",
+        ),
+        diagnostic(
+            "change_borrow_call_binding",
+            DiagnosticClass::Source,
+            "A borrowed call scope has no unique exact typed binding.",
+            "Provide exactly one binding with its declared result type.",
+        ),
+        diagnostic(
+            "change_result_borrow_source",
+            DiagnosticClass::Semantic,
+            "A borrowed result source does not resolve to a function parameter.",
+            "Select the exact borrowed source parameter in borrow-from.",
+        ),
+        diagnostic(
+            "change_extract_borrowed_result",
+            DiagnosticClass::Semantic,
+            "Function extraction cannot preserve a borrowed result relationship.",
+            "Author the borrowed helper explicitly with its exact source contract.",
         ),
         diagnostic(
             "change_unit_form",
@@ -8607,8 +8637,8 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         ),
         (
             "function",
-            "(function MODE BINDING (visibility VISIBILITY) TYPE_PARAMETER... EFFECT_PARAMETER... REQUIREMENT_PARAMETER... PARAMETER... (returns TYPE) (effect pure|TASK) (body EXPR))",
-            "Explicit complete signature and structural body. Parameter names are lexical locals; no effect inference.",
+            "(function MODE BINDING (visibility VISIBILITY) TYPE_PARAMETER... EFFECT_PARAMETER... REQUIREMENT_PARAMETER... PARAMETER... (returns TYPE [(borrow-from PARAMETER)]) (effect pure|TASK) (body EXPR))",
+            "Explicit complete signature and structural body. Pure functions may declare a result borrowing an exact borrowed parameter; borrow-call scopes receive that result. Parameter names are lexical locals; no effect inference.",
         ),
         (
             "external",
@@ -8677,8 +8707,8 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         ),
         (
             "owned-contract",
-            "(owned-contract MODE BINDING (visibility public|private) (self SELF) (type-parameter MODE SELF (constraint owned)) (type-parameter MODE ITEM (constraint owned))... (method method_HEX NAME (parameters (TYPE unrestricted|borrow|consume)...) (returns TYPE) [(effect pure|(task (requirement REQUIREMENT)...))])...)",
-            "Nominal pure or closed-effect task methods with distinguished owned Self and ordered additional owned parameters. Method types compose these parameters in owned products, choices and sequences; task memory arguments consume. Ordinary types remain closed and first order.",
+            "(owned-contract MODE BINDING (visibility public|private) (self SELF) (type-parameter MODE SELF (constraint owned)) (type-parameter MODE ITEM (constraint owned))... (method method_HEX NAME (parameters (TYPE unrestricted|borrow|consume)...) (returns TYPE [(borrow-from ZERO_BASED_PARAMETER_POSITION)]) [(effect pure|(task (requirement REQUIREMENT)...))])...)",
+            "Nominal pure or closed-effect task methods with distinguished owned Self and ordered additional owned parameters. Pure methods may tie a borrowed result to an exact zero-based borrowed parameter position. Method types compose these parameters in owned products, choices and sequences; task memory arguments consume. Ordinary types remain closed and first order.",
         ),
         (
             "owned-implementation",
@@ -9291,6 +9321,8 @@ fn validate_compact_change_inventory(
             ));
         }
         let optional = [
+            ("create.function", "borrow-from"),
+            ("set.function-contract", "borrow-from"),
             ("reference.package", "source"),
             ("reference.package", "package"),
             ("reference.package", "package-revision"),
@@ -9320,6 +9352,8 @@ fn validate_compact_change_inventory(
         }
     }
     for (operation, name) in [
+        ("create.function", "borrow-from"),
+        ("set.function-contract", "borrow-from"),
         ("add.case", "payload"),
         ("set.case-payload", "payload"),
         ("add.parameter", "function"),
@@ -9504,9 +9538,9 @@ mod tests {
             .expect("definition projection contract");
         assert_eq!(
             contract.identity,
-            "lkjscript-function-definition-projection-16"
+            "lkjscript-function-definition-projection-17"
         );
-        assert_eq!(contract.version, 16);
+        assert_eq!(contract.version, 17);
         assert_eq!(
             contract_descriptors()
                 .iter()

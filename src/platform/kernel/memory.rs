@@ -1,5 +1,8 @@
 //! Direct owned-memory flow, independent of capability-resource provenance.
 #[cfg(test)]
+#[path = "memory_borrow_result_tests.rs"]
+mod borrow_result_tests;
+#[cfg(test)]
 #[path = "memory_borrow_tests.rs"]
 mod borrow_tests;
 #[cfg(test)]
@@ -159,45 +162,49 @@ struct Signature {
     type_parameters: Vec<crate::platform::semantic_id::TypeParameterId>,
     parameters: Vec<ParameterRecord>,
     result: TypeObjectDigest,
+    result_borrow: Option<crate::platform::semantic_id::ParameterId>,
     pure: bool,
 }
 fn signature(
     read: &(impl ExpressionRead + ?Sized),
     d: DeclarationReference,
 ) -> Result<Option<Signature>, Diagnostic> {
-    let (type_parameters, parameters, result, pure) = if d.package == read.package_id() {
-        match read.owner(OwnerKey::Declaration(d.declaration))? {
-            Some(OwnerRecord::Declaration(r)) => match r.payload {
-                DeclarationPayload::Function(f) => (
-                    f.type_parameters,
-                    f.parameters,
-                    f.result,
-                    matches!(f.effect, FunctionEffect::Pure),
-                ),
-                DeclarationPayload::External(f) => {
-                    (f.type_parameters, f.parameters, f.result, true)
-                }
-                _ => return Ok(None),
-            },
-            _ => return Err(reject("missing direct memory callee")),
-        }
-    } else {
-        match read.package_interface_owner(d.package, OwnerKey::Declaration(d.declaration))? {
-            Some(PackageInterfaceRecord::Declaration(r)) => match r.payload {
-                PackageInterfaceDeclarationPayload::Function(f) => (
-                    f.type_parameters,
-                    f.parameters,
-                    f.result,
-                    matches!(f.effect, FunctionEffect::Pure),
-                ),
-                PackageInterfaceDeclarationPayload::External(f) => {
-                    (f.type_parameters, f.parameters, f.result, true)
-                }
-                _ => return Ok(None),
-            },
-            _ => return Err(reject("missing imported memory callee")),
-        }
-    };
+    let (type_parameters, parameters, result, result_borrow, pure) =
+        if d.package == read.package_id() {
+            match read.owner(OwnerKey::Declaration(d.declaration))? {
+                Some(OwnerRecord::Declaration(r)) => match r.payload {
+                    DeclarationPayload::Function(f) => (
+                        f.type_parameters,
+                        f.parameters,
+                        f.result,
+                        f.result_borrow,
+                        matches!(f.effect, FunctionEffect::Pure),
+                    ),
+                    DeclarationPayload::External(f) => {
+                        (f.type_parameters, f.parameters, f.result, None, true)
+                    }
+                    _ => return Ok(None),
+                },
+                _ => return Err(reject("missing direct memory callee")),
+            }
+        } else {
+            match read.package_interface_owner(d.package, OwnerKey::Declaration(d.declaration))? {
+                Some(PackageInterfaceRecord::Declaration(r)) => match r.payload {
+                    PackageInterfaceDeclarationPayload::Function(f) => (
+                        f.type_parameters,
+                        f.parameters,
+                        f.result,
+                        f.result_borrow,
+                        matches!(f.effect, FunctionEffect::Pure),
+                    ),
+                    PackageInterfaceDeclarationPayload::External(f) => {
+                        (f.type_parameters, f.parameters, f.result, None, true)
+                    }
+                    _ => return Ok(None),
+                },
+                _ => return Err(reject("missing imported memory callee")),
+            }
+        };
     let parameters = parameters
         .into_iter()
         .map(
@@ -211,6 +218,7 @@ fn signature(
         type_parameters,
         parameters,
         result,
+        result_borrow,
         pure,
     }))
 }
@@ -306,6 +314,24 @@ fn admit_signature(read: &(impl ExpressionRead + ?Sized), s: &Signature) -> Resu
         }
     }
     let result = direct(read, s.result)?;
+    if let Some(source) = s.result_borrow {
+        let parameter = s
+            .parameters
+            .iter()
+            .find(|p| p.header.owner == OwnerKey::Parameter(source))
+            .ok_or_else(|| {
+                reject("borrowed result source is outside the exact parameter inventory")
+            })?;
+        if !s.pure
+            || !result
+            || !direct(read, parameter.ty)?
+            || parameter.use_mode != ParameterUse::Borrow
+        {
+            return Err(reject(
+                "borrowed results require a pure function, direct owned result and exact borrowed source",
+            ));
+        }
+    }
     if !result && contains(read, s.result)? {
         return Err(reject("only a direct owned result can transfer memory"));
     }
@@ -344,6 +370,130 @@ impl Slot {
     }
 }
 type State = BTreeMap<LocalValueReference, Slot>;
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Mode {
+    Unrestricted,
+    Borrow,
+    Consume,
+    /// Returning a view requires exact semantic provenance, not allocation identity.
+    ReturnBorrow(LocalValueReference),
+}
+impl From<ParameterUse> for Mode {
+    fn from(value: ParameterUse) -> Self {
+        match value {
+            ParameterUse::Unrestricted => Self::Unrestricted,
+            ParameterUse::Borrow => Self::Borrow,
+            ParameterUse::Consume => Self::Consume,
+        }
+    }
+}
+
+/// Exact, substituted declaration metadata for the lexical borrowed-call boundary.
+/// Type inference consumes the same boundary shape; custody is checked separately below.
+pub(crate) struct BorrowInvocation {
+    pub(crate) result: TypeObjectDigest,
+    pub(crate) source: ExpressionId,
+    pub(crate) source_type: TypeObjectDigest,
+    arguments: Vec<ExpressionId>,
+    parameters: Vec<(TypeObjectDigest, ParameterUse, bool)>,
+}
+pub(crate) fn borrow_invocation(
+    read: &(impl ExpressionRead + ?Sized),
+    call: ExpressionId,
+    scope: Option<crate::platform::semantic_id::DeclarationId>,
+) -> Result<BorrowInvocation, Diagnostic> {
+    let Some(OwnerRecord::Expression(expression)) = read.owner(OwnerKey::Expression(call))? else {
+        return Err(reject("missing borrowed invocation"));
+    };
+    let (arguments, parameters, result, source_position) = match expression.operation {
+        ExpressionOperation::Call {
+            function,
+            type_arguments,
+            arguments,
+            ..
+        }
+        | ExpressionOperation::ImplementationCall {
+            function,
+            type_arguments,
+            arguments,
+            ..
+        } => {
+            let mut signature = signature(read, function)?
+                .ok_or_else(|| reject("borrow-call requires a named graph function"))?;
+            let source = signature
+                .result_borrow
+                .ok_or_else(|| reject("borrow-call requires a declared borrowed result"))?;
+            let position = signature
+                .parameters
+                .iter()
+                .position(|p| p.header.owner == OwnerKey::Parameter(source))
+                .ok_or_else(|| reject("borrowed invocation source is not a parameter"))?;
+            let original_parameters = signature.parameters.clone();
+            let original_result = signature.result;
+            instantiate(read, function, &type_arguments, &mut signature, scope)?;
+            admit_signature(read, &signature)?;
+            let substitutions = signature
+                .type_parameters
+                .iter()
+                .copied()
+                .zip(type_arguments.iter().copied())
+                .collect::<BTreeMap<_, _>>();
+            let mut derived = super::parallel_types::AppliedTypes::new(read);
+            let mut parameters = Vec::new();
+            for parameter in &original_parameters {
+                let ty = derived.substitute(parameter.ty, &substitutions, 0)?;
+                parameters.push((ty, parameter.use_mode, direct(&derived, ty)?));
+            }
+            let result = derived.substitute(original_result, &substitutions, 0)?;
+            (arguments, parameters, result, position)
+        }
+        ExpressionOperation::MethodCall {
+            witness,
+            contract,
+            method,
+            arguments,
+        } => {
+            let (signature, substitutions) =
+                super::owned_contract::method_signature(read, witness, contract, method, scope)?;
+            let position = signature
+                .result_borrow
+                .ok_or_else(|| reject("borrow-call requires a declared borrowed method result"))?
+                as usize;
+            let mut derived = super::parallel_types::AppliedTypes::new(read);
+            let mut parameters = Vec::new();
+            for parameter in &signature.parameters {
+                let ty = derived.substitute(parameter.ty, &substitutions, 0)?;
+                parameters.push((ty, parameter.use_mode, direct(&derived, ty)?));
+            }
+            let result = derived.substitute(signature.result, &substitutions, 0)?;
+            (arguments, parameters, result, position)
+        }
+        _ => {
+            return Err(reject(
+                "borrow-call requires an exact call, implementation-call or method-call",
+            ));
+        }
+    };
+    if arguments.len() != parameters.len() {
+        return Err(reject("borrowed invocation argument arity mismatch"));
+    }
+    let source = *arguments
+        .get(source_position)
+        .ok_or_else(|| reject("borrowed invocation source is out of range"))?;
+    let (source_type, use_mode, owned) = parameters[source_position];
+    if !owned || use_mode != ParameterUse::Borrow {
+        return Err(reject(
+            "borrowed invocation source requires an exact borrowed owned parameter",
+        ));
+    }
+    Ok(BorrowInvocation {
+        result,
+        source,
+        source_type,
+        arguments,
+        parameters,
+    })
+}
 fn fork(read: &(impl ExpressionRead + ?Sized), state: &State) -> Result<State, Diagnostic> {
     // Admit the complete fixed-size slot inventory before cloning its map nodes.
     for _ in 0..state.len() {
@@ -497,9 +647,10 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
         &self,
         id: ExpressionId,
         state: &mut State,
-        mode: ParameterUse,
+        mode: impl Into<Mode>,
         depth: usize,
     ) -> Result<bool, Diagnostic> {
+        let mode = mode.into();
         if depth > contract::MAXIMUM_EXPRESSION_DEPTH {
             return Err(reject("memory expression depth exceeded"));
         }
@@ -507,12 +658,70 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
         let Some(OwnerRecord::Expression(e)) = self.read.owner(OwnerKey::Expression(id))? else {
             return Err(reject("missing memory expression"));
         };
+        if matches!(mode, Mode::ReturnBorrow(_))
+            && !matches!(
+                e.operation,
+                ExpressionOperation::Local { .. }
+                    | ExpressionOperation::Let { .. }
+                    | ExpressionOperation::If { .. }
+                    | ExpressionOperation::Sequence { .. }
+                    | ExpressionOperation::BorrowCall { .. }
+                    | ExpressionOperation::BorrowOwnedItem { .. }
+                    | ExpressionOperation::BorrowOwnedField { .. }
+                    | ExpressionOperation::MatchBorrowedOwned { .. }
+                    | ExpressionOperation::MatchOwned { .. }
+                    | ExpressionOperation::UnpackOwned { .. }
+                    | ExpressionOperation::Match { .. }
+            )
+        {
+            return Err(reject(
+                "borrowed results require an exact borrowed local, optionally selected through lexical scopes and branches",
+            ));
+        }
         let next = depth + 1;
         let plain = |id, state: &mut State| {
             self.eval(id, state, ParameterUse::Unrestricted, next)
                 .map(|_| ())
         };
         let owned = match e.operation {
+            ExpressionOperation::BorrowCall {
+                call,
+                binding,
+                body,
+            } => {
+                let invocation = borrow_invocation(self.read, call, self.scope)?;
+                self.borrow_binding(binding, invocation.result)?;
+                let mut uses = BTreeMap::new();
+                for ((ty, use_mode, owned), argument) in
+                    invocation.parameters.iter().zip(&invocation.arguments)
+                {
+                    if *owned {
+                        let local = self.source_local(*argument, *ty, state, next)?;
+                        if let Some(prior) = uses.insert(local, *use_mode)
+                            && (prior == ParameterUse::Consume
+                                || *use_mode == ParameterUse::Consume)
+                        {
+                            return Err(reject(
+                                "consuming borrowed invocation argument aliases another argument",
+                            ));
+                        }
+                        self.eval(*argument, state, *use_mode, next)?;
+                    } else {
+                        plain(*argument, state)?;
+                    }
+                }
+                let source =
+                    self.source_local(invocation.source, invocation.source_type, state, next)?;
+                self.loan(source, state, true)?;
+                let local = LocalValueReference::LexicalBinding(binding);
+                if state.insert(local, Slot::view(source)).is_some() {
+                    return Err(reject("duplicate borrowed invocation binding"));
+                }
+                let result = self.eval(body, state, mode, next)?;
+                state.remove(&local);
+                self.loan(source, state, false)?;
+                result
+            }
             ExpressionOperation::SequenceEmpty { sequence_type } => {
                 self.sequence_item(sequence_type)?;
                 true
@@ -871,19 +1080,54 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 result
             }
             ExpressionOperation::Local { value } => {
+                if let Mode::ReturnBorrow(expected) = mode {
+                    let slot = state.get(&value).ok_or_else(|| {
+                        reject("borrowed result requires a live owned local view")
+                    })?;
+                    if !slot.live || !slot.borrowed {
+                        return Err(reject("borrowed result cannot expose a local owner"));
+                    }
+                    let mut root = value;
+                    let mut remaining = state.len();
+                    loop {
+                        self.read.validation_work()?;
+                        if remaining == 0 {
+                            return Err(reject("cyclic borrowed result provenance"));
+                        }
+                        remaining -= 1;
+                        let ancestor = state
+                            .get(&root)
+                            .ok_or_else(|| reject("missing borrowed result ancestor"))?;
+                        if !ancestor.live {
+                            return Err(reject("borrowed result ancestor is no longer live"));
+                        }
+                        if let Some(parent) = ancestor.parent {
+                            root = parent;
+                        } else {
+                            break;
+                        }
+                    }
+                    if root != expected {
+                        return Err(reject(
+                            "borrowed result originates from a different source parameter",
+                        ));
+                    }
+                    // The view crosses the boundary without transferring owning rights.
+                    return Ok(false);
+                }
                 if let Some(slot) = state.get_mut(&value) {
                     if !slot.live
-                        || mode == ParameterUse::Unrestricted
-                        || ((slot.borrowed || slot.loans != 0) && mode == ParameterUse::Consume)
+                        || mode == Mode::Unrestricted
+                        || ((slot.borrowed || slot.loans != 0) && mode == Mode::Consume)
                     {
                         return Err(reject(
                             "buffer copied, consumed twice, or borrowed parameter consumed/returned",
                         ));
                     }
-                    if mode == ParameterUse::Consume {
+                    if mode == Mode::Consume {
                         slot.live = false;
                     }
-                    return Ok(mode == ParameterUse::Consume);
+                    return Ok(mode == Mode::Consume);
                 }
                 false
             }
@@ -903,9 +1147,9 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                         value,
                         state,
                         if is_buffer {
-                            ParameterUse::Consume
+                            Mode::Consume
                         } else {
-                            ParameterUse::Unrestricted
+                            Mode::Unrestricted
                         },
                         next,
                     )?;
@@ -944,17 +1188,16 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 av
             }
             ExpressionOperation::Sequence { items } => {
+                if items.is_empty() && matches!(mode, Mode::ReturnBorrow(_)) {
+                    return Err(reject("a borrowed result sequence must return a view"));
+                }
                 let count = items.len();
                 let mut result = false;
                 for (i, item) in items.into_iter().enumerate() {
                     result = self.eval(
                         item,
                         state,
-                        if i + 1 == count {
-                            mode
-                        } else {
-                            ParameterUse::Consume
-                        },
+                        if i + 1 == count { mode } else { Mode::Consume },
                         next,
                     )?;
                 }
@@ -980,6 +1223,11 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 };
                 instantiate(self.read, function, &type_arguments, &mut s, self.scope)?;
                 admit_signature(self.read, &s)?;
+                if s.result_borrow.is_some() {
+                    return Err(reject(
+                        "borrowed result calls require a lexical borrow-call",
+                    ));
+                }
                 if s.parameters.len() != arguments.len() {
                     return Err(reject("memory call arity mismatch"));
                 }
@@ -1030,6 +1278,11 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 let (signature, _) = super::owned_contract::method_signature(
                     self.read, witness, contract, method, self.scope,
                 )?;
+                if signature.result_borrow.is_some() {
+                    return Err(reject(
+                        "borrowed method results require a lexical borrow-call",
+                    ));
+                }
                 if signature.parameters.len() != arguments.len() {
                     return Err(reject("owned method arity mismatch"));
                 }
@@ -1190,6 +1443,11 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                     *state = branch;
                     result
                 } else {
+                    if matches!(mode, Mode::ReturnBorrow(_)) {
+                        return Err(reject(
+                            "a borrowed result match requires a nonempty branch inventory",
+                        ));
+                    }
                     false
                 }
             }
@@ -1205,7 +1463,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
             }
             _ => false,
         };
-        if owned && mode != ParameterUse::Consume {
+        if owned && mode != Mode::Consume {
             return Err(reject(
                 "owned buffer requires a consuming result or annotated local",
             ));
@@ -1408,14 +1666,16 @@ pub(crate) fn validate_owner(
                 .eval(
                     f.body,
                     &mut state,
-                    if direct(read, f.result)? {
-                        ParameterUse::Consume
+                    if let Some(source) = f.result_borrow {
+                        Mode::ReturnBorrow(LocalValueReference::FunctionParameter(source))
+                    } else if direct(read, f.result)? {
+                        Mode::Consume
                     } else {
-                        ParameterUse::Unrestricted
+                        Mode::Unrestricted
                     },
                     0,
                 )?;
-                if result != direct(read, f.result)? {
+                if result != (direct(read, f.result)? && f.result_borrow.is_none()) {
                     return Err(reject("memory result ownership disagrees with declaration"));
                 }
             }

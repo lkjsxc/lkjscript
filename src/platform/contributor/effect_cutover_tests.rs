@@ -21,6 +21,16 @@ pub(crate) fn neutral_effect_fields(value: &mut serde_json::Value) {
             {
                 fields.remove("implementation_parameters");
             }
+            // Graph 27 spells the ordinary result mode as an absent source.
+            // Historical functions had that same mode without this field;
+            // preserve every actual source relationship in the comparison.
+            if fields.get("kind").and_then(serde_json::Value::as_str) == Some("function")
+                && fields
+                    .get("result_borrow")
+                    .is_some_and(serde_json::Value::is_null)
+            {
+                fields.remove("result_borrow");
+            }
             for key in [
                 "effect_parameters",
                 "effect_arguments",
@@ -63,6 +73,28 @@ fn historical_projection_preserves_nonempty_implementation_meaning() {
     assert_ne!(
         meaning_hash(json!({})),
         meaning_hash(json!({"implementation_parameters": []}))
+    );
+}
+
+#[test]
+fn historical_projection_preserves_actual_borrowed_result_sources() {
+    use serde_json::json;
+    let ordinary = json!({"kind": "function", "result": "owned-type"});
+    let mut explicit_ordinary = ordinary.clone();
+    explicit_ordinary["result_borrow"] = json!(null);
+    assert_eq!(
+        meaning_hash(ordinary.clone()),
+        meaning_hash(explicit_ordinary)
+    );
+    let mut borrowed = ordinary.clone();
+    borrowed["result_borrow"] = json!("exact-source-a");
+    assert_ne!(meaning_hash(ordinary), meaning_hash(borrowed.clone()));
+    let mut alternate = borrowed.clone();
+    alternate["result_borrow"] = json!("exact-source-b");
+    assert_ne!(meaning_hash(borrowed), meaning_hash(alternate));
+    assert_ne!(
+        meaning_hash(json!({})),
+        meaning_hash(json!({"result_borrow": null}))
     );
 }
 

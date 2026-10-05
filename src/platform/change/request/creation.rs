@@ -491,6 +491,11 @@ pub struct AuthoredExpression {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredExpressionOperation {
+    BorrowCall {
+        call: Box<AuthoredExpression>,
+        binding: Box<AuthoredBindingDefinition>,
+        body: Box<AuthoredExpression>,
+    },
     SequenceEmpty {
         sequence_type: AuthoredType,
     },
@@ -783,6 +788,15 @@ pub(super) fn collect_expression_symbols(
         let next = depth + 1;
         // Reverse pushes preserve the original preorder and per-kind allocation ordinals.
         match &expression.operation {
+            AuthoredExpressionOperation::BorrowCall {
+                call,
+                binding,
+                body,
+            } => {
+                stack.push(Visit::Expression(body, next));
+                stack.push(Visit::Binding(&binding.symbol, SymbolKind::LexicalBinding));
+                stack.push(Visit::Expression(call, next));
+            }
             AuthoredExpressionOperation::SequenceLength { source, .. }
             | AuthoredExpressionOperation::SequencePop { source, .. } => {
                 stack.push(Visit::Expression(source, next));
@@ -949,6 +963,7 @@ pub(super) fn lower_function<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead +
     type_parameters: &[AuthoredTypeParameter],
     parameters: &[AuthoredParameter],
     result: &AuthoredType,
+    result_borrow: Option<&AuthoredLocalReference>,
     effect: &AuthoredFunctionEffect,
     body: &AuthoredExpression,
 ) -> Result<(), Diagnostic> {
@@ -985,6 +1000,9 @@ pub(super) fn lower_function<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead +
         }))?;
     }
     let result = lowerer.lower_type(result)?;
+    let result_borrow = result_borrow
+        .map(|source| lowerer.lower_result_borrow(source))
+        .transpose()?;
     let effect = lowerer.lower_effect(effect)?;
     let body = lowerer.lower_expression(body)?;
     let kind = match effect {
@@ -1003,6 +1021,7 @@ pub(super) fn lower_function<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead +
             type_parameters: type_parameter_ids,
             parameters: parameter_ids,
             result,
+            result_borrow,
             effect,
             body,
         }),
@@ -1352,6 +1371,33 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
     ) -> Result<crate::platform::semantic_id::ExpressionId, Diagnostic> {
         let id = self.expression_identity(authored.symbol.as_deref())?;
         let operation = match &authored.operation {
+            AuthoredExpressionOperation::BorrowCall {
+                call,
+                binding,
+                body,
+            } => {
+                let call = self.lower_expression(call)?;
+                let id = self.lexical_binding_symbol(&binding.symbol)?;
+                let declared_type = binding
+                    .declared_type
+                    .as_ref()
+                    .map(|ty| self.lower_type(ty))
+                    .transpose()?;
+                self.insert_created(OwnerRecord::Binding(
+                    crate::platform::kernel::BindingRecord {
+                        header: OwnerHeader::new(OwnerKey::Binding(id), OwnerKind::Binding),
+                        name: binding.name.clone(),
+                        kind: crate::platform::kernel::BindingKind::OwnedBorrow,
+                        value: None,
+                        declared_type,
+                    },
+                ))?;
+                ExpressionOperation::BorrowCall {
+                    call,
+                    binding: id,
+                    body: self.lower_expression(body)?,
+                }
+            }
             AuthoredExpressionOperation::SequenceEmpty { sequence_type } => {
                 ExpressionOperation::SequenceEmpty {
                     sequence_type: self.lower_type(sequence_type)?,
@@ -1998,6 +2044,22 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             }
             AuthoredTypeParameterReference::Symbol { symbol } => self.type_parameter_symbol(symbol),
         }
+    }
+
+    fn lower_result_borrow(
+        &mut self,
+        selector: &AuthoredLocalReference,
+    ) -> Result<ParameterId, Diagnostic> {
+        let LocalValueReference::FunctionParameter(parameter) =
+            self.lower_local_reference(selector)?
+        else {
+            return Err(request_error(
+                DiagnosticClass::Semantic,
+                "change_result_borrow_source",
+                "borrowed result source must be a function parameter",
+            ));
+        };
+        Ok(parameter)
     }
 
     fn lower_local_reference(

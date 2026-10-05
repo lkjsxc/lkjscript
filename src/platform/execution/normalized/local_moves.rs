@@ -117,6 +117,8 @@ fn derive_linear(code: &mut NormalizedCode, work: &mut Budget<'_>) -> Result<(),
             }
             I::BorrowOwnedField { source_local, .. }
             | I::BorrowOwnedItem { source_local, .. }
+            | I::BeginBorrowCall { source_local, .. }
+            | I::AdoptBorrowResult { source_local, .. }
             | I::SequenceLength { source_local, .. }
             | I::SequencePush { source_local, .. }
             | I::SequencePop { source_local, .. } => Some(*source_local),
@@ -170,12 +172,14 @@ fn derive_linear(code: &mut NormalizedCode, work: &mut Budget<'_>) -> Result<(),
             | I::Map { .. }
             | I::Perform { .. }
             | I::PerformParameter { .. }
-            | I::Return => None,
+            | I::Return
+            | I::ReturnBorrowed => None,
         };
         let extra = match instruction {
             I::SequencePush { value_local, .. } => Some(*value_local),
             I::BorrowOwnedField { binding_local, .. }
-            | I::BorrowOwnedItem { binding_local, .. } => Some(*binding_local),
+            | I::BorrowOwnedItem { binding_local, .. }
+            | I::AdoptBorrowResult { binding_local, .. } => Some(*binding_local),
             _ => None,
         };
         for local in [read, extra].into_iter().flatten() {

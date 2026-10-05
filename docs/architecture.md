@@ -619,6 +619,8 @@ The canonical reference separately follows if/let/sequence/match tail contexts a
 maps and substitutions before its activation loop installs the next callee. Neither tier retains
 a per-transfer continuation. Arguments retain their evaluation order and cumulative work/allocation
 charges. Task frames, including empty-requirement tasks, and ancestor transactions remain live.
+Borrowed-result functions retain their activation on both sides of a call; their
+source relationship and transfer cleanup cannot be erased by tail replacement.
 
 ## Artifact and execution boundaries
 
@@ -631,6 +633,15 @@ pop preserves the vector in an existing owned-choice/product result envelope.
 Allocation-free cleanup traverses arbitrary sequence breadth under the admitted
 type-depth bound. This does not introduce recursive nominal ownership, escaping
 references or a second editable representation of program meaning.
+
+[Source-tied borrowed results](spec/owned-read-results.md) extend lexical read
+custody through pure named function and owned-contract method calls. Canonical
+signatures bind one exact borrowed parameter, with methods naming its ordered
+position. The caller's explicit borrow-call adopts a sealed result packet with
+the selected read token and ancestor guards. Reserved storage precedes custody
+detachment; child loans release before guards on success and failure. Provenance
+retains parameter identity even when two arguments alias one allocation. The
+production VM and canonical reference independently enforce that relationship.
 
 The artifact bundle binds the root repository/package/revision/state, every dependency package
 revision, compiler and bytecode compatibility, compiler-unit maps, runtime owner metadata, public

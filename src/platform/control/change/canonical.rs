@@ -342,6 +342,15 @@ impl<'a> Reader<'a> {
         use k::ExpressionOperation as E;
         let borrowed_choice = matches!(expression.operation, E::MatchBorrowedOwned { .. });
         let operation = match expression.operation {
+            E::BorrowCall {
+                call,
+                binding,
+                body,
+            } => A::BorrowCall {
+                call: Box::new(self.expression_at(call, depth + 1)?),
+                binding: Box::new(self.binding_definition(binding)?),
+                body: Box::new(self.expression_at(body, depth + 1)?),
+            },
             E::Parallel { left, right } => A::Parallel {
                 left: Box::new(self.expression_at(left, depth + 1)?),
                 right: Box::new(self.expression_at(right, depth + 1)?),

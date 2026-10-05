@@ -114,6 +114,7 @@ impl Read {
             name: Name::new(format!("function-{index}")).unwrap(),
             visibility: DeclarationVisibility::Public,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                result_borrow: None,
                 implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 effect_parameters: Vec::new(),

@@ -147,6 +147,16 @@ pub enum NormalizedInstruction {
     EndOwnedBorrow {
         binding_local: u32,
     },
+    BeginBorrowCall {
+        source_local: u32,
+        source_position: u32,
+    },
+    AdoptBorrowResult {
+        source_local: u32,
+        binding_local: u32,
+        binding_type: TypeObjectDigest,
+    },
+    ReturnBorrowed,
     PackOwned {
         product_type: TypeObjectDigest,
         fields: Arc<[u32]>,
@@ -351,6 +361,7 @@ pub struct NormalizedFunction {
     pub parameter_count: u32,
     pub parameters: Arc<[NormalizedParameter]>,
     pub result: TypeObjectDigest,
+    pub result_borrow: Option<u32>,
     pub task_requirements: Arc<[RequirementIndex]>,
     pub body: NormalizedFunctionBody,
 }
@@ -646,6 +657,7 @@ impl NormalizedProgram {
             types,
         };
         super::prepared_types::complete_with_implementations(&mut program, &units, control)?;
+        validate_borrowed_result_calls(&program)?;
         super::session::validate_program_interactive_targets(&program)?;
         Ok(program)
     }
@@ -1420,6 +1432,7 @@ fn prepare_functions(
                             .map(|parameter| parameter.parameter)
                             .collect::<Vec<_>>()
                     || function.result != result
+                    || function.result_borrow != signature.result_borrow
                     || canonical_requirements != task_requirements
                 {
                     return Err(runtime_corrupt(
@@ -1453,6 +1466,24 @@ fn prepare_functions(
             }
             _ => Vec::new(),
         };
+        let result_borrow = match &unit.payload {
+            CompilationPayload::Function { signature, .. } => signature
+                .result_borrow
+                .map(|source| {
+                    parameters
+                        .iter()
+                        .position(|p| p.parameter == source)
+                        .ok_or_else(|| {
+                            runtime_corrupt(
+                                "normalized_result_borrow",
+                                "borrowed result names an absent parameter",
+                            )
+                        })
+                        .and_then(|position| u32_index(position, "borrowed result source position"))
+                })
+                .transpose()?,
+            _ => None,
+        };
         functions[index.0 as usize] = Some(NormalizedFunction {
             implementation_parameters: implementation_parameters.into(),
             implementation_arguments: Arc::from([]),
@@ -1468,6 +1499,7 @@ fn prepare_functions(
             parameter_count,
             parameters: parameters.into(),
             result,
+            result_borrow,
             task_requirements: task_requirements.into(),
             body,
         });
@@ -1547,11 +1579,11 @@ pub(super) fn derive_tail_dispatch(
     let mut graph = Vec::with_capacity(functions.len());
     for function in functions.iter() {
         work.step()?;
-        graph.push(function.graph_function);
+        graph.push(function.graph_function && function.result_borrow.is_none());
     }
     for function in functions
         .iter_mut()
-        .filter(|function| function.graph_function)
+        .filter(|function| function.graph_function && function.result_borrow.is_none())
     {
         let NormalizedFunctionBody::Code(code) = &mut function.body else {
             return Err(runtime_corrupt(
@@ -1956,6 +1988,92 @@ fn normalized_type_contains_resource(
     };
     active_types.remove(&digest);
     Ok(result)
+}
+
+fn validate_borrowed_result_calls(program: &NormalizedProgram) -> Result<(), Diagnostic> {
+    let target = |index: FunctionIndex| {
+        program.functions.get(index.0 as usize).ok_or_else(|| {
+            runtime_corrupt(
+                "normalized_borrow_call_target",
+                "borrowed call target is outside the exact function table",
+            )
+        })
+    };
+    let check_code = |code: &NormalizedCode| -> Result<(), Diagnostic> {
+        for (index, instruction) in code.instructions.iter().enumerate() {
+            match instruction {
+                NormalizedInstruction::Call { function, .. } => {
+                    let callable = target(*function)?;
+                    let begin = index
+                        .checked_sub(1)
+                        .and_then(|previous| code.instructions.get(previous));
+                    match (callable.result_borrow, begin) {
+                        (
+                            Some(expected),
+                            Some(NormalizedInstruction::BeginBorrowCall {
+                                source_position,
+                                source_local,
+                            }),
+                        ) if expected == *source_position
+                            && matches!(code.instructions.get(index + 1), Some(NormalizedInstruction::AdoptBorrowResult { source_local: actual, .. }) if actual == source_local) =>
+                            {}
+                        (None, Some(NormalizedInstruction::BeginBorrowCall { .. }))
+                        | (Some(_), _) => {
+                            return Err(runtime_corrupt(
+                                "normalized_borrow_call_mode",
+                                "exact call and lexical handoff disagree on the borrowed result source",
+                            ));
+                        }
+                        (None, _) => {}
+                    }
+                }
+                NormalizedInstruction::FunctionValue { function, .. }
+                | NormalizedInstruction::TailCall { function, .. }
+                    if target(*function)?.result_borrow.is_some() =>
+                {
+                    return Err(runtime_corrupt(
+                        "normalized_borrow_call_boundary",
+                        "borrowed result function cannot cross a callable or tail boundary",
+                    ));
+                }
+                NormalizedInstruction::Parallel { left, right, .. }
+                    if target(*left)?.result_borrow.is_some()
+                        || target(*right)?.result_borrow.is_some() =>
+                {
+                    return Err(runtime_corrupt(
+                        "normalized_borrow_call_boundary",
+                        "borrowed results cannot cross parallel task boundaries",
+                    ));
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    };
+    for function in program.functions.iter() {
+        if let NormalizedFunctionBody::Code(code) = &function.body {
+            check_code(code)?;
+        }
+    }
+    for port in program.ports.iter() {
+        match &port.entry {
+            NormalizedEntryPoint::Function(function)
+                if target(*function)?.result_borrow.is_some() =>
+            {
+                return Err(runtime_corrupt(
+                    "normalized_borrow_entrypoint",
+                    "borrowed result functions cannot be component entrypoints",
+                ));
+            }
+            NormalizedEntryPoint::PortExpression(code, _) => check_code(code)?,
+            _ => {}
+        }
+    }
+    for test in program.tests.values() {
+        check_code(&test.actual)?;
+        check_code(&test.expected)?;
+    }
+    Ok(())
 }
 
 fn validate_resource_calls(functions: &[NormalizedFunction]) -> Result<(), Diagnostic> {
@@ -2852,6 +2970,27 @@ fn translate_code(
                     binding_local: *binding_local,
                 }
             }
+            CompiledInstruction::BeginBorrowCall {
+                source_local,
+                source_position,
+            } => NormalizedInstruction::BeginBorrowCall {
+                source_local: *source_local,
+                source_position: *source_position,
+            },
+            CompiledInstruction::AdoptBorrowResult {
+                source_local,
+                binding_local,
+                binding_type,
+            } => NormalizedInstruction::AdoptBorrowResult {
+                source_local: *source_local,
+                binding_local: *binding_local,
+                binding_type: index_copy(
+                    &unit.tables.types,
+                    *binding_type,
+                    "borrowed result binding type",
+                )?,
+            },
+            CompiledInstruction::ReturnBorrowed => NormalizedInstruction::ReturnBorrowed,
             CompiledInstruction::PackOwned {
                 product_type,
                 fields,

@@ -1008,6 +1008,37 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 )?;
                 Ok(result_type)
             }
+            ExpressionOperation::BorrowCall {
+                call,
+                binding,
+                body,
+            } => {
+                let invocation = self.owned_read(|read| {
+                    super::memory::borrow_invocation(read, call, context.declaration)
+                })?;
+                // The wrapped invocation retains its complete ordinary type/effect checks.
+                let actual = self.infer(call, context, next)?;
+                require_same(
+                    invocation.result,
+                    actual,
+                    "kernel_owned_borrow",
+                    "borrowed invocation result",
+                )?;
+                let source = self.borrow_source_type(invocation.source, context, next)?;
+                require_same(
+                    invocation.source_type,
+                    source,
+                    "kernel_owned_borrow",
+                    "borrowed invocation source",
+                )?;
+                self.require_borrow_binding(binding, invocation.result)?;
+                let mut scoped = self.scoped_context(context)?;
+                self.consume_work()?;
+                scoped
+                    .bindings
+                    .insert(binding, (BindingKind::OwnedBorrow, invocation.result));
+                self.infer(body, &scoped, next)
+            }
             ExpressionOperation::BorrowOwnedItem {
                 sequence_type,
                 source,

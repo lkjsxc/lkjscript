@@ -134,6 +134,7 @@ fn fixture(
                 name: Name::new(format!("consume-{index}")).unwrap(),
                 visibility: DeclarationVisibility::Private,
                 payload: DeclarationPayload::Function(FunctionDeclaration {
+                    result_borrow: None,
                     implementation_parameters: Vec::new(),
                     requirement_parameters: Vec::new(),
                     effect_parameters: Vec::new(),

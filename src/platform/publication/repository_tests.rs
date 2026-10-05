@@ -971,6 +971,7 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
                 name: Name::new("library").unwrap(),
             },
             AuthoredChange::CreateFunction {
+                result_borrow: None,
                 symbol: "$source_function".to_owned(),
                 module: ModuleSelector::Symbol {
                     symbol: "$source_module".to_owned(),
@@ -1114,6 +1115,7 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
                 name: Name::new("application").unwrap(),
             },
             AuthoredChange::CreateFunction {
+                result_borrow: None,
                 symbol: "$caller".to_owned(),
                 module: ModuleSelector::Symbol {
                     symbol: "$target_module".to_owned(),
@@ -1283,6 +1285,7 @@ fn staged_package_interface_validates_exact_cross_package_task_requirements() {
                 name: Name::new("application").unwrap(),
             },
             AuthoredChange::CreateFunction {
+                result_borrow: None,
                 symbol: "$foreign_task".to_owned(),
                 module: ModuleSelector::Symbol {
                     symbol: "$task_module".to_owned(),
@@ -2756,6 +2759,7 @@ fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
             name: Name::new("effect-owner").unwrap(),
             visibility: DeclarationVisibility::Private,
             payload: DeclarationPayload::Function(crate::platform::kernel::FunctionDeclaration {
+                result_borrow: None,
                 implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 type_parameters: vec![],
@@ -2863,6 +2867,7 @@ fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
                 self_parameter,
                 type_parameters: vec![item_parameter],
                 methods: vec![crate::platform::kernel::OwnedMethod {
+                    result_borrow: None,
                     id: method,
                     name: Name::new("inspect").unwrap(),
                     parameters: vec![],
@@ -2896,6 +2901,7 @@ fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
             "marker-method",
             OwnerKind::PureFunction,
             DeclarationPayload::Function(crate::platform::kernel::FunctionDeclaration {
+                result_borrow: None,
                 implementation_parameters: vec![],
                 requirement_parameters: vec![],
                 effect_parameters: vec![],
@@ -3365,6 +3371,7 @@ fn authored_owned_closure_follows_ownership_without_deleting_referenced_targets(
                 name: Name::new("module").unwrap(),
             },
             AuthoredChange::CreateFunction {
+                result_borrow: None,
                 symbol: "$callee".to_owned(),
                 module: ModuleSelector::Symbol {
                     symbol: "$module".to_owned(),
@@ -3378,6 +3385,7 @@ fn authored_owned_closure_follows_ownership_without_deleting_referenced_targets(
                 body: authored_expression(AuthoredExpressionOperation::Unit {}),
             },
             AuthoredChange::CreateFunction {
+                result_borrow: None,
                 symbol: "$caller".to_owned(),
                 module: ModuleSelector::Symbol {
                     symbol: "$module".to_owned(),
@@ -5532,6 +5540,7 @@ fn authored_budget_dimensions_exhaust_independently_without_advancing_head() {
     reject(
         anonymous_identity_budget,
         vec![AuthoredChange::CreateFunction {
+            result_borrow: None,
             symbol: "$anonymous_identity_budget".to_owned(),
             module: ModuleSelector::Name {
                 name: Name::new("unreached_module").unwrap(),
@@ -5551,6 +5560,7 @@ fn authored_budget_dimensions_exhaust_independently_without_advancing_head() {
     );
 
     let create_with_unit = AuthoredChange::CreateFunction {
+        result_borrow: None,
         symbol: "$existing_type_budget".to_owned(),
         module: ModuleSelector::Name {
             name: Name::new("first").unwrap(),
@@ -5596,6 +5606,7 @@ fn authored_budget_dimensions_exhaust_independently_without_advancing_head() {
     reject(
         authored_type_budget,
         vec![AuthoredChange::CreateFunction {
+            result_borrow: None,
             symbol: "$type_node_budget".to_owned(),
             module: ModuleSelector::Name {
                 name: Name::new("first").unwrap(),
@@ -5693,6 +5704,7 @@ fn authored_request_creates_a_typed_function_and_test_from_forward_references() 
                 },
             },
             AuthoredChange::CreateFunction {
+                result_borrow: None,
                 symbol: "$identity".to_owned(),
                 module: ModuleSelector::Symbol {
                     symbol: "$authored".to_owned(),
@@ -5921,6 +5933,7 @@ fn authored_type_builder_interns_every_unrestricted_graph_nine_type_form() {
         preconditions: Vec::new(),
         budget: ChangeBudget::default(),
         changes: vec![AuthoredChange::CreateFunction {
+            result_borrow: None,
             symbol: "$type_builder".to_owned(),
             module: ModuleSelector::Name {
                 name: Name::new("second").unwrap(),
@@ -6220,6 +6233,7 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                 }],
             },
             AuthoredChange::CreateFunction {
+                result_borrow: None,
                 symbol: "$entry".to_owned(),
                 module: ModuleSelector::Symbol {
                     symbol: "$domain".to_owned(),
@@ -6452,6 +6466,7 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
                 }],
             },
             AuthoredChange::CreateFunction {
+                result_borrow: None,
                 symbol: "$mutable_function".to_owned(),
                 module: second_module,
                 name: Name::new("mutable_function").unwrap(),
@@ -6558,6 +6573,7 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
                 implementation: ImplementationName::new("core.option.some").unwrap(),
             },
             AuthoredChange::SetFunctionContract {
+                result_borrow: None,
                 function: DeclarationSelector::Id {
                     declaration: declaration_id(function),
                 },
@@ -7227,6 +7243,7 @@ fn authored_expression_builder_covers_every_graph_nine_operation() {
         budget: ChangeBudget::default(),
         changes: vec![
             AuthoredChange::CreateFunction {
+                result_borrow: None,
                 symbol: "$all_pure".to_owned(),
                 module: ModuleSelector::Name {
                     name: Name::new("second").unwrap(),
@@ -7240,6 +7257,7 @@ fn authored_expression_builder_covers_every_graph_nine_operation() {
                 body: pure_body,
             },
             AuthoredChange::CreateFunction {
+                result_borrow: None,
                 symbol: "$all_task".to_owned(),
                 module: ModuleSelector::Name {
                     name: Name::new("second").unwrap(),
@@ -7473,6 +7491,7 @@ fn idempotent_authored_reprepare_ignores_physical_child_type_availability() {
         preconditions: Vec::new(),
         budget: ChangeBudget::default(),
         changes: vec![AuthoredChange::CreateFunction {
+            result_borrow: None,
             symbol: "$identity".to_owned(),
             module: ModuleSelector::Id { module },
             name: Name::new("structural-identity").unwrap(),

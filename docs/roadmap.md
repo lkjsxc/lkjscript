@@ -27,11 +27,18 @@ storage, independent elements, cross-representation transfer and a native
 provisional graph validator. It builds on [owned sequences](spec/owned-sequences.md)
 without requiring a new nominal ownership system.
 
-The next abstraction trigger is a useful generic algorithm that must return a
-borrowed view tied to its storage owner. Select associated scoped views and
-explicit lifetime relationships against that workload. Consider associated type
-families, higher-ranked borrowing and bounded value/region parameters only where
-they make that demonstrated abstraction sound and useful.
+Use [source-tied borrowed results](spec/owned-read-results.md) to return read-only
+views through pure generic functions and owned-contract methods. The
+[selection witness](../examples/owned-read-results/README.md) exports IndexRead and
+first-max selection before concrete readers exist, then observes selected views,
+drains the original collection and reuses its owner. Exact source provenance and
+ordered cleanup cross each package and call boundary; availability remains
+[status-owned](status.md).
+
+Associated view families become useful when storage representations need different
+view shapes or cursors. Select those families, higher-ranked relationships and
+bounded value/region parameters against such a concrete workload. The existing
+explicit Item argument serves readers that return their unchanged element type.
 
 Keep implementation identity explicit and contracts independently checkable.
 Inference must retain boundary evidence; bounded proof-search exhaustion remains

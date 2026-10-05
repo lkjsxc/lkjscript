@@ -343,6 +343,7 @@ fn historical_prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             name: name("callee"),
             visibility: DeclarationVisibility::Package,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                result_borrow: None,
                 implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 effect_parameters: Vec::new(),
@@ -476,6 +477,7 @@ fn historical_prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             name: name("caller"),
             visibility: DeclarationVisibility::Public,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                result_borrow: None,
                 implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 effect_parameters: Vec::new(),
@@ -534,6 +536,7 @@ fn historical_prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             name: name("with_binding"),
             visibility: DeclarationVisibility::Private,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                result_borrow: None,
                 implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 effect_parameters: Vec::new(),
@@ -1787,10 +1790,18 @@ fn canonical_kernel_codec_manifest_is_frozen() {
     let (mut snapshot, _) = historical_prototype_snapshot();
     assert_eq!(
         manifest(&snapshot, contract::GRAPH_CONTRACT_IDENTITY),
-        "603346d5fcf9da5d00f62c6f7af08772497cfc523faa074cca24d4ef8253073e"
+        "d0364bbd076b7471079822b30ddf7ee88c628a0dd52413da3bc5599323e4ccd1"
     );
     // The current identity and owner envelopes advance together. Keep the previous
     // golden under its original generation instead of relabeling its bytes.
+    snapshot.root.graph_contract_version = 26;
+    for owner in snapshot.owners.values_mut() {
+        owner.set_encoding_for_edit(26);
+    }
+    assert_eq!(
+        manifest(&snapshot, "lkjscript-meaning-graph-26"),
+        "603346d5fcf9da5d00f62c6f7af08772497cfc523faa074cca24d4ef8253073e"
+    );
     snapshot.root.graph_contract_version = 25;
     for owner in snapshot.owners.values_mut() {
         owner.set_encoding_for_edit(25);

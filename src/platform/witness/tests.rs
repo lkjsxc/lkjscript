@@ -73,6 +73,7 @@ fn witness_contract_domains_are_closed_and_unique() {
         "validator_contract_a4865032b8c53d9472988c166a7bce1d72eba3158026cb4a803482a08c2fc576"
     );
     for (name, version) in [
+        ("source_tied_owned_read_results", 1),
         ("parameterized_owned_contracts", 1),
         ("structural_owned_sequences", 1),
         ("lexical_owned_child_borrows", 1),
@@ -82,8 +83,8 @@ fn witness_contract_domains_are_closed_and_unique() {
         ("structural_owned_products", 3),
         ("symbolic_owned_parameters", 4),
         ("explicit_owned_implementation_witnesses", 5),
-        ("single_relation_extractor", 4),
-        ("owner_summary_dimensions", 3),
+        ("single_relation_extractor", 5),
+        ("owner_summary_dimensions", 4),
         ("same_task_owned_transfer", 1),
         ("sealed_owned_i64_cells", 1),
     ] {
@@ -152,9 +153,14 @@ fn witness_contract_domains_are_closed_and_unique() {
         digest,
         "validator_contract_54e026b266f50320397eae65398d5a884a773095f380562f98b8cfa3f16be1cc"
     );
-    assert_eq!(
+    // Source-tied read results invalidate predecessor ownership acceptance.
+    assert_ne!(
         digest,
         "validator_contract_1fd533a37a52f3de4ff1e6836082a4fe4b8796b2c920eb182962f54ca6e521fc"
+    );
+    assert_eq!(
+        digest,
+        "validator_contract_0bc1eb13d89dbdaf164c85d1b14c0e1d63318c42467d23ce425560a7ca10a043"
     );
 }
 

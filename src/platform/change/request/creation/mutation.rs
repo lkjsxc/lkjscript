@@ -222,8 +222,9 @@ pub(in crate::platform::change::request) fn lower_mutation<
         AuthoredChange::SetFunctionContract {
             function,
             result,
+            result_borrow,
             effect,
-        } => lower_set_function_contract(lowerer, function, result, effect),
+        } => lower_set_function_contract(lowerer, function, result, result_borrow.as_ref(), effect),
         AuthoredChange::SetExternalContract {
             external,
             result,
@@ -655,10 +656,14 @@ fn lower_set_function_contract<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead
     lowerer: &mut AuthoredLowerer<'_, B, W>,
     selector: &DeclarationSelector,
     result: &AuthoredType,
+    result_borrow: Option<&AuthoredLocalReference>,
     effect: &AuthoredFunctionEffect,
 ) -> Result<(), Diagnostic> {
     let declaration = lowerer.resolve_declaration(selector)?;
     let result = lowerer.lower_type(result)?;
+    let result_borrow = result_borrow
+        .map(|source| lowerer.lower_result_borrow(source))
+        .transpose()?;
     let effect = lowerer.lower_effect(effect)?;
     let OwnerRecord::Declaration(record) =
         lowerer.candidate_mut(OwnerKey::Declaration(declaration))?
@@ -676,6 +681,7 @@ fn lower_set_function_contract<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead
         FunctionEffect::Task { .. } => OwnerKind::TaskFunction,
     };
     function.result = result;
+    function.result_borrow = result_borrow;
     function.effect = effect;
     Ok(())
 }

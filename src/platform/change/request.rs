@@ -125,6 +125,7 @@ pub enum AuthoredChange {
         type_parameters: Vec<AuthoredTypeParameter>,
         parameters: Vec<AuthoredParameter>,
         result: AuthoredType,
+        result_borrow: Option<AuthoredLocalReference>,
         effect: AuthoredFunctionEffect,
         body: AuthoredExpression,
     },
@@ -264,6 +265,7 @@ pub enum AuthoredChange {
     SetFunctionContract {
         function: DeclarationSelector,
         result: AuthoredType,
+        result_borrow: Option<AuthoredLocalReference>,
         effect: AuthoredFunctionEffect,
     },
     SetExternalContract {
@@ -827,6 +829,7 @@ pub(crate) fn lower_authored_changes_with_publication_base<
                 type_parameters,
                 parameters,
                 result,
+                result_borrow,
                 effect,
                 body,
             } => creation::lower_function(
@@ -838,6 +841,7 @@ pub(crate) fn lower_authored_changes_with_publication_base<
                 type_parameters,
                 parameters,
                 result,
+                result_borrow.as_ref(),
                 effect,
                 body,
             )?,

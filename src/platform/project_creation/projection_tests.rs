@@ -441,6 +441,7 @@ fn visit_expression(
         | ExpressionOperation::SequencePush { .. }
         | ExpressionOperation::SequencePop { .. }
         | ExpressionOperation::BorrowOwnedItem { .. }
+        | ExpressionOperation::BorrowCall { .. }
         | ExpressionOperation::MatchBorrowedOwned { .. } => {
             panic!("owned products are outside the ordinary web template projection");
         }
@@ -687,6 +688,26 @@ fn recipe_projection_preserves_nonempty_implementation_meaning() {
     );
 }
 
+#[test]
+fn recipe_projection_preserves_actual_borrowed_result_sources() {
+    use serde_json::json;
+    let observe = |mut value: Value| {
+        normalize_strings(&mut value, &BTreeMap::new());
+        value
+    };
+    let ordinary = json!({"kind": "function", "result": "owned-type"});
+    let mut explicit_ordinary = ordinary.clone();
+    explicit_ordinary["result_borrow"] = json!(null);
+    assert_eq!(observe(ordinary.clone()), observe(explicit_ordinary));
+    let mut borrowed = ordinary.clone();
+    borrowed["result_borrow"] = json!("exact-source-a");
+    assert_ne!(observe(ordinary), observe(borrowed.clone()));
+    let mut alternate = borrowed.clone();
+    alternate["result_borrow"] = json!("exact-source-b");
+    assert_ne!(observe(borrowed), observe(alternate));
+    assert_ne!(observe(json!({})), observe(json!({"result_borrow": null})));
+}
+
 fn normalize_strings(value: &mut Value, identities: &BTreeMap<String, String>) {
     if value["kind"] == "concrete" && value["reference"].get("requirement").is_some() {
         *value = value["reference"].clone();
@@ -715,6 +736,13 @@ fn normalize_strings(value: &mut Value, identities: &BTreeMap<String, String>) {
                     .is_some_and(|value| value.as_array().is_some_and(Vec::is_empty))
             {
                 values.remove("implementation_parameters");
+            }
+            // Ordinary results retain their pre-27 meaning. Preserve every
+            // actual borrowed-result source and every unrelated null field.
+            if values.get("kind").and_then(Value::as_str) == Some("function")
+                && values.get("result_borrow").is_some_and(Value::is_null)
+            {
+                values.remove("result_borrow");
             }
             // Effect arity zero preserves predecessor meaning; task kind and every nonempty
             // row/application remain represented in this generation-neutral observation.

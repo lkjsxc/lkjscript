@@ -1953,3 +1953,47 @@ source and derived-layout proof under explicit compatibility cuts, rebuild maint
 assets through their supported owners, and retain original historical/publication
 evidence. Source acceptance, finalized-byte acceptance and public availability
 remain distinct facts.
+
+## Source-tied borrowed result obligations
+
+The [borrowed-result contract](owned-read-results.md) requires complete canonical,
+independent memory, reference and artifact admission. Validate generic functions
+and owned contracts before concrete implementations exist. Preserve exact result
+source identity or ordered method source position, result type, read mode and
+ancestor guards across substitution, witness selection, transport and compilation.
+Unused methods and untaken branches receive the same checks.
+
+The copied public executable must author three fresh packages: generic IndexRead
+and first-max selection, concrete flat/chunk32 cell/buffer readers, and an independent
+consumer. Reuse existing literal worklist modules through ordinary authoring rather
+than privileged graph construction or external semantic generation. Export the
+generic package before readers exist; retain exact dependency locators, canonical
+draft re-entry and an identity-preserving edit. Compare complete independent results
+for empty and singleton collections, distinguishable first ties, 31/32/33-item
+boundaries and 513 elements under all four implementations. Remove source projects
+and transports before detached execution. Observe selected views, exit their
+scopes, drain original storage in unchanged LIFO order and reuse the empty owner.
+
+Exercise direct-root returns, nested projections, sibling reads and forwarding
+through multiple functions. An alternate observer must assign equal greatest keys
+to distinguishable values, and an identity observer must reveal which original
+value was returned. Comparing key values alone cannot prove stable tie selection.
+Empty selector calls trap through existing indexed-read behavior; the consumer
+checks length before selecting.
+
+Reject local-owner escape, wrong-source returns including physically aliased inputs,
+wrong method source positions, owning-result substitution, ordinary call exposure,
+forged owning bindings, protected-source or ancestor consumption, first-class
+callable exposure, capture, task and serialization escape. Every failed authoring
+candidate preserves accepted HEAD. A later unchanged valid request must still
+admit. Consistently rehashed transport and artifact attacks must fail independently
+when they erase guards, change source relationships or counterfeit result modes.
+
+Inject trap and cancellation after observed progress, packet/guard reservation
+refusal, and failure between result extraction and caller adoption. Exactly one
+cleanup owner survives every transfer transition. Release child loans before
+ancestor guards and custodians, with zero residual read loans or owned handles.
+Unrelated owners retain their original custody until their own cleanup. Independently
+check preserved allocation identity where promised and require a healthy subsequent
+invocation. No storage lock may remain held across user code, and activation
+replacement cannot erase the borrowed-result cleanup boundary.

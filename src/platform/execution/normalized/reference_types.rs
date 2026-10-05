@@ -20,6 +20,9 @@ type Application = (
 type Calls = VecDeque<Application>;
 const MAXIMUM_METADATA_BYTES: usize = 256 * 1024 * 1024;
 
+#[path = "reference_borrowed_admission.rs"]
+mod borrowed_admission;
+
 struct Closure<'a> {
     parallel_targets: BTreeSet<(
         DeclarationReference,
@@ -522,6 +525,7 @@ impl<'a> Closure<'a> {
         task_context: bool,
         scope: Option<DeclarationReference>,
     ) -> Result<(), ExecutionError> {
+        borrowed_admission::body(self, package, root, bindings, scope)?;
         allocate::<ExpressionId>(&mut self.allocated, 1)?;
         let mut pending = vec![root];
         while let Some(expression) = pending.pop() {
@@ -1011,6 +1015,7 @@ pub(super) fn complete(
         requirements: BTreeMap::new(),
     };
     let mut calls = VecDeque::new();
+    borrowed_admission::inventory(&mut closure)?;
     let empty = Bindings::new();
     for snapshot in snapshots {
         let package = snapshot.root.package_id;

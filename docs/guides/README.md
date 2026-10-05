@@ -22,6 +22,7 @@ owns executable availability; `lkjscript capabilities` discovers the installed s
 | [Scoped reads of owned children](native-owned-borrows.md) | Generic product/choice inspection through exact witnesses while retaining the original owner. |
 | [Dynamic owned sequences](native-owned-sequences.md) | Runtime-sized owned collections, scoped indexed reads, exact element witnesses and consuming drain. |
 | [Parameterized owned worklists](native-owned-worklists.md) | One element contract across flat and chunked storage, explicit transfer and complete provisional graph validation. |
+| [Source-tied borrowed results](native-owned-read-results.md) | Return generic read-only views across packages, observe stable selection and regain consuming rights after scope exit. |
 | [Joined parallel computation](native-parallel.md) | Empty-effect child tasks, owned inputs, generic reductions, fresh child identities and shared quotas. |
 | [Reusable generic parallel groups](native-transferable-parallel.md) | Explicit transferable bounds, generic builders, mixed results and exact witnesses. |
 | [Immutable byte ranges](native-byte-ranges.md) | Strict binary ranges, explicit backing detachment and source-free package composition. |

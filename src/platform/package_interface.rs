@@ -31,11 +31,11 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-14";
-pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 14;
-pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF14";
+pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-15";
+pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 15;
+pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF15";
 pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str =
-    "lkjscript.package-interface-owner-envelope.v14";
+    "lkjscript.package-interface-owner-envelope.v15";
 const PACKAGE_INTERFACE_IDENTITY_MAGIC: [u8; 8] = *b"LKJPIFI1";
 const PACKAGE_INTERFACE_IDENTITY_DOMAIN: &str = "lkjscript.package-interface-identity.v1";
 pub const MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES: usize = 1024 * 1024;
@@ -76,9 +76,16 @@ pub struct PackageInterfaceOwner {
 }
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
-struct PackageInterfaceOwner14 {
+struct PackageInterfaceOwner10 {
     contract_version: u16,
     record: crate::platform::kernel::wire14::PackageInterfaceRecord14,
+}
+
+/// Frozen generation 14 predates source-tied borrowed results.
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+struct PackageInterfaceOwner14 {
+    contract_version: u16,
+    record: crate::platform::kernel::wire26::PackageInterfaceRecord26,
 }
 
 #[derive(Clone, Debug, Decode, Encode)]
@@ -240,6 +247,8 @@ impl PackageInterfaceOwner {
                 12
             } else if canonical.header().contract_version < 26 {
                 13
+            } else if canonical.header().contract_version < 27 {
+                14
             } else {
                 PACKAGE_INTERFACE_CONTRACT_VERSION
             },
@@ -264,7 +273,7 @@ impl PackageInterfaceOwner {
     pub fn encode(&self) -> Result<(PackageInterfaceOwnerDigest, Vec<u8>), Diagnostic> {
         self.validate_local()?;
         if self.contract_version == 10 {
-            let wire = PackageInterfaceOwner14 {
+            let wire = PackageInterfaceOwner10 {
                 contract_version: 10,
                 record: self.record.clone().try_into()?,
             };
@@ -315,6 +324,19 @@ impl PackageInterfaceOwner {
             )?;
             return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
         }
+        if self.contract_version == 14 {
+            let wire = PackageInterfaceOwner14 {
+                contract_version: 14,
+                record: self.record.clone().try_into()?,
+            };
+            let bytes = crate::platform::packed::encode(
+                *b"LKJPIF14",
+                "lkjscript.package-interface-owner-envelope.v14",
+                &wire,
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            return Ok((PackageInterfaceOwnerDigest::of(&bytes), bytes));
+        }
         let bytes = crate::platform::packed::encode(
             PACKAGE_INTERFACE_MAGIC,
             PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
@@ -336,7 +358,23 @@ impl PackageInterfaceOwner {
                 "package-interface owner bytes disagree with their exact digest",
             ));
         }
-        let value: Self = if bytes.starts_with(b"LKJPIF13") {
+        let value: Self = if bytes.starts_with(b"LKJPIF14") {
+            let wire: PackageInterfaceOwner14 = crate::platform::packed::decode(
+                bytes,
+                *b"LKJPIF14",
+                "lkjscript.package-interface-owner-envelope.v14",
+                MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+            )?;
+            if wire.contract_version != 14 {
+                return Err(interface_corrupt(
+                    "predecessor interface envelope has a foreign generation",
+                ));
+            }
+            Self {
+                contract_version: 14,
+                record: wire.record.into(),
+            }
+        } else if bytes.starts_with(b"LKJPIF13") {
             let wire: PackageInterfaceOwner13 = crate::platform::packed::decode(
                 bytes,
                 *b"LKJPIF13",
@@ -385,7 +423,7 @@ impl PackageInterfaceOwner {
                 record: wire.record.into(),
             }
         } else if bytes.starts_with(b"LKJPIF10") {
-            let wire: PackageInterfaceOwner14 = crate::platform::packed::decode(
+            let wire: PackageInterfaceOwner10 = crate::platform::packed::decode(
                 bytes,
                 *b"LKJPIF10",
                 "lkjscript.package-interface-owner-envelope.v10",
@@ -433,11 +471,23 @@ impl PackageInterfaceOwner {
             && self.contract_version != 11
             && self.contract_version != 12
             && self.contract_version != 13
+            && self.contract_version != 14
         {
             return Err(interface_error(
                 DiagnosticClass::Source,
                 "package_interface_contract",
                 "package-interface owner uses a predecessor or foreign contract",
+            ));
+        }
+        if self.contract_version < 15
+            && matches!(&self.record, PackageInterfaceRecord::Declaration(d) if match &d.payload {
+                PackageInterfaceDeclarationPayload::Function(f) => f.result_borrow.is_some(),
+                PackageInterfaceDeclarationPayload::OwnedContract(c) => c.methods.iter().any(|m| m.result_borrow.is_some()),
+                _ => false,
+            })
+        {
+            return Err(interface_corrupt(
+                "source-tied borrowed results require interface generation 15",
             ));
         }
         if self.contract_version < 13
@@ -1069,6 +1119,21 @@ fn validate_owner_closure(
                     }
                 }
                 for method in &c.methods {
+                    if let Some(position) = method.result_borrow {
+                        let Some(source) = method.parameters.get(position as usize) else {
+                            return Err(interface_corrupt(
+                                "borrowed method result source position is absent",
+                            ));
+                        };
+                        if source.use_mode != crate::platform::kernel::ParameterUse::Borrow
+                            || !interface_owned_type(source.ty, types, owners)
+                            || !interface_owned_type(method.result, types, owners)
+                        {
+                            return Err(interface_corrupt(
+                                "borrowed method result requires an Owned result and borrowed Owned source",
+                            ));
+                        }
+                    }
                     if declaration.header.contract_version < 26 {
                         for ty in method
                             .parameters
@@ -1201,6 +1266,25 @@ fn validate_owner_closure(
                 )?;
             }
             PackageInterfaceDeclarationPayload::Function(signature) => {
+                if let Some(source) = signature.result_borrow {
+                    let Some(PackageInterfaceOwner {
+                        record: PackageInterfaceRecord::Parameter(parameter),
+                        ..
+                    }) = owners.get(&OwnerKey::Parameter(source))
+                    else {
+                        return Err(interface_corrupt(
+                            "borrowed function result source parameter is absent",
+                        ));
+                    };
+                    if parameter.use_mode != crate::platform::kernel::ParameterUse::Borrow
+                        || !interface_owned_type(parameter.ty, types, owners)
+                        || !interface_owned_type(signature.result, types, owners)
+                    {
+                        return Err(interface_corrupt(
+                            "borrowed function result requires an Owned result and borrowed Owned source",
+                        ));
+                    }
+                }
                 for parameter in &signature.requirement_parameters {
                     require_child(
                         owners,
@@ -1356,6 +1440,28 @@ fn require_signature_children(
         )?;
     }
     Ok(())
+}
+
+fn interface_owned_type(
+    ty: TypeObjectDigest,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
+) -> bool {
+    match types.get(&ty).map(|object| &object.form) {
+        Some(
+            TypeForm::ByteBuffer
+            | TypeForm::OwnedI64Cell
+            | TypeForm::OwnedProduct { .. }
+            | TypeForm::OwnedChoice { .. }
+            | TypeForm::OwnedSequence { .. },
+        ) => true,
+        Some(TypeForm::TypeParameter { parameter }) => matches!(
+            owners.get(&OwnerKey::TypeParameter(*parameter)),
+            Some(PackageInterfaceOwner { record: PackageInterfaceRecord::TypeParameter(p), .. })
+                if p.constraints.has_owned()
+        ),
+        _ => false,
+    }
 }
 
 fn require_parameter(
@@ -1906,6 +2012,177 @@ mod tests {
     use crate::platform::witness::rebuild_full_witness;
 
     #[test]
+    fn interface15_preserves_borrowed_result_relationship_and_rejects_erasure() {
+        use crate::platform::kernel::*;
+        let seed = b"borrowed-interface-result";
+        let declaration = DeclarationId::migrate(seed, 0);
+        let parameter = ParameterId::migrate(seed, 0);
+        let ty = encode_type_object(&TypeObject::new(TypeForm::ByteBuffer).unwrap())
+            .unwrap()
+            .0;
+        let owner = OwnerKey::Declaration(declaration);
+        let original = PackageInterfaceOwner {
+            contract_version: PACKAGE_INTERFACE_CONTRACT_VERSION,
+            record: PackageInterfaceRecord::Declaration(PackageInterfaceDeclaration {
+                header: OwnerHeader::new(owner, OwnerKind::PureFunction),
+                name: Name::new("view").unwrap(),
+                payload: PackageInterfaceDeclarationPayload::Function(PackageFunctionSignature {
+                    implementation_parameters: Vec::new(),
+                    requirement_parameters: Vec::new(),
+                    effect_parameters: Vec::new(),
+                    type_parameters: Vec::new(),
+                    parameters: vec![parameter],
+                    result: ty,
+                    result_borrow: Some(parameter),
+                    effect: FunctionEffect::Pure,
+                }),
+            }),
+        };
+        let (digest, bytes) = original.encode().unwrap();
+        assert_eq!(&bytes[..8], b"LKJPIF15");
+        assert_eq!(
+            PackageInterfaceOwner::decode(&bytes, owner, digest).unwrap(),
+            original
+        );
+        let mut erased = original.clone();
+        let PackageInterfaceRecord::Declaration(d) = &mut erased.record else {
+            unreachable!()
+        };
+        let PackageInterfaceDeclarationPayload::Function(f) = &mut d.payload else {
+            unreachable!()
+        };
+        f.result_borrow = None;
+        assert_ne!(erased.encode().unwrap().0, digest);
+        let mut predecessor = original;
+        predecessor.contract_version = 14;
+        assert!(
+            predecessor
+                .encode()
+                .unwrap_err()
+                .message
+                .contains("generation 15")
+        );
+    }
+
+    #[test]
+    fn interface14_literal_function_layout_remains_exact() {
+        use crate::platform::kernel::*;
+        let seed = b"literal-interface14-function";
+        let declaration = DeclarationId::migrate(seed, 0);
+        let owner = OwnerKey::Declaration(declaration);
+        let header = OwnerHeader {
+            contract_version: 26,
+            owner,
+            kind: OwnerKind::PureFunction,
+        };
+        let name = Name::new("view").unwrap();
+        let result = encode_type_object(&TypeObject::new(TypeForm::ByteBuffer).unwrap())
+            .unwrap()
+            .0;
+        let literal = crate::platform::packed::encode(
+            *b"LKJPIF14",
+            "lkjscript.package-interface-owner-envelope.v14",
+            &(
+                14_u16,
+                0_u32,
+                header,
+                &name,
+                4_u32,
+                Vec::<ImplementationParameter>::new(),
+                Vec::<crate::platform::semantic_id::RequirementParameterId>::new(),
+                Vec::<crate::platform::semantic_id::EffectParameterId>::new(),
+                Vec::<TypeParameterId>::new(),
+                Vec::<ParameterId>::new(),
+                result,
+                FunctionEffect::Pure,
+            ),
+            MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
+        )
+        .unwrap();
+        let digest = PackageInterfaceOwnerDigest::of(&literal);
+        let original = PackageInterfaceOwner::decode(&literal, owner, digest).unwrap();
+        assert_eq!(original.encode().unwrap(), (digest, literal));
+        let PackageInterfaceRecord::Declaration(d) = original.record else {
+            unreachable!()
+        };
+        let PackageInterfaceDeclarationPayload::Function(f) = d.payload else {
+            unreachable!()
+        };
+        assert_eq!(f.result_borrow, None);
+    }
+
+    #[test]
+    fn borrowed_result_interface_requires_borrowed_owned_source() {
+        use crate::platform::kernel::*;
+        let seed = b"borrowed-interface-source-admission";
+        let package = PackageId::migrate(seed, 0);
+        let declaration = DeclarationId::migrate(seed, 0);
+        let parameter = ParameterId::migrate(seed, 0);
+        let object = TypeObject::new(TypeForm::ByteBuffer).unwrap();
+        let ty = encode_type_object(&object).unwrap().0;
+        let mut owners = BTreeMap::from([
+            (
+                OwnerKey::Declaration(declaration),
+                PackageInterfaceOwner {
+                    contract_version: PACKAGE_INTERFACE_CONTRACT_VERSION,
+                    record: PackageInterfaceRecord::Declaration(PackageInterfaceDeclaration {
+                        header: OwnerHeader::new(
+                            OwnerKey::Declaration(declaration),
+                            OwnerKind::PureFunction,
+                        ),
+                        name: Name::new("view").unwrap(),
+                        payload: PackageInterfaceDeclarationPayload::Function(
+                            PackageFunctionSignature {
+                                implementation_parameters: Vec::new(),
+                                requirement_parameters: Vec::new(),
+                                effect_parameters: Vec::new(),
+                                type_parameters: Vec::new(),
+                                parameters: vec![parameter],
+                                result: ty,
+                                result_borrow: Some(parameter),
+                                effect: FunctionEffect::Pure,
+                            },
+                        ),
+                    }),
+                },
+            ),
+            (
+                OwnerKey::Parameter(parameter),
+                PackageInterfaceOwner {
+                    contract_version: PACKAGE_INTERFACE_CONTRACT_VERSION,
+                    record: PackageInterfaceRecord::Parameter(ParameterRecord {
+                        header: OwnerHeader::new(
+                            OwnerKey::Parameter(parameter),
+                            OwnerKind::Parameter,
+                        ),
+                        parent: ParameterParent::Function(declaration),
+                        name: Name::new("storage").unwrap(),
+                        ty,
+                        use_mode: ParameterUse::Borrow,
+                        resource_requirement: None,
+                    }),
+                },
+            ),
+        ]);
+        let types = BTreeMap::from([(ty, object)]);
+        validate_owner_closure(package, &owners, &types).unwrap();
+        let PackageInterfaceRecord::Parameter(p) = &mut owners
+            .get_mut(&OwnerKey::Parameter(parameter))
+            .unwrap()
+            .record
+        else {
+            unreachable!()
+        };
+        p.use_mode = ParameterUse::Consume;
+        assert!(
+            validate_owner_closure(package, &owners, &types)
+                .unwrap_err()
+                .message
+                .contains("borrowed Owned source")
+        );
+    }
+
+    #[test]
     fn interface14_preserves_literal_interface13_contract_layout() {
         use crate::platform::kernel::*;
         use crate::platform::semantic_id::MethodId;
@@ -1921,13 +2198,27 @@ mod tests {
         let result = encode_type_object(&TypeObject::new(TypeForm::I64).unwrap())
             .unwrap()
             .0;
-        let methods = vec![OwnedMethod {
+        let methods = [OwnedMethod {
             id: MethodId::migrate(seed, 0),
             name: Name::new("length").unwrap(),
             parameters: Vec::new(),
             result,
+            result_borrow: None,
             effect: FunctionEffect::Pure,
         }];
+
+        let original_methods = methods
+            .iter()
+            .map(|method| {
+                (
+                    &method.id,
+                    &method.name,
+                    &method.parameters,
+                    &method.result,
+                    &method.effect,
+                )
+            })
+            .collect::<Vec<_>>();
         // Original interface and payload ordinals, with the original two
         // contract fields, bypass both current and frozen Rust wire records.
         let original = crate::platform::packed::encode(
@@ -1940,7 +2231,7 @@ mod tests {
                 &name,
                 5_u32,
                 self_parameter,
-                &methods,
+                &original_methods,
             ),
             MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES,
         )
@@ -2011,6 +2302,7 @@ mod tests {
                                     use_mode: ParameterUse::Consume,
                                 }],
                                 result: product_type,
+                                result_borrow: None,
                                 effect: FunctionEffect::Pure,
                             }],
                         }),

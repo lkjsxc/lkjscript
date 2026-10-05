@@ -285,6 +285,7 @@ impl Read {
                     name: Name::new(format!("f{f}")).unwrap(),
                     visibility: DeclarationVisibility::Private,
                     payload: DeclarationPayload::Function(FunctionDeclaration {
+                        result_borrow: None,
                         implementation_parameters: Vec::new(),
                         requirement_parameters: Vec::new(),
                         effect_parameters: vec![],

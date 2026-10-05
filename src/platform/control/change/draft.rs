@@ -554,11 +554,15 @@ impl Renderer<'_> {
                                 ),
                             };
                             clauses.push(format!(
-                                "(method {} {} (parameters{}) (returns {}){})",
+                                "(method {} {} (parameters{}) (returns {}{}){})",
                                 method.id,
                                 method.name,
                                 parameters,
                                 self.type_digest(method.result)?,
+                                method
+                                    .result_borrow
+                                    .map(|p| format!(" (borrow-from {p})"))
+                                    .unwrap_or_default(),
                                 effect
                             ));
                         }
@@ -642,7 +646,18 @@ impl Renderer<'_> {
                                 .map(OwnerKey::RequirementParameter),
                         );
                         children.extend(f.parameters.iter().copied().map(OwnerKey::Parameter));
-                        clauses.push(format!("(returns {})", self.type_digest(f.result)?));
+                        let source = f
+                            .result_borrow
+                            .map(|id| {
+                                let O::Parameter(p) = self.reader.owner(OwnerKey::Parameter(id))?
+                                else {
+                                    return Err(error("borrowed result source is not a parameter"));
+                                };
+                                Ok(format!(" (borrow-from {})", p.name))
+                            })
+                            .transpose()?
+                            .unwrap_or_default();
+                        clauses.push(format!("(returns {}{source})", self.type_digest(f.result)?));
                         let effect = match f.effect {
                             k::FunctionEffect::Pure => "pure".to_owned(),
                             effect => self.row(&canonical::row(effect.row()), "task")?,
@@ -1088,6 +1103,28 @@ impl Renderer<'_> {
                     }
                 }
                 text
+            }
+            E::BorrowCall {
+                call,
+                binding,
+                body,
+            } => {
+                let ty = self.ty(binding
+                    .declared_type
+                    .as_ref()
+                    .ok_or_else(|| error("borrowed call binding requires a type"))?)?;
+                let call = self.expression(call, env)?;
+                env.entry(binding.name.to_string())
+                    .or_default()
+                    .push(binding.symbol.clone());
+                let body = self.expression(body, env)?;
+                if let Some(values) = env.get_mut(binding.name.as_str()) {
+                    values.pop();
+                }
+                format!(
+                    "(borrow-call {call} (binding {} (as {}) (type {ty})) (in {body}))",
+                    binding.name, binding.symbol
+                )
             }
             E::BorrowOwnedField {
                 product_type,

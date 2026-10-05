@@ -12,6 +12,7 @@ pub struct AuthoredOwnedMethod {
     pub name: Name,
     pub parameters: Vec<(AuthoredType, ParameterUse)>,
     pub result: AuthoredType,
+    pub result_borrow: Option<u32>,
     pub effect: AuthoredFunctionEffect,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -66,6 +67,7 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
                 name: method.name.clone(),
                 parameters,
                 result: self.lower_type(&method.result)?,
+                result_borrow: method.result_borrow,
                 effect: self.lower_effect(&method.effect)?,
             });
         }

@@ -67,6 +67,7 @@ pub(super) fn command_recipe() -> Result<ProjectRecipe, Diagnostic> {
             builtin_dependency(standard),
             module()?,
             AuthoredChange::CreateFunction {
+                result_borrow: None,
                 symbol: "$greet".to_owned(),
                 module: local_module(),
                 name: name("greet")?,
@@ -198,6 +199,7 @@ pub(super) fn http_recipe() -> Result<ProjectRecipe, Diagnostic> {
             builtin_dependency(standard),
             module()?,
             AuthoredChange::CreateFunction {
+                result_borrow: None,
                 symbol: "$response_text".to_owned(),
                 module: local_module(),
                 name: name("response-text")?,
@@ -209,6 +211,7 @@ pub(super) fn http_recipe() -> Result<ProjectRecipe, Diagnostic> {
                 body: response_text,
             },
             AuthoredChange::CreateFunction {
+                result_borrow: None,
                 symbol: "$status_code".to_owned(),
                 module: local_module(),
                 name: name("status-code")?,
@@ -220,6 +223,7 @@ pub(super) fn http_recipe() -> Result<ProjectRecipe, Diagnostic> {
                 body: status_code,
             },
             AuthoredChange::CreateFunction {
+                result_borrow: None,
                 symbol: "$handle".to_owned(),
                 module: local_module(),
                 name: name("handle")?,
@@ -416,6 +420,7 @@ pub(super) fn nostr_relay_info_recipe(relay_url: &str) -> Result<ProjectRecipe, 
             builtin_dependency(standard),
             module()?,
             AuthoredChange::CreateFunction {
+                result_borrow: None,
                 symbol: "$content_type_is_nostr".to_owned(),
                 module: local_module(),
                 name: name("content-type-is-nostr")?,
@@ -439,6 +444,7 @@ pub(super) fn nostr_relay_info_recipe(relay_url: &str) -> Result<ProjectRecipe, 
                 header_type.clone(),
             )?,
             AuthoredChange::CreateFunction {
+                result_borrow: None,
                 symbol: "$handle".to_owned(),
                 module: local_module(),
                 name: name("handle")?,

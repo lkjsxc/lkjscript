@@ -567,6 +567,8 @@ impl ReferenceState<'_> {
             call_depth: 0,
             control_frames: 0,
             lexical_loan_scopes: 0,
+            borrow_result_sources: Vec::new(),
+            borrow_result_demand: false,
             local_counts: Vec::new(),
             next_transaction: 0,
             transactions: BTreeMap::new(),
@@ -578,7 +580,7 @@ impl ReferenceState<'_> {
             allowances: Vec::new(),
             root_allowance: Some(EffectRow::default()),
             observation: NormalizedReferenceObservation {
-                production_tier: "graph14_reference_records_9",
+                production_tier: "graph14_reference_records_10",
                 ..NormalizedReferenceObservation::default()
             },
         };

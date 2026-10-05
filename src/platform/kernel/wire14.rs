@@ -432,6 +432,7 @@ impl From<FunctionDeclaration14> for super::FunctionDeclaration {
             type_parameters,
             parameters,
             result,
+            result_borrow: None,
             effect: effect.into(),
             body,
         }
@@ -447,10 +448,14 @@ impl TryFrom<super::FunctionDeclaration> for FunctionDeclaration14 {
             type_parameters,
             parameters,
             result,
+            result_borrow,
             effect,
             body,
             requirement_parameters,
         } = value;
+        if result_borrow.is_some() {
+            return Err(extension());
+        }
         require_empty(&implementation_parameters)?;
         require_empty(&implementation_parameters)?;
         require_empty(&requirement_parameters)?;
@@ -758,7 +763,8 @@ impl TryFrom<super::ExpressionOperation> for ExpressionOperation14 {
             | super::ExpressionOperation::SequenceLength { .. }
             | super::ExpressionOperation::SequencePush { .. }
             | super::ExpressionOperation::SequencePop { .. }
-            | super::ExpressionOperation::BorrowOwnedItem { .. } => return Err(extension()),
+            | super::ExpressionOperation::BorrowOwnedItem { .. }
+            | super::ExpressionOperation::BorrowCall { .. } => return Err(extension()),
         })
     }
 }
@@ -951,6 +957,7 @@ impl From<PackageFunctionSignature14> for super::PackageFunctionSignature {
             type_parameters,
             parameters,
             result,
+            result_borrow: None,
             effect: effect.into(),
         }
     }
@@ -965,9 +972,13 @@ impl TryFrom<super::PackageFunctionSignature> for PackageFunctionSignature14 {
             type_parameters,
             parameters,
             result,
+            result_borrow,
             effect,
             requirement_parameters,
         } = value;
+        if result_borrow.is_some() {
+            return Err(extension());
+        }
         require_empty(&implementation_parameters)?;
         require_empty(&requirement_parameters)?;
         Ok(Self {

@@ -35,6 +35,11 @@ use std::sync::Arc;
 #[path = "reference_checked.rs"]
 mod checked;
 use checked::{Ownership, Value as CheckedValue};
+#[cfg(test)]
+#[path = "reference_borrow_result_tests.rs"]
+mod borrowed_result_tests;
+#[path = "reference_borrowed_results.rs"]
+mod borrowed_results;
 #[path = "reference_intrinsics.rs"]
 mod checked_intrinsics;
 #[path = "reference_parallel.rs"]
@@ -275,6 +280,7 @@ pub struct ReferenceSignature {
     type_parameter_constraints: Vec<crate::platform::kernel::TypeParameterConstraints>,
     parameters: Vec<ParameterRecord>,
     result: TypeObjectDigest,
+    result_borrow: Option<ParameterId>,
     pure: bool,
 }
 
@@ -569,6 +575,8 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
             call_depth: 0,
             control_frames: 0,
             lexical_loan_scopes: 0,
+            borrow_result_sources: Vec::new(),
+            borrow_result_demand: false,
             local_counts: Vec::new(),
             next_transaction: 0,
             transactions: BTreeMap::new(),
@@ -596,7 +604,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 canonical_map_pages_read: schema_work.map_pages_read,
                 canonical_objects_read: schema_work.objects_read,
                 canonical_bytes_read: schema_work.bytes_read,
-                production_tier: "graph14_reference_records_9",
+                production_tier: "graph14_reference_records_10",
                 tail_transfers: 0,
                 maximum_control_frames: 0,
                 maximum_live_locals: 0,
@@ -713,6 +721,8 @@ struct ReferenceState<'a> {
     call_depth: usize,
     control_frames: usize,
     lexical_loan_scopes: usize,
+    borrow_result_sources: Vec<Option<ParameterId>>,
+    borrow_result_demand: bool,
     local_counts: Vec<usize>,
     next_transaction: u64,
     transactions: BTreeMap<RequirementReference, ReferenceTransaction>,
@@ -737,7 +747,7 @@ enum ReferenceStep {
 /// Lexical custody is retained across body execution and host unwind. Removing
 /// the child before dropping the parent also preserves nested loan order.
 struct ReferenceLoanScope<'a> {
-    _parent: CheckedValue,
+    parent: Option<CheckedValue>,
     locals: &'a mut BTreeMap<LocalValueReference, CheckedValue>,
     local: LocalValueReference,
 }
@@ -1442,7 +1452,7 @@ impl ReferenceState<'_> {
         &mut self,
         parent: CheckedValue,
         binding: BindingId,
-        value: CheckedValue,
+        mut value: CheckedValue,
         body: ExpressionId,
         locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
     ) -> Result<CheckedValue, ExecutionError> {
@@ -1458,18 +1468,38 @@ impl ReferenceState<'_> {
                 "loan scope count overflowed",
             )
         })?;
+        if value.raw().memory_is_borrowed() {
+            value.set_provenance(parent.provenance().ok_or_else(|| {
+                reference_type_error("borrow parent has no canonical local provenance")
+            })?);
+        }
         locals.insert(local, value);
-        let scope = ReferenceLoanScope {
-            _parent: parent,
+        let mut scope = ReferenceLoanScope {
+            parent: Some(parent),
             locals,
             local,
         };
         self.lexical_loan_scopes = loan_scopes;
-        let result = self.evaluate(body, scope.locals).and_then(|value| {
+        let demand = self.borrow_result_demand;
+        let result = self.evaluate_in_context(body, scope.locals, demand).and_then(|mut value| {
             if value.raw().memory_is_borrowed() {
-                return Err(reference_type_error(
-                    "borrowed child escaped its lexical scope",
-                ));
+                let source = self.borrow_result_sources.last().copied().flatten()
+                    .map(LocalValueReference::FunctionParameter);
+                if !demand || source.is_none() || value.provenance() != source {
+                    return Err(reference_type_error(
+                        "borrowed child escaped its lexical scope without a matching result source",
+                    ));
+                }
+                let parent = scope.parent.as_ref().ok_or_else(|| {
+                    reference_type_error("borrow scope lost its custody guard")
+                })?;
+                if parent.provenance() == value.provenance() {
+                    self.charge_allocation(CheckedValue::parent_storage_bytes() as u64)?;
+                    value.reserve_parent(parent)?;
+                    value.retain_parent(|| scope.parent.take().ok_or_else(|| {
+                        reference_type_error("borrow scope custody was already transferred")
+                    }))?;
+                }
             }
             Ok(value)
         });
@@ -1559,6 +1589,7 @@ impl ReferenceState<'_> {
         arguments: Vec<CheckedValue>,
     ) -> Result<CheckedValue, ExecutionError> {
         self.control.check()?;
+        self.require_owning_result(reference)?;
         let type_arguments = self.resolve_type_arguments(type_arguments)?;
         let effect_arguments = self.resolve_effect_arguments(effect_arguments)?;
         let requirement_arguments = self.resolve_requirement_arguments(requirement_arguments)?;
@@ -1661,6 +1692,7 @@ impl ReferenceState<'_> {
                             type_parameters: external.type_parameters,
                             parameters,
                             result: external.result,
+                            result_borrow: None,
                             pure: true,
                         };
                         self.observation.external_calls =
@@ -1831,6 +1863,27 @@ impl ReferenceState<'_> {
             .copied()
             .zip(types.iter().copied())
             .collect::<BTreeMap<_, _>>();
+        if let Some(source) = function.result_borrow {
+            let source = function
+                .parameters
+                .iter()
+                .position(|id| *id == source)
+                .and_then(|position| parameters.get(position))
+                .ok_or_else(|| {
+                    reference_type_error("borrowed result selects a foreign parameter")
+                })?;
+            if !matches!(function.effect, FunctionEffect::Pure)
+                || source.use_mode != ParameterUse::Borrow
+                || source.resource_requirement.is_some()
+                || direct_memory_type(&self.schema, source.ty, &types, self.control)?.is_none()
+                || direct_memory_type(&self.schema, function.result, &types, self.control)?
+                    .is_none()
+            {
+                return Err(reference_type_error(
+                    "borrowed result requires a pure graph function and exact borrowed memory parameter",
+                ));
+            }
+        }
         self.validate_call_resources(
             &parameters,
             &types,
@@ -1861,12 +1914,19 @@ impl ReferenceState<'_> {
         tail: bool,
     ) -> Result<ReferenceStep, ExecutionError> {
         self.count_call(target.arguments.len())?;
+        let result_borrow = target.function.result_borrow;
         let mut locals = target
             .function
             .parameters
             .into_iter()
             .zip(target.arguments)
-            .map(|(parameter, value)| (LocalValueReference::FunctionParameter(parameter), value))
+            .map(|(parameter, mut value)| {
+                let local = LocalValueReference::FunctionParameter(parameter);
+                if value.raw().memory_is_borrowed() {
+                    value.set_provenance(local);
+                }
+                (local, value)
+            })
             .collect::<BTreeMap<_, _>>();
         self.control.check()?;
         self.active_package = target.declaration.package;
@@ -1890,9 +1950,16 @@ impl ReferenceState<'_> {
             self.observation.tail_transfers = self.observation.tail_transfers.saturating_add(1);
         }
         let lexical_loan_scopes = std::mem::replace(&mut self.lexical_loan_scopes, 0);
-        let result = self.evaluate_tail(target.function.body, &mut locals);
-        let result = result.and_then(|step| {
-            if let ReferenceStep::Value(value) = &step {
+        self.borrow_result_sources.push(result_borrow);
+        let previous_demand = std::mem::replace(&mut self.borrow_result_demand, false);
+        let result = if result_borrow.is_some() {
+            self.evaluate_in_context(target.function.body, &mut locals, true)
+                .map(ReferenceStep::Value)
+        } else {
+            self.evaluate_tail(target.function.body, &mut locals)
+        };
+        let result = result.and_then(|mut step| {
+            if let ReferenceStep::Value(value) = &mut step {
                 let memory_form = direct_memory_type(
                     &self.schema,
                     target.function.result,
@@ -1916,12 +1983,38 @@ impl ReferenceState<'_> {
                             "memory result representation mismatch",
                         ));
                     }
-                    value.raw().memory_validate(self.memory_domain, true)?;
+                    if let Some(source) = result_borrow {
+                        let source = LocalValueReference::FunctionParameter(source);
+                        if !value.raw().memory_is_borrowed() || value.provenance() != Some(source) {
+                            return Err(reference_type_error(
+                                "borrowed result came from another exact parameter",
+                            ));
+                        }
+                        value.raw().memory_validate(self.memory_domain, false)?;
+                        let parent = locals.get(&source).ok_or_else(|| {
+                            reference_type_error(
+                                "borrowed result source parameter is no longer live",
+                            )
+                        })?;
+                        self.charge_allocation(CheckedValue::parent_storage_bytes() as u64)?;
+                        value.reserve_parent(parent)?;
+                        value.retain_parent(|| {
+                            locals.remove(&source).ok_or_else(|| {
+                                reference_type_error(
+                                    "borrowed result source custody was already transferred",
+                                )
+                            })
+                        })?;
+                    } else {
+                        value.raw().memory_validate(self.memory_domain, true)?;
+                    }
                 }
             }
             Ok(step)
         });
         self.local_counts.pop();
+        self.borrow_result_sources.pop();
+        self.borrow_result_demand = previous_demand;
         self.implementation_scopes.pop();
         self.type_scopes.pop();
         self.effect_scopes.pop();
@@ -2170,6 +2263,7 @@ impl ReferenceState<'_> {
                     implementations,
                     arguments,
                 } => {
+                    self.require_owning_result(function)?;
                     let uses = self.function_parameter_uses(function)?;
                     let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
                     let target = self.witness_call(
@@ -2189,6 +2283,7 @@ impl ReferenceState<'_> {
                     arguments,
                 } => {
                     let function = self.method_target(witness, contract, method)?;
+                    self.require_owning_result(function)?;
                     let uses = self.function_parameter_uses(function)?;
                     let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
                     return self.tail_step(function, &[], &[], &[], arguments, locals);
@@ -2250,6 +2345,7 @@ impl ReferenceState<'_> {
         arguments: Vec<CheckedValue>,
         locals: &BTreeMap<LocalValueReference, CheckedValue>,
     ) -> Result<ReferenceStep, ExecutionError> {
+        self.require_owning_result(declaration)?;
         let callable = self.declaration(declaration)?;
         if let DeclarationPayload::Function(function) = callable.payload {
             let types = self.resolve_type_arguments(types)?;
@@ -2284,6 +2380,11 @@ impl ReferenceState<'_> {
         self.charge_allocation(std::mem::size_of::<AdmittedGraphCall>() as u64)?;
         self.control.check()?;
         if self.lexical_loan_scopes != 0
+            || target.function.result_borrow.is_some()
+            || self
+                .borrow_result_sources
+                .last()
+                .is_some_and(Option::is_some)
             || locals.values().any(|v| v.raw().memory_owns_live_loans())
         {
             if self.call_depth.saturating_add(self.ancestor_depth) >= self.policy.maximum_call_depth
@@ -2322,6 +2423,16 @@ impl ReferenceState<'_> {
         expression: ExpressionId,
         locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
     ) -> Result<CheckedValue, ExecutionError> {
+        self.evaluate_in_context(expression, locals, false)
+    }
+
+    fn evaluate_in_context(
+        &mut self,
+        expression: ExpressionId,
+        locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
+        demand: bool,
+    ) -> Result<CheckedValue, ExecutionError> {
+        let previous = std::mem::replace(&mut self.borrow_result_demand, demand);
         self.control_frames += 1;
         self.observation.maximum_control_frames = self
             .observation
@@ -2333,6 +2444,7 @@ impl ReferenceState<'_> {
             .and_then(|operation| self.evaluate_operation(operation, locals));
         self.observe_locals(locals);
         self.control_frames -= 1;
+        self.borrow_result_demand = previous;
         result
     }
 
@@ -2386,10 +2498,16 @@ impl ReferenceState<'_> {
         operation: ExpressionOperation,
         locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
     ) -> Result<CheckedValue, ExecutionError> {
+        let demand = self.borrow_result_demand;
         self.charge_allocation(
             (std::mem::size_of::<CheckedValue>() - std::mem::size_of::<NormalizedValue>()) as u64,
         )?;
         match operation {
+            ExpressionOperation::BorrowCall {
+                call,
+                binding,
+                body,
+            } => self.evaluate_borrow_call(call, binding, body, locals),
             ExpressionOperation::Parallel { left, right } => self.parallel(left, right, locals),
             ExpressionOperation::SequenceEmpty { sequence_type } => {
                 let (ty, _) = self.sequence_item_type(sequence_type)?;
@@ -2671,7 +2789,7 @@ impl ReferenceState<'_> {
                 arms,
             } => {
                 let (body, local) = self.bind_owned_choice(choice_type, source, &arms, locals)?;
-                let result = self.evaluate(body, locals);
+                let result = self.evaluate_in_context(body, locals, demand);
                 locals.remove(&local);
                 result
             }
@@ -2737,7 +2855,7 @@ impl ReferenceState<'_> {
                 body,
             } => {
                 self.bind_owned_product(product_type, source, &fields, locals)?;
-                let result = self.evaluate(body, locals);
+                let result = self.evaluate_in_context(body, locals, demand);
                 for field in fields {
                     locals.remove(&LocalValueReference::LexicalBinding(field.binding));
                 }
@@ -2751,6 +2869,7 @@ impl ReferenceState<'_> {
                 implementations,
                 arguments,
             } => {
+                self.require_owning_result(function)?;
                 let uses = self.function_parameter_uses(function)?;
                 let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
                 let target = self.witness_call(
@@ -2770,6 +2889,7 @@ impl ReferenceState<'_> {
                 arguments,
             } => {
                 let function = self.method_target(witness, contract, method)?;
+                self.require_owning_result(function)?;
                 let uses = self.function_parameter_uses(function)?;
                 let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
                 self.call_declaration(function, &[], &[], &[], arguments)
@@ -2803,6 +2923,22 @@ impl ReferenceState<'_> {
                             | NormalizedValue::OwnedSequence(_)
                     )
                 }) {
+                    if locals[&value].raw().memory_is_borrowed() {
+                        let source = self
+                            .borrow_result_sources
+                            .last()
+                            .copied()
+                            .flatten()
+                            .map(LocalValueReference::FunctionParameter);
+                        if !demand || source.is_none() || locals[&value].provenance() != source {
+                            return Err(reference_type_error(
+                                "borrowed local is outside its matching result context",
+                            ));
+                        }
+                        let result = locals[&value].duplicate(ParameterUse::Borrow)?;
+                        result.raw().memory_validate(self.memory_domain, false)?;
+                        return Ok(result);
+                    }
                     locals[&value]
                         .raw()
                         .memory_validate(self.memory_domain, true)?;
@@ -2837,8 +2973,10 @@ impl ReferenceState<'_> {
                 when_true,
                 when_false,
             } => match self.evaluate(condition, locals)?.release() {
-                NormalizedValue::Bool(true) => self.evaluate(when_true, locals),
-                NormalizedValue::Bool(false) => self.evaluate(when_false, locals),
+                NormalizedValue::Bool(true) => self.evaluate_in_context(when_true, locals, demand),
+                NormalizedValue::Bool(false) => {
+                    self.evaluate_in_context(when_false, locals, demand)
+                }
                 _ => Err(reference_type_error("if condition is not boolean")),
             },
             ExpressionOperation::Let { bindings, body } => {
@@ -2861,7 +2999,7 @@ impl ReferenceState<'_> {
                     }
                     scoped.push(local);
                 }
-                let result = self.evaluate(body, locals);
+                let result = self.evaluate_in_context(body, locals, demand);
                 for local in scoped {
                     locals.remove(&local);
                 }
@@ -2879,7 +3017,7 @@ impl ReferenceState<'_> {
                 for item in preceding {
                     self.evaluate(*item, locals)?;
                 }
-                self.evaluate(*last, locals)
+                self.evaluate_in_context(*last, locals, demand)
             }
             ExpressionOperation::Call {
                 requirement_arguments,
@@ -2888,6 +3026,7 @@ impl ReferenceState<'_> {
                 type_arguments,
                 arguments,
             } => {
+                self.require_owning_result(function)?;
                 let uses = self.function_parameter_uses(function)?;
                 let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
                 self.call_declaration(
@@ -2905,7 +3044,7 @@ impl ReferenceState<'_> {
                 type_arguments,
             } => {
                 let signature = self.function_signature(function)?;
-                if signature.has_implementations {
+                if signature.has_implementations || signature.result_borrow.is_some() {
                     return Err(reference_type_error(
                         "static witness templates cannot become callable values",
                     ));
@@ -3116,7 +3255,7 @@ impl ReferenceState<'_> {
                         ));
                     }
                 };
-                let result = self.evaluate(arm.body, locals);
+                let result = self.evaluate_in_context(arm.body, locals, demand);
                 if let Some(bound) = bound {
                     locals.remove(&bound);
                 }
@@ -3211,7 +3350,7 @@ impl ReferenceState<'_> {
                 ));
             }
         };
-        let value = if let Some(local) = local {
+        let mut value = if let Some(local) = local {
             match use_mode {
                 ParameterUse::Consume => {
                     // Invalid consuming syntax must leave its source in custody
@@ -3252,6 +3391,12 @@ impl ReferenceState<'_> {
             ));
         }
         if value.raw().memory_form().is_some() {
+            if use_mode == ParameterUse::Borrow
+                && value.provenance().is_none()
+                && let Some(local) = local
+            {
+                value.set_provenance(local);
+            }
             value
                 .raw()
                 .memory_validate(self.memory_domain, use_mode == ParameterUse::Consume)?;
@@ -3322,6 +3467,7 @@ impl ReferenceState<'_> {
             effect,
             parameters,
             result,
+            result_borrow,
             pure,
         ) = match self.declaration(reference)?.payload {
             DeclarationPayload::Function(function) => (
@@ -3332,6 +3478,7 @@ impl ReferenceState<'_> {
                 function.effect.clone(),
                 function.parameters,
                 function.result,
+                function.result_borrow,
                 matches!(function.effect, FunctionEffect::Pure),
             ),
             DeclarationPayload::External(external) => (
@@ -3342,6 +3489,7 @@ impl ReferenceState<'_> {
                 FunctionEffect::Pure,
                 external.parameters,
                 external.result,
+                None,
                 true,
             ),
             DeclarationPayload::Constant { .. } => {
@@ -3366,8 +3514,23 @@ impl ReferenceState<'_> {
             type_parameter_constraints,
             parameters: self.parameters(reference.package, &parameters)?,
             result,
+            result_borrow,
             pure,
         })
+    }
+
+    fn require_owning_result(
+        &mut self,
+        function: DeclarationReference,
+    ) -> Result<(), ExecutionError> {
+        if matches!(self.declaration(function)?.payload,
+            DeclarationPayload::Function(function) if function.result_borrow.is_some())
+        {
+            return Err(reference_type_error(
+                "borrowed-result function requires a lexical borrow-call",
+            ));
+        }
+        Ok(())
     }
 
     fn type_parameter_constraints(

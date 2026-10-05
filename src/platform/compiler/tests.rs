@@ -3,6 +3,8 @@
 #[path = "nominal_session_tests.rs"]
 mod nominal_session_tests;
 
+#[path = "borrowed_result_admission_tests.rs"]
+mod borrowed_result_admission_tests;
 #[path = "byte_buffer_admission_tests.rs"]
 mod byte_buffer_admission_tests;
 #[path = "byte_buffer_tests.rs"]

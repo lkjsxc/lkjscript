@@ -16,6 +16,20 @@ struct Rights {
     loans: BTreeMap<LocalValueReference, usize>,
 }
 impl Rights {
+    fn root(&self, local: LocalValueReference) -> Option<LocalValueReference> {
+        let mut next = local;
+        let mut seen = BTreeSet::new();
+        loop {
+            if !self.readable(next) || !seen.insert(next) {
+                return None;
+            }
+            match self.provenance.get(&next) {
+                Some(parent) if self.borrowed.contains(&next) => next = *parent,
+                Some(_) => return None,
+                None => return Some(next),
+            }
+        }
+    }
     fn readable(&self, local: LocalValueReference) -> bool {
         self.memory.contains(&local)
             && (self.owned.contains(&local) || self.borrowed.contains(&local))
@@ -79,6 +93,8 @@ impl Rights {
         Some(())
     }
 }
+#[path = "borrowed_result_memory_oracle_tests.rs"]
+mod borrowed_result_tests;
 #[path = "borrowed_memory_oracle_tests.rs"]
 mod borrowed_tests;
 #[path = "implementation_effect_memory_oracle_tests.rs"]
@@ -94,6 +110,15 @@ mod transfer_tests;
 #[path = "memory_witness_reference.rs"]
 mod witnesses;
 struct Oracle<'a>(&'a KernelSnapshot, Option<DeclarationReference>);
+#[derive(Clone, Copy)]
+enum Demand {
+    Data,
+    Owner,
+    Borrow {
+        source: LocalValueReference,
+        ty: TypeObjectDigest,
+    },
+}
 impl Oracle<'_> {
     fn type_generation(&self, roots: Vec<TypeObjectDigest>, generation: u16) -> bool {
         if generation >= 25 {
@@ -424,6 +449,15 @@ impl Oracle<'_> {
             pure,
             implementation,
         ))
+    }
+    fn result_source(
+        &self,
+        function: DeclarationReference,
+    ) -> Option<Option<crate::platform::semantic_id::ParameterId>> {
+        if let Some(signature) = self.function(function) {
+            return Some(signature.result_borrow);
+        }
+        self.signature(function).map(|_| None)
     }
     fn legal_signature(
         &self,
@@ -846,9 +880,161 @@ impl Oracle<'_> {
         }
         (moved.is_disjoint(&borrowed) && rights.loans == initial_loans).then_some(())
     }
-    // A result is either ordinary data or a moved owner. Reads never produce owners.
+    // Invocation resolution is reconstructed from canonical signatures. In
+    // particular, the source is a parameter position, never an allocation or
+    // an interchangeable local with the same type.
+    fn borrow_invocation(
+        &self,
+        call: ExpressionId,
+        ty: TypeObjectDigest,
+        rights: &mut Rights,
+        depth: usize,
+    ) -> Option<(LocalValueReference, Vec<LocalValueReference>)> {
+        let (parameters, arguments, source, result, substitutions) = match self.expression(call)? {
+            ExpressionOperation::Call {
+                function,
+                type_arguments,
+                arguments,
+                requirement_arguments,
+                effect_arguments,
+            } => {
+                let f = self.function(*function)?;
+                if !f.implementation_parameters.is_empty()
+                    || !self.valid_parameters(*function, &f)
+                    || !requirement_arguments.is_empty()
+                    || !effect_arguments.is_empty()
+                {
+                    return None;
+                }
+                let selected = f.result_borrow?;
+                let source = f.parameters.iter().position(|p| *p == selected)?;
+                let template = self.signature(*function)?;
+                let applied = self.applied_signature(*function, type_arguments)?;
+                if !self.legal_signature(&applied) {
+                    return None;
+                }
+                (
+                    template
+                        .0
+                        .iter()
+                        .zip(&applied.0)
+                        .map(|(t, p)| (t.ty, p.ty, p.use_mode))
+                        .collect::<Vec<_>>(),
+                    arguments,
+                    source,
+                    f.result,
+                    self.application_bindings(*function, type_arguments)?,
+                )
+            }
+            ExpressionOperation::ImplementationCall {
+                function,
+                type_arguments,
+                implementations,
+                arguments,
+                requirement_arguments,
+                effect_arguments,
+            } => {
+                let f = self.function(*function)?;
+                if !self.valid_parameters(*function, &f)
+                    || !self.witnesses(*function, type_arguments, implementations)
+                    || !requirement_arguments.is_empty()
+                    || !effect_arguments.is_empty()
+                {
+                    return None;
+                }
+                let selected = f.result_borrow?;
+                let source = f.parameters.iter().position(|p| *p == selected)?;
+                let template = self.signature(*function)?;
+                let applied = self.applied_signature(*function, type_arguments)?;
+                if !self.legal_signature(&applied) {
+                    return None;
+                }
+                (
+                    template
+                        .0
+                        .iter()
+                        .zip(&applied.0)
+                        .map(|(t, p)| (t.ty, p.ty, p.use_mode))
+                        .collect::<Vec<_>>(),
+                    arguments,
+                    source,
+                    f.result,
+                    self.application_bindings(*function, type_arguments)?,
+                )
+            }
+            ExpressionOperation::MethodCall {
+                witness,
+                contract,
+                method,
+                arguments,
+            } => {
+                let (m, substitutions) = self.method(*witness, *contract, *method)?;
+                let source = m.result_borrow? as usize;
+                (
+                    m.parameters
+                        .iter()
+                        .map(|p| (p.ty, self.method_type(p.ty, &substitutions), p.use_mode))
+                        .collect::<Vec<_>>(),
+                    arguments,
+                    source,
+                    m.result,
+                    substitutions,
+                )
+            }
+            _ => return None,
+        };
+        if parameters.get(source)?.2 != ParameterUse::Borrow {
+            return None;
+        }
+        let ExpressionOperation::Local { value: local } =
+            self.expression(*arguments.get(source)?)?
+        else {
+            return None;
+        };
+        let mut remaining = contract::MAXIMUM_VALIDATION_WORK;
+        self.exact_application_type(result, ty, &substitutions, 0, &mut remaining)?;
+        self.arguments(&parameters, arguments, rights, depth, &substitutions)?;
+        Some((*local, rights.loan(*local)?))
+    }
+    // Ordinary evaluation distinguishes data and transferred owners. A
+    // borrowed-return demand additionally requires every terminal path to
+    // establish the exact nominated root, while all preceding operations keep
+    // their ordinary consumption rules.
     fn run(&self, id: ExpressionId, rights: &mut Rights, take: bool, depth: usize) -> Option<bool> {
+        self.flow(
+            id,
+            rights,
+            if take { Demand::Owner } else { Demand::Data },
+            depth,
+        )
+    }
+    fn flow(
+        &self,
+        id: ExpressionId,
+        rights: &mut Rights,
+        demand: Demand,
+        depth: usize,
+    ) -> Option<bool> {
         if depth > contract::MAXIMUM_EXPRESSION_DEPTH {
+            return None;
+        }
+        let take = matches!(demand, Demand::Owner);
+        if matches!(demand, Demand::Borrow { .. })
+            && !matches!(
+                self.expression(id)?,
+                ExpressionOperation::Local { .. }
+                    | ExpressionOperation::Let { .. }
+                    | ExpressionOperation::Sequence { .. }
+                    | ExpressionOperation::If { .. }
+                    | ExpressionOperation::Match { .. }
+                    | ExpressionOperation::MatchOwned { .. }
+                    | ExpressionOperation::UnpackOwned { .. }
+                    | ExpressionOperation::BorrowOwnedItem { .. }
+                    | ExpressionOperation::BorrowOwnedField { .. }
+                    | ExpressionOperation::MatchBorrowedOwned { .. }
+                    | ExpressionOperation::BorrowCall { .. }
+            )
+        {
             return None;
         }
         let plain = |id, rights: &mut Rights| {
@@ -979,7 +1165,7 @@ impl Oracle<'_> {
                 let ancestry = rights.loan(*source)?;
                 let view = LocalValueReference::LexicalBinding(*binding);
                 rights.view(view, *source)?;
-                let result = self.run(*body, rights, take, depth + 1)?;
+                let result = self.flow(*body, rights, demand, depth + 1)?;
                 rights.finish_view(view)?;
                 rights.release(ancestry)?;
                 if rights.memory != before.memory
@@ -1020,7 +1206,7 @@ impl Oracle<'_> {
                 let ancestry = rights.loan(*source)?;
                 let view = LocalValueReference::LexicalBinding(*binding);
                 rights.view(view, *source)?;
-                let result = self.run(*body, rights, take, depth + 1)?;
+                let result = self.flow(*body, rights, demand, depth + 1)?;
                 rights.finish_view(view)?;
                 rights.release(ancestry)?;
                 if rights.memory != before.memory
@@ -1076,7 +1262,7 @@ impl Oracle<'_> {
                     } else if !self.ordinary(case.ty) {
                         return None;
                     }
-                    let result = self.run(arm.body, &mut branch, take, depth + 1)?;
+                    let result = self.flow(arm.body, &mut branch, demand, depth + 1)?;
                     if owned {
                         branch.finish_view(view)?;
                     }
@@ -1170,7 +1356,7 @@ impl Oracle<'_> {
                         branch.memory.insert(local);
                         branch.owned.insert(local);
                     }
-                    let output = self.run(arm.body, &mut branch, take, depth + 1)?;
+                    let output = self.flow(arm.body, &mut branch, demand, depth + 1)?;
                     branch.memory.remove(&local);
                     branch.owned.remove(&local);
                     if branch.memory != before.memory
@@ -1265,7 +1451,7 @@ impl Oracle<'_> {
                         rights.owned.insert(local);
                     }
                 }
-                let result = self.run(*body, rights, take, depth + 1)?;
+                let result = self.flow(*body, rights, demand, depth + 1)?;
                 for local in scope {
                     rights.memory.remove(&local);
                     rights.owned.remove(&local);
@@ -1273,6 +1459,12 @@ impl Oracle<'_> {
                 result
             }
             ExpressionOperation::Local { value } if rights.memory.contains(value) => {
+                if let Demand::Borrow { source, ty } = demand {
+                    return (rights.borrowed.contains(value)
+                        && rights.root(*value) == Some(source)
+                        && self.local_type(*value) == Some(ty))
+                    .then_some(false);
+                }
                 if !take {
                     return None;
                 }
@@ -1304,7 +1496,7 @@ impl Oracle<'_> {
                         scope.push(r);
                     }
                 }
-                let result = self.run(*body, rights, take, depth + 1)?;
+                let result = self.flow(*body, rights, demand, depth + 1)?;
                 for r in scope {
                     rights.memory.remove(&r);
                     rights.owned.remove(&r);
@@ -1312,9 +1504,21 @@ impl Oracle<'_> {
                 result
             }
             ExpressionOperation::Sequence { items } => {
+                if items.is_empty() && matches!(demand, Demand::Borrow { .. }) {
+                    return None;
+                }
                 let mut output = false;
                 for (i, e) in items.iter().enumerate() {
-                    output = self.run(*e, rights, i + 1 < items.len() || take, depth + 1)?;
+                    output = self.flow(
+                        *e,
+                        rights,
+                        if i + 1 < items.len() {
+                            Demand::Owner
+                        } else {
+                            demand
+                        },
+                        depth + 1,
+                    )?;
                 }
                 output
             }
@@ -1326,8 +1530,8 @@ impl Oracle<'_> {
                 plain(*condition, rights)?;
                 let mut a = rights.clone();
                 let mut b = rights.clone();
-                let av = self.run(*when_true, &mut a, take, depth + 1)?;
-                let bv = self.run(*when_false, &mut b, take, depth + 1)?;
+                let av = self.flow(*when_true, &mut a, demand, depth + 1)?;
+                let bv = self.flow(*when_false, &mut b, demand, depth + 1)?;
                 if av != bv {
                     return None;
                 }
@@ -1348,10 +1552,9 @@ impl Oracle<'_> {
                 arguments,
                 ..
             } => {
-                if self
-                    .function(*function)
-                    .is_some_and(|f| !f.implementation_parameters.is_empty())
-                    || !self.application(*function, type_arguments)
+                if self.function(*function).is_some_and(|f| {
+                    !f.implementation_parameters.is_empty() || f.result_borrow.is_some()
+                }) || !self.application(*function, type_arguments)
                 {
                     return None;
                 }
@@ -1408,6 +1611,7 @@ impl Oracle<'_> {
             } => {
                 if !self.application(*function, type_arguments)
                     || !self.witnesses(*function, type_arguments, implementations)
+                    || self.result_source(*function) != Some(None)
                 {
                     return None;
                 }
@@ -1437,6 +1641,9 @@ impl Oracle<'_> {
                 arguments,
             } => {
                 let (m, bindings) = self.method(*witness, *contract, *method)?;
+                if m.result_borrow.is_some() {
+                    return None;
+                }
                 self.arguments(
                     &m.parameters
                         .iter()
@@ -1449,15 +1656,44 @@ impl Oracle<'_> {
                 )?;
                 self.buffer(self.method_type(m.result, &bindings))
             }
+            ExpressionOperation::BorrowCall {
+                call,
+                binding,
+                body,
+            } => {
+                let OwnerRecord::Binding(record) =
+                    self.0.owners.get(&OwnerKey::Binding(*binding))?
+                else {
+                    return None;
+                };
+                let ty = record.declared_type?;
+                if !self.borrow_binding(*binding, ty) || !self.owned_type_in_scope(ty) {
+                    return None;
+                }
+                let (source, ancestry) = self.borrow_invocation(*call, ty, rights, depth)?;
+                let before = rights.clone();
+                let view = LocalValueReference::LexicalBinding(*binding);
+                rights.view(view, source)?;
+                let result = self.flow(*body, rights, demand, depth + 1)?;
+                rights.finish_view(view)?;
+                if rights.memory != before.memory
+                    || rights.borrowed != before.borrowed
+                    || rights.provenance != before.provenance
+                    || rights.loans != before.loans
+                {
+                    return None;
+                }
+                rights.release(ancestry)?;
+                result
+            }
             ExpressionOperation::FunctionValue {
                 function,
                 type_arguments,
                 ..
             } => {
-                if self
-                    .function(*function)
-                    .is_some_and(|f| !f.implementation_parameters.is_empty())
-                    || type_arguments.iter().any(|t| self.contains(*t))
+                if self.function(*function).is_some_and(|f| {
+                    !f.implementation_parameters.is_empty() || f.result_borrow.is_some()
+                }) || type_arguments.iter().any(|t| self.contains(*t))
                 {
                     return None;
                 }
@@ -1541,7 +1777,7 @@ impl Oracle<'_> {
                 let mut result: Option<(Rights, bool)> = None;
                 for arm in arms {
                     let mut path = rights.clone();
-                    let v = self.run(arm.body, &mut path, take, depth + 1)?;
+                    let v = self.flow(arm.body, &mut path, demand, depth + 1)?;
                     if let Some((prior, pv)) = &mut result {
                         if *pv != v
                             || prior.borrowed != path.borrowed
@@ -1568,7 +1804,9 @@ impl Oracle<'_> {
             | ExpressionOperation::StaticText { .. }
             | ExpressionOperation::Constant { .. } => false,
             ExpressionOperation::Local { value } => {
-                if self.local_type(*value).is_some_and(|ty| self.buffer(ty)) {
+                if matches!(demand, Demand::Borrow { .. })
+                    || self.local_type(*value).is_some_and(|ty| self.buffer(ty))
+                {
                     return None;
                 }
                 false
@@ -1603,10 +1841,11 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                         generation < 26 && !i.type_arguments.is_empty()
                     }
                     PackageInterfaceDeclarationPayload::Function(f) => {
-                        generation < 26
-                            && f.implementation_parameters
-                                .iter()
-                                .any(|p| !p.type_arguments.is_empty())
+                        (generation < 27 && f.result_borrow.is_some())
+                            || generation < 26
+                                && f.implementation_parameters
+                                    .iter()
+                                    .any(|p| !p.type_arguments.is_empty())
                     }
                     _ => false,
                 }
@@ -1721,7 +1960,8 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
         if let OwnerRecord::Expression(e) = owner {
             match &e.operation {
                 ExpressionOperation::BorrowOwnedField { binding, .. }
-                | ExpressionOperation::BorrowOwnedItem { binding, .. } => {
+                | ExpressionOperation::BorrowOwnedItem { binding, .. }
+                | ExpressionOperation::BorrowCall { binding, .. } => {
                     if !product_bindings.insert(*binding) || !borrowed_bindings.insert(*binding) {
                         return false;
                     }
@@ -1749,13 +1989,19 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                     generation < 26 && !i.type_arguments.is_empty()
                 }
                 DeclarationPayload::Function(f) => {
-                    generation < 26
-                        && f.implementation_parameters
-                            .iter()
-                            .any(|p| !p.type_arguments.is_empty())
+                    (generation < 27 && f.result_borrow.is_some())
+                        || generation < 26
+                            && f.implementation_parameters
+                                .iter()
+                                .any(|p| !p.type_arguments.is_empty())
                 }
                 _ => false,
             }
+        {
+            return false;
+        }
+        if generation < 27
+            && matches!(owner, OwnerRecord::Expression(e) if matches!(e.operation, ExpressionOperation::BorrowCall { .. }))
         {
             return false;
         }
@@ -1958,8 +2204,16 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                             }
                         }
                     }
-                    if oracle.run(f.body, &mut rights, oracle.buffer(f.result), 0)
-                        != Some(oracle.buffer(f.result))
+                    let demand = match f.result_borrow {
+                        Some(source) => Demand::Borrow {
+                            source: LocalValueReference::FunctionParameter(source),
+                            ty: f.result,
+                        },
+                        None if oracle.buffer(f.result) => Demand::Owner,
+                        None => Demand::Data,
+                    };
+                    if oracle.flow(f.body, &mut rights, demand, 0)
+                        != Some(f.result_borrow.is_none() && oracle.buffer(f.result))
                         || !rights.provenance.is_empty()
                         || !rights.loans.is_empty()
                     {

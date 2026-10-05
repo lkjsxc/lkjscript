@@ -91,6 +91,7 @@ fn phantom_fixture() -> (KernelSnapshot, Ids) {
         (
             declaration,
             DeclarationPayload::Function(FunctionDeclaration {
+                result_borrow: None,
                 implementation_parameters,
                 requirement_parameters: vec![],
                 effect_parameters: vec![],
@@ -124,6 +125,7 @@ fn phantom_fixture() -> (KernelSnapshot, Ids) {
                 self_parameter: ids.self_parameter,
                 type_parameters: vec![ids.item_parameter],
                 methods: vec![OwnedMethod {
+                    result_borrow: None,
                     id: ids.method,
                     name: Name::new("inspect").unwrap(),
                     parameters: vec![],

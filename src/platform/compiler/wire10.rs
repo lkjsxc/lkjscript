@@ -280,6 +280,7 @@ impl From<CompiledSignature10> for CompiledSignature {
             type_parameter_constraints,
             parameters,
             result,
+            result_borrow: None,
             task_requirements,
             implementation_parameters: Vec::new(),
             requirement_parameters: Vec::new(),

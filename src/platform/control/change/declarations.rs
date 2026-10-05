@@ -1298,10 +1298,29 @@ impl Lowering<'_> {
                         }
                         let parameters = parameters.to_vec();
                         let (result_clause, results) = self.parts(args[3])?;
-                        if result_clause != "returns" || results.len() != 1 {
+                        let result_clause = result_clause.to_owned();
+                        let results = results.to_vec();
+                        if result_clause != "returns" || !(1..=2).contains(&results.len()) {
                             return Err(self.error(args[3], "method requires one result"));
                         }
                         let result = self.ty(results[0], &scope, 1)?;
+                        let result_borrow = if let Some(source) = results.get(1) {
+                            let source = self.one(*source)?;
+                            if self.block.head(results[1]) != Some("borrow-from") {
+                                return Err(
+                                    self.error(results[1], "borrowed result requires borrow-from")
+                                );
+                            }
+                            let position: u32 = self.block.atom(source)?.parse().map_err(|_| {
+                                self.error(
+                                    source,
+                                    "method borrow-from requires a zero-based parameter position",
+                                )
+                            })?;
+                            Some(position.to_string())
+                        } else {
+                            None
+                        };
                         let effect = if let Some(clause) = args.get(4) {
                             if self.block.head(*clause) != Some("effect") {
                                 return Err(self.error(*clause, "method requires an effect clause"));
@@ -1316,19 +1335,19 @@ impl Lowering<'_> {
                         } else {
                             "pure"
                         };
-                        self.record(
-                            *clause,
-                            "owned.method",
-                            vec![
-                                ("parent", unit.label.clone()),
-                                ("index", index.to_string()),
-                                ("as", label.clone()),
-                                ("id", self.block.atom(args[0])?.into()),
-                                ("name", self.block.atom(args[1])?.into()),
-                                ("result", result),
-                                ("effect", effect.into()),
-                            ],
-                        )?;
+                        let mut method_fields = vec![
+                            ("parent", unit.label.clone()),
+                            ("index", index.to_string()),
+                            ("as", label.clone()),
+                            ("id", self.block.atom(args[0])?.into()),
+                            ("name", self.block.atom(args[1])?.into()),
+                            ("result", result),
+                            ("effect", effect.into()),
+                        ];
+                        if let Some(source) = result_borrow {
+                            method_fields.push(("borrow-from", source));
+                        }
+                        self.record(*clause, "owned.method", method_fields)?;
                         for (index, parameter) in parameters.into_iter().enumerate() {
                             let parts = self.block.list(parameter)?.to_vec();
                             if parts.len() != 2 {
@@ -1418,8 +1437,25 @@ impl Lowering<'_> {
                         self.record(*clause, "owned.witness", witness_fields)?;
                     }
                 }
-                let ty = self.one(self.required_clause(unit, "returns")?)?;
-                fields.push(("result", self.ty(ty, &scope, 1)?));
+                let returns = self.required_clause(unit, "returns")?;
+                let (_, values) = self.parts(returns)?;
+                let values = values.to_vec();
+                if !(1..=2).contains(&values.len()) {
+                    return Err(
+                        self.error(returns, "returns requires a type and optional borrow-from")
+                    );
+                }
+                fields.push(("result", self.ty(values[0], &scope, 1)?));
+                if let Some(source) = values.get(1) {
+                    if kind != "function" || self.block.head(*source) != Some("borrow-from") {
+                        return Err(
+                            self.error(*source, "borrow-from is supported only on functions")
+                        );
+                    }
+                    let source = self.one(*source)?;
+                    let reference = self.reference(source, &scope, "parameter")?;
+                    fields.push(("borrow-from", reference));
+                }
                 allowed.push("returns");
                 if kind == "external" {
                     fields.push(("implementation", self.scalar(unit, "implementation")?));
@@ -2022,6 +2058,7 @@ pub(super) fn finish(
             AuthoredChange::CreateFunction {
                 visibility,
                 result,
+                result_borrow,
                 effect,
                 body,
                 ..
@@ -2035,6 +2072,7 @@ pub(super) fn finish(
                 changes.push(AuthoredChange::SetFunctionContract {
                     function: function.clone(),
                     result,
+                    result_borrow,
                     effect,
                 });
                 let crate::platform::kernel::OwnerRecord::Declaration(old) = reader.owner(owner)?

@@ -1,0 +1,119 @@
+declarations.begin
+(units
+  (use std builtin)
+  (module create owned-read-app
+    (type-alias CellFlat (owned-sequence OwnedI64Cell))
+    (type-alias CellChunked (owned-product
+      (field chunks (owned-sequence (owned-sequence OwnedI64Cell))) (field size I64)))
+    (type-alias BufferFlat (owned-sequence ByteBuffer))
+    (type-alias BufferChunked (owned-product
+      (field chunks (owned-sequence (owned-sequence ByteBuffer))) (field size I64)))
+    (type-alias Scenario (record (length I64) (selected (list I64))
+      (tied-selected (list I64)) (drained (list I64)) (empty-length I64) (reused (list I64))))
+    (type-alias Result (record
+      (cell-flat Scenario) (cell-chunked Scenario) (buffer-flat Scenario) (buffer-chunked Scenario)))
+    (function create scenario (visibility private) (effect pure)
+      (type-parameter create T (constraint owned)) (type-parameter create W (constraint owned))
+      (implementation-parameter implparam_8a000000000000000000000000000011 element owned-worklists::Element T)
+      (implementation-parameter implparam_8a000000000000000000000000000012 keys owned-worklists::Element T)
+      (implementation-parameter implparam_8a000000000000000000000000000013 work owned-worklists::Worklist W (types T))
+      (implementation-parameter implparam_8a000000000000000000000000000014 reader owned-read-results::IndexRead W (types T))
+      (parameter create inputs (type (list I64))) (returns Scenario)
+      (body (let
+        (binding storage (type W)
+          (implementation-call owned-worklists::build (types T W)
+            (implementations parameter@scenario@implparam_8a000000000000000000000000000011
+              parameter@scenario@implparam_8a000000000000000000000000000013) (local inputs)))
+        (binding length (type I64)
+          (method-call parameter@scenario@implparam_8a000000000000000000000000000014
+            owned-read-results::IndexRead method_8a000000000000000000000000000001 (local storage)))
+        (binding selected (type (list I64))
+          (if (call std::i64-equal (local length) (i64 0)) (list I64)
+            (borrow-call
+              (implementation-call owned-read-results::select-max (types T W)
+                (implementations parameter@scenario@implparam_8a000000000000000000000000000011
+                  parameter@scenario@implparam_8a000000000000000000000000000014) (local storage))
+              (binding view (type T))
+              (in (list I64
+                (method-call parameter@scenario@implparam_8a000000000000000000000000000011
+                  owned-worklists::Element method_88000000000000000000000000000002 (local view)))))))
+        (binding tied-selected (type (list I64))
+          (if (call std::i64-equal (local length) (i64 0)) (list I64)
+            (borrow-call
+              (implementation-call owned-read-results::select-max (types T W)
+                (implementations parameter@scenario@implparam_8a000000000000000000000000000012
+                  parameter@scenario@implparam_8a000000000000000000000000000014) (local storage))
+              (binding view (type T))
+              (in (list I64
+                (method-call parameter@scenario@implparam_8a000000000000000000000000000011
+                  owned-worklists::Element method_88000000000000000000000000000002 (local view)))))))
+        (binding drained (type (owned-product (field rest W) (field values (list I64))))
+          (implementation-call owned-worklists::drain (types T W)
+            (implementations parameter@scenario@implparam_8a000000000000000000000000000011
+              parameter@scenario@implparam_8a000000000000000000000000000013) (local storage)))
+        (in (unpack-owned (type (owned-product (field rest W) (field values (list I64)))) (local drained)
+          (field rest (binding rest (type W))) (field values (binding drained-values (type (list I64))))
+          (in (let
+            (binding empty-length (type I64)
+              (method-call parameter@scenario@implparam_8a000000000000000000000000000014
+                owned-read-results::IndexRead method_8a000000000000000000000000000001 (local rest)))
+            (binding value (type T)
+              (method-call parameter@scenario@implparam_8a000000000000000000000000000011
+                owned-worklists::Element method_88000000000000000000000000000001 (i64 17)))
+            (binding next (type W)
+              (method-call parameter@scenario@implparam_8a000000000000000000000000000013
+                owned-worklists::Worklist method_88000000000000000000000000000013 (local value) (local rest)))
+            (binding reused (type (owned-product (field rest W) (field values (list I64))))
+              (implementation-call owned-worklists::drain (types T W)
+                (implementations parameter@scenario@implparam_8a000000000000000000000000000011
+                  parameter@scenario@implparam_8a000000000000000000000000000013) (local next)))
+            (in (unpack-owned (type (owned-product (field rest W) (field values (list I64)))) (local reused)
+              (field rest (binding final-rest (type W))) (field values (binding reused-values (type (list I64))))
+              (in (record structural
+                (field length (local length)) (field selected (local selected)) (field tied-selected (local tied-selected))
+                (field drained (local drained-values)) (field empty-length (local empty-length))
+                (field reused (local reused-values)))))))))))))
+    (function create cell-flat (visibility public) (effect pure)
+      (parameter create inputs (type (list I64))) (returns Scenario)
+      (body (implementation-call scenario (types OwnedI64Cell CellFlat)
+        (implementations concrete@worklist-carriers::Scalar concrete@read-carriers::CellKeys
+          concrete@worklist-carriers::FlatCells concrete@read-carriers::FlatCellReader) (local inputs))))
+    (function create cell-chunked (visibility public) (effect pure)
+      (parameter create inputs (type (list I64))) (returns Scenario)
+      (body (implementation-call scenario (types OwnedI64Cell CellChunked)
+        (implementations concrete@worklist-carriers::Scalar concrete@read-carriers::CellKeys
+          concrete@worklist-carriers::ChunkedCells concrete@read-carriers::ChunkedCellReader) (local inputs))))
+    (function create buffer-flat (visibility public) (effect pure)
+      (parameter create inputs (type (list I64))) (returns Scenario)
+      (body (implementation-call scenario (types ByteBuffer BufferFlat)
+        (implementations concrete@worklist-carriers::Octets concrete@read-carriers::BufferKeys
+          concrete@worklist-carriers::FlatBuffers concrete@read-carriers::FlatBufferReader) (local inputs))))
+    (function create buffer-chunked (visibility public) (effect pure)
+      (parameter create inputs (type (list I64))) (returns Scenario)
+      (body (implementation-call scenario (types ByteBuffer BufferChunked)
+        (implementations concrete@worklist-carriers::Octets concrete@read-carriers::BufferKeys
+          concrete@worklist-carriers::ChunkedBuffers concrete@read-carriers::ChunkedBufferReader) (local inputs))))
+    (function create main (visibility public) (effect pure)
+      (parameter create inputs (type (list I64))) (returns Result)
+      (body (record structural
+        (field cell-flat (call cell-flat (local inputs)))
+        (field cell-chunked (call cell-chunked (local inputs)))
+        (field buffer-flat (call buffer-flat (local inputs)))
+        (field buffer-chunked (call buffer-chunked (local inputs))))))
+    (component create command (visibility private)
+      (port create main (type (function ((list I64)) Result)) (function main))
+      (port create cell-flat (type (function ((list I64)) Scenario)) (function cell-flat))
+      (port create cell-chunked (type (function ((list I64)) Scenario)) (function cell-chunked))
+      (port create buffer-flat (type (function ((list I64)) Scenario)) (function buffer-flat))
+      (port create buffer-chunked (type (function ((list I64)) Scenario)) (function buffer-chunked))))
+  (target create owned-read-results (component owned-read-app::command)
+    (runner command) (port owned-read-app::command::main))
+  (target create read-cell-flat (component owned-read-app::command)
+    (runner command) (port owned-read-app::command::cell-flat))
+  (target create read-cell-chunked (component owned-read-app::command)
+    (runner command) (port owned-read-app::command::cell-chunked))
+  (target create read-buffer-flat (component owned-read-app::command)
+    (runner command) (port owned-read-app::command::buffer-flat))
+  (target create read-buffer-chunked (component owned-read-app::command)
+    (runner command) (port owned-read-app::command::buffer-chunked)))
+declarations.end

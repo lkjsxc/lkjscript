@@ -216,6 +216,7 @@ impl Signature {
             type_parameter_constraints: self.type_parameter_constraints,
             parameters: self.parameters,
             result: self.result,
+            result_borrow: None,
             task_requirements: self.task_requirements,
         }
     }

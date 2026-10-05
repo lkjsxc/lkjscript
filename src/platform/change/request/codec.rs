@@ -130,6 +130,7 @@ struct Writer {
     owned_borrow_extension: bool,
     sequence_extension: bool,
     parameterized_contract_extension: bool,
+    borrowed_result_extension: bool,
 }
 
 impl Writer {
@@ -153,11 +154,14 @@ impl Writer {
             owned_borrow_extension: false,
             sequence_extension: false,
             parameterized_contract_extension: false,
+            borrowed_result_extension: false,
         }
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.parameterized_contract_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+        if self.borrowed_result_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR31");
+        } else if self.parameterized_contract_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR30");
         } else if self.sequence_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR29");
@@ -513,7 +517,11 @@ impl Writer {
                     .iter()
                     .any(|m| !matches!(m.effect, AuthoredFunctionEffect::Pure {}));
                 self.task_method_extension |= task_methods;
-                self.tag(if !type_parameters.is_empty() {
+                let borrowed_results = methods.iter().any(|m| m.result_borrow.is_some());
+                self.borrowed_result_extension |= borrowed_results;
+                self.tag(if borrowed_results {
+                    93
+                } else if !type_parameters.is_empty() {
                     88
                 } else if task_methods {
                     86
@@ -525,7 +533,7 @@ impl Writer {
                 self.name(name)?;
                 self.visibility(*visibility)?;
                 self.authored_type(self_type, definitions, 1)?;
-                if !type_parameters.is_empty() {
+                if borrowed_results || !type_parameters.is_empty() {
                     self.list(type_parameters, |w, p| {
                         w.type_parameter_reference(p, definitions)
                     })?;
@@ -538,7 +546,10 @@ impl Writer {
                         w.parameter_use(*mode)
                     })?;
                     w.authored_type(&m.result, definitions, 1)?;
-                    if task_methods || !type_parameters.is_empty() {
+                    if borrowed_results {
+                        w.optional(m.result_borrow.as_ref(), |w, p| w.u64(u64::from(*p)))?;
+                    }
+                    if borrowed_results || task_methods || !type_parameters.is_empty() {
                         w.function_effect(&m.effect, definitions)
                     } else {
                         Ok(())
@@ -584,7 +595,11 @@ impl Writer {
                     .iter()
                     .any(|m| !matches!(m.effect, AuthoredFunctionEffect::Pure {}));
                 self.task_method_extension |= task_methods;
-                self.tag(if !type_parameters.is_empty() {
+                let borrowed_results = methods.iter().any(|m| m.result_borrow.is_some());
+                self.borrowed_result_extension |= borrowed_results;
+                self.tag(if borrowed_results {
+                    94
+                } else if !type_parameters.is_empty() {
                     90
                 } else if task_methods {
                     87
@@ -593,7 +608,7 @@ impl Writer {
                 })?;
                 self.declaration_selector(declaration, definitions)?;
                 self.authored_type(self_type, definitions, 1)?;
-                if !type_parameters.is_empty() {
+                if borrowed_results || !type_parameters.is_empty() {
                     self.list(type_parameters, |w, p| {
                         w.type_parameter_reference(p, definitions)
                     })?;
@@ -606,7 +621,10 @@ impl Writer {
                         w.parameter_use(*mode)
                     })?;
                     w.authored_type(&m.result, definitions, 1)?;
-                    if task_methods || !type_parameters.is_empty() {
+                    if borrowed_results {
+                        w.optional(m.result_borrow.as_ref(), |w, p| w.u64(u64::from(*p)))?;
+                    }
+                    if borrowed_results || task_methods || !type_parameters.is_empty() {
                         w.function_effect(&m.effect, definitions)
                     } else {
                         Ok(())
@@ -675,10 +693,12 @@ impl Writer {
                 type_parameters,
                 parameters,
                 result,
+                result_borrow,
                 effect,
                 body,
             } => {
-                self.tag(2)?;
+                self.borrowed_result_extension |= result_borrow.is_some();
+                self.tag(if result_borrow.is_some() { 91 } else { 2 })?;
                 self.symbol(symbol, definitions)?;
                 self.module_selector(module, definitions)?;
                 self.name(name)?;
@@ -690,6 +710,9 @@ impl Writer {
                     writer.parameter(value, definitions)
                 })?;
                 self.authored_type(result, definitions, 1)?;
+                if let Some(source) = result_borrow {
+                    self.local_reference(source, definitions)?;
+                }
                 self.function_effect(effect, definitions)?;
                 self.expression(body, definitions, 1)
             }
@@ -962,11 +985,16 @@ impl Writer {
             AuthoredChange::SetFunctionContract {
                 function,
                 result,
+                result_borrow,
                 effect,
             } => {
-                self.tag(21)?;
+                self.borrowed_result_extension |= result_borrow.is_some();
+                self.tag(if result_borrow.is_some() { 92 } else { 21 })?;
                 self.declaration_selector(function, definitions)?;
                 self.authored_type(result, definitions, 1)?;
+                if let Some(source) = result_borrow {
+                    self.local_reference(source, definitions)?;
+                }
                 self.function_effect(effect, definitions)
             }
             AuthoredChange::SetExternalContract {
@@ -1816,6 +1844,21 @@ impl Writer {
     ) -> Result<(), Diagnostic> {
         let next = depth.saturating_add(1);
         match value {
+            AuthoredExpressionOperation::BorrowCall {
+                call,
+                binding,
+                body,
+            } => {
+                self.borrowed_result_extension = true;
+                self.tag(44)?;
+                self.expression(call, definitions, next)?;
+                self.symbol(&binding.symbol, definitions)?;
+                self.name(&binding.name)?;
+                self.optional(binding.declared_type.as_ref(), |w, ty| {
+                    w.authored_type(ty, definitions, 1)
+                })?;
+                self.expression(body, definitions, next)
+            }
             AuthoredExpressionOperation::SequenceEmpty { sequence_type } => {
                 self.sequence_extension = true;
                 self.tag(39)?;
@@ -2479,6 +2522,7 @@ mod tests {
                         resource_requirement: None,
                     }],
                     result: AuthoredType::Text {},
+                    result_borrow: None,
                     effect: AuthoredFunctionEffect::Pure {},
                     body: AuthoredExpression {
                         symbol: Some(body_symbol.to_owned()),

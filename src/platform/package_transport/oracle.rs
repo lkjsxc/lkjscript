@@ -339,6 +339,8 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
                         12
                     } else if record.header().contract_version < 26 {
                         13
+                    } else if record.header().contract_version < 27 {
+                        14
                     } else {
                         crate::platform::package_interface::PACKAGE_INTERFACE_CONTRACT_VERSION
                     },
@@ -685,6 +687,7 @@ fn public_inventory(
                     type_parameters: function.type_parameters.clone(),
                     parameters: function.parameters.clone(),
                     result: function.result,
+                    result_borrow: function.result_borrow,
                     effect: function.effect.clone(),
                 })
             }

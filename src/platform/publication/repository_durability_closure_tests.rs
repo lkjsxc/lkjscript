@@ -279,6 +279,7 @@ fn prepare_nested_types(created: &CreatedRepository) -> PreparedPublication {
                 preconditions: Vec::new(),
                 budget: ChangeBudget::default(),
                 changes: vec![AuthoredChange::CreateFunction {
+                    result_borrow: None,
                     symbol: "$identity".to_owned(),
                     module: ModuleSelector::Id { module },
                     name: Name::new("nested_identity").unwrap(),

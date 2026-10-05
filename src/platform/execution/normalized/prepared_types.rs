@@ -864,7 +864,8 @@ fn calls(
         }
         match instruction {
             NormalizedInstruction::BorrowOwnedField { binding_type, .. }
-            | NormalizedInstruction::BorrowOwnedItem { binding_type, .. } => {
+            | NormalizedInstruction::BorrowOwnedItem { binding_type, .. }
+            | NormalizedInstruction::AdoptBorrowResult { binding_type, .. } => {
                 substitute(types, *binding_type, bindings, 0, work)?;
             }
             NormalizedInstruction::SequencePop { result_type, .. } => {
@@ -1216,6 +1217,16 @@ fn close_effect_applications(
                         *product_type = substitute_effect_type(
                             self.types,
                             *product_type,
+                            bindings,
+                            requirements,
+                            0,
+                            self.work,
+                        )?;
+                    }
+                    NormalizedInstruction::AdoptBorrowResult { binding_type, .. } => {
+                        *binding_type = substitute_effect_type(
+                            self.types,
+                            *binding_type,
                             bindings,
                             requirements,
                             0,

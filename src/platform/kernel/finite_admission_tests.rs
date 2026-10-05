@@ -117,6 +117,7 @@ fn function(
         label,
         OwnerKind::PureFunction,
         DeclarationPayload::Function(FunctionDeclaration {
+            result_borrow: None,
             implementation_parameters: Vec::new(),
             requirement_parameters: Vec::new(),
             effect_parameters: Vec::new(),

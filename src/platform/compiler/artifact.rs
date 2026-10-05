@@ -48,16 +48,16 @@ use std::fmt;
 #[path = "artifact_code.rs"]
 mod code_admission;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-33";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-33";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 33;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF33";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART33";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN33";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-34";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-34";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 34;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF34";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART34";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN34";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v33";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v33";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v33";
+    "lkjscript.artifact-manifest-envelope.v34";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v34";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v34";
 pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v18";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
@@ -511,7 +511,7 @@ impl ArtifactManifest {
                     | (23, 23, 18)
                     | (24, 24, 19)
                     | (25, 25, 20)
-                    | (26, 26, 21)
+                    | (27, 27, 22)
             )
             || self.compilation_manifest_contract_version != COMPILATION_MANIFEST_CONTRACT_VERSION
         {
@@ -1306,6 +1306,7 @@ pub(crate) enum RuntimeOwnerExpectation {
         effect: FunctionEffect,
         parameters: Vec<ParameterId>,
         result: TypeObjectDigest,
+        result_borrow: Option<ParameterId>,
         requirements: Vec<RequirementReference>,
     },
     MemoryExternal {
@@ -1457,6 +1458,7 @@ impl RuntimeOwnerExpectation {
                     effect,
                     parameters,
                     result,
+                    result_borrow,
                     requirements,
                 },
                 OwnerRecord::Declaration(record),
@@ -1471,6 +1473,7 @@ impl RuntimeOwnerExpectation {
                         && function.requirement_parameters == *requirement_parameters
                         && function.parameters == *parameters
                         && function.result == *result
+                        && function.result_borrow == *result_borrow
                         && (matches!(function.effect, FunctionEffect::Pure) && requirements.is_empty() || matches!(
                             &function.effect,
                             FunctionEffect::Task { effect_parameters: _,
@@ -1938,6 +1941,7 @@ pub(crate) fn runtime_owner_expectations(
                             effect: signature.effect.clone(),
                             parameters,
                             result,
+                            result_borrow: signature.result_borrow,
                             requirements,
                         },
                     )?;
@@ -4647,7 +4651,8 @@ fn reference_payload_matches(unit: &CompilationUnit, canonical: &DeclarationPayl
                 .iter()
                 .map(|p| p.parameter)
                 .eq(function.parameters.iter().copied())
-            && unit.tables.types.get(signature.result as usize) == Some(&function.result);
+            && unit.tables.types.get(signature.result as usize) == Some(&function.result)
+            && signature.result_borrow == function.result_borrow;
     }
     matches!(
         (compiled, canonical),
@@ -4715,7 +4720,8 @@ fn reference_expression_bindings(operation: &ExpressionOperation) -> Vec<Binding
             bindings.extend(fields.iter().map(|field| field.binding))
         }
         ExpressionOperation::BorrowOwnedField { binding, .. }
-        | ExpressionOperation::BorrowOwnedItem { binding, .. } => bindings.push(*binding),
+        | ExpressionOperation::BorrowOwnedItem { binding, .. }
+        | ExpressionOperation::BorrowCall { binding, .. } => bindings.push(*binding),
         ExpressionOperation::Match { arms, .. } => bindings.extend(
             arms.iter()
                 .filter_map(|arm| arm.payload_binding)

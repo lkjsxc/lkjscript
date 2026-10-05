@@ -258,6 +258,7 @@ pub(crate) fn library_composition() -> KernelSnapshot {
                 .unwrap(),
                 visibility: DeclarationVisibility::Public,
                 payload: DeclarationPayload::Function(FunctionDeclaration {
+                    result_borrow: None,
                     implementation_parameters: Vec::new(),
                     requirement_parameters: Vec::new(),
                     type_parameters: vec![parameter],
@@ -304,6 +305,7 @@ pub(crate) fn library_composition() -> KernelSnapshot {
             name: Name::new("consumer-task").unwrap(),
             visibility: DeclarationVisibility::Public,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                result_borrow: None,
                 implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 type_parameters: Vec::new(),
@@ -800,6 +802,7 @@ fn recursive_effect_permutation_and_union_close_by_finite_set_identity() {
             name: Name::new("combine-effects").unwrap(),
             visibility: DeclarationVisibility::Public,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                result_borrow: None,
                 implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 type_parameters: vec![],
@@ -841,6 +844,7 @@ fn recursive_effect_permutation_and_union_close_by_finite_set_identity() {
             name: Name::new("row-entry").unwrap(),
             visibility: DeclarationVisibility::Public,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                result_borrow: None,
                 implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 type_parameters: vec![],
@@ -1044,6 +1048,7 @@ fn task_input_fixture_dispatch(
             name: Name::new("accept-task").unwrap(),
             visibility: DeclarationVisibility::Public,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                result_borrow: None,
                 implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 type_parameters: vec![],
@@ -1092,6 +1097,7 @@ fn task_input_fixture_dispatch(
                 name: Name::new(name).unwrap(),
                 visibility: DeclarationVisibility::Public,
                 payload: DeclarationPayload::Function(FunctionDeclaration {
+                    result_borrow: None,
                     implementation_parameters: Vec::new(),
                     requirement_parameters: Vec::new(),
                     type_parameters: vec![],
@@ -1363,6 +1369,7 @@ fn empty_and_inactive_task_containers_are_transient_but_not_serializable() {
             name: Name::new("discard-task-containers").unwrap(),
             visibility: DeclarationVisibility::Private,
             payload: DeclarationPayload::Function(FunctionDeclaration {
+                result_borrow: None,
                 implementation_parameters: Vec::new(),
                 requirement_parameters: Vec::new(),
                 type_parameters: vec![],

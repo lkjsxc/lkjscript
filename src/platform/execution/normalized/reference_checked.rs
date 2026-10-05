@@ -17,6 +17,28 @@ pub(super) struct Value {
     datum: NormalizedValue,
     preparation: ValueOrigin,
     ownership: Ownership,
+    // Exact activation-local origin, independent of token allocation identity.
+    provenance: Option<LocalValueReference>,
+    // The leaf field drops first. Reborrowing shares ancestor cleanup custody
+    // rather than multiplying the same ancestor loans at every forwarding hop.
+    guards: Option<Arc<AncestorCustody>>,
+    reservation: Option<Arc<AncestorCustody>>,
+}
+
+#[derive(Debug, Default)]
+struct AncestorCustody {
+    inner: Option<Arc<AncestorCustody>>,
+    token: Option<NormalizedValue>,
+    outer: Option<Arc<AncestorCustody>>,
+}
+
+impl Drop for AncestorCustody {
+    fn drop(&mut self) {
+        // Explicit order, independent of container destructor conventions.
+        drop(self.inner.take());
+        drop(self.token.take());
+        drop(self.outer.take());
+    }
 }
 
 type Invocation = (
@@ -46,6 +68,9 @@ impl Value {
             datum,
             preparation: schema.value_origin,
             ownership: Ownership::Memory,
+            provenance: None,
+            guards: None,
+            reservation: None,
         })
     }
 
@@ -54,6 +79,53 @@ impl Value {
     }
     pub(super) fn release(self) -> NormalizedValue {
         self.datum
+    }
+
+    pub(super) fn provenance(&self) -> Option<LocalValueReference> {
+        self.provenance
+    }
+
+    pub(super) fn set_provenance(&mut self, source: LocalValueReference) {
+        self.provenance = Some(source);
+    }
+
+    pub(super) fn parent_storage_bytes() -> usize {
+        std::mem::size_of::<AncestorCustody>() + 2 * std::mem::size_of::<usize>()
+    }
+
+    // Reserve modeled growth before detaching either cleanup owner.
+    pub(super) fn reserve_parent(&mut self, _parent: &Self) -> Result<(), ExecutionError> {
+        if self.reservation.is_some() {
+            return Err(reject("borrowed result custody was reserved twice"));
+        }
+        #[cfg(test)]
+        super::borrowed_result_tests::fault(
+            super::borrowed_result_tests::FailureStage::ParentReservation,
+        )?;
+        // The empty node is allocated while both values remain in their
+        // original scopes. Custody transfer below performs no allocation.
+        self.reservation = Some(Arc::new(AncestorCustody::default()));
+        Ok(())
+    }
+
+    pub(super) fn retain_parent(
+        &mut self,
+        take_parent: impl FnOnce() -> Result<Self, ExecutionError>,
+    ) -> Result<(), ExecutionError> {
+        // Establish the unique destination before extracting the source. Any
+        // failed invariant leaves the parent in its original cleanup scope.
+        let custody = self
+            .reservation
+            .as_mut()
+            .ok_or_else(|| reject("borrowed result has no reserved custody destination"))?;
+        let unique = Arc::get_mut(custody)
+            .ok_or_else(|| reject("borrowed result custody reservation was shared"))?;
+        let parent = take_parent()?;
+        unique.inner = self.guards.take();
+        unique.token = Some(parent.datum);
+        unique.outer = parent.guards;
+        self.guards = self.reservation.take();
+        Ok(())
     }
 
     pub(super) fn ownership(
@@ -74,10 +146,14 @@ impl Value {
 
     pub(super) fn duplicate(&self, use_mode: ParameterUse) -> Result<Self, ExecutionError> {
         if self.ownership == Ownership::Memory && use_mode == ParameterUse::Borrow {
+            let datum = self.datum.memory_borrow()?;
             return Ok(Self {
-                datum: self.datum.memory_borrow()?,
+                datum,
                 preparation: self.preparation,
                 ownership: Ownership::Memory,
+                provenance: self.provenance,
+                guards: self.guards.as_ref().map(Arc::clone),
+                reservation: None,
             });
         }
 
@@ -95,6 +171,9 @@ impl Value {
                 },
                 preparation: self.preparation,
                 ownership: self.ownership,
+                provenance: None,
+                guards: None,
+                reservation: None,
             }),
             _ => Err(reference_error(
                 "normalized_reference_local_resource_use",
@@ -118,6 +197,9 @@ impl Value {
                 datum,
                 preparation: schema.value_origin,
                 ownership: Ownership::Ordinary,
+                provenance: None,
+                guards: None,
+                reservation: None,
             }),
             _ => Err(reject(
                 "primitive reference constructor received structured data or authority; use its checked constructor",
@@ -142,6 +224,7 @@ impl Value {
         if type_arguments
             .iter()
             .any(|ty| !schema.buffer_free_types.contains(ty))
+            || signature.result_borrow.is_some()
             || !schema.buffer_free_types.contains(&signature.result)
             || signature
                 .parameters
@@ -185,6 +268,9 @@ impl Value {
             },
             preparation: schema.value_origin,
             ownership: Ownership::Ordinary,
+            provenance: None,
+            guards: None,
+            reservation: None,
         })
     }
 
@@ -224,6 +310,9 @@ impl Value {
             datum: selected.clone(),
             preparation: self.preparation,
             ownership: Ownership::Ordinary,
+            provenance: None,
+            guards: None,
+            reservation: None,
         })
     }
 
@@ -239,6 +328,9 @@ impl Value {
             datum,
             preparation: self.preparation,
             ownership: Ownership::Ordinary,
+            provenance: None,
+            guards: None,
+            reservation: None,
         })
     }
 
@@ -252,6 +344,9 @@ impl Value {
             datum: item.clone(),
             preparation: self.preparation,
             ownership: Ownership::Ordinary,
+            provenance: None,
+            guards: None,
+            reservation: None,
         }))
     }
 
@@ -276,6 +371,9 @@ impl Value {
             datum,
             preparation: self.preparation,
             ownership: Ownership::Ordinary,
+            provenance: None,
+            guards: None,
+            reservation: None,
         }))
     }
 
@@ -317,6 +415,9 @@ impl Value {
                 datum: *datum,
                 preparation: self.preparation,
                 ownership,
+                provenance: None,
+                guards: None,
+                reservation: None,
             }),
         ))
     }
@@ -417,6 +518,9 @@ impl ReferenceState<'_> {
             datum: NormalizedValue::List(list),
             preparation: self.schema.value_origin,
             ownership: Ownership::Ordinary,
+            provenance: None,
+            guards: None,
+            reservation: None,
         })
     }
 
@@ -486,6 +590,9 @@ impl ReferenceState<'_> {
             datum: NormalizedValue::Record(datum),
             preparation: self.schema.value_origin,
             ownership: Ownership::Ordinary,
+            provenance: None,
+            guards: None,
+            reservation: None,
         })
     }
 
@@ -552,6 +659,9 @@ impl ReferenceState<'_> {
             },
             preparation: self.schema.value_origin,
             ownership,
+            provenance: None,
+            guards: None,
+            reservation: None,
         })
     }
 
@@ -561,6 +671,9 @@ impl ReferenceState<'_> {
             datum: NormalizedValue::Option(child.map(|value| Box::new(value.release()))),
             preparation: self.schema.value_origin,
             ownership: Ownership::Ordinary,
+            provenance: None,
+            guards: None,
+            reservation: None,
         })
     }
 
@@ -569,6 +682,9 @@ impl ReferenceState<'_> {
             datum: NormalizedValue::Map(super::super::map::Map::default()),
             preparation: self.schema.value_origin,
             ownership: Ownership::Ordinary,
+            provenance: None,
+            guards: None,
+            reservation: None,
         }
     }
 
@@ -605,6 +721,9 @@ impl ReferenceState<'_> {
             datum,
             preparation: self.schema.value_origin,
             ownership: Ownership::Ordinary,
+            provenance: None,
+            guards: None,
+            reservation: None,
         })
     }
 
@@ -628,6 +747,9 @@ impl ReferenceState<'_> {
             datum: NormalizedValue::List(output),
             preparation: list.preparation,
             ownership: Ownership::Ordinary,
+            provenance: None,
+            guards: None,
+            reservation: None,
         })
     }
 
@@ -654,6 +776,9 @@ impl ReferenceState<'_> {
             datum: NormalizedValue::Map(output),
             preparation: map.preparation,
             ownership: Ownership::Ordinary,
+            provenance: None,
+            guards: None,
+            reservation: None,
         })
     }
 }
@@ -682,6 +807,9 @@ impl ReferenceState<'_> {
                 datum,
                 preparation: self.schema.value_origin,
                 ownership,
+                provenance: None,
+                guards: None,
+                reservation: None,
             }),
             Err(mut error) => {
                 super::super::value::release_raw_value(datum);
@@ -1545,6 +1673,9 @@ impl ReferenceState<'_> {
             },
             preparation: self.schema.value_origin,
             ownership: Ownership::Ordinary,
+            provenance: None,
+            guards: None,
+            reservation: None,
         })
     }
 
@@ -1604,6 +1735,9 @@ impl ReferenceState<'_> {
                 datum: child.clone(),
                 preparation: callee.preparation,
                 ownership: Ownership::Ordinary,
+                provenance: None,
+                guards: None,
+                reservation: None,
             });
         }
         complete.extend(arguments);

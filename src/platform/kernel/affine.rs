@@ -445,6 +445,10 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
         self.step(expression, depth)?;
         let record = self.expression(expression)?;
         match record.operation {
+            ExpressionOperation::BorrowCall { call, body, .. } => {
+                self.require_unrestricted(call, state, depth + 1, "borrowed invocation")?;
+                self.evaluate(body, state, depth + 1)
+            }
             ExpressionOperation::SequenceEmpty { .. } => Ok(EvaluatedValue::Unrestricted),
             ExpressionOperation::SequenceLength { source, .. }
             | ExpressionOperation::SequencePop { source, .. } => {
@@ -1529,6 +1533,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                                 type_parameters: function.type_parameters,
                                 parameters: function.parameters,
                                 result: function.result,
+                                result_borrow: function.result_borrow,
                                 effect: function.effect,
                             },
                         )

@@ -580,6 +580,7 @@ pub struct FunctionDefinitionOracle {
     pub name: String,
     pub effect: String,
     pub result_type: String,
+    pub result_borrow: Option<String>,
     pub type_parameters: u64,
     pub parameters: u64,
     pub requirements: u64,
@@ -2215,6 +2216,7 @@ fn reconstruct_function_definition(
         name: declaration.name.as_str().to_owned(),
         effect: effect.to_owned(),
         result_type: function_record.result.to_string(),
+        result_borrow: function_record.result_borrow.map(|id| id.to_string()),
         type_parameters: function_record.type_parameters.len() as u64,
         parameters: function_record.parameters.len() as u64,
         requirements: requirements.len() as u64,
@@ -2430,6 +2432,36 @@ impl DefinitionOracleWalker<'_> {
                     0,
                     child_depth,
                     ExpressionChildRole::OwnedProductBody,
+                )?;
+            }
+            ExpressionOperation::BorrowCall {
+                call,
+                binding,
+                body,
+            } => {
+                self.visit_expression_child(
+                    *call,
+                    owner,
+                    "borrow_call_invocation",
+                    0,
+                    child_depth,
+                    ExpressionChildRole::BorrowCallInvocation,
+                )?;
+                self.visit_binding(
+                    *binding,
+                    owner,
+                    "borrow_call_binding",
+                    0,
+                    child_depth,
+                    (BindingKind::OwnedBorrow, BindingContainerRole::OwnedBorrow),
+                )?;
+                self.visit_expression_child(
+                    *body,
+                    owner,
+                    "borrow_call_body",
+                    0,
+                    child_depth,
+                    ExpressionChildRole::BorrowCallBody,
                 )?;
             }
             ExpressionOperation::BorrowOwnedField {
@@ -2932,6 +2964,7 @@ fn oracle_expression_form(operation: &ExpressionOperation) -> &'static str {
         ExpressionOperation::SequencePush { .. } => "sequence_push",
         ExpressionOperation::SequencePop { .. } => "sequence_pop",
         ExpressionOperation::BorrowOwnedItem { .. } => "borrow_owned_item",
+        ExpressionOperation::BorrowCall { .. } => "borrow_call",
     }
 }
 
@@ -2980,6 +3013,8 @@ fn oracle_child_role(role: ExpressionChildRole) -> &'static str {
         ExpressionChildRole::OwnedSequenceSource => "owned_sequence_source",
         ExpressionChildRole::OwnedSequenceIndex => "owned_sequence_index",
         ExpressionChildRole::OwnedSequenceBody => "owned_sequence_body",
+        ExpressionChildRole::BorrowCallInvocation => "borrow_call_invocation",
+        ExpressionChildRole::BorrowCallBody => "borrow_call_body",
     }
 }
 

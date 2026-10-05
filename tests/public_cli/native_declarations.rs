@@ -1674,6 +1674,8 @@ mod native_owned_borrows;
 mod native_owned_effects;
 #[path = "native_owned_products.rs"]
 mod native_owned_products;
+#[path = "native_owned_read_results.rs"]
+mod native_owned_read_results;
 #[path = "native_owned_sequences.rs"]
 mod native_owned_sequences;
 #[path = "native_owned_witnesses.rs"]

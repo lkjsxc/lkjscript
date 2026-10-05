@@ -41,6 +41,14 @@ impl ExpressionRecord {
                 ),
             ));
         }
+        if self.contract_version < 27
+            && matches!(self.operation, ExpressionOperation::BorrowCall { .. })
+        {
+            return Err(expression_error(
+                "kernel_borrow_result_generation",
+                "source-tied borrowed calls require Graph 27",
+            ));
+        }
         if self.contract_version < 25
             && matches!(
                 self.operation,
@@ -365,6 +373,12 @@ pub enum ExpressionOperation {
         binding: BindingId,
         body: ExpressionId,
     },
+    /// Adopt a source-tied result into a lexical read-only scope.
+    BorrowCall {
+        call: ExpressionId,
+        binding: BindingId,
+        body: ExpressionId,
+    },
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
@@ -548,6 +562,8 @@ pub enum ExpressionChildRole {
     OwnedSequenceSource,
     OwnedSequenceIndex,
     OwnedSequenceBody,
+    BorrowCallInvocation,
+    BorrowCallBody,
 }
 
 fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic> {
@@ -730,6 +746,7 @@ fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic>
             require_count("capability arguments", arguments.len(), true)?;
         }
         ExpressionOperation::Unit {}
+        | ExpressionOperation::BorrowCall { .. }
         | ExpressionOperation::BorrowOwnedField { .. }
         | ExpressionOperation::SequenceEmpty { .. }
         | ExpressionOperation::SequenceLength { .. }
@@ -797,6 +814,15 @@ fn require_unique<T: Ord + Copy>(
 fn expression_children(operation: &ExpressionOperation) -> Vec<ExpressionChild> {
     let mut children = Vec::new();
     match operation {
+        ExpressionOperation::BorrowCall { call, body, .. } => {
+            push_child(
+                &mut children,
+                *call,
+                ExpressionChildRole::BorrowCallInvocation,
+                0,
+            );
+            push_child(&mut children, *body, ExpressionChildRole::BorrowCallBody, 0);
+        }
         ExpressionOperation::SequenceLength { source, .. }
         | ExpressionOperation::SequencePop { source, .. } => {
             push_child(

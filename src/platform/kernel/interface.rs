@@ -165,6 +165,7 @@ impl PackageInterfaceDeclaration {
                     type_parameters: function.type_parameters.clone(),
                     parameters: function.parameters.clone(),
                     result: function.result,
+                    result_borrow: function.result_borrow,
                     effect: function.effect.clone(),
                 })
             }
@@ -224,6 +225,21 @@ impl PackageInterfaceDeclaration {
 
     fn validate_local(&self) -> Result<(), Diagnostic> {
         validate_header(self.header)?;
+        if self.header.contract_version < 27
+            && match &self.payload {
+                PackageInterfaceDeclarationPayload::Function(f) => f.result_borrow.is_some(),
+                PackageInterfaceDeclarationPayload::OwnedContract(c) => {
+                    c.methods.iter().any(|m| m.result_borrow.is_some())
+                }
+                _ => false,
+            }
+        {
+            return Err(interface_error(
+                DiagnosticClass::Semantic,
+                "kernel_borrow_result_generation",
+                "source-tied borrowed results require Graph 27",
+            ));
+        }
         if self.header.contract_version < 26
             && match &self.payload {
                 PackageInterfaceDeclarationPayload::OwnedContract(c) => {
@@ -280,6 +296,16 @@ impl PackageInterfaceDeclaration {
                 signature.effect.row().validate()?;
                 validate_ordered("function type parameters", &signature.type_parameters)?;
                 validate_ordered("function parameters", &signature.parameters)?;
+                if let Some(source) = signature.result_borrow
+                    && (!signature.parameters.contains(&source)
+                        || signature.effect != FunctionEffect::Pure)
+                {
+                    return Err(interface_error(
+                        DiagnosticClass::Semantic,
+                        "kernel_borrow_result",
+                        "a borrowed result requires an exact parameter of a pure function",
+                    ));
+                }
                 if let FunctionEffect::Task {
                     effect_parameters: _,
                     requirements,
@@ -361,6 +387,7 @@ pub struct PackageFunctionSignature {
     pub type_parameters: Vec<TypeParameterId>,
     pub parameters: Vec<ParameterId>,
     pub result: TypeObjectDigest,
+    pub result_borrow: Option<ParameterId>,
     pub effect: FunctionEffect,
 }
 

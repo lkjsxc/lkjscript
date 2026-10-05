@@ -17,7 +17,7 @@ struct Packages {
     standards: [PathBuf; 2],
 }
 
-fn standard(public: &Native) -> Export {
+pub(super) fn standard(public: &Native) -> Export {
     let output = public.root.path().join("standard.lkjp");
     let records = public.cli(
         &[
@@ -171,7 +171,7 @@ impl Packages {
     }
 }
 
-fn unchanged(public: &Native, module: &str) -> String {
+pub(super) fn unchanged(public: &Native, module: &str) -> String {
     let draft = public.root.path().join(format!("{module}-draft.lkjc"));
     public.cli(
         &[
@@ -192,7 +192,7 @@ fn unchanged(public: &Native, module: &str) -> String {
     std::fs::read_to_string(draft).unwrap()
 }
 
-fn declaration(public: &Native, module: &str, name: &str) -> String {
+pub(super) fn declaration(public: &Native, module: &str, name: &str) -> String {
     let module = public.cli(&["query", "find", "module", module], true);
     let parent = compact_field(compact_record(&module, "owner"), "id");
     let owner = public.cli(
@@ -202,7 +202,7 @@ fn declaration(public: &Native, module: &str, name: &str) -> String {
     compact_field(compact_record(&owner, "owner"), "id").into()
 }
 
-fn deployment(public: &Native, artifact: &str, target: &str) -> PathBuf {
+pub(super) fn deployment(public: &Native, artifact: &str, target: &str) -> PathBuf {
     public.input(
         &format!("{target}.deployment.json"),
         &json!({
@@ -234,7 +234,7 @@ fn clean_execution(records: &[CompactRecord], detached: bool) {
     assert_eq!(cleanup["cleanup_failures"], json!([]));
 }
 
-fn run_expected(
+pub(super) fn run_expected(
     public: &Native,
     target: &str,
     deployment: &Path,
@@ -633,7 +633,7 @@ const SIGNATURES: &str = r#"declarations.begin
 declarations.end
 "#;
 
-fn rejected(public: &Native, source: &str, before: &str, name: &str) {
+pub(super) fn rejected(public: &Native, source: &str, before: &str, name: &str) {
     let input = public.input(
         &format!("invalid-{name}.lkjc"),
         &format!("request base={before}\n{source}"),

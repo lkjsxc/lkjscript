@@ -36,7 +36,9 @@ fn flow(instruction: &I) -> Flow<'_> {
     // be classified when an instruction is added. A derived move is still a read.
     let (read, write, edges) = match instruction {
         I::LoadLocal { local, .. } | I::MoveLocal(local) => (Some(*local), None, Edges::Next),
-        I::SequenceLength { source_local, .. } => (Some(*source_local), None, Edges::Next),
+        I::SequenceLength { source_local, .. } | I::BeginBorrowCall { source_local, .. } => {
+            (Some(*source_local), None, Edges::Next)
+        }
         I::SequencePush { source_local, .. } | I::SequencePop { source_local, .. } => {
             (Some(*source_local), Some(*source_local), Edges::Next)
         }
@@ -64,6 +66,11 @@ fn flow(instruction: &I) -> Flow<'_> {
             source_local,
             binding_local,
             ..
+        }
+        | I::AdoptBorrowResult {
+            source_local,
+            binding_local,
+            ..
         } => (Some(*source_local), Some(*binding_local), Edges::Next),
         I::MatchBorrowedOwned {
             source_local,
@@ -71,7 +78,7 @@ fn flow(instruction: &I) -> Flow<'_> {
             ..
         } => (Some(*source_local), None, Edges::BorrowedChoice(cases)),
         I::EndOwnedBorrow { binding_local } => (None, Some(*binding_local), Edges::Next),
-        I::Return | I::TailCall { .. } => (None, None, Edges::Exit),
+        I::Return | I::ReturnBorrowed | I::TailCall { .. } => (None, None, Edges::Exit),
         // Dynamic external callees return to this frame; graph callees transfer.
         // Without callee proof, preserve the possible continuation's live values.
         I::TailInvoke { .. } => (None, None, Edges::Next),
@@ -112,7 +119,8 @@ fn flow(instruction: &I) -> Flow<'_> {
         read_extra: match instruction {
             I::SequencePush { value_local, .. } => Some(*value_local),
             I::BorrowOwnedField { binding_local, .. }
-            | I::BorrowOwnedItem { binding_local, .. } => Some(*binding_local),
+            | I::BorrowOwnedItem { binding_local, .. }
+            | I::AdoptBorrowResult { binding_local, .. } => Some(*binding_local),
             _ => None,
         },
         write,

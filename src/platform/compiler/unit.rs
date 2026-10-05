@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-26";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 26;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-21";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 21;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN26";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v26";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v26";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-27";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 27;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-22";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 22;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN27";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v27";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v27";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -226,6 +226,7 @@ pub struct CompiledSignature {
     pub type_parameter_constraints: Vec<crate::platform::kernel::TypeParameterConstraints>,
     pub parameters: Vec<CompiledParameter>,
     pub result: u32,
+    pub result_borrow: Option<ParameterId>,
     pub task_requirements: Vec<u32>,
 }
 
@@ -469,6 +470,18 @@ pub enum CompiledInstruction {
         binding_local: u32,
         binding_type: u32,
     },
+    /// Bind the immediately following exact call to its selected live source local.
+    BeginBorrowCall {
+        source_local: u32,
+        source_position: u32,
+    },
+    /// Adopt the immediately preceding borrowed call result into a lexical read scope.
+    AdoptBorrowResult {
+        source_local: u32,
+        binding_local: u32,
+        binding_type: u32,
+    },
+    ReturnBorrowed,
 }
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
@@ -539,7 +552,7 @@ impl CompilationUnit {
                 "compiler-unit bytes disagree with their exact object-domain digest",
             ));
         }
-        // Derived generations 10–25 require a rebuild from supported canonical owners.
+        // Derived generations 10–26 require a rebuild from supported canonical owners.
         // Refuse before decoding; old bytes never acquire current instruction meaning.
         if [
             b"LKJCUN10",
@@ -558,6 +571,7 @@ impl CompilationUnit {
             b"LKJCUN23",
             b"LKJCUN24",
             b"LKJCUN25",
+            b"LKJCUN26",
         ]
         .iter()
         .any(|magic| bytes.starts_with(*magic))
@@ -593,7 +607,7 @@ impl CompilationUnit {
                 self.bytecode_contract_version,
                 self.graph_contract_version
             ),
-            (26, 21, 26)
+            (27, 22, 27)
         ) {
             return Err(unit_error(
                 DiagnosticClass::Source,
@@ -794,6 +808,17 @@ impl CompilationPayload {
                 }
                 signature.validate(tables, source.kind)?;
                 code.validate(tables)?;
+                if signature.result_borrow.is_some()
+                    != matches!(
+                        code.instructions.last(),
+                        Some(CompiledInstruction::ReturnBorrowed)
+                    )
+                {
+                    return Err(unit_corrupt(
+                        "compiler_unit_result_mode",
+                        "compiled return path differs from its signature result mode",
+                    ));
+                }
                 if code.parameter_count as usize != signature.parameters.len() {
                     return Err(unit_corrupt(
                         "compiler_unit_parameter_count",
@@ -1151,6 +1176,20 @@ impl CompiledSignature {
             }
         }
         require_index("signature result", self.result, tables.types.len())?;
+        if let Some(source) = self.result_borrow
+            && (kind != OwnerKind::PureFunction
+                || !matches!(self.effect, crate::platform::kernel::FunctionEffect::Pure)
+                || !self.parameters.iter().any(|p| {
+                    p.parameter == source
+                        && p.use_mode == ParameterUse::Borrow
+                        && p.resource_requirement.is_none()
+                }))
+        {
+            return Err(unit_corrupt(
+                "compiler_unit_result_borrow",
+                "borrowed results require one exact borrowed parameter of a pure graph function",
+            ));
+        }
         for requirement in &self.task_requirements {
             require_index(
                 "signature requirement",
@@ -1308,10 +1347,17 @@ impl CompiledCode {
         }
         require_runtime_count("compiled parameters", self.parameter_count)?;
         require_runtime_count("compiled locals", self.local_count)?;
-        if !matches!(self.instructions.last(), Some(CompiledInstruction::Return))
-            || self.instructions[..instruction_count - 1]
-                .iter()
-                .any(|instruction| matches!(instruction, CompiledInstruction::Return))
+        if !matches!(
+            self.instructions.last(),
+            Some(CompiledInstruction::Return | CompiledInstruction::ReturnBorrowed)
+        ) || self.instructions[..instruction_count - 1]
+            .iter()
+            .any(|instruction| {
+                matches!(
+                    instruction,
+                    CompiledInstruction::Return | CompiledInstruction::ReturnBorrowed
+                )
+            })
         {
             return Err(unit_corrupt(
                 "compiler_unit_return",
@@ -1321,6 +1367,7 @@ impl CompiledCode {
         for instruction in &self.instructions {
             instruction.validate(self, tables)?;
         }
+        verify_borrow_call_protocol(self)?;
         let depths = verify_stack(self)?;
         verify_owned_borrow_scopes(self, &depths)
     }
@@ -1495,6 +1542,41 @@ impl CompiledInstruction {
                 *binding_local,
                 code.local_count as usize,
             ),
+            Self::BeginBorrowCall {
+                source_local,
+                source_position,
+            } => {
+                require_index(
+                    "borrowed call source",
+                    *source_local,
+                    code.local_count as usize,
+                )?;
+                require_runtime_count("borrowed source position", *source_position)
+            }
+            Self::AdoptBorrowResult {
+                source_local,
+                binding_local,
+                binding_type,
+            } => {
+                require_index(
+                    "borrowed result source",
+                    *source_local,
+                    code.local_count as usize,
+                )?;
+                require_index(
+                    "borrowed result binding",
+                    *binding_local,
+                    code.local_count as usize,
+                )?;
+                require_index("borrowed result type", *binding_type, tables.types.len())?;
+                if source_local == binding_local || *binding_local < code.parameter_count {
+                    return Err(unit_corrupt(
+                        "compiler_unit_borrow_local",
+                        "borrowed result requires a distinct lexical destination",
+                    ));
+                }
+                Ok(())
+            }
             Self::ChooseOwned { choice_type, case } => {
                 require_index("owned choice type", *choice_type, tables.types.len())?;
                 require_index(
@@ -1828,7 +1910,8 @@ impl CompiledInstruction {
             | Self::I64(_)
             | Self::F64(_)
             | Self::Drop
-            | Self::Return => Ok(()),
+            | Self::Return
+            | Self::ReturnBorrowed => Ok(()),
         }
     }
 }
@@ -1904,6 +1987,81 @@ fn require_runtime_count(label: &str, count: u32) -> Result<(), Diagnostic> {
             "compiler_unit_runtime_count",
             format!("{label} count {count} exceeds the compiler-unit bound"),
         ));
+    }
+    Ok(())
+}
+
+fn verify_borrow_call_protocol(code: &CompiledCode) -> Result<(), Diagnostic> {
+    let invalid = || {
+        unit_corrupt(
+            "compiler_unit_borrow_call_protocol",
+            "borrowed call handoff requires an uninterrupted exact begin, call and adoption",
+        )
+    };
+    let interior = |target: u32| {
+        let target = target as usize;
+        matches!(
+            code.instructions.get(target),
+            Some(CompiledInstruction::AdoptBorrowResult { .. })
+        ) || target.checked_sub(1).is_some_and(|previous| {
+            matches!(
+                code.instructions.get(previous),
+                Some(CompiledInstruction::BeginBorrowCall { .. })
+            )
+        })
+    };
+    for (index, instruction) in code.instructions.iter().enumerate() {
+        match instruction {
+            CompiledInstruction::BeginBorrowCall {
+                source_local,
+                source_position,
+            } => {
+                let arguments = match code.instructions.get(index + 1) {
+                    Some(
+                        CompiledInstruction::Call { arguments, .. }
+                        | CompiledInstruction::ImplementationCall { arguments, .. }
+                        | CompiledInstruction::MethodCall { arguments, .. },
+                    ) => *arguments,
+                    _ => return Err(invalid()),
+                };
+                if *source_position >= arguments
+                    || !matches!(code.instructions.get(index + 2), Some(CompiledInstruction::AdoptBorrowResult { source_local: actual, .. }) if actual == source_local)
+                {
+                    return Err(invalid());
+                }
+            }
+            CompiledInstruction::AdoptBorrowResult { .. } => {
+                if !index.checked_sub(2).is_some_and(|previous| {
+                    matches!(
+                        code.instructions.get(previous),
+                        Some(CompiledInstruction::BeginBorrowCall { .. })
+                    )
+                }) {
+                    return Err(invalid());
+                }
+            }
+            CompiledInstruction::Jump(target) | CompiledInstruction::JumpIfFalse(target) => {
+                if interior(*target) {
+                    return Err(invalid());
+                }
+            }
+            CompiledInstruction::MatchOwned { cases, .. } => {
+                if cases.iter().any(|case| interior(case.target)) {
+                    return Err(invalid());
+                }
+            }
+            CompiledInstruction::MatchBorrowedOwned { cases, .. } => {
+                if cases.iter().any(|case| interior(case.target)) {
+                    return Err(invalid());
+                }
+            }
+            CompiledInstruction::SwitchVariant(cases)
+                if cases.iter().any(|case| interior(case.target)) =>
+            {
+                return Err(invalid());
+            }
+            _ => {}
+        }
     }
     Ok(())
 }
@@ -2025,7 +2183,7 @@ fn verify_stack(code: &CompiledCode) -> Result<Vec<usize>, Diagnostic> {
             bindings.push(state);
         }
         match instruction {
-            CompiledInstruction::Return => {
+            CompiledInstruction::Return | CompiledInstruction::ReturnBorrowed => {
                 if depth != 1 {
                     return Err(unit_corrupt(
                         "compiler_unit_return_stack",
@@ -2148,6 +2306,11 @@ fn verify_owned_borrow_scopes_with_limit(
                 ..
             }
             | CompiledInstruction::BorrowOwnedItem {
+                source_local,
+                binding_local,
+                ..
+            }
+            | CompiledInstruction::AdoptBorrowResult {
                 source_local,
                 binding_local,
                 ..
@@ -2280,13 +2443,15 @@ fn verify_owned_borrow_scopes_with_limit(
                     pending.push((case.target as usize, Some(scope)));
                 }
             }
-            CompiledInstruction::Return if active.is_some() => {
+            CompiledInstruction::Return | CompiledInstruction::ReturnBorrowed
+                if active.is_some() =>
+            {
                 return Err(unit_corrupt(
                     "compiler_unit_borrow_escape",
                     "compiled return leaves an active lexical loan",
                 ));
             }
-            CompiledInstruction::Return => {}
+            CompiledInstruction::Return | CompiledInstruction::ReturnBorrowed => {}
             CompiledInstruction::Jump(target) => pending.push((*target as usize, next)),
             CompiledInstruction::JumpIfFalse(target) => {
                 pending.push((*target as usize, next));
@@ -2346,14 +2511,16 @@ fn stack_effect(instruction: &CompiledInstruction) -> Result<(usize, usize), Dia
         })
     };
     Ok(match instruction {
-        CompiledInstruction::BorrowOwnedItem { .. } => (1, 0),
+        CompiledInstruction::BorrowOwnedItem { .. }
+        | CompiledInstruction::AdoptBorrowResult { .. } => (1, 0),
         CompiledInstruction::SequenceEmpty { .. }
         | CompiledInstruction::SequenceLength { .. }
         | CompiledInstruction::SequencePush { .. }
         | CompiledInstruction::SequencePop { .. } => (0, 1),
         CompiledInstruction::BorrowOwnedField { .. }
         | CompiledInstruction::MatchBorrowedOwned { .. }
-        | CompiledInstruction::EndOwnedBorrow { .. } => (0, 0),
+        | CompiledInstruction::EndOwnedBorrow { .. }
+        | CompiledInstruction::BeginBorrowCall { .. } => (0, 0),
         CompiledInstruction::ChooseOwned { .. } => (1, 1),
         CompiledInstruction::MatchOwned { .. } => (1, 0),
         CompiledInstruction::PackOwned { fields, .. } => (fields.len(), 1),
@@ -2422,7 +2589,7 @@ fn stack_effect(instruction: &CompiledInstruction) -> Result<(usize, usize), Dia
         CompiledInstruction::SwitchVariant(_) => (1, 0),
         CompiledInstruction::Perform { arguments, .. }
         | CompiledInstruction::PerformParameter { arguments, .. } => (count(*arguments)?, 1),
-        CompiledInstruction::Return => (1, 0),
+        CompiledInstruction::Return | CompiledInstruction::ReturnBorrowed => (1, 0),
     })
 }
 
