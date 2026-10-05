@@ -24,7 +24,7 @@ retains 26 fresh passing gates, zero reuse and stable inputs at the accepted
 product source. The [release notes](releases/v0.1.77.md) describe parameterized
 owned contracts. Reporting descendants do not change that tested selection.
 
-## Source-tied borrowed results awaiting acceptance
+## Source-tied borrowed results accepted on main
 
 The v0.1.78 implementation adds [source-tied borrowed results](spec/owned-read-results.md)
 through pure named functions and owned-contract methods. Explicit lexical
@@ -39,26 +39,43 @@ witness; production application adoption and compiler self-hosting remain future
 work. The [release notes](releases/v0.1.78.md) describe the format cut and required
 rebuild of experimental derived bundles.
 
+Product source `2eedbd77f1cd622607fcae03ea81c9df7edeac8a` passed complete fresh
+source acceptance: all 26 gates passed, zero reuse, stable inputs. The original
+receipt is
+`.artifacts/lkjscript-dev/check/1791181801609973101-3752112-0/receipt.json`.
+Normal fast-forward delivery to remote main was independently verified through
+Git and the GitHub branch API. This status update is a reporting descendant;
+the accepted product and candidate controller selection remain that exact source.
+
 Development evidence, copied executables, literal public inputs, original failures
 and rebuilt native assets are retained under
 `.artifacts/20261005-owned-read-results/`. Maintained semantic HEADs and historical
 fixture bytes remain unchanged. The four maintained native projects pass 281
 tests. A copy containing only tracked native inputs reproduces all four artifacts
 and the standard transport exactly, with its 195-pack inventory unchanged;
-`cold-tracked-02.log` retains that observation with the corrected runtime. Focused checks are development
-evidence; complete fresh source acceptance and exact finalized-archive acceptance
-remain required.
+`cold-tracked-02.log` retains that observation with the corrected runtime.
+The fresh full run passed 1,486 library, 223 public executable and 253 developer
+tool tests, along with every other selected gate. Exact finalized-archive
+acceptance remains separate from these source and development checks.
 
 All four fresh public read-result cases pass against the copied executable;
 `focus-07/public-read-results.log` retains the result. The three-package case
 checks complete independent outputs across all four representations, then removes
 the authoring projects and transports before detached execution.
 
-Next: freeze source and generated discovery, run all fresh acceptance gates,
-then deliver through normal
-mainline integration. Dispatch one candidate from that exact accepted source and
-require `candidate_accepted` before unchanged-asset promotion and anonymous public
-verification. v0.1.78 is not yet a public release.
+[Candidate producer 37274342312/1](https://github.com/lkjsxc/lkjscript/actions/runs/37274342312)
+was dispatched once at 06:49:01 UTC. Its repository, workflow, main dispatch and
+exact product/controller source were authenticated. At 06:50:34 UTC it was
+building immutable host tools; no candidate artifacts had been uploaded. The
+retained handoff is
+`.artifacts/20261005-owned-read-results/release-0178/source-handoff.json`.
+
+Next: inspect that exact producer and require authenticated `candidate_accepted`
+for its finalized archive. Reuse the existing run. Only then select the v0.1.78
+annotation and promote unchanged assets, requiring
+`immutable_published_and_public_verified` and independent anonymous public
+readback. No v0.1.78 tag, selection or promotion has been made; v0.1.77 remains
+public/latest.
 
 Preserve unrelated worktrees, stashes, original fixtures/failures and immutable
 publication history. No application deployment changes are part of this work.
