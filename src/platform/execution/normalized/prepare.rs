@@ -340,7 +340,10 @@ pub enum NormalizedFunctionBody {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedImplementationArgument {
     pub implementation: DeclarationReference,
+    /// Exact ordered arguments of the selected implementation scheme.
+    pub implementation_type_arguments: Arc<[TypeObjectDigest]>,
     pub self_type: TypeObjectDigest,
+    /// Instantiated arguments of the nominal owned contract.
     pub type_arguments: Arc<[TypeObjectDigest]>,
 }
 
@@ -357,6 +360,8 @@ pub struct NormalizedFunction {
     /// Exact canonical graph-function kind, distinct from purity and from code entry wrappers.
     pub graph_function: bool,
     pub type_parameters: Arc<[TypeParameterId]>,
+    /// Bound callable arguments of a concrete type/witness instance; empty on templates.
+    pub type_arguments: Arc<[TypeObjectDigest]>,
     pub type_parameter_constraints: Arc<[crate::platform::kernel::TypeParameterConstraints]>,
     pub parameter_count: u32,
     pub parameters: Arc<[NormalizedParameter]>,
@@ -1495,6 +1500,7 @@ fn prepare_functions(
             declaration: *declaration,
             graph_function,
             type_parameters: type_parameters.into(),
+            type_arguments: Arc::from([]),
             type_parameter_constraints: type_parameter_constraints.into(),
             parameter_count,
             parameters: parameters.into(),
@@ -3044,7 +3050,7 @@ fn translate_code(
                 method,
                 arguments,
             } => NormalizedInstruction::MethodCall {
-                witness: *witness,
+                witness: witness.clone(),
                 contract: *contract,
                 method: *method,
                 arguments: *arguments,

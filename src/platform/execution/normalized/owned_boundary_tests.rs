@@ -190,6 +190,7 @@ fn owned_vm_rechecks_closed_witness_self_and_binding_arity() {
                 } else {
                     Arc::from([super::super::prepare::NormalizedImplementationArgument {
                         implementation: scalar,
+                        implementation_type_arguments: Arc::from([]),
                         self_type: i64_type,
                         type_arguments: Arc::from([]),
                     }])

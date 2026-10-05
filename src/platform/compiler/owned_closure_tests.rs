@@ -3,7 +3,7 @@ use super::*;
 use crate::platform::kernel::{KernelSnapshot, semantic_state_digest};
 use crate::platform::package_transport::PackageRevision;
 
-fn author(repository: &GraphRepository, text: &str) {
+pub(super) fn author(repository: &GraphRepository, text: &str) {
     let input = format!(
         "request base={}\n{text}",
         repository.view_current().unwrap().revision()
@@ -15,7 +15,7 @@ fn author(repository: &GraphRepository, text: &str) {
         .unwrap();
     repository.publish(&prepared.publication).unwrap();
 }
-fn dependency(exported: &ExportedPackageTransport) -> String {
+pub(super) fn dependency(exported: &ExportedPackageTransport) -> String {
     format!(
         "add.dependency package={} semantic-revision={} package-revision={}\n",
         exported.revision.package,
@@ -23,12 +23,15 @@ fn dependency(exported: &ExportedPackageTransport) -> String {
         exported.revision_digest
     )
 }
-fn build(repository: &GraphRepository, dependencies: &[LoadedArtifact]) -> LoadedArtifact {
+pub(super) fn build(
+    repository: &GraphRepository,
+    dependencies: &[LoadedArtifact],
+) -> LoadedArtifact {
     let compiled = build_clean(repository, OptimizationPolicy::DeterministicBaseline).unwrap();
     let linked = link_artifact(repository, compiled.manifest_digest, dependencies).unwrap();
     load_artifact(&linked.artifact.bytes).unwrap()
 }
-fn rebind(
+pub(super) fn rebind(
     loaded: &mut LoadedArtifact,
     snapshot: &KernelSnapshot,
 ) -> crate::platform::kernel::DependencyRecord {

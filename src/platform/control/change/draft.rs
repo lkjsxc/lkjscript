@@ -485,8 +485,19 @@ impl Renderer<'_> {
         operand: &AuthoredImplementationOperand,
     ) -> Result<String, Diagnostic> {
         Ok(match operand {
-            AuthoredImplementationOperand::Concrete { implementation } => {
-                format!("concrete@{}", self.declaration(implementation)?)
+            AuthoredImplementationOperand::Concrete {
+                implementation,
+                type_arguments,
+            } => {
+                if type_arguments.is_empty() {
+                    self.declaration(implementation)?
+                } else {
+                    format!(
+                        "(implementation {} {})",
+                        self.declaration(implementation)?,
+                        self.typed_list("types", type_arguments)?
+                    )
+                }
             }
             AuthoredImplementationOperand::Parameter {
                 function,
@@ -568,6 +579,7 @@ impl Renderer<'_> {
                         }
                     }
                     D::OwnedImplementation(i) => {
+                        children.extend(i.type_parameters.into_iter().map(OwnerKey::TypeParameter));
                         clauses.push(format!(
                             "(contract {})",
                             self.declaration(&canonical::declaration(i.contract))?
@@ -582,10 +594,21 @@ impl Renderer<'_> {
                             clauses.push(format!("(types {})", arguments.join(" ")));
                         }
                         for m in i.methods {
+                            let arguments = if m.type_arguments.is_empty() {
+                                String::new()
+                            } else {
+                                let types = m
+                                    .type_arguments
+                                    .into_iter()
+                                    .map(|ty| self.type_digest(ty))
+                                    .collect::<Result<Vec<_>, _>>()?;
+                                format!(" (types {})", types.join(" "))
+                            };
                             clauses.push(format!(
-                                "(method {} {})",
+                                "(method {} {}{})",
                                 m.method,
-                                self.declaration(&canonical::declaration(m.function))?
+                                self.declaration(&canonical::declaration(m.function))?,
+                                arguments,
                             ));
                         }
                     }

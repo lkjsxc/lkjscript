@@ -218,8 +218,8 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
 ];
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-function-definition-projection-17";
-pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 17;
+    "lkjscript-function-definition-projection-18";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 18;
 pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
 pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
 pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -418,6 +418,14 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("definition.expression", "function"),
     ("definition.expression", "implementations"),
     ("definition.expression", "implementation-parameter"),
+    ("definition.expression", "implementation-type-arguments"),
+    ("definition.implementation-operand-type-argument", "parent"),
+    (
+        "definition.implementation-operand-type-argument",
+        "implementation",
+    ),
+    ("definition.implementation-operand-type-argument", "index"),
+    ("definition.implementation-operand-type-argument", "type"),
     ("definition.expression", "method"),
     ("definition.expression", "requirement"),
     ("definition.expression", "operation"),
@@ -996,7 +1004,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             magic_values: &[
                 "LKJACR14", "LKJACR15", "LKJACR16", "LKJACR17", "LKJACR18", "LKJACR19", "LKJACR20",
                 "LKJACR21", "LKJACR22", "LKJACR23", "LKJACR24", "LKJACR25", "LKJACR26", "LKJACR27",
-                "LKJACR28", "LKJACR29", "LKJACR30", "LKJACR31", "LKJABG01",
+                "LKJACR28", "LKJACR29", "LKJACR30", "LKJACR31", "LKJACR32", "LKJABG01",
             ],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
@@ -8712,13 +8720,13 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         ),
         (
             "owned-implementation",
-            "(owned-implementation MODE BINDING (visibility public|private) (contract DECLARATION) (self TYPE) [(types TYPE...)] (method method_HEX FUNCTION)...)",
-            "Ordered owned type arguments apply the exact contract. Every method maps to an exact visible monomorphic graph function with identical substituted structural signature, callable kind and effect row; selection is explicit and never grants effects.",
+            "(owned-implementation MODE BINDING (visibility public|private) (type-parameter MODE PARAMETER (constraint owned))... (contract DECLARATION) (self TYPE) [(types TYPE...)] (method method_HEX FUNCTION [(types TYPE...)])...)",
+            "Ordered owned scheme parameters apply explicitly. Self and contract arguments may contain those parameters in finite owned structures. Every method maps to an exact visible graph function application with identical substituted signature, use modes, borrowed provenance, callable kind and closed effect row. Selection is explicit and never grants effects.",
         ),
         (
             "implementation-parameter",
             "(implementation-parameter implparam_HEX NAME CONTRACT SELF_TYPE [(types TYPE...)])",
-            "A function-scoped static witness with exact ordered owned type arguments. Operand syntax is concrete@IMPLEMENTATION or parameter@FUNCTION@implparam_HEX. Forwarding matches the complete contract application in the exact lexical scope; implementation calls supply ordered type, effect and requirement applications independently of witness selection.",
+            "A function-scoped static witness with exact ordered owned type arguments. Concrete operand syntax is IMPLEMENTATION or (implementation IMPLEMENTATION (types TYPE...)); lexical forwarding uses parameter@FUNCTION@implparam_HEX. Every scheme argument, including unused arguments, participates in identity and admission. Forwarding matches the complete contract application in the exact lexical scope; implementation calls supply ordered type, effect and requirement applications independently of witness selection.",
         ),
         (
             "type-parameter",
@@ -9538,9 +9546,9 @@ mod tests {
             .expect("definition projection contract");
         assert_eq!(
             contract.identity,
-            "lkjscript-function-definition-projection-17"
+            "lkjscript-function-definition-projection-18"
         );
-        assert_eq!(contract.version, 17);
+        assert_eq!(contract.version, 18);
         assert_eq!(
             contract_descriptors()
                 .iter()

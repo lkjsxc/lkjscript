@@ -415,6 +415,7 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
                     OwnerKind::Record
                         | OwnerKind::Variant
                         | OwnerKind::OwnedContract
+                        | OwnerKind::OwnedImplementation
                         | OwnerKind::PureFunction
                         | OwnerKind::TaskFunction
                         | OwnerKind::External

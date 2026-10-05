@@ -607,11 +607,11 @@ impl FullValidator<'_> {
                         "type parameter",
                     );
                     if parameter.constraints.has_owned()
-                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::OwnedContract(_) | DeclarationPayload::Function(_)))
+                        && !matches!(self.snapshot.owners.get(&OwnerKey::Declaration(parameter.declaration)), Some(OwnerRecord::Declaration(declaration)) if matches!(declaration.payload, DeclarationPayload::OwnedContract(_) | DeclarationPayload::OwnedImplementation(_) | DeclarationPayload::Function(_)))
                     {
                         self.error(
                             "kernel_owned_parameter_owner",
-                            "Owned is supported only by graph functions and owned contract Self",
+                            "Owned is supported by graph functions, owned contracts and implementation schemes",
                         );
                     }
                     if parameter.constraints.requires_transfer()
@@ -1219,7 +1219,15 @@ impl FullValidator<'_> {
                     self.validate_effect_row(owner, &method.effect.row());
                 }
             }
-            DeclarationPayload::OwnedImplementation(_) => {}
+            DeclarationPayload::OwnedImplementation(i) => {
+                for parameter in &i.type_parameters {
+                    self.require_local_kind(
+                        OwnerKey::TypeParameter(*parameter),
+                        &[OwnerKind::TypeParameter],
+                        "owned implementation type parameter",
+                    );
+                }
+            }
             DeclarationPayload::Record {
                 fields,
                 type_parameters,
@@ -2530,7 +2538,7 @@ impl FullValidator<'_> {
 
     fn validate_implementation_operand(&mut self, operand: super::ImplementationOperand) {
         let (reference, kinds): (_, &[OwnerKind]) = match operand {
-            super::ImplementationOperand::Concrete { implementation } => {
+            super::ImplementationOperand::Concrete { implementation, .. } => {
                 (implementation, &[OwnerKind::OwnedImplementation])
             }
             super::ImplementationOperand::Parameter { function, .. } => (
@@ -2582,13 +2590,13 @@ impl FullValidator<'_> {
                     "implementation callee",
                 );
                 for operand in implementations {
-                    self.validate_implementation_operand(*operand);
+                    self.validate_implementation_operand(operand.clone());
                 }
             }
             ExpressionOperation::MethodCall {
                 witness, contract, ..
             } => {
-                self.validate_implementation_operand(*witness);
+                self.validate_implementation_operand(witness.clone());
                 self.require_exact_kind(
                     contract.package,
                     OwnerKey::Declaration(contract.declaration),
@@ -2909,6 +2917,7 @@ impl FullValidator<'_> {
                     DeclarationPayload::OwnedContract(c) => {
                         c.self_parameter == id || c.type_parameters.contains(&id)
                     }
+                    DeclarationPayload::OwnedImplementation(i) => i.type_parameters.contains(&id),
                     DeclarationPayload::External(function) => {
                         function.type_parameters.contains(&id)
                     }

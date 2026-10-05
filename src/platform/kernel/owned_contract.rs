@@ -53,6 +53,7 @@ pub struct OwnedMethodParameter {
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct OwnedImplementation {
+    pub type_parameters: Vec<TypeParameterId>,
     pub contract: DeclarationReference,
     pub self_type: TypeObjectDigest,
     pub type_arguments: Vec<TypeObjectDigest>,
@@ -64,6 +65,7 @@ pub struct OwnedImplementation {
 pub struct OwnedMethodImplementation {
     pub method: MethodId,
     pub function: DeclarationReference,
+    pub type_arguments: Vec<TypeObjectDigest>,
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
@@ -76,13 +78,12 @@ pub struct ImplementationParameter {
     pub type_arguments: Vec<TypeObjectDigest>,
 }
 
-#[derive(
-    Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, Ord, PartialEq, PartialOrd, Serialize,
-)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ImplementationOperand {
     Concrete {
         implementation: DeclarationReference,
+        type_arguments: Vec<TypeObjectDigest>,
     },
     Parameter {
         function: DeclarationReference,
@@ -152,10 +153,22 @@ impl OwnedContract {
 
 impl OwnedImplementation {
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
-        if self.type_arguments.len() >= contract::MAXIMUM_CHILDREN
+        if self.type_parameters.len() >= contract::MAXIMUM_CHILDREN
+            || self
+                .type_parameters
+                .iter()
+                .copied()
+                .collect::<BTreeSet<_>>()
+                .len()
+                != self.type_parameters.len()
+            || self.type_arguments.len() >= contract::MAXIMUM_CHILDREN
             || self.methods.is_empty()
             || self.methods.len() > contract::MAXIMUM_CHILDREN
             || self.methods.windows(2).any(|p| p[0].method >= p[1].method)
+            || self
+                .methods
+                .iter()
+                .any(|m| m.type_arguments.len() > contract::MAXIMUM_CHILDREN)
         {
             return Err(reject(
                 "implementation method mapping must be complete, unique and canonically ordered",
@@ -163,6 +176,64 @@ impl OwnedImplementation {
         }
         Ok(())
     }
+}
+
+impl ImplementationOperand {
+    pub(crate) fn type_arguments(&self) -> &[TypeObjectDigest] {
+        match self {
+            Self::Concrete { type_arguments, .. } => type_arguments,
+            Self::Parameter { .. } => &[],
+        }
+    }
+}
+
+/// Disposable application types remain available throughout subsequent validation.
+pub(crate) struct AppliedTypeRead<'a, R: ?Sized> {
+    pub(crate) read: &'a R,
+    pub(crate) types: &'a BTreeMap<TypeObjectDigest, TypeObject>,
+}
+
+impl<R: ExpressionRead + ?Sized> ExpressionRead for AppliedTypeRead<'_, R> {
+    fn package_id(&self) -> PackageId {
+        self.read.package_id()
+    }
+    fn owner(&self, owner: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic> {
+        self.read.owner(owner)
+    }
+    fn type_object(&self, ty: TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic> {
+        Ok(self
+            .read
+            .type_object(ty)?
+            .or_else(|| self.types.get(&ty).cloned()))
+    }
+    fn package_interface_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        self.read.package_interface_owner(package, owner)
+    }
+    fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        self.read.has_dependency(package)
+    }
+    fn validation_checkpoint(&self) -> Result<(), Diagnostic> {
+        self.read.validation_checkpoint()
+    }
+    fn validation_work(&self) -> Result<(), Diagnostic> {
+        self.read.validation_work()
+    }
+}
+
+pub(crate) struct AppliedWitnessContract {
+    pub(crate) contract: DeclarationReference,
+    pub(crate) self_type: TypeObjectDigest,
+    pub(crate) type_arguments: Vec<TypeObjectDigest>,
+    pub(crate) types: BTreeMap<TypeObjectDigest, TypeObject>,
+}
+
+pub(crate) struct AppliedOwnedMethod {
+    pub(crate) method: OwnedMethod,
+    pub(crate) types: BTreeMap<TypeObjectDigest, TypeObject>,
 }
 
 pub(crate) fn contract_record(
@@ -318,6 +389,10 @@ pub(crate) fn validate_owned_parameter(
                     c.self_parameter == id
                         || super::transfer::function_parameter_listed(read, &c.type_parameters, id)?
                 }
+                DeclarationPayload::OwnedImplementation(i) => {
+                    p.constraints == TypeParameterConstraints::Owned
+                        && super::transfer::function_parameter_listed(read, &i.type_parameters, id)?
+                }
                 _ => false,
             },
             _ => false,
@@ -333,6 +408,10 @@ pub(crate) fn validate_owned_parameter(
                 PackageInterfaceDeclarationPayload::OwnedContract(c) => {
                     c.self_parameter == id
                         || super::transfer::function_parameter_listed(read, &c.type_parameters, id)?
+                }
+                PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
+                    p.constraints == TypeParameterConstraints::Owned
+                        && super::transfer::function_parameter_listed(read, &i.type_parameters, id)?
                 }
                 _ => false,
             },
@@ -449,14 +528,66 @@ pub(crate) fn validate_implementation(
     read: &(impl ExpressionRead + ?Sized),
     implementation: &OwnedImplementation,
 ) -> Result<(), Diagnostic> {
+    let scope = implementation
+        .type_parameters
+        .first()
+        .map(|id| match read.owner(OwnerKey::TypeParameter(*id))? {
+            Some(OwnerRecord::TypeParameter(p)) => Ok(DeclarationReference {
+                package: read.package_id(),
+                declaration: p.declaration,
+            }),
+            _ => Err(reject("missing implementation type parameter")),
+        })
+        .transpose()?;
+    validate_implementation_scoped(read, scope, implementation)
+}
+
+pub(crate) fn validate_implementation_at(
+    read: &(impl ExpressionRead + ?Sized),
+    reference: DeclarationReference,
+    implementation: &OwnedImplementation,
+) -> Result<(), Diagnostic> {
+    validate_implementation_scoped(read, Some(reference), implementation)
+}
+
+fn validate_implementation_scoped(
+    read: &(impl ExpressionRead + ?Sized),
+    scope: Option<DeclarationReference>,
+    implementation: &OwnedImplementation,
+) -> Result<(), Diagnostic> {
     for _ in &implementation.methods {
         read.validation_work()?;
     }
     implementation.validate_local()?;
-    validate_owned_type(read, implementation.self_type, None)?;
+    let mut names = BTreeSet::new();
+    for id in &implementation.type_parameters {
+        let scope =
+            scope.ok_or_else(|| reject("generic implementation requires an exact scope"))?;
+        validate_owned_parameter(read, *id, Some(scope))?;
+        let p = if scope.package == read.package_id() {
+            match read.owner(OwnerKey::TypeParameter(*id))? {
+                Some(OwnerRecord::TypeParameter(p)) => p,
+                _ => return Err(reject("missing implementation parameter")),
+            }
+        } else {
+            match read.package_interface_owner(scope.package, OwnerKey::TypeParameter(*id))? {
+                Some(PackageInterfaceRecord::TypeParameter(p)) => p,
+                _ => return Err(reject("missing imported implementation parameter")),
+            }
+        };
+        if p.constraints != TypeParameterConstraints::Owned
+            || p.header.contract_version < 28
+            || !names.insert(p.name)
+        {
+            return Err(reject(
+                "implementation schemes require distinct exact Owned parameters",
+            ));
+        }
+    }
+    validate_owned_type(read, implementation.self_type, scope)?;
     let contract = contract_record(read, implementation.contract)?;
     validate_contract_at(read, implementation.contract, &contract)?;
-    validate_contract_arguments(read, &contract, &implementation.type_arguments, None)?;
+    validate_contract_arguments(read, &contract, &implementation.type_arguments, scope)?;
     if implementation.methods.len() != contract.methods.len() {
         return Err(reject("missing implementation method"));
     }
@@ -465,7 +596,6 @@ pub(crate) fn validate_implementation(
         implementation.self_type,
         &implementation.type_arguments,
     );
-    let mut derived = super::parallel_types::AppliedTypes::new(read);
     for method in &contract.methods {
         read.validation_work()?;
         let mut target = None;
@@ -478,7 +608,7 @@ pub(crate) fn validate_implementation(
         }
         let target = target.ok_or_else(|| reject("wrong implementation method identity"))?;
         let f = function_contract(read, target.function)?;
-        if !f.type_parameters.is_empty()
+        if f.type_parameters.len() != target.type_arguments.len()
             || !f.effect_parameters.is_empty()
             || !f.requirement_parameters.is_empty()
             || !f.implementation_parameters.is_empty()
@@ -486,13 +616,46 @@ pub(crate) fn validate_implementation(
             || f.parameters.len() != method.parameters.len()
         {
             return Err(reject(
-                "implementation methods require monomorphic graph functions with exact callable kind and effect row",
+                "implementation methods require exact graph-function applications and closed callable kind/effect rows",
             ));
         }
+        let mut target_bindings = BTreeMap::new();
+        for (id, ty) in f.type_parameters.iter().zip(&target.type_arguments) {
+            read.validation_work()?;
+            let p = if target.function.package == read.package_id() {
+                match read.owner(OwnerKey::TypeParameter(*id))? {
+                    Some(OwnerRecord::TypeParameter(p)) => p,
+                    _ => return Err(reject("missing mapped function type parameter")),
+                }
+            } else {
+                match read.package_interface_owner(
+                    target.function.package,
+                    OwnerKey::TypeParameter(*id),
+                )? {
+                    Some(PackageInterfaceRecord::TypeParameter(p)) => p,
+                    _ => return Err(reject("missing imported mapped function type parameter")),
+                }
+            };
+            if p.header.owner != OwnerKey::TypeParameter(*id)
+                || p.declaration != target.function.declaration
+                || p.constraints != TypeParameterConstraints::Owned
+                || target_bindings.insert(*id, *ty).is_some()
+            {
+                return Err(reject(
+                    "mapped function applications require distinct exact Owned parameters",
+                ));
+            }
+            validate_owned_type(read, *ty, scope)?;
+        }
+        // Separate substitution caches bind each complete environment. A mapped target
+        // application and the contract application never reuse a digest under another map.
+        let mut expected_types = super::parallel_types::AppliedTypes::new(read);
+        let mut target_types = super::parallel_types::AppliedTypes::new(read);
         for (id, expected) in f.parameters.iter().zip(&method.parameters) {
             let p = parameter(read, target.function.package, *id)?;
             if p.parent != ParameterParent::Function(target.function.declaration)
-                || !substituted_equal(&mut derived, expected.ty, p.ty, &substitutions)?
+                || expected_types.substitute(expected.ty, &substitutions, 0)?
+                    != target_types.substitute(p.ty, &target_bindings, 0)?
                 || p.use_mode != expected.use_mode
                 || p.resource_requirement.is_some()
             {
@@ -501,7 +664,9 @@ pub(crate) fn validate_implementation(
                 ));
             }
         }
-        if !substituted_equal(&mut derived, method.result, f.result, &substitutions)? {
+        if expected_types.substitute(method.result, &substitutions, 0)?
+            != target_types.substitute(f.result, &target_bindings, 0)?
+        {
             return Err(reject("implementation result mismatch"));
         }
         let expected_source = method
@@ -522,21 +687,47 @@ pub(crate) fn validate_implementation(
 
 pub(crate) fn witness_contract(
     read: &(impl ExpressionRead + ?Sized),
-    operand: ImplementationOperand,
+    operand: &ImplementationOperand,
     scope: Option<DeclarationId>,
-) -> Result<
-    (
-        DeclarationReference,
-        TypeObjectDigest,
-        Vec<TypeObjectDigest>,
-    ),
-    Diagnostic,
-> {
+) -> Result<AppliedWitnessContract, Diagnostic> {
     match operand {
-        ImplementationOperand::Concrete { implementation } => {
-            let i = implementation_record(read, implementation)?;
-            validate_implementation(read, &i)?;
-            Ok((i.contract, i.self_type, i.type_arguments))
+        ImplementationOperand::Concrete {
+            implementation,
+            type_arguments,
+        } => {
+            let i = implementation_record(read, *implementation)?;
+            validate_implementation_at(read, *implementation, &i)?;
+            if i.type_parameters.len() != type_arguments.len() {
+                return Err(reject("implementation scheme type argument arity mismatch"));
+            }
+            let caller = scope.map(|declaration| DeclarationReference {
+                package: read.package_id(),
+                declaration,
+            });
+            for ty in type_arguments {
+                validate_owned_type(read, *ty, caller)?;
+            }
+            let bindings = i
+                .type_parameters
+                .iter()
+                .copied()
+                .zip(type_arguments.iter().copied())
+                .collect();
+            let mut derived = super::parallel_types::AppliedTypes::new(read);
+            let self_type = derived.substitute(i.self_type, &bindings, 0)?;
+            let mut arguments = Vec::with_capacity(i.type_arguments.len());
+            for ty in i.type_arguments {
+                arguments.push(derived.substitute(ty, &bindings, 0)?);
+            }
+            validate_owned_type(&derived, self_type, caller)?;
+            let contract = contract_record(read, i.contract)?;
+            validate_contract_arguments(&derived, &contract, &arguments, caller)?;
+            Ok(AppliedWitnessContract {
+                contract: i.contract,
+                self_type,
+                type_arguments: arguments,
+                types: derived.into_types(),
+            })
         }
         ImplementationOperand::Parameter {
             function,
@@ -547,11 +738,11 @@ pub(crate) fn witness_contract(
                     "implementation parameter escaped its exact function scope",
                 ));
             }
-            let f = function_contract(read, function)?;
+            let f = function_contract(read, *function)?;
             let mut found = None;
             for p in &f.implementation_parameters {
                 read.validation_work()?;
-                if p.id == parameter {
+                if p.id == *parameter {
                     found = Some(p);
                     break;
                 }
@@ -567,22 +758,27 @@ pub(crate) fn witness_contract(
                     "witness Self requires an in-scope owned type parameter",
                 ));
             }
-            validate_owned_type(read, p.self_type, Some(function))?;
-            validate_contract_arguments(read, &contract, &p.type_arguments, Some(function))?;
-            Ok((p.contract, p.self_type, p.type_arguments.clone()))
+            validate_owned_type(read, p.self_type, Some(*function))?;
+            validate_contract_arguments(read, &contract, &p.type_arguments, Some(*function))?;
+            Ok(AppliedWitnessContract {
+                contract: p.contract,
+                self_type: p.self_type,
+                type_arguments: p.type_arguments.clone(),
+                types: BTreeMap::new(),
+            })
         }
     }
 }
 
 pub(crate) fn method_signature(
     read: &(impl ExpressionRead + ?Sized),
-    operand: ImplementationOperand,
+    operand: &ImplementationOperand,
     reference: DeclarationReference,
     id: MethodId,
     scope: Option<DeclarationId>,
-) -> Result<(OwnedMethod, BTreeMap<TypeParameterId, TypeObjectDigest>), Diagnostic> {
-    let (actual, self_type, arguments) = witness_contract(read, operand, scope)?;
-    if actual != reference {
+) -> Result<AppliedOwnedMethod, Diagnostic> {
+    let application = witness_contract(read, operand, scope)?;
+    if application.contract != reference {
         return Err(reject("witness names a different nominal contract"));
     }
     let c = contract_record(read, reference)?;
@@ -595,9 +791,21 @@ pub(crate) fn method_signature(
             break;
         }
     }
-    let method = found.ok_or_else(|| reject("method is absent from the exact witness contract"))?;
-    let substitutions = contract_bindings(&c, self_type, &arguments);
-    Ok((method, substitutions))
+    let mut method =
+        found.ok_or_else(|| reject("method is absent from the exact witness contract"))?;
+    let substitutions = contract_bindings(&c, application.self_type, &application.type_arguments);
+    let overlay = AppliedTypeRead {
+        read,
+        types: &application.types,
+    };
+    let mut derived = super::parallel_types::AppliedTypes::new(&overlay);
+    for p in &mut method.parameters {
+        p.ty = derived.substitute(p.ty, &substitutions, 0)?;
+    }
+    method.result = derived.substitute(method.result, &substitutions, 0)?;
+    let mut types = derived.into_types();
+    types.extend(application.types);
+    Ok(AppliedOwnedMethod { method, types })
 }
 
 pub(crate) fn validate_application(
@@ -630,16 +838,21 @@ pub(crate) fn validate_application(
         .collect();
     let mut derived = super::parallel_types::AppliedTypes::new(read);
     for (p, operand) in f.implementation_parameters.iter().zip(operands) {
-        let (contract, self_type, arguments) = witness_contract(read, *operand, scope)?;
-        if contract != p.contract
-            || !substituted_equal(&mut derived, p.self_type, self_type, &substitutions)?
-            || arguments.len() != p.type_arguments.len()
+        let application = witness_contract(read, operand, scope)?;
+        if application.contract != p.contract
+            || !substituted_equal(
+                &mut derived,
+                p.self_type,
+                application.self_type,
+                &substitutions,
+            )?
+            || application.type_arguments.len() != p.type_arguments.len()
         {
             return Err(reject(
                 "witness contract, Self or type argument substitution mismatch",
             ));
         }
-        for (template, actual) in p.type_arguments.iter().zip(arguments) {
+        for (template, actual) in p.type_arguments.iter().zip(application.type_arguments) {
             if !substituted_equal(&mut derived, *template, actual, &substitutions)? {
                 return Err(reject(
                     "witness exact contract argument substitution mismatch",

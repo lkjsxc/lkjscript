@@ -62,6 +62,11 @@ consuming decomposition. Ordinary raw-entry structural substitutions remain supp
 Current artifacts retain all lexical annotation roots; an annotation is never an
 ownership certificate.
 
+[Explicit generic implementation schemes](generic-owned-implementations.md)
+extend the baseline with implementation-scoped Owned parameters and mapped
+generic-function applications. Structured parallel transfer has its own
+[contract](structured-parallel.md); neither extension adds mutable or escaping loans.
+
 ## Independent scalar carrier
 
 OwnedI64Cell has its own canonical type envelope `LKJCEL01` and sealed runtime
@@ -107,7 +112,7 @@ arguments and results. A result may also be ordinary closed data. A method need
 not mention Self or an additional parameter, but their exact owners, constraints
 and ordered application remain mandatory.
 
-An `OwnedImplementation` declaration names one exact contract, concrete owned
+The baseline concrete `OwnedImplementation` declaration names one exact contract, concrete owned
 Self and ordered additional owned arguments, and supplies a complete, unique,
 canonically ordered method map. Every entry selects an exact visible monomorphic
 graph function with matching ordered

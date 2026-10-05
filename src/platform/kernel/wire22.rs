@@ -137,11 +137,11 @@ pub enum ExpressionOperation22 {
     ImplementationCall {
         function: DeclarationReference,
         type_arguments: Vec<TypeObjectDigest>,
-        implementations: Vec<super::ImplementationOperand>,
+        implementations: Vec<super::wire27::ImplementationOperand27>,
         arguments: Vec<ExpressionId>,
     },
     MethodCall {
-        witness: super::ImplementationOperand,
+        witness: super::wire27::ImplementationOperand27,
         contract: DeclarationReference,
         method: crate::platform::semantic_id::MethodId,
         arguments: Vec<ExpressionId>,
@@ -368,7 +368,7 @@ impl From<ExpressionOperation22> for ExpressionOperation {
                 effect_arguments: Vec::new(),
                 function,
                 type_arguments,
-                implementations,
+                implementations: implementations.into_iter().map(Into::into).collect(),
                 arguments,
             },
             ExpressionOperation22::MethodCall {
@@ -377,7 +377,7 @@ impl From<ExpressionOperation22> for ExpressionOperation {
                 method,
                 arguments,
             } => Self::MethodCall {
-                witness,
+                witness: witness.into(),
                 contract,
                 method,
                 arguments,
@@ -552,7 +552,10 @@ impl TryFrom<ExpressionOperation> for ExpressionOperation22 {
                 Self::ImplementationCall {
                     function,
                     type_arguments,
-                    implementations,
+                    implementations: implementations
+                        .into_iter()
+                        .map(TryInto::try_into)
+                        .collect::<Result<_, _>>()?,
                     arguments,
                 }
             }
@@ -562,7 +565,7 @@ impl TryFrom<ExpressionOperation> for ExpressionOperation22 {
                 method,
                 arguments,
             } => Self::MethodCall {
-                witness,
+                witness: witness.try_into()?,
                 contract,
                 method,
                 arguments,

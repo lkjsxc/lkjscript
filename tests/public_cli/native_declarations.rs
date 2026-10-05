@@ -1672,6 +1672,8 @@ mod native_owned_parameters;
 mod native_owned_borrows;
 #[path = "native_owned_effects.rs"]
 mod native_owned_effects;
+#[path = "native_owned_generic_implementations.rs"]
+mod native_owned_generic_implementations;
 #[path = "native_owned_products.rs"]
 mod native_owned_products;
 #[path = "native_owned_read_results.rs"]

@@ -63,6 +63,8 @@ mod owned_contract_application_tests;
 mod owned_effect_tests;
 #[path = "owned_generic_tests.rs"]
 mod owned_generic_tests;
+#[path = "owned_implementation_scheme_tests.rs"]
+mod owned_implementation_scheme_tests;
 #[path = "owned_product_tests.rs"]
 mod owned_product_tests;
 #[path = "owned_sequence_eval_tests.rs"]
@@ -122,7 +124,7 @@ fn graph14_preserves_predecessor_type_bytes_and_nominal_nested_typed_data() {
     );
     assert_eq!(
         crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-        27
+        28
     );
     assert_eq!(
         crate::platform::kernel::contract::TYPE_OBJECT_CONTRACT_VERSION,

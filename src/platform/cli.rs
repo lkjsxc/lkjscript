@@ -3969,12 +3969,27 @@ fn append_owned_inspection(
                     ),
                     ("self", implementation.self_type.to_string()),
                     (
+                        "type-parameters",
+                        implementation.type_parameters.len().to_string(),
+                    ),
+                    (
                         "type-arguments",
                         implementation.type_arguments.len().to_string(),
                     ),
                     ("methods", implementation.methods.len().to_string()),
                 ],
             )?;
+            for (index, parameter) in implementation.type_parameters.iter().enumerate() {
+                append_compact_record(
+                    output,
+                    "owned.implementation-parameter",
+                    &[
+                        ("owner", declaration.header.owner.to_string()),
+                        ("index", index.to_string()),
+                        ("parameter", parameter.to_string()),
+                    ],
+                )?;
+            }
             for (index, ty) in implementation.type_arguments.iter().enumerate() {
                 append_compact_record(
                     output,
@@ -3992,6 +4007,7 @@ fn append_owned_inspection(
                     "owned.method-implementation",
                     &[
                         ("method", mapping.method.to_string()),
+                        ("type-arguments", mapping.type_arguments.len().to_string()),
                         (
                             "function",
                             format!(
@@ -4001,6 +4017,18 @@ fn append_owned_inspection(
                         ),
                     ],
                 )?;
+                for (index, ty) in mapping.type_arguments.iter().enumerate() {
+                    append_compact_record(
+                        output,
+                        "owned.method-implementation-type-argument",
+                        &[
+                            ("owner", declaration.header.owner.to_string()),
+                            ("method", mapping.method.to_string()),
+                            ("index", index.to_string()),
+                            ("type", ty.to_string()),
+                        ],
+                    )?;
+                }
             }
         }
         DeclarationPayload::Function(function) => {
@@ -5097,6 +5125,33 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
         self.add_reference(role, source, ordinal, "type", target.to_string())
     }
 
+    fn add_implementation_type_arguments(
+        &mut self,
+        owner: KernelOwnerKey,
+        implementation: usize,
+        type_arguments: &[TypeObjectDigest],
+    ) -> Result<(), Diagnostic> {
+        for (index, ty) in type_arguments.iter().enumerate() {
+            self.push_fields(
+                DefinitionSection::Body,
+                "definition.implementation-operand-type-argument",
+                &[
+                    ("parent", owner.to_string()),
+                    ("implementation", implementation.to_string()),
+                    ("index", index.to_string()),
+                    ("type", ty.to_string()),
+                ],
+            )?;
+            self.add_type_reference(
+                format!("implementation_operand_{implementation}_type_argument"),
+                owner,
+                index,
+                *ty,
+            )?;
+        }
+        Ok(())
+    }
+
     fn add_declaration_reference(
         &mut self,
         role: impl Into<String>,
@@ -5607,7 +5662,11 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                     let (reference, parameter) = match operand {
                         crate::platform::kernel::ImplementationOperand::Concrete {
                             implementation,
-                        } => (*implementation, None),
+                            type_arguments,
+                        } => {
+                            self.add_implementation_type_arguments(owner, index, type_arguments)?;
+                            (*implementation, None)
+                        }
                         crate::platform::kernel::ImplementationOperand::Parameter {
                             function,
                             parameter,
@@ -5641,7 +5700,15 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
                 fields.push(("arguments", arguments.len().to_string()));
                 self.add_declaration_reference("owned_contract", owner, 0, *contract)?;
                 let reference = match witness {
-                    crate::platform::kernel::ImplementationOperand::Concrete { implementation } => {
+                    crate::platform::kernel::ImplementationOperand::Concrete {
+                        implementation,
+                        type_arguments,
+                    } => {
+                        fields.push((
+                            "implementation-type-arguments",
+                            type_arguments.len().to_string(),
+                        ));
+                        self.add_implementation_type_arguments(owner, 0, type_arguments)?;
                         *implementation
                     }
                     crate::platform::kernel::ImplementationOperand::Parameter {

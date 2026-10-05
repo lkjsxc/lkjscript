@@ -56,6 +56,10 @@ targets are monomorphic graph functions with the exact contract signatures after
 substitution. The generic algorithms use only Worklist methods and exact element
 witnesses. They do not inspect storage fields or choose an implementation by name.
 
+[Generic implementation schemes](native-generic-owned-implementations.md) provide
+the reusable successor: one Flat<T> or Chunked<T> declaration explicitly maps the
+generic functions and supports later independent items without storage wrappers.
+
 Push consumes Item before Self in authored argument order. Both pure read methods
 and consuming methods retain the existing affine and synchronous-loan rules.
 Internal chunk moves transfer owners; they do not copy element storage. Vector

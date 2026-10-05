@@ -46,7 +46,10 @@ fn owned_sequence_transport_rejects_rehashed_predecessor_signatures_and_syntax()
     let independent =
         crate::platform::package_transport::oracle::reconstruct(&original.container).unwrap();
     let package = &original.packages[&original.container.root.package_revision];
-    assert_eq!(package.snapshot.root.graph_contract_version, 27);
+    assert_eq!(
+        package.snapshot.root.graph_contract_version,
+        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+    );
     assert_eq!(
         independent.snapshots[&package.snapshot.root.package_id].types,
         package.snapshot.types

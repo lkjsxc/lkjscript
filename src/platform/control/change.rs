@@ -15,6 +15,8 @@ mod commitment_tests;
 #[cfg(test)]
 mod declaration_tests;
 #[cfg(test)]
+mod generic_implementation_tests;
+#[cfg(test)]
 mod literal_edit_tests;
 mod origins;
 #[cfg(test)]
@@ -36,12 +38,12 @@ use crate::platform::change::{
     AuthoredFunctionEffect, AuthoredImplementationOperand, AuthoredImplementationParameter,
     AuthoredLetBinding, AuthoredLocalReference, AuthoredMapExpressionEntry,
     AuthoredMatchExpressionArm, AuthoredOperationReference, AuthoredOwnedMethod,
-    AuthoredOwnerParent, AuthoredParameter, AuthoredPort, AuthoredPortImplementation,
-    AuthoredPortReference, AuthoredPrecondition, AuthoredRecordExpressionField,
-    AuthoredRequirement, AuthoredRequirementReference, AuthoredResourceLimit,
-    AuthoredStructuralTypeField, AuthoredTransactionOutcomeContract, AuthoredType,
-    AuthoredTypeParameter, AuthoredTypeParameterReference, DeclarationSelector, ModuleSelector,
-    OwnerSelector, ParameterParentSelector,
+    AuthoredOwnedMethodImplementation, AuthoredOwnerParent, AuthoredParameter, AuthoredPort,
+    AuthoredPortImplementation, AuthoredPortReference, AuthoredPrecondition,
+    AuthoredRecordExpressionField, AuthoredRequirement, AuthoredRequirementReference,
+    AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredTransactionOutcomeContract,
+    AuthoredType, AuthoredTypeParameter, AuthoredTypeParameterReference, DeclarationSelector,
+    ModuleSelector, OwnerSelector, ParameterParentSelector,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass, SourceLocation};
 use crate::platform::kernel::{
@@ -58,10 +60,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-35";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 35;
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-31";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 31;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-36";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 36;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-32";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 32;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
@@ -2272,7 +2274,7 @@ pub(crate) const COMPACT_EXPRESSION_FORM_FIELDS: &[CompactFormField] = &[
         form: "method-call",
         name: "witness",
         required: true,
-        syntax: "concrete@DECLARATION|parameter@FUNCTION@implparam_HEX",
+        syntax: "DECLARATION|concrete@DECLARATION[@%APPLICATION]|parameter@FUNCTION@implparam_HEX",
     },
     CompactFormField {
         form: "method-call",
@@ -2788,7 +2790,7 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
                 form: "implementation.argument",
                 name: "implementation",
                 required: true,
-                syntax: "concrete@DECLARATION|parameter@FUNCTION@implparam_HEX",
+                syntax: "DECLARATION|concrete@DECLARATION[@%APPLICATION]|parameter@FUNCTION@implparam_HEX",
             },
         ],
     },
@@ -2941,8 +2943,33 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
         ],
     },
     CompactEdgeDescriptor {
+        name: "owned.implementation-parameter",
+        parent: "owned-implementation",
+        child: "type-parameter",
+        fields: &[
+            CompactFormField {
+                form: "owned.implementation-parameter",
+                name: "parent",
+                required: true,
+                syntax: "$NAME|%NAME",
+            },
+            CompactFormField {
+                form: "owned.implementation-parameter",
+                name: "index",
+                required: true,
+                syntax: "zero-based-index",
+            },
+            CompactFormField {
+                form: "owned.implementation-parameter",
+                name: "parameter",
+                required: true,
+                syntax: "$NAME|typeparam_ID",
+            },
+        ],
+    },
+    CompactEdgeDescriptor {
         name: "owned.type-argument",
-        parent: "owned-implementation-or-witness",
+        parent: "owned-implementation-or-witness-or-method-mapping",
         child: "type",
         fields: &[
             CompactFormField {
@@ -3056,6 +3083,12 @@ pub(crate) const COMPACT_CHANGE_EDGE_DESCRIPTORS: &[CompactEdgeDescriptor] = &[
         parent: "owned-implementation",
         child: "method-implementation",
         fields: &[
+            CompactFormField {
+                form: "owned.mapping",
+                name: "as",
+                required: false,
+                syntax: "%NAME",
+            },
             CompactFormField {
                 form: "owned.mapping",
                 name: "parent",
@@ -3939,16 +3972,33 @@ impl Decoder {
                 "owned.parameter" => {
                     self.insert_indexed_record_edge(record, &["parent", "index", "type", "use"])?
                 }
-                "owned.contract-parameter" => {
+                "owned.contract-parameter" | "owned.implementation-parameter" => {
                     self.insert_indexed_record_edge(record, &["parent", "index", "parameter"])?
                 }
                 "owned.type-argument" => {
                     self.insert_indexed_record_edge(record, &["parent", "index", "type"])?
                 }
-                "owned.mapping" => self.insert_indexed_record_edge(
-                    record,
-                    &["parent", "index", "method", "function"],
-                )?,
+                "owned.mapping" => {
+                    if let Some(label) = optional(&record, "as") {
+                        validate_local_label(&record, "as", label, '%')?;
+                        if self
+                            .fragments
+                            .insert(label.to_owned(), record.location.clone())
+                            .is_some()
+                        {
+                            return Err(field_error(
+                                &record,
+                                "as",
+                                "change_fragment_duplicate",
+                                format!("fragment label '{label}' is defined more than once"),
+                            ));
+                        }
+                    }
+                    self.insert_indexed_record_edge(
+                        record,
+                        &["parent", "index", "as", "method", "function"],
+                    )?;
+                }
                 "owned.witness" => {
                     if let Some(label) = optional(&record, "as") {
                         validate_local_label(&record, "as", label, '%')?;
@@ -4341,14 +4391,16 @@ impl Decoder {
         text: &str,
     ) -> Result<AuthoredImplementationOperand, Diagnostic> {
         let parts = text.split('@').collect::<Vec<_>>();
-        let (reference, parameter) = match parts.as_slice() {
-            ["concrete", reference] => (*reference, None),
-            ["parameter", reference, parameter] => (*reference, Some(parameter.parse()?)),
+        let (reference, parameter, application) = match parts.as_slice() {
+            [reference] => (*reference, None, None),
+            ["concrete", reference] => (*reference, None, None),
+            ["concrete", reference, application] => (*reference, None, Some(*application)),
+            ["parameter", reference, parameter] => (*reference, Some(parameter.parse()?), None),
             _ => {
                 return Err(record_error(
                     record,
                     "change_owned_operand",
-                    "witness must be concrete@IMPLEMENTATION or parameter@FUNCTION@IMPLEMENTATION_PARAMETER_ID",
+                    "witness must be concrete@IMPLEMENTATION[@%APPLICATION] or parameter@FUNCTION@IMPLEMENTATION_PARAMETER_ID",
                 ));
             }
         };
@@ -4369,6 +4421,13 @@ impl Decoder {
             },
             None => AuthoredImplementationOperand::Concrete {
                 implementation: reference,
+                type_arguments: match application {
+                    Some(parent) => {
+                        validate_fragment_parent(record, "witness", parent)?;
+                        self.decode_owned_type_arguments(parent)?
+                    }
+                    None => Vec::new(),
+                },
             },
         })
     }
@@ -4451,13 +4510,25 @@ impl Decoder {
             }
             CompactChangeOperation::CreateOwnedImplementation => {
                 let parent = symbol(record, "as")?;
+                let type_parameters = self
+                    .ordered_record_edges("owned.implementation-parameter", &parent)?
+                    .iter()
+                    .map(|edge| self.parse_type_parameter_reference(&edge.record, "parameter"))
+                    .collect::<Result<Vec<_>, _>>()?;
                 let type_arguments = self.decode_owned_type_arguments(&parent)?;
                 let mut methods = Vec::new();
                 for edge in self.ordered_record_edges("owned.mapping", &parent)? {
-                    methods.push((
-                        required(&edge.record, "method")?.parse()?,
-                        self.parse_declaration_reference(&edge.record, "function")?,
-                    ));
+                    methods.push(AuthoredOwnedMethodImplementation {
+                        method: required(&edge.record, "method")?.parse()?,
+                        function: self.parse_declaration_reference(&edge.record, "function")?,
+                        type_arguments: match optional(&edge.record, "as") {
+                            Some(parent) => {
+                                validate_local_label(&edge.record, "as", parent, '%')?;
+                                self.decode_owned_type_arguments(parent)?
+                            }
+                            None => Vec::new(),
+                        },
+                    });
                 }
                 Ok(AuthoredChange::CreateOwnedImplementation {
                     symbol: parent,
@@ -4465,6 +4536,7 @@ impl Decoder {
                     name: parse_name(record, "name")?,
                     visibility: parse_visibility(record, "visibility")?,
                     contract: self.parse_declaration_reference(record, "contract")?,
+                    type_parameters,
                     self_type: self.decode_type(required(record, "self")?)?,
                     type_arguments,
                     methods,
@@ -6021,6 +6093,8 @@ fn commitment_codec_identity(intent: &[u8]) -> &'static str {
         "lkjscript-authored-change-codec-29"
     } else if intent.starts_with(b"LKJACR30") {
         "lkjscript-authored-change-codec-30"
+    } else if intent.starts_with(b"LKJACR31") {
+        "lkjscript-authored-change-codec-31"
     } else {
         // Retain the existing fallback; do not infer identities from unknown/future magics.
         AUTHORED_CHANGE_CODEC_IDENTITY

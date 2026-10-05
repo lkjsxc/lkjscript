@@ -16,6 +16,11 @@ Consult [status](../../docs/status.md) for tested source and public availability
 These inputs and expected outputs are acceptance witnesses until their public tests
 have passed; they do not establish compiler self-hosting or production adoption.
 
+This example retains its concrete storage witnesses. The successor
+[generic implementation example](../generic-owned-implementations/README.md)
+exports reusable Flat<T> and Chunked<T> schemes, then applies them to independently
+authored items without per-item storage wrappers.
+
 ## Independent complete result
 
 The `owned-worklists` target takes one list. Arguments `[[2,3,7]]` return:

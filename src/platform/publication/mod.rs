@@ -5,6 +5,7 @@
     reason = "private publication exports become repository consumers at the Graph 10 cutover"
 )]
 
+mod callable_composition;
 pub(crate) mod contract;
 mod diff;
 mod digest;

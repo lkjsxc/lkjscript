@@ -221,6 +221,7 @@ pub(super) mod owned;
 mod record_order_tests;
 pub use owned::{
     AuthoredImplementationOperand, AuthoredImplementationParameter, AuthoredOwnedMethod,
+    AuthoredOwnedMethodImplementation,
 };
 
 pub use declarations::{

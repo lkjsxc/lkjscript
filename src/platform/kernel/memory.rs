@@ -394,6 +394,7 @@ pub(crate) struct BorrowInvocation {
     pub(crate) result: TypeObjectDigest,
     pub(crate) source: ExpressionId,
     pub(crate) source_type: TypeObjectDigest,
+    pub(crate) types: BTreeMap<TypeObjectDigest, TypeObject>,
     arguments: Vec<ExpressionId>,
     parameters: Vec<(TypeObjectDigest, ParameterUse, bool)>,
 }
@@ -405,7 +406,7 @@ pub(crate) fn borrow_invocation(
     let Some(OwnerRecord::Expression(expression)) = read.owner(OwnerKey::Expression(call))? else {
         return Err(reject("missing borrowed invocation"));
     };
-    let (arguments, parameters, result, source_position) = match expression.operation {
+    let (arguments, parameters, result, source_position, types) = match expression.operation {
         ExpressionOperation::Call {
             function,
             type_arguments,
@@ -445,7 +446,13 @@ pub(crate) fn borrow_invocation(
                 parameters.push((ty, parameter.use_mode, direct(&derived, ty)?));
             }
             let result = derived.substitute(original_result, &substitutions, 0)?;
-            (arguments, parameters, result, position)
+            (
+                arguments,
+                parameters,
+                result,
+                position,
+                derived.into_types(),
+            )
         }
         ExpressionOperation::MethodCall {
             witness,
@@ -453,20 +460,32 @@ pub(crate) fn borrow_invocation(
             method,
             arguments,
         } => {
-            let (signature, substitutions) =
-                super::owned_contract::method_signature(read, witness, contract, method, scope)?;
+            let application =
+                super::owned_contract::method_signature(read, &witness, contract, method, scope)?;
+            let signature = application.method;
             let position = signature
                 .result_borrow
                 .ok_or_else(|| reject("borrow-call requires a declared borrowed method result"))?
                 as usize;
-            let mut derived = super::parallel_types::AppliedTypes::new(read);
+            let overlay = super::owned_contract::AppliedTypeRead {
+                read,
+                types: &application.types,
+            };
             let mut parameters = Vec::new();
             for parameter in &signature.parameters {
-                let ty = derived.substitute(parameter.ty, &substitutions, 0)?;
-                parameters.push((ty, parameter.use_mode, direct(&derived, ty)?));
+                parameters.push((
+                    parameter.ty,
+                    parameter.use_mode,
+                    direct(&overlay, parameter.ty)?,
+                ));
             }
-            let result = derived.substitute(signature.result, &substitutions, 0)?;
-            (arguments, parameters, result, position)
+            (
+                arguments,
+                parameters,
+                signature.result,
+                position,
+                application.types,
+            )
         }
         _ => {
             return Err(reject(
@@ -490,6 +509,7 @@ pub(crate) fn borrow_invocation(
         result,
         source,
         source_type,
+        types,
         arguments,
         parameters,
     })
@@ -1275,9 +1295,14 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 method,
                 arguments,
             } => {
-                let (signature, _) = super::owned_contract::method_signature(
-                    self.read, witness, contract, method, self.scope,
+                let application = super::owned_contract::method_signature(
+                    self.read, &witness, contract, method, self.scope,
                 )?;
+                let signature = application.method;
+                let overlay = super::owned_contract::AppliedTypeRead {
+                    read: self.read,
+                    types: &application.types,
+                };
                 if signature.result_borrow.is_some() {
                     return Err(reject(
                         "borrowed method results require a lexical borrow-call",
@@ -1288,7 +1313,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                 }
                 let mut uses = BTreeMap::new();
                 for (p, a) in signature.parameters.iter().zip(arguments) {
-                    if direct_in(self.read, contract.package, p.ty)? {
+                    if direct(&overlay, p.ty)? {
                         let Some(OwnerRecord::Expression(e)) =
                             self.read.owner(OwnerKey::Expression(a))?
                         else {
@@ -1313,7 +1338,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                         plain(a, state)?;
                     }
                 }
-                direct_in(self.read, contract.package, signature.result)?
+                direct(&overlay, signature.result)?
             }
             ExpressionOperation::FunctionValue {
                 function,
@@ -1546,6 +1571,12 @@ pub(crate) fn validate_owner(
                     DeclarationPayload::Function(f) => {
                         matches!(key, OwnerKey::TypeParameter(id) if f.type_parameters.contains(&id))
                     }
+                    DeclarationPayload::OwnedImplementation(i) => {
+                        p.constraints == TypeParameterConstraints::Owned
+                            && p.header.contract_version >= 28
+                            && matches!(key, OwnerKey::TypeParameter(id)
+                                if i.type_parameters.contains(&id))
+                    }
                     _ => false,
                 },
                 _ => false,
@@ -1554,7 +1585,7 @@ pub(crate) fn validate_owner(
                 return Err(Diagnostic::new(
                     DiagnosticClass::Semantic,
                     "kernel_owned_parameter_owner",
-                    "Owned requires an exact graph-function or owned-contract parameter",
+                    "Owned requires an exact graph-function, owned-contract or implementation-scheme parameter",
                 ));
             }
         }
@@ -1604,7 +1635,17 @@ pub(crate) fn validate_owner(
                 super::owned_contract::validate_contract(read, key, c)?
             }
             DeclarationPayload::OwnedImplementation(i) => {
-                super::owned_contract::validate_implementation(read, i)?
+                let OwnerKey::Declaration(declaration) = key else {
+                    return Err(reject("implementation requires a declaration identity"));
+                };
+                super::owned_contract::validate_implementation_at(
+                    read,
+                    DeclarationReference {
+                        package: read.package_id(),
+                        declaration,
+                    },
+                    i,
+                )?
             }
             DeclarationPayload::Constant { ty, value } => {
                 if contains(read, *ty)? {

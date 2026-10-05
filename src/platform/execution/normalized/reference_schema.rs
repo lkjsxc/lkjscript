@@ -56,6 +56,23 @@ pub struct NormalizedReferenceSchema {
 }
 
 impl NormalizedReferenceSchema {
+    #[cfg(test)]
+    pub(crate) fn independently_admit_witness_source(
+        snapshot: &KernelSnapshot,
+    ) -> Result<Self, ExecutionError> {
+        // Deliberately bypass production source admission so mutation tests
+        // establish the canonical reference's own complete witness proof.
+        let mut schema = Self::default();
+        schema.types.extend(snapshot.types.clone());
+        schema.types.extend(snapshot.dependency_types.clone());
+        super::reference_types::complete(
+            &mut schema,
+            &[snapshot],
+            &crate::platform::execution::ExecutionControl::uncancelled(),
+        )?;
+        Ok(schema)
+    }
+
     pub fn reconstruct<'a>(
         snapshots: impl IntoIterator<Item = &'a KernelSnapshot>,
     ) -> Result<Self, ExecutionError> {
@@ -266,6 +283,18 @@ impl NormalizedReferenceSchema {
                 Ok(affine)
             })
             .collect::<Result<_, ExecutionError>>()?;
+        crate::platform::kernel::callable_flow::validate_snapshot_callable_closure(
+            &inputs,
+            &|| {
+                control.check().map_err(|error| {
+                    Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message)
+                })
+            },
+            &mut source_work,
+            crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
+        )
+        .map_err(source_error)?;
+        schema.source_admission_steps = source_work as u64;
         super::reference_types::complete(&mut schema, &inputs, control)?;
         Ok(schema)
     }
@@ -413,8 +442,9 @@ impl NormalizedReferenceSchema {
     }
 }
 
-// Local callable SCCs exclude foreign applications only because complete package closures are
-// acyclic. Establish that premise for raw reference inputs too; an interface is not a body proof.
+// Bind exact source inventories and reject package dependency cycles here.
+// Supplied witnesses can still create callable cycles across the package DAG;
+// complete composition is proved separately before instance derivation.
 fn validate_dependency_closure(
     snapshots: &[&KernelSnapshot],
     control: &crate::platform::execution::ExecutionControl,

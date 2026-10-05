@@ -281,6 +281,8 @@ impl Value {
                 .iter()
                 .any(|p| !program.buffer_free_types.contains(&p.ty))
             || target.type_parameters.len() != type_arguments.len()
+            || (!target.type_arguments.is_empty()
+                && target.type_arguments.as_ref() != type_arguments.as_ref())
             || type_arguments
                 .iter()
                 .any(|ty| program.substitute_type(*ty, &BTreeMap::new(), 0).is_none())
@@ -800,6 +802,8 @@ impl Admission<'_> {
                 .iter()
                 .any(|parameter| parameter.resource_requirement.is_some())
             || type_arguments.len() != target.type_parameters.len()
+            || (!target.type_arguments.is_empty()
+                && target.type_arguments.as_ref() != type_arguments.as_ref())
         {
             return Err(admission_error(
                 "bind target has unresolved effects or a resource-bearing signature",
@@ -1361,6 +1365,8 @@ impl Admission<'_> {
                             .iter()
                             .any(|parameter| parameter.resource_requirement.is_some())
                         || callable.type_parameters.len() != type_arguments.len()
+                        || (!callable.type_arguments.is_empty()
+                            && callable.type_arguments.as_ref() != type_arguments.as_ref())
                         || bound_arguments
                             .as_ref()
                             .is_some_and(|prefix| prefix.is_empty())

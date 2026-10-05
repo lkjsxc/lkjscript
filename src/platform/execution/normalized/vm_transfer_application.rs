@@ -42,6 +42,7 @@ impl TaskApplication {
             || !f.requirement_parameters.is_empty()
             || f.type_parameters.len() != types.len()
             || f.type_parameter_constraints.len() != types.len()
+            || (!f.type_arguments.is_empty() && f.type_arguments.as_ref() != types.as_ref())
             || f.implementation_parameters.len() != f.implementation_arguments.len()
         {
             return Err(reject());
@@ -91,6 +92,11 @@ impl TaskApplication {
             .zip(f.implementation_arguments.iter())
         {
             work.visit(0)?;
+            for ty in application.implementation_type_arguments.iter() {
+                if !validate_type(program, *ty, 0, &mut work)? {
+                    return Err(reject());
+                }
+            }
             if resolve_type(program, parameter.self_type, &bindings, control)?
                 != application.self_type
                 || parameter.type_arguments.len() != application.type_arguments.len()

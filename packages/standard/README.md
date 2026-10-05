@@ -79,10 +79,10 @@ Current identity:
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
 - semantic revision: `rev_c3bcf5a07bdc9f8400fdf670fffcd5a0a85b54ff6f86ce7514c2c5f36cab41e4`;
-- package revision: `package_revision_f23ac69d40d2001f90a0a79a680b2033c0b11a30f98d32ae37ecd9be58fd6be6`;
-- package transport: `package_transport_a7ad00bdcc0de1b0e551093cea015107f0169a51028ebdce14e5a5b6296f5ea6`;
-- artifact manifest: `artifact_manifest_919ebbcfbd57b4903ad711e38cd0858a4b3f1faa85550b362bf1931189d9457c`;
-- artifact bundle: `artifact_bundle_ccd41fabfb1e29e9359a4817c277b3675bc76ee72a32629141c0c3f3fcac205d`;
+- package revision: `package_revision_4f367660906ad834e7b43a86c1168c97abd99fac5b07e519ddc8eb389f7258b5`;
+- package transport: `package_transport_cd715d864efbcd2fee7afb1f63d5f4274b0ad800d5a9600d073b12d08c0552fc`;
+- artifact manifest: `artifact_manifest_af6988227aa0fcf10015c20056f7ac6ecf9f4a1fc492dff80589cedb4cc19cba`;
+- artifact bundle: `artifact_bundle_4af73528efbff8592c18af9ba2d8e4596bb521b11760b9ebdacc87de8151476b`;
 - 1,900 live semantic owners, 247 compiler units, and 96 graph tests.
 
 Graph-owned `pair<First,Second>`, `pair-new`, `pair-first`, `pair-second` and `pair-map` compose
@@ -273,13 +273,12 @@ Accepted HEAD and standard program meaning remain unchanged; this is a compiler
 refresh, not product adoption in the standard library.
 
 The [structured parallel refresh](../../docs/campaigns/20261002-structured-parallel.md)
-derives the current Graph 21 transport and compiler 19 / bytecode 15 / artifact 26
+derived the Graph 21 transport and compiler 19 / bytecode 15 / artifact 26
 bundle through public export/build. All 89 graph tests agree between production and
 reference execution; accepted HEAD and standard operations retain their meaning.
 
-The owned-effect compiler refresh derives the Graph 23 transport through
-public native export and rebuilds the bundle through public check/build for
-compiler 23, bytecode 18 and artifact 30. The same 89 tests agree between production
-and reference execution. The package revision and transport pins above select the
-current graph and interface wrappers; accepted HEAD and standard operations retain
-their existing meaning.
+The current generic-implementation refresh derives the interface 16 transport
+through public export and the compiler 28 / bytecode 23 / artifact 35 bundle
+through public check/build. All 96 tests agree between production and reference
+execution. The package revision and transport pins above select those current
+wrappers; accepted HEAD and standard operations retain their existing meaning.

@@ -24,9 +24,16 @@ pub struct AuthoredImplementationParameter {
     pub type_arguments: Vec<AuthoredType>,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AuthoredOwnedMethodImplementation {
+    pub method: MethodId,
+    pub function: AuthoredDeclarationReference,
+    pub type_arguments: Vec<AuthoredType>,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredImplementationOperand {
     Concrete {
         implementation: AuthoredDeclarationReference,
+        type_arguments: Vec<AuthoredType>,
     },
     Parameter {
         function: AuthoredDeclarationReference,
@@ -80,26 +87,37 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
     fn owned_implementation_value(
         &mut self,
         contract: &AuthoredDeclarationReference,
+        type_parameters: &[AuthoredTypeParameterReference],
         self_type: &AuthoredType,
         type_arguments: &[AuthoredType],
-        methods: &[(MethodId, AuthoredDeclarationReference)],
+        methods: &[AuthoredOwnedMethodImplementation],
     ) -> Result<OwnedImplementation, Diagnostic> {
         let contract = self.lower_declaration_reference(contract)?;
+        let type_parameters = type_parameters
+            .iter()
+            .map(|parameter| self.lower_type_parameter_reference(parameter))
+            .collect::<Result<Vec<_>, _>>()?;
         let self_type = self.lower_type(self_type)?;
         let type_arguments = type_arguments
             .iter()
             .map(|ty| self.lower_type(ty))
             .collect::<Result<Vec<_>, _>>()?;
         let mut lowered = Vec::new();
-        for (method, function) in methods {
+        for mapping in methods {
             lowered.push(OwnedMethodImplementation {
-                method: *method,
-                function: self.lower_declaration_reference(function)?,
+                method: mapping.method,
+                function: self.lower_declaration_reference(&mapping.function)?,
+                type_arguments: mapping
+                    .type_arguments
+                    .iter()
+                    .map(|ty| self.lower_type(ty))
+                    .collect::<Result<Vec<_>, _>>()?,
             });
         }
         lowered.sort_by_key(|m| m.method);
         Ok(OwnedImplementation {
             contract,
+            type_parameters,
             self_type,
             type_arguments,
             methods: lowered,
@@ -110,11 +128,16 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
         operand: &AuthoredImplementationOperand,
     ) -> Result<ImplementationOperand, Diagnostic> {
         Ok(match operand {
-            AuthoredImplementationOperand::Concrete { implementation } => {
-                ImplementationOperand::Concrete {
-                    implementation: self.lower_declaration_reference(implementation)?,
-                }
-            }
+            AuthoredImplementationOperand::Concrete {
+                implementation,
+                type_arguments,
+            } => ImplementationOperand::Concrete {
+                implementation: self.lower_declaration_reference(implementation)?,
+                type_arguments: type_arguments
+                    .iter()
+                    .map(|ty| self.lower_type(ty))
+                    .collect::<Result<Vec<_>, _>>()?,
+            },
             AuthoredImplementationOperand::Parameter {
                 function,
                 parameter,
@@ -184,14 +207,20 @@ pub(in crate::platform::change::request) fn lower<
             name,
             visibility,
             contract,
+            type_parameters,
             self_type,
             type_arguments,
             methods,
         } => {
             let declaration = lowerer.declaration_symbol(symbol)?;
             let module = lowerer.resolve_module(module)?;
-            let value =
-                lowerer.owned_implementation_value(contract, self_type, type_arguments, methods)?;
+            let value = lowerer.owned_implementation_value(
+                contract,
+                type_parameters,
+                self_type,
+                type_arguments,
+                methods,
+            )?;
             lowerer.insert_created(OwnerRecord::Declaration(DeclarationRecord {
                 header: OwnerHeader::new(
                     OwnerKey::Declaration(declaration),
@@ -233,13 +262,19 @@ pub(in crate::platform::change::request) fn lower<
         C::SetOwnedImplementation {
             declaration,
             contract,
+            type_parameters,
             self_type,
             type_arguments,
             methods,
         } => {
             let declaration = lowerer.resolve_declaration(declaration)?;
-            let value =
-                lowerer.owned_implementation_value(contract, self_type, type_arguments, methods)?;
+            let value = lowerer.owned_implementation_value(
+                contract,
+                type_parameters,
+                self_type,
+                type_arguments,
+                methods,
+            )?;
             let OwnerRecord::Declaration(d) =
                 lowerer.candidate_mut(OwnerKey::Declaration(declaration))?
             else {

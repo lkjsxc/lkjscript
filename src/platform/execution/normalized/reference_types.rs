@@ -7,15 +7,17 @@ use crate::platform::kernel::{
     DeclarationPayload, DeclarationReference, ExpressionOperation, KernelSnapshot, OwnerKey,
     OwnerRecord, PackageId, TypeForm, TypeObject, TypeObjectDigest, encode_type_object,
 };
-use crate::platform::semantic_id::{ExpressionId, TypeParameterId};
+use crate::platform::semantic_id::{ExpressionId, ImplementationParameterId, TypeParameterId};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 type Bindings = BTreeMap<TypeParameterId, TypeObjectDigest>;
+type Witness = (DeclarationReference, Vec<TypeObjectDigest>);
 type Application = (
     DeclarationReference,
     Vec<TypeObjectDigest>,
     Vec<crate::platform::kernel::EffectRow>,
     Vec<crate::platform::kernel::RequirementReference>,
+    Vec<Witness>,
 );
 type Calls = VecDeque<Application>;
 const MAXIMUM_METADATA_BYTES: usize = 256 * 1024 * 1024;
@@ -42,6 +44,7 @@ struct Closure<'a> {
     control: &'a crate::platform::execution::ExecutionControl,
     effects: super::reference_effects::Bindings,
     requirements: super::reference_effects::RequirementBindings,
+    implementation_bindings: BTreeMap<ImplementationParameterId, Witness>,
 }
 
 fn allocate<T>(allocated: &mut usize, count: usize) -> Result<(), ExecutionError> {
@@ -64,6 +67,235 @@ fn index_node<T>(allocated: &mut usize) -> Result<(), ExecutionError> {
 }
 
 impl<'a> Closure<'a> {
+    fn owned_witness_type(
+        &mut self,
+        ty: TypeObjectDigest,
+        scope: Option<DeclarationReference>,
+        depth: usize,
+    ) -> Result<bool, ExecutionError> {
+        self.tick()?;
+        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+            return Err(failure());
+        }
+        let object = self.types.get(&ty).ok_or_else(failure)?;
+        let sequence = matches!(object.form, TypeForm::OwnedSequence { .. });
+        match object.form {
+            TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => return Ok(true),
+            TypeForm::TypeParameter { .. } => {
+                return if self.scoped_owned(ty, scope)? {
+                    Ok(true)
+                } else {
+                    Err(failure())
+                };
+            }
+            TypeForm::OwnedSequence { .. }
+            | TypeForm::OwnedProduct { .. }
+            | TypeForm::OwnedChoice { .. } => {}
+            _ => {
+                return self
+                    .ordinary_witness_type(ty)
+                    .and_then(|ordinary| if ordinary { Ok(false) } else { Err(failure()) });
+            }
+        }
+        allocate::<TypeObjectDigest>(&mut self.allocated, object.child_type_count())?;
+        let children = object.child_types();
+        let mut owned = false;
+        for child in children {
+            let child_owned = self.owned_witness_type(child, scope, depth + 1)?;
+            if sequence && !child_owned {
+                return Err(failure());
+            }
+            owned |= child_owned;
+        }
+        if !owned {
+            return Err(failure());
+        }
+        Ok(true)
+    }
+
+    fn ordinary_witness_type(&mut self, ty: TypeObjectDigest) -> Result<bool, ExecutionError> {
+        type Context = BTreeSet<TypeParameterId>;
+        allocate::<(TypeObjectDigest, Context)>(&mut self.allocated, 1)?;
+        let mut pending = vec![(ty, Context::new())];
+        let mut seen = BTreeSet::new();
+        while let Some((ty, assumptions)) = pending.pop() {
+            self.tick()?;
+            allocate::<TypeParameterId>(&mut self.allocated, assumptions.len())?;
+            if seen.contains(&(ty, assumptions.clone())) {
+                continue;
+            }
+            index_node::<(TypeObjectDigest, Context)>(&mut self.allocated)?;
+            allocate::<TypeParameterId>(&mut self.allocated, assumptions.len())?;
+            seen.insert((ty, assumptions.clone()));
+            let object = self.types.get(&ty).ok_or_else(failure)?;
+            match &object.form {
+                TypeForm::Function { .. }
+                | TypeForm::TaskFunction { .. }
+                | TypeForm::CapabilityResource { .. }
+                | TypeForm::ByteBuffer
+                | TypeForm::OwnedI64Cell
+                | TypeForm::OwnedProduct { .. }
+                | TypeForm::OwnedChoice { .. }
+                | TypeForm::OwnedSequence { .. }
+                | TypeForm::Secret
+                | TypeForm::Stream { .. } => return Ok(false),
+                TypeForm::TypeParameter { parameter } if !assumptions.contains(parameter) => {
+                    return Ok(false);
+                }
+                _ => {}
+            }
+            allocate::<TypeObjectDigest>(&mut self.allocated, object.child_type_count())?;
+            let children = object.child_types();
+            let nominal = match &object.form {
+                TypeForm::Named { declaration } => Some((*declaration, 0)),
+                TypeForm::Applied {
+                    declaration,
+                    arguments,
+                } => Some((*declaration, arguments.len())),
+                _ => None,
+            };
+            for child in children {
+                allocate::<(TypeObjectDigest, Context)>(&mut self.allocated, 1)?;
+                allocate::<TypeParameterId>(&mut self.allocated, assumptions.len())?;
+                pending.push((child, assumptions.clone()));
+            }
+            if let Some((reference, arguments)) = nominal {
+                let OwnerRecord::Declaration(owner) = self.owner(
+                    reference.package,
+                    OwnerKey::Declaration(reference.declaration),
+                )?
+                else {
+                    return Err(failure());
+                };
+                let (parameters, fields, cases) = match &owner.payload {
+                    DeclarationPayload::Record {
+                        type_parameters,
+                        fields,
+                    } => (type_parameters.as_slice(), fields.as_slice(), &[][..]),
+                    DeclarationPayload::Variant {
+                        type_parameters,
+                        cases,
+                    } => (type_parameters.as_slice(), &[][..], cases.as_slice()),
+                    _ => return Ok(false),
+                };
+                if parameters.len() != arguments {
+                    return Ok(false);
+                }
+                let mut nominal_assumptions = Context::new();
+                for parameter in parameters {
+                    let OwnerRecord::TypeParameter(parameter_owner) =
+                        self.owner(reference.package, OwnerKey::TypeParameter(*parameter))?
+                    else {
+                        return Err(failure());
+                    };
+                    if parameter_owner.header.owner != OwnerKey::TypeParameter(*parameter)
+                        || parameter_owner.declaration != reference.declaration
+                        || parameter_owner.constraints.has_owned()
+                        || !nominal_assumptions.insert(*parameter)
+                    {
+                        return Ok(false);
+                    }
+                    index_node::<TypeParameterId>(&mut self.allocated)?;
+                }
+                for field in fields {
+                    let OwnerRecord::Field(field) =
+                        self.owner(reference.package, OwnerKey::Field(*field))?
+                    else {
+                        return Err(failure());
+                    };
+                    if field.declaration != reference.declaration {
+                        return Err(failure());
+                    }
+                    allocate::<(TypeObjectDigest, Context)>(&mut self.allocated, 1)?;
+                    allocate::<TypeParameterId>(&mut self.allocated, nominal_assumptions.len())?;
+                    pending.push((field.ty, nominal_assumptions.clone()));
+                }
+                for case in cases {
+                    let OwnerRecord::Case(case) =
+                        self.owner(reference.package, OwnerKey::Case(*case))?
+                    else {
+                        return Err(failure());
+                    };
+                    if case.declaration != reference.declaration {
+                        return Err(failure());
+                    }
+                    if let Some(ty) = &case.payload {
+                        allocate::<(TypeObjectDigest, Context)>(&mut self.allocated, 1)?;
+                        allocate::<TypeParameterId>(
+                            &mut self.allocated,
+                            nominal_assumptions.len(),
+                        )?;
+                        pending.push((*ty, nominal_assumptions.clone()));
+                    }
+                }
+            }
+        }
+        Ok(true)
+    }
+
+    fn owned_scheme_parameters(
+        &mut self,
+        reference: DeclarationReference,
+        parameters: &[TypeParameterId],
+    ) -> Result<Bindings, ExecutionError> {
+        if parameters.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN {
+            return Err(failure());
+        }
+        let mut bindings = Bindings::new();
+        let mut names = BTreeSet::new();
+        for parameter in parameters {
+            let OwnerRecord::TypeParameter(owner) =
+                self.owner(reference.package, OwnerKey::TypeParameter(*parameter))?
+            else {
+                return Err(failure());
+            };
+            if owner.header.owner != OwnerKey::TypeParameter(*parameter)
+                || owner.declaration != reference.declaration
+                || owner.constraints != crate::platform::kernel::TypeParameterConstraints::Owned
+                || !names.insert(&owner.name)
+            {
+                return Err(failure());
+            }
+            index_node::<(TypeParameterId, TypeObjectDigest)>(&mut self.allocated)?;
+            index_node::<&crate::platform::kernel::Name>(&mut self.allocated)?;
+            let object = TypeObject::new(TypeForm::TypeParameter {
+                parameter: *parameter,
+            })
+            .map_err(|_| failure())?;
+            let (ty, _) = encode_type_object(&object).map_err(|_| failure())?;
+            index_node::<(TypeObjectDigest, TypeObject)>(&mut self.allocated)?;
+            self.types.entry(ty).or_insert(object);
+            if bindings.insert(*parameter, ty).is_some() {
+                return Err(failure());
+            }
+        }
+        Ok(bindings)
+    }
+
+    fn scoped_type_parameters(
+        &mut self,
+        ty: TypeObjectDigest,
+        allowed: &Bindings,
+        depth: usize,
+    ) -> Result<(), ExecutionError> {
+        self.tick()?;
+        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+            return Err(failure());
+        }
+        let object = self.types.get(&ty).ok_or_else(failure)?;
+        if let TypeForm::TypeParameter { parameter } = object.form
+            && !allowed.contains_key(&parameter)
+        {
+            return Err(failure());
+        }
+        allocate::<TypeObjectDigest>(&mut self.allocated, object.child_type_count())?;
+        let children = object.child_types();
+        for child in children {
+            self.scoped_type_parameters(child, allowed, depth + 1)?;
+        }
+        Ok(())
+    }
+
     fn sequence(
         &mut self,
         ty: TypeObjectDigest,
@@ -159,9 +391,79 @@ impl<'a> Closure<'a> {
                 if record.declaration != declaration.declaration {
                     return Err(failure());
                 }
-                Ok(record.constraints.has_owned())
+                let constraints = record.constraints;
+                if record.header.owner != OwnerKey::TypeParameter(parameter) {
+                    return Err(failure());
+                }
+                let OwnerRecord::Declaration(owner) = self.owner(
+                    declaration.package,
+                    OwnerKey::Declaration(declaration.declaration),
+                )?
+                else {
+                    return Err(failure());
+                };
+                if !owner.payload.type_parameters().contains(&parameter) {
+                    return Err(failure());
+                }
+                Ok(constraints.has_owned())
             }
             _ => Ok(false),
+        }
+    }
+
+    fn witness_selection(
+        &mut self,
+        operand: &crate::platform::kernel::ImplementationOperand,
+        scope: Option<DeclarationReference>,
+        bindings: &Bindings,
+    ) -> Result<Option<Witness>, ExecutionError> {
+        use crate::platform::kernel::ImplementationOperand;
+        match operand {
+            ImplementationOperand::Concrete {
+                implementation,
+                type_arguments,
+            } => {
+                let OwnerRecord::Declaration(owner) = self.owner(
+                    implementation.package,
+                    OwnerKey::Declaration(implementation.declaration),
+                )?
+                else {
+                    return Err(failure());
+                };
+                let DeclarationPayload::OwnedImplementation(scheme) = &owner.payload else {
+                    return Err(failure());
+                };
+                if scheme.type_parameters.len() != type_arguments.len() {
+                    return Err(failure());
+                }
+                allocate::<TypeObjectDigest>(&mut self.allocated, type_arguments.len())?;
+                let mut arguments = Vec::new();
+                for ty in type_arguments {
+                    self.scoped_type_parameters(*ty, bindings, 0)?;
+                    let actual = self.identity(*ty, bindings, 0)?;
+                    if !self.owned_witness_type(actual, scope, 0)? {
+                        return Err(failure());
+                    }
+                    arguments.push(actual);
+                }
+                Ok(Some((*implementation, arguments)))
+            }
+            ImplementationOperand::Parameter {
+                function,
+                parameter,
+            } => {
+                if scope != Some(*function) {
+                    return Err(failure());
+                }
+                if let Some(selected) = self.implementation_bindings.get(parameter) {
+                    allocate::<TypeObjectDigest>(&mut self.allocated, selected.1.len())?;
+                    Ok(Some(selected.clone()))
+                } else if self.symbolic {
+                    Ok(None)
+                } else {
+                    Err(failure())
+                }
+            }
         }
     }
 
@@ -179,8 +481,9 @@ impl<'a> Closure<'a> {
         ExecutionError,
     > {
         use crate::platform::kernel::ImplementationOperand;
-        let (contract, self_type, arguments) = match operand {
-            ImplementationOperand::Concrete { implementation } => {
+        let selected = self.witness_selection(&operand, scope, bindings)?;
+        let (contract, self_type, arguments, substitutions) =
+            if let Some((implementation, arguments)) = selected {
                 let OwnerRecord::Declaration(owner) = self.owner(
                     implementation.package,
                     OwnerKey::Declaration(implementation.declaration),
@@ -191,17 +494,68 @@ impl<'a> Closure<'a> {
                 let DeclarationPayload::OwnedImplementation(selected) = &owner.payload else {
                     return Err(failure());
                 };
+                if selected.type_parameters.len() != arguments.len() {
+                    return Err(failure());
+                }
+                let mut substitutions = Bindings::new();
+                for (parameter, actual) in selected.type_parameters.iter().zip(arguments) {
+                    index_node::<(TypeParameterId, TypeObjectDigest)>(&mut self.allocated)?;
+                    if substitutions.insert(*parameter, actual).is_some() {
+                        return Err(failure());
+                    }
+                }
                 allocate::<TypeObjectDigest>(&mut self.allocated, selected.type_arguments.len())?;
+                // The canonical evaluator checks every mapping at application
+                // admission, including unused methods. Retain their derived
+                // type objects before that check can ask for their identities.
+                for mapping in &selected.methods {
+                    let OwnerRecord::Declaration(target) = self.owner(
+                        mapping.function.package,
+                        OwnerKey::Declaration(mapping.function.declaration),
+                    )?
+                    else {
+                        return Err(failure());
+                    };
+                    let DeclarationPayload::Function(function) = &target.payload else {
+                        return Err(failure());
+                    };
+                    if function.type_parameters.len() != mapping.type_arguments.len() {
+                        return Err(failure());
+                    }
+                    let mut target_bindings = Bindings::new();
+                    for (formal, actual) in
+                        function.type_parameters.iter().zip(&mapping.type_arguments)
+                    {
+                        let actual = self.identity(*actual, &substitutions, 0)?;
+                        index_node::<(TypeParameterId, TypeObjectDigest)>(&mut self.allocated)?;
+                        if target_bindings.insert(*formal, actual).is_some() {
+                            return Err(failure());
+                        }
+                    }
+                    self.identity(function.result, &target_bindings, 0)?;
+                    for parameter in &function.parameters {
+                        let OwnerRecord::Parameter(parameter) =
+                            self.owner(mapping.function.package, OwnerKey::Parameter(*parameter))?
+                        else {
+                            return Err(failure());
+                        };
+                        self.identity(parameter.ty, &target_bindings, 0)?;
+                    }
+                }
                 (
                     selected.contract,
                     selected.self_type,
                     selected.type_arguments.clone(),
+                    substitutions,
                 )
-            }
-            ImplementationOperand::Parameter {
-                function,
-                parameter,
-            } => {
+            } else {
+                let ImplementationOperand::Parameter {
+                    function,
+                    parameter,
+                } = operand
+                else {
+                    return Err(failure());
+                };
                 if scope != Some(function) {
                     return Err(failure());
                 }
@@ -221,25 +575,57 @@ impl<'a> Closure<'a> {
                     .find(|formal| formal.id == parameter)
                     .ok_or_else(failure)?;
                 allocate::<TypeObjectDigest>(&mut self.allocated, formal.type_arguments.len())?;
+                allocate::<(TypeParameterId, TypeObjectDigest)>(
+                    &mut self.allocated,
+                    bindings.len(),
+                )?;
+                allocate::<usize>(&mut self.allocated, bindings.len().saturating_mul(3))?;
                 (
                     formal.contract,
                     formal.self_type,
                     formal.type_arguments.clone(),
+                    bindings.clone(),
                 )
-            }
-        };
-        let empty = Bindings::new();
-        let bindings = if matches!(operand, ImplementationOperand::Concrete { .. }) {
-            &empty
-        } else {
-            bindings
-        };
-        let self_type = self.identity(self_type, bindings, 0)?;
+            };
+        let self_type = self.identity(self_type, &substitutions, 0)?;
         allocate::<TypeObjectDigest>(&mut self.allocated, arguments.len())?;
-        let arguments = arguments
+        let arguments: Vec<TypeObjectDigest> = arguments
             .into_iter()
-            .map(|ty| self.identity(ty, bindings, 0))
+            .map(|ty| self.identity(ty, &substitutions, 0))
             .collect::<Result<_, _>>()?;
+        let OwnerRecord::Declaration(owner) = self.owner(
+            contract.package,
+            OwnerKey::Declaration(contract.declaration),
+        )?
+        else {
+            return Err(failure());
+        };
+        let DeclarationPayload::OwnedContract(declaration) = &owner.payload else {
+            return Err(failure());
+        };
+        if declaration.type_parameters.len() != arguments.len() {
+            return Err(failure());
+        }
+        let mut contract_bindings = Bindings::new();
+        index_node::<(TypeParameterId, TypeObjectDigest)>(&mut self.allocated)?;
+        contract_bindings.insert(declaration.self_parameter, self_type);
+        for (formal, actual) in declaration
+            .type_parameters
+            .iter()
+            .copied()
+            .zip(arguments.iter().copied())
+        {
+            index_node::<(TypeParameterId, TypeObjectDigest)>(&mut self.allocated)?;
+            if contract_bindings.insert(formal, actual).is_some() {
+                return Err(failure());
+            }
+        }
+        for method in &declaration.methods {
+            for parameter in &method.parameters {
+                self.identity(parameter.ty, &contract_bindings, 0)?;
+            }
+            self.identity(method.result, &contract_bindings, 0)?;
+        }
         Ok((contract, self_type, arguments))
     }
 
@@ -258,7 +644,7 @@ impl<'a> Closure<'a> {
             self.tick()?;
             let expected = self.identity(formal.self_type, child_bindings, 0)?;
             let (contract, actual, arguments) =
-                self.witness_application(*operand, scope, caller_bindings)?;
+                self.witness_application(operand.clone(), scope, caller_bindings)?;
             if contract != formal.contract
                 || actual != expected
                 || formal.type_arguments.len() != arguments.len()
@@ -281,7 +667,9 @@ impl<'a> Closure<'a> {
         method: crate::platform::semantic_id::MethodId,
         scope: Option<DeclarationReference>,
         bindings: &Bindings,
+        calls: &mut Calls,
     ) -> Result<(), ExecutionError> {
+        let selected = self.witness_selection(&witness, scope, bindings)?;
         let (selected_contract, self_type, arguments) =
             self.witness_application(witness, scope, bindings)?;
         if selected_contract != contract {
@@ -315,10 +703,53 @@ impl<'a> Closure<'a> {
             .iter()
             .find(|candidate| candidate.id == method)
             .ok_or_else(failure)?;
+        let method_id = method.id;
         for parameter in &method.parameters {
             self.identity(parameter.ty, &substitutions, 0)?;
         }
         self.identity(method.result, &substitutions, 0)?;
+        if let Some((selected, arguments)) = selected {
+            let OwnerRecord::Declaration(owner) = self.owner(
+                selected.package,
+                OwnerKey::Declaration(selected.declaration),
+            )?
+            else {
+                return Err(failure());
+            };
+            let DeclarationPayload::OwnedImplementation(implementation) = &owner.payload else {
+                return Err(failure());
+            };
+            let mapping = implementation
+                .methods
+                .iter()
+                .find(|mapping| mapping.method == method_id)
+                .ok_or_else(failure)?;
+            allocate::<(TypeParameterId, TypeObjectDigest)>(
+                &mut self.allocated,
+                implementation.type_parameters.len(),
+            )?;
+            allocate::<usize>(
+                &mut self.allocated,
+                implementation.type_parameters.len().saturating_mul(3),
+            )?;
+            let substitutions: Bindings = implementation
+                .type_parameters
+                .iter()
+                .copied()
+                .zip(arguments)
+                .collect();
+            let target = mapping.function;
+            allocate::<TypeObjectDigest>(&mut self.allocated, mapping.type_arguments.len())?;
+            let arguments = mapping
+                .type_arguments
+                .iter()
+                .map(|ty| self.identity(*ty, &substitutions, 0))
+                .collect::<Result<Vec<_>, _>>()?;
+            if !self.symbolic {
+                allocate::<Application>(&mut self.allocated, 1)?;
+                calls.push_back((target, arguments, Vec::new(), Vec::new(), Vec::new()));
+            }
+        }
         Ok(())
     }
 
@@ -637,7 +1068,7 @@ impl<'a> Closure<'a> {
                     method,
                     ..
                 } => {
-                    self.method_signature(witness, contract, method, scope, bindings)?;
+                    self.method_signature(witness, contract, method, scope, bindings, calls)?;
                 }
                 ExpressionOperation::Parallel { left, right } => {
                     if !task_context {
@@ -841,13 +1272,6 @@ impl<'a> Closure<'a> {
                     requirement_arguments,
                     ..
                 }
-                | ExpressionOperation::ImplementationCall {
-                    function,
-                    type_arguments,
-                    effect_arguments,
-                    requirement_arguments,
-                    ..
-                }
                 | ExpressionOperation::FunctionValue {
                     effect_arguments,
                     requirement_arguments,
@@ -910,7 +1334,63 @@ impl<'a> Closure<'a> {
                         })
                         .collect::<Result<Vec<_>, _>>()?;
                     if !self.symbolic {
-                        calls.push_back((function, concrete, effects, requirements));
+                        calls.push_back((function, concrete, effects, requirements, Vec::new()));
+                    }
+                }
+                ExpressionOperation::ImplementationCall {
+                    function,
+                    type_arguments,
+                    effect_arguments,
+                    requirement_arguments,
+                    implementations,
+                    ..
+                } => {
+                    let mut types = Vec::new();
+                    allocate::<TypeObjectDigest>(&mut self.allocated, type_arguments.len())?;
+                    for ty in type_arguments {
+                        types.push(self.identity(ty, bindings, 0)?);
+                    }
+                    index_node::<(
+                        DeclarationReference,
+                        Vec<TypeObjectDigest>,
+                        Option<DeclarationReference>,
+                    )>(&mut self.allocated)?;
+                    allocate::<TypeObjectDigest>(&mut self.allocated, types.len())?;
+                    self.constrained_applications.insert((
+                        function,
+                        types.clone(),
+                        if self.symbolic { scope } else { None },
+                    ));
+                    let mut witnesses = Vec::new();
+                    allocate::<Witness>(&mut self.allocated, implementations.len())?;
+                    for operand in &implementations {
+                        if let Some(selected) = self.witness_selection(operand, scope, bindings)? {
+                            witnesses.push(selected);
+                        }
+                    }
+                    if !self.symbolic {
+                        let mut effects = Vec::new();
+                        allocate::<crate::platform::kernel::EffectRow>(
+                            &mut self.allocated,
+                            effect_arguments.len(),
+                        )?;
+                        for row in effect_arguments {
+                            effects.push(super::reference_effects::close(&row, &self.effects, &self.requirements, |n| {
+                                allocate::<(crate::platform::kernel::RequirementReference, usize)>(&mut self.allocated, n)
+                            })?);
+                        }
+                        allocate::<crate::platform::kernel::RequirementReference>(
+                            &mut self.allocated,
+                            requirement_arguments.len(),
+                        )?;
+                        let requirements = requirement_arguments
+                            .iter()
+                            .map(|operand| {
+                                super::reference_effects::resolve(*operand, &self.requirements)
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+                        allocate::<Application>(&mut self.allocated, 1)?;
+                        calls.push_back((function, types, effects, requirements, witnesses));
                     }
                 }
                 _ => {}
@@ -989,6 +1469,7 @@ pub(super) fn check_product_substitution(
         control: &control,
         effects: BTreeMap::new(),
         requirements: BTreeMap::new(),
+        implementation_bindings: BTreeMap::new(),
     };
     closure.identity(ty, &bindings, 0)?;
     closure.product_depths()
@@ -1013,6 +1494,7 @@ pub(super) fn complete(
         control,
         effects: BTreeMap::new(),
         requirements: BTreeMap::new(),
+        implementation_bindings: BTreeMap::new(),
     };
     let mut calls = VecDeque::new();
     borrowed_admission::inventory(&mut closure)?;
@@ -1028,7 +1510,8 @@ pub(super) fn complete(
                     DeclarationPayload::Function(function) => Some(
                         !function.type_parameters.is_empty()
                             || !function.effect_parameters.is_empty()
-                            || !function.requirement_parameters.is_empty(),
+                            || !function.requirement_parameters.is_empty()
+                            || !function.implementation_parameters.is_empty(),
                     ),
                     DeclarationPayload::External(function) => {
                         Some(!function.type_parameters.is_empty())
@@ -1102,6 +1585,7 @@ pub(super) fn complete(
                             Vec::new(),
                             Vec::new(),
                             Vec::new(),
+                            Vec::new(),
                         ));
                     }
                     continue;
@@ -1117,9 +1601,9 @@ pub(super) fn complete(
         }
     }
     let mut completed = BTreeSet::new();
-    while let Some((function, arguments, effects, requirements)) = calls.pop_front() {
+    while let Some((function, arguments, effects, requirements, witnesses)) = calls.pop_front() {
         closure.tick()?;
-        index_node::<(DeclarationReference, Vec<TypeObjectDigest>)>(&mut closure.allocated)?;
+        index_node::<Application>(&mut closure.allocated)?;
         allocate::<TypeObjectDigest>(&mut closure.allocated, arguments.len())?;
         allocate::<crate::platform::kernel::EffectRow>(&mut closure.allocated, effects.len())?;
         for row in &effects {
@@ -1132,11 +1616,17 @@ pub(super) fn complete(
             &mut closure.allocated,
             requirements.len(),
         )?;
+        allocate::<Witness>(&mut closure.allocated, witnesses.len())?;
+        for witness in &witnesses {
+            closure.tick()?;
+            allocate::<TypeObjectDigest>(&mut closure.allocated, witness.1.len())?;
+        }
         if !completed.insert((
             function,
             arguments.clone(),
             effects.clone(),
             requirements.clone(),
+            witnesses.clone(),
         )) {
             continue;
         }
@@ -1182,6 +1672,7 @@ pub(super) fn complete(
         if types.len() != arguments.len()
             || effect_parameters.len() != effects.len()
             || requirement_parameters.len() != requirements.len()
+            || implementations.len() != witnesses.len()
         {
             return Err(failure());
         }
@@ -1190,6 +1681,17 @@ pub(super) fn complete(
             index_node::<(TypeParameterId, TypeObjectDigest)>(&mut closure.allocated)?;
         }
         let bindings = types.into_iter().zip(arguments).collect();
+        closure.implementation_bindings.clear();
+        for (formal, witness) in implementations.iter().zip(witnesses) {
+            index_node::<(ImplementationParameterId, Witness)>(&mut closure.allocated)?;
+            if closure
+                .implementation_bindings
+                .insert(formal.id, witness)
+                .is_some()
+            {
+                return Err(failure());
+            }
+        }
         allocate::<(
             crate::platform::kernel::EffectParameterReference,
             crate::platform::kernel::EffectRow,

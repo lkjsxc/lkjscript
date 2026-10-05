@@ -9,8 +9,12 @@ mod borrowed_result_admission_tests;
 mod byte_buffer_admission_tests;
 #[path = "byte_buffer_tests.rs"]
 mod byte_buffer_tests;
+#[path = "composed_implementation_admission_tests.rs"]
+mod composed_implementation_admission_tests;
 #[path = "effect_tests.rs"]
 mod effect_tests;
+#[path = "generic_implementation_admission_tests.rs"]
+mod generic_implementation_admission_tests;
 #[path = "generic_resource_tests.rs"]
 mod generic_resource_tests;
 #[path = "owned_borrow_admission_tests.rs"]

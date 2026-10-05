@@ -47,17 +47,19 @@ use std::fmt;
 
 #[path = "artifact_code.rs"]
 mod code_admission;
+#[path = "artifact_flow.rs"]
+mod flow_admission;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-34";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-34";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 34;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF34";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART34";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN34";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-35";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-35";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 35;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF35";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART35";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN35";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v34";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v34";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v34";
+    "lkjscript.artifact-manifest-envelope.v35";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v35";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v35";
 pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v18";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
@@ -67,8 +69,8 @@ pub(crate) const MAXIMUM_ARTIFACT_SEGMENTS: usize = 1_000_000;
 pub(crate) const MAXIMUM_ARTIFACT_BUNDLE_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 pub(crate) const TARGET_ARTIFACT_SEGMENT_BYTES: usize = 4 * 1024 * 1024;
 
-// The predecessor layout has no added fields. Retain its exact envelope/domain when admitting
-// historical bytes; all newly linked artifacts use the successor envelope before owner decoding.
+// Historical envelopes retain their own domains. Generations whose embedded compiler or
+// canonical owner shapes changed are refused before decoding and require a source rebuild.
 struct ArtifactWire {
     version: u16,
     manifest_magic: [u8; 8],
@@ -80,7 +82,7 @@ struct ArtifactWire {
 }
 fn artifact_wire(version: u16) -> Result<ArtifactWire, Diagnostic> {
     match version {
-        30..=32 => Err(artifact_error(
+        30..=34 => Err(artifact_error(
             DiagnosticClass::Source,
             "artifact_bundle_contract",
             "predecessor artifacts require rebuilding from canonical meaning",
@@ -422,6 +424,10 @@ impl ArtifactManifest {
             31
         } else if bytes.starts_with(b"LKJAMF32") {
             32
+        } else if bytes.starts_with(b"LKJAMF33") {
+            33
+        } else if bytes.starts_with(b"LKJAMF34") {
+            34
         } else {
             ARTIFACT_CONTRACT_VERSION
         })?;
@@ -511,7 +517,7 @@ impl ArtifactManifest {
                     | (23, 23, 18)
                     | (24, 24, 19)
                     | (25, 25, 20)
-                    | (27, 27, 22)
+                    | (28, 28, 23)
             )
             || self.compilation_manifest_contract_version != COMPILATION_MANIFEST_CONTRACT_VERSION
         {
@@ -588,6 +594,8 @@ pub struct ArtifactLoadWork {
     pub map: MapWork,
     pub store: StoreWork,
     pub implementation_inventory_steps: u64,
+    pub callable_analysis_steps: u64,
+    pub callable_analysis_bytes: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -1694,6 +1702,16 @@ pub(crate) fn runtime_owner_expectations(
                     (*package, *owner),
                     RuntimeOwnerExpectation::OwnedImplementation(i.clone()),
                 )?;
+                for parameter in &i.type_parameters {
+                    insert_runtime_expectation(
+                        &mut expected,
+                        (*package, OwnerKey::TypeParameter(*parameter)),
+                        RuntimeOwnerExpectation::TypeParameter {
+                            declaration: declaration_owner(*owner, "owned implementation")?,
+                            constraints: crate::platform::kernel::TypeParameterConstraints::Owned,
+                        },
+                    )?;
+                }
             }
             CompilationPayload::Record {
                 fields,
@@ -2823,6 +2841,9 @@ fn trace_object_closure(
         &interfaces,
         &types,
     )?;
+    let (steps, analysis) = flow_admission::validate(&reference_owners, &runtime_owners, &types)?;
+    work.callable_analysis_steps = steps as u64;
+    work.callable_analysis_bytes = analysis.metadata_bytes as u64;
     validate_artifact_session_relations(manifest, &units, &runtime_owners, &interfaces, &types)?;
     for (digest, expected_length) in blobs {
         let key = ObjectKey::from_digest(ObjectDomain::Blob, digest.bytes());
@@ -3532,6 +3553,8 @@ fn validate_artifact_nominal_meaning(
         if matches!(
             unit.payload,
             CompilationPayload::Record { .. }
+                | CompilationPayload::OwnedContract(_)
+                | CompilationPayload::OwnedImplementation(_)
                 | CompilationPayload::Variant { .. }
                 | CompilationPayload::Function { .. }
                 | CompilationPayload::External { .. }
@@ -4763,7 +4786,9 @@ fn validate_unit_relocations(
                 type_parameters.insert(c.self_parameter);
                 type_parameters.extend(c.type_parameters.iter().copied());
             }
-            CompilationPayload::OwnedImplementation(_) => {}
+            CompilationPayload::OwnedImplementation(i) => {
+                type_parameters.extend(i.type_parameters.iter().copied());
+            }
             CompilationPayload::Record {
                 fields: layouts,
                 type_parameters: parameters,

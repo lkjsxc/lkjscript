@@ -851,10 +851,11 @@ impl RepositoryView {
                 self.store.bound_current_rebuild(true);
                 let snapshot = self.reconstruct_full_oracle();
                 let dependencies = if snapshot.is_ok() {
-                    super::repository::validate_dependency_sources(
+                    super::repository::validate_dependency_sources_controlled(
                         &self.store,
                         &self.store,
                         &self.current.semantic_root,
+                        &|| self.validation_checkpoint(),
                     )
                 } else {
                     Ok(0)
@@ -1418,8 +1419,12 @@ impl RepositoryView {
             options,
             self.revalidated.as_ref().map(|base| &base.facts),
         )?;
-        super::repository::validate_prepared_dependency_sources(&self.store, &publication)
-            .map_err(|diagnostic| vec![diagnostic])?;
+        super::repository::validate_prepared_dependency_sources_controlled(
+            &self.store,
+            &publication,
+            &|| self.validation_checkpoint(),
+        )
+        .map_err(|diagnostic| vec![diagnostic])?;
         Ok(PreparedChangeWithAnalysis {
             publication,
             analysis,

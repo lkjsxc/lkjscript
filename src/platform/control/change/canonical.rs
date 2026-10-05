@@ -573,8 +573,8 @@ impl<'a> Reader<'a> {
                 requirement_arguments: requirement_arguments.into_iter().map(requirement).collect(),
                 implementations: implementations
                     .into_iter()
-                    .map(implementation_operand)
-                    .collect(),
+                    .map(|operand| self.implementation_operand(operand))
+                    .collect::<Result<Vec<_>, _>>()?,
                 arguments: self.expressions(arguments, depth)?,
             },
             E::MethodCall {
@@ -583,7 +583,7 @@ impl<'a> Reader<'a> {
                 method,
                 arguments,
             } => A::MethodCall {
-                witness: implementation_operand(witness),
+                witness: self.implementation_operand(witness)?,
                 contract: declaration(contract),
                 method,
                 arguments: self.expressions(arguments, depth)?,
@@ -754,6 +754,27 @@ impl<'a> Reader<'a> {
     fn types(&mut self, values: Vec<TypeObjectDigest>) -> Result<Vec<AuthoredType>, Diagnostic> {
         values.into_iter().map(|t| self.ty(t)).collect()
     }
+    fn implementation_operand(
+        &mut self,
+        operand: k::ImplementationOperand,
+    ) -> Result<AuthoredImplementationOperand, Diagnostic> {
+        Ok(match operand {
+            k::ImplementationOperand::Concrete {
+                implementation,
+                type_arguments,
+            } => AuthoredImplementationOperand::Concrete {
+                implementation: declaration(implementation),
+                type_arguments: self.types(type_arguments)?,
+            },
+            k::ImplementationOperand::Parameter {
+                function,
+                parameter,
+            } => AuthoredImplementationOperand::Parameter {
+                function: declaration(function),
+                parameter,
+            },
+        })
+    }
     fn binding_definition(
         &mut self,
         id: BindingId,
@@ -816,25 +837,6 @@ fn field(selector: k::FieldSelector) -> AuthoredFieldSelector {
             },
         },
         k::FieldSelector::Structural(name) => AuthoredFieldSelector::Structural { name },
-    }
-}
-
-pub(super) fn implementation_operand(
-    operand: k::ImplementationOperand,
-) -> AuthoredImplementationOperand {
-    match operand {
-        k::ImplementationOperand::Concrete { implementation } => {
-            AuthoredImplementationOperand::Concrete {
-                implementation: declaration(implementation),
-            }
-        }
-        k::ImplementationOperand::Parameter {
-            function,
-            parameter,
-        } => AuthoredImplementationOperand::Parameter {
-            function: declaration(function),
-            parameter,
-        },
     }
 }
 

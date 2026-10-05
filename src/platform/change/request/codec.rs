@@ -131,6 +131,7 @@ struct Writer {
     sequence_extension: bool,
     parameterized_contract_extension: bool,
     borrowed_result_extension: bool,
+    generic_implementation_extension: bool,
 }
 
 impl Writer {
@@ -155,11 +156,14 @@ impl Writer {
             sequence_extension: false,
             parameterized_contract_extension: false,
             borrowed_result_extension: false,
+            generic_implementation_extension: false,
         }
     }
 
     fn finish(mut self) -> Vec<u8> {
-        if self.borrowed_result_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+        if self.generic_implementation_extension && self.bytes.starts_with(&INTENT_MAGIC) {
+            self.bytes[..8].copy_from_slice(b"LKJACR32");
+        } else if self.borrowed_result_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR31");
         } else if self.parameterized_contract_extension && self.bytes.starts_with(&INTENT_MAGIC) {
             self.bytes[..8].copy_from_slice(b"LKJACR30");
@@ -331,9 +335,18 @@ impl Writer {
         definitions: &BTreeMap<String, SymbolDefinition>,
     ) -> Result<(), Diagnostic> {
         match operand {
-            AuthoredImplementationOperand::Concrete { implementation } => {
-                self.tag(1)?;
-                self.declaration_reference(implementation, definitions)
+            AuthoredImplementationOperand::Concrete {
+                implementation,
+                type_arguments,
+            } => {
+                self.generic_implementation_extension |= !type_arguments.is_empty();
+                self.tag(if type_arguments.is_empty() { 1 } else { 3 })?;
+                self.declaration_reference(implementation, definitions)?;
+                if !type_arguments.is_empty() {
+                    self.list(type_arguments, |w, ty| w.authored_type(ty, definitions, 1))
+                } else {
+                    Ok(())
+                }
             }
             AuthoredImplementationOperand::Parameter {
                 function,
@@ -562,25 +575,47 @@ impl Writer {
                 name,
                 visibility,
                 contract,
+                type_parameters,
                 self_type,
                 type_arguments,
                 methods,
             } => {
                 self.owned_extension = true;
                 self.parameterized_contract_extension |= !type_arguments.is_empty();
-                self.tag(if type_arguments.is_empty() { 81 } else { 89 })?;
+                let generic = !type_parameters.is_empty()
+                    || methods.iter().any(|m| !m.type_arguments.is_empty());
+                self.generic_implementation_extension |= generic;
+                self.tag(if generic {
+                    95
+                } else if type_arguments.is_empty() {
+                    81
+                } else {
+                    89
+                })?;
                 self.symbol(symbol, definitions)?;
                 self.module_selector(module, definitions)?;
                 self.name(name)?;
                 self.visibility(*visibility)?;
                 self.declaration_reference(contract, definitions)?;
+                if generic {
+                    self.list(type_parameters, |w, p| {
+                        w.type_parameter_reference(p, definitions)
+                    })?;
+                }
                 self.authored_type(self_type, definitions, 1)?;
-                if !type_arguments.is_empty() {
+                if generic || !type_arguments.is_empty() {
                     self.list(type_arguments, |w, ty| w.authored_type(ty, definitions, 1))?;
                 }
-                self.list(methods, |w, (method, function)| {
-                    w.raw(&method.bytes())?;
-                    w.declaration_reference(function, definitions)
+                self.list(methods, |w, mapping| {
+                    w.raw(&mapping.method.bytes())?;
+                    w.declaration_reference(&mapping.function, definitions)?;
+                    if generic {
+                        w.list(&mapping.type_arguments, |w, ty| {
+                            w.authored_type(ty, definitions, 1)
+                        })
+                    } else {
+                        Ok(())
+                    }
                 })
             }
             AuthoredChange::SetOwnedContract {
@@ -634,22 +669,44 @@ impl Writer {
             AuthoredChange::SetOwnedImplementation {
                 declaration,
                 contract,
+                type_parameters,
                 self_type,
                 type_arguments,
                 methods,
             } => {
                 self.owned_extension = true;
                 self.parameterized_contract_extension |= !type_arguments.is_empty();
-                self.tag(if type_arguments.is_empty() { 85 } else { 91 })?;
+                let generic = !type_parameters.is_empty()
+                    || methods.iter().any(|m| !m.type_arguments.is_empty());
+                self.generic_implementation_extension |= generic;
+                self.tag(if generic {
+                    96
+                } else if type_arguments.is_empty() {
+                    85
+                } else {
+                    91
+                })?;
                 self.declaration_selector(declaration, definitions)?;
                 self.declaration_reference(contract, definitions)?;
+                if generic {
+                    self.list(type_parameters, |w, p| {
+                        w.type_parameter_reference(p, definitions)
+                    })?;
+                }
                 self.authored_type(self_type, definitions, 1)?;
-                if !type_arguments.is_empty() {
+                if generic || !type_arguments.is_empty() {
                     self.list(type_arguments, |w, ty| w.authored_type(ty, definitions, 1))?;
                 }
-                self.list(methods, |w, (method, function)| {
-                    w.raw(&method.bytes())?;
-                    w.declaration_reference(function, definitions)
+                self.list(methods, |w, mapping| {
+                    w.raw(&mapping.method.bytes())?;
+                    w.declaration_reference(&mapping.function, definitions)?;
+                    if generic {
+                        w.list(&mapping.type_arguments, |w, ty| {
+                            w.authored_type(ty, definitions, 1)
+                        })
+                    } else {
+                        Ok(())
+                    }
                 })
             }
             AuthoredChange::SetImplementationParameters {

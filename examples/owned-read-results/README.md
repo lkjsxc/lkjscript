@@ -11,6 +11,11 @@ they do not establish production application adoption or compiler self-hosting.
 The [guide](../../docs/guides/native-owned-read-results.md) explains ordinary use,
 and the [specification](../../docs/spec/owned-read-results.md) owns exact semantics.
 
+The successor [generic implementation example](../generic-owned-implementations/README.md)
+retains these selection algorithms while exporting reusable reader schemes before
+the concrete items exist. A later nested owned product uses the same readers;
+explicit same-Self reverse selection also makes scheme identity observable.
+
 ## Three packages without duplicated algorithms
 
 Create a minimal `library` project. Stage the exact builtin standard transport,

@@ -79,7 +79,8 @@ struct Node {
     types: Vec<CompactField>,
     effects: Vec<CompactField>,
     requirements: Vec<CompactField>,
-    implementations: Vec<CompactField>,
+    implementations: Vec<(CompactField, Vec<CompactField>)>,
+    witness_types: Vec<CompactField>,
     members: Vec<CompactRecord>,
     // Only lexical resolution constructs this value. User text always uses the public decoder.
     lexical: Option<AuthoredLocalReference>,
@@ -156,6 +157,7 @@ pub(super) fn layout(
             effects: Vec::new(),
             requirements: Vec::new(),
             implementations: Vec::new(),
+            witness_types: Vec::new(),
             members: Vec::new(),
             lexical: None,
         };
@@ -248,7 +250,9 @@ pub(super) fn layout(
             }
             "method-call" => {
                 minimum(&block, id, args, 3)?;
-                node.record.fields.push(block.field(args[0], "witness")?);
+                let (witness, types) = implementation_syntax(&block, args[0], "witness")?;
+                node.record.fields.push(witness);
+                node.witness_types = types;
                 node.record.fields.push(block.field(args[1], "contract")?);
                 node.record.fields.push(block.field(args[2], "method")?);
                 node.children.extend_from_slice(&args[3..]);
@@ -913,11 +917,22 @@ fn applications<'a>(
             return Err(block.error(*id, "change_block_application", "application clauses must occur at most once in types/effects/requirements/implementations order and only where supported"));
         }
         previous = rank;
+        if rank == 4 {
+            for operand in clause(block, *id, head)? {
+                node.implementations.push(implementation_syntax(
+                    block,
+                    *operand,
+                    "implementation",
+                )?);
+            }
+            consumed += 1;
+            continue;
+        }
         let (target, field) = match rank {
             1 => (&mut node.types, "type"),
             2 => (&mut node.effects, "effect"),
             3 => (&mut node.requirements, "requirement"),
-            _ => (&mut node.implementations, "implementation"),
+            _ => unreachable!(),
         };
         for atom in clause(block, *id, head)? {
             target.push(block.field(*atom, field)?);
@@ -925,6 +940,60 @@ fn applications<'a>(
         consumed += 1;
     }
     Ok(&args[consumed..])
+}
+
+fn implementation_syntax(
+    block: &Block,
+    id: usize,
+    field: &str,
+) -> Result<(CompactField, Vec<CompactField>), Diagnostic> {
+    if matches!(block.syntax[id].kind, SyntaxKind::Atom { .. }) {
+        return Ok((block.field(id, field)?, Vec::new()));
+    }
+    let args = clause(block, id, "implementation")?;
+    if !(1..=2).contains(&args.len()) {
+        return Err(block.error(
+            id,
+            "change_owned_operand",
+            "applied witness requires a declaration and optional types clause",
+        ));
+    }
+    let mut reference = block.field(args[0], field)?;
+    reference.value = format!("concrete@{}", reference.value);
+    let types = args
+        .get(1)
+        .map(|types| {
+            clause(block, *types, "types")?
+                .iter()
+                .map(|ty| block.field(*ty, "type"))
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .transpose()?
+        .unwrap_or_default();
+    Ok((reference, types))
+}
+
+fn lower_implementation_syntax(
+    decoder: &mut Decoder,
+    record: &CompactRecord,
+    field: &str,
+    types: &[CompactField],
+) -> Result<AuthoredImplementationOperand, Diagnostic> {
+    let mut operand = decoder.parse_implementation_operand(record, field)?;
+    if !types.is_empty() {
+        let AuthoredImplementationOperand::Concrete { type_arguments, .. } = &mut operand else {
+            return Err(record_error(
+                record,
+                "change_owned_operand",
+                "only concrete witnesses accept type applications",
+            ));
+        };
+        *type_arguments = types
+            .iter()
+            .map(|ty| decoder.decode_type_field(ty))
+            .collect::<Result<Vec<_>, _>>()?;
+    }
+    Ok(operand)
 }
 
 impl Body {
@@ -1007,14 +1076,19 @@ fn lower_node(
             implementations: node
                 .implementations
                 .iter()
-                .map(|f| decoder.parse_implementation_operand(record, &f.value))
+                .map(|(f, types)| lower_implementation_syntax(decoder, record, &f.value, types))
                 .collect::<Result<_, _>>()?,
             arguments: (0..node.children.len())
                 .map(|_| child())
                 .collect::<Result<_, _>>()?,
         },
         "expression.method-call" => AuthoredExpressionOperation::MethodCall {
-            witness: decoder.parse_implementation_operand(record, required(record, "witness")?)?,
+            witness: lower_implementation_syntax(
+                decoder,
+                record,
+                required(record, "witness")?,
+                &node.witness_types,
+            )?,
             contract: decoder.parse_declaration_reference(record, "contract")?,
             method: required(record, "method")?.parse()?,
             arguments: (0..node.children.len())

@@ -24,11 +24,12 @@ pub use creation::{
     AuthoredFieldReference, AuthoredFieldSelector, AuthoredFunctionEffect,
     AuthoredImplementationOperand, AuthoredImplementationParameter, AuthoredLetBinding,
     AuthoredLocalReference, AuthoredMapExpressionEntry, AuthoredMatchExpressionArm,
-    AuthoredOperation, AuthoredOperationReference, AuthoredOwnedMethod, AuthoredParameter,
-    AuthoredPort, AuthoredPortImplementation, AuthoredPortReference, AuthoredRecordExpressionField,
-    AuthoredRequirement, AuthoredRequirementParameter, AuthoredRequirementReference,
-    AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredTransactionOutcomeContract,
-    AuthoredType, AuthoredTypeParameter, AuthoredTypeParameterReference,
+    AuthoredOperation, AuthoredOperationReference, AuthoredOwnedMethod,
+    AuthoredOwnedMethodImplementation, AuthoredParameter, AuthoredPort, AuthoredPortImplementation,
+    AuthoredPortReference, AuthoredRecordExpressionField, AuthoredRequirement,
+    AuthoredRequirementParameter, AuthoredRequirementReference, AuthoredResourceLimit,
+    AuthoredStructuralTypeField, AuthoredTransactionOutcomeContract, AuthoredType,
+    AuthoredTypeParameter, AuthoredTypeParameterReference,
 };
 pub use precondition::{
     AuthoredExistingOwner, AuthoredOwnerParent, AuthoredPrecondition, AuthoredSelectedPrecondition,
@@ -83,12 +84,10 @@ pub enum AuthoredChange {
         name: Name,
         visibility: crate::platform::kernel::DeclarationVisibility,
         contract: AuthoredDeclarationReference,
+        type_parameters: Vec<AuthoredTypeParameterReference>,
         self_type: AuthoredType,
         type_arguments: Vec<AuthoredType>,
-        methods: Vec<(
-            crate::platform::semantic_id::MethodId,
-            AuthoredDeclarationReference,
-        )>,
+        methods: Vec<AuthoredOwnedMethodImplementation>,
     },
     SetOwnedContract {
         declaration: DeclarationSelector,
@@ -99,12 +98,10 @@ pub enum AuthoredChange {
     SetOwnedImplementation {
         declaration: DeclarationSelector,
         contract: AuthoredDeclarationReference,
+        type_parameters: Vec<AuthoredTypeParameterReference>,
         self_type: AuthoredType,
         type_arguments: Vec<AuthoredType>,
-        methods: Vec<(
-            crate::platform::semantic_id::MethodId,
-            AuthoredDeclarationReference,
-        )>,
+        methods: Vec<AuthoredOwnedMethodImplementation>,
     },
     SetImplementationParameters {
         declaration: DeclarationSelector,

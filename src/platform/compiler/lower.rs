@@ -640,6 +640,7 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                 Ok(CompilationPayload::OwnedContract(c))
             }
             DeclarationPayload::OwnedImplementation(i) => {
+                self.compile_type_parameter_constraints(declaration, &i.type_parameters)?;
                 self.tables.declaration(i.contract)?;
                 self.tables.ty(i.self_type)?;
                 for ty in &i.type_arguments {
@@ -647,6 +648,9 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
                 }
                 for m in &i.methods {
                     self.tables.declaration(m.function)?;
+                    for ty in &m.type_arguments {
+                        self.tables.ty(*ty)?;
+                    }
                 }
                 Ok(CompilationPayload::OwnedImplementation(i))
             }
@@ -997,13 +1001,19 @@ impl<B: CanonicalBaseRead + ?Sized> UnitBuilder<'_, B> {
 impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
     fn implementation_operand(
         &mut self,
-        operand: crate::platform::kernel::ImplementationOperand,
+        operand: &crate::platform::kernel::ImplementationOperand,
     ) -> Result<(), Diagnostic> {
         let reference = match operand {
-            crate::platform::kernel::ImplementationOperand::Concrete { implementation } => {
-                implementation
+            crate::platform::kernel::ImplementationOperand::Concrete {
+                implementation,
+                type_arguments,
+            } => {
+                for ty in type_arguments {
+                    self.tables.ty(*ty)?;
+                }
+                *implementation
             }
-            crate::platform::kernel::ImplementationOperand::Parameter { function, .. } => function,
+            crate::platform::kernel::ImplementationOperand::Parameter { function, .. } => *function,
         };
         self.tables.declaration(reference)?;
         Ok(())
@@ -1777,7 +1787,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 .map(|ty| self.unit.tables.ty(ty))
                 .collect::<Result<Vec<_>, _>>()?;
             for operand in &implementations {
-                self.unit.implementation_operand(*operand)?;
+                self.unit.implementation_operand(operand)?;
             }
             if uses.len() != arguments.len() {
                 return Err(compiler_corrupt(
@@ -2406,7 +2416,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                     ));
                 }
                 for operand in &implementations {
-                    self.unit.implementation_operand(*operand)?;
+                    self.unit.implementation_operand(operand)?;
                 }
                 let function = self.unit.tables.declaration(function)?;
                 let type_arguments = type_arguments
@@ -2432,7 +2442,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 method,
                 arguments,
             } => {
-                self.unit.implementation_operand(witness)?;
+                self.unit.implementation_operand(&witness)?;
                 self.unit.tables.declaration(contract)?;
                 let signature = self.unit.owned_method(contract, method)?;
                 if signature.parameters.len() != arguments.len() {

@@ -45,14 +45,10 @@ impl ReferenceState<'_> {
                     contract,
                     method,
                     arguments,
-                } => (
-                    self.method_target(witness, contract, method)?,
-                    vec![],
-                    vec![],
-                    vec![],
-                    vec![],
-                    arguments,
-                ),
+                } => {
+                    let (function, types) = self.method_target(witness, contract, method)?;
+                    (function, types, vec![], vec![], vec![], arguments)
+                }
                 _ => {
                     return Err(reference_type_error(
                         "borrow-call requires one exact named invocation",

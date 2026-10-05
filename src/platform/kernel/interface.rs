@@ -213,6 +213,11 @@ impl PackageInterfaceDeclaration {
             PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
                 std::iter::once(i.self_type)
                     .chain(i.type_arguments.iter().copied())
+                    .chain(
+                        i.methods
+                            .iter()
+                            .flat_map(|m| m.type_arguments.iter().copied()),
+                    )
                     .collect()
             }
             PackageInterfaceDeclarationPayload::Constant { ty } => vec![*ty],
@@ -225,6 +230,13 @@ impl PackageInterfaceDeclaration {
 
     fn validate_local(&self) -> Result<(), Diagnostic> {
         validate_header(self.header)?;
+        if self.header.contract_version < 28
+            && matches!(&self.payload, PackageInterfaceDeclarationPayload::OwnedImplementation(i)
+                if !i.type_parameters.is_empty()
+                    || i.methods.iter().any(|m| !m.type_arguments.is_empty()))
+        {
+            return Err(super::wire27::implementation_scheme_extension());
+        }
         if self.header.contract_version < 27
             && match &self.payload {
                 PackageInterfaceDeclarationPayload::Function(f) => f.result_borrow.is_some(),

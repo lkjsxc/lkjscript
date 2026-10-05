@@ -323,6 +323,14 @@ fn append_owner_detail(
                 records.push(detail);
             }
             PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
+                for (index, parameter) in i.type_parameters.iter().enumerate() {
+                    append_child_owner(
+                        standard,
+                        OwnerKey::TypeParameter(*parameter),
+                        index,
+                        records,
+                    )?;
+                }
                 let mut detail =
                     declaration_detail(declaration, "owned-implementation", i.methods.len(), None);
                 detail.fields.extend([
@@ -332,6 +340,10 @@ fn append_owner_detail(
                     ),
                     ("self".to_owned(), i.self_type.to_string()),
                     (
+                        "type-parameters".to_owned(),
+                        i.type_parameters.len().to_string(),
+                    ),
+                    (
                         "type-arguments".to_owned(),
                         i.type_arguments.len().to_string(),
                     ),
@@ -340,6 +352,17 @@ fn append_owner_detail(
                 append_type(standard, "self", i.self_type, records, 0)?;
                 for (index, ty) in i.type_arguments.iter().enumerate() {
                     append_type(standard, &format!("type-argument.{index}"), *ty, records, 0)?;
+                }
+                for mapping in &i.methods {
+                    for (index, ty) in mapping.type_arguments.iter().enumerate() {
+                        append_type(
+                            standard,
+                            &format!("method.{}.type-argument.{index}", mapping.method),
+                            *ty,
+                            records,
+                            0,
+                        )?;
+                    }
                 }
             }
             PackageInterfaceDeclarationPayload::Record {

@@ -149,6 +149,24 @@ impl ExpressionRecord {
                 "implementation effect and requirement arguments require Graph 23",
             ));
         }
+        if self.contract_version < 28
+            && match &self.operation {
+                ExpressionOperation::ImplementationCall {
+                    implementations, ..
+                } => implementations
+                    .iter()
+                    .any(|p| !p.type_arguments().is_empty()),
+                ExpressionOperation::MethodCall { witness, .. } => {
+                    !witness.type_arguments().is_empty()
+                }
+                _ => false,
+            }
+        {
+            return Err(expression_error(
+                "kernel_implementation_scheme_generation",
+                "applied implementation operands require Graph 28",
+            ));
+        }
         validate_operation(&self.operation)
     }
 
@@ -175,8 +193,21 @@ impl ExpressionRecord {
             ExpressionOperation::PackOwned { product_type, .. }
             | ExpressionOperation::UnpackOwned { product_type, .. }
             | ExpressionOperation::BorrowOwnedField { product_type, .. } => vec![*product_type],
-            ExpressionOperation::ImplementationCall { type_arguments, .. }
-            | ExpressionOperation::Call { type_arguments, .. }
+            ExpressionOperation::ImplementationCall {
+                type_arguments,
+                implementations,
+                ..
+            } => type_arguments
+                .iter()
+                .copied()
+                .chain(
+                    implementations
+                        .iter()
+                        .flat_map(|p| p.type_arguments().iter().copied()),
+                )
+                .collect(),
+            ExpressionOperation::MethodCall { witness, .. } => witness.type_arguments().to_vec(),
+            ExpressionOperation::Call { type_arguments, .. }
             | ExpressionOperation::FunctionValue { type_arguments, .. }
             | ExpressionOperation::Record { type_arguments, .. }
             | ExpressionOperation::Variant { type_arguments, .. } => type_arguments.clone(),
@@ -673,9 +704,23 @@ fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic>
                 row.validate()?;
             }
             require_count("implementation call witnesses", implementations.len(), true)?;
+            for operand in implementations {
+                require_count(
+                    "implementation scheme arguments",
+                    operand.type_arguments().len(),
+                    true,
+                )?;
+            }
             require_count("implementation call arguments", arguments.len(), true)?;
         }
-        ExpressionOperation::MethodCall { arguments, .. } => {
+        ExpressionOperation::MethodCall {
+            arguments, witness, ..
+        } => {
+            require_count(
+                "implementation scheme arguments",
+                witness.type_arguments().len(),
+                true,
+            )?;
             require_count("method arguments", arguments.len(), true)?;
         }
         ExpressionOperation::Invoke { arguments, .. } => {

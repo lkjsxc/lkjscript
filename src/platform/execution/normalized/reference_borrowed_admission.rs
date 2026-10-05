@@ -10,6 +10,7 @@ use crate::platform::kernel::{
 };
 use crate::platform::semantic_id::{BindingId, ExpressionId};
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 
 fn reject() -> ExecutionError {
     ExecutionError::new(
@@ -73,8 +74,49 @@ pub(super) fn inventory(closure: &mut Closure<'_>) -> Result<(), ExecutionError>
             };
             match &owner.payload {
                 DeclarationPayload::OwnedContract(contract) => {
+                    allocate::<crate::platform::semantic_id::TypeParameterId>(
+                        &mut closure.allocated,
+                        contract.type_parameters.len() + 1,
+                    )?;
+                    let formals: Vec<_> = std::iter::once(contract.self_parameter)
+                        .chain(contract.type_parameters.iter().copied())
+                        .collect();
+                    closure.owned_scheme_parameters(reference, &formals)?;
+                    let mut methods = BTreeSet::new();
+                    let mut names = BTreeSet::new();
+                    if contract.methods.is_empty() {
+                        return Err(reject());
+                    }
                     for method in &contract.methods {
                         closure.tick()?;
+                        index_node::<crate::platform::semantic_id::MethodId>(
+                            &mut closure.allocated,
+                        )?;
+                        index_node::<&crate::platform::kernel::Name>(&mut closure.allocated)?;
+                        if !methods.insert(method.id)
+                            || !names.insert(&method.name)
+                            || method.effect.row().validate().is_err()
+                            || !method.effect.row().is_closed()
+                        {
+                            return Err(reject());
+                        }
+                        let mut owned_suffix = false;
+                        for parameter in &method.parameters {
+                            if closure.owned_witness_type(parameter.ty, Some(reference), 0)? {
+                                owned_suffix = true;
+                                if parameter.use_mode == ParameterUse::Unrestricted
+                                    || (method.effect != FunctionEffect::Pure
+                                        && parameter.use_mode != ParameterUse::Consume)
+                                {
+                                    return Err(reject());
+                                }
+                            } else if owned_suffix
+                                || parameter.use_mode != ParameterUse::Unrestricted
+                            {
+                                return Err(reject());
+                            }
+                        }
+                        closure.owned_witness_type(method.result, Some(reference), 0)?;
                         if let Some(position) = method.result_borrow {
                             let parameter = method
                                 .parameters
@@ -91,6 +133,18 @@ pub(super) fn inventory(closure: &mut Closure<'_>) -> Result<(), ExecutionError>
                     }
                 }
                 DeclarationPayload::OwnedImplementation(implementation) => {
+                    let scheme = closure
+                        .owned_scheme_parameters(reference, &implementation.type_parameters)?;
+                    closure.scoped_type_parameters(implementation.self_type, &scheme, 0)?;
+                    if !closure.owned_witness_type(implementation.self_type, Some(reference), 0)? {
+                        return Err(reject());
+                    }
+                    for argument in &implementation.type_arguments {
+                        closure.scoped_type_parameters(*argument, &scheme, 0)?;
+                        if !closure.owned_witness_type(*argument, Some(reference), 0)? {
+                            return Err(reject());
+                        }
+                    }
                     let OwnerRecord::Declaration(owner) = closure.owner(
                         implementation.contract.package,
                         OwnerKey::Declaration(implementation.contract.declaration),
@@ -131,7 +185,8 @@ pub(super) fn inventory(closure: &mut Closure<'_>) -> Result<(), ExecutionError>
                             .methods
                             .iter()
                             .filter(|mapping| mapping.method == method.id);
-                        let target = mappings.next().ok_or_else(reject)?.function;
+                        let mapping = mappings.next().ok_or_else(reject)?;
+                        let target = mapping.function;
                         if mappings.next().is_some() {
                             return Err(reject());
                         }
@@ -143,8 +198,33 @@ pub(super) fn inventory(closure: &mut Closure<'_>) -> Result<(), ExecutionError>
                         let DeclarationPayload::Function(function) = &owner.payload else {
                             return Err(reject());
                         };
+                        let target_parameters =
+                            closure.owned_scheme_parameters(target, &function.type_parameters)?;
+                        if function.type_parameters.len() != mapping.type_arguments.len() {
+                            return Err(reject());
+                        }
+                        let mut target_types = Bindings::new();
+                        for (formal, actual) in
+                            function.type_parameters.iter().zip(&mapping.type_arguments)
+                        {
+                            closure.scoped_type_parameters(*actual, &scheme, 0)?;
+                            if !closure.owned_witness_type(*actual, Some(reference), 0)? {
+                                return Err(reject());
+                            }
+                            index_node::<(
+                                crate::platform::semantic_id::TypeParameterId,
+                                TypeObjectDigest,
+                            )>(&mut closure.allocated)?;
+                            if target_types
+                                .insert(*formal, closure.identity(*actual, &scheme, 0)?)
+                                .is_some()
+                            {
+                                return Err(reject());
+                            }
+                        }
+                        closure.scoped_type_parameters(function.result, &target_parameters, 0)?;
+                        closure.owned_witness_type(function.result, Some(target), 0)?;
                         if function.effect != method.effect
-                            || !function.type_parameters.is_empty()
                             || !function.effect_parameters.is_empty()
                             || !function.requirement_parameters.is_empty()
                             || !function.implementation_parameters.is_empty()
@@ -153,7 +233,8 @@ pub(super) fn inventory(closure: &mut Closure<'_>) -> Result<(), ExecutionError>
                                 != method.result_borrow.and_then(|position| {
                                     function.parameters.get(position as usize).copied()
                                 })
-                            || function.result != closure.identity(method.result, &types, 0)?
+                            || closure.identity(function.result, &target_types, 0)?
+                                != closure.identity(method.result, &types, 0)?
                         {
                             return Err(reject());
                         }
@@ -164,10 +245,13 @@ pub(super) fn inventory(closure: &mut Closure<'_>) -> Result<(), ExecutionError>
                             else {
                                 return Err(reject());
                             };
+                            closure.scoped_type_parameters(actual.ty, &target_parameters, 0)?;
+                            closure.owned_witness_type(actual.ty, Some(target), 0)?;
                             if actual.parent != ParameterParent::Function(target.declaration)
                                 || actual.use_mode != expected.use_mode
                                 || actual.resource_requirement.is_some()
-                                || actual.ty != closure.identity(expected.ty, &types, 0)?
+                                || closure.identity(actual.ty, &target_types, 0)?
+                                    != closure.identity(expected.ty, &types, 0)?
                             {
                                 return Err(reject());
                             }
@@ -730,9 +814,9 @@ impl Checker<'_, '_> {
                 method,
                 ..
             } => {
-                let (selected, self_type, arguments) = self
-                    .closure
-                    .witness_application(*witness, self.scope, self.types)?;
+                let (selected, self_type, arguments) =
+                    self.closure
+                        .witness_application(witness.clone(), self.scope, self.types)?;
                 if selected != *contract {
                     return Err(reject());
                 }

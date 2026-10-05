@@ -98,7 +98,7 @@ fn call_literal_comparison_cannot_hide_type_witness_method_or_arity_changes() {
     let operand = |name: &str| {
         original
             .split_whitespace()
-            .find(|token| token.starts_with(&format!("concrete@ref_{name}_")))
+            .find(|token| token.starts_with(&format!("ref_{name}_")))
             .unwrap()
             .trim_end_matches(')')
     };
@@ -112,10 +112,20 @@ fn call_literal_comparison_cannot_hide_type_witness_method_or_arity_changes() {
         ),
         (
             "implementation-witness",
-            original.replace(marker, other),
+            original.replace(
+                &format!("(implementations {marker})"),
+                &format!("(implementations {other})"),
+            ),
             true,
         ),
-        ("method-witness", original.replace(other, marker), true),
+        (
+            "method-witness",
+            original.replace(
+                &format!("(method-call {other} "),
+                &format!("(method-call {marker} "),
+            ),
+            true,
+        ),
         (
             "method",
             original.replace(

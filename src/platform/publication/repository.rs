@@ -2346,9 +2346,15 @@ pub(super) fn validate_prepared_dependency_sources(
     store: &PackDirectoryStore,
     prepared: &PreparedPublication,
 ) -> Result<(), Diagnostic> {
-    if prepared.authority.semantic.root.dependencies.entries() == 0 {
-        return Ok(());
-    }
+    validate_prepared_dependency_sources_controlled(store, prepared, &|| Ok(()))
+}
+
+pub(super) fn validate_prepared_dependency_sources_controlled(
+    store: &PackDirectoryStore,
+    prepared: &PreparedPublication,
+    checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
+) -> Result<(), Diagnostic> {
+    checkpoint()?;
     let mut overlay = ObjectStage::new(store);
     let mut work = StoreWork::default();
     for (key, bytes) in &prepared.objects {
@@ -2356,26 +2362,32 @@ pub(super) fn validate_prepared_dependency_sources(
             .stage(*key, bytes, &mut work)
             .map_err(store_diagnostic)?;
     }
-    validate_dependency_sources(&overlay, store, &prepared.authority.semantic.root).map(|_| ())
+    validate_dependency_sources_controlled(
+        &overlay,
+        store,
+        &prepared.authority.semantic.root,
+        checkpoint,
+    )
+    .map(|_| ())
 }
 
-pub(super) fn validate_dependency_sources<S: ImmutableObjectStore + ?Sized>(
+pub(super) fn validate_dependency_sources_controlled<S: ImmutableObjectStore + ?Sized>(
     source: &S,
     store: &PackDirectoryStore,
     root: &crate::platform::kernel::SemanticRoot,
+    checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
 ) -> Result<u64, Diagnostic> {
     use crate::platform::kernel::{PackageId, decode_dependency, decode_dependency_binding};
     use crate::platform::package_transport::source::{
         MAXIMUM_VALIDATION_READ_BYTES, MAXIMUM_VALIDATION_VISITS, collect_with_budget, entries,
         required,
     };
-    if root.dependencies.entries() == 0 {
-        return Ok(0);
-    }
+    checkpoint()?;
     let mut work = StoreWork::default();
     let overlay = crate::platform::package_transport::source::CollectingStore::new(source);
     let mut direct = Vec::new();
     for (key, bytes) in entries(&overlay, root.dependencies)? {
+        checkpoint()?;
         let package = key
             .as_slice()
             .try_into()
@@ -2402,6 +2414,7 @@ pub(super) fn validate_dependency_sources<S: ImmutableObjectStore + ?Sized>(
     let mut union = BTreeMap::new();
     let mut edge_count = direct.len();
     while let Some(dependency) = pending.pop_front() {
+        checkpoint()?;
         if dependency.package == root.package_id {
             return Err(repository_error(
                 DiagnosticClass::Semantic,
@@ -2470,7 +2483,9 @@ pub(super) fn validate_dependency_sources<S: ImmutableObjectStore + ?Sized>(
     }
     let mut semantic_visits = 0_u64;
     let mut checked = BTreeSet::new();
+    let mut snapshots = BTreeMap::new();
     for dependency in direct {
+        checkpoint()?;
         if checked.contains(&dependency.package_revision) {
             continue;
         }
@@ -2514,8 +2529,14 @@ pub(super) fn validate_dependency_sources<S: ImmutableObjectStore + ?Sized>(
                 )
             })?;
         checked.extend(admitted.packages.keys().copied());
+        for package in admitted.packages.into_values() {
+            checkpoint()?;
+            snapshots
+                .entry(package.snapshot.root.package_id)
+                .or_insert(package.snapshot);
+        }
     }
-    Ok(semantic_visits.saturating_add(overlay.visits()))
+    super::callable_composition::validate(&overlay, root, &snapshots, semantic_visits, checkpoint)
 }
 
 pub(super) fn logical_dependency_inventory<S: ImmutableObjectStore + ?Sized>(

@@ -97,6 +97,8 @@ impl Rights {
 mod borrowed_result_tests;
 #[path = "borrowed_memory_oracle_tests.rs"]
 mod borrowed_tests;
+#[path = "generic_implementation_memory_oracle_tests.rs"]
+mod generic_implementation_tests;
 #[path = "implementation_effect_memory_oracle_tests.rs"]
 mod implementation_effect_tests;
 #[path = "imported_memory_oracle_tests.rs"]
@@ -968,7 +970,7 @@ impl Oracle<'_> {
                 method,
                 arguments,
             } => {
-                let (m, substitutions) = self.method(*witness, *contract, *method)?;
+                let (m, substitutions) = self.method(witness.clone(), *contract, *method)?;
                 let source = m.result_borrow? as usize;
                 (
                     m.parameters
@@ -1640,7 +1642,7 @@ impl Oracle<'_> {
                 method,
                 arguments,
             } => {
-                let (m, bindings) = self.method(*witness, *contract, *method)?;
+                let (m, bindings) = self.method(witness.clone(), *contract, *method)?;
                 if m.result_borrow.is_some() {
                     return None;
                 }
@@ -1816,6 +1818,12 @@ impl Oracle<'_> {
     }
 }
 pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
+    let Some(derived) = witnesses::materialized_witness_types(snapshot) else {
+        return false;
+    };
+    let mut materialized = snapshot.clone();
+    materialized.types.extend(derived);
+    let snapshot = &materialized;
     let oracle = Oracle(snapshot, None);
     // Imported parameter identities live in their declaration's package. Check
     // every exported template, even when no root expression calls it.
@@ -1838,7 +1846,10 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                         !oracle.contract_generation(c, generation)
                     }
                     PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
-                        generation < 26 && !i.type_arguments.is_empty()
+                        (generation < 26 && !i.type_arguments.is_empty())
+                            || (generation < 28
+                                && (!i.type_parameters.is_empty()
+                                    || i.methods.iter().any(|m| !m.type_arguments.is_empty())))
                     }
                     PackageInterfaceDeclarationPayload::Function(f) => {
                         (generation < 27 && f.result_borrow.is_some())
@@ -1894,6 +1905,10 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                             if matches!(key, OwnerKey::TypeParameter(id) if f.type_parameters.contains(id))
                                 && (!p.constraints.requires_transfer()
                                     || p.header.contract_version >= 22) => {}
+                        PackageInterfaceDeclarationPayload::OwnedImplementation(i)
+                            if p.constraints == TypeParameterConstraints::Owned
+                                && matches!(key, OwnerKey::TypeParameter(id) if i.type_parameters.contains(id)) =>
+                            {}
                         _ => return false,
                     }
                 }
@@ -1986,7 +2001,10 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
             && match &declaration.payload {
                 DeclarationPayload::OwnedContract(c) => !oracle.contract_generation(c, generation),
                 DeclarationPayload::OwnedImplementation(i) => {
-                    generation < 26 && !i.type_arguments.is_empty()
+                    (generation < 26 && !i.type_arguments.is_empty())
+                        || (generation < 28
+                            && (!i.type_parameters.is_empty()
+                                || i.methods.iter().any(|m| !m.type_arguments.is_empty())))
                 }
                 DeclarationPayload::Function(f) => {
                     (generation < 27 && f.result_borrow.is_some())
@@ -2000,6 +2018,18 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
         {
             return false;
         }
+        if generation < 28
+            && let OwnerRecord::Expression(expression) = owner
+            && match &expression.operation {
+                ExpressionOperation::ImplementationCall { implementations, .. } => implementations.iter().any(|operand| {
+                    matches!(operand, ImplementationOperand::Concrete { type_arguments, .. } if !type_arguments.is_empty())
+                }),
+                ExpressionOperation::MethodCall { witness, .. } => {
+                    matches!(witness, ImplementationOperand::Concrete { type_arguments, .. } if !type_arguments.is_empty())
+                },
+                _ => false,
+            }
+        { return false; }
         if generation < 27
             && matches!(owner, OwnerRecord::Expression(e) if matches!(e.operation, ExpressionOperation::BorrowCall { .. }))
         {
@@ -2094,6 +2124,10 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                             && matches!(key, OwnerKey::TypeParameter(id)
                                 if *id == c.self_parameter || c.type_parameters.contains(id)) => {}
                     DeclarationPayload::Function(f) if matches!(key, OwnerKey::TypeParameter(id) if f.type_parameters.contains(id)) =>
+                        {}
+                    DeclarationPayload::OwnedImplementation(i)
+                        if p.constraints == TypeParameterConstraints::Owned
+                            && matches!(key, OwnerKey::TypeParameter(id) if i.type_parameters.contains(id)) =>
                         {}
                     _ => return false,
                 }

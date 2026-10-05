@@ -2881,6 +2881,7 @@ fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
             "CellMarker",
             OwnerKind::OwnedImplementation,
             DeclarationPayload::OwnedImplementation(crate::platform::kernel::OwnedImplementation {
+                type_parameters: Vec::new(),
                 contract: crate::platform::kernel::DeclarationReference {
                     package: logical.root.package_id,
                     declaration: owned_contract,
@@ -2888,6 +2889,7 @@ fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
                 self_type: cell_type,
                 type_arguments: vec![cell_type],
                 methods: vec![crate::platform::kernel::OwnedMethodImplementation {
+                    type_arguments: Vec::new(),
                     method,
                     function: crate::platform::kernel::DeclarationReference {
                         package: logical.root.package_id,

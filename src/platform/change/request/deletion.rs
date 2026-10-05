@@ -442,6 +442,11 @@ fn detach_root_from_live_parent<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRea
                         "owned contract type parameter",
                     )
                 }
+                DeclarationPayload::OwnedImplementation(implementation) => remove_exact(
+                    &mut implementation.type_parameters,
+                    child,
+                    "implementation type parameter",
+                ),
                 DeclarationPayload::Record {
                     type_parameters, ..
                 }

@@ -14,7 +14,7 @@ struct ChildOutcome {
 struct CanonicalTask {
     declaration: DeclarationReference,
     types: Arc<[TypeObjectDigest]>,
-    implementations: Vec<DeclarationReference>,
+    implementations: Vec<AppliedReferenceImplementation>,
 }
 struct CanonicalParallelCall {
     task: CanonicalTask,
@@ -192,7 +192,7 @@ impl ReferenceState<'_> {
             }
         }
         self.charge_allocation(
-            (implementations.len() * std::mem::size_of::<DeclarationReference>()) as u64,
+            (implementations.len() * std::mem::size_of::<AppliedReferenceImplementation>()) as u64,
         )?;
         let mut selected = Vec::with_capacity(implementations.len());
         for operand in implementations {
@@ -277,11 +277,16 @@ impl ReferenceState<'_> {
             .position(|f| {
                 f.declaration == task.declaration
                     && f.type_parameters.as_ref() == signature.type_parameters.as_slice()
+                    && f.type_arguments.as_ref() == task.types.as_ref()
                     && f.implementation_arguments.len() == task.implementations.len()
                     && f.implementation_arguments
                         .iter()
-                        .map(|argument| &argument.implementation)
-                        .eq(task.implementations.iter())
+                        .zip(&task.implementations)
+                        .all(|(argument, canonical)| {
+                            argument.implementation == canonical.implementation
+                                && argument.implementation_type_arguments.as_ref()
+                                    == canonical.type_arguments.as_slice()
+                        })
             })
             .ok_or_else(|| {
                 reference_type_error("canonical child has no exact prepared application")
@@ -321,7 +326,7 @@ impl ReferenceState<'_> {
         }
         let implementation_arguments = Arc::clone(&selected.implementation_arguments);
         for (prepared, reference) in implementation_arguments.iter().zip(&task.implementations) {
-            let canonical = self.checked_implementation(*reference)?;
+            let canonical = self.checked_implementation(reference)?;
             matches &= prepared.self_type == canonical.self_type
                 && prepared.type_arguments.as_ref() == canonical.type_arguments.as_slice();
         }

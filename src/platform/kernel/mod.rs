@@ -47,6 +47,7 @@ mod wire17;
 mod wire22;
 pub(crate) mod wire25;
 pub(crate) mod wire26;
+pub(crate) mod wire27;
 
 pub(crate) use affine::validate_affine_roots_with_limits;
 pub use codec::{
@@ -94,6 +95,8 @@ pub(crate) mod tests;
 
 #[cfg(test)]
 mod finite_admission_tests;
+#[cfg(test)]
+mod implementation_scheme_tests;
 #[cfg(test)]
 mod owned_contract_tests;
 #[cfg(test)]

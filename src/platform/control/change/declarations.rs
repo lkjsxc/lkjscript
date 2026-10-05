@@ -990,7 +990,34 @@ impl Lowering<'_> {
         match parts.as_slice() {
             ["concrete", reference] => Ok(format!("concrete@{}", self.resolve(reference, scope, "declaration", at)?)),
             ["parameter", reference, id] => Ok(format!("parameter@{}@{id}", self.resolve(reference, scope, "declaration", at)?)),
-            _ => Err(self.error(at, "expected concrete@IMPLEMENTATION or parameter@FUNCTION@IMPLEMENTATION_PARAMETER_ID")),
+            [reference] => Ok(format!("concrete@{}", self.resolve(reference, scope, "declaration", at)?)),
+            _ => Err(self.error(at, "expected IMPLEMENTATION, concrete@IMPLEMENTATION or parameter@FUNCTION@IMPLEMENTATION_PARAMETER_ID")),
+        }
+    }
+
+    fn implementation_operand(&mut self, id: usize, scope: &str) -> Result<String, Diagnostic> {
+        if let SyntaxKind::Atom { value, .. } = &self.block.syntax[id].kind {
+            let value = value.clone();
+            return self.implementation_atom(&value, scope, id);
+        }
+        let (form, args) = self.parts(id)?;
+        let args = args.to_vec();
+        if form != "implementation" || !(1..=2).contains(&args.len()) {
+            return Err(self.error(
+                id,
+                "applied witness requires (implementation DECLARATION [(types TYPE...)])",
+            ));
+        }
+        let implementation = self.reference(args[0], scope, "declaration")?;
+        if let Some(clause) = args.get(1) {
+            if self.block.head(*clause) != Some("types") {
+                return Err(self.error(*clause, "applied witness requires a types clause"));
+            }
+            let label = self.allocate('%')?;
+            self.owned_type_arguments(*clause, scope, &label)?;
+            Ok(format!("concrete@{implementation}@{label}"))
+        } else {
+            Ok(format!("concrete@{implementation}"))
         }
     }
     fn body(&mut self, id: usize, scope: &str) -> Result<String, Diagnostic> {
@@ -1038,7 +1065,10 @@ impl Lowering<'_> {
                 _ => {}
             }
             if form == "method-call" {
-                let value = self.implementation_atom(self.block.atom(args[0])?, scope, args[0])?;
+                let witness = *args
+                    .first()
+                    .ok_or_else(|| self.error(node, "method-call requires a witness"))?;
+                let value = self.implementation_operand(witness, scope)?;
                 block.syntax[args[0]].kind = SyntaxKind::Atom {
                     value,
                     quoted: false,
@@ -1047,8 +1077,7 @@ impl Lowering<'_> {
             match form.as_str() {
                 "implementations" => {
                     for arg in &args {
-                        let value =
-                            self.implementation_atom(self.block.atom(*arg)?, scope, *arg)?;
+                        let value = self.implementation_operand(*arg, scope)?;
                         block.syntax[*arg].kind = SyntaxKind::Atom {
                             value,
                             quoted: false,
@@ -1202,6 +1231,35 @@ impl Lowering<'_> {
                     if let Some(clause) = self.clause(&unit.clauses, "types")? {
                         self.owned_type_arguments(clause, &scope, &unit.label)?;
                     }
+                    let parent = unit
+                        .existing
+                        .map(|id| id.to_string())
+                        .unwrap_or_else(|| unit.label.clone());
+                    let parameters = self
+                        .units
+                        .iter()
+                        .filter(|child| child.parent == parent && child.kind == "type-parameter")
+                        .map(|child| {
+                            (
+                                child.syntax,
+                                child
+                                    .existing
+                                    .map(|id| id.to_string())
+                                    .unwrap_or_else(|| child.label.clone()),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    for (index, (syntax, parameter)) in parameters.into_iter().enumerate() {
+                        self.record(
+                            syntax,
+                            "owned.implementation-parameter",
+                            vec![
+                                ("parent", unit.label.clone()),
+                                ("index", index.to_string()),
+                                ("parameter", parameter),
+                            ],
+                        )?;
+                    }
                 } else {
                     let self_parameter = self
                         .records
@@ -1267,23 +1325,30 @@ impl Lowering<'_> {
                     let (_, args) = self.parts(*clause)?;
                     let args = args.to_vec();
                     if kind == "owned-implementation" {
-                        if args.len() != 2 {
+                        if !(2..=3).contains(&args.len()) {
                             return Err(self.error(
                                 *clause,
-                                "method mapping requires exact method ID and function",
+                                "method mapping requires exact method ID, function and optional types clause",
                             ));
                         }
                         let function = self.reference(args[1], &scope, "declaration")?;
-                        self.record(
-                            *clause,
-                            "owned.mapping",
-                            vec![
-                                ("parent", unit.label.clone()),
-                                ("index", index.to_string()),
-                                ("method", self.block.atom(args[0])?.into()),
-                                ("function", function),
-                            ],
-                        )?;
+                        let mut fields = vec![
+                            ("parent", unit.label.clone()),
+                            ("index", index.to_string()),
+                            ("method", self.block.atom(args[0])?.into()),
+                            ("function", function),
+                        ];
+                        if let Some(types) = args.get(2) {
+                            if self.block.head(*types) != Some("types") {
+                                return Err(
+                                    self.error(*types, "method mapping requires a types clause")
+                                );
+                            }
+                            let label = self.allocate('%')?;
+                            self.owned_type_arguments(*types, &scope, &label)?;
+                            fields.push(("as", label));
+                        }
+                        self.record(*clause, "owned.mapping", fields)?;
                     } else {
                         if !(4..=5).contains(&args.len()) {
                             return Err(self.error(
@@ -1858,6 +1923,14 @@ pub(super) fn contract_children(record: &crate::platform::kernel::OwnerRecord) -
                         .map(OwnerKey::TypeParameter),
                 );
             }
+            D::OwnedImplementation(i) => {
+                children.extend(
+                    i.type_parameters
+                        .iter()
+                        .copied()
+                        .map(OwnerKey::TypeParameter),
+                );
+            }
             D::Record {
                 type_parameters,
                 fields,
@@ -2021,6 +2094,7 @@ pub(super) fn finish(
             AuthoredChange::CreateOwnedImplementation {
                 visibility,
                 contract,
+                type_parameters,
                 self_type,
                 type_arguments,
                 methods,
@@ -2035,6 +2109,7 @@ pub(super) fn finish(
                 changes.push(AuthoredChange::SetOwnedImplementation {
                     declaration,
                     contract,
+                    type_parameters,
                     self_type,
                     type_arguments,
                     methods,
@@ -2398,7 +2473,7 @@ fn child_allowed(parent: &str, child: &str) -> bool {
         "module" => namespace(child) == Some("declaration"),
         "record" => matches!(child, "field" | "type-parameter"),
         "variant" => matches!(child, "case" | "type-parameter"),
-        "owned-contract" => child == "type-parameter",
+        "owned-contract" | "owned-implementation" => child == "type-parameter",
         "interface" => child == "operation",
         "function" => matches!(
             child,

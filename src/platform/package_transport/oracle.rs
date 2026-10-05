@@ -549,6 +549,19 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
         }
         reader.charge(intrinsic_work)?;
     }
+    // A package dependency DAG cannot establish finite generic instantiation:
+    // a supplied witness may dispatch from an upstream body back downstream.
+    // Reconstruct the proof from this independently decoded complete source.
+    reader.charge(snapshots.len())?;
+    let complete_sources: Vec<_> = snapshots.values().collect();
+    let mut composition_work = 0;
+    crate::platform::kernel::callable_flow::validate_snapshot_callable_closure(
+        &complete_sources,
+        &|| Ok(()),
+        &mut composition_work,
+        (16_000_000 - reader.visits.get()) as usize,
+    )?;
+    reader.charge(composition_work)?;
     if *reader.seen.borrow() != container.objects.keys().copied().collect() {
         return Err(failure("missing or extra complete source object"));
     }
@@ -606,6 +619,13 @@ fn public_inventory(
                 PackageInterfaceDeclarationPayload::OwnedContract(c.clone())
             }
             DeclarationPayload::OwnedImplementation(i) => {
+                reader.charge(i.type_parameters.len())?;
+                selected.extend(
+                    i.type_parameters
+                        .iter()
+                        .copied()
+                        .map(OwnerKey::TypeParameter),
+                );
                 PackageInterfaceDeclarationPayload::OwnedImplementation(i.clone())
             }
             DeclarationPayload::Record {

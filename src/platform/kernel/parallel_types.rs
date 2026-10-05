@@ -5,10 +5,14 @@ use crate::platform::semantic_id::TypeParameterId;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
+const MAXIMUM_METADATA_BYTES: usize = 64 * 1_048_576;
+
 pub(crate) struct AppliedTypes<'a, R: ?Sized> {
     read: &'a R,
     types: RefCell<BTreeMap<TypeObjectDigest, TypeObject>>,
     resolved: BTreeMap<TypeObjectDigest, TypeObjectDigest>,
+    metadata_bytes: usize,
+    maximum_metadata_bytes: usize,
 }
 impl<'a, R: ExpressionRead + ?Sized> AppliedTypes<'a, R> {
     pub(crate) fn into_types(self) -> BTreeMap<TypeObjectDigest, TypeObject> {
@@ -19,7 +23,67 @@ impl<'a, R: ExpressionRead + ?Sized> AppliedTypes<'a, R> {
             read,
             types: RefCell::new(BTreeMap::new()),
             resolved: BTreeMap::new(),
+            metadata_bytes: 0,
+            maximum_metadata_bytes: MAXIMUM_METADATA_BYTES,
         }
+    }
+    #[cfg(test)]
+    pub(crate) fn with_metadata_limit(read: &'a R, maximum_metadata_bytes: usize) -> Self {
+        Self {
+            maximum_metadata_bytes,
+            ..Self::new(read)
+        }
+    }
+    #[cfg(test)]
+    pub(crate) fn metadata_bytes_for_test(&self) -> usize {
+        self.metadata_bytes
+    }
+
+    fn reserve_type(&mut self, object: &TypeObject) -> Result<(), Diagnostic> {
+        self.read.validation_work()?;
+        let (children, names) = match &object.form {
+            TypeForm::StructuralRecord { fields }
+            | TypeForm::OwnedProduct { fields }
+            | TypeForm::OwnedChoice { cases: fields } => (
+                fields
+                    .len()
+                    .checked_mul(std::mem::size_of::<StructuralTypeField>()),
+                fields.iter().try_fold(0usize, |bytes, field| {
+                    bytes.checked_add(field.name.as_str().len())
+                }),
+            ),
+            _ => (
+                object
+                    .child_type_count()
+                    .checked_mul(std::mem::size_of::<TypeObjectDigest>()),
+                Some(0),
+            ),
+        };
+        // Admit the rebuilt child vector and names, both tree-map entries and
+        // temporary canonical encoding before constructing any derived storage.
+        // This is cumulative modeled metadata, not allocator traffic or RSS.
+        let bytes = children
+            .and_then(|n| names.and_then(|m| n.checked_add(m)))
+            .and_then(|n| n.checked_mul(2))
+            .and_then(|n| {
+                n.checked_add(
+                    std::mem::size_of::<TypeObject>()
+                        + 3 * std::mem::size_of::<TypeObjectDigest>()
+                        + 8 * std::mem::size_of::<usize>()
+                        + 256,
+                )
+            })
+            .and_then(|n| self.metadata_bytes.checked_add(n))
+            .filter(|n| *n <= self.maximum_metadata_bytes)
+            .ok_or_else(|| {
+                Diagnostic::new(
+                    DiagnosticClass::Resource,
+                    "kernel_parallel_type_storage",
+                    "substituted signature metadata exceeds its storage admission",
+                )
+            })?;
+        self.metadata_bytes = bytes;
+        Ok(())
     }
     pub(crate) fn substitute(
         &mut self,
@@ -46,13 +110,15 @@ impl<'a, R: ExpressionRead + ?Sized> AppliedTypes<'a, R> {
         let object = self
             .type_object(ty)?
             .ok_or_else(|| super::parallel::reject("missing child signature type"))?;
+        if let TypeForm::TypeParameter { parameter } = object.form {
+            return bindings.get(&parameter).copied().ok_or_else(|| {
+                super::parallel::reject("child signature contains a foreign type parameter")
+            });
+        }
+        self.reserve_type(&object)?;
         let mut child = |ty| self.substitute(ty, bindings, depth + 1);
         let form = match object.form {
-            TypeForm::TypeParameter { parameter } => {
-                return bindings.get(&parameter).copied().ok_or_else(|| {
-                    super::parallel::reject("child signature contains a foreign type parameter")
-                });
-            }
+            TypeForm::TypeParameter { .. } => unreachable!("parameters return without allocation"),
             TypeForm::StructuralRecord { fields } => TypeForm::StructuralRecord {
                 fields: fields
                     .into_iter()

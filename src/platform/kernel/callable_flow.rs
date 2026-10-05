@@ -5,6 +5,12 @@
 #[path = "callable_flow_tests.rs"]
 mod tests;
 
+#[path = "composed_callable_flow.rs"]
+mod composed;
+pub(crate) use composed::{
+    CallableClosureRead, validate_callable_closure, validate_snapshot_callable_closure,
+};
+
 use super::{
     DeclarationPayload, DeclarationReference, ExpressionOperation, ExpressionRead, OwnerKey,
     OwnerRecord, TypeForm, TypeObjectDigest,
@@ -104,8 +110,9 @@ impl<R: ExpressionRead> Flow<'_, R> {
     ) -> Result<(), Diagnostic> {
         self.tick()?;
         self.observation.applications += 1;
-        // Exact package dependencies are acyclic. Foreign signature/type/constraint checks
-        // belong to inference; complete supplier bodies are independently admitted at transport.
+        // This declaration-local pass has no complete supplier bodies or downstream witness
+        // selections. The mandatory composed source-closure pass at publication, transport and
+        // artifact admission closes foreign calls and selected method callbacks independently.
         if target.package != self.read.package_id() {
             return Ok(());
         }
@@ -274,8 +281,9 @@ impl<R: ExpressionRead> Flow<'_, R> {
                         self.reserve::<super::ImplementationOperand>(implementations.len())?;
                         for operand in implementations {
                             self.tick()?;
-                            if let super::ImplementationOperand::Concrete { implementation } =
-                                operand
+                            if let super::ImplementationOperand::Concrete {
+                                implementation, ..
+                            } = operand
                             {
                                 self.implementation_targets(*implementation, &mut pending)?;
                             }
@@ -294,7 +302,9 @@ impl<R: ExpressionRead> Flow<'_, R> {
                     }
                     ExpressionOperation::MethodCall { witness, .. } => {
                         self.tick()?;
-                        if let super::ImplementationOperand::Concrete { implementation } = witness {
+                        if let super::ImplementationOperand::Concrete { implementation, .. } =
+                            witness
+                        {
                             self.implementation_targets(*implementation, &mut pending)?;
                         }
                     }

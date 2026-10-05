@@ -319,7 +319,7 @@ fn unsupported_and_future_magics_keep_the_existing_current_identity_fallback() {
     for intent in [
         b"".as_slice(),
         b"LKJACR13",
-        b"LKJACR31",
+        b"LKJACR32",
         b"LKJACR99",
         b"unknown",
     ] {
@@ -339,6 +339,10 @@ fn unsupported_and_future_magics_keep_the_existing_current_identity_fallback() {
     assert_eq!(
         commitment_codec_identity(b"LKJACR29"),
         "lkjscript-authored-change-codec-29"
+    );
+    assert_eq!(
+        commitment_codec_identity(b"LKJACR31"),
+        "lkjscript-authored-change-codec-31"
     );
     assert_eq!(
         commitment_codec_identity(b"LKJACR17"),
@@ -369,6 +373,7 @@ fn implementation_authority_uses_codec27_and_empty_application_keeps_frozen_code
                 requirement_arguments,
                 implementations: vec![AuthoredImplementationOperand::Concrete {
                     implementation: local(3),
+                    type_arguments: Vec::new(),
                 }],
                 arguments: vec![expression(AuthoredExpressionOperation::I64 { value: 42 })],
             }),

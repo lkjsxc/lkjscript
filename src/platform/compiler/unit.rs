@@ -14,13 +14,13 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-27";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 27;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-22";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 22;
-pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN27";
-pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v27";
-pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v27";
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-28";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 28;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-23";
+pub const BYTECODE_CONTRACT_VERSION: u16 = 23;
+pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUN28";
+pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope.v28";
+pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key.v28";
 pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
@@ -552,7 +552,7 @@ impl CompilationUnit {
                 "compiler-unit bytes disagree with their exact object-domain digest",
             ));
         }
-        // Derived generations 10–26 require a rebuild from supported canonical owners.
+        // Derived generations 10–27 require a rebuild from supported canonical owners.
         // Refuse before decoding; old bytes never acquire current instruction meaning.
         if [
             b"LKJCUN10",
@@ -572,6 +572,7 @@ impl CompilationUnit {
             b"LKJCUN24",
             b"LKJCUN25",
             b"LKJCUN26",
+            b"LKJCUN27",
         ]
         .iter()
         .any(|magic| bytes.starts_with(*magic))
@@ -601,13 +602,14 @@ impl CompilationUnit {
     }
 
     pub(crate) fn validate(&self) -> Result<(), Diagnostic> {
-        if !matches!(
-            (
-                self.contract_version,
-                self.bytecode_contract_version,
-                self.graph_contract_version
-            ),
-            (27, 22, 27)
+        if (
+            self.contract_version,
+            self.bytecode_contract_version,
+            self.graph_contract_version,
+        ) != (
+            COMPILER_UNIT_CONTRACT_VERSION,
+            BYTECODE_CONTRACT_VERSION,
+            crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
         ) {
             return Err(unit_error(
                 DiagnosticClass::Source,
@@ -736,7 +738,14 @@ impl CompilationPayload {
                     }
                 }
                 let types = tables.types.iter().copied().collect::<BTreeSet<_>>();
-                for ty in std::iter::once(i.self_type).chain(i.type_arguments.iter().copied()) {
+                for ty in std::iter::once(i.self_type)
+                    .chain(i.type_arguments.iter().copied())
+                    .chain(
+                        i.methods
+                            .iter()
+                            .flat_map(|method| method.type_arguments.iter().copied()),
+                    )
+                {
                     if !types.contains(&ty) {
                         return Err(unit_corrupt(
                             "compiler_unit_owned_implementation_type",
@@ -1364,8 +1373,25 @@ impl CompiledCode {
                 "compiled code must have exactly one terminal return instruction",
             ));
         }
+        // Raw witness operands retain semantic digests rather than dense indexes. Build
+        // membership once; per-argument linear scans would multiply hostile table lengths.
+        let witness_tables = if self.instructions.iter().any(|instruction| {
+            matches!(
+                instruction,
+                CompiledInstruction::ImplementationCall { .. }
+                    | CompiledInstruction::MethodCall { .. }
+                    | CompiledInstruction::Parallel { .. }
+            )
+        }) {
+            WitnessTables {
+                declarations: tables.declarations.iter().copied().collect(),
+                types: tables.types.iter().copied().collect(),
+            }
+        } else {
+            WitnessTables::default()
+        };
         for instruction in &self.instructions {
-            instruction.validate(self, tables)?;
+            instruction.validate(self, tables, &witness_tables)?;
         }
         verify_borrow_call_protocol(self)?;
         let depths = verify_stack(self)?;
@@ -1374,7 +1400,12 @@ impl CompiledCode {
 }
 
 impl CompiledInstruction {
-    fn validate(&self, code: &CompiledCode, tables: &CompilationTables) -> Result<(), Diagnostic> {
+    fn validate(
+        &self,
+        code: &CompiledCode,
+        tables: &CompilationTables,
+        witness_tables: &WitnessTables,
+    ) -> Result<(), Diagnostic> {
         if let Self::ImplementationCall {
             effect_arguments, ..
         }
@@ -1669,9 +1700,24 @@ impl CompiledInstruction {
                 for ty in type_arguments {
                     require_index("implementation type", *ty, tables.types.len())?;
                 }
+                for operand in implementations {
+                    validate_implementation_operand(operand, witness_tables)?;
+                }
                 Ok(())
             }
-            Self::MethodCall { arguments, .. } => {
+            Self::MethodCall {
+                witness,
+                contract,
+                arguments,
+                ..
+            } => {
+                validate_implementation_operand(witness, witness_tables)?;
+                if !witness_tables.declarations.contains(contract) {
+                    return Err(unit_corrupt(
+                        "compiler_unit_method_contract",
+                        "owned method contract is absent from its exact declaration table",
+                    ));
+                }
                 require_runtime_count("method arguments", *arguments)
             }
             Self::Parallel {
@@ -1693,6 +1739,9 @@ impl CompiledInstruction {
                 }
                 for operands in [left_implementations, right_implementations] {
                     require_item_count("parallel witnesses", operands.len(), true)?;
+                    for operand in operands {
+                        validate_implementation_operand(operand, witness_tables)?;
+                    }
                 }
                 require_index("left parallel task", *left, tables.declarations.len())?;
                 require_index("right parallel task", *right, tables.declarations.len())?;
@@ -1925,6 +1974,43 @@ impl CompiledFieldSelector {
             }
         }
     }
+}
+
+#[derive(Default)]
+struct WitnessTables {
+    declarations: BTreeSet<DeclarationReference>,
+    types: BTreeSet<TypeObjectDigest>,
+}
+
+fn validate_implementation_operand(
+    operand: &crate::platform::kernel::ImplementationOperand,
+    tables: &WitnessTables,
+) -> Result<(), Diagnostic> {
+    let declaration = match operand {
+        crate::platform::kernel::ImplementationOperand::Concrete {
+            implementation,
+            type_arguments,
+        } => {
+            require_item_count("witness type arguments", type_arguments.len(), true)?;
+            for ty in type_arguments {
+                if !tables.types.contains(ty) {
+                    return Err(unit_corrupt(
+                        "compiler_unit_witness_type",
+                        "applied witness references a type absent from its exact table",
+                    ));
+                }
+            }
+            implementation
+        }
+        crate::platform::kernel::ImplementationOperand::Parameter { function, .. } => function,
+    };
+    if !tables.declarations.contains(declaration) {
+        return Err(unit_corrupt(
+            "compiler_unit_witness_declaration",
+            "implementation witness references a declaration absent from its exact table",
+        ));
+    }
+    Ok(())
 }
 
 fn require_kind(source: &CompilationSource, expected: OwnerKind) -> Result<(), Diagnostic> {

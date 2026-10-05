@@ -176,6 +176,7 @@ pub(super) fn complete_with_implementations(
     control: &crate::platform::execution::ExecutionControl,
 ) -> Result<(), Diagnostic> {
     let mut work = Budget::new(control);
+    close_effect_applications(program, &mut work)?;
     implementations::close(program, units, &mut work)?;
     complete_budgeted(program, &mut work)
 }
@@ -186,6 +187,7 @@ pub(super) fn complete_controlled(
     control: &crate::platform::execution::ExecutionControl,
 ) -> Result<(), Diagnostic> {
     let mut work = Budget::new(control);
+    close_effect_applications(program, &mut work)?;
     complete_budgeted(program, &mut work)
 }
 
@@ -194,7 +196,6 @@ fn complete_budgeted(
     work: &mut Budget<'_>,
 ) -> Result<(), Diagnostic> {
     let mut pending = BTreeSet::new();
-    close_effect_applications(program, work)?;
     // Derive dispatch only after each exact effect application and its callees are closed.
     super::prepare::derive_tail_dispatch(std::sync::Arc::make_mut(&mut program.functions), work)?;
     for (index, function) in program.functions.iter().enumerate() {
@@ -262,6 +263,9 @@ fn complete_budgeted(
             .get(index.0 as usize)
             .ok_or_else(missing)?;
         if function.type_parameters.len() != arguments.len() {
+            return Err(missing());
+        }
+        if !function.type_arguments.is_empty() && function.type_arguments.as_ref() != arguments {
             return Err(missing());
         }
         for _ in &arguments {
@@ -1098,7 +1102,12 @@ fn close_effect_applications(
             // Admit variable operand storage before Arc::make_mut can clone it.
             for instruction in code.instructions.iter() {
                 step(self.work)?;
-                if let NormalizedInstruction::Call {
+                if let NormalizedInstruction::ImplementationCall {
+                    effect_arguments,
+                    requirement_arguments,
+                    ..
+                }
+                | NormalizedInstruction::Call {
                     effect_arguments,
                     requirement_arguments,
                     ..
@@ -1118,11 +1127,85 @@ fn close_effect_applications(
                     self.work
                         .reserve::<RequirementOperand>(requirement_arguments.len())?;
                 }
+                if let NormalizedInstruction::MethodCall {
+                    witness:
+                        crate::platform::kernel::ImplementationOperand::Concrete {
+                            type_arguments, ..
+                        },
+                    ..
+                } = instruction
+                {
+                    self.work
+                        .reserve::<TypeObjectDigest>(type_arguments.len())?;
+                }
             }
             for instruction in Arc::make_mut(&mut code.instructions) {
                 step(self.work)?;
+                if let NormalizedInstruction::ImplementationCall {
+                    implementations, ..
+                } = instruction
+                {
+                    self.work
+                        .reserve::<crate::platform::kernel::ImplementationOperand>(
+                            implementations.len(),
+                        )?;
+                    for operand in implementations.iter() {
+                        if let crate::platform::kernel::ImplementationOperand::Concrete {
+                            type_arguments,
+                            ..
+                        } = operand
+                        {
+                            self.work
+                                .reserve::<TypeObjectDigest>(type_arguments.len())?;
+                        }
+                    }
+                    for operand in Arc::make_mut(implementations) {
+                        if let crate::platform::kernel::ImplementationOperand::Concrete {
+                            type_arguments,
+                            ..
+                        } = operand
+                        {
+                            for ty in type_arguments {
+                                *ty = substitute_effect_type(
+                                    self.types,
+                                    *ty,
+                                    bindings,
+                                    requirements,
+                                    0,
+                                    self.work,
+                                )?;
+                            }
+                        }
+                    }
+                }
+                if let NormalizedInstruction::MethodCall {
+                    witness:
+                        crate::platform::kernel::ImplementationOperand::Concrete {
+                            type_arguments, ..
+                        },
+                    ..
+                } = instruction
+                {
+                    for ty in type_arguments {
+                        *ty = substitute_effect_type(
+                            self.types,
+                            *ty,
+                            bindings,
+                            requirements,
+                            0,
+                            self.work,
+                        )?;
+                    }
+                }
                 match instruction {
-                    NormalizedInstruction::Call {
+                    NormalizedInstruction::ImplementationCall {
+                        function,
+                        type_arguments,
+                        effect_arguments,
+                        requirement_arguments,
+                        ..
+                    }
+                    | NormalizedInstruction::Call {
                         function,
                         type_arguments,
                         effect_arguments,

@@ -64,12 +64,17 @@ one explicitly ordered owned type argument per additional contract parameter:
   (method method_77000000000000000000000000000004 flat-pop))
 ```
 
-The complete method map selects visible monomorphic graph functions. Resolve each
-original method signature with one simultaneous substitution for Self and every
-additional parameter, then require exact parameter order, type, use mode, result,
-callable kind and effect row. A function with its own generic or implementation
-scheme cannot serve as a method target. All mappings are checked even when unused.
-No inferred implementation search or subtyping participates in selection.
+The complete method map resolves each original method signature with one
+simultaneous substitution for Self and every additional parameter, then requires
+exact parameter order, type, use mode, result, callable kind and effect row.
+The baseline mappings shown above have no function type arguments and select
+visible monomorphic graph functions. Generic targets require an explicit mapped
+type application under the extension below. All mappings are checked even when
+unused. No inferred implementation search or subtyping participates in selection.
+
+[Generic implementation schemes](generic-owned-implementations.md) extend this
+form with implementation-scoped Owned parameters and explicit mapped-function
+type arguments. They retain complete symbolic admission and exact selection.
 
 A function witness retains its in-scope Owned Self parameter and declares an
 ordered argument vector. Arguments may contain exact in-scope Owned parameters
@@ -126,7 +131,7 @@ The derived format cut requires rebuilding maintained bundles through their
 supported product owners. Historical acceptance and immutable published bytes
 retain their original meaning and evidence.
 
-Associated projections, generic implementation schemes, general escaping references,
+Associated projections, general escaping references,
 mutable borrows and method-local generics remain future work.
 [Source-tied borrowed results](owned-read-results.md) add an explicit pure-method
 read relationship by exact parameter position. Explicit contract

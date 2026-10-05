@@ -841,7 +841,7 @@ where
                 OwnerKey::Declaration(function.declaration),
             )?;
             for operand in implementations {
-                implementation_edge(edges, source, *operand)?;
+                implementation_edge(edges, source, operand)?;
             }
         }
         ExpressionOperation::MethodCall {
@@ -854,7 +854,7 @@ where
                 contract.package,
                 OwnerKey::Declaration(contract.declaration),
             )?;
-            implementation_edge(edges, source, *witness)?;
+            implementation_edge(edges, source, witness)?;
         }
         ExpressionOperation::Call { function, .. } => exact_edge(
             edges,
@@ -1217,10 +1217,10 @@ fn relation_error(code: &str, message: impl Into<String>) -> Diagnostic {
 fn implementation_edge(
     edges: &mut RelationCollector,
     source: ExactOwnerKey,
-    operand: super::ImplementationOperand,
+    operand: &super::ImplementationOperand,
 ) -> Result<(), Diagnostic> {
     let r = match operand {
-        super::ImplementationOperand::Concrete { implementation } => implementation,
+        super::ImplementationOperand::Concrete { implementation, .. } => implementation,
         super::ImplementationOperand::Parameter { function, .. } => function,
     };
     exact_edge(

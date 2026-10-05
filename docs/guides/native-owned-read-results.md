@@ -20,6 +20,10 @@ has `length(Self borrow) -> I64` and `at(I64, Self borrow) -> Item`, so `at` dec
 `(returns Item (borrow-from 1))`. Concrete method targets retain that exact
 relationship after type substitution.
 
+[Generic implementation schemes](native-generic-owned-implementations.md) can map
+generic reader functions once and preserve this same result relationship for
+every explicit owned item application.
+
 Use the returned view through a lexical call:
 
 ```lisp

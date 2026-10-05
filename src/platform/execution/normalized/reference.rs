@@ -687,6 +687,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
 
 #[path = "reference_implementations.rs"]
 mod implementations;
+use implementations::AppliedReferenceImplementation;
 
 struct ReferenceTransaction {
     binding: BindingId,
@@ -699,7 +700,7 @@ struct ReferenceApplication<'a> {
     types: &'a [TypeObjectDigest],
     effects: &'a [EffectRow],
     requirements: &'a [RequirementOperand],
-    implementations: &'a [DeclarationReference],
+    implementations: &'a [AppliedReferenceImplementation],
 }
 
 struct ReferenceState<'a> {
@@ -729,7 +730,10 @@ struct ReferenceState<'a> {
     calls_by_requirement: BTreeMap<RequirementReference, u64>,
     implementation_scopes: Vec<(
         DeclarationReference,
-        BTreeMap<crate::platform::semantic_id::ImplementationParameterId, DeclarationReference>,
+        BTreeMap<
+            crate::platform::semantic_id::ImplementationParameterId,
+            AppliedReferenceImplementation,
+        >,
     )>,
     type_scopes: Vec<BTreeMap<TypeParameterId, TypeObjectDigest>>,
     effect_scopes: Vec<super::reference_effects::Bindings>,
@@ -761,8 +765,10 @@ impl Drop for ReferenceLoanScope<'_> {
 /// One internal transition, constructed only by canonical call admission in this state.
 /// It is neither a callable value nor a reusable proof, and carries no component grant.
 struct AdmittedGraphCall {
-    implementations:
-        BTreeMap<crate::platform::semantic_id::ImplementationParameterId, DeclarationReference>,
+    implementations: BTreeMap<
+        crate::platform::semantic_id::ImplementationParameterId,
+        AppliedReferenceImplementation,
+    >,
     declaration: DeclarationReference,
     function: FunctionDeclaration,
     types: BTreeMap<TypeParameterId, TypeObjectDigest>,
@@ -2282,11 +2288,11 @@ impl ReferenceState<'_> {
                     method,
                     arguments,
                 } => {
-                    let function = self.method_target(witness, contract, method)?;
+                    let (function, types) = self.method_target(witness, contract, method)?;
                     self.require_owning_result(function)?;
                     let uses = self.function_parameter_uses(function)?;
                     let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
-                    return self.tail_step(function, &[], &[], &[], arguments, locals);
+                    return self.tail_step(function, &types, &[], &[], arguments, locals);
                 }
                 ExpressionOperation::Call {
                     requirement_arguments,
@@ -2888,11 +2894,11 @@ impl ReferenceState<'_> {
                 method,
                 arguments,
             } => {
-                let function = self.method_target(witness, contract, method)?;
+                let (function, types) = self.method_target(witness, contract, method)?;
                 self.require_owning_result(function)?;
                 let uses = self.function_parameter_uses(function)?;
                 let arguments = self.evaluate_many_with_uses(&arguments, &uses, locals)?;
-                self.call_declaration(function, &[], &[], &[], arguments)
+                self.call_declaration(function, &types, &[], &[], arguments)
             }
             ExpressionOperation::Unit {} => {
                 CheckedValue::primitive(&self.schema, NormalizedValue::Unit)

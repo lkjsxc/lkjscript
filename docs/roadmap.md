@@ -40,6 +40,14 @@ view shapes or cursors. Select those families, higher-ranked relationships and
 bounded value/region parameters against such a concrete workload. The existing
 explicit Item argument serves readers that return their unchanged element type.
 
+Use [explicit generic implementation schemes](spec/generic-owned-implementations.md)
+to reuse storage and reader methods across independently authored owned items.
+The [native witness](../examples/generic-owned-implementations/README.md) exports
+flat/chunked schemes before cells, buffers and a nested product exist, preserving
+exact applications through source-tied reads, transfer and joined tasks. Require
+complete admission of mapped targets and finite cross-package callable flow before
+adding implementation prerequisites, method-local schemes or inferred selection.
+
 Keep implementation identity explicit and contracts independently checkable.
 Inference must retain boundary evidence; bounded proof-search exhaustion remains
 distinct from invalid meaning. Effect allowances, witnesses and deployment grants

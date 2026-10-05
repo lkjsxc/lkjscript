@@ -81,8 +81,9 @@ fn witness_contract_domains_are_closed_and_unique() {
         ("structured_parallel_owned_tasks", 4),
         ("structural_owned_choices", 2),
         ("structural_owned_products", 3),
-        ("symbolic_owned_parameters", 4),
-        ("explicit_owned_implementation_witnesses", 5),
+        ("symbolic_owned_parameters", 5),
+        ("explicit_owned_implementation_witnesses", 6),
+        ("finite_generic_callable_instantiation", 2),
         ("single_relation_extractor", 5),
         ("owner_summary_dimensions", 4),
         ("same_task_owned_transfer", 1),
@@ -158,9 +159,14 @@ fn witness_contract_domains_are_closed_and_unique() {
         digest,
         "validator_contract_1fd533a37a52f3de4ff1e6836082a4fe4b8796b2c920eb182962f54ca6e521fc"
     );
-    assert_eq!(
+    // Generic implementation schemes invalidate the previous monomorphic proof.
+    assert_ne!(
         digest,
         "validator_contract_0bc1eb13d89dbdaf164c85d1b14c0e1d63318c42467d23ce425560a7ca10a043"
+    );
+    assert_eq!(
+        digest,
+        "validator_contract_42bb6265ce61f4c67aeff0f1e49a607539c7eae48c34bf85244f0177a17e1344"
     );
 }
 

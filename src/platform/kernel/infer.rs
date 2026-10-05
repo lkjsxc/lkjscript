@@ -1016,6 +1016,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 let invocation = self.owned_read(|read| {
                     super::memory::borrow_invocation(read, call, context.declaration)
                 })?;
+                self.adopt_applied_types(invocation.types)?;
                 // The wrapped invocation retains its complete ordinary type/effect checks.
                 let actual = self.infer(call, context, next)?;
                 require_same(
@@ -1475,19 +1476,17 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 method,
                 arguments,
             } => {
-                let (mut signature, substitutions) = self.owned_read(|read| {
+                let application = self.owned_read(|read| {
                     super::owned_contract::method_signature(
                         read,
-                        witness,
+                        &witness,
                         contract,
                         method,
                         context.declaration,
                     )
                 })?;
-                for parameter in &mut signature.parameters {
-                    parameter.ty = self.substitute(parameter.ty, &substitutions, 0)?;
-                }
-                signature.result = self.substitute(signature.result, &substitutions, 0)?;
+                self.adopt_applied_types(application.types)?;
+                let signature = application.method;
                 let row = signature.effect.row();
                 self.validate_call_effect(
                     &FunctionSignature {
@@ -3867,6 +3866,22 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             _ => {}
         }
         self.canonical_type(object.form)
+    }
+
+    fn adopt_applied_types(
+        &mut self,
+        types: BTreeMap<TypeObjectDigest, TypeObject>,
+    ) -> Result<(), Diagnostic> {
+        for (digest, object) in types {
+            self.consume_work()?;
+            if self.canonical_type(object.form)? != digest {
+                return Err(type_error(
+                    "kernel_owned_contract",
+                    "derived application type is not canonical",
+                ));
+            }
+        }
+        Ok(())
     }
 
     fn canonical_type(&mut self, form: TypeForm) -> Result<TypeObjectDigest, Diagnostic> {

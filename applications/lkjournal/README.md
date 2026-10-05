@@ -22,9 +22,9 @@ Current normalized identity:
 - package: `pkg_20000000000000000000000000000001`;
 - semantic revision: `rev_a1d97c5d7deda1ece8e2e3383bd7a58ae1e267838368ec5b42678e40c9eb1640`;
 - semantic state: `semantic_state_3832cd12c3fee672d0bdfb975cb363cbc457f6ef45f15cb44a62d40ab47f2dee`;
-- package revision: `package_revision_02f8bf426ee43d7cad86fbf9773b4696b34dbf0bebbf8f1560dd67238886dab5`;
-- artifact manifest: `artifact_manifest_24292416109a666d453341f1620661cc97850aabf002041a14afa89136968eb8`;
-- artifact bundle: `artifact_bundle_b01668eeaf41c7e0f75c9eb1610a1978568155bde448f29fe4eb6614f032a05b`;
+- package revision: `package_revision_2b3f0cdcc4c300dc8cae9273a86f2870c6ea21cc01bf397aba66f4122de66187`;
+- artifact manifest: `artifact_manifest_6218224cd09b828977686d0476d1117dbe54de1e1dadfbbbf8fd66b069923457`;
+- artifact bundle: `artifact_bundle_b8f1687a75968f6cbf26e30f2d8d536593fb70d8b54fee09eb27bff9e794a37f`;
 - 2,044 live root semantic owners and one exact built-in standard dependency.
 
 The original Graph 13 materialization preserved all existing application owner identities and behavior.
@@ -93,9 +93,9 @@ empty 404 and invokes none of them.
 
 ## Current service, interactive, and worker boundary
 
-All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,375,404-byte
+All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,375,561-byte
 artifact bundle above (SHA-256
-`80c1343919d5b59c1bac8979087907898ac896407b59884b136313678fa16969`). The service descriptor
+`68413f5096edc2f10c9ca1d1c3cd5939bad01f963fff6494c2eaaac17bb4e5d9`). The service descriptor
 resolves `serve`, the worker descriptor resolves `work`, and `live.deployment.json` resolves
 `lkjournal-live-1`. Preparation strictly loads the standalone bundle,
 validates the runner, route-indexed handler and component requirement closure, grants, secrets, and adapters, and emits
@@ -217,7 +217,7 @@ The structured parallel compiler refresh rebuilds the current bundle for compile
 exact-supplier tests agree between production and reference execution. Accepted
 HEAD, dependency selection, application behavior and operational data are unchanged.
 
-The owned-sequence compiler refresh rebuilds the current bundle for
-compiler 25, bytecode 20 and artifact 32 through public check/build. All 44 tests
+The generic-implementation compiler refresh rebuilds the current bundle for
+compiler 28, bytecode 23 and artifact 35 through public check/build. All 44 tests
 agree between production and reference execution. Accepted HEAD, exact historical
 standard supplier, application behavior and operational data remain unchanged.

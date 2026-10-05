@@ -7,16 +7,33 @@ use crate::platform::semantic_id::ImplementationParameterId;
 
 use std::collections::BTreeSet;
 
-type Implementations = BTreeMap<ImplementationParameterId, DeclarationReference>;
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct AppliedReferenceImplementation {
+    pub(super) implementation: DeclarationReference,
+    pub(super) type_arguments: Vec<TypeObjectDigest>,
+}
+
+type Implementations = BTreeMap<ImplementationParameterId, AppliedReferenceImplementation>;
 
 impl ReferenceState<'_> {
     pub(super) fn resolve_implementation(
         &mut self,
         operand: ImplementationOperand,
-    ) -> Result<DeclarationReference, ExecutionError> {
+    ) -> Result<AppliedReferenceImplementation, ExecutionError> {
         self.control.check()?;
         match operand {
-            ImplementationOperand::Concrete { implementation } => Ok(implementation),
+            ImplementationOperand::Concrete {
+                implementation,
+                type_arguments,
+            } => {
+                self.charge_allocation(
+                    (type_arguments.len() * std::mem::size_of::<TypeObjectDigest>()) as u64,
+                )?;
+                Ok(AppliedReferenceImplementation {
+                    implementation,
+                    type_arguments: self.resolve_type_arguments(&type_arguments)?,
+                })
+            }
             ImplementationOperand::Parameter {
                 function,
                 parameter,
@@ -27,18 +44,24 @@ impl ReferenceState<'_> {
                 if *scope != function {
                     return Err(reference_type_error("witness belongs to another function"));
                 }
-                values
+                let selected = values
                     .get(&parameter)
-                    .copied()
-                    .ok_or_else(|| reference_type_error("unbound implementation witness"))
+                    .cloned()
+                    .ok_or_else(|| reference_type_error("unbound implementation witness"))?;
+                self.charge_allocation(
+                    (selected.type_arguments.len() * std::mem::size_of::<TypeObjectDigest>())
+                        as u64,
+                )?;
+                Ok(selected)
             }
         }
     }
 
     pub(super) fn checked_implementation(
         &mut self,
-        reference: DeclarationReference,
+        selected: &AppliedReferenceImplementation,
     ) -> Result<OwnedImplementation, ExecutionError> {
+        let reference = selected.implementation;
         let DeclarationPayload::OwnedImplementation(implementation) =
             self.declaration(reference)?.payload
         else {
@@ -46,6 +69,77 @@ impl ReferenceState<'_> {
                 "witness does not select an implementation owner",
             ));
         };
+        if implementation.type_parameters.len() != selected.type_arguments.len()
+            || implementation.type_parameters.len()
+                > crate::platform::kernel::contract::MAXIMUM_CHILDREN
+        {
+            return Err(reference_type_error(
+                "implementation type argument arity mismatch",
+            ));
+        }
+        self.charge_allocation(
+            (implementation.type_parameters.len()
+                * (std::mem::size_of::<(TypeParameterId, TypeObjectDigest)>()
+                    + 6 * std::mem::size_of::<usize>())) as u64,
+        )?;
+        let mut scheme_parameters = BTreeSet::new();
+        let mut scheme_names = BTreeSet::new();
+        let mut scheme_bindings = BTreeMap::new();
+        for (parameter, actual) in implementation
+            .type_parameters
+            .iter()
+            .zip(&selected.type_arguments)
+        {
+            self.witness_metadata_step()?;
+            let Some(OwnerRecord::TypeParameter(owner)) =
+                self.owner_in_package(reference.package, OwnerKey::TypeParameter(*parameter))?
+            else {
+                return Err(reference_type_error(
+                    "missing implementation type parameter",
+                ));
+            };
+            if owner.header.owner != OwnerKey::TypeParameter(*parameter)
+                || owner.declaration != reference.declaration
+                || owner.constraints != TypeParameterConstraints::Owned
+                || !scheme_parameters.insert(*parameter)
+                || !scheme_names.insert(owner.name)
+                || !self.owned_method_type(*actual, &BTreeSet::new())?
+            {
+                return Err(reference_type_error(
+                    "implementation requires distinct scoped Owned formals and closed Owned arguments",
+                ));
+            }
+            scheme_bindings.insert(*parameter, *actual);
+        }
+        // Validate the open templates before substitution: an application cannot
+        // erase a foreign parameter or an invalid unused mapping argument.
+        if !self.owned_method_type(implementation.self_type, &scheme_parameters)? {
+            return Err(reference_type_error(
+                "implementation template has an invalid Owned scope",
+            ));
+        }
+        for argument in &implementation.type_arguments {
+            if !self.owned_method_type(*argument, &scheme_parameters)? {
+                return Err(reference_type_error(
+                    "implementation template has an invalid Owned scope",
+                ));
+            }
+        }
+        let mut implementation = implementation;
+        implementation.self_type = self.method_type(implementation.self_type, &scheme_bindings)?;
+        for actual in &mut implementation.type_arguments {
+            *actual = self.method_type(*actual, &scheme_bindings)?;
+        }
+        for mapping in &mut implementation.methods {
+            for actual in &mut mapping.type_arguments {
+                if !self.owned_method_type(*actual, &scheme_parameters)? {
+                    return Err(reference_type_error(
+                        "method mapping requires scoped Owned type arguments",
+                    ));
+                }
+                *actual = self.method_type(*actual, &scheme_bindings)?;
+            }
+        }
         if !self.owned_method_type(implementation.self_type, &BTreeSet::new())? {
             return Err(reference_type_error("implementation has a non-owned Self"));
         }
@@ -188,12 +282,13 @@ impl ReferenceState<'_> {
             let mut mapping = None;
             for candidate in &implementation.methods {
                 self.witness_metadata_step()?;
-                if candidate.method == method.id && mapping.replace(candidate.function).is_some() {
+                if candidate.method == method.id && mapping.replace(candidate).is_some() {
                     return Err(reference_type_error("duplicate method implementation"));
                 }
             }
-            let target =
+            let mapping =
                 mapping.ok_or_else(|| reference_type_error("missing method implementation"))?;
+            let target = mapping.function;
             let target_owner = self.declaration(target)?;
             if target.package != reference.package
                 && target_owner.visibility != crate::platform::kernel::DeclarationVisibility::Public
@@ -206,7 +301,7 @@ impl ReferenceState<'_> {
                 ));
             };
             if function.effect != method.effect
-                || !function.type_parameters.is_empty()
+                || function.type_parameters.len() != mapping.type_arguments.len()
                 || !function.effect_parameters.is_empty()
                 || !function.requirement_parameters.is_empty()
                 || !function.implementation_parameters.is_empty()
@@ -217,21 +312,57 @@ impl ReferenceState<'_> {
                         .and_then(|position| function.parameters.get(position as usize).copied())
             {
                 return Err(reference_type_error(
-                    "method implementation must have exact monomorphic type, callable kind and effects",
+                    "method implementation must have exact applied type, callable kind and effects",
                 ));
+            }
+            let mut target_parameters = BTreeSet::new();
+            let mut target_names = BTreeSet::new();
+            let mut target_bindings = BTreeMap::new();
+            self.charge_allocation(
+                (function.type_parameters.len()
+                    * (2 * std::mem::size_of::<TypeParameterId>()
+                        + std::mem::size_of::<TypeObjectDigest>()
+                        + std::mem::size_of::<crate::platform::kernel::Name>()
+                        + 9 * std::mem::size_of::<usize>())) as u64,
+            )?;
+            for (parameter, actual) in function.type_parameters.iter().zip(&mapping.type_arguments)
+            {
+                self.witness_metadata_step()?;
+                let Some(OwnerRecord::TypeParameter(owner)) =
+                    self.owner_in_package(target.package, OwnerKey::TypeParameter(*parameter))?
+                else {
+                    return Err(reference_type_error("missing method target type parameter"));
+                };
+                if owner.header.owner != OwnerKey::TypeParameter(*parameter)
+                    || owner.declaration != target.declaration
+                    || owner.constraints != TypeParameterConstraints::Owned
+                    || !target_parameters.insert(*parameter)
+                    || !target_names.insert(owner.name)
+                    || !self.owned_method_type(*actual, &BTreeSet::new())?
+                {
+                    return Err(reference_type_error(
+                        "method targets require distinct exact Owned type parameters",
+                    ));
+                }
+                target_bindings.insert(*parameter, *actual);
             }
             let parameters = self.parameters(target.package, &function.parameters)?;
             for (actual, expected) in parameters.iter().zip(&method.parameters) {
+                self.owned_method_type(actual.ty, &target_parameters)?;
                 if actual.parent
                     != crate::platform::kernel::ParameterParent::Function(target.declaration)
-                    || actual.ty != self.method_type(expected.ty, &substitutions)?
+                    || self.method_type(actual.ty, &target_bindings)?
+                        != self.method_type(expected.ty, &substitutions)?
                     || actual.use_mode != expected.use_mode
                     || actual.resource_requirement.is_some()
                 {
                     return Err(reference_type_error("method parameter contract mismatch"));
                 }
             }
-            if function.result != self.method_type(method.result, &substitutions)? {
+            self.owned_method_type(function.result, &target_parameters)?;
+            if self.method_type(function.result, &target_bindings)?
+                != self.method_type(method.result, &substitutions)?
+            {
                 return Err(reference_type_error("method result contract mismatch"));
             }
         }
@@ -251,7 +382,7 @@ impl ReferenceState<'_> {
         &mut self,
         function: &FunctionDeclaration,
         types: &BTreeMap<TypeParameterId, TypeObjectDigest>,
-        supplied: &[DeclarationReference],
+        supplied: &[AppliedReferenceImplementation],
     ) -> Result<Implementations, ExecutionError> {
         if function.implementation_parameters.len() != supplied.len() {
             return Err(reference_type_error(
@@ -260,13 +391,16 @@ impl ReferenceState<'_> {
         }
         self.charge_allocation(
             (supplied.len()
-                * std::mem::size_of::<(ImplementationParameterId, DeclarationReference)>())
-                as u64,
+                * std::mem::size_of::<(ImplementationParameterId, AppliedReferenceImplementation)>(
+                )) as u64,
         )?;
         let mut bindings = BTreeMap::new();
         for (parameter, selected) in function.implementation_parameters.iter().zip(supplied) {
             self.witness_metadata_step()?;
-            let implementation = self.checked_implementation(*selected)?;
+            let implementation = self.checked_implementation(selected)?;
+            self.charge_allocation(
+                (selected.type_arguments.len() * std::mem::size_of::<TypeObjectDigest>()) as u64,
+            )?;
             let Some(TypeForm::TypeParameter {
                 parameter: type_parameter,
             }) = self.schema.types.get(&parameter.self_type).map(|t| &t.form)
@@ -278,7 +412,7 @@ impl ReferenceState<'_> {
             if implementation.contract != parameter.contract
                 || types.get(type_parameter) != Some(&implementation.self_type)
                 || parameter.type_arguments.len() != implementation.type_arguments.len()
-                || bindings.insert(parameter.id, *selected).is_some()
+                || bindings.insert(parameter.id, selected.clone()).is_some()
             {
                 return Err(reference_type_error(
                     "static witness contract or instantiated Self mismatch",
@@ -305,16 +439,19 @@ impl ReferenceState<'_> {
         witness: ImplementationOperand,
         contract: DeclarationReference,
         method: crate::platform::semantic_id::MethodId,
-    ) -> Result<DeclarationReference, ExecutionError> {
+    ) -> Result<(DeclarationReference, Vec<TypeObjectDigest>), ExecutionError> {
         let selected = self.resolve_implementation(witness)?;
-        let implementation = self.checked_implementation(selected)?;
+        let implementation = self.checked_implementation(&selected)?;
         if implementation.contract != contract {
             return Err(reference_type_error("method uses another nominal contract"));
         }
         for m in &implementation.methods {
             self.witness_metadata_step()?;
             if m.method == method {
-                return Ok(m.function);
+                self.charge_allocation(
+                    (m.type_arguments.len() * std::mem::size_of::<TypeObjectDigest>()) as u64,
+                )?;
+                return Ok((m.function, m.type_arguments.clone()));
             }
         }
         Err(reference_type_error("method absent from implementation"))
@@ -330,11 +467,11 @@ impl ReferenceState<'_> {
         arguments: Vec<CheckedValue>,
     ) -> Result<AdmittedGraphCall, ExecutionError> {
         self.charge_allocation(
-            (operands.len() * std::mem::size_of::<DeclarationReference>()) as u64,
+            (operands.len() * std::mem::size_of::<AppliedReferenceImplementation>()) as u64,
         )?;
         let mut selected = Vec::with_capacity(operands.len());
         for operand in operands {
-            selected.push(self.resolve_implementation(*operand)?);
+            selected.push(self.resolve_implementation(operand.clone())?);
         }
         let types = self.resolve_type_arguments(types)?;
         let effects = self.resolve_effect_arguments(effects)?;

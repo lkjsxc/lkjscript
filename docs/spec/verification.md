@@ -1867,6 +1867,56 @@ Source acceptance, exact finalized-byte acceptance and public verification remai
 separate. The native graph tool is a language witness; production compiler
 integration is not established by executing it successfully.
 
+## Generic owned-implementation obligations
+
+The [generic implementation contract](generic-owned-implementations.md) requires
+complete symbolic and applied admission at canonical, independent ownership,
+reference, package, compiler and artifact boundaries. Preserve implementation
+parameter identities/order, mapped target applications, selected operand arguments,
+exact contract applications, callable kind/effects and borrowed-result provenance.
+Unused parameters, unused methods and untaken syntax receive complete checking.
+
+The copied public executable must export the reusable flat/chunked Worklist and
+IndexRead schemes before concrete items exist. A separate package supplies cells,
+buffers and a newly authored nested owned product, with distinct observers and
+consuming finish behavior. The independent consumer must use those same schemes
+without item-specific storage/indexing wrappers. Retain exact dependencies, literal
+inputs, public discovery, canonical re-entry and identity-preserving edits; observe
+the edited behavior before restoring the complete independently expected result.
+
+Cover empty and singleton inputs, distinguishable stable first ties, 31/32/33 chunk
+boundaries and 513 items per representation under unchanged allocation limits.
+The combined seven-scenario witness exceeds the existing source/reference
+allocation allowance at 513 items; retain that failure and exercise each complete
+large result through its individual target. Observe source-tied views, drain unchanged original
+storage, reuse empty owners and transfer items between representations. Two reader
+schemes for the same Self and contract must remain observably distinguishable.
+Exercise symbolic scheme applications inside generic helpers, direct method calls,
+named task mappings and generic transferable structured children. Remove source
+projects and transports before detached execution with complete canonical outputs
+and joined cleanup.
+
+Reject wrong scheme/mapped-target arity, order, scope, bounds, types, use modes,
+effects, result sources and contract identity while preserving accepted HEAD.
+Independently consistently rehashed transports and artifacts cannot erase scheme
+parameters, selected type vectors or mapped applications. Neutral reconstruction
+retains the full admitted meaning. An unchanged valid proposal must still admit
+after each rejected-candidate family.
+
+Callable-flow admission must follow mapped targets and forwarded witnesses across
+packages before publication. A public cross-package cycle that grows one sequence
+layer per iteration rejects as semantic expansion, including when its branch is
+untaken. Plain recursive and parameter-permuting counterparts must admit and
+execute independently expected results. Keep discovered expansion distinct from
+finite analysis exhaustion and ordinary bounded application preparation.
+
+Reservation refusal, cancellation, traps and failed invocation/result adoption
+must retain existing cleanup and custody contracts. Observe each owner/loan released
+once, ancestor guards protected until child loans end, unchanged allocation identity
+where promised, no remaining owned handles and a healthy subsequent invocation.
+Scheme selection never supplies effect allowances or deployment grants. Extend
+existing source/public/finalized-harness owners rather than a parallel verifier.
+
 ## Dynamic owned-sequence obligations
 
 The [owned sequence contract](owned-sequences.md) extends the existing source,

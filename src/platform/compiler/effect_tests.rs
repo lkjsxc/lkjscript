@@ -45,7 +45,7 @@ fn strict_artifact_rejects_fully_rehashed_expanding_canonical_applications() {
                 .unwrap();
         }
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/finite-callable-compiler27")
+            .join("tests/fixtures/finite-callable-compiler28")
             .join(format!("expanding-{name}.lkja"));
         let error = load_artifact(&current).unwrap_err();
         assert_eq!(error.code, "kernel_callable_expansion", "{name}: {error:?}");
@@ -259,6 +259,7 @@ fn replace_unit_checked(
         25 => (*b"LKJCUN25", "lkjscript.compiler-unit-envelope.v25"),
         26 => (*b"LKJCUN26", "lkjscript.compiler-unit-envelope.v26"),
         27 => (*b"LKJCUN27", "lkjscript.compiler-unit-envelope.v27"),
+        28 => (*b"LKJCUN28", "lkjscript.compiler-unit-envelope.v28"),
         other => panic!("unexpected forged-unit generation {other}"),
     };
     let bytes = crate::platform::packed::encode(

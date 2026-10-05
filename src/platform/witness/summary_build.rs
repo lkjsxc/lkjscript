@@ -795,7 +795,14 @@ pub(crate) fn aggregation_children(
                         )
                     }),
             ),
-            DeclarationPayload::OwnedImplementation(_) => {}
+            DeclarationPayload::OwnedImplementation(i) => {
+                children.extend(i.type_parameters.iter().map(|parameter| {
+                    (
+                        OwnershipRole::DeclarationTypeParameter,
+                        OwnerKey::TypeParameter(*parameter),
+                    )
+                }))
+            }
             DeclarationPayload::Record { fields, .. } => children.extend(
                 fields
                     .iter()
@@ -1131,10 +1138,24 @@ fn local_summary(
                                 i.clone(),
                             )?,
                         )?;
+                    } else if record.header.contract_version < 28 {
+                        interface.piece(
+                            10,
+                            &crate::platform::kernel::wire27::OwnedImplementation27::try_from(
+                                i.clone(),
+                            )?,
+                        )?;
                     } else {
                         interface.piece(10, i)?;
                     }
-                    implementation.piece(5, &i.methods)?;
+                    if record.header.contract_version < 28 {
+                        let frozen = i.methods.iter().cloned()
+                            .map(crate::platform::kernel::wire27::OwnedMethodImplementation27::try_from)
+                            .collect::<Result<Vec<_>, _>>()?;
+                        implementation.piece(5, &frozen)?;
+                    } else {
+                        implementation.piece(5, &i.methods)?;
+                    }
                 }
                 DeclarationPayload::Function(function) => {
                     if !function.implementation_parameters.is_empty() {
@@ -1242,7 +1263,16 @@ fn local_summary(
         }
         OwnerRecord::Expression(record) => {
             implementation.piece(1, &record.id)?;
-            implementation.piece(2, &record.operation)?;
+            if record.contract_version < 28 {
+                implementation.piece(
+                    2,
+                    &crate::platform::kernel::wire27::ExpressionOperation27::try_from(
+                        record.operation.clone(),
+                    )?,
+                )?;
+            } else {
+                implementation.piece(2, &record.operation)?;
+            }
         }
         OwnerRecord::Requirement(record) => {
             presentation.piece(1, &record.name)?;
@@ -1357,6 +1387,10 @@ struct Material {
 #[cfg(test)]
 #[path = "borrow_result_summary_tests.rs"]
 mod borrow_result_tests;
+
+#[cfg(test)]
+#[path = "owned_scheme_summary_tests.rs"]
+mod owned_scheme_tests;
 
 impl Material {
     fn new(kind: OwnerKind) -> Self {

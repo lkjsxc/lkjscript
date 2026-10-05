@@ -16,7 +16,7 @@ pub enum OwnerRecord26 {
     Operation(OperationRecord),
     Parameter(ParameterRecord),
     Binding(BindingRecord),
-    Expression(ExpressionRecord),
+    Expression(super::wire27::ExpressionRecord27),
     Requirement(RequirementRecord),
     Port(PortRecord),
     Target(TargetRecord),
@@ -64,7 +64,7 @@ pub enum DeclarationPayload26 {
         comparison: ComparisonPolicy,
     },
     OwnedContract(OwnedContract26),
-    OwnedImplementation(OwnedImplementation),
+    OwnedImplementation(super::wire27::OwnedImplementation27),
 }
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
@@ -116,7 +116,7 @@ pub enum PackageInterfaceDeclarationPayload26 {
     External(PackageExternalSignature),
     Function(PackageFunctionSignature26),
     OwnedContract(OwnedContract26),
-    OwnedImplementation(OwnedImplementation),
+    OwnedImplementation(super::wire27::OwnedImplementation27),
     Constant {
         ty: TypeObjectDigest,
     },
@@ -295,7 +295,7 @@ impl From<OwnerRecord26> for OwnerRecord {
             OwnerRecord26::Operation(v) => Self::Operation(v),
             OwnerRecord26::Parameter(v) => Self::Parameter(v),
             OwnerRecord26::Binding(v) => Self::Binding(v),
-            OwnerRecord26::Expression(v) => Self::Expression(v),
+            OwnerRecord26::Expression(v) => Self::Expression(v.into()),
             OwnerRecord26::Requirement(v) => Self::Requirement(v),
             OwnerRecord26::Port(v) => Self::Port(v),
             OwnerRecord26::Target(v) => Self::Target(v),
@@ -320,7 +320,7 @@ impl TryFrom<OwnerRecord> for OwnerRecord26 {
             OwnerRecord::Operation(v) => Self::Operation(v),
             OwnerRecord::Parameter(v) => Self::Parameter(v),
             OwnerRecord::Binding(v) => Self::Binding(v),
-            OwnerRecord::Expression(v) => Self::Expression(v),
+            OwnerRecord::Expression(v) => Self::Expression(v.try_into()?),
             OwnerRecord::Requirement(v) => Self::Requirement(v),
             OwnerRecord::Port(v) => Self::Port(v),
             OwnerRecord::Target(v) => Self::Target(v),
@@ -405,7 +405,7 @@ impl From<DeclarationPayload26> for DeclarationPayload {
                 comparison,
             },
             DeclarationPayload26::OwnedContract(v) => Self::OwnedContract(v.into()),
-            DeclarationPayload26::OwnedImplementation(v) => Self::OwnedImplementation(v),
+            DeclarationPayload26::OwnedImplementation(v) => Self::OwnedImplementation(v.into()),
         }
     }
 }
@@ -449,7 +449,7 @@ impl TryFrom<DeclarationPayload> for DeclarationPayload26 {
                 comparison,
             },
             DeclarationPayload::OwnedContract(v) => Self::OwnedContract(v.try_into()?),
-            DeclarationPayload::OwnedImplementation(v) => Self::OwnedImplementation(v),
+            DeclarationPayload::OwnedImplementation(v) => Self::OwnedImplementation(v.try_into()?),
         })
     }
 }
@@ -478,7 +478,7 @@ impl From<PackageInterfaceDeclarationPayload26> for PackageInterfaceDeclarationP
             PackageInterfaceDeclarationPayload26::Function(v) => Self::Function(v.into()),
             PackageInterfaceDeclarationPayload26::OwnedContract(v) => Self::OwnedContract(v.into()),
             PackageInterfaceDeclarationPayload26::OwnedImplementation(v) => {
-                Self::OwnedImplementation(v)
+                Self::OwnedImplementation(v.into())
             }
             PackageInterfaceDeclarationPayload26::Constant { ty } => Self::Constant { ty },
             PackageInterfaceDeclarationPayload26::Component {
@@ -519,7 +519,7 @@ impl TryFrom<PackageInterfaceDeclarationPayload> for PackageInterfaceDeclaration
                 Self::OwnedContract(v.try_into()?)
             }
             PackageInterfaceDeclarationPayload::OwnedImplementation(v) => {
-                Self::OwnedImplementation(v)
+                Self::OwnedImplementation(v.try_into()?)
             }
             PackageInterfaceDeclarationPayload::Constant { ty } => Self::Constant { ty },
             PackageInterfaceDeclarationPayload::Component {

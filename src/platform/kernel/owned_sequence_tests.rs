@@ -102,11 +102,97 @@ fn every_sequence_operation_requires_graph_25_and_retains_all_type_roots() {
         }
         let owner = OwnerRecord::Expression(expression.clone());
         let (digest, bytes) = encode_owner(&owner).unwrap();
-        assert_eq!(&bytes[..8], b"LKJOWN27");
+        assert_eq!(&bytes[..8], b"LKJOWN28");
         assert_eq!(
             decode_owner(&bytes, owner.owner(), owner.kind(), digest).unwrap(),
             owner
         );
+        // Freeze the original owner ordinal, expression ordinals and field
+        // order independently of the current enum and predecessor conversions.
+        for generation in [25_u16, 26, 27] {
+            let magic = format!("LKJOWN{generation}").as_bytes().try_into().unwrap();
+            let domain = format!("lkjscript.kernel.owner-envelope.v{generation}");
+            let literal = match &expression.operation {
+                ExpressionOperation::SequenceEmpty { sequence_type } => packed::encode(
+                    magic,
+                    &domain,
+                    &(9_u32, generation, id, 33_u32, sequence_type),
+                    contract::MAXIMUM_OWNER_OBJECT_BYTES,
+                ),
+                ExpressionOperation::SequenceLength {
+                    sequence_type,
+                    source,
+                } => packed::encode(
+                    magic,
+                    &domain,
+                    &(9_u32, generation, id, 34_u32, sequence_type, source),
+                    contract::MAXIMUM_OWNER_OBJECT_BYTES,
+                ),
+                ExpressionOperation::SequencePush {
+                    sequence_type,
+                    value,
+                    source,
+                } => packed::encode(
+                    magic,
+                    &domain,
+                    &(9_u32, generation, id, 35_u32, sequence_type, value, source),
+                    contract::MAXIMUM_OWNER_OBJECT_BYTES,
+                ),
+                ExpressionOperation::SequencePop {
+                    sequence_type,
+                    result_type,
+                    source,
+                } => packed::encode(
+                    magic,
+                    &domain,
+                    &(
+                        9_u32,
+                        generation,
+                        id,
+                        36_u32,
+                        sequence_type,
+                        result_type,
+                        source,
+                    ),
+                    contract::MAXIMUM_OWNER_OBJECT_BYTES,
+                ),
+                ExpressionOperation::BorrowOwnedItem {
+                    sequence_type,
+                    source,
+                    index,
+                    binding,
+                    body,
+                } => packed::encode(
+                    magic,
+                    &domain,
+                    &(
+                        9_u32,
+                        generation,
+                        id,
+                        37_u32,
+                        sequence_type,
+                        source,
+                        index,
+                        binding,
+                        body,
+                    ),
+                    contract::MAXIMUM_OWNER_OBJECT_BYTES,
+                ),
+                _ => unreachable!(),
+            }
+            .unwrap();
+            let literal_digest = OwnerObjectDigest::of(&literal);
+            let mut expected = owner.clone();
+            expected.set_encoding_for_edit(generation);
+            assert_eq!(
+                encode_owner(&expected).unwrap(),
+                (literal_digest, literal.clone())
+            );
+            assert_eq!(
+                decode_owner(&literal, expected.owner(), expected.kind(), literal_digest).unwrap(),
+                expected
+            );
+        }
         let mut predecessor = expression;
         predecessor.contract_version = 24;
         assert_eq!(

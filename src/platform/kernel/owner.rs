@@ -302,6 +302,15 @@ impl DeclarationRecord {
     fn validate_local(&self) -> Result<(), Diagnostic> {
         validate_header_domain(self.header, self.expected_kind())?;
         validate_names([&self.name])?;
+        if self.header.contract_version < 28
+            && matches!(&self.payload, DeclarationPayload::OwnedImplementation(i)
+                if !i.type_parameters.is_empty() || i.methods.iter().any(|m| !m.type_arguments.is_empty()))
+        {
+            return Err(owner_error(
+                "kernel_implementation_scheme_generation",
+                "generic implementation schemes and mapped applications require Graph 28",
+            ));
+        }
         if self.header.contract_version < 27
             && match &self.payload {
                 DeclarationPayload::Function(f) => f.result_borrow.is_some(),
@@ -393,6 +402,11 @@ impl DeclarationRecord {
             DeclarationPayload::OwnedContract(c) => c.type_roots(),
             DeclarationPayload::OwnedImplementation(i) => std::iter::once(i.self_type)
                 .chain(i.type_arguments.iter().copied())
+                .chain(
+                    i.methods
+                        .iter()
+                        .flat_map(|m| m.type_arguments.iter().copied()),
+                )
                 .collect(),
             DeclarationPayload::Constant { ty, .. } => vec![*ty],
             DeclarationPayload::Record { .. }
@@ -469,6 +483,7 @@ impl DeclarationPayload {
                 std::slice::from_ref(&c.self_parameter),
                 c.type_parameters.as_slice(),
             ),
+            Self::OwnedImplementation(i) => (i.type_parameters.as_slice(), &[][..]),
             Self::Function(function) => (function.type_parameters.as_slice(), &[][..]),
             Self::External(function) => (function.type_parameters.as_slice(), &[][..]),
             _ => (&[][..], &[][..]),

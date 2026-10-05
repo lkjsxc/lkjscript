@@ -815,6 +815,19 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
             },
         );
     }
+    // Individual package admission cannot see a supplier generic body calling a downstream
+    // method supplied by its consumer. Rederive that composed relation from the complete exact
+    // source closure before exposing readiness, including unused schemes and untaken syntax.
+    store.charge_visits(packages.len() as u64)?;
+    let source_snapshots = packages.values().map(|p| &p.snapshot).collect::<Vec<_>>();
+    let mut composed_work = 0;
+    crate::platform::kernel::callable_flow::validate_snapshot_callable_closure(
+        &source_snapshots,
+        &|| Ok(()),
+        &mut composed_work,
+        usize::try_from(maximum_visits - store.visits()).map_err(|_| limit("validation visits"))?,
+    )?;
+    store.charge_visits(composed_work as u64)?;
     let mut dependency_order = Vec::new();
     let mut counts = BTreeMap::new();
     let mut parents = BTreeMap::<PackageRevisionDigest, BTreeSet<PackageRevisionDigest>>::new();

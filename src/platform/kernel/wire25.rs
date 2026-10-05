@@ -16,7 +16,7 @@ pub enum OwnerRecord25 {
     Operation(OperationRecord),
     Parameter(ParameterRecord),
     Binding(BindingRecord),
-    Expression(ExpressionRecord),
+    Expression(super::wire27::ExpressionRecord27),
     Requirement(RequirementRecord),
     Port(PortRecord),
     Target(TargetRecord),
@@ -147,7 +147,7 @@ pub struct OwnedContract25 {
 pub struct OwnedImplementation25 {
     pub contract: DeclarationReference,
     pub self_type: TypeObjectDigest,
-    pub methods: Vec<OwnedMethodImplementation>,
+    pub methods: Vec<super::wire27::OwnedMethodImplementation27>,
 }
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
@@ -320,7 +320,8 @@ impl From<OwnedImplementation25> for OwnedImplementation {
         Self {
             contract: v.contract,
             self_type: v.self_type,
-            methods: v.methods,
+            methods: v.methods.into_iter().map(Into::into).collect(),
+            type_parameters: Vec::new(),
             type_arguments: Vec::new(),
         }
     }
@@ -329,13 +330,20 @@ impl From<OwnedImplementation25> for OwnedImplementation {
 impl TryFrom<OwnedImplementation> for OwnedImplementation25 {
     type Error = crate::platform::diagnostic::Diagnostic;
     fn try_from(v: OwnedImplementation) -> Result<Self, Self::Error> {
+        if !v.type_parameters.is_empty() || v.methods.iter().any(|m| !m.type_arguments.is_empty()) {
+            return Err(super::wire27::implementation_scheme_extension());
+        }
         if !v.type_arguments.is_empty() {
             return Err(extension());
         }
         Ok(Self {
             contract: v.contract,
             self_type: v.self_type,
-            methods: v.methods,
+            methods: v
+                .methods
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<_, _>>()?,
         })
     }
 }
@@ -379,7 +387,7 @@ impl From<OwnerRecord25> for OwnerRecord {
             OwnerRecord25::Operation(v) => Self::Operation(v),
             OwnerRecord25::Parameter(v) => Self::Parameter(v),
             OwnerRecord25::Binding(v) => Self::Binding(v),
-            OwnerRecord25::Expression(v) => Self::Expression(v),
+            OwnerRecord25::Expression(v) => Self::Expression(v.into()),
             OwnerRecord25::Requirement(v) => Self::Requirement(v),
             OwnerRecord25::Port(v) => Self::Port(v),
             OwnerRecord25::Target(v) => Self::Target(v),
@@ -404,7 +412,7 @@ impl TryFrom<OwnerRecord> for OwnerRecord25 {
             OwnerRecord::Operation(v) => Self::Operation(v),
             OwnerRecord::Parameter(v) => Self::Parameter(v),
             OwnerRecord::Binding(v) => Self::Binding(v),
-            OwnerRecord::Expression(v) => Self::Expression(v),
+            OwnerRecord::Expression(v) => Self::Expression(v.try_into()?),
             OwnerRecord::Requirement(v) => Self::Requirement(v),
             OwnerRecord::Port(v) => Self::Port(v),
             OwnerRecord::Target(v) => Self::Target(v),

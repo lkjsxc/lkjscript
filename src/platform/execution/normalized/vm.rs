@@ -2635,6 +2635,13 @@ impl Machine<'_> {
         if type_arguments.len() != function.type_parameters.len() {
             return Err(type_error("function type-argument count is foreign"));
         }
+        if !function.type_arguments.is_empty()
+            && function.type_arguments.as_ref() != type_arguments.as_ref()
+        {
+            return Err(type_error(
+                "function type arguments disagree with the prepared application",
+            ));
+        }
         for (constraint, ty) in function
             .type_parameter_constraints
             .iter()
@@ -2699,6 +2706,27 @@ impl Machine<'_> {
             .zip(function.implementation_arguments.iter())
         {
             self.control.check()?;
+            for ty in application.implementation_type_arguments.iter() {
+                resolve_runtime_type(
+                    self.program,
+                    *ty,
+                    &BTreeMap::new(),
+                    self.control,
+                    "implementation scheme argument is unresolved",
+                )?;
+                if !matches!(
+                    self.program.types.get(ty).map(|t| &t.form),
+                    Some(
+                        TypeForm::ByteBuffer
+                            | TypeForm::OwnedI64Cell
+                            | TypeForm::OwnedProduct { .. }
+                            | TypeForm::OwnedChoice { .. }
+                            | TypeForm::OwnedSequence { .. }
+                    )
+                ) {
+                    return Err(type_error("implementation scheme argument is not owned"));
+                }
+            }
             let Some(TypeForm::TypeParameter {
                 parameter: type_parameter,
             }) = self
