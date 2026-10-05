@@ -1956,7 +1956,17 @@ impl Machine<'_> {
         Ok(())
     }
 
-    fn borrow_owned_source(&self, source: u32) -> Result<CheckedValue, ExecutionError> {
+    fn borrow_owned_source(&mut self, source: u32) -> Result<CheckedValue, ExecutionError> {
+        let provenance = self
+            .current_frame()?
+            .locals
+            .get(source as usize)
+            .and_then(Option::as_ref)
+            .ok_or_else(|| type_error("owned borrow source is uninitialized or consumed"))?
+            .borrow_source();
+        if provenance.is_some() {
+            self.charge_allocation(CheckedValue::borrow_metadata_allocation_bytes())?;
+        }
         let source = self
             .current_frame()?
             .locals
@@ -1964,7 +1974,9 @@ impl Machine<'_> {
             .and_then(Option::as_ref)
             .ok_or_else(|| type_error("owned borrow source is uninitialized or consumed"))?;
         source.raw().memory_validate(self.memory_domain, false)?;
-        source.duplicate(ParameterUse::Borrow)
+        let mut parent = source.duplicate(ParameterUse::Borrow)?;
+        parent.set_borrow_source(provenance);
+        Ok(parent)
     }
 
     fn start_owned_borrow(
@@ -1973,7 +1985,12 @@ impl Machine<'_> {
         parent: CheckedValue,
         mut child: CheckedValue,
     ) -> Result<(), ExecutionError> {
-        child.set_borrow_source(parent.borrow_source());
+        if child.raw().memory_form().is_some() {
+            if parent.borrow_source().is_some() {
+                self.charge_allocation(child.borrow_metadata_bytes())?;
+            }
+            child.set_borrow_source(parent.borrow_source());
+        }
         let stack_base = self.stack.len();
         let frame = self.current_frame_mut()?;
         let destination = frame
@@ -2095,11 +2112,12 @@ impl Machine<'_> {
             .reserve_borrow_guards(1)?;
         self.control.check()?;
         let mut result = self.pop()?;
-        let source = self.current_frame_mut()?.locals[position as usize]
-            .take()
-            .ok_or_else(|| type_error("borrowed return lost source custody"))?;
-        result.retain_borrow_guard(source);
-        result.set_borrow_packet(target);
+        result.set_borrow_packet(target)?;
+        result.retain_borrow_guard_from(|| {
+            self.current_frame_mut()?.locals[position as usize]
+                .take()
+                .ok_or_else(|| type_error("borrowed return lost source custody"))
+        })?;
         // The sealed packet now owns the selected root and every intermediate
         // guard. It survives destruction of all unrelated callee temporaries.
         drop(self.frames.pop());
@@ -2204,27 +2222,50 @@ impl Machine<'_> {
                 .reserve_borrow_guards(2)?;
             self.control.check()?;
         }
-        let frame = self.current_frame_mut()?;
-        let scope = frame
-            .owned_loans
-            .pop()
-            .ok_or_else(|| type_error("missing owned loan scope"))?;
-        let binding = frame
-            .locals
-            .get_mut(binding_local as usize)
-            .ok_or_else(|| type_error("foreign owned loan local"))?
-            .take();
         if transfer_scope {
+            let frame = self
+                .frames
+                .last_mut()
+                .ok_or_else(|| type_error("escaping read view has no lexical frame"))?;
             let value = self
                 .stack
                 .last_mut()
                 .ok_or_else(|| type_error("missing escaping owned read view during transfer"))?;
-            if let Some(binding) = binding {
-                value.retain_borrow_guard(binding);
+            // A borrowed-choice arm may bind ordinary data. Its final use can
+            // move that data out of the slot; no loan guard remains to retain.
+            let binding_present = frame
+                .locals
+                .get(binding_local as usize)
+                .ok_or_else(|| type_error("foreign owned loan local"))?
+                .is_some();
+            if binding_present {
+                value.retain_borrow_guard_from(|| {
+                    frame
+                        .locals
+                        .get_mut(binding_local as usize)
+                        .ok_or_else(|| type_error("foreign owned loan local"))?
+                        .take()
+                        .ok_or_else(|| type_error("escaping read view lost its lexical binding"))
+                })?;
             }
-            value.retain_borrow_guard(scope.parent);
+            value.retain_borrow_guard_from(|| {
+                frame
+                    .owned_loans
+                    .pop()
+                    .map(|scope| scope.parent)
+                    .ok_or_else(|| type_error("missing owned loan scope"))
+            })?;
         } else {
-            drop(binding);
+            let frame = self.current_frame_mut()?;
+            let binding = frame
+                .locals
+                .get_mut(binding_local as usize)
+                .ok_or_else(|| type_error("foreign owned loan local"))?;
+            let scope = frame
+                .owned_loans
+                .pop()
+                .ok_or_else(|| type_error("missing owned loan scope"))?;
+            drop(binding.take());
             drop(scope.parent);
         }
         Ok(())
@@ -2938,6 +2979,21 @@ impl Machine<'_> {
                 )
             })?;
         self.charge_allocation(locals_bytes)?;
+        let metadata_bytes = arguments
+            .iter()
+            .filter(|argument| argument.raw().memory_form().is_some())
+            .try_fold(0_u64, |bytes, argument| {
+                bytes.checked_add(argument.borrow_metadata_bytes())
+            })
+            .ok_or_else(|| {
+                resource_error(
+                    "normalized_borrow_result_storage",
+                    "parameter provenance storage overflowed",
+                )
+            })?;
+        if metadata_bytes != 0 {
+            self.charge_allocation(metadata_bytes)?;
+        }
         let id = self.next_frame;
         self.next_frame = self.next_frame.checked_add(1).ok_or_else(|| {
             resource_error(
@@ -3361,6 +3417,20 @@ impl Machine<'_> {
             }
             self.resources.validate_admission(*handle, None, None)?;
         }
+        let provenance = source.borrow_source();
+        let memory = source.raw().memory_form().is_some();
+        let metadata_bytes = if memory {
+            if move_ordinary || use_mode == ParameterUse::Consume {
+                source.borrow_metadata_bytes()
+            } else {
+                CheckedValue::borrow_metadata_allocation_bytes()
+            }
+        } else {
+            0
+        };
+        if metadata_bytes != 0 {
+            self.charge_allocation(metadata_bytes)?;
+        }
         let mut value = if move_ordinary || use_mode == ParameterUse::Consume {
             self.frames
                 .last_mut()
@@ -3368,9 +3438,17 @@ impl Machine<'_> {
                 .and_then(Option::take)
                 .ok_or_else(|| type_error("validated local disappeared"))?
         } else {
-            source.duplicate(use_mode)?
+            self.current_frame()?
+                .locals
+                .get(local as usize)
+                .and_then(Option::as_ref)
+                .ok_or_else(|| {
+                    type_error("validated local disappeared during metadata reservation")
+                })?
+                .duplicate(use_mode)?
         };
-        if value.raw().memory_form().is_some() {
+        if memory {
+            value.set_borrow_source(provenance);
             value.set_borrow_placement(BorrowSource {
                 frame: self.current_frame()?.id,
                 local,

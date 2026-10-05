@@ -32,7 +32,9 @@ pub(super) struct Value {
     raw: NormalizedValue,
     origin: ValueOrigin,
     class: Class,
-    borrow: BorrowMetadata,
+    // Ordinary immutable operands carry no loan metadata. Allocate provenance
+    // only for memory placements and custody-bearing borrowed results.
+    borrow: Option<Box<BorrowMetadata>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -88,7 +90,7 @@ impl Value {
             raw,
             origin: program.value_origin,
             class: Class::Memory,
-            borrow: BorrowMetadata::default(),
+            borrow: None,
         })
     }
 
@@ -97,48 +99,94 @@ impl Value {
     }
     pub(super) fn into_raw(self) -> NormalizedValue {
         debug_assert!(
-            self.borrow.guards.is_empty(),
+            self.borrow
+                .as_ref()
+                .is_none_or(|borrow| borrow.guards.is_empty()),
             "borrowed result crossed a raw boundary"
         );
         self.raw
     }
 
     pub(super) fn borrow_source(&self) -> Option<BorrowSource> {
-        self.borrow.source
+        self.borrow.as_ref().and_then(|borrow| borrow.source)
+    }
+
+    pub(super) fn borrow_metadata_bytes(&self) -> u64 {
+        if self.borrow.is_some() {
+            0
+        } else {
+            Self::borrow_metadata_allocation_bytes()
+        }
+    }
+
+    pub(super) const fn borrow_metadata_allocation_bytes() -> u64 {
+        std::mem::size_of::<BorrowMetadata>() as u64
     }
 
     pub(super) fn set_borrow_source(&mut self, source: Option<BorrowSource>) {
-        self.borrow.source = source;
+        if source.is_some() || self.borrow.is_some() {
+            self.borrow
+                .get_or_insert_with(|| Box::new(BorrowMetadata::default()))
+                .source = source;
+        }
     }
 
     pub(super) fn borrow_placement(&self) -> Option<BorrowSource> {
-        self.borrow.placement
+        self.borrow.as_ref().and_then(|borrow| borrow.placement)
     }
 
     pub(super) fn set_borrow_placement(&mut self, source: BorrowSource) {
-        self.borrow.placement = Some(source);
+        self.borrow
+            .get_or_insert_with(|| Box::new(BorrowMetadata::default()))
+            .placement = Some(source);
     }
 
-    pub(super) fn set_borrow_packet(&mut self, target: BorrowResultTarget) {
-        self.borrow.packet = Some(target);
+    pub(super) fn set_borrow_packet(
+        &mut self,
+        target: BorrowResultTarget,
+    ) -> Result<(), ExecutionError> {
+        self.borrow
+            .as_mut()
+            .ok_or_else(|| admission_error("borrowed result has no reserved provenance metadata"))?
+            .packet = Some(target);
+        Ok(())
     }
 
     pub(super) fn take_borrow_packet(&mut self) -> Option<BorrowResultTarget> {
-        self.borrow.packet.take()
+        self.borrow.as_mut().and_then(|borrow| borrow.packet.take())
     }
 
     pub(super) fn reserve_borrow_guards(&mut self, count: usize) -> Result<(), ExecutionError> {
-        self.borrow.guards.try_reserve_exact(count).map_err(|_| {
-            resource_error(
-                "normalized_borrow_result_storage",
-                "borrowed-result guard reservation failed",
-            )
-        })
+        self.borrow
+            .as_mut()
+            .ok_or_else(|| admission_error("borrowed result has no reserved guard metadata"))?
+            .guards
+            .try_reserve_exact(count)
+            .map_err(|_| {
+                resource_error(
+                    "normalized_borrow_result_storage",
+                    "borrowed-result guard reservation failed",
+                )
+            })
     }
 
-    pub(super) fn retain_borrow_guard(&mut self, guard: Value) {
-        debug_assert!(self.borrow.guards.len() < self.borrow.guards.capacity());
-        self.borrow.guards.push(guard);
+    pub(super) fn retain_borrow_guard_from(
+        &mut self,
+        detach: impl FnOnce() -> Result<Value, ExecutionError>,
+    ) -> Result<(), ExecutionError> {
+        let borrow = self.borrow.as_mut().ok_or_else(|| {
+            admission_error("guard transfer requires reserved provenance metadata")
+        })?;
+        if borrow.guards.len() == borrow.guards.capacity() {
+            return Err(admission_error(
+                "guard transfer exceeds reserved custody storage",
+            ));
+        }
+        // Validate the no-growth destination before the caller relinquishes
+        // any ancestor custody. A failed invariant leaves the guard in place.
+        let guard = detach()?;
+        borrow.guards.push(guard);
+        Ok(())
     }
 
     pub(super) fn class(
@@ -163,12 +211,7 @@ impl Value {
                 raw: self.raw.memory_borrow()?,
                 origin: self.origin,
                 class: Class::Memory,
-                borrow: BorrowMetadata {
-                    source: self.borrow.source,
-                    placement: self.borrow.placement,
-                    packet: None,
-                    guards: Vec::new(),
-                },
+                borrow: None,
             });
         }
 
@@ -190,7 +233,7 @@ impl Value {
             },
             origin: self.origin,
             class: self.class,
-            borrow: BorrowMetadata::default(),
+            borrow: None,
         })
     }
 
@@ -216,7 +259,7 @@ impl Value {
             raw,
             origin: program.value_origin,
             class: Class::Free,
-            borrow: BorrowMetadata::default(),
+            borrow: None,
         })
     }
 
@@ -288,7 +331,7 @@ impl Value {
             },
             origin: program.value_origin,
             class: Class::Free,
-            borrow: BorrowMetadata::default(),
+            borrow: None,
         })
     }
 
@@ -319,7 +362,7 @@ impl Value {
                 raw: raw.clone(),
                 origin: self.origin,
                 class: Class::Free,
-                borrow: BorrowMetadata::default(),
+                borrow: None,
             })
             .collect();
         Ok((*function, Arc::clone(type_arguments), arguments))
@@ -369,7 +412,7 @@ impl Value {
             )?),
             origin: program.value_origin,
             class: Class::Free,
-            borrow: BorrowMetadata::default(),
+            borrow: None,
         })
     }
 
@@ -416,7 +459,7 @@ impl Value {
             raw: NormalizedValue::Record(record),
             origin: program.value_origin,
             class: Class::Free,
-            borrow: BorrowMetadata::default(),
+            borrow: None,
         })
     }
 
@@ -469,7 +512,7 @@ impl Value {
             },
             origin: program.value_origin,
             class,
-            borrow: BorrowMetadata::default(),
+            borrow: None,
         })
     }
 
@@ -485,7 +528,7 @@ impl Value {
             raw: NormalizedValue::Option(child.map(|child| Box::new(child.raw))),
             origin: program.value_origin,
             class: Class::Free,
-            borrow: BorrowMetadata::default(),
+            borrow: None,
         })
     }
 
@@ -494,7 +537,7 @@ impl Value {
             raw: NormalizedValue::Map(super::super::map::Map::default()),
             origin: program.value_origin,
             class: Class::Free,
-            borrow: BorrowMetadata::default(),
+            borrow: None,
         }
     }
 
@@ -532,7 +575,7 @@ impl Value {
             raw,
             origin: program.value_origin,
             class: Class::Free,
-            borrow: BorrowMetadata::default(),
+            borrow: None,
         })
     }
 
@@ -548,7 +591,7 @@ impl Value {
             raw,
             origin: self.origin,
             class: Class::Free,
-            borrow: BorrowMetadata::default(),
+            borrow: None,
         })
     }
 
@@ -588,7 +631,7 @@ impl Value {
                 raw: *payload,
                 origin: self.origin,
                 class: if direct { Class::Direct } else { Class::Free },
-                borrow: BorrowMetadata::default(),
+                borrow: None,
             }),
         ))
     }
@@ -650,7 +693,7 @@ impl Value {
             raw,
             origin: self.origin,
             class: Class::Free,
-            borrow: BorrowMetadata::default(),
+            borrow: None,
         })
     }
 
@@ -662,7 +705,7 @@ impl Value {
             raw: value.clone(),
             origin: self.origin,
             class: Class::Free,
-            borrow: BorrowMetadata::default(),
+            borrow: None,
         }))
     }
 
@@ -687,7 +730,7 @@ impl Value {
             raw,
             origin: self.origin,
             class: Class::Free,
-            borrow: BorrowMetadata::default(),
+            borrow: None,
         }))
     }
 }
@@ -889,7 +932,7 @@ impl Admission<'_> {
             },
             origin: self.program.value_origin,
             class: Class::Free,
-            borrow: BorrowMetadata::default(),
+            borrow: None,
         })
     }
 
@@ -1020,7 +1063,7 @@ impl Admission<'_> {
                 raw,
                 origin: self.program.value_origin,
                 class,
-                borrow: BorrowMetadata::default(),
+                borrow: None,
             }),
             Err(mut error) => {
                 super::super::value::release_raw_value(raw);

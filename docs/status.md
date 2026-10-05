@@ -45,12 +45,12 @@ and rebuilt native assets are retained under
 fixture bytes remain unchanged. The four maintained native projects pass 281
 tests. A copy containing only tracked native inputs reproduces all four artifacts
 and the standard transport exactly, with its 195-pack inventory unchanged;
-`cold-tracked-01.log` retains that observation. Focused checks are development
+`cold-tracked-02.log` retains that observation with the corrected runtime. Focused checks are development
 evidence; complete fresh source acceptance and exact finalized-archive acceptance
 remain required.
 
 All four fresh public read-result cases pass against the copied executable;
-`focus-05/public-read-results.log` retains the result. The three-package case
+`focus-07/public-read-results.log` retains the result. The three-package case
 checks complete independent outputs across all four representations, then removes
 the authoring projects and transports before detached execution.
 

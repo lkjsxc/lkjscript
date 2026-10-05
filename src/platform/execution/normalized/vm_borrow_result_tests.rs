@@ -43,6 +43,7 @@ pub(crate) const SOURCE: &str = r#"declarations.begin
 (units (module create borrowed-results
   (type-alias Packet (owned-product (field cell OwnedI64Cell) (field tag I64)))
   (type-alias Nested (owned-product (field packet Packet) (field tag I64)))
+  (type-alias Outcome (owned-choice (case accepted I64) (case rejected OwnedI64Cell)))
   (external create new-cell (visibility private) (implementation core.cell.create)
     (parameter create n (type I64)) (returns OwnedI64Cell))
   (external create read-cell (visibility private) (implementation core.cell.read)
@@ -85,6 +86,27 @@ pub(crate) const SOURCE: &str = r#"declarations.begin
       (in (borrow-call (call cell (local packet)) (binding view (type OwnedI64Cell))
         (in (borrow-call (call exact (local view) (local view))
           (binding forwarded (type OwnedI64Cell)) (in (local forwarded)))))))))
+  (function create retain-choice (visibility private) (effect pure)
+    (parameter create selected (type Outcome) (use borrow))
+    (returns Outcome (borrow-from selected))
+    (body (match-borrowed-owned (type Outcome) (local selected)
+      (case accepted (binding value (type I64)) (in (sequence (local value) (local selected))))
+      (case rejected (binding view (type OwnedI64Cell)) (in (sequence (call read-cell (local view)) (local selected)))))))
+  (function create choice-main (visibility public) (effect pure)
+    (parameter create accepted (type Bool)) (returns I64)
+    (body (let
+      (binding outcome (type Outcome) (if (local accepted)
+        (choose-owned (type Outcome) (case accepted) (i64 71))
+        (let (binding rejected-cell (type OwnedI64Cell) (call new-cell (i64 89)))
+          (in (choose-owned (type Outcome) (case rejected) (local rejected-cell))))))
+      (binding observed (type I64) (borrow-call (call retain-choice (local outcome))
+        (binding retained (type Outcome)) (in (match-borrowed-owned (type Outcome) (local retained)
+          (case accepted (binding value (type I64)) (in (local value)))
+          (case rejected (binding view (type OwnedI64Cell)) (in (call read-cell (local view))))))))
+      (binding original (type I64) (match-owned (type Outcome) (local outcome)
+        (case accepted (binding value (type I64)) (in (local value)))
+        (case rejected (binding cell (type OwnedI64Cell)) (in (call finish-cell (local cell))))))
+      (in (call add (local observed) (local original))))))
   (function create main (visibility public) (effect pure)
     (parameter create fail (type Bool)) (returns I64)
     (body (let
@@ -201,6 +223,35 @@ fn borrowed_result_packets_forward_nested_custody_and_preserve_original_owner() 
     let observation = observation.unwrap();
     assert!(observation.maximum_call_depth >= 3);
     assert_eq!(observation.tail_transfers, 0);
+}
+
+#[test]
+fn borrowed_result_choice_ordinary_payload_moves_before_retained_root_return() {
+    let (program, functions) = fixture();
+    let NormalizedFunctionBody::Code(code) =
+        &program.functions[functions["retain-choice"].0 as usize].body
+    else {
+        panic!("borrowed-choice reader code");
+    };
+    let ordinary_binding = code
+        .instructions
+        .iter()
+        .find_map(|instruction| match instruction {
+            NormalizedInstruction::MatchBorrowedOwned { cases, .. } => Some(cases[0].binding_local),
+            _ => None,
+        })
+        .unwrap();
+    assert!(code.instructions.iter().any(|instruction| matches!(instruction, NormalizedInstruction::MoveLocal(local) if *local == ordinary_binding)), "the ordinary payload's final use must vacate its lexical binding");
+    for (accepted, expected) in [(true, 142), (false, 178)] {
+        let (result, _) = run_clean(
+            &program,
+            functions["choice-main"],
+            accepted,
+            NormalizedRunPolicy::foreground(),
+            &ExecutionControl::uncancelled(),
+        );
+        assert_eq!(result.unwrap(), NormalizedValue::I64(expected));
+    }
 }
 
 #[test]

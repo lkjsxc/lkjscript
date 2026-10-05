@@ -1113,6 +1113,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         "sequence-length",
         "sequence-push",
         "sequence-pop",
+        "borrow-call",
         "borrow-owned-item",
         "choose-owned",
         "match-owned",
@@ -1195,6 +1196,10 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         (
             "sequence-pop",
             "(sequence-pop (type SEQUENCE) (local SOURCE))",
+        ),
+        (
+            "borrow-call",
+            "(borrow-call INVOCATION (binding NAME (type TYPE)) (in BODY))",
         ),
         (
             "borrow-owned-item",
@@ -1449,8 +1454,8 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .iter()
         .filter(|record| record.operation == "change.operation-field")
         .collect::<Vec<_>>();
-    // The four owned operations add 5 + 6 + 2 + 2 required fields.
-    assert_eq!(operation_fields.len(), 164);
+    // Borrowed results add an optional source to both function contract operations.
+    assert_eq!(operation_fields.len(), 166);
     assert!(change_section.iter().any(|record| {
         record.operation == "change.edge-field"
             && compact_field(record, "edge") == Some("requirement-parameter.operation")
@@ -1475,6 +1480,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             ("reference.owner", "name"),
             ("reference.owner", "parent"),
             ("reference.owner", "owner"),
+            ("create.function", "borrow-from"),
             ("create.target", "port"),
             ("add.case", "payload"),
             ("add.type-parameter", "constraint"),
@@ -1487,6 +1493,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             ("add.port", "value"),
             ("add.http-route", "path"),
             ("add.http-route", "pattern"),
+            ("set.function-contract", "borrow-from"),
             ("set.http-route", "path"),
             ("set.http-route", "pattern"),
         ]
@@ -1585,6 +1592,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         "owned_contract_use",
         "implementation_selection",
         "implementation_method",
+        "borrow_result_source",
         "http_route_target",
         "http_route_port",
         "requirement_parameter_use",
@@ -1614,7 +1622,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .iter()
             .filter(|record| record.operation == "query.relation-kind")
             .count(),
-        36
+        37
     );
     assert_eq!(
         query

@@ -42,6 +42,12 @@ result is disabled until transfer can preserve its complete contract independent
 Sealed packets and reserve-before-detach transfer make failures have one cleanup
 owner; independent reference and loader admission remain required.
 
+Keep loan metadata separate from ordinary value payloads. Materialize and charge
+it only where memory provenance or custody requires it, preserving established
+ordinary workloads under their existing allocation limits. A lexical choice arm
+can move an ordinary payload and still return its borrowed root; only remaining
+loan guards need to accompany that root.
+
 Associated views should follow differing reader representations. Regions should
 follow measured working-set and reclamation needs. Shared auxiliary worker capacity
 and bounded production self-hosting remain separate milestones with explicit
