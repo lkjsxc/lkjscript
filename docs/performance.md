@@ -2183,3 +2183,34 @@ its log remains. The corrected driver uses Bash timing and does not measure RSS.
 `candidate-focused-final.log` confirms the same node/slot and reservation counts
 after adding the exact boundary tests. Generated guide preflight correctly rejected
 the old version stamp; the product generator refreshed it before stable acceptance.
+
+### Final local acceptance owner and independent repeat
+
+The seven-pair table above was measured with preflight v0.1.84 executable SHA-256
+`2a048dd9186b4095c08f380f41d8be574552928e89628f2d4ee0071fdd531439`.
+The full workspace/release-test build selects a different feature-unified local
+binary. Its last owner is the original full run's
+`retained/release_command_lifecycle/0`, SHA-256
+`0349db388ec6865810eb1ec4ea40e99d9d459a4a5c244dd1058219dc428d9ac6`.
+The accepted source is `ea6d5729431e426268a391b8e4a47a115cc5775b`; the original
+receipt and prospective-tree binding are [status-owned](status.md). This paragraph
+reports that acceptance and does not substitute a different binary into the earlier
+measurements or receipt.
+
+The final product independently passes the fresh source-selected public depth-24
+case outside the checkout, including reviewed edit/restoration and source deletion.
+A new alternating seven-pair replay against the same predecessor artifact confirms
+exactly the same deterministic counters and expected output bytes as the table.
+Predecessor/final medians are 83.573 / 81.772 ms for preparation, 0.345 / 0.321 ms
+for invocation and 0.104 / 0.097 seconds for complete process wall time. Preparation
+ranges are 79.930–114.986 / 78.100–85.938 ms; invocation ranges are
+0.317–0.480 / 0.287–0.537 ms. The relative timing varies across the two runs, and
+other full-check workloads were running; these samples do not establish a broad
+speedup or a controlled end-to-end benchmark.
+
+`final-local/owner-gate.json`, the copied source-selected harness and unchanged
+binary hashes, `final-local/public.log`, and `matched-public-final-observations.json`
+retain these independent final-product observations. The predecessor remains
+`ac7adccb…`; its original artifact, descriptor, arguments and complete expected
+results are unchanged. This evidence is local product acceptance, not final release
+archive or immutable-publication acceptance.

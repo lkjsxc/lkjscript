@@ -2,123 +2,131 @@
 
 Current snapshot: 2026-10-06. This page owns availability and unfinished acceptance.
 [Direction](direction.md) owns goals, [specifications](spec/) own semantics and
-[roadmap](roadmap.md) orders future language work. Workflow states below are observed
-states, not a claim that externally running jobs cannot subsequently advance.
+[roadmap](roadmap.md) orders future language work. External workflow states below
+are observations, not a claim that independently running jobs cannot advance.
 
-## Public binary
-
-The last independently observed public/latest release is immutable
-[v0.1.81](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.81), at accepted
-source `3e5f1b4e704763b32ceb7a193c9043cded8ba7e0`.
-[Producer 37420429039/1](https://github.com/lkjsxc/lkjscript/actions/runs/37420429039)
-completed `candidate_accepted`.
-[Promotion 37435859207/1](https://github.com/lkjsxc/lkjscript/actions/runs/37435859207)
-completed `immutable_published_and_public_verified` at 2026-10-06 08:32:50 UTC.
-Release `404483023` and annotation `80132b11ae49c8d5cce000c43300025b55b59b62`
-retain that exact source. Its original authenticated publication, anonymous
-acquisition and independent public-readback evidence remain indexed by
-`.artifacts/20261006-scoped-parallel/release-0181/completed-publication.json`.
-These observations do not validate successor implementation or distribution bytes.
-
-No publication control, immutable tag, release asset, credential or protection was
-changed by the demanded-provenance work. The latest/control preflight observations
-are retained under
-`.artifacts/20261006-demanded-callable-proof/release-0182-followthrough/` and
-`.artifacts/20261006-demanded-callable-proof/release-0183/`.
-
-## Demanded recursive provenance accepted on main
+## Whole prepared witness nodes accepted on main
 
 The selected checkout is `/home/coder/workspace/lkjscript`, on `main`. Accepted
-v0.1.83 source `65b3d00428d36827f9d65bf92f7900cf52719d21`, tree
-`155ac53c5acf8140268928355a0562663871ca36`, is integrated by normal fast-forward
-push and independently confirmed through Git and the GitHub API. This page is a
-reporting descendant, not a replacement for the tested source.
+v0.1.84 source `ea6d5729431e426268a391b8e4a47a115cc5775b`, tree
+`88eb390bcfda8485400e396bf24574c8986eed49`, was normally pushed and independently
+confirmed through Git and the GitHub API. This page and the binary-provenance
+addendum are reporting descendants, not replacements for that tested source.
 
-[Demanded recursive provenance](decisions/demanded-callable-provenance.md) follows
-the backward closure of declaration type-parameter slots after complete exact
-callable-context discovery. Every expanding type cycle lies in that closure.
-Witness-only forwarding outside it cannot grow a type. Demanded paths retain their
-exact selected context and ordered position; equal shapes do not merge distinct
-type provenance. All source operands, phantom arguments, unused mappings and untaken
-syntax remain independently admitted. Resource limits were not increased.
+[Whole immutable prepared witness nodes](decisions/shared-prepared-witness-nodes.md)
+share complete exact applications across the preparation catalogue, prerequisite
+edges and function bindings. The preparation interner also reuses whole nodes,
+not just their numeric identities. The selected declaration, ordered type arguments
+and complete ordered prerequisites remain distinct. All written operands, defining
+scopes and full suffix depth remain admitted before memoized reuse.
 
-The [literal recursive library](../examples/demanded-callable-proof/README.md)
-authors and exports 24 generic layers before concrete items exist. Its bounded
-concrete consumer keeps distinct same-Self readers, borrows and eventually consumes
-the original cell, preserves canonical edit/restore identities, and runs after both
-authoring projects and their transport are removed. The same corrected literal input
-is refused by the source-matched predecessor with `kernel_callable_flow_storage`
-and accepted HEAD unchanged; the new copied product plans, applies, checks and
-exports those exact input bytes. Initial invalid fixture attempts and the driver's
-incorrect resource-exit expectation remain separately retained.
+Ordinary and parallel runtime admission require the exact immutable node admitted
+by the current preparation. Equal IDs, independently copied equal records, foreign
+prepared handles and privately modified descendants reject before a visited-node
+shortcut. Node bodies, reference-count metadata and handles are reserved before
+modeled growth. Exact/N-1 byte and work boundaries and early/late cancellation
+retain their resource/cancellation classes and do not publish an unfinished node.
 
-At 24 layers the recursive proof uses 252,517 modeled work units, 912,878 reserved
-metadata bytes, 327 slots and 25 edges within the unchanged 1,000,000-work allowance.
-At eight layers the matched eager comparison uses 112,959 work units and 1,619,157
-reserved bytes, versus 26,253 and 143,086 respectively with demand. Small cases can
-require more work. [Measurements](performance.md#demanded-recursive-type-provenance)
-separate cumulative conservative admission counters from live memory, RSS, elapsed
-execution and API costs; these are not runtime-speed claims.
+This shares derived immutable metadata, not application values, mutable owners,
+borrow state, cancellation lineage or effect authority. There is no global cache
+or language-level reference-counting commitment. No meaning-graph, interface,
+type-object, bytecode or artifact encoding was changed, and no limit was raised.
+
+### Corrected baseline and measured benefit
+
+Concrete DAG storage and compatible shared instruction bodies already existed.
+The source-matched v0.1.83 predecessor passes the newly maintained
+[full depth-24 public recursive consumer](../examples/concrete-callable-proof/README.md),
+including package export before concrete selection, distinct same-Self readers,
+I64 extrema, canonical edits/restoration and execution after source deletion.
+This is stronger maintained coverage, not newly enabled depth-24 execution.
+The roadmap no longer describes those existing mechanisms as unimplemented work.
+
+At 24 layers in the matched source-level consuming-witness fixture, the calculated
+retained node/slot subset falls from 26,400 to 7,728 bytes (70.73%). Cumulative
+prepared-type reservations fall from 465,904 to 410,080 bytes (11.98%). These are
+not RSS or total live heap measurements. Complete nodes add individual allocations;
+rarely reused nodes can cost more. Source authoring/preparation timing does not
+establish a broad speedup.
+
+The separate borrowed recursive public artifact, created by the unchanged v0.1.83
+binary and run after removing its sources, is replayed by both the preflight and
+final source-accepted v0.1.84 binaries. Every final replay preserves complete result
+bytes, 246 instructions, 102 tail transfers, 40,069 type-derivation steps, zero
+capability calls and zero live frames/handles. Cumulative prepared-type reservations
+fall from 1,984,238 to 1,869,630 bytes (5.78%).
+[Measurements](performance.md#whole-prepared-witness-node-sharing) separate fixtures,
+modeled ledgers, exact binary identities and noisy timing samples.
+
+### Original full acceptance and exact local product
 
 Original full acceptance is
-`.artifacts/lkjscript-dev/check/1791282201882782616-2457670-0/receipt.json`:
+`.artifacts/lkjscript-dev/check/1791290482565453095-2924689-0/receipt.json`:
 26 fresh passing gates, no reused or unrun gates, and stable inputs. Its digest is
-`verification_a455a75c8dacc16d66ec7dfd004216eeaa94a1fbf64ac13d1fed55923d29fbcb`.
-The workspace suite has 2,162 passing tests, zero failures and 29 pre-existing ignored
-tests. Counts exclude two filtered subprocess replays. The public CLI suite has
-232 passing tests and one ignored test. All 34 focused callable-flow tests pass,
-including the independent weighted-closure oracle, same-shape permutations and
-resets, a parameterless forwarding carrier, exact/N-1 work admission and cancellation.
+`verification_219cfdd5ebc6558507378df95c931c992955e6c126f4111d0f3d2808678049d3`.
+The workspace suite has 2,168 passing tests, zero failures and 29 pre-existing
+ignored tests. The total excludes two filtered subprocess replays. The public CLI
+suite has 233 passing tests and one ignored test; it is included in that workspace
+total. Seven focused preparation tests include exact resource and cancellation
+boundaries; the full suite also retains independent reference and forgery checks.
 
-The tested parent is `afbc31306234285544a37fe86ef1feadd63f1075`. The prospective
-Git tree and SHA-256 of all 24 changed files were recorded before full verification
-and rechecked afterward; the committed tree is exactly that tested tree. Original
-receipts, source mapping, negative controls and independent remote observations are
-indexed by `.artifacts/20261006-demanded-callable-proof/source-acceptance.json`.
-The checker preserves its original frozen verifier in the run directory even though
-workspace compilation rebuilds the normal target-directory executable.
+The tested parent is `8300dbf33c5a9eb56dcc104403fc97c5ee0142be`. The prospective
+Git tree and SHA-256 of all 28 changed files were frozen before full verification
+and rechecked afterward. The accepted commit is exactly that tested tree. The
+original receipt continues to name its actual parent and stable worktree digest;
+it is not relabeled to a later commit. Source mapping, original failed contributor
+attempts, negative controls and independent remote observations are indexed by
+`.artifacts/20261006-concrete-closure/source-acceptance.json`.
 
-The exact new public case also passes against the release product retained by the
-full command-lifecycle gate, copied outside the checkout with its source-selected
-harness and an empty credential environment. Product SHA-256 is
-`ac7adccb8e5126f6dcaedbb53d6e4d7de4d526e84807903d1b2d658bea1c938a`;
-product and harness bytes remain unchanged. Its original receipt is
-`.artifacts/20261006-demanded-callable-proof/cold-native-02.json`.
-This is local source/product evidence, not finalized-archive acceptance.
+Cargo's workspace and release-test feature contexts can produce different local
+executables. The last product owner is the full checker's
+`retained/release_command_lifecycle/0`, with SHA-256
+`0349db388ec6865810eb1ec4ea40e99d9d459a4a5c244dd1058219dc428d9ac6`.
+Its source-selected release harness SHA-256 is
+`a6a531f9d503546892fbbc8ff943171981d69ab829e1d4c8eeba8f9059a59eaa`.
+Both are copied outside the checkout and re-read unchanged. The exact new public
+case passes with an empty credential environment, full independent expected
+results, edited/restored identities and deleted authoring projects. Fourteen
+alternating old/final-product processes also replay the same original artifact.
+Their records are under `.artifacts/20261006-concrete-closure/final-local/` and
+`matched-public-final-observations.json`.
 
-No meaning-graph, interface, type-object or artifact encoding changes are introduced.
-Concrete prepared-witness DAG storage is the next representation milestone. Large
-actual demand sets, exact context growth and repeated source reads remain separate
-bounded proof costs; compact source checking does not establish cheap concrete
-execution of all 24 layers.
+The earlier `2a048dd9…` product measurements remain preflight evidence, not the
+last lifecycle owner's evidence. Both sets are retained and explicitly separated.
+None of this local source/product evidence is finalized release-archive acceptance.
 
-## Exact successor candidates remain pending
+## Public binary and existing successor candidates
 
-[Candidate 37452910212/1](https://github.com/lkjsxc/lkjscript/actions/runs/37452910212)
-was dispatched exactly once at 2026-10-06T10:54:46Z for accepted v0.1.83 source
-`65b3d00428d36827f9d65bf92f7900cf52719d21`. Repository, workflow, event, branch and
-original attempt were read back independently. The job was observed in progress at
-its pinned-toolchain installation step. No v0.1.83 tag existed at dispatch, and no
-v0.1.83 final-archive acceptance or immutable publication is established here.
-The exact resumption record is
-`.artifacts/20261006-demanded-callable-proof/release-0183/candidate-handoff.json`.
+The last independently re-read public/latest release remains immutable
+[v0.1.81](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.81), release
+`404483023`, published at 2026-10-06T08:30:57Z. Its original authenticated publication,
+anonymous acquisition and public-readback evidence remain indexed by
+`.artifacts/20261006-scoped-parallel/release-0181/completed-publication.json`.
+Those observations do not validate successor implementation or archive bytes.
 
 Predecessor [candidate 37441390499/1](https://github.com/lkjsxc/lkjscript/actions/runs/37441390499)
-retains v0.1.82 source `ad1faa6c70763e0fa2be4e7e9206fb725dd12d58`, tree
-`1bc80f148ee19f320e4903ec117107541fe8afe2`. It was observed in progress after
-source-specific acceptance, at `Admit the final candidate and original evidence`.
-Its final-archive acceptance and publication are not yet established here. Its
-original accepted source, exact producer and release notes remain under
-`.artifacts/20261006-compact-callable-proof/release-0182/`. No duplicate producer,
-cancellation, substituted artifact or publication-control change was made.
+for v0.1.82 source `ad1faa6c70763e0fa2be4e7e9206fb725dd12d58` has completed
+`candidate_accepted`. Its exact original run and terminal artifact `11408960958`
+were fetched and the ZIP digest independently verified. The terminal explicitly
+records publication and public verification as skipped. Candidate acceptance is
+not immutable publication. Evidence is retained under
+`.artifacts/20261006-concrete-closure/predecessor-candidate-0182/`.
 
-For each version, authenticate its exact original `candidate_accepted` terminal and
-artifact identities before considering promotion. Reconcile completed predecessor
-publication and the current scoped tag selector, annotate only the corresponding
-accepted source, then use the maintained publisher for those unchanged assets.
-Require `immutable_published_and_public_verified` plus independent public readback.
-Do not infer publication from a source receipt or a running workflow, and do not
-rebuild or replace accepted bytes while resuming.
+[Candidate 37452910212/1](https://github.com/lkjsxc/lkjscript/actions/runs/37452910212)
+for v0.1.83 source `65b3d00428d36827f9d65bf92f7900cf52719d21` was re-read still
+in progress. It had reached `Admit the final candidate and original evidence`.
+Its original dispatch and handoff remain under
+`.artifacts/20261006-demanded-callable-proof/release-0183/`; final publication is
+not established here. Last readbacks for this session are retained under
+`.artifacts/20261006-concrete-closure/release-final-observation/`.
 
-Unrelated worktrees, stashes, original failures, immutable publication history and
-application deployments are preserved.
+No v0.1.84 producer was dispatched in this change. Do not stack duplicate publication
+work on top of the existing original candidates or relabel a predecessor's assets.
+Before a later promotion, authenticate its exact original accepted terminal and
+asset identities, reconcile predecessor publication and the scoped tag selector,
+then use the maintained publisher without rebuilding accepted bytes. Require
+`immutable_published_and_public_verified` and independent public readback.
+
+No publication control, immutable tag, release asset, credential, protection,
+production service or application data was changed by this work. Unrelated
+worktrees, stashes, original failures and immutable publication history remain.
