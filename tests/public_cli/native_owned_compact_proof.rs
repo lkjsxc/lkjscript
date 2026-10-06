@@ -42,20 +42,31 @@ fn draft(public: &Native, module: &str, label: &str) -> String {
 
 #[test]
 fn native_owned_compact_callable_proof_large_library_scoped_reads_and_detached_use() {
+    exercise(LIBRARY);
+}
+
+#[test]
+fn native_owned_demanded_callable_proof_recursive_library_scoped_reads_and_detached_use() {
+    exercise(include_str!(
+        "../../examples/demanded-callable-proof/library.lkjc"
+    ));
+}
+
+fn exercise(library_source: &str) {
     let library = retained("minimal");
     let before = library.revision();
     let first = "parameter@read24@implparam_c1000000000000000000000000000024";
     let foreign = "parameter@read23@implparam_c1000000000000000000000000000023";
-    assert!(LIBRARY.contains(first));
+    assert!(library_source.contains(first));
     rejected(
         &library,
-        &LIBRARY.replacen(first, foreign, 1),
+        &library_source.replacen(first, foreign, 1),
         &before,
         "foreign-unused-scope",
     );
     // Read24 is never invoked by the concrete consumer. It still belongs to the
     // independently admitted source closure and must survive every transport.
-    author(&library, LIBRARY);
+    author(&library, library_source);
     std::fs::copy(
         library.root.path().join("native.lkjc"),
         library.root.path().join("library.lkjc"),

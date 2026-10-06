@@ -1,6 +1,8 @@
 //! A type-slot cycle projects to a cycle of exact callable contexts. Discover that
 //! finite graph first; acyclic edges cannot participate in an expanding slot SCC.
-//! This is pruning, not witness unification: recursive contexts keep every path.
+//! Demand only provenance that can feed a declaration slot, without unifying paths.
+#[path = "demanded_callable_flow.rs"]
+mod demanded;
 use super::*;
 
 #[derive(Clone, Copy)]
@@ -12,14 +14,17 @@ pub(super) struct CallSite {
 #[derive(Clone, Copy)]
 pub(super) enum ProofScope {
     Recursive,
+    #[cfg(test)]
+    RecursivePaths,
     // Small-fixture reference: retain the predecessor's complete path expansion.
     #[cfg(test)]
     All,
 }
+#[cfg(test)]
 impl ProofScope {
     fn relevant(self, components: &[usize], call: CallSite) -> bool {
         match self {
-            Self::Recursive => components[call.from] == components[call.to],
+            Self::Recursive | Self::RecursivePaths => components[call.from] == components[call.to],
             #[cfg(test)]
             Self::All => true,
         }
@@ -31,12 +36,25 @@ pub(super) fn connect<R: CallableClosureRead + ?Sized>(
     scope: ProofScope,
 ) -> Result<(), Diagnostic> {
     let components = components(analysis)?;
+    match scope {
+        ProofScope::Recursive => demanded::connect(analysis, &components),
+        #[cfg(test)]
+        _ => connect_paths(analysis, scope, &components),
+    }
+}
+
+#[cfg(test)]
+fn connect_paths<R: CallableClosureRead + ?Sized>(
+    analysis: &mut Analysis<'_, R>,
+    scope: ProofScope,
+    components: &[usize],
+) -> Result<(), Diagnostic> {
     analysis.reserve::<bool>(analysis.contexts.len())?;
     let mut needed = vec![false; analysis.contexts.len()];
     for index in 0..analysis.calls.len() {
         analysis.tick()?;
         let call = analysis.calls[index];
-        if scope.relevant(&components, call) {
+        if scope.relevant(components, call) {
             needed[call.from] = true;
             needed[call.to] = true;
         }
@@ -50,7 +68,7 @@ pub(super) fn connect<R: CallableClosureRead + ?Sized>(
     for index in 0..analysis.calls.len() {
         analysis.tick()?;
         let call = analysis.calls[index];
-        if scope.relevant(&components, call) {
+        if scope.relevant(components, call) {
             connect_site(analysis, call)?;
         }
     }
@@ -131,6 +149,7 @@ fn components<R: CallableClosureRead + ?Sized>(
     Ok(components)
 }
 
+#[cfg(test)]
 fn connect_site<R: CallableClosureRead + ?Sized>(
     analysis: &mut Analysis<'_, R>,
     call: CallSite,
@@ -229,6 +248,7 @@ fn connect_site<R: CallableClosureRead + ?Sized>(
         )
     }
 }
+#[cfg(test)]
 fn same_target(
     target: &ContextInfo,
     owner: DeclarationReference,

@@ -2053,3 +2053,45 @@ Focused logs are retained at
 The [literal public witness](../examples/compact-callable-proof/README.md) separates
 large generic-library admission from four-layer concrete execution. Final source
 and distributed-byte acceptance remain [status-owned](status.md).
+
+## Demanded recursive type provenance
+
+The `recursive_duplicate_prerequisites` probe adds a self-call to the duplicate
+prerequisite library's terminal function. It forwards the same type and witness;
+there is no constructor growth. The comparison below uses identical source and
+limits in one Linux x86-64 Rust 1.98.0 unit-test executable. The eager mode retains
+the preceding recursive-path strategy after the same complete discovery. It is a
+matched representation comparison, not a timed run of a previous product binary.
+
+| Layers | Demanded work | Eager work | Demanded reserved metadata (bytes) | Eager reserved metadata (bytes) |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 1,657 | 1,553 | 18,339 | 20,144 |
+| 2 | 2,976 | 2,931 | 28,258 | 35,850 |
+| 4 | 7,675 | 9,087 | 55,998 | 111,959 |
+| 6 | 14,674 | 27,803 | 94,274 | 396,080 |
+| 8 | 26,253 | 112,959 | 143,086 | 1,619,157 |
+
+At eight layers the demanded proof has 47 slots and nine edges instead of 549
+slots and 511 edges. At 24 layers it uses 252,517 work units, 912,878 reserved bytes,
+327 slots and 25 edges, within the unchanged 1,000,000-work allowance. Both the
+retained actual pre-change implementation and the eager recursive comparison fail
+that large probe with resource diagnostic `kernel_callable_flow_storage`.
+
+The smallest cases require **more** work, despite lower reserved metadata. The
+request table and backward-transfer traversal have a cost; these results do not
+justify claiming that every check is faster. Counts are cumulative conservative
+admission reservations, not live allocated memory, peak heap, RSS, runtime time or
+API usage. Test-only eager layout fields are present in both compared modes.
+
+The corrected [public recursive library](../examples/demanded-callable-proof/README.md)
+also fails through the copied source-matched predecessor executable, with the exact
+resource diagnostic and accepted revision unchanged. Its implementation-independent
+input is retained separately from invalid fixture iterations. Public concrete use
+is intentionally four layers; compact source proof does not establish compact
+materialization of a 24-layer concrete executable.
+
+Original evidence is under `.artifacts/20261006-demanded-callable-proof/`:
+`baseline-red.log`, `focused-01.log`, `proof-measurements-01.log`, and
+`public-baseline-confirmed.json` (which identifies the original observation and an
+incorrect exit-code expectation in the first driver). Actual source/final-byte
+acceptance remains [status-owned](status.md).

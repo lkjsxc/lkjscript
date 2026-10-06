@@ -2129,3 +2129,30 @@ edit/restore identities, exact package transport and unchanged HEAD on rejection
 Run the artifact after removing its owned source projects and transport; compare
 complete independent results and cleanup. This remains part of the mandatory
 final-byte `native_owned_` family. Source-only unit evidence cannot replace it.
+
+## Demanded recursive type provenance
+
+The [demanded-provenance decision](../decisions/demanded-callable-provenance.md)
+retains the backward closure of declaration parameter slots. A future operation
+introducing constructor edges from another kind of slot must extend or renew the
+closure proof. Do not infer that equal witness shapes have equal type provenance.
+
+Retain the actual predecessor's resource failure on a compact 24-layer recursive
+prerequisite DAG. Compare small identical inputs with eager recursive-path proof,
+including unfavorable small-case work. Check semantic decisions against both the
+retained independent weighted-closure oracle and explicit same-shape selection,
+permutation, reset and nested-constructor expectations. Exercise a carrier with no
+declaration parameters whose witness slots must nevertheless enter the closure.
+
+Missing bodies, invalid phantom types, wrong arities, foreign defining scopes and
+untaken operands must still reject independently of demand. Exact/N-1 work admission
+and early/late cancellation must retain their own class and permit a subsequent
+independent check. No limit increase can substitute for compact proof work.
+
+The mandatory copied-product `native_owned_demanded_callable_proof` case authors
+and exports the full recursive library before a concrete item exists, rejects
+invalid unused source without changing accepted HEAD, preserves canonical drafts
+and selected implementation identities through an edit and restore, and checks
+full borrowed-read/consumption results after disposable source projects and exact
+transport are removed. Generic-source scale and bounded concrete execution remain
+separate obligations; local product proof does not replace final-archive acceptance.

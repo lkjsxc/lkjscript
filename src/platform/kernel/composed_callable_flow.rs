@@ -143,6 +143,7 @@ struct Context {
     method: Option<MethodId>,
     implementations: Vec<SelectionId>,
 }
+#[cfg(test)]
 #[derive(Clone)]
 struct WitnessLayout {
     path: Vec<usize>,
@@ -153,9 +154,11 @@ struct WitnessLayout {
 struct ContextInfo {
     key: Context,
     parameters: Vec<TypeParameterId>,
+    #[cfg(test)]
     witnesses: Vec<WitnessLayout>,
     slots: Vec<usize>,
 }
+#[cfg(test)]
 impl ContextInfo {
     fn witness_slots(&self, path: &[usize]) -> &[usize] {
         let Ok(index) = self
@@ -287,6 +290,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         }
         Ok(self.selections[id.0].shape.clone())
     }
+    #[cfg(test)]
     fn witness_slots<'c>(
         &mut self,
         context: &'c ContextInfo,
@@ -438,12 +442,14 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         self.contexts.push(ContextInfo {
             key,
             parameters,
+            #[cfg(test)]
             witnesses: Vec::new(),
             slots,
         });
         self.pending.push(index);
         Ok(index)
     }
+    #[cfg(test)]
     fn materialize_witnesses(&mut self, index: usize) -> Result<(), Diagnostic> {
         self.steps(self.contexts[index].key.implementations.len())?;
         self.reserve::<SelectionId>(self.contexts[index].key.implementations.len())?;
@@ -482,30 +488,32 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         Ok(())
     }
     fn info(&mut self, index: usize) -> Result<ContextInfo, Diagnostic> {
-        // Type-provenance paths remain separate, and are metered before their copies.
+        // Discovery copies flat context metadata. The eager reference additionally
+        // retains separately metered witness paths only in source tests.
         self.steps(self.contexts[index].key.implementations.len())?;
-        self.steps(
-            self.contexts[index].parameters.len()
-                + self.contexts[index].slots.len()
-                + self.contexts[index].witnesses.len(),
-        )?;
+        self.steps(self.contexts[index].parameters.len() + self.contexts[index].slots.len())?;
         self.reserve::<ContextInfo>(1)?;
         self.reserve::<TypeParameterId>(self.contexts[index].parameters.len())?;
-        self.reserve::<WitnessLayout>(self.contexts[index].witnesses.len())?;
-        for ordinal in 0..self.contexts[index].witnesses.len() {
-            self.steps(
-                self.contexts[index].witnesses[ordinal].path.len()
-                    + self.contexts[index].witnesses[ordinal].parameters.len(),
-            )?;
-            self.reserve::<TypeParameterId>(
-                self.contexts[index].witnesses[ordinal].parameters.len(),
-            )?;
-            self.reserve::<usize>(self.contexts[index].witnesses[ordinal].path.len())?;
+        #[cfg(test)]
+        {
+            self.steps(self.contexts[index].witnesses.len())?;
+            self.reserve::<WitnessLayout>(self.contexts[index].witnesses.len())?;
+            for ordinal in 0..self.contexts[index].witnesses.len() {
+                self.steps(
+                    self.contexts[index].witnesses[ordinal].path.len()
+                        + self.contexts[index].witnesses[ordinal].parameters.len(),
+                )?;
+                self.reserve::<TypeParameterId>(
+                    self.contexts[index].witnesses[ordinal].parameters.len(),
+                )?;
+                self.reserve::<usize>(self.contexts[index].witnesses[ordinal].path.len())?;
+            }
         }
         self.reserve::<usize>(self.contexts[index].slots.len())?;
         self.reserve::<SelectionId>(self.contexts[index].key.implementations.len())?;
         Ok(self.contexts[index].clone())
     }
+    #[cfg(test)]
     fn witness_layout(
         &mut self,
         selection: SelectionId,
@@ -720,6 +728,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
             }
         }
     }
+    #[cfg(test)]
     fn witness_arguments(
         &mut self,
         source: usize,
@@ -753,6 +762,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
             }
         }
     }
+    #[cfg(test)]
     fn forward_witness(
         &mut self,
         source: &ContextInfo,
@@ -783,6 +793,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         }
         Ok(())
     }
+    #[cfg(test)]
     fn method_arguments(
         &mut self,
         source: usize,
@@ -879,6 +890,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         )?;
         self.record_call(source, target, expression)
     }
+    #[cfg(test)]
     fn connect_application(
         &mut self,
         source: usize,

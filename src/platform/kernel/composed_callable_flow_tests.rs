@@ -1223,3 +1223,206 @@ fn acyclic_calls_still_admit_unused_nested_phantom_type_scope_and_arity() {
         );
     }
 }
+
+fn recursive_duplicate_prerequisites(depth: u64) -> Read {
+    let mut read = typed_duplicate_prerequisites(depth);
+    let ty = read.p(0, 0);
+    let body = read.expression(
+        package(0),
+        ExpressionOperation::ImplementationCall {
+            function: reference(0),
+            type_arguments: vec![ty],
+            implementations: vec![lexical(0, 0)],
+            effect_arguments: vec![],
+            requirement_arguments: vec![],
+            arguments: vec![],
+        },
+    );
+    read.function(0, 1, 1, body);
+    read
+}
+
+#[test]
+fn recursive_typed_prerequisite_dag_demands_only_observable_provenance() {
+    let read = recursive_duplicate_prerequisites(24);
+    let mut work = 0;
+    let observation = validate_callable_closure(&read, &mut work, 1_000_000).unwrap();
+    eprintln!("recursive typed DAG: work={work} observation={observation:?}");
+    assert!(observation.slots < 2_000);
+    assert!(observation.metadata_bytes < 16 * 1024 * 1024);
+    assert!(observation.edges > 0);
+}
+
+#[test]
+fn demanded_recursive_proof_matches_eager_paths_and_measures_both_costs() {
+    for depth in [1, 2, 4, 6, 8] {
+        let read = recursive_duplicate_prerequisites(depth);
+        let mut demanded_work = 0;
+        let demanded = validate_callable_closure(&read, &mut demanded_work, 5_000_000).unwrap();
+        let mut eager_work = 0;
+        let eager = validate_callable_closure_with_scope(
+            &read,
+            &mut eager_work,
+            5_000_000,
+            recursive::ProofScope::RecursivePaths,
+        )
+        .unwrap();
+        assert_eq!(demanded.functions, eager.functions);
+        assert_eq!(demanded.applications, eager.applications);
+        if depth >= 4 {
+            assert!(demanded.slots < eager.slots);
+            assert!(demanded.metadata_bytes < eager.metadata_bytes);
+            assert!(demanded_work < eager_work);
+        }
+        eprintln!(
+            "recursive depth={depth} demanded_work={demanded_work} eager_work={eager_work} demanded={demanded:?} eager={eager:?}"
+        );
+    }
+    let read = recursive_duplicate_prerequisites(24);
+    let error = validate_callable_closure_with_scope(
+        &read,
+        &mut 0,
+        1_000_000,
+        recursive::ProofScope::RecursivePaths,
+    )
+    .unwrap_err();
+    assert_eq!(error.class, DiagnosticClass::Resource);
+    assert!(matches!(
+        error.code.as_str(),
+        "kernel_callable_flow_work" | "kernel_callable_flow_storage"
+    ));
+    read.admit().unwrap();
+}
+
+#[test]
+fn demanded_recursive_proof_preserves_eager_semantic_decisions() {
+    for read in [
+        callback(false, false),
+        callback(true, false),
+        callback(true, true),
+        nested_type_callback(false),
+        nested_type_callback(true),
+        duplicate_shape_provenance(false),
+        duplicate_shape_provenance(true),
+        selected_chain(false),
+        selected_chain(true),
+    ] {
+        let demanded = validate_callable_closure(&read, &mut 0, 5_000_000);
+        let eager = validate_callable_closure_with_scope(
+            &read,
+            &mut 0,
+            5_000_000,
+            recursive::ProofScope::RecursivePaths,
+        );
+        assert_eq!(
+            demanded.as_ref().err().map(|e| (&e.class, &e.code)),
+            eager.as_ref().err().map(|e| (&e.class, &e.code)),
+        );
+    }
+}
+
+#[test]
+fn demanded_recursive_proof_preserves_work_refusal_and_late_cancellation() {
+    let read = recursive_duplicate_prerequisites(12);
+    let mut required = 0;
+    let expected = validate_callable_closure(&read, &mut required, 1_000_000).unwrap();
+    let checkpoints = read.checkpoints.get();
+    let mut exact = 0;
+    let observed = validate_callable_closure(&read, &mut exact, required).unwrap();
+    assert_eq!(exact, required);
+    assert_eq!(observed.metadata_bytes, expected.metadata_bytes);
+    let error = validate_callable_closure(&read, &mut 0, required - 1).unwrap_err();
+    assert_eq!(error.class, DiagnosticClass::Resource);
+    assert_eq!(error.code, "kernel_callable_flow_work");
+    for after in [
+        1,
+        checkpoints / 2,
+        checkpoints * 3 / 4,
+        checkpoints - 1,
+        checkpoints,
+    ] {
+        read.checkpoints.set(0);
+        read.cancel_after.set(Some(after));
+        let error = read.admit().unwrap_err();
+        assert_eq!(error.class, DiagnosticClass::Cancelled);
+        assert_eq!(error.code, "test_cancelled");
+    }
+    read.cancel_after.set(None);
+    read.admit().unwrap();
+}
+
+#[test]
+fn demanded_paths_preserve_equal_shape_forwarding_permutations_and_resets() {
+    for first in 0..=1 {
+        for second in 0..=1 {
+            for chosen in 0..=1 {
+                let mut read = duplicate_shape_provenance(false);
+                let ty = read.p(2, 0);
+                let body = read.expression(
+                    package(1),
+                    ExpressionOperation::ImplementationCall {
+                        function: reference(8),
+                        type_arguments: vec![ty],
+                        implementations: vec![lexical(2, first), lexical(2, second)],
+                        effect_arguments: vec![],
+                        requirement_arguments: vec![],
+                        arguments: vec![],
+                    },
+                );
+                read.function(2, 1, 2, body);
+                let body = method_call(&mut read, 8, lexical(8, chosen));
+                read.function(8, 1, 2, body);
+                // Literal selection oracle: leaf zero resets to a closed cell;
+                // leaf one nests the incoming parameter under OwnedSequence.
+                let growing = [first, second][chosen as usize] == 1;
+                for scope in [
+                    recursive::ProofScope::Recursive,
+                    recursive::ProofScope::RecursivePaths,
+                ] {
+                    let result =
+                        validate_callable_closure_with_scope(&read, &mut 0, 1_000_000, scope);
+                    if growing {
+                        assert_eq!(result.unwrap_err().code, "kernel_callable_expansion");
+                    } else {
+                        result.unwrap();
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn demanded_paths_cross_carriers_without_declaration_type_parameters() {
+    for grow in [false, true] {
+        let mut read = Read::default();
+        let body = method_call(&mut read, 0, lexical(0, 0));
+        read.function(0, 0, 1, body);
+        let ty = read.p(1, 0);
+        read.implementation(1, 1, vec![(0, 2, vec![ty])]);
+        let ty = read.p(2, 0);
+        let ty = if grow {
+            read.ty(TypeForm::OwnedSequence { item: ty })
+        } else {
+            ty
+        };
+        let body = read.expression(
+            package(1),
+            ExpressionOperation::ImplementationCall {
+                function: reference(0),
+                type_arguments: vec![],
+                implementations: vec![selected(1, vec![ty], vec![])],
+                effect_arguments: vec![],
+                requirement_arguments: vec![],
+                arguments: vec![],
+            },
+        );
+        read.function(2, 1, 0, body);
+        let result = read.admit();
+        if grow {
+            assert_eq!(result.unwrap_err().code, "kernel_callable_expansion");
+        } else {
+            result.unwrap();
+        }
+    }
+}

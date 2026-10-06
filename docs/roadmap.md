@@ -114,13 +114,18 @@ does not establish distributed exactly-once delivery.
 
 Use [exact callable-cycle proof selection](decisions/context-scoped-callable-proof.md)
 to admit compact acyclic prerequisite DAGs without unfolding every typed path.
-All source operands remain independently admitted. Select demand-driven recursive
-provenance as the next proof milestone: typed prerequisite paths can still expand
-inside recursive contexts. Share equivalent proof states only while preserving
-exact substitutions, defining scopes and distinct witness identities; retain
-expanding/permuting recursion adversaries and bounded refusal. Concrete prepared
-witness materialization is a separate DAG-storage milestone. Measure preparation
-and retained memory before changing limits or claiming a speedup.
+All source operands remain independently admitted. Use
+[demanded recursive provenance](decisions/demanded-callable-provenance.md) to follow
+only exact paths that can feed declaration type slots, preserving all expanding
+cycles without merging same-shaped witnesses. Repeated incoming-call reads and
+large genuinely demanded path sets remain separate proof costs; retain exact
+substitutions, scopes, expansion adversaries and bounded refusal.
+
+Select concrete prepared-witness DAG storage as the next representation milestone.
+Share exact immutable applications rather than expanding repeated prerequisites,
+while retaining selected identity, method bindings, admission and owner-private
+execution state. Measure concrete preparation and retained metadata on the same
+recursive public workload before changing limits or claiming a speedup.
 
 Share identical prepared instruction bodies for the same exact function, type
 arguments and closed effect/requirement context. Keep complete witness identities

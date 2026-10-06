@@ -178,14 +178,20 @@ component. Acyclic prerequisite DAGs do not require unfolding every typed path
 for the recursive-growth proof. This is proof selection, not dead-code elimination
 or permission to omit source admission.
 
-Within recursive contexts, every typed prerequisite path remains separate, even
-when shape nodes are shared: equal shapes can have different type provenance.
-Large recursive applications can still exhaust finite proof capacity. Exact
-context growth, literal input limits and concrete prepared-witness materialization
-remain separate bounds. The [decision](../decisions/context-scoped-callable-proof.md)
-records the cycle-projection argument; the
-[public workload](../../examples/compact-callable-proof/README.md) separates large
-generic-library admission from bounded concrete execution.
+Within recursive contexts, demand the backward closure of declaration type-parameter
+slots. Every expanding edge originates in a written argument of its calling
+declaration; every expanding cycle therefore lies in that closure. Pure witness
+forwarding outside the closure cannot grow a type. A demanded witness parameter
+retains its exact callable context and complete ordered path, even when selection
+shape nodes are shared. Equal shapes do not imply equal type provenance. Ordinary
+source admission still checks every operand before this proof selection.
+
+The number of demanded paths and exact contexts can still exhaust finite proof
+capacity. Literal input limits and concrete prepared-witness materialization remain
+separate bounds. The [demanded-provenance decision](../decisions/demanded-callable-provenance.md)
+defines the closure argument and the conditions that future flow operations must
+preserve. The [context-cycle decision](../decisions/context-scoped-callable-proof.md)
+retains the independent reason for omitting acyclic edges.
 
 Prepared applications retain their complete witness environments. Compatible
 immutable code may share after each application has been materialized; admission
