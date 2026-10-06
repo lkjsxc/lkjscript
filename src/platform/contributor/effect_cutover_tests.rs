@@ -487,7 +487,8 @@ fn stage_effect_successor() {
             .interface_owners
             .iter()
             .map(|(key, owner)| (*key, owner.record.clone()))
-            .collect(),
+            .collect::<BTreeMap<_, _>>()
+            .into(),
     );
     application.dependency_types = exported
         .interface_types

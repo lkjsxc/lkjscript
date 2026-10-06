@@ -1,0 +1,15 @@
+declarations.begin
+(units (module create left-reader
+  (external create read-cell (visibility private) (implementation core.cell.read)
+    (parameter create value (type OwnedI64Cell) (use borrow)) (returns I64))
+  (function create observe (visibility private) (effect pure)
+    (parameter create value (type OwnedI64Cell) (use borrow)) (returns I64)
+    (body (call read-cell (local value))))
+  (owned-implementation create SelectedReader (visibility private)
+    (contract compact-proof::Reader) (self OwnedI64Cell)
+    (method method_c1000000000000000000000000000001 observe))
+  (function create read (visibility public) (effect pure)
+    (parameter create value (type OwnedI64Cell) (use borrow)) (returns I64)
+    (body (implementation-call compact-proof::read24 (types OwnedI64Cell)
+      (implementations SelectedReader) (local value))))))
+declarations.end

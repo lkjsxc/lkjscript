@@ -2214,3 +2214,62 @@ retain these independent final-product observations. The predecessor remains
 `ac7adccb…`; its original artifact, descriptor, arguments and complete expected
 results are unchanged. This evidence is local product acceptance, not final release
 archive or immutable-publication acceptance.
+
+## Admission-local shared dependency interface records
+
+The source-matched predecessor is v0.1.84 reporting HEAD
+`bcc710b3f86d6adb23367c24ef8438609459000a`, with accepted implementation parent
+`ea6d5729431e426268a391b8e4a47a115cc5775b`. Its record-copy measurement changes only
+the source-selected test instrumentation, not production behavior. Both versions
+run on the same Linux x86-64 development host with pinned Rust/Cargo 1.98.0.
+
+The fixture exports the literal recursive generic library, then creates one, four
+or eight distinct wrapper packages and a root importing those wrappers and the
+supplier directly. The supplier has 86 public interface records and 31 reachable
+type objects. Its source is admitted before concrete reader implementation choices.
+The resulting graphs have three, six and ten total packages and three, nine and
+seventeen direct dependency edges. These are source-admission measurements, not
+invocation or worker-scaling measurements.
+
+Predecessor-produced `fanout-1.lkjp`, `fanout-4.lkjp` and `fanout-8.lkjp` are retained
+with their SHA-256 inventory. Successor measurements strictly decode and admit
+those same serialized bytes; newly created similar source is not substituted.
+Output container bytes remain identical. All owner-copy counts below are actual
+attachment-loop observations, including variable-sized record clones. Type copies
+remain separately counted and are unchanged.
+
+| Wrapper packages | Owner copies before / after | Type copies, both | Aggregate validation visits before / after | Validation-read bytes, both |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 172 / 86 | 62 | 325,808 / 325,631 | 167,455 |
+| 4 | 430 / 86 | 155 | 326,510 / 325,796 | 184,933 |
+| 8 | 774 / 86 | 279 | 327,446 / 326,016 | 208,237 |
+
+At eight wrappers, attachment record copies fall 88.89%, but total admission visits
+fall only 0.44%. Independent canonical source and interface validation, composed
+callable checking and type-map copying still dominate this example. These counts
+do not measure allocator traffic, total live memory, process RSS/PSS or API tokens.
+Shared-map pointer identities establish physical reuse, not semantic acceptance or
+an end-to-end speedup.
+
+Single admission-time observations before/after are 11.503/8.812 ms,
+9.041/8.840 ms and 9.165/9.213 ms. The deepest case is slightly slower in this sample;
+these noisy one-shot values do not establish a timing improvement. Fixture creation
+is outside these admission spans. The full public native workflow owns separate
+functional evidence and is not treated as this microbenchmark.
+
+Tiny interfaces add bookkeeping. For the minimal one-owner/one-type triangle,
+the attachment test's total visits rise from five to nine; the structured
+one-parameter case rises from thirteen to fifteen. The new totals include incoming
+edges and shared-map entries, including an empty wrapper interface, before growth.
+No limit was raised or uncharged type copies omitted to obtain the larger-case result.
+
+Original containers, baseline and corrected successor logs, failed development
+compile attempts, copy instrumentation and source/binary identities remain under
+`.artifacts/20261007-shared-interfaces/`. In particular,
+`baseline-measurement.log`, `baseline-containers.sha256` and
+`focused-interfaces-02.log` own the matched figures. The
+[sharing decision](decisions/shared-dependency-interfaces.md) specifies the exact
+admission-local lifetime; the [four-package public workload](guides/native-shared-dependencies.md)
+keeps same-Self private reader choices distinct and checks borrowed then consumed
+values after source deletion. [Status](status.md) owns actual accepted source,
+final product evidence and publication, not this earlier measurement snapshot.

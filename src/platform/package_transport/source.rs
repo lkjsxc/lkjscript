@@ -731,13 +731,14 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
         transports.insert(binding.package_revision, transport);
     }
     let mut packages = BTreeMap::new();
+    let mut shared_interfaces = SharedDependencyInterfaces::new(&interfaces, &store);
     // Every canonical read charges a decoding/validation visit, including repeated interface
     // validation and map traversal. Full type/expression/relation work shares the same remainder.
     for binding in selections {
         let mut snapshot = snapshots
             .remove(&binding.package_revision)
             .ok_or_else(|| corrupt("package_source_snapshot", "source snapshot disappeared"))?;
-        attach_dependency_interfaces(&mut snapshot, &interfaces, &store)?;
+        shared_interfaces.attach(&mut snapshot)?;
         // Dependency type copies have already reserved their base visits before growth.
         let projection_visits = snapshot
             .owners
@@ -815,6 +816,7 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
             },
         );
     }
+    drop(shared_interfaces);
     // Individual package admission cannot see a supplier generic body calling a downstream
     // method supplied by its consumer. Rederive that composed relation from the complete exact
     // source closure before exposing readiness, including unused schemes and untaken syntax.
@@ -882,59 +884,9 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
     })
 }
 
-fn attach_dependency_interfaces<S: ?Sized>(
-    snapshot: &mut KernelSnapshot,
-    interfaces: &BTreeMap<PackageRevisionDigest, PackageInterfaceValidation>,
-    store: &CollectingStore<'_, S>,
-) -> Result<(), Diagnostic> {
-    for dependency in snapshot.dependencies.values() {
-        let interface = interfaces
-            .get(&dependency.package_revision)
-            .ok_or_else(|| {
-                corrupt(
-                    "package_source_dependency",
-                    "direct dependency interface is unavailable",
-                )
-            })?;
-        let mut owners = BTreeMap::new();
-        for (key, owner) in &interface.owners {
-            store.charge_visits(interface_owner_validation_visits(owner))?;
-            #[cfg(test)]
-            DEPENDENCY_COPY_COUNTS.with(|counts| {
-                let (owners, types) = counts.get();
-                counts.set((owners + 1, types));
-            });
-            owners.insert(*key, owner.record.clone());
-        }
-        snapshot
-            .dependency_interfaces
-            .insert(dependency.package_revision, owners);
-        for (digest, object) in &interface.type_objects {
-            let children = object.child_type_count();
-            let effect_atoms = match &object.form {
-                TypeForm::TaskFunction { effect, .. } => effect
-                    .requirements
-                    .len()
-                    .checked_add(effect.parameters.len())
-                    .ok_or_else(|| limit("validation visits"))?,
-                _ => 0,
-            };
-            let copy_visits = children
-                .checked_add(effect_atoms)
-                .and_then(|count| count.checked_add(1))
-                .and_then(|count| u64::try_from(count).ok())
-                .ok_or_else(|| limit("validation visits"))?;
-            store.charge_visits(copy_visits)?;
-            #[cfg(test)]
-            DEPENDENCY_COPY_COUNTS.with(|counts| {
-                let (owners, types) = counts.get();
-                counts.set((owners, types + 1));
-            });
-            snapshot.dependency_types.insert(*digest, object.clone());
-        }
-    }
-    Ok(())
-}
+#[path = "shared_dependency_interfaces.rs"]
+mod shared_interfaces;
+use shared_interfaces::SharedDependencyInterfaces;
 
 #[cfg(test)]
 std::thread_local! {
@@ -1187,6 +1139,8 @@ mod tests {
     include!("borrowed_result_admission_tests.rs");
     include!("prerequisite_implementation_admission_tests.rs");
     include!("dependency_copy_admission_tests.rs");
+    include!("dependency_interface_measurement_tests.rs");
+    include!("shared_dependency_interface_tests.rs");
 
     #[test]
     fn source_transport_preserves_supported_composite_and_task_owner_envelopes() {

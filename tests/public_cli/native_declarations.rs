@@ -1696,3 +1696,6 @@ mod native_owned_mutation;
 
 #[path = "parallel_work.rs"]
 mod parallel_work;
+
+#[path = "native_owned_shared_interfaces.rs"]
+mod native_owned_shared_interfaces;

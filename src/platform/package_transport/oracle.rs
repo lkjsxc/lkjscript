@@ -540,7 +540,8 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
                 interfaces
                     .get(&dependency.package)
                     .cloned()
-                    .ok_or_else(|| failure("unresolved public dependency"))?,
+                    .ok_or_else(|| failure("unresolved public dependency"))?
+                    .into(),
             );
             snapshot.dependency_types.extend(
                 interface_types

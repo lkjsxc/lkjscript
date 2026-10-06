@@ -504,6 +504,7 @@ fn borrowed_result_oracle_validates_imported_unused_signature_source_and_generat
     for fault in ["missing-formal", "consume", "generation"] {
         let mut snapshot = baseline.clone();
         for interface in snapshot.dependency_interfaces.values_mut() {
+            let interface = std::sync::Arc::make_mut(interface);
             let id = interface
                 .iter()
                 .find_map(|(key, owner)| match (key, owner) {

@@ -1183,7 +1183,7 @@ mod tests {
             types: BTreeMap::new(),
             dependency_interfaces: dependencies
                 .iter()
-                .map(|dependency| (dependency.package_revision, BTreeMap::new()))
+                .map(|dependency| (dependency.package_revision, BTreeMap::new().into()))
                 .collect(),
             dependency_types: BTreeMap::new(),
             blobs: BTreeMap::new(),

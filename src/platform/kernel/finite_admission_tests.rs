@@ -623,7 +623,9 @@ fn imported_target_checks_both_port_parent_and_component_inventory() {
                 }),
             ),
         ]);
-        snapshot.dependency_interfaces.insert(revision, interface);
+        snapshot
+            .dependency_interfaces
+            .insert(revision, interface.into());
         insert(
             &mut snapshot,
             OwnerRecord::Target(TargetRecord {
@@ -645,7 +647,8 @@ fn imported_target_checks_both_port_parent_and_component_inventory() {
             &validate_full_with_limit(&snapshot, 2048).unwrap_err(),
             "kernel_full_target_port_owner"
         ));
-        let owners = snapshot.dependency_interfaces.get_mut(&revision).unwrap();
+        let owners =
+            std::sync::Arc::make_mut(snapshot.dependency_interfaces.get_mut(&revision).unwrap());
         let PackageInterfaceRecord::Declaration(component) =
             owners.get_mut(&OwnerKey::Declaration(a)).unwrap()
         else {

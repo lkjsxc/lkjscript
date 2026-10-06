@@ -102,6 +102,28 @@ availability, validation identity, and logical closure under the publication loc
 visibility. Stale/altered plans, incompatible replacements, missing source, cancellation, and
 exhaustion publish nothing. Post-publication derived failure reports acceptance separately.
 
+## Derived immutable dependency records
+
+A complete source-admission operation may share one immutable public-interface
+record map among snapshots importing the same exact package revision. Snapshot
+clones retain these immutable maps; provisional changes must obtain a private copy.
+This derived sharing neither changes canonical bytes nor confers acceptance or
+execution authority. Equal names or shapes do not merge revisions.
+
+Every operation still reads and independently admits its selected inputs, canonical
+private bodies and interface/body agreement, and checks the full composed callable
+closure. Direct visibility remains bound to each importing package. A cached record
+map is not a cached validation result. The pool is local to that admission and
+releases its own references before return; snapshots retain only their selected
+maps. Flattened dependency type maps and application state remain separately owned.
+
+The existing aggregate visit budget accounts incoming bindings and shared-map
+bookkeeping before growth, record copies once before materialization, and the
+remaining type copies for every importing snapshot. No public ceiling is raised.
+Tiny interfaces may cost more bookkeeping. See the
+[sharing decision](../decisions/shared-dependency-interfaces.md) and
+[native diamond workload](../guides/native-shared-dependencies.md).
+
 ## Built-in standard material
 
 `packages/standard` is the sole maintained owner of two generated assets:

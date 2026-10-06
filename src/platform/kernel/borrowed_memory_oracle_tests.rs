@@ -521,6 +521,7 @@ fn borrowed_memory_oracle_rejects_weakened_imported_bounds_and_foreign_witnesses
     for fault in ["ordinary", "foreign-declaration", "missing-formal"] {
         let mut changed = source.clone();
         for interface in changed.dependency_interfaces.values_mut() {
+            let interface = std::sync::Arc::make_mut(interface);
             let (id, f) = interface
                 .iter()
                 .find_map(|(key, owner)| match (key, owner) {

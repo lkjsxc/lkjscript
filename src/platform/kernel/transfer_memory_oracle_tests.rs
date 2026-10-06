@@ -217,6 +217,7 @@ fn transfer_memory_oracle_checks_unused_imported_constraints_and_generation() {
     for fault in ["predecessor", "foreign-owner", "removed-formal"] {
         let mut changed = source.clone();
         for interface in changed.dependency_interfaces.values_mut() {
+            let interface = std::sync::Arc::make_mut(interface);
             let (id, f) = interface
                 .iter()
                 .find_map(|(key, owner)| match (key, owner) {

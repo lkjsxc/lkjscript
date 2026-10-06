@@ -2166,7 +2166,7 @@ fn full_oracle_resolves_foreign_calls_only_through_the_exact_package_interface()
         .expect("public signature parameter interface");
     snapshot.dependency_interfaces.insert(
         package_revision,
-        BTreeMap::from([(declaration_key, declaration), (parameter_key, parameter)]),
+        BTreeMap::from([(declaration_key, declaration), (parameter_key, parameter)]).into(),
     );
 
     let Some(OwnerRecord::Expression(call)) = snapshot
@@ -2181,11 +2181,13 @@ fn full_oracle_resolves_foreign_calls_only_through_the_exact_package_interface()
     function.package = foreign_package;
     validate_full(&snapshot).expect("exact foreign function interface must validate");
 
-    snapshot
-        .dependency_interfaces
-        .get_mut(&package_revision)
-        .unwrap()
-        .remove(&declaration_key);
+    std::sync::Arc::make_mut(
+        snapshot
+            .dependency_interfaces
+            .get_mut(&package_revision)
+            .unwrap(),
+    )
+    .remove(&declaration_key);
     let diagnostics = validate_full(&snapshot)
         .expect_err("binding a package alone must not authorize an absent foreign owner");
     assert!(
@@ -2229,7 +2231,8 @@ fn full_oracle_types_foreign_nominal_and_capability_uses_from_the_interface() {
             .expect("public nominal or capability interface owner");
         (owner, interface)
     })
-    .collect();
+    .collect::<BTreeMap<_, _>>()
+    .into();
     snapshot
         .dependency_interfaces
         .insert(package_revision, exported);

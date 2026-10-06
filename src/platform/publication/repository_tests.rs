@@ -514,7 +514,7 @@ fn repository_creation_installs_exact_dependency_transport_before_initial_public
         .insert(dependency.package, dependency.clone());
     target_snapshot.dependency_interfaces.insert(
         dependency.package_revision,
-        std::collections::BTreeMap::new(),
+        std::collections::BTreeMap::new().into(),
     );
     target_snapshot.root.dependencies = MapRoot::from_parts(
         PageDigest::from_bytes([0; 32]),

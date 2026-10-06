@@ -1369,7 +1369,8 @@ impl RepositoryView {
                             .owners
                             .into_iter()
                             .map(|(key, value)| (key, value.record))
-                            .collect(),
+                            .collect::<BTreeMap<_, _>>()
+                            .into(),
                     );
                     repair_base.dependency_types.extend(interface.type_objects);
                 }
@@ -1843,10 +1844,11 @@ impl RepositoryView {
                 .canonical_records_decoded
                 .saturating_add(interface_owners.len() as u64)
                 .saturating_add(interface_types.len() as u64);
-            let records = interface_owners
+            let records: crate::platform::kernel::DependencyInterface = interface_owners
                 .into_iter()
                 .map(|(owner, value)| (owner, value.record))
-                .collect::<BTreeMap<_, _>>();
+                .collect::<BTreeMap<_, _>>()
+                .into();
             match dependency_interfaces.entry(dependency.package_revision) {
                 Entry::Vacant(entry) => {
                     entry.insert(records);

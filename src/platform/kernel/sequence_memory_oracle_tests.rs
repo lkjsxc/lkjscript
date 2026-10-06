@@ -311,15 +311,15 @@ fn sequence_oracle_admits_generations_of_complete_unused_imported_signatures() {
             package_revision: revision,
         },
     );
-    snapshot.dependency_interfaces.insert(revision, owners);
+    snapshot
+        .dependency_interfaces
+        .insert(revision, owners.into());
     assert!(accepts(&snapshot));
     let mut changed = snapshot.clone();
-    let PackageInterfaceRecord::Declaration(declaration) = changed
-        .dependency_interfaces
-        .get_mut(&revision)
-        .unwrap()
-        .get_mut(&OwnerKey::Declaration(id))
-        .unwrap()
+    let PackageInterfaceRecord::Declaration(declaration) =
+        std::sync::Arc::make_mut(changed.dependency_interfaces.get_mut(&revision).unwrap())
+            .get_mut(&OwnerKey::Declaration(id))
+            .unwrap()
     else {
         unreachable!()
     };
@@ -329,12 +329,10 @@ fn sequence_oracle_admits_generations_of_complete_unused_imported_signatures() {
         "new parameter owners cannot upgrade an older imported function"
     );
     let mut changed = snapshot.clone();
-    let PackageInterfaceRecord::Parameter(parameter) = changed
-        .dependency_interfaces
-        .get_mut(&revision)
-        .unwrap()
-        .get_mut(&OwnerKey::Parameter(parameter))
-        .unwrap()
+    let PackageInterfaceRecord::Parameter(parameter) =
+        std::sync::Arc::make_mut(changed.dependency_interfaces.get_mut(&revision).unwrap())
+            .get_mut(&OwnerKey::Parameter(parameter))
+            .unwrap()
     else {
         unreachable!()
     };

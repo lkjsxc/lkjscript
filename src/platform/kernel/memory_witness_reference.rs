@@ -285,7 +285,7 @@ pub(super) fn materialized_witness_types(
         let interface = source
             .dependency_interfaces
             .get(&dependency.package_revision)?;
-        for (key, owner) in interface {
+        for (key, owner) in interface.iter() {
             if let (OwnerKey::Declaration(id), PackageInterfaceRecord::Declaration(owner)) =
                 (key, owner)
                 && let PackageInterfaceDeclarationPayload::OwnedImplementation(i) = &owner.payload

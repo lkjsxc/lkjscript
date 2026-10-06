@@ -35,14 +35,16 @@ pub struct KernelSnapshot {
     pub types: BTreeMap<TypeObjectDigest, TypeObject>,
     /// Derived exact interfaces for bound dependency package revisions. These are oracle inputs,
     /// not fields of the local semantic root.
-    pub dependency_interfaces:
-        BTreeMap<PackageRevisionDigest, BTreeMap<OwnerKey, PackageInterfaceRecord>>,
+    pub dependency_interfaces: BTreeMap<PackageRevisionDigest, DependencyInterface>,
     /// Structural types reachable from the bound dependency interfaces.
     pub dependency_types: BTreeMap<TypeObjectDigest, TypeObject>,
     pub blobs: BTreeMap<BlobObjectDigest, u64>,
     pub dependencies: BTreeMap<PackageId, DependencyRecord>,
     pub retirements: BTreeMap<OwnerKey, RetirementRecord>,
 }
+
+/// Immutable derived records for one exact dependency revision. Not an admission certificate.
+pub type DependencyInterface = std::sync::Arc<BTreeMap<OwnerKey, PackageInterfaceRecord>>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FullValidationReport {

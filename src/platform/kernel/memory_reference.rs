@@ -1959,7 +1959,7 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
         else {
             return false;
         };
-        for (key, owner) in interface {
+        for (key, owner) in interface.iter() {
             let generation = snapshot
                 .root
                 .graph_contract_version

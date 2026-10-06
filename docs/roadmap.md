@@ -137,11 +137,13 @@ mechanism is implemented, not a new backlog item. Continue measuring retained
 instructions, application metadata and preparation on matched selections; sharing
 storage alone does not establish faster preparation or execution.
 
-Share immutable admitted dependency interfaces across snapshots as a separate,
-measured follow-up. Preserve exact package/revision bindings, substitutions,
-visibility and effects; loaders must continue independent admission. Compare repeated
-cross-package checks before and after, including retained storage and unsuccessful
-cases. Existing copy-work admission bounds growth without removing duplication.
+Use [admission-local shared interface record maps](decisions/shared-dependency-interfaces.md)
+across importing snapshots. Each exact record map is materialized once per source
+admission; every load retains independent interface, body and composed-callable
+validation. The [diamond reader workload](guides/native-shared-dependencies.md)
+keeps distinct private implementations and ordered borrowing through shared imports.
+Flattened dependency type maps, cross-operation reuse and repeated validation remain
+separate costs. Measure them before extending sharing or changing admission limits.
 
 Use [reviewed candidate refresh](spec/concurrent-changes.md) as the foundation for
 larger concurrent-agent experiments and finer dependency capture. Distinct edited

@@ -1,0 +1,22 @@
+declarations.begin
+(units
+  (module create shared-reader-user
+    (type-alias Result (record (left I64) (right I64) (restored I64)))
+    (external create create-cell (visibility private) (implementation core.cell.create)
+      (parameter create n (type I64)) (returns OwnedI64Cell))
+    (external create extract-cell (visibility private) (implementation core.cell.extract)
+      (parameter create value (type OwnedI64Cell) (use consume)) (returns I64))
+    (function create main (visibility public) (effect pure)
+      (parameter create n (type I64)) (returns Result)
+      (body (let
+        (binding value (type OwnedI64Cell) (call create-cell (local n)))
+        (binding left (type I64) (call left-reader::read (local value)))
+        (binding right (type I64) (call right-reader::read (local value)))
+        (binding restored (type I64) (call extract-cell (local value)))
+        (in (record structural (field left (local left)) (field right (local right))
+          (field restored (local restored)))))))
+    (component create command (visibility private)
+      (port create main (type (function (I64) Result)) (function main))))
+  (target create shared-readers (component shared-reader-user::command)
+    (runner command) (port shared-reader-user::command::main)))
+declarations.end

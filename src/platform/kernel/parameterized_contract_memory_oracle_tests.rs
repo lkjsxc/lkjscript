@@ -327,7 +327,9 @@ fn import_only(snapshot: &KernelSnapshot) -> (KernelSnapshot, PackageRevisionDig
         }
     }
     imported.dependency_types = std::mem::take(&mut imported.types);
-    imported.dependency_interfaces.insert(revision, owners);
+    imported
+        .dependency_interfaces
+        .insert(revision, owners.into());
     imported.dependencies.insert(
         package,
         DependencyRecord {
@@ -367,12 +369,10 @@ fn parameterized_contract_oracle_admits_unused_imports_and_rejects_downgraded_re
         "old extra formal cannot introduce current contract arguments"
     );
     let mut changed = imported.clone();
-    let PackageInterfaceRecord::TypeParameter(p) = changed
-        .dependency_interfaces
-        .get_mut(&revision)
-        .unwrap()
-        .get_mut(&OwnerKey::TypeParameter(phantom))
-        .unwrap()
+    let PackageInterfaceRecord::TypeParameter(p) =
+        std::sync::Arc::make_mut(changed.dependency_interfaces.get_mut(&revision).unwrap())
+            .get_mut(&OwnerKey::TypeParameter(phantom))
+            .unwrap()
     else {
         unreachable!()
     };
@@ -396,12 +396,10 @@ fn parameterized_contract_oracle_admits_unused_imports_and_rejects_downgraded_re
         );
 
         let mut changed = imported.clone();
-        let PackageInterfaceRecord::Declaration(d) = changed
-            .dependency_interfaces
-            .get_mut(&revision)
-            .unwrap()
-            .get_mut(&OwnerKey::Declaration(id))
-            .unwrap()
+        let PackageInterfaceRecord::Declaration(d) =
+            std::sync::Arc::make_mut(changed.dependency_interfaces.get_mut(&revision).unwrap())
+                .get_mut(&OwnerKey::Declaration(id))
+                .unwrap()
         else {
             unreachable!()
         };

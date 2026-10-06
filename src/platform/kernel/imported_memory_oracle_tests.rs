@@ -202,7 +202,7 @@ declarations.end
     assert_ne!(source.root.package_id, export.revision.package);
     assert!(!source.dependency_interfaces.is_empty());
     for interface in source.dependency_interfaces.values() {
-        for (key, owner) in interface {
+        for (key, owner) in interface.iter() {
             if matches!(owner, PackageInterfaceRecord::TypeParameter(p) if p.constraints == TypeParameterConstraints::Owned)
             {
                 assert!(
@@ -325,6 +325,7 @@ fn imported_memory_oracle_rejects_foreign_constraints_modes_and_open_actuals() {
     ] {
         let mut invalid = source.clone();
         for interface in invalid.dependency_interfaces.values_mut() {
+            let interface = std::sync::Arc::make_mut(interface);
             let function = interface
                 .values()
                 .find_map(|owner| match owner {
@@ -387,6 +388,7 @@ fn imported_memory_oracle_rejects_foreign_constraints_modes_and_open_actuals() {
     ] {
         let mut stronger = source.clone();
         for interface in stronger.dependency_interfaces.values_mut() {
+            let interface = std::sync::Arc::make_mut(interface);
             let parameter = interface
                 .values()
                 .find_map(|owner| match owner {
@@ -428,6 +430,7 @@ fn imported_memory_oracle_rejects_foreign_constraints_modes_and_open_actuals() {
     }
     let mut constraint = source.clone();
     for interface in constraint.dependency_interfaces.values_mut() {
+        let interface = std::sync::Arc::make_mut(interface);
         for owner in interface.values_mut() {
             if let PackageInterfaceRecord::TypeParameter(p) = owner {
                 p.constraints = TypeParameterConstraints::None;

@@ -135,12 +135,15 @@ fn dependency_interface_fanout_refuses_before_next_owner_or_type_copy_and_exact_
         (interfaces[&supplier].owners.len(), interfaces[&supplier].type_objects.len()),
         (1, 1),
     );
-    // Independently: one nullary owner and one scalar type cost two visits per importing package.
+    // Independently: three incoming edges, two shared maps (one empty), one owner,
+    // two scalar copies and the earlier visit total nine. Tiny interfaces add overhead.
     for (maximum, expected_copies, success) in [
         (1, (0, 0), false),
-        (2, (1, 0), false),
-        (3, (1, 1), false),
-        (5, (2, 2), true),
+        (2, (0, 0), false),
+        (3, (0, 0), false),
+        (4, (1, 0), false),
+        (5, (1, 1), false),
+        (9, (1, 2), true),
     ] {
         let store = dependency_copy_store(&source.container.objects, maximum);
         DEPENDENCY_COPY_COUNTS.with(|counts| counts.set((0, 0)));
@@ -148,12 +151,13 @@ fn dependency_interface_fanout_refuses_before_next_owner_or_type_copy_and_exact_
         assert_eq!(store.visits(), 1);
         assert_eq!(DEPENDENCY_COPY_COUNTS.with(|counts| counts.get()), (0, 0));
         let mut result = Ok(());
+        let mut pool = SharedDependencyInterfaces::new(&interfaces, &store);
         for revision in [wrapper, source.container.root.package_revision] {
             let expected = &source.packages[&revision].snapshot;
             let mut snapshot = expected.clone();
             snapshot.dependency_interfaces.clear();
             snapshot.dependency_types.clear();
-            result = attach_dependency_interfaces(&mut snapshot, &interfaces, &store);
+            result = pool.attach(&mut snapshot);
             if result.is_err() {
                 if maximum <= 2 {
                     assert!(snapshot.dependency_types.is_empty());
@@ -210,16 +214,19 @@ fn dependency_interface_copy_reserves_owner_and_type_children_before_growth() {
         (2, 2),
     );
     // Independently: function + parameter child + parameter owner = three; scalar type +
-    // structural type + its field child = three more. Each importing package costs six.
-    for (maximum, expected_copies, success) in [(7, (2, 2), false), (13, (4, 4), true)] {
+    // structural type + its field child = three more per importing package.
+    // Three edges + two maps + one owner inventory (3) + two type inventories (6)
+    // + the earlier visit total fifteen; owner records are copied only once.
+    for (maximum, expected_copies, success) in [(9, (2, 2), false), (15, (2, 4), true)] {
         let store = dependency_copy_store(&source.container.objects, maximum);
         DEPENDENCY_COPY_COUNTS.with(|counts| counts.set((0, 0)));
         let mut result = Ok(());
+        let mut pool = SharedDependencyInterfaces::new(&interfaces, &store);
         for revision in [wrapper, source.container.root.package_revision] {
             let mut snapshot = source.packages[&revision].snapshot.clone();
             snapshot.dependency_interfaces.clear();
             snapshot.dependency_types.clear();
-            result = attach_dependency_interfaces(&mut snapshot, &interfaces, &store);
+            result = pool.attach(&mut snapshot);
             if result.is_err() {
                 break;
             }

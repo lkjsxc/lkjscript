@@ -32,7 +32,9 @@ fn exact_package_resource_signatures_agree_with_the_disjoint_flow_oracle() {
                 "external",
             ] {
                 let mut broken = snapshot.clone();
-                let owners = broken.dependency_interfaces.get_mut(&revision).unwrap();
+                let owners = std::sync::Arc::make_mut(
+                    broken.dependency_interfaces.get_mut(&revision).unwrap(),
+                );
                 if fault == "missing-function" {
                     owners.remove(&OwnerKey::Declaration(declaration));
                 } else if fault == "missing-parameter" {
@@ -151,13 +153,11 @@ fn owned_task_imported_constraints_ignore_same_identity_caller_records() {
                 unreachable!()
             };
             p.constraints = local_constraint;
-            let PackageInterfaceRecord::TypeParameter(p) = snapshot
-                .dependency_interfaces
-                .get_mut(&revision)
-                .unwrap()
-                .get_mut(&key)
-                .unwrap()
-            else {
+            let PackageInterfaceRecord::TypeParameter(p) = std::sync::Arc::make_mut(
+                snapshot.dependency_interfaces.get_mut(&revision).unwrap(),
+            )
+            .get_mut(&key)
+            .unwrap() else {
                 unreachable!()
             };
             p.constraints = foreign_constraint;
@@ -180,10 +180,7 @@ fn owned_task_imported_constraints_ignore_same_identity_caller_records() {
                 .buffer(ty),
                 local_owned
             );
-            snapshot
-                .dependency_interfaces
-                .get_mut(&revision)
-                .unwrap()
+            std::sync::Arc::make_mut(snapshot.dependency_interfaces.get_mut(&revision).unwrap())
                 .remove(&key);
             assert!(!memory::direct_in(&snapshot, package, ty).unwrap());
             assert!(
@@ -286,7 +283,9 @@ fn imported_helper(
             semantic_revision: RevisionId::from_digest([72; 32]),
         },
     );
-    snapshot.dependency_interfaces.insert(revision, owners);
+    snapshot
+        .dependency_interfaces
+        .insert(revision, owners.into());
     let Some(OwnerRecord::Expression(record)) = snapshot.owners.get_mut(&expression) else {
         unreachable!();
     };
