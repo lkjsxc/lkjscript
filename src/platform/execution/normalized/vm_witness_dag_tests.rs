@@ -68,7 +68,8 @@ fn runtime_dag_admission_reserves_before_memo_growth_and_rejects_changed_edges()
     assert!(visited.is_empty());
 
     let mut changed = root.clone();
-    Arc::make_mut(&mut changed.implementations)[1] = program.implementation_applications[0].clone();
+    Arc::make_mut(&mut Arc::make_mut(&mut changed).implementations)[1] =
+        program.implementation_applications[0].clone();
     assert!(
         validate_runtime_implementation(
             &program,
@@ -120,7 +121,7 @@ fn runtime_dag_depth_checks_the_full_shared_suffix_before_memo_skip() {
         .is_err()
     );
     let mut forged = root.clone();
-    forged.depth = 0;
+    Arc::make_mut(&mut forged).depth = 0;
     assert!(
         validate_runtime_implementation(
             &program,
@@ -133,4 +134,45 @@ fn runtime_dag_depth_checks_the_full_shared_suffix_before_memo_skip() {
         )
         .is_err()
     );
+}
+
+#[test]
+fn runtime_witness_handles_reject_equal_copies_and_foreign_preparations_before_memo_skip() {
+    let program = prepared_duplicate_dag(24);
+    let other = prepared_duplicate_dag(24);
+    let root = program.implementation_applications.last().unwrap();
+    let control = ExecutionControl::uncancelled();
+    let cloned = Arc::clone(root);
+    let mut visited = BTreeSet::new();
+    validate_runtime_implementation(
+        &program,
+        &cloned,
+        &control,
+        0,
+        &mut 0,
+        &mut visited,
+        &mut |_| Ok(()),
+    )
+    .unwrap();
+    for foreign in [
+        Arc::new((**root).clone()),
+        other.implementation_applications.last().unwrap().clone(),
+    ] {
+        assert_eq!(foreign.identity, root.identity);
+        assert!(!Arc::ptr_eq(&foreign, root));
+        let before = visited.clone();
+        assert!(
+            validate_runtime_implementation(
+                &program,
+                &foreign,
+                &control,
+                0,
+                &mut 0,
+                &mut visited,
+                &mut |_| panic!("foreign handle must reject before reservation")
+            )
+            .is_err()
+        );
+        assert_eq!(visited, before);
+    }
 }

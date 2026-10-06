@@ -121,18 +121,21 @@ cycles without merging same-shaped witnesses. Repeated incoming-call reads and
 large genuinely demanded path sets remain separate proof costs; retain exact
 substitutions, scopes, expansion adversaries and bounded refusal.
 
-Select concrete prepared-witness DAG storage as the next representation milestone.
-Share exact immutable applications rather than expanding repeated prerequisites,
-while retaining selected identity, method bindings, admission and owner-private
-execution state. Measure concrete preparation and retained metadata on the same
-recursive public workload before changing limits or claiming a speedup.
+Use [whole immutable prepared witness nodes](decisions/shared-prepared-witness-nodes.md)
+to share complete exact applications across catalogue entries, prerequisite edges
+and function bindings. Concrete DAG storage was already present; the full
+[recursive consumer](../examples/concrete-callable-proof/README.md) is now maintained
+as public coverage rather than described as an unsupported future capability.
+Keep selected identity, complete admission and owner-private execution state.
+Measure node storage, preparation and invocation separately without raising limits.
 
-Share identical prepared instruction bodies for the same exact function, type
-arguments and closed effect/requirement context. Keep complete witness identities
-and resolved call-site bindings on separately admitted applications, including
-tail calls, function values and parallel children. Measure retained instructions,
-application metadata, preparation and invocation costs on matched selections;
-sharing storage alone does not establish faster preparation or execution.
+Preserve the existing shared prepared instruction bodies for the same exact
+function, type arguments and closed effect/requirement context. Complete witness
+identities and resolved call-site bindings remain on separately admitted
+applications, including tail calls, function values and parallel children. This
+mechanism is implemented, not a new backlog item. Continue measuring retained
+instructions, application metadata and preparation on matched selections; sharing
+storage alone does not establish faster preparation or execution.
 
 Share immutable admitted dependency interfaces across snapshots as a separate,
 measured follow-up. Preserve exact package/revision bindings, substitutions,

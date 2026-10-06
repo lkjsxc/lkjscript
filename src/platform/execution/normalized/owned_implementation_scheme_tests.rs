@@ -253,14 +253,14 @@ pub(crate) fn prepared_duplicate_dag(depth: usize) -> NormalizedProgram {
         .unwrap()
         .clone();
     let mut previous = template.implementations[0].clone();
-    previous.identity = 0;
-    previous.depth = 0;
+    Arc::make_mut(&mut previous).identity = 0;
+    Arc::make_mut(&mut previous).depth = 0;
     let mut nodes = vec![previous.clone()];
     for identity in 1..=depth {
         let mut node = template.clone();
-        node.identity = u32::try_from(identity).unwrap();
-        node.depth = identity;
-        node.implementations = Arc::from([previous.clone(), previous]);
+        Arc::make_mut(&mut node).identity = u32::try_from(identity).unwrap();
+        Arc::make_mut(&mut node).depth = identity;
+        Arc::make_mut(&mut node).implementations = Arc::from([previous.clone(), previous]);
         nodes.push(node.clone());
         previous = node;
     }
@@ -810,12 +810,15 @@ fn forged_nested_prerequisites_and_shared_callsite_tables_reject_without_leaking
             changed += 1;
             match fault {
                 0 => {
-                    Arc::make_mut(&mut function.implementation_arguments)[0].implementations =
-                        Arc::from([])
+                    Arc::make_mut(&mut Arc::make_mut(&mut function.implementation_arguments)[0])
+                        .implementations = Arc::from([])
                 }
                 1 => {
-                    let witness = &mut Arc::make_mut(&mut function.implementation_arguments)[0];
-                    Arc::make_mut(&mut witness.implementations)[0].contract = read;
+                    let witness = Arc::make_mut(
+                        &mut Arc::make_mut(&mut function.implementation_arguments)[0],
+                    );
+                    Arc::make_mut(&mut Arc::make_mut(&mut witness.implementations)[0]).contract =
+                        read;
                 }
                 2 => function.callsites = Arc::from([]),
                 _ => {
@@ -852,9 +855,9 @@ fn forged_nested_prerequisites_and_shared_callsite_tables_reject_without_leaking
 
 #[test]
 fn duplicated_prerequisite_edges_preserve_exact_shared_dag_dispatch() {
-    // The producer's independent layout proof also has a finite capacity;
-    // deeper runtime admission is exercised directly on compact prepared DAGs.
-    let source = byte_buffer_tests::author_only(&duplicate_dag_source(8)).unwrap();
+    // Source, concrete preparation and execution compose at the same full depth.
+    // This was already supported before whole-node sharing.
+    let source = byte_buffer_tests::author_only(&duplicate_dag_source(24)).unwrap();
     let program = prepare_snapshot(&source);
     let both = declaration_named(&source, "Both");
     let nodes = program
@@ -862,7 +865,7 @@ fn duplicated_prerequisite_edges_preserve_exact_shared_dag_dispatch() {
         .iter()
         .filter(|node| node.implementation == both)
         .collect::<Vec<_>>();
-    assert_eq!(nodes.len(), 8);
+    assert_eq!(nodes.len(), 24);
     for node in nodes {
         assert_eq!(node.implementations.len(), 2);
         assert_eq!(
@@ -916,11 +919,12 @@ fn repeated_intern_identity_cannot_hide_a_forged_descendant() {
                     .is_some_and(|w| w.implementation == both)
         })
         .unwrap();
-    let root = &mut Arc::make_mut(&mut function.implementation_arguments)[0];
+    let root = Arc::make_mut(&mut Arc::make_mut(&mut function.implementation_arguments)[0]);
     // The sibling retains the same intern ID; its descendant has private mutated storage.
     let children = Arc::make_mut(&mut root.implementations);
     assert_eq!(children[0].identity, children[1].identity);
-    Arc::make_mut(&mut children[1].implementations)[0].contract = read;
+    let changed = Arc::make_mut(&mut children[1]);
+    Arc::make_mut(&mut Arc::make_mut(&mut changed.implementations)[0]).contract = read;
     let cells = owned_i64_cell::StorageObservation::start();
     assert!(
         invoke(

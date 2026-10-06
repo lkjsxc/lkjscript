@@ -193,10 +193,21 @@ defines the closure argument and the conditions that future flow operations must
 preserve. The [context-cycle decision](../decisions/context-scoped-callable-proof.md)
 retains the independent reason for omitting acyclic edges.
 
-Prepared applications retain their complete witness environments. Compatible
-immutable code may share after each application has been materialized; admission
-still charges those construction and clone costs. Such sharing does not establish
-cheaper preparation or a runtime speedup.
+Prepared applications retain their complete witness environments. Exact immutable
+implementation nodes may be shared across catalogue entries, ordered prerequisite
+edges and function applications. This does not merge declaration identity, type
+arguments, prerequisite positions or source-tied result provenance. A runtime
+reference must belong to its admitted preparation; an equal numeric identity or
+an independently reconstructed equal record is not sufficient. Depth of the full
+shared suffix and every incoming prerequisite obligation remain checked before
+reusing traversal evidence. Process-local physical identity is not canonical meaning.
+
+Compatible immutable code may share after each application has been admitted.
+Node construction, retained references and actual metadata copies remain budgeted.
+Such sharing creates no shared mutable owner or effect authority and does not by
+itself establish faster preparation or execution. The
+[whole-node decision](../decisions/shared-prepared-witness-nodes.md) records the
+current derived representation and its measurement boundaries.
 
 Canonical meaning, compact/native authoring, drafts, public inspection, package
 interfaces, transport, compiler metadata and detached artifacts retain every

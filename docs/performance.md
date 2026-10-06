@@ -2095,3 +2095,91 @@ Original evidence is under `.artifacts/20261006-demanded-callable-proof/`:
 `public-baseline-confirmed.json` (which identifies the original observation and an
 incorrect exit-code expectation in the first driver). Actual source/final-byte
 acceptance remains [status-owned](status.md).
+
+## Whole prepared witness node sharing
+
+Source-matched v0.1.83 (`65b3d004…`, reporting parent `8300dbf3…`) already
+passes the new full concrete recursive public case. Whole-node sharing is a
+representation improvement, not new depth-24 support and not removal of an
+exponential concrete-preparation algorithm. Both old and new closures are DAGs.
+
+The matched source-level `duplicate_dag_fixture` uses consuming `Keep` witnesses,
+`Both` duplicate prerequisites and other small generic/read/task fixtures. At each
+depth both production and the independent canonical interpreter return literal 17
+with no remaining frames or handles. This fixture is distinct from the borrowed
+recursive public reader. These are x86-64 Rust 1.98.0 test-profile measurements:
+
+| Duplicate layers | Unique nodes / retained slots | Node + slot bytes, old / new | Cumulative prepared-type reservation, old / new | Derivation work, old / new |
+| ---: | ---: | ---: | ---: | ---: |
+| 0 | 10 / 31 | 5,456 / 2,168 | 196,889 / 185,793 | 3,907 / 3,903 |
+| 1 | 11 / 35 | 6,160 / 2,392 | 205,971 / 193,387 | 4,049 / 4,045 |
+| 4 | 14 / 50 | 8,800 / 3,088 | 239,572 / 221,348 | 4,653 / 4,649 |
+| 8 | 18 / 70 | 12,320 / 4,016 | 285,184 / 259,440 | 5,471 / 5,467 |
+| 12 | 22 / 90 | 15,840 / 4,944 | 330,604 / 297,340 | 6,286 / 6,282 |
+| 24 | 34 / 150 | 26,400 / 7,728 | 465,904 / 410,080 | 8,716 / 8,712 |
+
+The node/slot subset counts each unique nonempty function-argument or prerequisite
+array once, plus catalogue slots. Previously each slot stored a 176-byte complete
+record. New slots store an 8-byte handle and each unique node retains one 176-byte
+record plus 16 modeled reference-count bytes. This excludes backing type-argument
+and prerequisite-constraint arrays, container overhead and allocator overhead;
+it is not total retained metadata or measured RSS. At 24 layers this subset falls
+70.73%, while conservative cumulative prepared-type reservations fall 11.98%.
+There is an additional allocation per unique complete node. An isolated catalogue
+node without reuse can incur extra header/handle cost; the table is not evidence
+that every selection pattern saves storage or allocator calls.
+
+Single source-authoring-plus-preparation times, in increasing depth order, are
+498.926 / 522.087, 529.107 / 551.724, 593.657 / 614.387, 701.253 / 697.860,
+836.680 / 813.090 and 560.057 / 569.313 ms (old / new). Four of six samples are
+slower. These include source authoring, validation and preparation, are not isolated
+invocation measurements, and do not support a general speedup claim.
+
+The [literal public consumer](../examples/concrete-callable-proof/README.md) supplies
+separate end-to-end evidence: generic package export before concrete selection,
+full-depth borrowed reads, distinct same-Self implementations, I64 bounds,
+identity-preserving edits/restoration and execution after source deletion.
+Exact/N-1 bytes and work, cancellation, full shared suffix depth, equal copied
+records, foreign prepared handles and modified descendants are independently tested.
+
+Original evidence is under `.artifacts/20261006-concrete-closure/`:
+`predecessor-storage-03.log`, `candidate-storage.log`, immutable predecessor product
+and source-selected harness, and `predecessor-public.log`. The first two failed
+measurement-test compilations retain their diagnostics; they were contributor
+import mistakes, not product failures. The predecessor's complete public case
+passes, and its original source-deleted artifact and expected results are retained.
+[Status](status.md) records exact final accepted source and publication separately.
+
+### Same source-deleted public artifact, alternating processes
+
+Seven new processes per binary, alternating old/new order, execute the exact same
+v0.1.83-produced artifact `artifact_bundle_72720fdd…` and `[17]` input with empty
+environment, no deployment grants and both authoring projects already absent.
+Artifact, deployment descriptor and argument bytes are hashed before and after.
+Both binaries return the independent complete expected JSON. This tests existing
+artifact compatibility; it does not regenerate an easier candidate-only artifact.
+
+| Public observation | Old | New |
+| --- | ---: | ---: |
+| Cumulative prepared-type reservation (every sample), bytes | 1,984,238 | 1,869,630 |
+| Type-derivation work (every sample) | 40,069 | 40,069 |
+| Observed allocation ledger including preparation (every sample), bytes | 2,058,995 | 1,944,387 |
+| Instructions / tail transfers (every sample) | 246 / 102 | 246 / 102 |
+| Preparation median (min–max), ms | 81.271 (79.380–86.481) | 82.913 (77.763–89.257) |
+| Invocation median (min–max), ms | 0.359 (0.332–0.537) | 0.310 (0.293–0.350) |
+| Whole-process median, seconds | 0.094 | 0.094 |
+
+Prepared-type reservations decrease 5.78%. Both ledgers are modeled observations,
+not physical allocator traffic or RSS. Invocation samples favor the candidate but
+are sub-millisecond and noisy; preparation median is slower and end-to-end median
+is unchanged. No broad runtime-speed claim follows. Every sample has zero live
+frames/handles and zero capability calls. The complete fresh native case separately
+passes old and new products, including I64 extrema and canonical edit/restoration.
+
+`matched-public-observations.json`, `matched-public-summary.json`, all 14 process
+logs/results and immutable input hashes retain the observations. The first driver
+attempt stopped because `/usr/bin/time` is not installed, before product execution;
+its log remains. The corrected driver uses Bash timing and does not measure RSS.
+`candidate-focused-final.log` confirms the same node/slot and reservation counts
+after adding the exact boundary tests. Generated guide preflight correctly rejected
+the old version stamp; the product generator refreshed it before stable acceptance.

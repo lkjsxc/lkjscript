@@ -337,8 +337,12 @@ pub enum NormalizedFunctionBody {
     External(ImplementationName),
 }
 
+/// An exact immutable application shared by catalogue, incoming edges and call sites.
+/// Logical identity remains program-local; this handle grants no execution authority.
+pub type NormalizedImplementationArgument = Arc<NormalizedImplementationApplication>;
+
 #[derive(Clone, Debug)]
-pub struct NormalizedImplementationArgument {
+pub struct NormalizedImplementationApplication {
     /// Interned identity within this exact prepared program.
     pub identity: u32,
     /// Maximum number of prerequisite edges below this canonical node.

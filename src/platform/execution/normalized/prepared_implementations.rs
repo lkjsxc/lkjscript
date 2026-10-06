@@ -1,7 +1,8 @@
 //! Finite closure of callable types and exact applied static witnesses.
 //! A caller's type scope is resolved before any witness crosses a call boundary.
 use super::super::prepare::{
-    NormalizedFunction, NormalizedImplementationArgument, NormalizedImplementationConstraint,
+    NormalizedFunction, NormalizedImplementationApplication, NormalizedImplementationArgument,
+    NormalizedImplementationConstraint,
 };
 use super::*;
 use crate::platform::compiler::{CompilationPayload, CompilationUnit};
@@ -12,12 +13,22 @@ use crate::platform::semantic_id::ImplementationParameterId;
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
-struct AppliedWitness {
+struct AppliedWitness(Arc<AppliedWitnessNode>);
+
+#[derive(Debug)]
+struct AppliedWitnessNode {
     identity: u32,
     depth: usize,
     implementation: DeclarationReference,
     type_arguments: Vec<TypeObjectDigest>,
     implementations: Arc<[AppliedWitness]>,
+}
+
+impl std::ops::Deref for AppliedWitness {
+    type Target = AppliedWitnessNode;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 impl PartialEq for AppliedWitness {
@@ -49,7 +60,7 @@ struct Closing<'a, 'b> {
     targets: BTreeMap<DeclarationReference, FunctionIndex>,
     instances: BTreeMap<Application, FunctionIndex>,
     normalized: BTreeMap<AppliedWitness, NormalizedImplementationArgument>,
-    witnesses: BTreeMap<WitnessIdentity, u32>,
+    witnesses: BTreeMap<WitnessIdentity, AppliedWitness>,
     pending: Vec<(Application, FunctionIndex)>,
     types: &'a mut BTreeMap<TypeObjectDigest, TypeObject>,
     work: &'a mut Budget<'b>,
@@ -66,11 +77,6 @@ impl Closing<'_, '_> {
             .iter()
             .map(|ty| substitute(self.types, *ty, bindings, 0, self.work))
             .collect()
-    }
-
-    fn reserve_witness(&mut self, witness: &AppliedWitness) -> Result<(), Diagnostic> {
-        self.work
-            .reserve::<TypeObjectDigest>(witness.type_arguments.len())
     }
 
     fn reserve_operand(
@@ -176,24 +182,24 @@ impl Closing<'_, '_> {
                     arguments.clone(),
                     prerequisites.iter().map(|w| w.identity).collect(),
                 );
-                let identity = match self.witnesses.get(&key) {
-                    Some(identity) => *identity,
-                    None => {
-                        self.work.node::<(WitnessIdentity, u32)>()?;
-                        let identity =
-                            u32::try_from(self.witnesses.len()).map_err(|_| missing())?;
-                        self.witnesses.insert(key, identity);
-                        identity
-                    }
-                };
-                let selected = AppliedWitness {
+                // All written operands and depth bounds have been admitted above.
+                // Reuse the entire exact node, not only its numeric identity.
+                if let Some(selected) = self.witnesses.get(&key) {
+                    return Ok(selected.clone());
+                }
+                self.work.node::<(WitnessIdentity, AppliedWitness)>()?;
+                self.work.reserve::<AppliedWitnessNode>(1)?;
+                self.work.reserve::<usize>(2)?;
+                let identity = u32::try_from(self.witnesses.len()).map_err(|_| missing())?;
+                let selected = AppliedWitness(Arc::new(AppliedWitnessNode {
                     identity,
                     depth: subtree_depth,
                     implementation: *implementation,
                     type_arguments: arguments,
                     implementations: prerequisites.into(),
-                };
+                }));
                 self.normalize_witness(&selected, depth)?;
+                self.witnesses.insert(key, selected.clone());
                 Ok(selected)
             }
             ImplementationOperand::Parameter {
@@ -209,7 +215,6 @@ impl Closing<'_, '_> {
                 {
                     return Err(missing());
                 }
-                self.reserve_witness(witness)?;
                 Ok(witness.clone())
             }
         }
@@ -274,7 +279,10 @@ impl Closing<'_, '_> {
         }
         self.work
             .reserve::<TypeObjectDigest>(witness.type_arguments.len())?;
-        let application = NormalizedImplementationArgument {
+        self.work
+            .reserve::<NormalizedImplementationApplication>(1)?;
+        self.work.reserve::<usize>(2)?;
+        let application = Arc::new(NormalizedImplementationApplication {
             identity: witness.identity,
             depth: witness.depth,
             implementation: witness.implementation,
@@ -284,10 +292,9 @@ impl Closing<'_, '_> {
             type_arguments: type_arguments.into(),
             implementations: prerequisites.into(),
             prerequisites: obligations.into(),
-        };
+        });
         self.work
             .node::<(AppliedWitness, NormalizedImplementationArgument)>()?;
-        self.reserve_witness(witness)?;
         self.normalized.insert(witness.clone(), application.clone());
         Ok(application)
     }
@@ -362,10 +369,6 @@ impl Closing<'_, '_> {
         self.work.node::<(Application, FunctionIndex)>()?;
         self.work.reserve::<TypeObjectDigest>(key.1.len())?;
         self.work.reserve::<AppliedWitness>(key.2.len())?;
-        for witness in &key.2 {
-            self.work
-                .reserve::<TypeObjectDigest>(witness.type_arguments.len())?;
-        }
         let index = if key.1.is_empty() && key.2.is_empty() {
             function
         } else {
@@ -508,10 +511,9 @@ impl Closing<'_, '_> {
                         .reserve::<(ImplementationParameterId, AppliedWitness)>(
                             selected.implementations.len(),
                         )?;
-                    for child in selected.implementations.iter() {
+                    for _ in selected.implementations.iter() {
                         step(self.work)?;
                         self.work.reserve::<usize>(3)?;
-                        self.reserve_witness(child)?;
                     }
                     let implementation_witnesses: Bindings = implementation
                         .implementation_parameters
@@ -893,17 +895,18 @@ mod tests {
             let mut program = base.clone();
             let f = &mut Arc::make_mut(&mut program.functions)[0];
             if selected {
-                f.implementation_arguments = Arc::from([NormalizedImplementationArgument {
-                    identity: 0,
-                    depth: 0,
-                    implementation: reference,
-                    contract: reference,
-                    implementation_type_arguments: Arc::from([]),
-                    self_type: f.result,
-                    type_arguments: Arc::from([]),
-                    implementations: Arc::from([]),
-                    prerequisites: Arc::from([]),
-                }]);
+                f.implementation_arguments =
+                    Arc::from([Arc::new(NormalizedImplementationApplication {
+                        identity: 0,
+                        depth: 0,
+                        implementation: reference,
+                        contract: reference,
+                        implementation_type_arguments: Arc::from([]),
+                        self_type: f.result,
+                        type_arguments: Arc::from([]),
+                        implementations: Arc::from([]),
+                        prerequisites: Arc::from([]),
+                    })]);
             } else {
                 f.implementation_parameters =
                     Arc::from([crate::platform::kernel::ImplementationParameter {
@@ -1054,6 +1057,12 @@ mod tests {
                 .operand(&operand, Some(scope), &bindings, &BTreeMap::new())
                 .unwrap();
             assert_eq!(selected.identity, repeated.identity);
+            assert!(Arc::ptr_eq(&selected.0, &repeated.0));
+            assert!(Arc::ptr_eq(
+                &selected.implementations[0].0,
+                &selected.implementations[1].0
+            ));
+
             assert_eq!(
                 selected.implementations[0].identity,
                 selected.implementations[1].identity
@@ -1115,3 +1124,11 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "prepared_witness_storage_tests.rs"]
+mod storage_tests;
+
+#[cfg(test)]
+#[path = "prepared_witness_reservation_tests.rs"]
+mod reservation_tests;

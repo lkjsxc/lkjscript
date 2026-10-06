@@ -357,7 +357,7 @@ fn owned_contract_application_vm_and_transfer_reject_wrong_or_missing_item() {
                     continue;
                 }
                 changed += 1;
-                application.type_arguments = match fault {
+                Arc::make_mut(application).type_arguments = match fault {
                     0 => Arc::from([]),
                     1 => Arc::from([application.self_type]),
                     _ => Arc::from([application.type_arguments[0], application.type_arguments[0]]),

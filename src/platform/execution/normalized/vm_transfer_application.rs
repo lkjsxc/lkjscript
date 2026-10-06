@@ -233,23 +233,8 @@ fn validate_implementation(
         .implementation_applications
         .get(application.identity as usize)
         .ok_or_else(reject)?;
-    if canonical.identity != application.identity
-        || canonical.depth != application.depth
-        || canonical.implementation != application.implementation
-        || canonical.contract != application.contract
-        || canonical.self_type != application.self_type
-        || canonical.implementation_type_arguments != application.implementation_type_arguments
-        || canonical.type_arguments != application.type_arguments
-        || canonical.prerequisites != application.prerequisites
-        || !Arc::ptr_eq(&canonical.implementations, &application.implementations)
-        || !Arc::ptr_eq(&canonical.prerequisites, &application.prerequisites)
-        || canonical.implementations.len() != application.implementations.len()
-        || canonical
-            .implementations
-            .iter()
-            .zip(application.implementations.iter())
-            .any(|(expected, actual)| expected.identity != actual.identity)
-    {
+    // Only the exact immutable node admitted by this preparation is a valid handle.
+    if canonical.identity != application.identity || !Arc::ptr_eq(canonical, application) {
         return Err(reject());
     }
     if depth.saturating_add(canonical.depth) > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
@@ -320,12 +305,39 @@ mod tests {
     }
 
     #[test]
+    fn parallel_witness_handle_rejects_equal_record_before_memo_skip() {
+        let program = prepared_duplicate_dag(24);
+        let root = program.implementation_applications.last().unwrap();
+        let equal_copy = Arc::new((**root).clone());
+        let control = ExecutionControl::uncancelled();
+        let mut work = Work {
+            control: &control,
+            nodes: 0,
+        };
+        let mut visited = BTreeSet::from([root.identity]);
+        assert!(
+            validate_implementation(
+                &program,
+                &equal_copy,
+                0,
+                &mut work,
+                &mut visited,
+                &mut |_| panic!("equal copied record is not this canonical handle")
+            )
+            .is_err()
+        );
+        assert_eq!(visited, BTreeSet::from([root.identity]));
+    }
+
+    #[test]
     fn parallel_dag_admission_rejects_a_private_mutated_duplicate_before_memo_skip() {
         let program = prepared_duplicate_dag(24);
         let root = program.implementation_applications.last().unwrap();
         let mut forged = root.clone();
-        let duplicate = &mut Arc::make_mut(&mut forged.implementations)[1];
-        Arc::make_mut(&mut duplicate.implementations)[0].contract = root.implementation;
+        let duplicate =
+            Arc::make_mut(&mut Arc::make_mut(&mut Arc::make_mut(&mut forged).implementations)[1]);
+        Arc::make_mut(&mut Arc::make_mut(&mut duplicate.implementations)[0]).contract =
+            root.implementation;
         let control = ExecutionControl::uncancelled();
         let mut work = Work {
             control: &control,

@@ -188,17 +188,19 @@ fn owned_vm_rechecks_closed_witness_self_and_binding_arity() {
                 function.implementation_arguments = if missing {
                     Arc::from([])
                 } else {
-                    Arc::from([super::super::prepare::NormalizedImplementationArgument {
-                        identity: 0,
-                        depth: 0,
-                        implementation: scalar,
-                        contract: function.implementation_parameters[0].contract,
-                        implementation_type_arguments: Arc::from([]),
-                        self_type: i64_type,
-                        type_arguments: Arc::from([]),
-                        implementations: Arc::from([]),
-                        prerequisites: Arc::from([]),
-                    }])
+                    Arc::from([Arc::new(
+                        super::super::prepare::NormalizedImplementationApplication {
+                            identity: 0,
+                            depth: 0,
+                            implementation: scalar,
+                            contract: function.implementation_parameters[0].contract,
+                            implementation_type_arguments: Arc::from([]),
+                            self_type: i64_type,
+                            type_arguments: Arc::from([]),
+                            implementations: Arc::from([]),
+                            prerequisites: Arc::from([]),
+                        },
+                    )])
                 };
             }
         }

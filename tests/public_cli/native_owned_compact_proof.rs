@@ -42,17 +42,26 @@ fn draft(public: &Native, module: &str, label: &str) -> String {
 
 #[test]
 fn native_owned_compact_callable_proof_large_library_scoped_reads_and_detached_use() {
-    exercise(LIBRARY);
+    exercise(LIBRARY, CONSUMER);
 }
 
 #[test]
 fn native_owned_demanded_callable_proof_recursive_library_scoped_reads_and_detached_use() {
-    exercise(include_str!(
-        "../../examples/demanded-callable-proof/library.lkjc"
-    ));
+    exercise(
+        include_str!("../../examples/demanded-callable-proof/library.lkjc"),
+        CONSUMER,
+    );
 }
 
-fn exercise(library_source: &str) {
+#[test]
+fn native_owned_concrete_callable_proof_depth_24_scoped_reads_and_detached_use() {
+    exercise(
+        include_str!("../../examples/demanded-callable-proof/library.lkjc"),
+        include_str!("../../examples/concrete-callable-proof/consumer.lkjc"),
+    );
+}
+
+fn exercise(library_source: &str, consumer_source: &str) {
     let library = retained("minimal");
     let before = library.revision();
     let first = "parameter@read24@implparam_c1000000000000000000000000000024";
@@ -64,8 +73,8 @@ fn exercise(library_source: &str) {
         &before,
         "foreign-unused-scope",
     );
-    // Read24 is never invoked by the concrete consumer. It still belongs to the
-    // independently admitted source closure and must survive every transport.
+    // The whole generic library is independently admitted before selecting either
+    // the small consumer or the complete 24-layer concrete workload.
     author(&library, library_source);
     std::fs::copy(
         library.root.path().join("native.lkjc"),
@@ -81,7 +90,7 @@ fn exercise(library_source: &str) {
     let consumer = retained("command");
     stage(&consumer, &package);
     let source = format!(
-        "{}declarations.begin\n(units (use compact-proof {} {}))\ndeclarations.end\n{CONSUMER}",
+        "{}declarations.begin\n(units (use compact-proof {} {}))\ndeclarations.end\n{consumer_source}",
         dependency(&package),
         package.package,
         package.revision,

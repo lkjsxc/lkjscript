@@ -5096,23 +5096,9 @@ fn validate_runtime_implementation(
         .implementation_applications
         .get(application.identity as usize)
         .ok_or_else(|| type_error("implementation witness identity is foreign"))?;
-    if canonical.identity != application.identity
-        || canonical.depth != application.depth
-        || canonical.implementation != application.implementation
-        || canonical.contract != application.contract
-        || canonical.self_type != application.self_type
-        || canonical.implementation_type_arguments != application.implementation_type_arguments
-        || canonical.type_arguments != application.type_arguments
-        || canonical.prerequisites != application.prerequisites
-        || !Arc::ptr_eq(&canonical.implementations, &application.implementations)
-        || !Arc::ptr_eq(&canonical.prerequisites, &application.prerequisites)
-        || canonical.implementations.len() != application.implementations.len()
-        || canonical
-            .implementations
-            .iter()
-            .zip(application.implementations.iter())
-            .any(|(expected, actual)| expected.identity != actual.identity)
-    {
+    // A shallow clone shares this complete immutable node. Equal IDs, equal
+    // fields, copied descendants or a foreign program's node are not admission.
+    if canonical.identity != application.identity || !Arc::ptr_eq(canonical, application) {
         return Err(type_error(
             "implementation witness differs from its admitted identity",
         ));
