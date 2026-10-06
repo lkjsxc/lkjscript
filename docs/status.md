@@ -27,34 +27,56 @@ source mapping at
 The accepted source had 26 fresh passing gates, stable inputs, and no unrun gates.
 These observations do not validate subsequent implementation changes.
 
-## Borrowed tasks and scoped parallel reads awaiting source acceptance
+## Borrowed tasks and scoped parallel reads accepted on main
 
-The selected checkout is `/home/coder/workspace/lkjscript`, on `main` at reporting
-base `52ad8322f0e48fd92c93edf53ad2d9d0a89a42e2`. The working candidate selects
-product identifier `0.1.81`. Its implementation adds synchronous borrowed task
-parameters and methods, independent Shareable constraints, and scoped read custody
-through recursive joined parallel children. The
-[public witness](../examples/scoped-parallel-reads/README.md) uses exact generic
-readers over flat and chunked storage, then drains and reuses the original owner.
+The selected checkout is `/home/coder/workspace/lkjscript`, on `main`. Accepted
+v0.1.81 source `3e5f1b4e704763b32ceb7a193c9043cded8ba7e0`, tree
+`58ad05020bbe0ca186d256e6e343fde06db19db8`, is integrated by normal fast-forward
+push and independently confirmed through Git and the GitHub API. This page is a
+reporting descendant, not a replacement for that tested source.
 
-Independent semantic and physical-custody reviews are complete. Maintained standard,
-guide, policy and application programs pass 96, 79, 62 and 44 differential tests;
-their derived bundles and all eight generated reference pages are refreshed.
-Cold reproduction passes all four native checks without adding packs or changing
-native HEADs; the original receipt is
+The implementation adds synchronous borrowed task parameters and methods,
+independent Shareable constraints, and scoped read custody through recursive
+joined parallel children. The [public witness](../examples/scoped-parallel-reads/README.md)
+uses exact generic readers over flat and chunked storage, then drains and reuses
+the original owner. Its fresh copied-executable harness passes both rejection and
+complete three-package execution, including edit/restore identity and detached use.
+
+Original full acceptance is
+`.artifacts/lkjscript-dev/check/1791264172524048034-370487-0/receipt.json`:
+26 fresh passing gates, no reused or unrun gates, and stable inputs. The workspace
+suite has 2,151 passing tests, zero failures and 29 explicitly ignored tests;
+the public CLI suite has 230 passing tests and one ignored test. Independent
+source mapping recomputes every original file digest and verifies all 1,750
+committed files against the tested snapshot at parent
+`52ad8322f0e48fd92c93edf53ad2d9d0a89a42e2`. Evidence and remote observations are
+indexed by `.artifacts/20261006-scoped-parallel/source-acceptance.json`.
+
+Maintained standard, guide, policy and application programs pass 96, 79, 62 and 44
+differential tests; their derived bundles and all eight generated reference pages
+are refreshed. Cold reproduction passes all four native checks without adding
+packs or changing native HEADs; the original receipt is
 `.artifacts/20261006-scoped-parallel/cold-native-04/receipt.txt`.
+Earlier failed iterations and the separate manual continuation remain preserved
+under `.artifacts/20261006-scoped-parallel/`.
 
-Focused iterations and retained failures are under
-`.artifacts/20261006-scoped-parallel/`. The copied-executable witness passes the
-alias-rejection cases. Its corrected manual continuation authors three packages,
-checks 97 tests, executes all six storage backends and the matched serial path,
-then repeats execution with the original source and transport paths absent.
-This continuation does not relabel the earlier failed harness run as passing.
+## v0.1.81 finalized candidate acceptance pending
 
-Dependency-complete fresh source acceptance and the corrected fresh public harness
-remain pending. Then integrate the accepted source and independently authenticate
-the finalized executable candidate. Public/latest remains v0.1.80; no v0.1.81
-publication has been selected.
+[Candidate 37420429039/1](https://github.com/lkjsxc/lkjscript/actions/runs/37420429039)
+was dispatched once on 2026-10-06 at 05:49:04 UTC. Its authenticated repository,
+workflow and event head bind the exact accepted source above. The observed state
+is `in_progress`; finalized-archive acceptance and immutable publication remain
+pending. Public/latest is still v0.1.80. No v0.1.81 tag, draft or release existed
+at dispatch, and the scoped promotion control still identifies the completed
+v0.1.80 annotation.
+
+Next inspect this producer's terminal and retained artifact identities. After
+`candidate_accepted`, annotate the exact accepted source, reconcile the scoped
+promotion control, and promote those unchanged assets. Require
+`immutable_published_and_public_verified` and independent anonymous public
+readback. Retain the original source/run/attempt; do not rebuild or substitute
+bytes while resuming. Release evidence belongs under
+`.artifacts/20261006-scoped-parallel/release-0181/`.
 
 Preserve unrelated worktrees, stashes, original failures and immutable publication
 history. This work changes no application deployment.
