@@ -1,132 +1,142 @@
 # Status
 
-Current snapshot: 2026-10-06. This page owns availability and unfinished acceptance.
-[Direction](direction.md) owns goals, [specifications](spec/) own semantics and
-[roadmap](roadmap.md) orders future language work. External workflow states below
+Current snapshot: 2026-10-07 (Asia/Tokyo). This page owns availability and unfinished
+acceptance. [Direction](direction.md) owns goals, [specifications](spec/) own semantics
+and [roadmap](roadmap.md) orders future language work. External workflow states below
 are observations, not a claim that independently running jobs cannot advance.
 
-## Whole prepared witness nodes accepted on main
+## Shared dependency interfaces accepted on main
 
 The selected checkout is `/home/coder/workspace/lkjscript`, on `main`. Accepted
-v0.1.84 source `ea6d5729431e426268a391b8e4a47a115cc5775b`, tree
-`88eb390bcfda8485400e396bf24574c8986eed49`, was normally pushed and independently
-confirmed through Git and the GitHub API. This page and the binary-provenance
-addendum are reporting descendants, not replacements for that tested source.
+v0.1.85 source `d1461c863e1b0a507815632616223a27c84772a5`, tree
+`17fe1b038c8f1a13c857bb591393bdc737274cd8`, was normally pushed and independently
+confirmed through Git and the GitHub API. This page is a reporting descendant,
+not a replacement for that tested source.
 
-[Whole immutable prepared witness nodes](decisions/shared-prepared-witness-nodes.md)
-share complete exact applications across the preparation catalogue, prerequisite
-edges and function bindings. The preparation interner also reuses whole nodes,
-not just their numeric identities. The selected declaration, ordered type arguments
-and complete ordered prerequisites remain distinct. All written operands, defining
-scopes and full suffix depth remain admitted before memoized reuse.
+[Admission-local shared dependency interfaces](decisions/shared-dependency-interfaces.md)
+materialize each needed exact public-interface record map once per source admission.
+Importing snapshots and snapshot clones share those immutable records. The pool is
+bound to one admitted interface inventory and releases its own references before
+return. Snapshot-private type maps and application state remain separate.
 
-Ordinary and parallel runtime admission require the exact immutable node admitted
-by the current preparation. Equal IDs, independently copied equal records, foreign
-prepared handles and privately modified descendants reject before a visited-node
-shortcut. Node bodies, reference-count metadata and handles are reserved before
-modeled growth. Exact/N-1 byte and work boundaries and early/late cancellation
-retain their resource/cancellation classes and do not publish an unfinished node.
+A shared record map is not a validation certificate. Every load still independently
+admits interfaces and canonical private bodies, compares interface/body agreement,
+checks direct visibility and reconstructs the complete composed callable closure.
+Equal names, Self types or contract shapes do not merge exact revisions or selected
+implementations. Corrupted input rejects even after an earlier successful load.
+The independent source oracle continues reconstructing its own maps.
 
-This shares derived immutable metadata, not application values, mutable owners,
-borrow state, cancellation lineage or effect authority. There is no global cache
-or language-level reference-counting commitment. No meaning-graph, interface,
-type-object, bytecode or artifact encoding was changed, and no limit was raised.
+Incoming edges, new map entries, record copies and remaining per-snapshot type
+copies retain the existing aggregate budget. Exact-fit and one-below tests verify
+reservation before growth; an incomplete admission does not publish readiness.
+Copy-on-write fixtures cannot modify another snapshot, and the last retained
+snapshot releases its shared records. No limit or authority was widened.
 
-### Corrected baseline and measured benefit
+### Measured effect and composed public use
 
-Concrete DAG storage and compatible shared instruction bodies already existed.
-The source-matched v0.1.83 predecessor passes the newly maintained
-[full depth-24 public recursive consumer](../examples/concrete-callable-proof/README.md),
-including package export before concrete selection, distinct same-Self readers,
-I64 extrema, canonical edits/restoration and execution after source deletion.
-This is stronger maintained coverage, not newly enabled depth-24 execution.
-The roadmap no longer describes those existing mechanisms as unimplemented work.
+The matched eight-wrapper source-admission workload reduces actual interface record
+copies from 774 to 86 (88.89%). Aggregate validation visits change from 327,446 to
+326,016 (0.44%); the same 279 type copies and 208,237 validation-read bytes remain.
+Both versions admit the exact serialized containers retained from the v0.1.84
+predecessor, with unchanged output container bytes. Tiny interfaces add bookkeeping.
+These are not RSS, total live heap, runtime-speed or API-cost measurements; the
+retained deepest timing sample is slightly slower. [Measurements](performance.md#admission-local-shared-dependency-interface-records)
+retain the limits and unfavorable observations.
 
-At 24 layers in the matched source-level consuming-witness fixture, the calculated
-retained node/slot subset falls from 26,400 to 7,728 bytes (70.73%). Cumulative
-prepared-type reservations fall from 465,904 to 410,080 bytes (11.98%). These are
-not RSS or total live heap measurements. Complete nodes add individual allocations;
-rarely reused nodes can cost more. Source authoring/preparation timing does not
-establish a broad speedup.
+The [four-package public workload](guides/native-shared-dependencies.md) exports a
+recursive generic supplier before two independently authored private readers exist.
+A consumer borrows one cell through both exact readers, then consumes the owner.
+It preserves full I64-extrema results and canonical re-entry, refuses a malformed
+call without changing accepted HEAD, and runs after deleting all four disposable
+authoring projects and their transports. The predecessor also passes this functional
+workload: the improvement is reduced duplication, not newly invented reader semantics.
 
-The separate borrowed recursive public artifact, created by the unchanged v0.1.83
-binary and run after removing its sources, is replayed by both the preflight and
-final source-accepted v0.1.84 binaries. Every final replay preserves complete result
-bytes, 246 instructions, 102 tail transfers, 40,069 type-derivation steps, zero
-capability calls and zero live frames/handles. Cumulative prepared-type reservations
-fall from 1,984,238 to 1,869,630 bytes (5.78%).
-[Measurements](performance.md#whole-prepared-witness-node-sharing) separate fixtures,
-modeled ledgers, exact binary identities and noisy timing samples.
+This source includes v0.1.84's [whole prepared-witness sharing](decisions/shared-prepared-witness-nodes.md),
+accepted at `ea6d5729431e426268a391b8e4a47a115cc5775b`. That earlier matched 24-layer
+fixture reduced its calculated retained node/slot subset from 26,400 to 7,728 bytes.
+Its distinct measurements and original acceptance remain under
+`.artifacts/20261006-concrete-closure/source-acceptance.json` and
+[performance](performance.md#whole-prepared-witness-node-sharing). Concrete DAGs and
+compatible shared instruction bodies already existed; the newly maintained full
+24-layer recursive consumer also passes on v0.1.83. Neither result is a claim that
+all logical witness paths execute cheaply or that total process memory falls equally.
 
-### Original full acceptance and exact local product
+No meaning-graph, package-interface, type-object, bytecode or artifact encoding
+changed. There is no application-data migration, global cache or language-level
+reference-counting commitment. Shared type tables, cross-operation reuse and
+remaining source-validation costs are separate follow-ups, not completed features.
+
+### Original acceptance and exact local product
 
 Original full acceptance is
-`.artifacts/lkjscript-dev/check/1791290482565453095-2924689-0/receipt.json`:
+`.artifacts/lkjscript-dev/check/1791308022373689585-3440901-0/receipt.json`:
 26 fresh passing gates, no reused or unrun gates, and stable inputs. Its digest is
-`verification_219cfdd5ebc6558507378df95c931c992955e6c126f4111d0f3d2808678049d3`.
-The workspace suite has 2,168 passing tests, zero failures and 29 pre-existing
-ignored tests. The total excludes two filtered subprocess replays. The public CLI
-suite has 233 passing tests and one ignored test; it is included in that workspace
-total. Seven focused preparation tests include exact resource and cancellation
-boundaries; the full suite also retains independent reference and forgery checks.
+`verification_1a6e0fcf72a627fb73b04a79c4be7269072836747d3fce11b175bc2dc6445728`.
+The workspace suite has 2,174 passing tests, zero failures and 29 pre-existing
+ignored tests. This excludes two filtered subprocess replays. The public CLI suite
+has 234 passing tests and one ignored test and is included in that total. All seven
+focused dependency-interface tests pass, including independent reconstruction,
+reclamation, corrupted-input and exact-budget checks.
 
-The tested parent is `8300dbf33c5a9eb56dcc104403fc97c5ee0142be`. The prospective
-Git tree and SHA-256 of all 28 changed files were frozen before full verification
-and rechecked afterward. The accepted commit is exactly that tested tree. The
-original receipt continues to name its actual parent and stable worktree digest;
-it is not relabeled to a later commit. Source mapping, original failed contributor
-attempts, negative controls and independent remote observations are indexed by
-`.artifacts/20261006-concrete-closure/source-acceptance.json`.
+The original receipt names actual parent
+`bcc710b3f86d6adb23367c24ef8438609459000a` and stable worktree digest
+`verification_48016fda5b27c87be36a72c98532d1c185782313f945dbb5411b9481520b821a`.
+Before committing, all 1,779 frozen file SHA-256 values and all 1,786 input
+kind/mode/length entries were independently rechecked. All 44 changed paths belonged
+to that original input inventory. The committed tree equals the reviewed prospective
+tree; the original receipt is not relabeled as a different source. Original logs,
+failed development attempts, source mapping and remote observations are indexed by
+`.artifacts/20261007-shared-interfaces/source-acceptance.json`.
 
-Cargo's workspace and release-test feature contexts can produce different local
-executables. The last product owner is the full checker's
-`retained/release_command_lifecycle/0`, with SHA-256
-`0349db388ec6865810eb1ec4ea40e99d9d459a4a5c244dd1058219dc428d9ac6`.
-Its source-selected release harness SHA-256 is
-`a6a531f9d503546892fbbc8ff943171981d69ab829e1d4c8eeba8f9059a59eaa`.
-Both are copied outside the checkout and re-read unchanged. The exact new public
-case passes with an empty credential environment, full independent expected
-results, edited/restored identities and deleted authoring projects. Fourteen
-alternating old/final-product processes also replay the same original artifact.
-Their records are under `.artifacts/20261006-concrete-closure/final-local/` and
-`matched-public-final-observations.json`.
+The full command-lifecycle gate's retained executable has SHA-256
+`ad622597a69d821bfc0f0bb0bc0274d9509cf9f6c1474c93c3025a469e6b0b7e`.
+Its source-selected public harness has SHA-256
+`75c334b4a507575bb6e1d456353deebc80bb6bdc8c742fd960db2116bf8db3b9`.
+The new diamond case passes again against copies outside the checkout with an empty
+credential environment. Product and harness are re-read unchanged. These bytes also
+match the separately retained preflight copies. Originals remain under
+`.artifacts/20261007-shared-interfaces/final-local/`. This is exact local-product
+acceptance, not acceptance of a finalized release archive.
 
-The earlier `2a048dd9…` product measurements remain preflight evidence, not the
-last lifecycle owner's evidence. Both sets are retained and explicitly separated.
-None of this local source/product evidence is finalized release-archive acceptance.
+## Public binary
 
-## Public binary and existing successor candidates
+The independently re-read public/latest release is immutable
+[v0.1.83](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.83), release
+`404980756`, at source `65b3d00428d36827f9d65bf92f7900cf52719d21`.
+[Producer 37452910212/1](https://github.com/lkjsxc/lkjscript/actions/runs/37452910212)
+completed candidate acceptance. [Promotion 37502927035/1](https://github.com/lkjsxc/lkjscript/actions/runs/37502927035)
+completed `immutable_published_and_public_verified`; its terminal records authorized
+promotion, successful publication/public verification and selected latest.
+Publication occurred at 2026-10-06T17:29:23Z (2026-10-07 02:29:23 JST).
+Annotation `65d1c4e43776015eae510b2f895357040c28f246` retains that exact source.
 
-The last independently re-read public/latest release remains immutable
-[v0.1.81](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.81), release
-`404483023`, published at 2026-10-06T08:30:57Z. Its original authenticated publication,
-anonymous acquisition and public-readback evidence remain indexed by
-`.artifacts/20261006-scoped-parallel/release-0181/completed-publication.json`.
-Those observations do not validate successor implementation or archive bytes.
+The original terminal, authenticated workflow observations, anonymous exact/latest
+and release-ID readbacks, unchanged asset lengths/hashes and completion index remain
+under `.artifacts/20261007-shared-interfaces/release-0183/`. Its
+`completed-publication.json` indexes those originals. This completed v0.1.83
+publication does not validate successor source or distribution bytes.
 
-Predecessor [candidate 37441390499/1](https://github.com/lkjsxc/lkjscript/actions/runs/37441390499)
-for v0.1.82 source `ad1faa6c70763e0fa2be4e7e9206fb725dd12d58` has completed
-`candidate_accepted`. Its exact original run and terminal artifact `11408960958`
-were fetched and the ZIP digest independently verified. The terminal explicitly
-records publication and public verification as skipped. Candidate acceptance is
-not immutable publication. Evidence is retained under
-`.artifacts/20261006-concrete-closure/predecessor-candidate-0182/`.
+## Exact v0.1.85 candidate remains pending
 
-[Candidate 37452910212/1](https://github.com/lkjsxc/lkjscript/actions/runs/37452910212)
-for v0.1.83 source `65b3d00428d36827f9d65bf92f7900cf52719d21` was re-read still
-in progress. It had reached `Admit the final candidate and original evidence`.
-Its original dispatch and handoff remain under
-`.artifacts/20261006-demanded-callable-proof/release-0183/`; final publication is
-not established here. Last readbacks for this session are retained under
-`.artifacts/20261006-concrete-closure/release-final-observation/`.
+[Candidate 37521548961/1](https://github.com/lkjsxc/lkjscript/actions/runs/37521548961)
+was dispatched exactly once at 2026-10-06T19:47:27Z from accepted source
+`d1461c863e1b0a507815632616223a27c84772a5`. Repository, head repository, workflow,
+event, branch and original attempt were independently re-read. It was in progress
+at `Fetch locked dependencies and build immutable host tools`. No v0.1.85 tag
+existed at dispatch; final-archive acceptance or immutable publication is not yet
+established here. The exact resumption owner is
+`.artifacts/20261007-shared-interfaces/release-0185/candidate-handoff.json`.
 
-No v0.1.84 producer was dispatched in this change. Do not stack duplicate publication
-work on top of the existing original candidates or relabel a predecessor's assets.
-Before a later promotion, authenticate its exact original accepted terminal and
-asset identities, reconcile predecessor publication and the scoped tag selector,
-then use the maintained publisher without rebuilding accepted bytes. Require
-`immutable_published_and_public_verified` and independent public readback.
+Authenticate this original producer's `candidate_accepted` terminal and retained
+artifact identities before promotion. Reconcile the completed v0.1.83 publication
+and current scoped tag selector; annotate only the exact accepted product source,
+then use the maintained publisher on unchanged finalized assets. Require
+`immutable_published_and_public_verified` and independent public readback. Do not
+rebuild accepted assets, dispatch a duplicate producer or treat a green subjob as
+publication. Missing, invalidated or expired originals require renewed proof.
 
-No publication control, immutable tag, release asset, credential, protection,
-production service or application data was changed by this work. Unrelated
-worktrees, stashes, original failures and immutable publication history remain.
+The accepted v0.1.82 producer remains historical, not a selected publication target.
+No v0.1.84 producer was created; its mainline changes are consolidated into v0.1.85.
+The source and local acceptance are complete independently of this release-only
+waiting. Existing stashes, unrelated worktrees, failed evidence, published immutable
+history, application services and operational data remain preserved.
